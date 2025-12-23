@@ -1,0 +1,318 @@
+Role: You are a senior full stack developer working inside my existing Replit project. Implement the functionality changes below without breaking current features. Provide working code, database migrations, and clear setup steps. Confirm each item in a checklist at the end.
+
+Change 1: Extend Video Expiration From 7 Days to 30 Days
+Current behavior: videos expire after 7 days.
+New requirement: videos must be available for download for 30 days from the time the user saves the session.
+
+Implementation requirements
+
+Update all retention logic so expiresAt is createdAt + 30 days.
+
+Update the cleanup job so it deletes MP4 files and thumbnails only after 30 days.
+
+Update all UI text where it references 7 days to 30 days:
+
+Dashboard status
+
+Session details page expiration message
+
+Any tooltips or helper text
+
+If there is a constant like VIDEO_RETENTION_DAYS, set it to 30 and use it everywhere.
+
+Change 2: Let Users Choose Their Camera and Microphone
+Goal: On the New Practice Session page, users can select which camera and which microphone to use from available devices connected to their computer.
+
+Frontend requirements
+
+Add two dropdown selectors above the recorder:
+
+Camera selector
+
+Microphone selector
+
+Use browser MediaDevices APIs to list devices:
+
+navigator.mediaDevices.enumerateDevices()
+
+Filter by videoinput and audioinput
+
+Request permissions first so device labels appear:
+
+Call getUserMedia once with basic constraints, then enumerate devices.
+
+When the user selects a camera or mic, reinitialize the stream with device constraints:
+
+video: { deviceId: { exact: selectedCameraId } }
+
+audio: { deviceId: { exact: selectedMicId } }
+
+Show helpful fallback states:
+
+If no camera devices: show “No camera detected”
+
+If no mic devices: show “No microphone detected”
+
+Remember device selections per user:
+
+Store selectedCameraId and selectedMicId in localStorage
+
+On page load, apply them if still available
+
+Add a “Test mic” mini meter if easy:
+
+Optional but helpful: show audio level so they know the mic is working
+
+Ensure recording still works across Chrome and Edge at minimum.
+
+Mobile behavior:
+
+If device selection is limited on mobile, keep the UI but handle gracefully.
+
+Change 3: Allow Users to Name Each Video Session
+Goal: Each session has a user editable name that shows on the dashboard list so it is easy to find.
+
+Database changes
+Add to Sessions table:
+
+title (string, nullable)
+
+Backend changes
+
+When creating a session, accept an optional title.
+
+Provide an endpoint to update title:
+
+PATCH /api/sessions/:id
+
+Body: { "title": "New name" }
+
+Validate:
+
+Max length 80 characters
+
+Trim whitespace
+
+Only allow updates by the session owner
+
+Frontend changes
+
+On New Practice Session page:
+
+Add a text input: “Session name (optional)”
+
+Placeholder example: “Product pitch practice” or “Hook test 1”
+
+After saving, show the name on the results page header.
+
+On Dashboard:
+
+Show session name prominently.
+
+If blank, fall back to something like “Practice Session” plus the date.
+
+Add quick edit on dashboard:
+
+An edit icon or small “Rename” button opens inline edit, saves via PATCH.
+
+Change 4: Add “Redo Transcript” Button
+Goal: User can re run transcription if no transcript exists, or if they want to regenerate it.
+
+Rules
+
+If transcriptText is null or empty:
+
+Show a primary button on the session results page: “Generate transcript”
+
+If transcript exists:
+
+Show a secondary button: “Redo transcript”
+
+Clicking it triggers the transcription process again, overwriting transcriptText, and then re runs scoring automatically.
+
+Backend requirements
+
+Implement an endpoint:
+
+POST /api/sessions/:id/retranscribe
+
+The endpoint should:
+
+Confirm user owns the session
+
+Confirm video is still available (not expired)
+
+Re run transcription against the stored MP4
+
+Save the new transcriptText
+
+Clear transcriptEditedText if you have it, or keep it but mark it stale
+
+Re run scoring with the new transcriptText
+
+Update scoreJson and scoreUpdatedAt
+
+Add rate limiting:
+
+Example: max 3 retranscribes per session per 24 hours
+
+Log failures and return user friendly errors.
+
+Frontend requirements
+
+Add a confirmation modal:
+
+“Redo transcript? This will replace the current transcript and update your score.”
+
+Show progress stepper:
+
+Transcribing
+
+Scoring
+
+Disable the button while processing.
+
+Change 5: AI Generated Title From Transcript, Editable by User
+Goal: After a transcript is generated (initial transcription or retranscribe), the app should automatically generate a session title using AI, then allow the user to edit it.
+
+Rules and behavior
+
+Title generation runs automatically after:
+
+Successful initial transcription
+
+Successful retranscribe
+
+Use the transcript text as the primary input.
+
+Generated title should be:
+
+Short
+
+Clear
+
+Specific
+
+Suitable for a dashboard list
+
+Limit title length to 60 characters by default. Hard cap at 80 characters.
+
+If the user already set a title manually:
+
+Do not overwrite it.
+
+Instead offer a small “AI Suggest Title” button that proposes a new title.
+
+If the title is empty or default:
+
+Auto apply the AI generated title.
+
+Backend requirements
+
+Add a function to generate a title from transcript via LLM API.
+
+Enforce strict output:
+
+Return plain text title only
+
+No quotes
+
+No punctuation at the end unless it is necessary
+
+Add endpoint:
+
+POST /api/sessions/:id/generate-title
+
+Returns: { "title": "..." }
+
+Auto call title generation inside:
+
+/api/sessions/:id/transcribe
+
+/api/sessions/:id/retranscribe
+
+Save the title to the session record if it is empty or still default.
+
+Log errors but do not fail the session if title generation fails.
+
+Frontend requirements
+
+On Session Results page:
+
+Display the session title as an editable inline field (or a rename UI)
+
+Include a small button: “AI Suggest Title”
+
+On Dashboard:
+
+Show the title prominently
+
+Allow rename inline as already specified
+
+If title generation fails:
+
+Show a subtle message: “Could not generate a title, you can name it manually.”
+
+Change 6: Increase Session Logout Inactivity Timeout to 3 Hours
+Goal: Keep users logged in unless they are inactive for 3 hours. If they are active, do not log them out.
+
+Define activity
+Activity means any meaningful interaction:
+
+Route change
+
+Button click
+
+API call from the frontend
+
+Typing in forms
+
+Mouse or touch interactions
+
+Implementation requirements
+
+Set auth session expiration policy to 3 hours of inactivity.
+
+If using cookie sessions:
+
+Set cookie maxAge and rolling sessions so each request refreshes expiration.
+
+If using JWT:
+
+Implement refresh mechanism that renews token on activity.
+
+Ensure that as long as the user is using the app, the session keeps extending.
+
+Add a minimal UX:
+
+If a user is about to be logged out due to inactivity, optionally show a warning modal at 2 hours 55 minutes with a “Stay logged in” button.
+
+This is optional, implement only if it is straightforward.
+
+Document the exact auth strategy in README and where the timeout is configured.
+
+UI Text Updates
+Update any copy that says 7 days to say 30 days.
+
+Testing Checklist
+Provide a short checklist and confirm:
+
+New sessions expire in 30 days.
+
+Cleanup job deletes only after 30 days.
+
+Camera and mic selectors populate and switching devices works.
+
+Session naming works on create and rename works from dashboard.
+
+Redo transcript works when transcript is missing and when transcript exists.
+
+Retranscribe is blocked if the video is expired.
+
+AI generated title is created after transcription when title is empty.
+
+AI title is editable and “AI Suggest Title” works.
+
+Auth session remains active for up to 3 hours of inactivity, and rolling refresh keeps active users logged in.
+
+Now implement these changes in the existing codebase.

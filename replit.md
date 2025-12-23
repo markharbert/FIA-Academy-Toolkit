@@ -32,6 +32,8 @@ Preferred communication style: Simple, everyday language.
 - **Language**: TypeScript (ESM modules)
 - **API Pattern**: RESTful JSON API under `/api/*` routes
 - **Session Management**: Express sessions with PostgreSQL session store (connect-pg-simple)
+  - **Timeout**: 3 hours of inactivity (configured in `server/routes.ts`)
+  - **Rolling Sessions**: Each request resets the 3-hour timer, keeping active users logged in
 - **Authentication**: Custom session-based auth with bcrypt password hashing
 - **File Uploads**: Multer for video file handling (stored in `uploads/` directory)
 

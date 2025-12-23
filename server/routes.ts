@@ -86,6 +86,10 @@ export async function registerRoutes(
   // Setup session middleware
   const PgSession = connectPgSimple(session);
   
+  // Session timeout: 3 hours of inactivity
+  // Rolling sessions extend the timeout on each request
+  const SESSION_INACTIVITY_TIMEOUT = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+  
   app.use(
     session({
       store: new PgSession({
@@ -94,12 +98,13 @@ export async function registerRoutes(
         createTableIfMissing: true,
       }),
       secret: process.env.SESSION_SECRET || "video-confidence-coach-secret-key",
-      resave: false,
+      resave: true, // Enable resave for rolling sessions
       saveUninitialized: false,
+      rolling: true, // Reset expiration on each request (activity extends session)
       cookie: {
         secure: process.env.NODE_ENV === "production",
         httpOnly: true,
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        maxAge: SESSION_INACTIVITY_TIMEOUT, // 3 hours of inactivity
       },
     })
   );
@@ -569,6 +574,21 @@ export async function registerRoutes(
         scoreJson: scoreResult,
         scoreUpdatedAt: new Date(),
       });
+
+      // Auto-generate title after initial scoring if no user-provided title exists
+      if (!session.title && transcript && transcript.length > 10) {
+        try {
+          const aiTitle = await generateTitle(transcript);
+          await storage.updateSession(session.id, {
+            title: aiTitle,
+            titleSource: "ai",
+            titleGeneratedAt: new Date(),
+          });
+          console.log(`[Score] Auto-generated title for session ${session.id}: ${aiTitle}`);
+        } catch (titleErr) {
+          console.warn("Failed to auto-generate title after scoring:", titleErr);
+        }
+      }
 
       res.json(scoreResult);
     } catch (err) {
