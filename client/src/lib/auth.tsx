@@ -8,7 +8,7 @@ interface AuthUser {
   lastName?: string | null;
   emailConsentAt?: string | null;
   isAdmin?: boolean;
-  role?: "user" | "admin";
+  role?: "user" | "admin" | "super_admin";
   isDisabled?: boolean;
 }
 
