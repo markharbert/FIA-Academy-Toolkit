@@ -3,16 +3,43 @@ import { pgTable, text, varchar, integer, timestamp, jsonb, boolean } from "driz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Auth provider types for OAuth
+export const authProviders = ["local", "google", "facebook", "apple"] as const;
+export type AuthProvider = typeof authProviders[number];
+
 // Users table for authentication
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  passwordHash: text("password_hash"), // Nullable for OAuth users
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   keapContactId: text("keap_contact_id"),
   emailConsentAt: timestamp("email_consent_at"),
   emailConsentIp: text("email_consent_ip"),
   isAdmin: boolean("is_admin").default(false),
+});
+
+// User identities table for OAuth providers (supports multiple providers per user)
+export const userIdentities = pgTable("user_identities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().$type<AuthProvider>(),
+  providerUserId: text("provider_user_id").notNull(),
+  emailFromProvider: text("email_from_provider"),
+  emailVerifiedByProvider: boolean("email_verified_by_provider").default(false),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// Password reset tokens table
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  requestIp: text("request_ip"),
+  userAgent: text("user_agent"),
 });
 
 // System settings table for Keap OAuth tokens
@@ -151,3 +178,25 @@ export type LoginInput = z.infer<typeof loginSchema>;
 
 // System settings types
 export type SystemSettings = typeof systemSettings.$inferSelect;
+
+// User identity types
+export type UserIdentity = typeof userIdentities.$inferSelect;
+export type InsertUserIdentity = typeof userIdentities.$inferInsert;
+
+// Password reset token types
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+// Forgot password schema
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+});
+
+// Reset password schema
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

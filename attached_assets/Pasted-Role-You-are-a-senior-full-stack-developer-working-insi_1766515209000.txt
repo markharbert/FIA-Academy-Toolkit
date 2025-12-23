@@ -1,0 +1,326 @@
+Role: You are a senior full stack developer working inside my existing Replit project. Implement the auth changes below without breaking current features. Provide working code, database migrations, and clear setup steps. Confirm each item in a checklist at the end.
+
+Goal Summary
+
+Add “Forgot password” flow that emails a reset link.
+
+Add OAuth login options on the login page for:
+
+Google
+
+Facebook
+
+Apple
+
+Keep existing email + password login working.
+
+Change 1: Forgot Password (Email Reset Link)
+
+User experience requirements
+
+On the Login page, add a link: “Forgot password?”
+
+Clicking it opens a page with a single email input.
+
+When submitted:
+
+Always show a generic success message like:
+“If an account exists for that email, we sent a reset link.”
+
+Do not reveal whether the email exists.
+
+Email contains a single use reset link that expires.
+
+Reset link takes the user to a “Set new password” page:
+
+New password
+
+Confirm new password
+
+After successful reset:
+
+Invalidate the token
+
+Log the user in or redirect to login with a success message
+
+Security requirements
+
+Do not email passwords.
+
+Use a cryptographically secure random token.
+
+Store only a hashed version of the token in the database.
+
+Token expiration: 60 minutes.
+
+Rate limit requests:
+
+Example: max 5 reset requests per email per hour
+
+Plus a general IP based limiter
+
+Invalidate all active sessions for that user after password reset (recommended).
+
+Backend API endpoints
+
+POST /api/auth/forgot-password
+Body: { email }
+
+POST /api/auth/reset-password
+Body: { token, newPassword }
+
+Database changes
+Add a table PasswordResetTokens:
+
+id
+
+userId
+
+tokenHash
+
+expiresAt
+
+usedAt (nullable)
+
+createdAt
+
+requestIp (nullable)
+
+userAgent (nullable)
+
+Email sending requirements
+
+Implement transactional email sending from the backend.
+
+Provide a simple provider approach that works in Replit:
+
+Option A: SMTP credentials (recommended for simplicity)
+
+Option B: Resend
+
+Option C: SendGrid
+
+Use environment variables only. No hardcoded secrets.
+
+Required env vars (choose approach and document clearly)
+SMTP approach:
+
+SMTP_HOST
+
+SMTP_PORT
+
+SMTP_USER
+
+SMTP_PASS
+
+SMTP_FROM
+
+Also:
+
+APP_BASE_URL (example: https://your-replit-app-url
+)
+This is used to build reset links.
+
+Email template requirements
+Subject: Reset your Fearless Video Coach password
+Body includes:
+
+A short message
+
+A reset button link
+
+The raw link as backup
+
+Expiration time notice (60 minutes)
+
+Change 2: OAuth Login (Google, Facebook, Apple)
+
+User experience requirements
+
+On the Login page, add buttons:
+
+Continue with Google
+
+Continue with Facebook
+
+Continue with Apple
+
+On the Signup page, optionally add the same buttons or link to login.
+
+After OAuth login:
+
+Create an account if it does not exist
+
+Otherwise log them in
+
+If the OAuth provider does not return an email, handle gracefully and require the user to add one.
+
+Implementation requirements
+Use an established library based on the current stack:
+If the app is React + Express:
+
+Use Passport.js with:
+
+passport-google-oauth20
+
+passport-facebook
+
+passport-apple
+Or use a unified OIDC library if you prefer, but keep it stable.
+
+If the app is Next.js:
+
+Use NextAuth with providers:
+
+Google
+
+Facebook
+
+Apple
+
+OAuth callback routes
+Implement standard routes, for example:
+
+GET /api/auth/oauth/google
+
+GET /api/auth/oauth/google/callback
+
+GET /api/auth/oauth/facebook
+
+GET /api/auth/oauth/facebook/callback
+
+GET /api/auth/oauth/apple
+
+POST or GET callback depending on Apple setup
+
+Session handling
+
+Keep the same session mechanism already used (cookie session or JWT in httpOnly cookie).
+
+After OAuth success, set the session and redirect to the dashboard.
+
+Database changes for OAuth
+Update Users table to support OAuth identities:
+Option A: Add fields to Users:
+
+authProvider (nullable, values: local, google, facebook, apple)
+
+providerUserId (nullable)
+
+oauthEmailVerified (nullable boolean)
+
+passwordHash remains nullable for OAuth users
+
+Option B (preferred for multiple providers): Create UserIdentities table:
+
+id
+
+userId
+
+provider (google, facebook, apple)
+
+providerUserId
+
+emailFromProvider (nullable)
+
+createdAt
+Unique constraint on (provider, providerUserId)
+
+Choose one approach and implement fully. Prefer UserIdentities for flexibility.
+
+Env vars required for OAuth
+
+Google
+
+GOOGLE_CLIENT_ID
+
+GOOGLE_CLIENT_SECRET
+
+GOOGLE_REDIRECT_URI
+
+Facebook
+
+FACEBOOK_APP_ID
+
+FACEBOOK_APP_SECRET
+
+FACEBOOK_REDIRECT_URI
+
+Apple
+Apple requires several values from Apple Developer settings:
+
+APPLE_CLIENT_ID (Service ID)
+
+APPLE_TEAM_ID
+
+APPLE_KEY_ID
+
+APPLE_PRIVATE_KEY (store as env var, support multiline safely)
+
+APPLE_REDIRECT_URI
+
+Also:
+
+APP_BASE_URL
+
+SESSION_SECRET (or JWT secret if using JWT)
+
+Provider console setup instructions
+In the README, include exact steps for:
+
+Creating OAuth credentials for each provider
+
+Setting redirect URIs
+
+Configuring app domains and privacy URLs if required
+
+For Apple, how to create the Service ID, key, and configure “Sign in with Apple”
+
+Login page UI updates
+
+Add a divider: “or”
+
+Keep email/password login intact.
+
+Place OAuth buttons above or below, consistent spacing.
+
+Style buttons to match the existing palette:
+
+Primary action stays red for email login button
+
+OAuth buttons can be white with dark border and provider icon
+
+Edge cases and rules
+
+If a user already exists with the same email from local auth, and they try OAuth:
+
+Link the identity to the existing account after verifying email ownership from provider.
+
+If provider email is not verified, treat cautiously:
+
+Allow login but require email verification or prompt.
+
+If OAuth login fails, show a friendly error and return to login.
+
+Testing checklist
+Provide a short checklist and confirm:
+
+Forgot password email sends successfully in a test environment.
+
+Reset link expires after 60 minutes.
+
+Token is single use.
+
+User enumeration is not possible from UI responses.
+
+Google OAuth login works end to end.
+
+Facebook OAuth login works end to end.
+
+Apple OAuth login works end to end.
+
+Existing email/password login still works.
+
+OAuth accounts can access their sessions correctly.
+
+Now implement these changes in the existing codebase.

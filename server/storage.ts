@@ -1,11 +1,13 @@
 import { 
-  users, sessions, systemSettings,
+  users, sessions, systemSettings, passwordResetTokens, userIdentities,
   type User, type InsertUser, 
   type Session, type InsertSession,
-  type ScoreResult, type SystemSettings
+  type ScoreResult, type SystemSettings,
+  type PasswordResetToken, type InsertPasswordResetToken,
+  type UserIdentity, type InsertUserIdentity, type AuthProvider
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, lt, isNull, desc } from "drizzle-orm";
+import { eq, and, lt, isNull, desc, gt } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -28,6 +30,17 @@ export interface IStorage {
   // System Settings (Keap)
   getSystemSettings(): Promise<SystemSettings | undefined>;
   upsertSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings>;
+  
+  // Password Reset Tokens
+  createPasswordResetToken(token: InsertPasswordResetToken): Promise<PasswordResetToken>;
+  getPasswordResetTokenByHash(tokenHash: string): Promise<PasswordResetToken | undefined>;
+  markPasswordResetTokenUsed(id: string): Promise<void>;
+  countRecentPasswordResetRequests(userId: string, since: Date): Promise<number>;
+  
+  // User Identities (OAuth)
+  getUserIdentityByProvider(provider: AuthProvider, providerUserId: string): Promise<UserIdentity | undefined>;
+  getUserIdentitiesByUser(userId: string): Promise<UserIdentity[]>;
+  createUserIdentity(identity: InsertUserIdentity): Promise<UserIdentity>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -121,6 +134,53 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return settings;
     }
+  }
+
+  // Password Reset Tokens
+  async createPasswordResetToken(token: InsertPasswordResetToken): Promise<PasswordResetToken> {
+    const [resetToken] = await db.insert(passwordResetTokens).values(token as any).returning();
+    return resetToken;
+  }
+
+  async getPasswordResetTokenByHash(tokenHash: string): Promise<PasswordResetToken | undefined> {
+    const [token] = await db.select().from(passwordResetTokens)
+      .where(eq(passwordResetTokens.tokenHash, tokenHash));
+    return token || undefined;
+  }
+
+  async markPasswordResetTokenUsed(id: string): Promise<void> {
+    await db.update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResetTokens.id, id));
+  }
+
+  async countRecentPasswordResetRequests(userId: string, since: Date): Promise<number> {
+    const tokens = await db.select().from(passwordResetTokens)
+      .where(and(
+        eq(passwordResetTokens.userId, userId),
+        gt(passwordResetTokens.createdAt, since)
+      ));
+    return tokens.length;
+  }
+
+  // User Identities (OAuth)
+  async getUserIdentityByProvider(provider: AuthProvider, providerUserId: string): Promise<UserIdentity | undefined> {
+    const [identity] = await db.select().from(userIdentities)
+      .where(and(
+        eq(userIdentities.provider, provider),
+        eq(userIdentities.providerUserId, providerUserId)
+      ));
+    return identity || undefined;
+  }
+
+  async getUserIdentitiesByUser(userId: string): Promise<UserIdentity[]> {
+    return db.select().from(userIdentities)
+      .where(eq(userIdentities.userId, userId));
+  }
+
+  async createUserIdentity(identity: InsertUserIdentity): Promise<UserIdentity> {
+    const [newIdentity] = await db.insert(userIdentities).values(identity as any).returning();
+    return newIdentity;
   }
 }
 

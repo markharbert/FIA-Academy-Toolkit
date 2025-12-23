@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginInput } from "@shared/schema";
@@ -8,14 +8,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
+import { SiGoogle, SiFacebook } from "react-icons/si";
 import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
 
 export default function LoginPage() {
   const { login } = useAuth();
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    if (params.get("error") === "oauth_failed") {
+      setError("Social login failed. Please try again or use email/password.");
+    }
+  }, [searchString]);
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -99,6 +109,16 @@ export default function LoginPage() {
                 )}
               />
 
+              <div className="flex items-center justify-between">
+                <Link 
+                  href="/forgot-password" 
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                  data-testid="link-forgot-password"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+
               <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-login-submit">
                 {isLoading ? (
                   <>
@@ -111,6 +131,36 @@ export default function LoginPage() {
               </Button>
             </form>
           </Form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <Separator className="w-full" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">or continue with</span>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => window.location.href = "/api/auth/oauth/google"}
+              data-testid="button-oauth-google"
+            >
+              <SiGoogle className="mr-2 h-4 w-4" />
+              Continue with Google
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => window.location.href = "/api/auth/oauth/facebook"}
+              data-testid="button-oauth-facebook"
+            >
+              <SiFacebook className="mr-2 h-4 w-4" />
+              Continue with Facebook
+            </Button>
+          </div>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
             Don't have an account?{" "}

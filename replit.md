@@ -92,6 +92,25 @@ Preferred communication style: Simple, everyday language.
 - `KEAP_AUTHORIZE_URL_BASE`: (Optional) Defaults to https://accounts.infusionsoft.com/app/oauth/authorize
 - `KEAP_TOKEN_URL`: (Optional) Defaults to https://api.infusionsoft.com/token
 
+### Email Configuration (Password Reset)
+- `SMTP_HOST`: SMTP server hostname (e.g., smtp.gmail.com)
+- `SMTP_PORT`: SMTP port (default: 587)
+- `SMTP_USER`: SMTP username/email
+- `SMTP_PASS`: SMTP password or app-specific password
+- `SMTP_FROM`: From email address for outgoing emails
+- `APP_BASE_URL`: Base URL for reset links (e.g., https://yourapp.replit.app)
+
+### OAuth Login (Google, Facebook)
+#### Google OAuth
+- `GOOGLE_CLIENT_ID`: Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
+- `GOOGLE_REDIRECT_URI`: (Optional) Callback URL, defaults to `{APP_BASE_URL}/api/auth/oauth/google/callback`
+
+#### Facebook OAuth
+- `FACEBOOK_APP_ID`: Facebook App ID
+- `FACEBOOK_APP_SECRET`: Facebook App secret
+- `FACEBOOK_REDIRECT_URI`: (Optional) Callback URL, defaults to `{APP_BASE_URL}/api/auth/oauth/facebook/callback`
+
 #### Admin Page
 - Located at `/admin` (accessible to admin users only)
 - Connect/disconnect Keap integration

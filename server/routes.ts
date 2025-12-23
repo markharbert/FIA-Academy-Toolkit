@@ -3,9 +3,14 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider } from "@shared/schema";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import multer from "multer";
+import passport from "passport";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { Strategy as FacebookStrategy } from "passport-facebook";
+import { sendPasswordResetEmail } from "./email";
 import path from "path";
 import fs from "fs";
 import session from "express-session";
@@ -176,6 +181,11 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
+      // Check if user has a password (might be OAuth-only user)
+      if (!user.passwordHash) {
+        return res.status(401).json({ message: "This account uses social login. Please sign in with Google or Facebook." });
+      }
+
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
         return res.status(401).json({ message: "Invalid email or password" });
@@ -213,6 +223,254 @@ export async function registerRoutes(
 
     res.json({ user: { id: user.id, email: user.email, isAdmin: user.isAdmin } });
   });
+
+  // ===================
+  // PASSWORD RESET ROUTES
+  // ===================
+
+  const PASSWORD_RESET_EXPIRY_MINUTES = 60;
+  const MAX_RESET_REQUESTS_PER_HOUR = 5;
+
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const parsed = forgotPasswordSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const { email } = parsed.data;
+      const successMessage = "If an account exists for that email, we sent a reset link.";
+
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        return res.json({ message: successMessage });
+      }
+
+      if (!user.passwordHash) {
+        return res.json({ message: successMessage });
+      }
+
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const recentRequests = await storage.countRecentPasswordResetRequests(user.id, oneHourAgo);
+      
+      if (recentRequests >= MAX_RESET_REQUESTS_PER_HOUR) {
+        console.warn(`[Password Reset] Rate limit exceeded for user ${user.id}`);
+        return res.json({ message: successMessage });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_MINUTES * 60 * 1000);
+
+      await storage.createPasswordResetToken({
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+        requestIp: req.ip || req.socket.remoteAddress || null,
+        userAgent: req.get("user-agent") || null,
+      });
+
+      await sendPasswordResetEmail(email, token);
+
+      res.json({ message: successMessage });
+    } catch (err) {
+      console.error("Forgot password error:", err);
+      res.status(500).json({ message: "An error occurred. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const parsed = resetPasswordSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const { token, newPassword } = parsed.data;
+
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const resetToken = await storage.getPasswordResetTokenByHash(tokenHash);
+
+      if (!resetToken) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
+
+      if (resetToken.usedAt) {
+        return res.status(400).json({ message: "This reset link has already been used" });
+      }
+
+      if (new Date() > new Date(resetToken.expiresAt)) {
+        return res.status(400).json({ message: "This reset link has expired" });
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+
+      await storage.updateUser(resetToken.userId, { passwordHash });
+      await storage.markPasswordResetTokenUsed(resetToken.id);
+
+      res.json({ message: "Password reset successfully. You can now log in with your new password." });
+    } catch (err) {
+      console.error("Reset password error:", err);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // ===================
+  // OAUTH ROUTES
+  // ===================
+
+  const APP_BASE_URL = process.env.APP_BASE_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+
+  // Initialize Passport
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const user = await storage.getUser(id);
+      done(null, user);
+    } catch (err) {
+      done(err);
+    }
+  });
+
+  // Google OAuth Strategy
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    passport.use(new GoogleStrategy({
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_REDIRECT_URI || `${APP_BASE_URL}/api/auth/oauth/google/callback`,
+    }, async (accessToken, refreshToken, profile, done) => {
+      try {
+        const email = profile.emails?.[0]?.value;
+        const providerUserId = profile.id;
+
+        if (!email) {
+          return done(null, false, { message: "No email provided by Google" });
+        }
+
+        let identity = await storage.getUserIdentityByProvider("google", providerUserId);
+        let user;
+
+        if (identity) {
+          user = await storage.getUser(identity.userId);
+        } else {
+          user = await storage.getUserByEmail(email);
+
+          if (user) {
+            await storage.createUserIdentity({
+              userId: user.id,
+              provider: "google",
+              providerUserId,
+              emailFromProvider: email,
+              emailVerifiedByProvider: profile.emails?.[0]?.verified || false,
+            });
+          } else {
+            user = await storage.createUser({
+              email,
+              passwordHash: null as any,
+            });
+
+            await storage.createUserIdentity({
+              userId: user.id,
+              provider: "google",
+              providerUserId,
+              emailFromProvider: email,
+              emailVerifiedByProvider: profile.emails?.[0]?.verified || false,
+            });
+          }
+        }
+
+        done(null, user);
+      } catch (err) {
+        done(err);
+      }
+    }));
+
+    app.get("/api/auth/oauth/google", passport.authenticate("google", {
+      scope: ["profile", "email"],
+    }));
+
+    app.get("/api/auth/oauth/google/callback",
+      passport.authenticate("google", { failureRedirect: "/login?error=oauth_failed" }),
+      (req: Request, res: Response) => {
+        req.session.userId = (req.user as any).id;
+        res.redirect("/dashboard");
+      }
+    );
+  }
+
+  // Facebook OAuth Strategy
+  if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
+    passport.use(new FacebookStrategy({
+      clientID: process.env.FACEBOOK_APP_ID,
+      clientSecret: process.env.FACEBOOK_APP_SECRET,
+      callbackURL: process.env.FACEBOOK_REDIRECT_URI || `${APP_BASE_URL}/api/auth/oauth/facebook/callback`,
+      profileFields: ["id", "emails", "name"],
+    }, async (accessToken, refreshToken, profile, done) => {
+      try {
+        const email = profile.emails?.[0]?.value;
+        const providerUserId = profile.id;
+
+        if (!email) {
+          return done(null, false, { message: "No email provided by Facebook" });
+        }
+
+        let identity = await storage.getUserIdentityByProvider("facebook", providerUserId);
+        let user;
+
+        if (identity) {
+          user = await storage.getUser(identity.userId);
+        } else {
+          user = await storage.getUserByEmail(email);
+
+          if (user) {
+            await storage.createUserIdentity({
+              userId: user.id,
+              provider: "facebook",
+              providerUserId,
+              emailFromProvider: email,
+              emailVerifiedByProvider: false,
+            });
+          } else {
+            user = await storage.createUser({
+              email,
+              passwordHash: null as any,
+            });
+
+            await storage.createUserIdentity({
+              userId: user.id,
+              provider: "facebook",
+              providerUserId,
+              emailFromProvider: email,
+              emailVerifiedByProvider: false,
+            });
+          }
+        }
+
+        done(null, user);
+      } catch (err) {
+        done(err);
+      }
+    }));
+
+    app.get("/api/auth/oauth/facebook", passport.authenticate("facebook", {
+      scope: ["email"],
+    }));
+
+    app.get("/api/auth/oauth/facebook/callback",
+      passport.authenticate("facebook", { failureRedirect: "/login?error=oauth_failed" }),
+      (req: Request, res: Response) => {
+        req.session.userId = (req.user as any).id;
+        res.redirect("/dashboard");
+      }
+    );
+  }
 
   // ===================
   // ADMIN ROUTES - KEAP INTEGRATION

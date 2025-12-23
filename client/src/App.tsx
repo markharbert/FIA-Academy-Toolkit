@@ -11,6 +11,8 @@ import { Loader2 } from "lucide-react";
 import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
 import DashboardPage from "@/pages/dashboard";
 import RecordPage from "@/pages/record";
 import SessionPage from "@/pages/session";
@@ -78,6 +80,12 @@ function Router() {
       </Route>
       <Route path="/signup">
         {() => <PublicOnlyRoute component={SignupPage} />}
+      </Route>
+      <Route path="/forgot-password">
+        {() => <PublicOnlyRoute component={ForgotPasswordPage} />}
+      </Route>
+      <Route path="/reset-password">
+        {() => <PublicOnlyRoute component={ResetPasswordPage} />}
       </Route>
       <Route path="/dashboard">
         {() => <ProtectedRoute component={DashboardPage} />}
