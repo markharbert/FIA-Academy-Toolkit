@@ -1,0 +1,234 @@
+Role: You are a senior full stack developer working inside my existing Replit project. We have a user experience problem: the email mh@markharbert.com
+ appears to have two separate accounts. One seems to exist in a production or admin environment, and another exists in the published or live app. I do not want two separate accounts or two separate logins. I want exactly one account for that email across the environment that users access. Your job is to identify why duplicates exist and implement a permanent fix so this cannot happen again.
+
+Do not guess. Use database inspection, logs, and a clear explanation of root cause and remedy.
+
+High Priority Outcomes
+
+There is only one user record representing mh@markharbert.com
+ in the live database.
+
+Any OAuth identities (Google, Facebook, Apple) that belong to mh@markharbert.com
+ are linked to that same single user.
+
+Logging in with email/password or any OAuth provider always lands in the same account and the same dashboard data.
+
+Duplicate accounts cannot be created again, even under race conditions.
+
+Step 1: Confirm what “two accounts” means with evidence
+You must verify whether the duplicates are caused by:
+A. Two different databases (staging vs production, dev vs published)
+B. Two different auth providers creating separate users (local auth vs OAuth)
+C. Case sensitivity or whitespace differences in email
+D. Missing unique constraint on email
+E. Broken identity linking logic
+
+Required actions
+
+Log the database connection information at backend startup:
+
+If SQLite, log the absolute path of the DB file.
+
+If Postgres, log the host and database name (do not log credentials).
+
+From the running published instance, run a query:
+
+Count users where email ILIKE 'mh@markharbert.com
+'
+
+Also check normalized matches: lower(trim(email)) = 'mh@markharbert.com
+'
+
+Print the user IDs found and key fields:
+
+id, email, createdAt, role, auth method indicators
+
+Check UserIdentities table for identities that match this email or provider user id and list them:
+
+provider, providerUserId, userId
+
+Step 2: Fix environment split issues if present
+If the “two accounts” are actually in two different databases:
+
+Confirm which database the published app uses.
+
+Confirm which database the production/admin app uses.
+
+Update configuration so both the admin and the published app point to the same single database.
+
+Remove any fallback behavior that creates a new SQLite file in different paths per environment.
+
+Example issues to check
+
+One instance uses ./db.sqlite and the other uses /home/runner/.../db.sqlite
+
+One instance uses an in-memory SQLite database in dev
+
+One instance has separate DB_URL env vars or missing env var leading to defaults
+
+Step 3: Implement a real “merge accounts” process for duplicates in the same database
+If duplicates exist inside the same live database, implement a merge utility that:
+
+Chooses a primary user and a duplicate user.
+
+Moves all dependent records from duplicate -> primary:
+
+Sessions table: userId reassigned to primary userId
+
+UserIdentities: reassigned to primary userId
+
+Any Keap contact id fields, consent fields, and profile fields merged safely
+
+Audit logs updated if needed
+
+Resolves field conflicts:
+
+If primary missing a field and duplicate has it, copy it
+
+Never overwrite primary with blank
+
+Deletes or archives the duplicate user record:
+
+Prefer soft delete: set isDisabled true and mark mergedIntoUserId
+
+Logs the merge action to AdminAuditLog with details.
+
+Create an admin-only endpoint or script
+
+POST /api/admin/users/merge
+Body:
+{
+"primaryEmail": "mh@markharbert.com
+",
+"duplicateUserId": "..."
+}
+
+Or support:
+{
+"primaryUserId": "...",
+"duplicateUserId": "..."
+}
+
+This endpoint must be protected with requireAdmin and also a safety confirmation step:
+
+Require a query param or confirm phrase like “CONFIRM_MERGE”.
+
+Step 4: Prevent duplicates permanently
+
+Email normalization
+
+Normalize emails everywhere:
+
+const normalizedEmail = email.trim().toLowerCase()
+
+Apply normalization on:
+
+signup with email/password
+
+OAuth callback user creation
+
+account profile email updates
+
+admin updates
+
+Database constraints
+
+Add a unique index on normalized email.
+Options:
+A. Store normalizedEmail column and unique index on it (recommended).
+
+Users.normalizedEmail (lower(trim(email)))
+
+Unique index on normalizedEmail
+B. If DB supports functional indexes, create a unique index on lower(trim(email)).
+
+Implement in migrations.
+
+Race condition protection
+
+When creating users via OAuth:
+
+Wrap user creation + identity creation in a transaction.
+
+If user create fails due to unique constraint, re-query the existing user and link identity to it.
+
+Identity linking rules
+
+If OAuth provider returns an email:
+
+Attempt to find user by normalizedEmail first.
+
+If found, link identity instead of creating a new user.
+
+If identity already exists by providerUserId:
+
+Always use that user.
+
+Step 5: Confirm login always lands on the same account
+
+Required tests
+
+Login with email/password for mh@markharbert.com
+.
+
+Login with Google OAuth for the same email.
+
+Confirm both land on the same userId and same session list.
+
+Confirm /api/auth/me returns the same userId across both login methods.
+
+Confirm admin role remains correct after merge.
+
+Step 6: Update the Super Admin page to detect duplicates
+Add a “Possible duplicates” detection tool:
+
+Find users with the same normalizedEmail
+
+Show them grouped with a “Merge” button
+Admin sees:
+
+both user IDs
+
+created dates
+
+identities
+
+session counts
+
+a recommended primary
+
+Step 7: Deliverables you must produce
+
+Root cause explanation:
+
+Was it environment split or same DB duplicates
+
+Evidence:
+
+DB path or DB name in published environment
+
+Query results showing duplicates before and after
+
+Merge executed so mh@markharbert.com
+ is single account
+
+Constraints and normalization added so it cannot happen again
+
+Tests confirming both login methods go to the same account
+
+Verification Checklist
+At the end, confirm:
+
+Only one Users row exists for mh@markharbert.com
+ in the live DB
+
+All sessions and identities are linked to that user
+
+Unique constraint prevents new duplicates
+
+OAuth linking uses normalized email and identity lookup correctly
+
+Logging in via different methods reaches the same dashboard data
+
+Now implement these fixes in the existing codebase and perform the merge for mh@markharbert.com
+ if duplicates exist.

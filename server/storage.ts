@@ -10,6 +10,12 @@ import {
 import { db } from "./db";
 import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizzle-orm";
 
+// Email normalization helper - centralizes email handling to prevent duplicates
+export function normalizeEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  return email.trim().toLowerCase();
+}
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -75,6 +81,21 @@ export interface IStorage {
     totalSessions: number;
     sessionsLast7Days: number;
   }>;
+  
+  // Admin: Duplicate Detection
+  findDuplicateEmails(): Promise<Array<{
+    normalizedEmail: string;
+    count: number;
+    users: Array<{ id: string; email: string; createdAt: Date; isAdmin: boolean }>;
+  }>>;
+  
+  // Admin: Account Merge
+  mergeUsers(primaryUserId: string, duplicateUserId: string): Promise<{
+    success: boolean;
+    message: string;
+    reassignedSessions?: number;
+    reassignedIdentities?: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -85,18 +106,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    // Use case-insensitive lookup to prevent duplicate accounts
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) return undefined;
+    
+    const [user] = await db.select().from(users)
+      .where(sql`LOWER(TRIM(${users.email})) = ${normalizedEmail}`);
     return user || undefined;
   }
 
   async createUser(insertUser: InsertUser & { emailConsentAt?: Date; emailConsentIp?: string }): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    // Normalize email before insert to ensure consistency
+    const normalizedData = {
+      ...insertUser,
+      email: normalizeEmail(insertUser.email),
+    };
+    
+    const [user] = await db.insert(users).values(normalizedData).returning();
     return user;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    // Normalize email if being updated
+    const normalizedUpdates = {
+      ...updates,
+      ...(updates.email !== undefined ? { email: normalizeEmail(updates.email) } : {}),
+    };
+    
     const [user] = await db.update(users)
-      .set(updates)
+      .set(normalizedUpdates)
       .where(eq(users.id, id))
       .returning();
     return user || undefined;
@@ -382,6 +420,123 @@ export class DatabaseStorage implements IStorage {
       totalSessions: Number(totalSessions),
       sessionsLast7Days: Number(sessionsLast7Days),
     };
+  }
+
+  // Admin: Duplicate Detection
+  async findDuplicateEmails(): Promise<Array<{
+    normalizedEmail: string;
+    count: number;
+    users: Array<{ id: string; email: string; createdAt: Date; isAdmin: boolean }>;
+  }>> {
+    // Find emails that appear more than once (case-insensitive)
+    const duplicates = await db.execute(sql`
+      SELECT LOWER(TRIM(email)) as normalized_email, COUNT(*) as cnt
+      FROM users
+      WHERE email IS NOT NULL
+      GROUP BY LOWER(TRIM(email))
+      HAVING COUNT(*) > 1
+    `);
+    
+    const result = [];
+    for (const row of duplicates.rows as any[]) {
+      const normalizedEmail = row.normalized_email;
+      const usersWithEmail = await db.select({
+        id: users.id,
+        email: users.email,
+        createdAt: users.createdAt,
+        isAdmin: users.isAdmin,
+      }).from(users)
+        .where(sql`LOWER(TRIM(${users.email})) = ${normalizedEmail}`)
+        .orderBy(asc(users.createdAt));
+      
+      result.push({
+        normalizedEmail,
+        count: Number(row.cnt),
+        users: usersWithEmail.map(u => ({
+          id: u.id,
+          email: u.email || '',
+          createdAt: u.createdAt,
+          isAdmin: u.isAdmin || false,
+        })),
+      });
+    }
+    
+    return result;
+  }
+
+  // Admin: Account Merge
+  async mergeUsers(primaryUserId: string, duplicateUserId: string): Promise<{
+    success: boolean;
+    message: string;
+    reassignedSessions?: number;
+    reassignedIdentities?: number;
+  }> {
+    if (primaryUserId === duplicateUserId) {
+      return { success: false, message: "Cannot merge a user with itself" };
+    }
+    
+    const primary = await this.getUser(primaryUserId);
+    const duplicate = await this.getUser(duplicateUserId);
+    
+    if (!primary) {
+      return { success: false, message: "Primary user not found" };
+    }
+    if (!duplicate) {
+      return { success: false, message: "Duplicate user not found" };
+    }
+    
+    try {
+      // Reassign sessions from duplicate to primary
+      const sessionResult = await db.update(sessions)
+        .set({ userId: primaryUserId })
+        .where(eq(sessions.userId, duplicateUserId))
+        .returning({ id: sessions.id });
+      
+      // Reassign user identities from duplicate to primary
+      const identityResult = await db.update(userIdentities)
+        .set({ userId: primaryUserId })
+        .where(eq(userIdentities.userId, duplicateUserId))
+        .returning({ id: userIdentities.id });
+      
+      // Update audit logs to point to primary user
+      await db.update(adminAuditLog)
+        .set({ targetUserId: primaryUserId })
+        .where(eq(adminAuditLog.targetUserId, duplicateUserId));
+      
+      // Copy any fields from duplicate that primary is missing
+      const updates: Partial<User> = {};
+      if (!primary.firstName && duplicate.firstName) updates.firstName = duplicate.firstName;
+      if (!primary.lastName && duplicate.lastName) updates.lastName = duplicate.lastName;
+      if (!primary.displayName && duplicate.displayName) updates.displayName = duplicate.displayName;
+      if (!primary.keapContactId && duplicate.keapContactId) updates.keapContactId = duplicate.keapContactId;
+      if (!primary.emailConsentAt && duplicate.emailConsentAt) {
+        updates.emailConsentAt = duplicate.emailConsentAt;
+        updates.emailConsentIp = duplicate.emailConsentIp;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await this.updateUser(primaryUserId, updates);
+      }
+      
+      // Soft-delete the duplicate user
+      await this.updateUser(duplicateUserId, {
+        isDisabled: true,
+        disabledAt: new Date(),
+        disabledReason: `Merged into user ${primaryUserId}`,
+      });
+      
+      return {
+        success: true,
+        message: `Successfully merged user ${duplicateUserId} into ${primaryUserId}`,
+        reassignedSessions: sessionResult.length,
+        reassignedIdentities: identityResult.length,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Merge failed: ${err.message}`,
+      };
+    }
   }
 }
 
