@@ -1,0 +1,491 @@
+Role: You are a senior full stack web developer. Build a production style web app in Replit based on the specification below. Make reasonable choices when something is not specified, but do not skip core features. Provide working code, a runnable project, and setup steps.
+
+Project Name: Video Confidence Coach
+
+Core Purpose
+A web platform where users can practice video marketing by recording short videos inside the app, getting an automatic transcription, and receiving an AI score and improvement suggestions based on a 5 part video creation formula:
+
+Hook
+
+Set the Hook
+
+First Call to Action
+
+Content
+
+Final Call to Action
+
+Key User Outcomes
+
+User records a practice video in the browser and sees it embedded on screen.
+
+User can save the video, then download it later for up to 7 days.
+
+App transcribes the audio and shows the transcript on screen.
+
+App evaluates the recording using AI and produces:
+
+A score for each of the 5 parts
+
+A total score
+
+Specific improvement suggestions for each part
+
+Optional speaking delivery metrics (pace, filler words, long pauses)
+
+Non Goals
+This app is for practice. Do not publish videos publicly. No social feed. No public sharing links in v1 unless explicitly requested later.
+
+Tech Stack Requirements
+Use a modern simple stack that runs well on Replit.
+Suggested stack (choose one and implement fully):
+Option A:
+
+Frontend: React + Vite
+
+Backend: Node.js + Express
+
+Database: SQLite (via Prisma) or Postgres if easiest in Replit
+
+Storage: Local filesystem storage in Replit for v1, structured so it can be swapped to S3 later
+
+Background jobs: node-cron or a simple scheduled cleanup script that runs at startup and then on an interval
+
+Transcription: Use an API based speech to text service. Preferred: OpenAI Whisper API. If you choose something else, explain why and keep it simple.
+
+AI scoring: Use an LLM API. Preferred: OpenAI Responses or Chat Completions API. Use transcript as primary input. If you can also analyze audio features locally, do it, but keep it reliable.
+
+Option B:
+
+Frontend: Next.js full stack
+
+Database: SQLite
+
+Storage: filesystem
+
+Same transcription and scoring approach
+
+You must implement environment variable based secrets for API keys. Do not hardcode keys.
+
+Authentication
+Implement basic user accounts so each user sees only their videos.
+
+Email + password sign up and login
+
+Password hashing (bcrypt or equivalent)
+
+Session auth with httpOnly cookies or JWT in httpOnly cookies
+
+Basic account pages: Log in, Sign up, Log out
+
+Data Retention Rules
+Videos are stored for 7 days from the time the user saves the recording.
+
+User can download within 7 days.
+
+After 7 days, the video file must be deleted automatically.
+
+Keep transcript and score results in the database, but mark the video as expired and remove download access once the file is deleted.
+
+Build a cleanup job that runs at least daily, and also runs on server start.
+
+Main Screens and UX
+
+Landing Page
+Goal: Explain what the app does and push user to sign up.
+Include:
+
+Headline: Practice video marketing, get feedback, build confidence
+
+A short 3 step explanation:
+Step 1 Record
+Step 2 Transcribe
+Step 3 Get a score and improvements
+
+Buttons: Sign up, Log in
+
+Dashboard
+After login, show:
+
+Button: New Practice Session
+
+List of past sessions with:
+
+Date
+
+Duration
+
+Total score
+
+Status: Video available or Expired
+
+Buttons: View details, Download (only if within 7 days)
+
+New Practice Session Page
+Layout:
+
+Left side: Video recorder and preview area
+
+Right side: The 5 part video creation formula displayed clearly
+Include:
+
+Embedded camera preview before recording
+
+Record button
+
+Stop button
+
+Playback player after recording
+
+Save Session button (stores video, runs transcription, runs scoring)
+
+Allow re record before saving
+
+Show tips for recording:
+
+Good lighting
+
+Speak clearly
+
+Keep it short and focused
+
+Recording Rules
+Use browser MediaRecorder to capture video and audio.
+Store video format as webm by default. If you convert to mp4 server side, do it only if it is stable in Replit.
+Capture duration and file size.
+
+Session Results Page
+After the user saves a session, show these sections:
+
+A. Video Player
+
+Embedded player for saved video (stream from backend)
+
+Download button if within 7 days
+
+Show expiration date and time
+
+If expired, show “Video expired” and hide download
+
+B. Transcript
+
+Display full transcript text
+
+Provide a copy button
+
+Provide a simple edit box so the user can correct transcript text and re run scoring using the edited transcript (important feature)
+
+C. Scoring Summary
+
+Total score out of 100
+
+Score breakdown for each of the 5 parts, each out of 20
+
+A short “What you did well” section
+
+A short “Top 3 improvements” section
+
+D. Detailed Feedback by Part
+For each part:
+
+Score
+
+What was found in the transcript that supports that score
+
+What is missing
+
+2 to 5 specific rewrite suggestions
+
+Example lines the user can say next time
+
+E. Delivery Metrics (optional but recommended)
+Compute from transcript and timing if possible:
+
+Estimated words per minute
+
+Filler words count (um, uh, like, you know, etc)
+
+Long pause detection if you can infer it
+If you cannot do timing, still do filler word count from text.
+
+The Five Part Video Creation Formula Definitions
+Display these in the UI and also use them in the scoring rubric.
+
+Hook
+Goal: Grab attention in the first 1 to 3 seconds.
+Examples:
+
+Ask a sharp question
+
+Call out the audience
+
+Make a bold promise
+
+Set the Hook
+Goal: Create curiosity and make the viewer want to keep watching.
+Examples:
+
+Tease what is coming
+
+Mention a common mistake
+
+Set up a quick story
+
+First Call to Action
+Goal: Early micro action.
+Examples:
+
+“Comment the word…”
+
+“Follow for more…”
+
+“Stick with me…”
+
+Content
+Goal: Deliver the value clearly.
+Examples:
+
+1 to 3 points
+
+Clear steps
+
+Simple explanation
+
+Final Call to Action
+Goal: Clear next step at the end.
+Examples:
+
+“Click the link…”
+
+“Download the guide…”
+
+“Send me a message…”
+
+AI Scoring Requirements
+
+Inputs to the scoring model
+
+Primary: transcript text
+
+Secondary: metadata (duration, words per minute, filler count)
+
+User chosen goal (add a dropdown before saving):
+
+Sales
+
+Lead capture
+
+Content education
+
+Recruitment or invite
+This goal slightly changes feedback tone and calls to action.
+
+Output format
+The model must return strict JSON so the UI can render it.
+Define a JSON schema like:
+
+{
+"totalScore": 0,
+"partScores": {
+"hook": 0,
+"setHook": 0,
+"firstCTA": 0,
+"content": 0,
+"finalCTA": 0
+},
+"summary": {
+"strengths": ["", "", ""],
+"topImprovements": ["", "", ""]
+},
+"parts": {
+"hook": {
+"whatWorked": [""],
+"whatMissing": [""],
+"suggestions": [""],
+"exampleLines": [""]
+},
+"setHook": { ... },
+"firstCTA": { ... },
+"content": { ... },
+"finalCTA": { ... }
+},
+"delivery": {
+"wordsPerMinute": 0,
+"fillerWords": {
+"count": 0,
+"examples": [""]
+},
+"clarityNotes": [""]
+}
+}
+
+Make sure totalScore equals the sum of the five part scores and caps at 100.
+
+Scoring guidance
+Each part is 0 to 20.
+Provide consistent criteria:
+
+0 to 5: missing
+
+6 to 10: weak
+
+11 to 15: solid
+
+16 to 20: strong
+Scoring must be grounded in what is actually present in the transcript. If something is missing, say it is missing.
+
+Transcription Requirements
+After saving video:
+
+Extract audio or send video directly if supported by the transcription API.
+
+Produce transcript text.
+
+Save transcript to database.
+
+Run AI scoring on transcript.
+
+Save JSON results to database.
+
+Add progress UI
+Show a stepper while processing:
+
+Uploading video
+
+Transcribing
+
+Scoring
+
+Done
+
+Backend API Endpoints (minimum)
+Auth
+
+POST /api/auth/signup
+
+POST /api/auth/login
+
+POST /api/auth/logout
+
+GET /api/auth/me
+
+Sessions
+
+POST /api/sessions (create session record)
+
+POST /api/sessions/:id/upload (upload video file)
+
+POST /api/sessions/:id/transcribe (run transcription)
+
+POST /api/sessions/:id/score (run scoring)
+
+POST /api/sessions/:id/rescore (rescore using edited transcript)
+
+GET /api/sessions (list user sessions)
+
+GET /api/sessions/:id (get details)
+
+GET /api/sessions/:id/video (stream video if available)
+
+GET /api/sessions/:id/download (download video if available)
+
+Database Schema (minimum)
+Users
+
+id
+
+email
+
+passwordHash
+
+createdAt
+
+Sessions
+
+id
+
+userId
+
+createdAt
+
+goalType (sales, lead, education, recruit)
+
+durationSeconds
+
+videoPath
+
+videoMimeType
+
+videoSizeBytes
+
+expiresAt
+
+videoDeletedAt (nullable)
+
+transcriptText (nullable)
+
+transcriptEditedText (nullable)
+
+scoreJson (nullable)
+
+scoreUpdatedAt (nullable)
+
+Security and Privacy
+
+Only authenticated users can access their own sessions.
+
+Validate file uploads and size limit (set a reasonable limit like 250 MB).
+
+Rate limit scoring and transcription endpoints per user to prevent abuse.
+
+Store secrets only in environment variables.
+
+Add a basic privacy note in the footer: recordings are private to the account.
+
+Error Handling
+
+If transcription fails, show a readable error and allow retry.
+
+If scoring fails, allow retry without re uploading.
+
+If video expired, show it clearly and hide download.
+
+Testing and Verification
+Provide a short checklist to confirm it works:
+
+Record video in browser
+
+Save session
+
+Transcript appears
+
+Scores appear in JSON rendered UI
+
+Download works within 7 days
+
+Simulate expiration by changing expiresAt and confirm download is blocked
+
+Confirm a user cannot view another user’s sessions
+
+Developer Instructions
+At the end, output:
+
+How to run the app in Replit
+
+Required environment variables
+
+Any one time setup steps (database migrations)
+
+Notes on cost and usage for transcription and scoring APIs
+
+Implementation Notes
+
+Keep code organized and readable.
+
+Do not skip the strict JSON output requirement for scoring.
+
+Build the UI so it is simple and fast, not cluttered.
+
+The 5 part formula must be visible on the recording page.
+
+Now build the complete app.
