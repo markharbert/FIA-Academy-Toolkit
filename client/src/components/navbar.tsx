@@ -23,7 +23,7 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-[#06092a] shadow-md">
+    <header className="sticky top-0 z-50 w-full bg-brand-dark shadow-md">
       <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4 md:px-6">
         <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2" data-testid="link-logo">
           <img src={logoImage} alt="Mark Harbert" className="h-8" />
@@ -75,7 +75,7 @@ export function Navbar() {
               </Link>
               <Link href="/signup">
                 <Button 
-                  className="bg-[#da0010] text-white font-bold hover:bg-[#b8000d] border-0"
+                  className="font-bold"
                   data-testid="button-signup"
                 >
                   Sign up
@@ -97,7 +97,7 @@ export function Navbar() {
       </div>
 
       {mobileMenuOpen && (
-        <div className="md:hidden bg-[#06092a] border-t border-white/10 px-4 py-4">
+        <div className="md:hidden bg-brand-dark border-t border-white/10 px-4 py-4">
           {user ? (
             <div className="space-y-3">
               <p className="text-white/70 text-sm px-2">{user.email}</p>
@@ -138,7 +138,7 @@ export function Navbar() {
               </Link>
               <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
                 <Button 
-                  className="w-full bg-[#da0010] text-white font-bold hover:bg-[#b8000d] border-0"
+                  className="w-full font-bold"
                 >
                   Sign up
                 </Button>

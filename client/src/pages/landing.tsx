@@ -42,13 +42,13 @@ const features = [
 export default function LandingPage() {
   return (
     <div className="flex flex-col">
-      <section className="relative overflow-hidden bg-white py-20 md:py-32">
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(45%_40%_at_50%_60%,rgba(63,146,204,0.08),transparent)]" />
+      <section className="relative overflow-hidden bg-background py-20 md:py-32">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(45%_40%_at_50%_60%,hsl(var(--brand-light)/0.08),transparent)]" />
         <div className="container mx-auto px-4 text-center">
-          <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-[#06092a] md:text-5xl lg:text-6xl" data-testid="text-hero-title">
+          <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-brand-dark md:text-5xl lg:text-6xl" data-testid="text-hero-title">
             Practice Video Marketing,
             <br />
-            <span className="text-[#da0010]">Get Feedback, Build Confidence</span>
+            <span className="text-brand-red">Get Feedback, Build Confidence</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl" data-testid="text-hero-subtitle">
             Record practice videos, get AI-powered scoring on the 5-part video creation formula, 
@@ -147,7 +147,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="bg-[#06092a] py-16 md:py-20">
+      <section className="bg-brand-dark py-16 md:py-20">
         <div className="container mx-auto px-4 text-center">
           <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl" data-testid="text-cta-title">
             Ready to Build Your Video Confidence?
@@ -156,7 +156,7 @@ export default function LandingPage() {
             Start practicing today. Record, get feedback, improve, and watch your confidence grow.
           </p>
           <Link href="/signup">
-            <Button size="lg" className="h-12 px-8 text-base bg-[#da0010] text-white font-bold hover:bg-[#b8000d] border-0" data-testid="button-cta-signup">
+            <Button size="lg" className="h-12 px-8 text-base font-bold" data-testid="button-cta-signup">
               Start Practicing Now
             </Button>
           </Link>
