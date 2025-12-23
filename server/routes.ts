@@ -124,35 +124,6 @@ export async function registerRoutes(
   );
 
   // ===================
-  // DEBUG ROUTES (development only)
-  // ===================
-  
-  app.get("/api/debug/oauth-status", async (req: Request, res: Response) => {
-    try {
-      const appBaseUrl = process.env.APP_BASE_URL || 
-        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "unknown");
-      
-      res.json({
-        environment: {
-          NODE_ENV: process.env.NODE_ENV,
-          REPLIT_DEPLOYMENT: process.env.REPLIT_DEPLOYMENT,
-          isProduction,
-          hasGoogleCredentials: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-          hasFacebookCredentials: !!(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET),
-          hasAppleCredentials: !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID),
-          appBaseUrl,
-        },
-        session: {
-          userId: req.session.userId || null,
-          hasSession: !!req.session,
-        },
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // ===================
   // AUTH ROUTES
   // ===================
 
@@ -411,11 +382,6 @@ export async function registerRoutes(
       callbackURL: googleCallbackURL,
       state: true,
     }, async (accessToken, refreshToken, profile, done) => {
-      console.log("[OAuth Google] Strategy callback entered");
-      console.log("[OAuth Google] Profile ID:", profile.id);
-      console.log("[OAuth Google] Profile emails:", JSON.stringify(profile.emails));
-      console.log("[OAuth Google] Profile name:", JSON.stringify(profile.name));
-      
       try {
         const email = profile.emails?.[0]?.value?.toLowerCase();
         const providerUserId = profile.id;
@@ -424,24 +390,19 @@ export async function registerRoutes(
         const lastName = profile.name?.familyName;
         const displayName = profile.displayName;
 
-        console.log("[OAuth Google] Extracted email:", email);
-        console.log("[OAuth Google] Provider user ID:", providerUserId);
-
         // Check if identity already exists for this provider
         let identity = await storage.getUserIdentityByProvider("google", providerUserId);
         let user;
 
         if (identity) {
-          console.log("[OAuth Google] Found existing identity, loading user:", identity.userId);
           // User already linked, just return them
           user = await storage.getUser(identity.userId);
+          console.log("[OAuth Google] Existing user logged in:", user?.id);
         } else if (email) {
-          console.log("[OAuth Google] No identity found, checking for user by email");
           // Check if a user with this email already exists
           user = await storage.getUserByEmail(email);
 
           if (user) {
-            console.log("[OAuth Google] Found existing user by email, linking identity:", user.id);
             // Link the OAuth identity to existing user (don't modify their password)
             await storage.createUserIdentity({
               userId: user.id,
@@ -451,8 +412,8 @@ export async function registerRoutes(
               emailVerifiedByProvider: emailVerified,
               nameFromProvider: displayName,
             });
+            console.log("[OAuth Google] Linked identity to existing user:", user.id);
           } else {
-            console.log("[OAuth Google] Creating new user with email");
             // Create new user without password (OAuth-only user)
             user = await storage.createUser({
               email,
@@ -461,7 +422,6 @@ export async function registerRoutes(
               lastName: lastName || null,
               displayName: displayName || null,
             });
-            console.log("[OAuth Google] Created new user:", user.id);
 
             await storage.createUserIdentity({
               userId: user.id,
@@ -471,10 +431,9 @@ export async function registerRoutes(
               emailVerifiedByProvider: emailVerified,
               nameFromProvider: displayName,
             });
-            console.log("[OAuth Google] Created identity for new user");
+            console.log("[OAuth Google] Created new user:", user.id);
           }
         } else {
-          console.log("[OAuth Google] No email from provider, creating user without email");
           // No email from provider - create user without email
           user = await storage.createUser({
             email: null as any,
@@ -492,51 +451,39 @@ export async function registerRoutes(
             emailVerifiedByProvider: false,
             nameFromProvider: displayName,
           });
+          console.log("[OAuth Google] Created user without email:", user.id);
         }
 
-        console.log("[OAuth Google] Success! Returning user:", user?.id);
         done(null, user);
       } catch (err: any) {
-        console.error("[OAuth Google] ERROR:", err.message);
-        console.error("[OAuth Google] Stack:", err.stack);
+        console.error("[OAuth Google] Error:", err.message);
         done(err);
       }
     }));
 
-    app.get("/api/auth/oauth/google", (req: Request, res: Response, next: NextFunction) => {
-      console.log("[OAuth Google] Starting OAuth flow");
-      passport.authenticate("google", {
-        scope: ["profile", "email"],
-      })(req, res, next);
-    });
+    app.get("/api/auth/oauth/google", passport.authenticate("google", {
+      scope: ["profile", "email"],
+    }));
 
     app.get("/api/auth/oauth/google/callback", (req: Request, res: Response, next: NextFunction) => {
-      console.log("[OAuth Google] Callback hit with query:", JSON.stringify(req.query));
-      
       passport.authenticate("google", (err: any, user: any, info: any) => {
-        console.log("[OAuth Google] Passport authenticate result - err:", err, "user:", user?.id, "info:", info);
-        
         if (err) {
           console.error("[OAuth Google] Authentication error:", err.message);
-          return res.redirect("/login?error=oauth_failed&reason=auth_error");
+          return res.redirect("/login?error=oauth_failed");
         }
         
         if (!user) {
           console.error("[OAuth Google] No user returned from strategy");
-          return res.redirect("/login?error=oauth_failed&reason=no_user");
+          return res.redirect("/login?error=oauth_failed");
         }
         
-        // Set session
+        // Set session and save before redirect
         req.session.userId = user.id;
-        console.log("[OAuth Google] Session userId set to:", user.id);
-        
-        // Save session before redirect
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error("[OAuth Google] Session save error:", saveErr);
-            return res.redirect("/login?error=oauth_failed&reason=session_error");
+            return res.redirect("/login?error=oauth_failed");
           }
-          console.log("[OAuth Google] Session saved, redirecting to dashboard");
           res.redirect("/dashboard");
         });
       })(req, res, next);

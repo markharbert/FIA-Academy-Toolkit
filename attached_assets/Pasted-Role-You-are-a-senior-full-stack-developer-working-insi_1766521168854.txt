@@ -1,0 +1,499 @@
+Role: You are a senior full stack developer working inside my existing Replit project. Build a secure Super Admin section that only admin users can access. This is not just a UI hide. It must be enforced on the backend too. Do not break existing features. Provide working code, database migrations, and clear setup steps. Confirm each item in a checklist at the end.
+
+Goal Summary
+
+Add role based access control so we have an admin role.
+
+Add an Admin entry in the top navigation that only admins can see.
+
+Add an Admin Settings dropdown item in the user menu dropdown for admins only.
+
+Create a Super Admin page that lets the admin:
+
+View all users
+
+Search, filter, sort users
+
+Open a user profile panel for each user with lots of detail
+
+View their sessions
+
+Manage user status
+
+Inspect and manage Keap connection status
+
+Refresh Keap connection through OAuth
+
+Ensure all admin endpoints are protected and cannot be accessed by non admin users even if they guess the URL.
+
+Part 1: Roles and Permissions
+
+Database changes
+Add to Users table:
+
+role (string) with allowed values:
+
+user
+
+admin
+Default should be user.
+
+Also add:
+
+isDisabled (boolean, default false)
+
+disabledAt (nullable datetime)
+
+disabledReason (nullable string)
+
+Admin bootstrap rule
+Since there must be at least one admin:
+Option A (recommended): Environment based admin email
+
+ADMIN_EMAIL
+On server startup:
+
+If a user exists with that email, set role=admin.
+
+If not, log a warning.
+
+Option B: Manual DB update documented in README.
+
+Backend authorization middleware
+Create middleware:
+
+requireAuth
+
+requireAdmin
+
+Rules
+
+requireAuth checks session is valid.
+
+requireAdmin checks user.role === "admin" and user.isDisabled is false.
+
+If non admin:
+
+return 403 for API calls
+
+redirect to /dashboard for page routes if needed
+
+Important: Admin link visibility
+
+Frontend must hide the Admin link unless user.role is admin.
+
+Backend must still block non admin even if they type /admin manually.
+
+Part 2: Admin Navigation
+
+Top bar changes
+
+Add a nav item: Admin
+
+Only show this when the logged in user is admin.
+
+Clicking it goes to /admin.
+
+User menu dropdown changes
+
+Add “Admin Settings” item in the dropdown for admins only.
+
+Keep “Account” for all users.
+
+Part 3: Super Admin Page UI
+
+Route
+
+/admin
+
+Layout
+Use the existing white space design.
+
+Dark blue header remains
+
+Admin page content is white with cards
+
+Admin page sections
+A. Overview Cards (top)
+
+Total users
+
+New users last 7 days
+
+Total sessions recorded
+
+Sessions last 7 days
+
+Keap connection status (Connected, Not Connected, Token Expiring Soon)
+
+B. User Management Table
+Show a table with:
+
+Created date
+
+Name (displayName or first+last)
+
+Email
+
+Role
+
+Signup method (local, google, facebook, apple)
+
+Consent status (emailConsentAt present or not)
+
+Keap sync status (synced, pending, failed)
+
+Sessions count
+
+Last login (if available)
+
+Status (active or disabled)
+
+Controls
+
+Search box (search email, name)
+
+Filters:
+
+Role: all, user, admin
+
+Status: active, disabled
+
+Signup method: all, local, google, facebook, apple
+
+Consent: yes or no
+
+Keap: all, synced, pending, failed
+
+Sorting:
+
+newest
+
+oldest
+
+most sessions
+
+last login
+
+Pagination
+
+25 per page with next/prev
+
+C. User Profile Drawer (dropdown or expandable row)
+When the admin clicks a user row, open either:
+
+A right side drawer panel, OR
+
+An expandable row accordion
+Use whichever is easiest and cleanest.
+
+Profile details shown
+
+Basic info
+
+User id
+
+Display name
+
+First name
+
+Last name
+
+Email
+
+Email verified status
+
+Role
+
+Status active or disabled
+
+Auth identities
+
+List of connected providers:
+
+local
+
+google
+
+facebook
+
+apple
+For each provider:
+
+providerUserId
+
+emailFromProvider
+
+createdAt
+
+Consent and marketing
+
+emailConsentAt
+
+emailConsentIp
+
+whether eligible for Keap sync
+
+Keap status
+
+Keap contact id (if stored)
+
+last sync time
+
+last sync status and last error message
+
+Sessions overview
+Show last 10 sessions with:
+
+Session title
+
+Date
+
+Total score
+
+Video status (available or expired)
+
+ExpiresAt
+
+Transcript present yes/no
+Provide a “View all sessions” link.
+
+Admin actions on user
+Buttons with confirmations:
+
+Promote to admin
+
+Demote to user (do not allow demote self if it would remove last admin)
+
+Disable user account
+
+Re enable user
+
+Force logout user (invalidate sessions)
+
+Trigger Keap sync now (if consent and email exist)
+
+Resend welcome email (if email exists and sending is configured)
+
+Part 4: Admin API Endpoints
+
+Create admin endpoints protected by requireAdmin:
+
+Users list
+
+GET /api/admin/users
+Query params:
+
+search
+
+role
+
+status
+
+provider
+
+consent
+
+keapStatus
+
+sort
+
+page
+
+pageSize
+
+Single user details
+
+GET /api/admin/users/:id
+Include:
+
+user profile fields
+
+identities list
+
+session counts and last 10 sessions
+
+keap fields and last sync status
+
+Update user
+
+PATCH /api/admin/users/:id
+Allow:
+
+role change
+
+disable/enable
+
+update displayName and names if needed (optional)
+
+Force logout user
+
+POST /api/admin/users/:id/force-logout
+
+Trigger Keap sync for user
+
+POST /api/admin/users/:id/keap-sync
+
+Keap status
+
+GET /api/admin/keap/status
+Return:
+
+connected true/false
+
+tokenExpiresAt
+
+lastRefreshAt
+
+lastError
+
+Keap connect and refresh through OAuth
+
+GET /api/admin/keap/connect
+
+GET /api/admin/keap/callback
+
+POST /api/admin/keap/refresh
+
+POST /api/admin/keap/disconnect
+
+Part 5: Keap Connection Through OAuth
+
+Goal
+Admin connects Keap through OAuth and can refresh the connection easily.
+
+Implementation requirements
+
+Admin connects Keap once for the whole app, not per user.
+
+Store tokens in a SystemSettings table:
+
+keapAccessToken
+
+keapRefreshToken
+
+keapTokenExpiresAt
+
+keapConnectedAt
+
+keapLastRefreshAt
+
+keapLastError
+
+Refresh token handling
+
+Implement token refresh using Keap token endpoint.
+
+Always persist the newest refresh token.
+
+Admin UI
+Inside /admin add a Keap Integration section:
+
+Status indicator
+
+Connect button
+
+Refresh connection button
+
+Disconnect button
+
+Show token expires at
+
+Show last error
+
+Automated refresh
+
+When an API call needs Keap access, refresh token if near expiration.
+
+Also allow manual refresh from Admin page.
+
+Part 6: Data and Safety
+
+Security requirements
+
+The Admin nav item must be hidden for non admins.
+
+The /admin page route must require admin:
+
+If non admin, redirect to /dashboard.
+
+All /api/admin/* must requireAdmin middleware and return 403 for non admin.
+
+Log all admin actions with an AdminAuditLog table.
+
+AdminAuditLog table
+
+id
+
+adminUserId
+
+action
+
+targetUserId (nullable)
+
+metadataJson (nullable)
+
+createdAt
+
+ip (nullable)
+
+userAgent (nullable)
+
+Write audit logs for:
+
+role changes
+
+disable/enable
+
+force logout
+
+keap connect/refresh/disconnect
+
+manual keap sync
+
+Part 7: Frontend implementation
+
+Routes
+
+Add /admin page route guarded by an AdminRoute wrapper that checks user.role.
+
+If not admin, redirect.
+
+State
+
+Ensure /api/auth/me returns user role so frontend can conditionally render Admin links.
+
+UI components
+
+Users table
+
+Search and filter bar
+
+Drawer or accordion profile viewer
+
+Confirm modals for destructive actions
+
+Part 8: Final Checklist
+At the end of your response, provide a checklist confirming:
+
+Admin role added and enforced on backend
+
+Admin nav link and dropdown item only visible to admins
+
+/admin route blocked for non admins
+
+Admin page lists users with search, filters, pagination
+
+Admin can open a user profile drawer with identities and sessions
+
+Admin can disable users and change roles safely
+
+Admin can force logout a user
+
+Keap connect, refresh, and disconnect work via OAuth
+
+Keap status is visible in admin page
+
+Admin actions are logged in AdminAuditLog
+
+Now implement this Super Admin section fully in the existing codebase.
