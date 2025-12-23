@@ -7,14 +7,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { 
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
 import { 
   Download, Copy, Check, RefreshCw, AlertCircle, Clock, 
   TrendingUp, MessageSquare, Lightbulb, AlertTriangle, Quote,
-  Gauge, Timer, ArrowLeft, Loader2
+  Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText
 } from "lucide-react";
 import type { Session, ScoreResult } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 function ScoreCircle({ score, size = "lg" }: { score: number; size?: "sm" | "lg" }) {
   const radius = size === "lg" ? 54 : 36;
@@ -162,9 +169,12 @@ function DetailedPartFeedback({
 export default function SessionPage() {
   const [, params] = useRoute("/session/:id");
   const sessionId = params?.id;
+  const { toast } = useToast();
 
   const [editedTranscript, setEditedTranscript] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
 
   const { data: session, isLoading, error } = useQuery<Session>({
     queryKey: ["/api/sessions", sessionId],
@@ -179,6 +189,63 @@ export default function SessionPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions", sessionId] });
       setEditedTranscript(null);
+    },
+  });
+
+  const updateTitleMutation = useMutation({
+    mutationFn: async (title: string) => {
+      const res = await apiRequest("PATCH", `/api/sessions/${sessionId}`, { title: title || null });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to update title");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      setIsEditingTitle(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const retranscribeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/sessions/${sessionId}/retranscribe`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to retranscribe");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      toast({ title: "Transcript Updated", description: "Your video has been retranscribed and rescored." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const generateTitleMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/sessions/${sessionId}/generate-title`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to generate title");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      toast({ title: "Title Generated", description: `New title: ${data.title}` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
 
@@ -233,6 +300,24 @@ export default function SessionPage() {
     finalCTA: "Final Call to Action",
   };
 
+  const displayTitle = session.title || "Practice Session";
+  const canRetranscribe = !isExpired && session.videoPath && (session.retranscribeCount ?? 0) < 3;
+  const retranscribesRemaining = 3 - (session.retranscribeCount ?? 0);
+
+  const handleStartEditTitle = () => {
+    setEditTitle(session.title || "");
+    setIsEditingTitle(true);
+  };
+
+  const handleSaveTitle = () => {
+    updateTitleMutation.mutate(editTitle);
+  };
+
+  const handleCancelEditTitle = () => {
+    setEditTitle("");
+    setIsEditingTitle(false);
+  };
+
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8 space-y-8">
       <div className="flex items-center gap-4">
@@ -241,8 +326,72 @@ export default function SessionPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-session-title">Session Results</h1>
+        <div className="flex-1">
+          {isEditingTitle ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                maxLength={80}
+                className="text-xl font-bold"
+                data-testid="input-edit-title"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveTitle();
+                  if (e.key === "Escape") handleCancelEditTitle();
+                }}
+              />
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                onClick={handleSaveTitle}
+                disabled={updateTitleMutation.isPending}
+                data-testid="button-save-title"
+              >
+                {updateTitleMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+              </Button>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                onClick={handleCancelEditTitle}
+                data-testid="button-cancel-title"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold" data-testid="text-session-title">{displayTitle}</h1>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                onClick={handleStartEditTitle}
+                data-testid="button-edit-title"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              {session.transcriptText && (
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => generateTitleMutation.mutate()}
+                  disabled={generateTitleMutation.isPending}
+                  data-testid="button-generate-title"
+                >
+                  {generateTitleMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  Generate Title
+                </Button>
+              )}
+            </div>
+          )}
           <p className="text-sm text-muted-foreground">
             {format(new Date(session.createdAt), "MMMM d, yyyy 'at' h:mm a")}
           </p>
@@ -302,10 +451,61 @@ export default function SessionPage() {
             </CardTitle>
             <CardDescription>Edit the transcript for more accurate scoring</CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={copyTranscript} data-testid="button-copy-transcript">
-            {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-            {copied ? "Copied!" : "Copy"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {canRetranscribe && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={retranscribeMutation.isPending}
+                    data-testid="button-retranscribe"
+                  >
+                    {retranscribeMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="mr-2 h-4 w-4" />
+                    )}
+                    {retranscribeMutation.isPending ? "Processing..." : "Redo Transcript"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Retranscribe Video?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will generate a new transcript from your video and update your scores. 
+                      You have {retranscribesRemaining} retranscription{retranscribesRemaining !== 1 ? "s" : ""} remaining for this session.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={retranscribeMutation.isPending}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={() => retranscribeMutation.mutate()}
+                      disabled={retranscribeMutation.isPending}
+                    >
+                      {retranscribeMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        "Retranscribe"
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            {(session.retranscribeCount ?? 0) >= 3 && !isExpired && session.videoPath && (
+              <Badge variant="secondary" className="text-xs">
+                No retranscriptions remaining
+              </Badge>
+            )}
+            <Button variant="ghost" size="sm" onClick={copyTranscript} data-testid="button-copy-transcript">
+              {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <Textarea

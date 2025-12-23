@@ -94,6 +94,10 @@ export const scoreResultSchema = z.object({
 
 export type ScoreResult = z.infer<typeof scoreResultSchema>;
 
+// Title source types for sessions
+export const titleSources = ["ai", "user"] as const;
+export type TitleSource = typeof titleSources[number];
+
 // Sessions table for video practice sessions
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -111,6 +115,11 @@ export const sessions = pgTable("sessions", {
   transcriptEditedText: text("transcript_edited_text"),
   scoreJson: jsonb("score_json").$type<ScoreResult>(),
   scoreUpdatedAt: timestamp("score_updated_at"),
+  title: text("title"),
+  titleSource: text("title_source").$type<TitleSource>(),
+  titleGeneratedAt: timestamp("title_generated_at"),
+  retranscribeCount: integer("retranscribe_count").default(0),
+  lastRetranscribeAt: timestamp("last_retranscribe_at"),
 });
 
 export const insertSessionSchema = createInsertSchema(sessions).omit({

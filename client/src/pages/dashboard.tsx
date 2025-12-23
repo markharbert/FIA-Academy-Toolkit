@@ -1,12 +1,16 @@
+import { useState } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Video, Clock, TrendingUp, Download, Eye, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Video, Clock, TrendingUp, Download, Eye, AlertCircle, Pencil, Check, X, Loader2 } from "lucide-react";
 import type { Session } from "@shared/schema";
 import { format } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "0:00";
@@ -85,8 +89,43 @@ function VideoThumbnail({ session, isExpired }: { session: Session; isExpired: b
 }
 
 function SessionCard({ session }: { session: Session }) {
+  const { toast } = useToast();
   const isExpired = session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date());
   const score = session.scoreJson?.totalScore ?? null;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(session.title || "");
+
+  const updateTitleMutation = useMutation({
+    mutationFn: async (title: string) => {
+      const res = await apiRequest("PATCH", `/api/sessions/${session.id}`, { title: title || null });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to update title");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions", session.id] });
+      setIsEditing(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const displayTitle = session.title || `Practice Session`;
+  const dateStr = format(new Date(session.createdAt), "MMM d, yyyy");
+
+  const handleSaveTitle = () => {
+    const trimmed = editTitle.trim();
+    updateTitleMutation.mutate(trimmed);
+  };
+
+  const handleCancelEdit = () => {
+    setEditTitle(session.title || "");
+    setIsEditing(false);
+  };
 
   return (
     <Card className="overflow-hidden transition-shadow hover:shadow-md" data-testid={`card-session-${session.id}`}>
@@ -95,9 +134,61 @@ function SessionCard({ session }: { session: Session }) {
           <VideoThumbnail session={session} isExpired={isExpired} />
           <div className="flex flex-1 flex-col justify-between p-4">
             <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">
-                  {format(new Date(session.createdAt), "MMM d, yyyy 'at' h:mm a")}
+              <div className="space-y-1 flex-1">
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      maxLength={80}
+                      className="h-8"
+                      data-testid={`input-rename-session-${session.id}`}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveTitle();
+                        if (e.key === "Escape") handleCancelEdit();
+                      }}
+                    />
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      onClick={handleSaveTitle}
+                      disabled={updateTitleMutation.isPending}
+                      data-testid={`button-save-rename-${session.id}`}
+                    >
+                      {updateTitleMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      onClick={handleCancelEdit}
+                      data-testid={`button-cancel-rename-${session.id}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold" data-testid={`text-session-title-${session.id}`}>
+                      {displayTitle}
+                    </p>
+                    <Button 
+                      size="icon" 
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() => setIsEditing(true)}
+                      data-testid={`button-rename-session-${session.id}`}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  {dateStr} at {format(new Date(session.createdAt), "h:mm a")}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="text-xs">

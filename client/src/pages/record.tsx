@@ -6,8 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Video, Circle, Square, RotateCcw, Save, Lightbulb, Mic, CheckCircle, Loader2, AlertCircle, Upload, FileText, TrendingUp } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Video, Circle, Square, RotateCcw, Save, Lightbulb, Mic, CheckCircle, Loader2, AlertCircle, Upload, FileText, TrendingUp, Camera, Settings } from "lucide-react";
 import type { GoalType } from "@shared/schema";
+
+interface MediaDeviceOption {
+  deviceId: string;
+  label: string;
+}
 
 const formulaParts = [
   {
@@ -114,28 +120,126 @@ export default function RecordPage() {
   const [processingStep, setProcessingStep] = useState<ProcessingStep>("idle");
   const [error, setError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
+  const [sessionTitle, setSessionTitle] = useState("");
+
+  const [cameras, setCameras] = useState<MediaDeviceOption[]>([]);
+  const [microphones, setMicrophones] = useState<MediaDeviceOption[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<string>("");
+  const [selectedMicrophone, setSelectedMicrophone] = useState<string>("");
+  const [audioLevel, setAudioLevel] = useState(0);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const audioAnimationRef = useRef<number | null>(null);
+  const isInitializedRef = useRef(false);
 
-  const startCamera = useCallback(async () => {
+  const cleanupAudio = useCallback(() => {
+    if (audioAnimationRef.current) {
+      cancelAnimationFrame(audioAnimationRef.current);
+      audioAnimationRef.current = null;
+    }
+    if (audioSourceRef.current) {
+      audioSourceRef.current.disconnect();
+      audioSourceRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioLevel(0);
+  }, []);
+
+  const startCamera = useCallback(async (cameraId?: string, micId?: string) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720, facingMode: "user" },
-        audio: true,
-      });
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      cleanupAudio();
+
+      const constraints: MediaStreamConstraints = {
+        video: cameraId
+          ? { deviceId: { exact: cameraId }, width: 1280, height: 720 }
+          : { width: 1280, height: 720, facingMode: "user" },
+        audio: micId
+          ? { deviceId: { exact: micId } }
+          : true,
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.muted = true;
       }
       setCameraReady(true);
+
+      if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+        audioContextRef.current = new AudioContext();
+      }
+      const audioContext = audioContextRef.current;
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      audioSourceRef.current = source;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateLevel = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setAudioLevel(Math.min(100, (avg / 128) * 100));
+        audioAnimationRef.current = requestAnimationFrame(updateLevel);
+      };
+      updateLevel();
     } catch (err) {
       setError("Could not access camera. Please allow camera permissions.");
     }
-  }, []);
+  }, [cleanupAudio]);
 
   useEffect(() => {
-    startCamera();
+    const init = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch {}
+      
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices
+        .filter((d) => d.kind === "videoinput")
+        .map((d, i) => ({
+          deviceId: d.deviceId,
+          label: d.label || `Camera ${i + 1}`,
+        }));
+      const audioDevices = devices
+        .filter((d) => d.kind === "audioinput")
+        .map((d, i) => ({
+          deviceId: d.deviceId,
+          label: d.label || `Microphone ${i + 1}`,
+        }));
+
+      setCameras(videoDevices);
+      setMicrophones(audioDevices);
+
+      const savedCamera = localStorage.getItem("selectedCameraId");
+      const savedMic = localStorage.getItem("selectedMicrophoneId");
+
+      const initialCamera = savedCamera && videoDevices.some((d) => d.deviceId === savedCamera)
+        ? savedCamera
+        : videoDevices[0]?.deviceId || "";
+      const initialMic = savedMic && audioDevices.some((d) => d.deviceId === savedMic)
+        ? savedMic
+        : audioDevices[0]?.deviceId || "";
+
+      setSelectedCamera(initialCamera);
+      setSelectedMicrophone(initialMic);
+
+      if (initialCamera || initialMic) {
+        await startCamera(initialCamera, initialMic);
+      }
+      isInitializedRef.current = true;
+    };
+    init();
+
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
@@ -143,8 +247,28 @@ export default function RecordPage() {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      cleanupAudio();
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
     };
-  }, [startCamera]);
+  }, [startCamera, cleanupAudio]);
+
+  const handleCameraChange = (deviceId: string) => {
+    setSelectedCamera(deviceId);
+    localStorage.setItem("selectedCameraId", deviceId);
+    if (isInitializedRef.current) {
+      startCamera(deviceId, selectedMicrophone);
+    }
+  };
+
+  const handleMicrophoneChange = (deviceId: string) => {
+    setSelectedMicrophone(deviceId);
+    localStorage.setItem("selectedMicrophoneId", deviceId);
+    if (isInitializedRef.current) {
+      startCamera(selectedCamera, deviceId);
+    }
+  };
 
   const startRecording = () => {
     if (!streamRef.current) return;
@@ -213,7 +337,11 @@ export default function RecordPage() {
       const createRes = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goalType, durationSeconds: duration }),
+        body: JSON.stringify({ 
+          goalType, 
+          durationSeconds: duration,
+          title: sessionTitle.trim() || undefined,
+        }),
         credentials: "include",
       });
 
@@ -402,20 +530,114 @@ export default function RecordPage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-2">
-            <Label htmlFor="goal">Video Goal</Label>
-            <Select value={goalType} onValueChange={(v) => setGoalType(v as GoalType)}>
-              <SelectTrigger id="goal" data-testid="select-goal">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sales">Sales</SelectItem>
-                <SelectItem value="lead">Lead Capture</SelectItem>
-                <SelectItem value="education">Content Education</SelectItem>
-                <SelectItem value="recruit">Recruitment / Invite</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Settings className="h-5 w-5 text-primary" />
+                Session Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Session Name (optional)</Label>
+                <Input
+                  id="title"
+                  value={sessionTitle}
+                  onChange={(e) => setSessionTitle(e.target.value)}
+                  placeholder="e.g., Product pitch practice"
+                  maxLength={80}
+                  disabled={isRecording || isProcessing}
+                  data-testid="input-session-title"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to auto-generate from your transcript
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="goal">Video Goal</Label>
+                <Select value={goalType} onValueChange={(v) => setGoalType(v as GoalType)} disabled={isRecording || isProcessing}>
+                  <SelectTrigger id="goal" data-testid="select-goal">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sales">Sales</SelectItem>
+                    <SelectItem value="lead">Lead Capture</SelectItem>
+                    <SelectItem value="education">Content Education</SelectItem>
+                    <SelectItem value="recruit">Recruitment / Invite</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="camera" className="flex items-center gap-2">
+                    <Camera className="h-4 w-4" />
+                    Camera
+                  </Label>
+                  {cameras.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No camera detected</p>
+                  ) : (
+                    <Select 
+                      value={selectedCamera} 
+                      onValueChange={handleCameraChange}
+                      disabled={isRecording || isProcessing}
+                    >
+                      <SelectTrigger id="camera" data-testid="select-camera">
+                        <SelectValue placeholder="Select camera" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cameras.map((cam) => (
+                          <SelectItem key={cam.deviceId} value={cam.deviceId}>
+                            {cam.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="microphone" className="flex items-center gap-2">
+                    <Mic className="h-4 w-4" />
+                    Microphone
+                  </Label>
+                  {microphones.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No microphone detected</p>
+                  ) : (
+                    <Select 
+                      value={selectedMicrophone} 
+                      onValueChange={handleMicrophoneChange}
+                      disabled={isRecording || isProcessing}
+                    >
+                      <SelectTrigger id="microphone" data-testid="select-microphone">
+                        <SelectValue placeholder="Select microphone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {microphones.map((mic) => (
+                          <SelectItem key={mic.deviceId} value={mic.deviceId}>
+                            {mic.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
+              {microphones.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Microphone Level</Label>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div 
+                      className="h-full bg-primary transition-all duration-75"
+                      style={{ width: `${audioLevel}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="lg:col-span-2 lg:sticky lg:top-20 lg:self-start">

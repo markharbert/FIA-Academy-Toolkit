@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeAudio, scoreTranscript } from "./ai";
+import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType } from "@shared/schema";
 import bcrypt from "bcrypt";
@@ -21,8 +21,9 @@ import {
 } from "./keap";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
-const VIDEO_RETENTION_DAYS = 7;
+const VIDEO_RETENTION_DAYS = 30;
 const MAX_VIDEO_SIZE = 250 * 1024 * 1024; // 250MB
+const MAX_RETRANSCRIBES_PER_DAY = 3;
 
 // Ensure uploads directory exists
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -313,7 +314,7 @@ export async function registerRoutes(
 
   app.post("/api/sessions", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { goalType, durationSeconds } = req.body;
+      const { goalType, durationSeconds, title } = req.body;
 
       if (!goalTypes.includes(goalType)) {
         return res.status(400).json({ message: "Invalid goal type" });
@@ -321,6 +322,8 @@ export async function registerRoutes(
 
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + VIDEO_RETENTION_DAYS);
+
+      const trimmedTitle = title?.trim().slice(0, 80) || null;
 
       const session = await storage.createSession({
         userId: req.session.userId!,
@@ -335,12 +338,48 @@ export async function registerRoutes(
         transcriptEditedText: null,
         scoreJson: null,
         scoreUpdatedAt: null,
+        title: trimmedTitle,
+        titleSource: trimmedTitle ? "user" : null,
+        titleGeneratedAt: trimmedTitle ? new Date() : null,
       });
 
       res.status(201).json({ id: session.id });
     } catch (err) {
       console.error("Create session error:", err);
       res.status(500).json({ message: "Failed to create session" });
+    }
+  });
+
+  app.patch("/api/sessions/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const { title } = req.body;
+      
+      if (typeof title !== "string") {
+        return res.status(400).json({ message: "Title must be a string" });
+      }
+
+      const trimmedTitle = title.trim().slice(0, 80);
+
+      await storage.updateSession(session.id, {
+        title: trimmedTitle || null,
+        titleSource: "user",
+        titleGeneratedAt: new Date(),
+      });
+
+      res.json({ title: trimmedTitle });
+    } catch (err) {
+      console.error("Update session error:", err);
+      res.status(500).json({ message: "Failed to update session" });
     }
   });
 
@@ -576,6 +615,149 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Rescore error:", err);
       res.status(500).json({ message: "Failed to rescore video" });
+    }
+  });
+
+  app.post("/api/sessions/:id/retranscribe", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date())) {
+        return res.status(410).json({ message: "Video has expired and cannot be retranscribed" });
+      }
+
+      if (!session.videoPath) {
+        return res.status(400).json({ message: "No video to transcribe" });
+      }
+
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
+      if (session.lastRetranscribeAt && new Date(session.lastRetranscribeAt) > twentyFourHoursAgo) {
+        const count = session.retranscribeCount || 0;
+        if (count >= MAX_RETRANSCRIBES_PER_DAY) {
+          return res.status(429).json({ 
+            message: `You can only retranscribe ${MAX_RETRANSCRIBES_PER_DAY} times per 24 hours. Please try again later.` 
+          });
+        }
+      }
+
+      const videoPath = path.join(UPLOADS_DIR, session.videoPath);
+      
+      if (!fs.existsSync(videoPath)) {
+        return res.status(404).json({ message: "Video file not found" });
+      }
+
+      const audioResult = await extractAudio(videoPath, UPLOADS_DIR);
+      
+      if (!audioResult.success) {
+        return res.status(500).json({ message: audioResult.error || "Failed to extract audio" });
+      }
+
+      const audioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
+      
+      try {
+        const transcript = await transcribeAudio(audioPath);
+
+        const newCount = session.lastRetranscribeAt && new Date(session.lastRetranscribeAt) > twentyFourHoursAgo
+          ? (session.retranscribeCount || 0) + 1
+          : 1;
+
+        await storage.updateSession(session.id, {
+          transcriptText: transcript,
+          transcriptEditedText: null,
+          retranscribeCount: newCount,
+          lastRetranscribeAt: now,
+        });
+
+        try {
+          if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+          }
+        } catch {}
+
+        const scoreResult = await scoreTranscript(
+          transcript,
+          session.goalType as GoalType,
+          session.durationSeconds || 60
+        );
+
+        await storage.updateSession(session.id, {
+          scoreJson: scoreResult,
+          scoreUpdatedAt: new Date(),
+        });
+
+        if (session.titleSource === "ai" || !session.title) {
+          try {
+            if (transcript && transcript.length > 10) {
+              const aiTitle = await generateTitle(transcript);
+              await storage.updateSession(session.id, {
+                title: aiTitle,
+                titleSource: "ai",
+                titleGeneratedAt: new Date(),
+              });
+            }
+          } catch (titleErr) {
+            console.warn("Failed to generate title after retranscribe:", titleErr);
+          }
+        }
+
+        res.json({ transcript, score: scoreResult });
+      } catch (transcribeErr) {
+        try {
+          if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+          }
+        } catch {}
+        throw transcribeErr;
+      }
+    } catch (err) {
+      console.error("Retranscribe error:", err);
+      res.status(500).json({ message: "Failed to retranscribe video" });
+    }
+  });
+
+  app.post("/api/sessions/:id/generate-title", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date())) {
+        return res.status(410).json({ message: "Video has expired" });
+      }
+
+      const transcript = session.transcriptEditedText || session.transcriptText;
+      if (!transcript || transcript.length < 10) {
+        return res.status(400).json({ message: "No transcript available to generate title from" });
+      }
+
+      const aiTitle = await generateTitle(transcript);
+
+      await storage.updateSession(session.id, {
+        title: aiTitle,
+        titleSource: "ai",
+        titleGeneratedAt: new Date(),
+      });
+
+      res.json({ title: aiTitle });
+    } catch (err) {
+      console.error("Generate title error:", err);
+      res.status(500).json({ message: "Failed to generate title" });
     }
   });
 

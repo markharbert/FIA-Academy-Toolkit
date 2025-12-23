@@ -265,3 +265,39 @@ Respond with a JSON object matching this exact structure:
   
   return result;
 }
+
+export async function generateTitle(transcript: string): Promise<string> {
+  console.log(`[AI] Generating title from transcript (${transcript.length} chars)`);
+  
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.1",
+    messages: [
+      { 
+        role: "system", 
+        content: "You generate short session titles for recorded practice videos." 
+      },
+      {
+        role: "user",
+        content: `Create a clear title (6 to 12 words, max 80 characters) that describes the topic of the transcript below. Output only the title text. No quotes. No emojis.
+
+Transcript:
+${transcript.slice(0, 2000)}`,
+      },
+    ],
+    max_completion_tokens: 100,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("No title generated");
+  }
+
+  let title = content.trim();
+  title = title.replace(/^["']|["']$/g, "");
+  
+  if (title.length > 80) {
+    title = title.slice(0, 77) + "...";
+  }
+
+  return title;
+}

@@ -1,0 +1,286 @@
+Role: You are a senior full stack developer working inside my existing Replit project. Implement the functionality changes below without breaking current features. Provide working code, database migrations, and clear setup steps. Confirm each item in a checklist at the end.
+
+Change 1: Extend Video Expiration From 7 Days to 30 Days
+Current behavior: videos expire after 7 days.
+New requirement: videos must be available for download for 30 days from the time the user saves the session.
+
+Implementation requirements
+
+Update all retention logic so expiresAt is createdAt + 30 days.
+
+Update the cleanup job so it deletes MP4 files and thumbnails only after 30 days.
+
+Update all UI text where it references 7 days to 30 days:
+
+Dashboard status
+
+Session details page expiration message
+
+Any tooltips or helper text
+
+If there is a constant like VIDEO_RETENTION_DAYS, set it to 30 and use it everywhere.
+
+Change 2: Let Users Choose Their Camera and Microphone
+Goal: On the New Practice Session page, users can select which camera and which microphone to use from available devices connected to their computer.
+
+Frontend requirements
+
+Add two dropdown selectors above the recorder:
+
+Camera selector
+
+Microphone selector
+
+Use browser MediaDevices APIs to list devices:
+
+navigator.mediaDevices.enumerateDevices()
+
+Filter by videoinput and audioinput
+
+Request permissions first so device labels appear:
+
+Call getUserMedia once with basic constraints, then enumerate devices.
+
+When the user selects a camera or mic, reinitialize the stream with device constraints:
+
+video: { deviceId: { exact: selectedCameraId } }
+
+audio: { deviceId: { exact: selectedMicId } }
+
+Show helpful fallback states:
+
+If no camera devices: show “No camera detected”
+
+If no mic devices: show “No microphone detected”
+
+Remember device selections per user:
+
+Store selectedCameraId and selectedMicId in localStorage
+
+On page load, apply them if still available
+
+Add a “Test mic” mini meter if easy:
+
+Optional: show audio level so they know the mic is working
+
+Ensure recording still works across Chrome and Edge at minimum.
+
+Mobile behavior:
+
+If device selection is limited on mobile, keep the UI but handle gracefully.
+
+Change 3: Allow Users to Name Each Video Session
+Goal: Each session has a user editable name that shows on the dashboard list so it is easy to find.
+
+Database changes
+Add to Sessions table:
+
+title (string, nullable)
+
+titleSource (string, nullable) values: "ai" or "user"
+
+titleGeneratedAt (datetime, nullable)
+
+Backend changes
+
+When creating a session, accept an optional title.
+
+Provide an endpoint to update title:
+
+PATCH /api/sessions/:id
+
+Body: { "title": "New name" }
+
+Validate:
+
+Max length 80 characters
+
+Trim whitespace
+
+Only allow updates by the session owner
+
+When user updates the title, set titleSource to "user" and update titleGeneratedAt if you are using it.
+
+Frontend changes
+
+On New Practice Session page:
+
+Add a text input: “Session name (optional)”
+
+Placeholder example: “Product pitch practice” or “Hook test 1”
+
+After saving, show the name on the results page header.
+
+On Dashboard:
+
+Show session name prominently.
+
+If blank, fall back to something like “Practice Session” plus the date.
+
+Add quick edit on dashboard:
+
+An edit icon or small “Rename” button opens inline edit, saves via PATCH.
+
+Change 4: Add “Redo Transcript” Button
+Goal: User can re run transcription if no transcript exists, or if they want to regenerate it.
+
+Rules
+
+If transcriptText is null or empty:
+
+Show a primary button on the session results page: “Generate transcript”
+
+If transcript exists:
+
+Show a secondary button: “Redo transcript”
+
+Clicking it triggers the transcription process again, overwriting transcriptText, and then re runs scoring automatically.
+
+Backend requirements
+
+Implement an endpoint:
+
+POST /api/sessions/:id/retranscribe
+
+The endpoint should:
+
+Confirm user owns the session
+
+Confirm video is still available (not expired)
+
+Re run transcription against the stored MP4
+
+Save the new transcriptText
+
+Clear transcriptEditedText if you have it, or keep it but mark it stale
+
+Re run scoring with the new transcriptText
+
+Update scoreJson and scoreUpdatedAt
+
+Add rate limiting:
+
+Example: max 3 retranscribes per session per 24 hours
+
+Log failures and return user friendly errors.
+
+Frontend requirements
+
+Add a confirmation modal:
+
+“Redo transcript? This will replace the current transcript and update your score.”
+
+Show progress stepper:
+
+Transcribing
+
+Scoring
+
+Disable the button while processing.
+
+Change 5: AI Generated Session Title Based on Transcript (Editable)
+Goal: After transcription completes, automatically generate a short, descriptive session title using AI, based on the transcript. The user can edit this title at any time.
+
+Rules
+
+This AI title generation happens only after a transcript exists.
+
+If the user already provided a title during recording, do not overwrite it.
+
+If the user edits the title at any time, do not overwrite it with AI in the future unless the user explicitly clicks “Regenerate title.”
+
+AI title requirements
+
+Title length:
+
+6 to 12 words ideal
+
+Hard max 80 characters
+
+Title style:
+
+Clear, specific, plain language
+
+Should reflect what the video is about
+
+No quotes
+
+No emojis
+
+Title output must be plain text only.
+
+Backend implementation
+
+Add a title generation function that calls the LLM API you are already using for scoring.
+
+Add endpoint:
+
+POST /api/sessions/:id/generate-title
+
+On the normal save flow:
+
+After transcription completes and before scoring is finalized, generate the title if title is empty.
+
+Save title, set titleSource="ai", set titleGeneratedAt=now.
+
+On retranscribe flow:
+
+If titleSource is "ai" and the user has not edited it, you may regenerate the title after a new transcript is created.
+
+If titleSource is "user", never regenerate automatically.
+
+Add a “Regenerate title” button that calls the generate-title endpoint, but only allow it when the video is not expired.
+
+Frontend implementation
+
+On the Session Results page:
+
+Display the title at the top.
+
+Add an edit icon or inline edit.
+
+Add a “Regenerate title” secondary button next to it.
+
+On the Dashboard:
+
+Show the title in the session list.
+
+When user edits and saves:
+
+Use PATCH /api/sessions/:id
+
+Set titleSource="user"
+
+Prompt for AI Title Generation
+Use a strict prompt that yields only a title. Example:
+
+System: You generate short session titles for recorded practice videos.
+User: Create a clear title (6 to 12 words, max 80 characters) that describes the topic of the transcript below. Output only the title text. No quotes. No emojis.
+Transcript:
+<TRANSCRIPT HERE>
+
+UI Text Updates
+Update any copy that says 7 days to say 30 days.
+
+Testing Checklist
+Provide a short checklist and confirm:
+
+New sessions expire in 30 days.
+
+Cleanup job deletes only after 30 days.
+
+Camera and mic selectors populate and switching devices works.
+
+Session naming works on create and rename works from dashboard.
+
+Redo transcript works when transcript is missing and when transcript exists.
+
+Retranscribe is blocked if the video is expired.
+
+AI generates a title when transcript exists and title is blank.
+
+User can edit the title and it does not get overwritten.
+
+Regenerate title works when allowed.
+
+Now implement these changes in the existing codebase.

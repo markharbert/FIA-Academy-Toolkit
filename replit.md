@@ -4,7 +4,7 @@
 
 Fearless Video Coach is a web application for practicing video marketing skills. Users record short videos in-browser, receive automatic transcription, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA.
 
-The app is designed for private practice—no public sharing or social features. Videos are stored for 7 days before automatic cleanup.
+The app is designed for private practice—no public sharing or social features. Videos are stored for 30 days before automatic cleanup.
 
 ## Branding
 
@@ -50,11 +50,17 @@ Preferred communication style: Simple, everyday language.
 
 1. **Shared Schema**: Database schemas and Zod validators in `shared/schema.ts` ensure type safety across frontend and backend.
 
-2. **Video Lifecycle**: Videos auto-delete after 7 days via scheduled cleanup job (`server/cleanup.ts`). Sessions track `videoPath` and `videoDeletedAt`.
+2. **Video Lifecycle**: Videos auto-delete after 30 days via scheduled cleanup job (`server/cleanup.ts`). Sessions track `videoPath`, `videoDeletedAt`, and `expiresAt`.
 
 3. **Goal-Based Scoring**: Users select a goal type (sales, lead, education, recruit) that tailors AI feedback to their specific use case.
 
 4. **Monorepo Structure**: Client code in `client/`, server in `server/`, shared types in `shared/`. Build outputs to `dist/`.
+
+5. **Session Naming**: Users can name their practice sessions with custom titles, or let AI auto-generate titles from transcripts.
+
+6. **Device Selection**: Camera and microphone device selection with localStorage persistence and real-time audio level visualization.
+
+7. **Retranscribe**: Users can redo transcription up to 3 times per session if AI transcription is inaccurate.
 
 ## External Dependencies
 
@@ -117,6 +123,24 @@ Preferred communication style: Simple, everyday language.
 - `emailConsentAt`: (Optional) Email consent timestamp
 - `emailConsentIp`: (Optional) IP address at consent time
 - `isAdmin`: Boolean flag for admin access
+
+### Sessions Table
+- `id`: UUID primary key
+- `userId`: Foreign key to users table
+- `createdAt`: Session creation timestamp
+- `goalType`: Video goal type (sales, lead, education, recruit)
+- `durationSeconds`: Video duration in seconds
+- `videoPath`: Path to video file
+- `thumbnailPath`: Path to thumbnail image
+- `expiresAt`: Video expiration timestamp (30 days from creation)
+- `videoDeletedAt`: When video was deleted (null if still available)
+- `transcriptText`: AI-generated transcript
+- `transcriptEditedText`: User-edited transcript
+- `scoreJson`: JSON object with scoring results
+- `title`: Session title (user-provided or AI-generated)
+- `titleSource`: How title was created ('ai' or 'user')
+- `retranscribeCount`: Number of retranscription attempts
+- `lastRetranscribeAt`: Timestamp of last retranscription
 
 ### System Settings Table
 - `id`: Primary key (always 'keap_integration')
