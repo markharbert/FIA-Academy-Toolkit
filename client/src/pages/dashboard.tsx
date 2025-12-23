@@ -286,7 +286,11 @@ function EmptyState() {
 export default function DashboardPage() {
   const { data: sessions, isLoading, error } = useQuery<Session[]>({
     queryKey: ["/api/sessions"],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
+
+  console.log("[Dashboard] sessions:", sessions, "isLoading:", isLoading, "error:", error);
 
   return (
     <div className="container mx-auto px-4 py-8">
