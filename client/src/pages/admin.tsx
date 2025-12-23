@@ -40,20 +40,25 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { 
-  Settings, Link2, Unlink, TestTube, Loader2, CheckCircle, XCircle, AlertCircle,
-  Users, Video, Search, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, 
-  CheckCircle2, LogOut, RefreshCw, Eye, Mail, Tag, Send
+  Settings, Link2, Unlink, Loader2, CheckCircle, XCircle, AlertCircle,
+  Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
+  CheckCircle2, LogOut, RefreshCw, Tag, Check, ChevronsUpDown, Search, Mail, Eye
 } from "lucide-react";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface AdminStats {
   totalUsers: number;
@@ -129,13 +134,6 @@ interface TagCacheInfo {
   warning?: string;
 }
 
-interface TestContactForm {
-  email: string;
-  firstName: string;
-  lastName: string;
-  tagId: string;
-}
-
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -176,21 +174,12 @@ export default function AdminPage() {
     action: () => Promise<void>;
   } | null>(null);
 
-  // Test contact modal
-  const [testContactModalOpen, setTestContactModalOpen] = useState(false);
-  const [testContactForm, setTestContactForm] = useState<TestContactForm>({
-    email: "",
-    firstName: "",
-    lastName: "",
-    tagId: "",
-  });
-  const [testContactResult, setTestContactResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
-
   // Tag cache info
   const [tagCacheInfo, setTagCacheInfo] = useState<TagCacheInfo | null>(null);
+  
+  // Tag combobox state
+  const [tagComboOpen, setTagComboOpen] = useState(false);
+  const [tagSearchValue, setTagSearchValue] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -394,68 +383,11 @@ export default function AdminPage() {
     }
   };
 
-  const openTestContactModal = () => {
-    setTestContactForm({
-      email: "",
-      firstName: "",
-      lastName: "",
-      tagId: keapStatus?.defaultTag?.id?.toString() || "",
-    });
-    setTestContactResult(null);
-    setTestContactModalOpen(true);
-  };
-
-  const handleTestContactSubmit = async () => {
+  const handleRefreshTags = async () => {
     try {
-      setActionLoading("test");
-      setTestContactResult(null);
-      
-      const body: Record<string, unknown> = {};
-      if (testContactForm.email.trim()) body.email = testContactForm.email.trim();
-      if (testContactForm.firstName.trim()) body.firstName = testContactForm.firstName.trim();
-      if (testContactForm.lastName.trim()) body.lastName = testContactForm.lastName.trim();
-      if (testContactForm.tagId) body.tagId = Number(testContactForm.tagId);
-      
-      const res = await fetch("/api/admin/keap/test", {
+      setActionLoading("refresh-tags");
+      const res = await fetch("/api/admin/keap/tags/refresh", { 
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        credentials: "include",
-      });
-      const data = await res.json();
-      
-      setTestContactResult({
-        success: data.success,
-        message: data.message,
-      });
-      
-      if (data.success) {
-        toast({
-          title: "Test Successful",
-          description: data.message,
-        });
-      }
-    } catch (err) {
-      setTestContactResult({
-        success: false,
-        message: "Failed to send test contact",
-      });
-      toast({
-        title: "Error",
-        description: "Failed to send test contact",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleFetchTags = async (forceRefresh = false) => {
-    try {
-      setActionLoading(forceRefresh ? "refresh-tags" : "fetch-tags");
-      const url = forceRefresh ? "/api/admin/keap/tags/refresh" : "/api/admin/keap/tags";
-      const res = await fetch(url, { 
-        method: forceRefresh ? "POST" : "GET",
         credentials: "include" 
       });
       
@@ -469,24 +401,23 @@ export default function AdminPage() {
           warning: data.warning,
         });
         
-        const sourceText = data.source === "cache" ? "cache" : "Keap";
         toast({
-          title: "Tags Loaded",
-          description: `Loaded ${data.tags?.length || 0} tags from ${sourceText}.${data.warning ? ` ${data.warning}` : ""}`,
+          title: "Tags Refreshed",
+          description: `Loaded ${data.tags?.length || 0} tags from Keap.`,
         });
         fetchKeapStatus();
       } else {
         const error = await res.json();
         toast({
           title: "Error",
-          description: error.message || "Failed to fetch tags",
+          description: error.message || "Failed to refresh tags",
           variant: "destructive",
         });
       }
     } catch (err) {
       toast({
         title: "Error",
-        description: "Failed to fetch tags from Keap",
+        description: "Failed to refresh tags from Keap",
         variant: "destructive",
       });
     } finally {
@@ -1047,30 +978,19 @@ export default function AdminPage() {
                     Connect Keap
                   </Button>
                 ) : (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={handleDisconnect}
-                      disabled={!!actionLoading}
-                      data-testid="button-disconnect-keap"
-                    >
-                      {actionLoading === "disconnect" ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Unlink className="mr-2 h-4 w-4" />
-                      )}
-                      Disconnect Keap
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={openTestContactModal}
-                      disabled={!!actionLoading}
-                      data-testid="button-test-keap"
-                    >
-                      <TestTube className="mr-2 h-4 w-4" />
-                      Send Test Contact
-                    </Button>
-                  </>
+                  <Button
+                    variant="outline"
+                    onClick={handleDisconnect}
+                    disabled={!!actionLoading}
+                    data-testid="button-disconnect-keap"
+                  >
+                    {actionLoading === "disconnect" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Unlink className="mr-2 h-4 w-4" />
+                    )}
+                    Disconnect Keap
+                  </Button>
                 )}
               </div>
 
@@ -1090,37 +1010,71 @@ export default function AdminPage() {
                 <div className="space-y-4 border-t pt-4">
                   <h4 className="font-medium">Default Tag for New Signups</h4>
                   <div className="flex flex-wrap items-center gap-3">
-                    <Select
-                      value={selectedTagId?.toString() || keapStatus.defaultTag?.id?.toString() || ""}
-                      onValueChange={(value) => setSelectedTagId(Number(value))}
-                    >
-                      <SelectTrigger className="w-64" data-testid="select-keap-tag">
-                        <SelectValue placeholder="Select a tag..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {keapTags.map((tag) => (
-                          <SelectItem key={tag.id} value={tag.id.toString()}>
-                            {tag.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={tagComboOpen} onOpenChange={(open) => {
+                      setTagComboOpen(open);
+                      if (!open) setTagSearchValue("");
+                    }}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={tagComboOpen}
+                          className="w-72 justify-between"
+                          data-testid="select-keap-tag"
+                          disabled={keapTags.length === 0}
+                        >
+                          {selectedTagId || keapStatus.defaultTag?.id
+                            ? keapTags.find((tag) => tag.id === (selectedTagId || keapStatus.defaultTag?.id))?.name || "Select a tag..."
+                            : "Select a tag..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput 
+                            placeholder="Search tags..." 
+                            value={tagSearchValue}
+                            onValueChange={setTagSearchValue}
+                            data-testid="input-tag-search"
+                          />
+                          <CommandList>
+                            <CommandEmpty>No tags found.</CommandEmpty>
+                            <CommandGroup>
+                              {keapTags
+                                .filter((tag) => 
+                                  tag.name.toLowerCase().includes(tagSearchValue.toLowerCase())
+                                )
+                                .sort((a, b) => a.name.localeCompare(b.name))
+                                .map((tag) => (
+                                  <CommandItem
+                                    key={tag.id}
+                                    value={tag.id.toString()}
+                                    onSelect={() => {
+                                      setSelectedTagId(tag.id);
+                                      setTagComboOpen(false);
+                                      setTagSearchValue("");
+                                    }}
+                                    data-testid={`tag-option-${tag.id}`}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        (selectedTagId || keapStatus.defaultTag?.id) === tag.id 
+                                          ? "opacity-100" 
+                                          : "opacity-0"
+                                      )}
+                                    />
+                                    {tag.name}
+                                  </CommandItem>
+                                ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     <Button
                       variant="outline"
-                      onClick={() => handleFetchTags(false)}
-                      disabled={!!actionLoading}
-                      data-testid="button-fetch-tags"
-                    >
-                      {actionLoading === "fetch-tags" ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                      )}
-                      Load Tags
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleFetchTags(true)}
+                      onClick={handleRefreshTags}
                       disabled={!!actionLoading}
                       data-testid="button-refresh-tags"
                     >
@@ -1177,7 +1131,7 @@ export default function AdminPage() {
                       <ul className="mt-2 list-inside list-disc space-y-1 text-amber-700 dark:text-amber-300">
                         <li>Set KEAP_CLIENT_ID and KEAP_CLIENT_SECRET in environment</li>
                         <li>Set KEAP_REDIRECT_URI to your callback URL</li>
-                        <li>After connecting, use "Load Tags" and set a default tag for new signups</li>
+                        <li>After connecting, set a default tag for new signups</li>
                       </ul>
                     </div>
                   </div>
@@ -1187,106 +1141,6 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <Dialog open={testContactModalOpen} onOpenChange={setTestContactModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Send Test Contact to Keap</DialogTitle>
-            <DialogDescription>
-              Send a test contact to verify your Keap connection is working. Leave fields empty to use defaults.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="test-email">Email</Label>
-              <Input
-                id="test-email"
-                type="email"
-                placeholder="test@fearlessvideocoach.com"
-                value={testContactForm.email}
-                onChange={(e) => setTestContactForm({ ...testContactForm, email: e.target.value })}
-                data-testid="input-test-email"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="test-first-name">First Name</Label>
-                <Input
-                  id="test-first-name"
-                  placeholder="Test"
-                  value={testContactForm.firstName}
-                  onChange={(e) => setTestContactForm({ ...testContactForm, firstName: e.target.value })}
-                  data-testid="input-test-first-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="test-last-name">Last Name</Label>
-                <Input
-                  id="test-last-name"
-                  placeholder="Contact"
-                  value={testContactForm.lastName}
-                  onChange={(e) => setTestContactForm({ ...testContactForm, lastName: e.target.value })}
-                  data-testid="input-test-last-name"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="test-tag">Tag (optional)</Label>
-              <Select
-                value={testContactForm.tagId}
-                onValueChange={(value) => setTestContactForm({ ...testContactForm, tagId: value })}
-              >
-                <SelectTrigger data-testid="select-test-tag">
-                  <SelectValue placeholder="No tag" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">No tag</SelectItem>
-                  {keapTags.map((tag) => (
-                    <SelectItem key={tag.id} value={tag.id.toString()}>
-                      {tag.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {testContactResult && (
-              <div className={`rounded-lg p-3 ${testContactResult.success ? "bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900" : "bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900"}`}>
-                <div className="flex gap-2 items-start">
-                  {testContactResult.success ? (
-                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-500 shrink-0" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-500 shrink-0" />
-                  )}
-                  <p className={`text-sm ${testContactResult.success ? "text-green-700 dark:text-green-300" : "text-red-700 dark:text-red-300"}`}>
-                    {testContactResult.message}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setTestContactModalOpen(false)}
-              data-testid="button-test-cancel"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleTestContactSubmit}
-              disabled={actionLoading === "test" || (testContactForm.email.trim() !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testContactForm.email.trim()))}
-              data-testid="button-test-submit"
-            >
-              {actionLoading === "test" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
-              )}
-              Send to Keap
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Sheet open={!!selectedUserId} onOpenChange={(open) => !open && setSelectedUserId(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">

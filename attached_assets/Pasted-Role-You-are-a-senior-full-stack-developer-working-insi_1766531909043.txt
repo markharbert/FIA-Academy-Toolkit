@@ -1,0 +1,209 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Update the Admin Keap Integration UI and related code exactly as described below. Do not break Keap OAuth, tag caching, or the default tag selection behavior. Focus only on the dropdown search UX and simplifying the buttons.
+
+High Priority Outcomes
+
+The “Default tag for new signups” dropdown becomes searchable so I can quickly find a tag among hundreds.
+
+The search bar appears only when the dropdown is opened.
+
+Remove the “Send Test Contact” button and all related UI and code paths.
+
+Simplify tag buttons:
+
+Remove “Load tags”
+
+Keep only one button: “Refresh from Keap”
+
+Tags must remain cached so they are available across logout and login without needing to click anything.
+
+Part 1: Searchable Dropdown for Default Tag Selection
+
+Current problem
+The dropdown shows a long list and defaults to the first tag. With many tags, it is painful to find one.
+
+Required UX
+
+The dropdown should show the currently selected tag (or placeholder “Select a tag”).
+
+When the admin clicks to open the dropdown:
+
+A search input appears at the top of the dropdown menu.
+
+The search input should auto focus.
+
+As the admin types, filter the tag list in real time.
+
+Matching rules:
+
+Case insensitive
+
+Match anywhere in the tag name
+
+Sorting rules:
+
+Keep the tags alphabetically sorted by name by default.
+
+Filtering should preserve alphabetical order within results.
+
+If no matches:
+
+Show “No tags found.”
+
+Closing the dropdown:
+
+Clears the search term.
+
+The dropdown must not automatically pick the first tag unless the admin explicitly selects it.
+
+If there is already a saved default tag, show it selected.
+
+If not saved, show placeholder and do not preselect.
+
+Implementation requirements
+
+Use an existing searchable select component if already available in the UI library.
+
+Examples: a combobox pattern, select with search, or a popover + command list pattern.
+
+If no component exists, implement it using:
+
+A button that opens a popover
+
+A search input inside the popover
+
+A scrollable list below
+
+Accessibility:
+
+Keyboard support: arrow keys to navigate, Enter to select
+
+Escape closes
+
+Performance:
+
+Tag list can be 900+ items.
+
+Filtering should be efficient and not cause UI lag.
+
+Virtualized list is optional but nice if simple to add.
+
+Data binding
+
+Use the cached tags list from the server (see Part 3).
+
+When a tag is selected:
+
+Save keapDefaultTagId in SystemSettings via API.
+
+Update the displayed selection immediately.
+
+Part 2: Remove “Send Test Contact” Button Completely
+
+Requirement
+Remove the button and any references to it. It is not needed.
+
+Do all of the following
+
+Remove “Send Test Contact” button from the Admin Keap Integration page UI.
+
+Remove any modal, component, or state tied to it.
+
+Remove the backend endpoint if it exists:
+
+POST /api/admin/keap/test-contact
+
+Remove any routes and code that support that endpoint.
+
+Remove any mention of it in admin docs or UI text.
+
+Part 3: Simplify Tag Loading Buttons and Preserve Caching
+
+Current issue
+There are two buttons:
+
+Load tags
+
+Refresh from Keap
+This is confusing because they overlap.
+
+Required behavior
+
+Remove “Load tags” button completely.
+
+Keep only one button:
+
+“Refresh from Keap”
+
+Tags should still populate automatically on page load without clicking any buttons:
+
+If Keap is connected, load tags from cache via GET /api/admin/keap/tags
+
+If cache exists and valid, it returns instantly
+
+If cache missing or expired, server refreshes and returns tags
+
+Backend API expectations
+
+GET /api/admin/keap/tags
+
+Returns cached tags if valid, otherwise refreshes automatically server side.
+
+POST /api/admin/keap/tags/refresh
+
+Forces refresh from Keap immediately and updates cache.
+
+Frontend expectations
+
+On page mount:
+
+Call /api/admin/keap/status
+
+If connected true:
+
+Call GET /api/admin/keap/tags
+
+Populate dropdown immediately
+
+“Refresh from Keap” button calls:
+
+POST /api/admin/keap/tags/refresh
+
+Update dropdown list with returned tags
+
+If not connected:
+
+Disable tag dropdown and refresh button.
+
+Caching requirements remain unchanged
+
+Cache TTL 72 hours.
+
+Tags must be stored server side in SystemSettings:
+
+keapTagsCacheJson
+
+keapTagsCachedAt
+
+keapTagsCacheExpiresAt
+
+Tags must persist across logout and login.
+
+Part 4: Final Verification Checklist
+
+At the end, confirm:
+
+Default tag dropdown does not auto select first tag unless a saved default exists.
+
+Dropdown is searchable only after opening it, with real time filtering.
+
+The tag list is alphabetical and filtered results stay alphabetical.
+
+“Send Test Contact” button is removed from UI and backend.
+
+Only one tag button remains: “Refresh from Keap.”
+
+Tags auto load from cache on page load and persist across logout/login.
+
+Clicking “Refresh from Keap” updates the cached tags and dropdown list.
+
+Now implement these changes in the existing codebase.

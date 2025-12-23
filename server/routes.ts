@@ -25,14 +25,12 @@ import {
   isKeapConnected,
   disconnectKeap,
   createOrUpdateContact,
-  sendTestContact,
   fetchKeapTags,
   getKeapTagsWithCache,
   setDefaultTag,
   getDefaultTag,
   syncUserToKeap,
   applyTagToUser,
-  type TestContactInput,
 } from "./keap";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1116,26 +1114,6 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Keap disconnect error:", err);
       res.status(500).json({ message: "Failed to disconnect Keap" });
-    }
-  });
-
-  app.post("/api/admin/keap/test", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { email, firstName, lastName, tagId } = req.body;
-      
-      const hasAnyOverride = email || firstName || lastName || tagId;
-      const input: TestContactInput | undefined = hasAnyOverride ? {
-        email: email || "test@fearlessvideocoach.com",
-        firstName: firstName || undefined,
-        lastName: lastName || undefined,
-        tagId: tagId ? Number(tagId) : undefined,
-      } : undefined;
-      
-      const result = await sendTestContact(input);
-      res.json(result);
-    } catch (err) {
-      console.error("Keap test error:", err);
-      res.status(500).json({ success: false, message: "Failed to send test contact" });
     }
   });
 
