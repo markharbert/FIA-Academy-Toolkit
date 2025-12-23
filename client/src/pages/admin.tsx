@@ -42,7 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Settings, Link2, Unlink, TestTube, Loader2, CheckCircle, XCircle, AlertCircle,
   Users, Video, Search, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, 
-  CheckCircle2, LogOut, RefreshCw, Eye, Mail
+  CheckCircle2, LogOut, RefreshCw, Eye, Mail, Tag
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -101,6 +101,16 @@ interface UserDetails {
 interface KeapStatus {
   connected: boolean;
   connectedAt: string | null;
+  lastError: string | null;
+  tokenExpiresAt: string | null;
+  defaultTag: { id: number; name: string } | null;
+  lastTagSyncAt: string | null;
+}
+
+interface KeapTag {
+  id: number;
+  name: string;
+  description?: string;
 }
 
 export default function AdminPage() {
@@ -112,6 +122,8 @@ export default function AdminPage() {
   const [keapStatus, setKeapStatus] = useState<KeapStatus | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [keapTags, setKeapTags] = useState<KeapTag[]>([]);
+  const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
   
   // User management state
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -299,7 +311,8 @@ export default function AdminPage() {
           title: "Disconnected",
           description: "Keap has been disconnected.",
         });
-        setKeapStatus({ connected: false, connectedAt: null });
+        setKeapStatus({ connected: false, connectedAt: null, lastError: null, tokenExpiresAt: null, defaultTag: null, lastTagSyncAt: null });
+        setKeapTags([]);
         fetchStats();
       }
     } catch (err) {
@@ -338,6 +351,85 @@ export default function AdminPage() {
       toast({
         title: "Error",
         description: "Failed to send test contact",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleFetchTags = async () => {
+    try {
+      setActionLoading("fetch-tags");
+      const res = await fetch("/api/admin/keap/tags", { credentials: "include" });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setKeapTags(data.tags || []);
+        toast({
+          title: "Tags Loaded",
+          description: `Loaded ${data.tags?.length || 0} tags from Keap.`,
+        });
+        fetchKeapStatus();
+      } else {
+        const error = await res.json();
+        toast({
+          title: "Error",
+          description: error.message || "Failed to fetch tags",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch tags from Keap",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSetDefaultTag = async () => {
+    if (!selectedTagId) {
+      toast({
+        title: "Error",
+        description: "Please select a tag first",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const tag = keapTags.find(t => t.id === selectedTagId);
+    if (!tag) return;
+    
+    try {
+      setActionLoading("set-tag");
+      const res = await fetch("/api/admin/keap/default-tag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagId: tag.id, tagName: tag.name }),
+        credentials: "include",
+      });
+      
+      if (res.ok) {
+        toast({
+          title: "Default Tag Set",
+          description: `"${tag.name}" will be applied to new signups.`,
+        });
+        fetchKeapStatus();
+      } else {
+        const error = await res.json();
+        toast({
+          title: "Error",
+          description: error.message || "Failed to set default tag",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to set default tag",
         variant: "destructive",
       });
     } finally {
@@ -882,6 +974,76 @@ export default function AdminPage() {
                 )}
               </div>
 
+              {keapStatus?.lastError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/50">
+                  <div className="flex gap-3">
+                    <AlertCircle className="h-5 w-5 shrink-0 text-red-600 dark:text-red-500" />
+                    <div className="text-sm">
+                      <p className="font-medium text-red-800 dark:text-red-200">Last Error</p>
+                      <p className="mt-1 text-red-700 dark:text-red-300">{keapStatus.lastError}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {keapStatus?.connected && (
+                <div className="space-y-4 border-t pt-4">
+                  <h4 className="font-medium">Default Tag for New Signups</h4>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Select
+                      value={selectedTagId?.toString() || keapStatus.defaultTag?.id?.toString() || ""}
+                      onValueChange={(value) => setSelectedTagId(Number(value))}
+                    >
+                      <SelectTrigger className="w-64" data-testid="select-keap-tag">
+                        <SelectValue placeholder="Select a tag..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {keapTags.map((tag) => (
+                          <SelectItem key={tag.id} value={tag.id.toString()}>
+                            {tag.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      onClick={handleFetchTags}
+                      disabled={!!actionLoading}
+                      data-testid="button-fetch-tags"
+                    >
+                      {actionLoading === "fetch-tags" ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                      )}
+                      Fetch Tags
+                    </Button>
+                    <Button
+                      onClick={handleSetDefaultTag}
+                      disabled={!!actionLoading || !selectedTagId}
+                      data-testid="button-set-default-tag"
+                    >
+                      {actionLoading === "set-tag" ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Tag className="mr-2 h-4 w-4" />
+                      )}
+                      Set Default Tag
+                    </Button>
+                  </div>
+                  {keapStatus.defaultTag && (
+                    <p className="text-sm text-muted-foreground">
+                      Current default: <span className="font-medium">{keapStatus.defaultTag.name}</span>
+                    </p>
+                  )}
+                  {keapStatus.lastTagSyncAt && (
+                    <p className="text-sm text-muted-foreground">
+                      Tags last synced: {format(new Date(keapStatus.lastTagSyncAt), "MMM d, yyyy 'at' h:mm a")}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/50">
                 <div className="flex gap-3">
                   <AlertCircle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
@@ -890,7 +1052,7 @@ export default function AdminPage() {
                     <ul className="mt-2 list-inside list-disc space-y-1 text-amber-700 dark:text-amber-300">
                       <li>Set KEAP_CLIENT_ID and KEAP_CLIENT_SECRET in environment</li>
                       <li>Set KEAP_REDIRECT_URI to your callback URL</li>
-                      <li>Optionally set KEAP_TAG_ID to auto-apply a tag to new contacts</li>
+                      <li>Use "Fetch Tags" and set a default tag for new signups</li>
                     </ul>
                   </div>
                 </div>

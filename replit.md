@@ -79,18 +79,26 @@ Preferred communication style: Simple, everyday language.
 
 ### Keap Integration (Email List Sync)
 - **Purpose**: Automatically add new signups to Keap email list
-- **OAuth Flow**: Admin connects Keap once via OAuth 2.0
+- **OAuth Flow**: Admin connects Keap once via OAuth 2.0 with CSRF protection via state parameter
 - **Token Storage**: Access/refresh tokens in `system_settings` table
-- **Auto-Refresh**: Tokens automatically refresh before expiration
+- **Auto-Refresh**: Tokens automatically refresh before expiration (5 min buffer)
 - **Rate Limiting**: Implements retry with backoff for 429 errors
+- **Tag Management**: Admin can fetch tags from Keap and set a default tag for new signups
+- **Debugging**: Comprehensive logging with traceIds for debugging OAuth and API issues
 
 #### Keap Environment Variables
 - `KEAP_CLIENT_ID`: OAuth client ID from Keap developer portal
 - `KEAP_CLIENT_SECRET`: OAuth client secret
 - `KEAP_REDIRECT_URI`: Callback URL (e.g., https://yourapp.com/api/admin/keap/callback)
-- `KEAP_TAG_ID`: (Optional) Tag ID to apply to new contacts
+- `KEAP_TAG_ID`: (Optional, deprecated) Fallback tag ID - prefer using admin UI tag selection
 - `KEAP_AUTHORIZE_URL_BASE`: (Optional) Defaults to https://accounts.infusionsoft.com/app/oauth/authorize
 - `KEAP_TOKEN_URL`: (Optional) Defaults to https://api.infusionsoft.com/token
+
+#### Tag Management
+- Admin can fetch available tags from Keap in the admin panel
+- Select a default tag to apply to all new signups
+- Tags are stored in `system_settings`: `keapDefaultTagId`, `keapDefaultTagName`
+- Per-user tag application available via admin user details drawer
 
 ### Email Configuration (Password Reset)
 - `SMTP_HOST`: SMTP server hostname (e.g., smtp.gmail.com)

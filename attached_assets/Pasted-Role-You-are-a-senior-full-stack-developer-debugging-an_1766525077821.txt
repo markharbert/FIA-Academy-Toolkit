@@ -1,0 +1,343 @@
+Role: You are a senior full stack developer debugging an existing Replit web app. The Keap OAuth connection flow redirects to Keap successfully, but after interacting with Keap it shows: “There was a server error processing your request.” That message is shown on the Keap side, which usually means our OAuth app configuration, redirect URI, scopes, or authorization request parameters are wrong, or our app is failing to complete the OAuth flow correctly.
+
+Your job:
+
+Find the exact root cause of the Keap server error.
+
+Fix Keap OAuth connect end to end.
+
+Add reliable tag selection so every new signup can be tagged in Keap with an admin chosen tag.
+
+Provide clear setup steps and verification evidence.
+
+Do not guess. Use logs, response codes, and captured request URLs to pinpoint the issue.
+
+Part 1: Reproduce and capture the exact failure
+
+Reproduce the Keap connect flow from the Admin Keap Integration page.
+
+Capture the full Keap authorize URL we send the user to, including query parameters:
+
+client_id
+
+redirect_uri
+
+response_type
+
+scope
+
+state
+
+Capture the exact screen in Keap where it says “server error processing your request.”
+
+Check whether Keap redirected back to our app at all.
+
+If yes, capture the callback URL query string (code, state, error, error_description).
+
+If no, the error is happening before callback, likely due to invalid authorize request parameters.
+
+Add temporary logging
+
+Log the generated authorize URL on our server (redacting nothing except secrets).
+
+Log the redirect_uri value exactly.
+
+Log the scope value exactly.
+
+Log state generation and storage.
+
+Part 2: Verify Keap OAuth configuration and parameters
+
+You must validate each of these and fix mismatches:
+
+Client ID and Client Secret
+
+Confirm env vars exist and are loaded:
+
+KEAP_CLIENT_ID
+
+KEAP_CLIENT_SECRET
+
+KEAP_REDIRECT_URI
+
+KEAP_AUTHORIZE_URL_BASE
+
+KEAP_TOKEN_URL
+
+Log which vars are present (never log secrets).
+
+Confirm the app is not using stale or wrong credentials.
+
+Redirect URI mismatch
+This is the most common OAuth failure.
+
+Confirm KEAP_REDIRECT_URI exactly matches what is configured in the Keap developer app settings, character for character.
+
+Confirm correct scheme (https vs http).
+
+Confirm correct path (for example /api/admin/keap/callback).
+
+Confirm no trailing slash mismatch.
+
+Confirm no URL encoding mistakes.
+
+Authorize endpoint correctness
+Keap has had different hostnames historically.
+
+Identify what the current correct authorize base should be for Keap.
+
+Use the Keap official docs currently referenced in the codebase and confirm:
+
+The authorize URL is correct
+
+The token URL is correct (often https://api.infusionsoft.com/token
+)
+
+Make the authorize base configurable via env var, defaulting to the correct one.
+
+Required query parameters
+Ensure authorize request includes:
+
+client_id
+
+redirect_uri (URL encoded)
+
+response_type=code
+
+scope (space separated or encoded as required)
+
+state (random, stored server side)
+
+If any are missing or malformed, fix.
+
+Scope issues
+
+Confirm the scopes requested are valid Keap scopes.
+
+Reduce to the minimum needed for:
+
+creating and updating contacts
+
+applying tags
+
+reading tag list (optional but recommended)
+If scopes are invalid or too broad, Keap may error.
+Implement a configurable KEAP_SCOPES env var with a safe default.
+
+State and CSRF
+
+Ensure state is random and stored server side (session or DB).
+
+Ensure callback validates state.
+
+If state mismatch occurs, show a clear error on our side, not generic.
+
+Part 3: Implement deep callback and token exchange diagnostics
+
+In our callback route:
+
+/api/admin/keap/callback
+
+Add structured logs with a traceId:
+
+Callback received
+
+Query params present:
+
+code
+
+state
+
+error
+
+If error param present, log error and error_description and stop.
+
+If code present:
+
+Exchange code for tokens at KEAP_TOKEN_URL
+
+Log HTTP status code and response body safely (redact tokens but log shape)
+
+If token exchange fails:
+
+Log status code
+
+Log error message
+
+Render a clear admin error page with next steps
+
+Important token storage rules
+
+Store access token, refresh token, and expiresAt in SystemSettings.
+
+Persist the newest refresh token after refresh calls.
+
+Part 4: Confirm Keap token refresh works and is used correctly
+
+Implement helper:
+getKeapAccessToken()
+
+Rules:
+
+If token missing, return not connected.
+
+If token expires within 5 minutes, refresh it.
+
+On refresh, update:
+
+access token
+
+refresh token
+
+expiresAt
+
+lastRefreshAt
+
+If refresh fails, store lastError and show it in admin UI.
+
+Part 5: Tag selection and tagging behavior
+
+Goal
+Admin can choose which Keap tag is applied to new signups and to OAuth signups.
+
+Admin UI requirements
+
+In Admin -> Keap Integration section add:
+
+A dropdown: “Default tag for new signups”
+
+A button: “Fetch tags from Keap”
+
+A save button
+
+Tag storage
+Store in SystemSettings:
+
+keapDefaultTagId
+
+keapDefaultTagName (optional)
+
+keapLastTagSyncAt
+
+Fetching tags
+
+Implement:
+
+GET /api/admin/keap/tags
+This should:
+
+Use getKeapAccessToken()
+
+Call Keap endpoint to list tags
+
+Return an array of { id, name }
+
+If Keap does not support listing tags easily via one endpoint in your chosen API version:
+
+Provide an alternate solution:
+
+Admin manually enters Tag ID
+
+Or show instructions on where to get Tag ID in Keap UI
+But first try to implement tag fetching.
+
+Applying tags on contact create
+When a user signs up:
+
+Create or update Keap contact (store keapContactId on user).
+
+Apply the selected default tag:
+
+If keapDefaultTagId is set, apply it
+
+If not set, do not attempt tagging
+
+Also add an admin override
+On the Super Admin user drawer:
+
+Add a “Tag in Keap” dropdown and apply button for that user.
+
+Error handling
+
+If contact create succeeds but tag apply fails:
+
+Do not fail signup
+
+Log the error and show it in admin panel
+
+Part 6: Contact create or update reliability
+
+Implement a single function:
+syncUserToKeap(user)
+
+Rules:
+
+Only run if:
+
+keap is connected
+
+user has email
+
+user consent is true
+
+If user.keapContactId exists:
+
+Update contact
+
+If not:
+
+Search for contact by email first to avoid duplicates
+
+If found, set keapContactId
+
+If not found, create contact then store id
+
+Then apply default tag if present.
+
+Add logging with traceId for each sync attempt.
+
+Part 7: Concrete debugging tasks to perform and report back
+
+You must produce:
+
+The exact authorize URL being generated.
+
+Confirmation whether Keap ever redirects back to our callback.
+
+If callback is hit:
+
+The token exchange request and response status
+
+Root cause statement:
+
+Redirect URI mismatch, invalid scope, wrong endpoint, bad client id, etc.
+
+The fix applied in code.
+
+Proof:
+
+Successful Keap connect status in admin UI
+
+Token stored and refresh tested
+
+A test contact successfully created
+
+Default tag applied to that test contact
+
+Part 8: Verification checklist
+
+At the end, confirm:
+
+Keap connect no longer shows server error on Keap side
+
+Callback hits our server and token exchange succeeds
+
+Tokens are stored and refresh works
+
+Admin can fetch tags or manually set tag id
+
+Default tag is applied to new signups
+
+Errors are logged clearly and shown in admin UI where appropriate
+
+Now implement the debugging instrumentation, find the root cause, fix it, and implement tag selection and tagging support as described.

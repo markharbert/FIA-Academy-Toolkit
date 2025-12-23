@@ -19,11 +19,18 @@ import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
 import {
   getKeapAuthUrl,
+  generateOAuthState,
+  validateOAuthState,
   exchangeCodeForTokens,
   isKeapConnected,
   disconnectKeap,
   createOrUpdateContact,
   sendTestContact,
+  fetchKeapTags,
+  setDefaultTag,
+  getDefaultTag,
+  syncUserToKeap,
+  applyTagToUser,
 } from "./keap";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1019,10 +1026,15 @@ export async function registerRoutes(
     try {
       const connected = await isKeapConnected();
       const settings = await storage.getSystemSettings();
+      const defaultTag = await getDefaultTag();
       
       res.json({
         connected,
         connectedAt: settings?.keapConnectedAt || null,
+        lastError: settings?.keapLastError || null,
+        tokenExpiresAt: settings?.keapTokenExpiresAt || null,
+        defaultTag: defaultTag,
+        lastTagSyncAt: settings?.keapLastTagSyncAt || null,
       });
     } catch (err) {
       console.error("Keap status error:", err);
@@ -1032,7 +1044,8 @@ export async function registerRoutes(
 
   app.get("/api/admin/keap/auth-url", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const authUrl = getKeapAuthUrl();
+      const state = generateOAuthState();
+      const authUrl = getKeapAuthUrl(state);
       res.json({ authUrl });
     } catch (err) {
       console.error("Keap auth URL error:", err);
@@ -1042,22 +1055,46 @@ export async function registerRoutes(
 
   app.get("/api/admin/keap/callback", async (req: Request, res: Response) => {
     try {
-      const { code, error } = req.query;
+      const { code, error, error_description, state } = req.query;
+      
+      console.log("[Keap Callback] Received callback");
+      console.log("[Keap Callback] Query params:", { 
+        hasCode: !!code, 
+        hasError: !!error, 
+        hasState: !!state,
+        error: error || null,
+        error_description: error_description || null 
+      });
       
       if (error) {
-        console.error("Keap OAuth error:", error);
-        return res.redirect("/admin?keap_error=oauth_denied");
+        console.error("[Keap Callback] OAuth error from Keap:", error, error_description);
+        const errorMsg = encodeURIComponent(String(error_description || error));
+        return res.redirect(`/admin?keap_error=${errorMsg}`);
       }
       
       if (!code || typeof code !== "string") {
+        console.error("[Keap Callback] No authorization code received");
         return res.redirect("/admin?keap_error=no_code");
       }
       
+      // Validate state - REQUIRED for CSRF protection
+      if (!state || typeof state !== "string") {
+        console.error("[Keap Callback] Missing OAuth state parameter");
+        return res.redirect("/admin?keap_error=missing_state");
+      }
+      
+      if (!validateOAuthState(state)) {
+        console.error("[Keap Callback] Invalid or expired OAuth state");
+        return res.redirect("/admin?keap_error=invalid_state");
+      }
+      
       await exchangeCodeForTokens(code);
+      console.log("[Keap Callback] Token exchange successful");
       res.redirect("/admin?keap_success=connected");
     } catch (err) {
-      console.error("Keap callback error:", err);
-      res.redirect("/admin?keap_error=token_exchange");
+      console.error("[Keap Callback] Error:", err);
+      const errorMsg = err instanceof Error ? encodeURIComponent(err.message) : "token_exchange";
+      res.redirect(`/admin?keap_error=${errorMsg}`);
     }
   });
 
@@ -1078,6 +1115,56 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Keap test error:", err);
       res.status(500).json({ success: false, message: "Failed to send test contact" });
+    }
+  });
+
+  // Fetch tags from Keap
+  app.get("/api/admin/keap/tags", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const tags = await fetchKeapTags();
+      res.json({ tags });
+    } catch (err) {
+      console.error("Keap fetch tags error:", err);
+      res.status(500).json({ message: "Failed to fetch tags from Keap" });
+    }
+  });
+
+  // Set default tag for new signups
+  app.post("/api/admin/keap/default-tag", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { tagId, tagName } = req.body;
+      
+      if (!tagId || !tagName) {
+        return res.status(400).json({ message: "Tag ID and name are required" });
+      }
+      
+      await setDefaultTag(Number(tagId), String(tagName));
+      res.json({ message: "Default tag set successfully" });
+    } catch (err) {
+      console.error("Set default tag error:", err);
+      res.status(500).json({ message: "Failed to set default tag" });
+    }
+  });
+
+  // Apply tag to a specific user
+  app.post("/api/admin/users/:id/apply-tag", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { tagId } = req.body;
+      
+      if (!tagId) {
+        return res.status(400).json({ message: "Tag ID is required" });
+      }
+      
+      const success = await applyTagToUser(req.params.id, Number(tagId));
+      
+      if (success) {
+        res.json({ message: "Tag applied successfully" });
+      } else {
+        res.status(400).json({ message: "Failed to apply tag. User may not have a Keap contact." });
+      }
+    } catch (err) {
+      console.error("Apply tag error:", err);
+      res.status(500).json({ message: "Failed to apply tag" });
     }
   });
 
