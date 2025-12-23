@@ -157,7 +157,8 @@ async function getValidAccessToken(): Promise<string> {
   const now = new Date();
   const bufferMs = 5 * 60 * 1000;
   
-  if (expiresAt && new Date(expiresAt.getTime() - bufferMs) <= now) {
+  // If no expiry set or token is expiring soon, refresh it
+  if (!expiresAt || new Date(expiresAt.getTime() - bufferMs) <= now) {
     return await refreshAccessToken();
   }
   
