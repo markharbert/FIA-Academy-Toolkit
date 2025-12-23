@@ -303,43 +303,147 @@ export async function disconnectKeap(): Promise<void> {
   console.log("[Keap] Disconnected and cleared all settings");
 }
 
-export async function fetchKeapTags(): Promise<KeapTag[]> {
-  const traceId = crypto.randomBytes(4).toString("hex");
-  console.log(`[Keap Tags ${traceId}] Fetching tags from Keap...`);
+const TAG_CACHE_TTL_HOURS = 72;
+
+export interface TagCacheResult {
+  source: "cache" | "keap";
+  cachedAt: Date | null;
+  expiresAt: Date | null;
+  tags: KeapTag[];
+  warning?: string;
+}
+
+async function fetchTagsFromKeap(traceId: string): Promise<KeapTag[]> {
+  console.log(`[Keap Tags ${traceId}] Fetching tags from Keap API...`);
   
+  const accessToken = await getValidAccessToken();
+  
+  const response = await fetchWithRetry(
+    `${KEAP_API_BASE}/tags?limit=1000`,
+    {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[Keap Tags ${traceId}] Failed to fetch tags: ${errorText}`);
+    throw new Error(`Failed to fetch tags: ${errorText}`);
+  }
+  
+  const data: KeapTagsResponse = await response.json();
+  const tags = data.tags || [];
+  
+  // Sort by name
+  tags.sort((a, b) => a.name.localeCompare(b.name));
+  
+  console.log(`[Keap Tags ${traceId}] Fetched ${tags.length} tags from Keap`);
+  return tags;
+}
+
+async function cacheTagsToDatabase(tags: KeapTag[]): Promise<{ cachedAt: Date; expiresAt: Date }> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + TAG_CACHE_TTL_HOURS * 60 * 60 * 1000);
+  
+  await storage.upsertSystemSettings({
+    keapTagsCacheJson: JSON.stringify(tags),
+    keapTagsCachedAt: now,
+    keapTagsCacheExpiresAt: expiresAt,
+    keapLastTagSyncAt: now,
+    keapLastTagFetchError: null,
+  });
+  
+  return { cachedAt: now, expiresAt };
+}
+
+export async function getKeapTagsWithCache(forceRefresh: boolean = false): Promise<TagCacheResult> {
+  const traceId = crypto.randomBytes(4).toString("hex");
+  console.log(`[Keap Tags ${traceId}] Getting tags (forceRefresh: ${forceRefresh})`);
+  
+  const settings = await storage.getSystemSettings();
+  const now = new Date();
+  
+  // Check if we have valid cache and don't need to force refresh
+  if (!forceRefresh && settings?.keapTagsCacheJson && settings?.keapTagsCacheExpiresAt) {
+    const expiresAt = new Date(settings.keapTagsCacheExpiresAt);
+    if (expiresAt > now) {
+      console.log(`[Keap Tags ${traceId}] Returning cached tags (expires: ${expiresAt.toISOString()})`);
+      const cachedTags: KeapTag[] = JSON.parse(settings.keapTagsCacheJson);
+      return {
+        source: "cache",
+        cachedAt: settings.keapTagsCachedAt,
+        expiresAt: settings.keapTagsCacheExpiresAt,
+        tags: cachedTags,
+      };
+    }
+    console.log(`[Keap Tags ${traceId}] Cache expired, will refresh`);
+  }
+  
+  // Try to fetch fresh tags from Keap
   try {
-    const accessToken = await getValidAccessToken();
-    
-    const response = await fetchWithRetry(
-      `${KEAP_API_BASE}/tags?limit=1000`,
-      {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
+    const connected = await isKeapConnected();
+    if (!connected) {
+      // Return cached if available, otherwise empty
+      if (settings?.keapTagsCacheJson) {
+        const cachedTags: KeapTag[] = JSON.parse(settings.keapTagsCacheJson);
+        return {
+          source: "cache",
+          cachedAt: settings.keapTagsCachedAt,
+          expiresAt: settings.keapTagsCacheExpiresAt,
+          tags: cachedTags,
+          warning: "Keap not connected. Showing cached tags.",
+        };
       }
-    );
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[Keap Tags ${traceId}] Failed to fetch tags: ${errorText}`);
-      throw new Error(`Failed to fetch tags: ${errorText}`);
+      return {
+        source: "cache",
+        cachedAt: null,
+        expiresAt: null,
+        tags: [],
+        warning: "Keap not connected and no cached tags available.",
+      };
     }
     
-    const data: KeapTagsResponse = await response.json();
-    console.log(`[Keap Tags ${traceId}] Fetched ${data.tags?.length || 0} tags`);
+    const tags = await fetchTagsFromKeap(traceId);
+    const { cachedAt, expiresAt } = await cacheTagsToDatabase(tags);
     
-    // Update last sync time
+    return {
+      source: "keap",
+      cachedAt,
+      expiresAt,
+      tags,
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[Keap Tags ${traceId}] Error fetching from Keap:`, errorMsg);
+    
+    // Store the error
     await storage.upsertSystemSettings({
-      keapLastTagSyncAt: new Date(),
+      keapLastTagFetchError: errorMsg,
     });
     
-    return data.tags || [];
-  } catch (error) {
-    console.error(`[Keap Tags ${traceId}] Error:`, error);
+    // Return cached tags if available
+    if (settings?.keapTagsCacheJson) {
+      const cachedTags: KeapTag[] = JSON.parse(settings.keapTagsCacheJson);
+      return {
+        source: "cache",
+        cachedAt: settings.keapTagsCachedAt,
+        expiresAt: settings.keapTagsCacheExpiresAt,
+        tags: cachedTags,
+        warning: `Failed to refresh from Keap: ${errorMsg}. Showing cached tags.`,
+      };
+    }
+    
     throw error;
   }
+}
+
+export async function fetchKeapTags(): Promise<KeapTag[]> {
+  const result = await getKeapTagsWithCache(false);
+  return result.tags;
 }
 
 export async function setDefaultTag(tagId: number, tagName: string): Promise<void> {
@@ -522,19 +626,61 @@ export async function syncUserToKeap(
   }
 }
 
-export async function sendTestContact(): Promise<{ success: boolean; message: string; contactId?: number }> {
+export interface TestContactInput {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  tagId?: number;
+}
+
+export interface TestContactResult {
+  success: boolean;
+  message: string;
+  contactId?: number;
+  created?: boolean;
+  updated?: boolean;
+  tagApplied?: boolean;
+  tagId?: number;
+}
+
+export async function sendTestContact(input?: TestContactInput): Promise<TestContactResult> {
+  const traceId = crypto.randomBytes(4).toString("hex");
+  
+  // Use provided input or defaults
+  const email = input?.email || "test@fearlessvideocoach.com";
+  const firstName = input?.firstName || "Test";
+  const lastName = input?.lastName || "Contact";
+  const tagId = input?.tagId;
+  
+  console.log(`[Keap Test ${traceId}] Sending test contact: ${email}`);
+  
   try {
+    // Check if connected
+    const connected = await isKeapConnected();
+    if (!connected) {
+      return {
+        success: false,
+        message: "Keap is not connected. Please connect Keap first.",
+      };
+    }
+    
     const contactId = await createOrUpdateContact(
-      "test@fearlessvideocoach.com",
-      "Test",
-      "Contact"
+      email,
+      firstName,
+      lastName,
+      tagId
     );
     
     if (contactId) {
+      console.log(`[Keap Test ${traceId}] Success! Contact ID: ${contactId}`);
       return {
         success: true,
-        message: `Test contact created/updated successfully with ID: ${contactId}`,
+        message: `Contact "${firstName} ${lastName}" (${email}) successfully synced to Keap with ID: ${contactId}${tagId ? `. Tag ${tagId} applied.` : ""}`,
         contactId,
+        created: true,
+        updated: false,
+        tagApplied: !!tagId,
+        tagId,
       };
     } else {
       return {
@@ -543,9 +689,11 @@ export async function sendTestContact(): Promise<{ success: boolean; message: st
       };
     }
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error occurred";
+    console.error(`[Keap Test ${traceId}] Error:`, errorMsg);
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Unknown error occurred",
+      message: errorMsg,
     };
   }
 }

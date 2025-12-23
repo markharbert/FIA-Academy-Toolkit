@@ -1,0 +1,294 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Improve the Admin dashboard Keap integration page with the changes below. Do not break the existing Keap OAuth connection logic. Focus on caching tags, conditional UI display, and fixing the “Send Test Contact” button so it works reliably.
+
+High Priority Outcomes
+
+Keap tags are cached so the admin does not have to fetch them every time.
+
+Tags automatically refresh every 72 hours, and also refresh immediately when the admin clicks “Fetch tags.”
+
+The yellow “Setup requirements” instruction box only displays when Keap is NOT connected.
+
+“Send Test Contact” works and gives clear results, with a small modal to enter test details.
+
+Part 1: Cache Keap Tags
+
+Goal
+When the admin fetches Keap tags, store them in our database so we can reuse them without hitting Keap every page load.
+
+Database changes
+Add to SystemSettings (or equivalent app settings store):
+
+keapTagsCacheJson (text/json, nullable)
+
+keapTagsCachedAt (datetime, nullable)
+
+keapTagsCacheExpiresAt (datetime, nullable)
+
+keapLastTagFetchError (text, nullable)
+
+Caching rules
+
+Cache TTL: 72 hours.
+
+When the admin page loads:
+
+If keapTagsCacheJson exists AND current time < keapTagsCacheExpiresAt:
+
+Use cached tags.
+
+If missing or expired:
+
+Auto refresh in the background if Keap is connected.
+
+If refresh fails, continue showing cached tags if present, and show a warning.
+
+When admin clicks “Fetch tags”:
+
+Force refresh tags from Keap immediately.
+
+Overwrite cache and reset cachedAt and expiresAt.
+
+Tag object format to cache
+Store as array of:
+[{ "id": "<string or number>", "name": "<string>" }]
+Sort by name before caching.
+
+API changes
+Implement or update endpoints:
+
+GET /api/admin/keap/tags
+Behavior:
+
+Returns tags quickly from cache when valid.
+
+Accepts query param:
+
+force=true to bypass cache and fetch from Keap.
+Return JSON:
+{
+"source": "cache" | "keap",
+"cachedAt": "...",
+"expiresAt": "...",
+"tags": [...]
+}
+
+POST /api/admin/keap/tags/refresh
+Behavior:
+
+Forces a refresh regardless of cache.
+
+Returns the same payload as above.
+
+Backend logic requirements
+
+Use getKeapAccessToken() helper.
+
+If not connected, return 400 with a friendly message.
+
+If Keap request fails:
+
+Log the error
+
+Set keapLastTagFetchError in settings
+
+Return cached tags if available and mark source="cache" plus warning field.
+
+Background auto refresh
+Implement one of these:
+Option A (recommended): On admin page load, call GET tags, and if expired it refreshes automatically server side.
+Option B: A scheduled job that runs every X hours to refresh when connected.
+Either is acceptable, but must meet the behavior: auto refresh after 72 hours without admin needing to click.
+
+Part 2: Conditional “Setup Requirements” Yellow Box
+
+Goal
+The yellow setup instructions box (client id, secret, redirect uri, etc) should only show when Keap is NOT connected.
+
+Frontend requirements
+
+On admin Keap integration page, call:
+
+GET /api/admin/keap/status
+
+If status.connected is true:
+
+Hide the yellow setup box completely.
+
+If status.connected is false:
+
+Show the yellow setup box.
+
+Backend requirements
+Ensure /api/admin/keap/status returns:
+{
+"connected": true|false,
+"tokenExpiresAt": "...",
+"connectedAt": "...",
+"lastError": "..."
+}
+
+Part 3: Fix “Send Test Contact” Button
+
+Current behavior
+The button exists but does not work.
+
+Goal
+Clicking “Send Test Contact” should:
+
+Open a modal dialog.
+
+Let admin enter a test email and optional first/last name.
+
+Optionally allow selecting a tag to apply (default to the currently selected default signup tag).
+
+On submit, run a full test sync:
+
+Create contact if not found
+
+Update contact if found
+
+Apply selected tag if present
+
+Show success or error results clearly.
+
+UI requirements for modal
+Fields:
+
+Email (required)
+
+First name (optional)
+
+Last name (optional)
+
+Tag (dropdown)
+
+Preselect default tag if set
+Buttons:
+
+Cancel
+
+Send test
+
+Validation
+
+Validate email format
+
+Disable submit until valid
+
+API endpoint required
+POST /api/admin/keap/test-contact
+Body:
+{
+"email": "...",
+"firstName": "...",
+"lastName": "...",
+"tagId": "..." (optional)
+}
+
+Endpoint behavior
+
+Require admin auth.
+
+Require Keap connected.
+
+Run lookup by email:
+
+If exists, update.
+
+If not, create.
+
+If tagId provided:
+
+Apply tag.
+
+Return detailed result payload:
+{
+"created": true|false,
+"updated": true|false,
+"contactId": "...",
+"tagApplied": true|false,
+"tagId": "...",
+"message": "..."
+}
+
+Error handling
+
+If Keap not connected, return 400 and a friendly message.
+
+If token refresh fails, return 500 and record lastError.
+
+Log all errors with traceId.
+
+Debug requirement for button not working
+You must identify why it currently does not work:
+Common causes to check:
+
+Button not wired to handler
+
+Handler calls wrong endpoint
+
+Endpoint does not exist or returns 404/403
+
+Frontend fetch missing credentials
+
+CORS or auth failure
+
+Missing CSRF token if your app uses it
+
+Fix it fully and verify end to end.
+
+Part 4: Admin Page Behavior Summary
+
+On page load:
+
+Fetch /api/admin/keap/status
+
+If connected:
+
+Hide setup instructions box
+
+Load tags via cached endpoint
+
+If not connected:
+
+Show setup instructions box
+
+Disable tag dropdown and test contact button
+
+Show “Connect Keap” as primary action
+
+Buttons
+
+Fetch tags:
+
+Calls refresh with force=true
+
+Updates cache and dropdown
+
+Send test contact:
+
+Opens modal and calls test endpoint
+
+Shows results in UI
+
+Part 5: Final Verification Checklist
+
+At the end, provide a checklist confirming:
+
+Tags are cached with a 72 hour TTL
+
+Tags load instantly from cache when valid
+
+Tags refresh automatically when expired
+
+Fetch tags forces refresh and updates cache
+
+Yellow setup requirements box only shows when disconnected
+
+Send Test Contact opens a modal and successfully creates or updates a contact
+
+Optional tag selection works in test contact flow
+
+Clear success and error messages appear in the admin UI
+
+Now implement these changes in the existing codebase.

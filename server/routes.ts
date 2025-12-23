@@ -27,10 +27,12 @@ import {
   createOrUpdateContact,
   sendTestContact,
   fetchKeapTags,
+  getKeapTagsWithCache,
   setDefaultTag,
   getDefaultTag,
   syncUserToKeap,
   applyTagToUser,
+  type TestContactInput,
 } from "./keap";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1110,7 +1112,16 @@ export async function registerRoutes(
 
   app.post("/api/admin/keap/test", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const result = await sendTestContact();
+      const { email, firstName, lastName, tagId } = req.body;
+      
+      const input: TestContactInput | undefined = email ? {
+        email,
+        firstName,
+        lastName,
+        tagId: tagId ? Number(tagId) : undefined,
+      } : undefined;
+      
+      const result = await sendTestContact(input);
       res.json(result);
     } catch (err) {
       console.error("Keap test error:", err);
@@ -1118,14 +1129,26 @@ export async function registerRoutes(
     }
   });
 
-  // Fetch tags from Keap
+  // Fetch tags from Keap (with caching)
   app.get("/api/admin/keap/tags", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const tags = await fetchKeapTags();
-      res.json({ tags });
+      const force = req.query.force === "true";
+      const result = await getKeapTagsWithCache(force);
+      res.json(result);
     } catch (err) {
       console.error("Keap fetch tags error:", err);
       res.status(500).json({ message: "Failed to fetch tags from Keap" });
+    }
+  });
+
+  // Force refresh tags from Keap
+  app.post("/api/admin/keap/tags/refresh", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const result = await getKeapTagsWithCache(true);
+      res.json(result);
+    } catch (err) {
+      console.error("Keap refresh tags error:", err);
+      res.status(500).json({ message: "Failed to refresh tags from Keap" });
     }
   });
 

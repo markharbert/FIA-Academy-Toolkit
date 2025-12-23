@@ -72,6 +72,10 @@ export const systemSettings = pgTable("system_settings", {
   keapDefaultTagId: integer("keap_default_tag_id"),
   keapDefaultTagName: text("keap_default_tag_name"),
   keapLastTagSyncAt: timestamp("keap_last_tag_sync_at"),
+  keapTagsCacheJson: text("keap_tags_cache_json"),
+  keapTagsCachedAt: timestamp("keap_tags_cached_at"),
+  keapTagsCacheExpiresAt: timestamp("keap_tags_cache_expires_at"),
+  keapLastTagFetchError: text("keap_last_tag_fetch_error"),
 });
 
 // Admin audit log table for tracking admin actions
