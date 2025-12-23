@@ -290,8 +290,6 @@ export default function DashboardPage() {
     refetchOnMount: "always",
   });
 
-  console.log("[Dashboard] sessions:", sessions, "isLoading:", isLoading, "error:", error);
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
