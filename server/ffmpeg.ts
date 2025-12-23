@@ -154,6 +154,61 @@ export async function convertToMp4(inputPath: string, uploadsDir: string): Promi
   }
 }
 
+export interface AudioResult {
+  success: boolean;
+  audioPath?: string;
+  error?: string;
+}
+
+export async function extractAudio(videoPath: string, uploadsDir: string): Promise<AudioResult> {
+  try {
+    if (!fs.existsSync(videoPath)) {
+      return { success: false, error: "Video file not found" };
+    }
+
+    const inputFilename = path.basename(videoPath);
+    const audioFilename = inputFilename.replace(/\.[^.]+$/, "_audio.mp3");
+    const audioPath = path.join(uploadsDir, audioFilename);
+
+    console.log(`[FFmpeg] Extracting audio from ${inputFilename}...`);
+
+    return new Promise((resolve) => {
+      const ffmpeg = spawn("ffmpeg", [
+        "-i", videoPath,
+        "-vn",
+        "-acodec", "libmp3lame",
+        "-q:a", "4",
+        "-y",
+        audioPath,
+      ]);
+
+      let stderr = "";
+      ffmpeg.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      ffmpeg.on("close", (code) => {
+        if (code === 0 && fs.existsSync(audioPath)) {
+          const stat = fs.statSync(audioPath);
+          console.log(`[FFmpeg] Audio extracted: ${audioFilename} (${(stat.size / 1024 / 1024).toFixed(2)}MB)`);
+          resolve({ success: true, audioPath: audioFilename });
+        } else {
+          console.error(`[FFmpeg] Audio extraction failed:`, stderr.slice(-500));
+          resolve({ success: false, error: "Audio extraction failed" });
+        }
+      });
+
+      ffmpeg.on("error", (err) => {
+        console.error(`[FFmpeg] Audio extraction process error:`, err);
+        resolve({ success: false, error: "FFmpeg process failed to start" });
+      });
+    });
+  } catch (err) {
+    console.error(`[FFmpeg] Unexpected audio extraction error:`, err);
+    return { success: false, error: "Unexpected error during audio extraction" };
+  }
+}
+
 export async function generateThumbnail(videoPath: string, uploadsDir: string): Promise<ThumbnailResult> {
   try {
     if (!fs.existsSync(videoPath)) {

@@ -19,10 +19,15 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL!,
 });
 
-export async function transcribeVideo(videoPath: string): Promise<string> {
-  const absolutePath = path.resolve(videoPath);
-  const videoBuffer = fs.readFileSync(absolutePath);
-  const base64Video = videoBuffer.toString("base64");
+export async function transcribeAudio(audioPath: string): Promise<string> {
+  const absolutePath = path.resolve(audioPath);
+  const audioBuffer = fs.readFileSync(absolutePath);
+  const base64Audio = audioBuffer.toString("base64");
+  
+  const ext = path.extname(audioPath).toLowerCase();
+  const mimeType = ext === ".mp3" ? "audio/mpeg" : ext === ".wav" ? "audio/wav" : "audio/mpeg";
+  
+  console.log(`[AI] Transcribing audio: ${path.basename(audioPath)} (${(audioBuffer.length / 1024 / 1024).toFixed(2)}MB)`);
   
   const response = await gemini.models.generateContent({
     model: "gemini-2.5-flash",
@@ -32,12 +37,12 @@ export async function transcribeVideo(videoPath: string): Promise<string> {
         parts: [
           {
             inlineData: {
-              mimeType: "video/webm",
-              data: base64Video,
+              mimeType,
+              data: base64Audio,
             },
           },
           {
-            text: "Please transcribe all the spoken words in this video accurately. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
+            text: "Please transcribe all the spoken words in this audio accurately. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
           },
         ],
       },

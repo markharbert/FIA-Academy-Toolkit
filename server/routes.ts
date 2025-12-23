@@ -1,8 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeVideo, scoreTranscript } from "./ai";
-import { convertToMp4, generateThumbnail } from "./ffmpeg";
+import { transcribeAudio, scoreTranscript } from "./ai";
+import { convertToMp4, generateThumbnail, extractAudio } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType } from "@shared/schema";
 import bcrypt from "bcrypt";
 import multer from "multer";
@@ -463,13 +463,40 @@ export async function registerRoutes(
       }
 
       const videoPath = path.join(UPLOADS_DIR, session.videoPath);
-      const transcript = await transcribeVideo(videoPath);
+      
+      const audioResult = await extractAudio(videoPath, UPLOADS_DIR);
+      
+      if (!audioResult.success) {
+        return res.status(500).json({ message: audioResult.error || "Failed to extract audio" });
+      }
 
-      await storage.updateSession(session.id, {
-        transcriptText: transcript,
-      });
+      const audioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
+      
+      try {
+        const transcript = await transcribeAudio(audioPath);
 
-      res.json({ transcript });
+        await storage.updateSession(session.id, {
+          transcriptText: transcript,
+        });
+
+        try {
+          if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+            console.log(`[Transcribe] Cleaned up audio file: ${audioResult.audioPath}`);
+          }
+        } catch (cleanupErr) {
+          console.warn(`[Transcribe] Failed to clean up audio file:`, cleanupErr);
+        }
+
+        res.json({ transcript });
+      } catch (transcribeErr) {
+        try {
+          if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+          }
+        } catch {}
+        throw transcribeErr;
+      }
     } catch (err) {
       console.error("Transcribe error:", err);
       res.status(500).json({ message: "Failed to transcribe video" });
