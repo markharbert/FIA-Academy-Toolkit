@@ -39,10 +39,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { 
   Settings, Link2, Unlink, TestTube, Loader2, CheckCircle, XCircle, AlertCircle,
   Users, Video, Search, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, 
-  CheckCircle2, LogOut, RefreshCw, Eye, Mail, Tag
+  CheckCircle2, LogOut, RefreshCw, Eye, Mail, Tag, Send
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -113,6 +122,20 @@ interface KeapTag {
   description?: string;
 }
 
+interface TagCacheInfo {
+  source: "cache" | "keap";
+  cachedAt: string | null;
+  expiresAt: string | null;
+  warning?: string;
+}
+
+interface TestContactForm {
+  email: string;
+  firstName: string;
+  lastName: string;
+  tagId: string;
+}
+
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -152,6 +175,22 @@ export default function AdminPage() {
     description: string;
     action: () => Promise<void>;
   } | null>(null);
+
+  // Test contact modal
+  const [testContactModalOpen, setTestContactModalOpen] = useState(false);
+  const [testContactForm, setTestContactForm] = useState<TestContactForm>({
+    email: "",
+    firstName: "",
+    lastName: "",
+    tagId: "",
+  });
+  const [testContactResult, setTestContactResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  // Tag cache info
+  const [tagCacheInfo, setTagCacheInfo] = useState<TagCacheInfo | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -331,28 +370,52 @@ export default function AdminPage() {
     }
   };
 
-  const handleTestContact = async () => {
+  const openTestContactModal = () => {
+    setTestContactForm({
+      email: "",
+      firstName: "",
+      lastName: "",
+      tagId: keapStatus?.defaultTag?.id?.toString() || "",
+    });
+    setTestContactResult(null);
+    setTestContactModalOpen(true);
+  };
+
+  const handleTestContactSubmit = async () => {
     try {
       setActionLoading("test");
+      setTestContactResult(null);
+      
+      const body: Record<string, unknown> = {};
+      if (testContactForm.email.trim()) body.email = testContactForm.email.trim();
+      if (testContactForm.firstName.trim()) body.firstName = testContactForm.firstName.trim();
+      if (testContactForm.lastName.trim()) body.lastName = testContactForm.lastName.trim();
+      if (testContactForm.tagId) body.tagId = Number(testContactForm.tagId);
+      
       const res = await fetch("/api/admin/keap/test", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
         credentials: "include",
       });
       const data = await res.json();
+      
+      setTestContactResult({
+        success: data.success,
+        message: data.message,
+      });
       
       if (data.success) {
         toast({
           title: "Test Successful",
           description: data.message,
         });
-      } else {
-        toast({
-          title: "Test Failed",
-          description: data.message,
-          variant: "destructive",
-        });
       }
     } catch (err) {
+      setTestContactResult({
+        success: false,
+        message: "Failed to send test contact",
+      });
       toast({
         title: "Error",
         description: "Failed to send test contact",
@@ -363,17 +426,29 @@ export default function AdminPage() {
     }
   };
 
-  const handleFetchTags = async () => {
+  const handleFetchTags = async (forceRefresh = false) => {
     try {
-      setActionLoading("fetch-tags");
-      const res = await fetch("/api/admin/keap/tags", { credentials: "include" });
+      setActionLoading(forceRefresh ? "refresh-tags" : "fetch-tags");
+      const url = forceRefresh ? "/api/admin/keap/tags/refresh" : "/api/admin/keap/tags";
+      const res = await fetch(url, { 
+        method: forceRefresh ? "POST" : "GET",
+        credentials: "include" 
+      });
       
       if (res.ok) {
         const data = await res.json();
         setKeapTags(data.tags || []);
+        setTagCacheInfo({
+          source: data.source,
+          cachedAt: data.cachedAt,
+          expiresAt: data.expiresAt,
+          warning: data.warning,
+        });
+        
+        const sourceText = data.source === "cache" ? "cache" : "Keap";
         toast({
           title: "Tags Loaded",
-          description: `Loaded ${data.tags?.length || 0} tags from Keap.`,
+          description: `Loaded ${data.tags?.length || 0} tags from ${sourceText}.${data.warning ? ` ${data.warning}` : ""}`,
         });
         fetchKeapStatus();
       } else {
@@ -964,15 +1039,11 @@ export default function AdminPage() {
                     </Button>
                     <Button
                       variant="secondary"
-                      onClick={handleTestContact}
+                      onClick={openTestContactModal}
                       disabled={!!actionLoading}
                       data-testid="button-test-keap"
                     >
-                      {actionLoading === "test" ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <TestTube className="mr-2 h-4 w-4" />
-                      )}
+                      <TestTube className="mr-2 h-4 w-4" />
                       Send Test Contact
                     </Button>
                   </>
@@ -1012,7 +1083,7 @@ export default function AdminPage() {
                     </Select>
                     <Button
                       variant="outline"
-                      onClick={handleFetchTags}
+                      onClick={() => handleFetchTags(false)}
                       disabled={!!actionLoading}
                       data-testid="button-fetch-tags"
                     >
@@ -1021,7 +1092,20 @@ export default function AdminPage() {
                       ) : (
                         <RefreshCw className="mr-2 h-4 w-4" />
                       )}
-                      Fetch Tags
+                      Load Tags
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleFetchTags(true)}
+                      disabled={!!actionLoading}
+                      data-testid="button-refresh-tags"
+                    >
+                      {actionLoading === "refresh-tags" ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                      )}
+                      Refresh from Keap
                     </Button>
                     <Button
                       onClick={handleSetDefaultTag}
@@ -1041,7 +1125,18 @@ export default function AdminPage() {
                       Current default: <span className="font-medium">{keapStatus.defaultTag.name}</span>
                     </p>
                   )}
-                  {keapStatus.lastTagSyncAt && (
+                  {tagCacheInfo && (
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <p>
+                        Tags loaded from: <span className="font-medium">{tagCacheInfo.source === "cache" ? "cached data" : "Keap API"}</span>
+                        {tagCacheInfo.cachedAt && ` (cached ${format(new Date(tagCacheInfo.cachedAt), "MMM d, yyyy 'at' h:mm a")})`}
+                      </p>
+                      {tagCacheInfo.warning && (
+                        <p className="text-amber-600 dark:text-amber-400">{tagCacheInfo.warning}</p>
+                      )}
+                    </div>
+                  )}
+                  {!tagCacheInfo && keapStatus.lastTagSyncAt && (
                     <p className="text-sm text-muted-foreground">
                       Tags last synced: {format(new Date(keapStatus.lastTagSyncAt), "MMM d, yyyy 'at' h:mm a")}
                     </p>
@@ -1049,23 +1144,125 @@ export default function AdminPage() {
                 </div>
               )}
 
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/50">
-                <div className="flex gap-3">
-                  <AlertCircle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
-                  <div className="text-sm">
-                    <p className="font-medium text-amber-800 dark:text-amber-200">Setup Requirements</p>
-                    <ul className="mt-2 list-inside list-disc space-y-1 text-amber-700 dark:text-amber-300">
-                      <li>Set KEAP_CLIENT_ID and KEAP_CLIENT_SECRET in environment</li>
-                      <li>Set KEAP_REDIRECT_URI to your callback URL</li>
-                      <li>Use "Fetch Tags" and set a default tag for new signups</li>
-                    </ul>
+              {!keapStatus?.connected && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/50">
+                  <div className="flex gap-3">
+                    <AlertCircle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
+                    <div className="text-sm">
+                      <p className="font-medium text-amber-800 dark:text-amber-200">Setup Requirements</p>
+                      <ul className="mt-2 list-inside list-disc space-y-1 text-amber-700 dark:text-amber-300">
+                        <li>Set KEAP_CLIENT_ID and KEAP_CLIENT_SECRET in environment</li>
+                        <li>Set KEAP_REDIRECT_URI to your callback URL</li>
+                        <li>After connecting, use "Load Tags" and set a default tag for new signups</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={testContactModalOpen} onOpenChange={setTestContactModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Test Contact to Keap</DialogTitle>
+            <DialogDescription>
+              Send a test contact to verify your Keap connection is working. Leave fields empty to use defaults.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="test-email">Email</Label>
+              <Input
+                id="test-email"
+                type="email"
+                placeholder="test@fearlessvideocoach.com"
+                value={testContactForm.email}
+                onChange={(e) => setTestContactForm({ ...testContactForm, email: e.target.value })}
+                data-testid="input-test-email"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="test-first-name">First Name</Label>
+                <Input
+                  id="test-first-name"
+                  placeholder="Test"
+                  value={testContactForm.firstName}
+                  onChange={(e) => setTestContactForm({ ...testContactForm, firstName: e.target.value })}
+                  data-testid="input-test-first-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="test-last-name">Last Name</Label>
+                <Input
+                  id="test-last-name"
+                  placeholder="Contact"
+                  value={testContactForm.lastName}
+                  onChange={(e) => setTestContactForm({ ...testContactForm, lastName: e.target.value })}
+                  data-testid="input-test-last-name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="test-tag">Tag (optional)</Label>
+              <Select
+                value={testContactForm.tagId}
+                onValueChange={(value) => setTestContactForm({ ...testContactForm, tagId: value })}
+              >
+                <SelectTrigger data-testid="select-test-tag">
+                  <SelectValue placeholder="No tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No tag</SelectItem>
+                  {keapTags.map((tag) => (
+                    <SelectItem key={tag.id} value={tag.id.toString()}>
+                      {tag.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {testContactResult && (
+              <div className={`rounded-lg p-3 ${testContactResult.success ? "bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900" : "bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900"}`}>
+                <div className="flex gap-2 items-start">
+                  {testContactResult.success ? (
+                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-500 shrink-0" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-500 shrink-0" />
+                  )}
+                  <p className={`text-sm ${testContactResult.success ? "text-green-700 dark:text-green-300" : "text-red-700 dark:text-red-300"}`}>
+                    {testContactResult.message}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTestContactModalOpen(false)}
+              data-testid="button-test-cancel"
+            >
+              Close
+            </Button>
+            <Button
+              onClick={handleTestContactSubmit}
+              disabled={actionLoading === "test"}
+              data-testid="button-test-submit"
+            >
+              {actionLoading === "test" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              Send to Keap
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={!!selectedUserId} onOpenChange={(open) => !open && setSelectedUserId(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">

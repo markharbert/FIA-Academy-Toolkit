@@ -1114,10 +1114,11 @@ export async function registerRoutes(
     try {
       const { email, firstName, lastName, tagId } = req.body;
       
-      const input: TestContactInput | undefined = email ? {
-        email,
-        firstName,
-        lastName,
+      const hasAnyOverride = email || firstName || lastName || tagId;
+      const input: TestContactInput | undefined = hasAnyOverride ? {
+        email: email || "test@fearlessvideocoach.com",
+        firstName: firstName || undefined,
+        lastName: lastName || undefined,
         tagId: tagId ? Number(tagId) : undefined,
       } : undefined;
       
