@@ -129,13 +129,15 @@ Preferred communication style: Simple, everyday language.
 
 #### Admin Page
 - Located at `/admin` (accessible to admin users only)
-- **Overview Tab**: Dashboard with stats cards (Total Users, Sessions Last 7 Days, New Users Last 30 Days) and activity feed showing session creation events
+- **Overview Tab**: Dashboard with stats cards (Total Users, Sessions Last 7 Days, New Users Last 30 Days) and activity feed showing session creation events with View button to open session detail drawer
 - **Users Tab**: User management with search, filters, and user details drawer
 - **Keap Integration Tab**: Connect/disconnect Keap, manage tags, and set default tag for new signups
 
 #### Admin API Endpoints
 - `GET /api/admin/overview/stats` - Dashboard statistics (totalUsers, sessionsLast7Days, newUsersLast30Days)
 - `GET /api/admin/overview/activity` - Activity feed with cursor pagination (limit, cursor query params)
+- `GET /api/admin/sessions/:sessionId` - Full session detail with video, scores, transcript, recommendations
+- `GET /api/admin/sessions/:sessionId/video` - Stream video file for admin viewing (with range support)
 - `GET /api/admin/users` - User list with search, filter, sort, pagination
 - `GET /api/admin/users/:id` - User details with sessions and identities
 - `GET /api/admin/keap/status` - Keap connection status

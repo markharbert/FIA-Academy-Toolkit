@@ -125,6 +125,18 @@ export interface IStorage {
     reassignedIdentities?: number;
     skippedIdentities?: number;
   }>;
+  
+  // Admin: Session Detail (for viewing any user's session)
+  getSessionDetailForAdmin(sessionId: string): Promise<{
+    session: Session;
+    user: {
+      id: string;
+      displayName: string | null;
+      email: string | null;
+      firstName: string | null;
+      lastName: string | null;
+    };
+  } | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -708,6 +720,39 @@ export class DatabaseStorage implements IStorage {
         message: `Merge failed: ${err.message}`,
       };
     }
+  }
+
+  // Admin: Get session detail with user info for admin viewing
+  async getSessionDetailForAdmin(sessionId: string): Promise<{
+    session: Session;
+    user: {
+      id: string;
+      displayName: string | null;
+      email: string | null;
+      firstName: string | null;
+      lastName: string | null;
+    };
+  } | undefined> {
+    const result = await db.select({
+      session: sessions,
+      user: {
+        id: users.id,
+        displayName: users.displayName,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      },
+    })
+    .from(sessions)
+    .innerJoin(users, eq(sessions.userId, users.id))
+    .where(eq(sessions.id, sessionId));
+    
+    if (result.length === 0) return undefined;
+    
+    return {
+      session: result[0].session,
+      user: result[0].user,
+    };
   }
 }
 

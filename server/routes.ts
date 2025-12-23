@@ -830,6 +830,127 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Get session detail (for viewing any user's session)
+  app.get("/api/admin/sessions/:sessionId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      
+      const result = await storage.getSessionDetailForAdmin(sessionId);
+      if (!result) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+      
+      const { session, user } = result;
+      
+      // Determine if video is available
+      const isExpired = session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date());
+      const status = isExpired ? "expired" : "available";
+      
+      // Build video URL for admin (reuse existing video endpoint)
+      const videoUrl = !isExpired && session.videoPath ? `/api/admin/sessions/${sessionId}/video` : null;
+      
+      // Build thumbnail URL
+      const thumbnailUrl = session.thumbnailPath ? `/api/sessions/${sessionId}/thumbnail` : null;
+      
+      // Parse score JSON
+      const scoreJson = session.scoreJson as any;
+      
+      res.json({
+        session: {
+          id: session.id,
+          title: session.title,
+          createdAt: session.createdAt,
+          expiresAt: session.expiresAt,
+          status,
+          videoUrl,
+          thumbnailUrl,
+          transcriptText: session.transcriptEditedText || session.transcriptText,
+          goalType: session.goalType,
+          score: scoreJson ? {
+            total: scoreJson.totalScore,
+            breakdown: scoreJson.partScores,
+          } : null,
+          recommendationsJson: scoreJson ? {
+            summary: scoreJson.summary,
+            parts: scoreJson.parts,
+            delivery: scoreJson.delivery,
+          } : null,
+          rawScoreJson: scoreJson,
+          fileMeta: {
+            durationSeconds: session.durationSeconds || 0,
+            sizeBytes: session.videoSizeBytes || 0,
+            format: session.videoMimeType || "video/mp4",
+          },
+        },
+        user,
+      });
+    } catch (err) {
+      console.error("Admin session detail error:", err);
+      res.status(500).json({ message: "Failed to get session details" });
+    }
+  });
+
+  // Admin: Serve video file for admin viewing
+  app.get("/api/admin/sessions/:sessionId/video", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      
+      const result = await storage.getSessionDetailForAdmin(sessionId);
+      if (!result) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+      
+      const { session } = result;
+      
+      // Check if video is available
+      if (session.videoDeletedAt) {
+        return res.status(410).json({ message: "Video has been deleted" });
+      }
+      
+      if (!session.videoPath) {
+        return res.status(404).json({ message: "Video not found" });
+      }
+      
+      const fs = await import("fs");
+      const path = await import("path");
+      const videoPath = path.resolve(session.videoPath);
+      
+      if (!fs.existsSync(videoPath)) {
+        return res.status(404).json({ message: "Video file not found" });
+      }
+      
+      const stat = fs.statSync(videoPath);
+      const fileSize = stat.size;
+      const range = req.headers.range;
+      
+      if (range) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunksize = end - start + 1;
+        const file = fs.createReadStream(videoPath, { start, end });
+        const head = {
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": chunksize,
+          "Content-Type": session.videoMimeType || "video/mp4",
+        };
+        res.writeHead(206, head);
+        file.pipe(res);
+      } else {
+        const head = {
+          "Content-Length": fileSize,
+          "Content-Type": session.videoMimeType || "video/mp4",
+        };
+        res.writeHead(200, head);
+        fs.createReadStream(videoPath).pipe(res);
+      }
+    } catch (err) {
+      console.error("Admin video serve error:", err);
+      res.status(500).json({ message: "Failed to serve video" });
+    }
+  });
+
   // List users with search, filter, sort, pagination
   app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
     try {

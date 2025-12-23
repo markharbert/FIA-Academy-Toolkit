@@ -1,0 +1,237 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). On the Admin Dashboard Overview tab, the Recent Activity feed currently has a “View” action that opens a side panel. Modify that side panel so that when an admin clicks “View” on a recent activity item (a session), the side panel displays the same session experience the user sees.
+
+High Priority Outcome
+When an admin clicks “View” on a Recent Activity item, a right side panel opens and shows:
+
+The recorded video (embedded player)
+
+All scoring and stats for that session
+
+The transcript (if available)
+
+The recommendations / improvements (AI feedback)
+
+Any metadata normally shown on the user’s session results page
+This should be read-only for the admin. Admin should not edit user content from this panel unless explicitly requested later.
+
+Part 1: Define the Side Panel Content
+
+The side panel must include these sections in this order:
+
+A. Header
+
+Session title
+
+User name and email
+
+Session created date/time
+
+Session expiration date
+
+Session status: available or expired
+
+B. Video Player
+
+Show an embedded HTML5 video player for the saved MP4.
+
+Use the same video URL used on the user session results page.
+
+If the video is expired or missing:
+
+Show a clear message: “Video expired or unavailable.”
+
+C. Score Summary
+
+Show the overall score if available.
+
+Show the 5-part breakdown used in the app:
+
+Hook
+
+Set the Hook
+
+First Call to Action
+
+Content
+
+Final Call to Action
+
+Show the same numeric score values and any labels used on the user page.
+
+D. Transcript
+
+Show transcript text if available.
+
+If missing, show “Transcript not available.”
+
+E. Recommendations / Improvements
+
+Show the AI suggestions exactly as the user sees them.
+
+If stored as structured JSON, render in the same structure.
+
+If stored as plain text, render as formatted text.
+
+F. Session Metadata (small section)
+
+Session ID
+
+Recording duration if tracked
+
+File size if tracked
+
+Any other stored fields relevant to admin debugging
+
+Part 2: Backend Support
+
+You must add or reuse secure admin-only endpoints to fetch full session detail.
+
+Requirements
+
+Admin must be able to retrieve any user’s session detail.
+
+Non-admin users must not be able to use the admin endpoint.
+
+The endpoint should return everything needed to render the side panel without extra calls.
+
+Implement endpoint
+GET /api/admin/sessions/:sessionId
+
+Return payload:
+{
+"session": {
+"id": "...",
+"title": "...",
+"createdAt": "...",
+"expiresAt": "...",
+"status": "available"|"expired",
+"videoUrl": "...", // signed or protected if needed
+"thumbnailUrl": "...", // optional
+"transcriptText": "...",
+"score": {
+"total": 78,
+"breakdown": {
+"hook": 15,
+"setHook": 14,
+"firstCTA": 16,
+"content": 18,
+"finalCTA": 15
+}
+},
+"recommendations": "...", // or structured JSON
+"recommendationsJson": {...}, // if you have it
+"rawScoreJson": {...}, // if useful
+"fileMeta": {
+"durationSeconds": 0,
+"sizeBytes": 0,
+"format": "mp4",
+"resolution": "1080p"
+}
+},
+"user": {
+"id": "...",
+"displayName": "...",
+"email": "..."
+}
+}
+
+Implementation notes
+
+Use the same data sources as the user session results page.
+
+If video URLs are protected:
+
+Generate a short lived signed URL for admin, or
+
+Reuse the existing authenticated file-serving route
+
+Ensure the admin endpoint checks requireAdmin.
+
+Optional: If you already have user endpoints
+If there is already GET /api/sessions/:id that returns all this data for the owner:
+
+Keep it for users
+
+Add admin version that bypasses ownership and uses requireAdmin
+
+Part 3: Frontend Side Panel Implementation
+
+Requirements
+
+The Recent Activity “View” click should pass the sessionId into the side panel.
+
+When opened:
+
+Fetch GET /api/admin/sessions/:sessionId
+
+Show loading skeleton
+
+Render the sections listed above
+
+Side panel behavior:
+
+Scrollable content
+
+Sticky header with close button
+
+Escape key closes the panel
+
+Keep design consistent with existing UI:
+
+Lots of white space
+
+Dark blue header area if used
+
+Red buttons only if needed (ideally read-only so minimal actions)
+
+Actions in side panel
+Include minimal actions:
+
+Close
+Optional:
+
+“Open full page” link to /admin/sessions/:id (only if you decide to create this route)
+
+Error handling
+
+If session fetch fails:
+
+Show friendly message
+
+Include traceId if available
+
+If session missing:
+
+“Session not found.”
+
+Part 4: Admin Security and Privacy
+
+Rules
+
+This panel is admin-only.
+
+Do not expose admin session details to non-admin routes.
+
+Do not allow download of user videos unless the user experience already allows it.
+
+Ensure all requests include credentials.
+
+Part 5: Verification Checklist
+
+At the end, confirm:
+
+Clicking View opens side panel
+
+Side panel shows video player when available
+
+Side panel shows the same scoring breakdown as user page
+
+Transcript renders correctly
+
+Recommendations render correctly
+
+Admin-only access is enforced
+
+No non-admin can access /api/admin/sessions/:id
+
+Now implement these changes in the existing codebase.

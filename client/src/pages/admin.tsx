@@ -154,6 +154,60 @@ interface TagCacheInfo {
   warning?: string;
 }
 
+interface SessionDetail {
+  session: {
+    id: string;
+    title: string | null;
+    createdAt: string;
+    expiresAt: string | null;
+    status: "available" | "expired";
+    videoUrl: string | null;
+    thumbnailUrl: string | null;
+    transcriptText: string | null;
+    goalType: string;
+    score: {
+      total: number;
+      breakdown: {
+        hook: number;
+        setHook: number;
+        firstCTA: number;
+        content: number;
+        finalCTA: number;
+      };
+    } | null;
+    recommendationsJson: {
+      summary: {
+        strengths: string[];
+        topImprovements: string[];
+      };
+      parts: Record<string, {
+        whatWorked: string[];
+        whatMissing: string[];
+        suggestions: string[];
+        exampleLines: string[];
+      }>;
+      delivery: {
+        wordsPerMinute: number;
+        fillerWords: { count: number; examples: string[] };
+        clarityNotes: string[];
+      };
+    } | null;
+    rawScoreJson: any;
+    fileMeta: {
+      durationSeconds: number;
+      sizeBytes: number;
+      format: string;
+    };
+  };
+  user: {
+    id: string;
+    displayName: string | null;
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+  };
+}
+
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -206,6 +260,11 @@ export default function AdminPage() {
   // Tag combobox state
   const [tagComboOpen, setTagComboOpen] = useState(false);
   const [tagSearchValue, setTagSearchValue] = useState("");
+  
+  // Session detail drawer
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
+  const [sessionDetailLoading, setSessionDetailLoading] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -358,6 +417,35 @@ export default function AdminPage() {
     if (user.email) return user.email.split("@")[0];
     return "Unknown User";
   };
+
+  const fetchSessionDetail = async (sessionId: string) => {
+    try {
+      setSessionDetailLoading(true);
+      const res = await fetch(`/api/admin/sessions/${sessionId}`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setSessionDetail(data);
+      } else {
+        toast({ title: "Error", description: "Failed to load session details", variant: "destructive" });
+        setSessionDetail(null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch session detail:", err);
+      toast({ title: "Error", description: "Failed to load session details", variant: "destructive" });
+      setSessionDetail(null);
+    } finally {
+      setSessionDetailLoading(false);
+    }
+  };
+
+  // Effect to fetch session detail when selectedSessionId changes
+  useEffect(() => {
+    if (selectedSessionId) {
+      fetchSessionDetail(selectedSessionId);
+    } else {
+      setSessionDetail(null);
+    }
+  }, [selectedSessionId]);
 
   const fetchKeapStatus = async () => {
     try {
@@ -846,9 +934,9 @@ export default function AdminPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setSelectedUserId(item.user.id);
+                          setSelectedSessionId(item.sessionId);
                         }}
-                        data-testid={`button-view-activity-user-${item.id}`}
+                        data-testid={`button-view-activity-session-${item.id}`}
                       >
                         <Eye className="h-4 w-4 mr-1" />
                         View
@@ -1278,6 +1366,225 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Session Detail Sheet */}
+      <Sheet open={!!selectedSessionId} onOpenChange={(open) => !open && setSelectedSessionId(null)}>
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Session Details</SheetTitle>
+            <SheetDescription>
+              View session recording, scores, and feedback
+            </SheetDescription>
+          </SheetHeader>
+          
+          {sessionDetailLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : sessionDetail ? (
+            <div className="mt-6 space-y-6">
+              {/* Header Info */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg">{sessionDetail.session.title || "Practice Session"}</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">User:</span>
+                    <span>{sessionDetail.user.displayName || sessionDetail.user.email || "Unknown"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Email:</span>
+                    <span>{sessionDetail.user.email || "-"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Created:</span>
+                    <span>{format(new Date(sessionDetail.session.createdAt), "MMM d, yyyy 'at' h:mm a")}</span>
+                  </div>
+                  {sessionDetail.session.expiresAt && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Expires:</span>
+                      <span>{format(new Date(sessionDetail.session.expiresAt), "MMM d, yyyy 'at' h:mm a")}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status:</span>
+                    {sessionDetail.session.status === "available" ? (
+                      <Badge variant="outline" className="text-green-600 border-green-600">Available</Badge>
+                    ) : (
+                      <Badge variant="destructive">Expired</Badge>
+                    )}
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Goal Type:</span>
+                    <Badge variant="secondary">{sessionDetail.session.goalType}</Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Video Player */}
+              <div className="space-y-3">
+                <h3 className="font-semibold">Recording</h3>
+                {sessionDetail.session.videoUrl && sessionDetail.session.status === "available" ? (
+                  <video
+                    src={sessionDetail.session.videoUrl}
+                    controls
+                    className="w-full rounded-lg bg-black aspect-video"
+                    data-testid="admin-session-video"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center rounded-lg bg-muted aspect-video">
+                    <div className="text-center text-muted-foreground">
+                      <Video className="mx-auto h-12 w-12 mb-2" />
+                      <p className="font-medium">Video {sessionDetail.session.status === "expired" ? "Expired" : "Unavailable"}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Score Summary */}
+              {sessionDetail.session.score && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold">Score Summary</h3>
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-20 w-20">
+                      <svg className="h-20 w-20 -rotate-90">
+                        <circle
+                          className="text-muted"
+                          strokeWidth="6"
+                          stroke="currentColor"
+                          fill="transparent"
+                          r={32}
+                          cx={40}
+                          cy={40}
+                        />
+                        <circle
+                          className={sessionDetail.session.score.total >= 70 ? "text-green-500" : sessionDetail.session.score.total >= 40 ? "text-yellow-500" : "text-red-500"}
+                          strokeWidth="6"
+                          strokeDasharray={2 * Math.PI * 32}
+                          strokeDashoffset={2 * Math.PI * 32 - (sessionDetail.session.score.total / 100) * 2 * Math.PI * 32}
+                          strokeLinecap="round"
+                          stroke="currentColor"
+                          fill="transparent"
+                          r={32}
+                          cx={40}
+                          cy={40}
+                        />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+                        {sessionDetail.session.score.total}
+                      </span>
+                    </div>
+                    <div className="flex-1 text-sm text-muted-foreground">
+                      Overall Score: {sessionDetail.session.score.total}/100
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {[
+                      { key: "hook", label: "Hook", score: sessionDetail.session.score.breakdown.hook },
+                      { key: "setHook", label: "Set the Hook", score: sessionDetail.session.score.breakdown.setHook },
+                      { key: "firstCTA", label: "First Call to Action", score: sessionDetail.session.score.breakdown.firstCTA },
+                      { key: "content", label: "Content", score: sessionDetail.session.score.breakdown.content },
+                      { key: "finalCTA", label: "Final Call to Action", score: sessionDetail.session.score.breakdown.finalCTA },
+                    ].map((part) => (
+                      <div key={part.key} className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>{part.label}</span>
+                          <span className="font-medium">{part.score}/20</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted">
+                          <div 
+                            className={part.score >= 14 ? "bg-green-500" : part.score >= 8 ? "bg-yellow-500" : "bg-red-500"} 
+                            style={{ width: `${(part.score / 20) * 100}%`, height: "100%" }} 
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Transcript */}
+              <div className="space-y-3">
+                <h3 className="font-semibold">Transcript</h3>
+                {sessionDetail.session.transcriptText ? (
+                  <div className="rounded-lg bg-muted p-4 text-sm max-h-48 overflow-y-auto whitespace-pre-wrap">
+                    {sessionDetail.session.transcriptText}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Transcript not available</p>
+                )}
+              </div>
+
+              {/* Recommendations */}
+              {sessionDetail.session.recommendationsJson && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold">AI Feedback</h3>
+                  
+                  {/* Strengths */}
+                  {sessionDetail.session.recommendationsJson.summary?.strengths?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-green-600 dark:text-green-400 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        Strengths
+                      </p>
+                      <ul className="space-y-1 pl-6 text-sm text-muted-foreground">
+                        {sessionDetail.session.recommendationsJson.summary.strengths.map((s, i) => (
+                          <li key={i} className="list-disc">{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Areas to Improve */}
+                  {sessionDetail.session.recommendationsJson.summary?.topImprovements?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        Areas to Improve
+                      </p>
+                      <ul className="space-y-1 pl-6 text-sm text-muted-foreground">
+                        {sessionDetail.session.recommendationsJson.summary.topImprovements.map((s, i) => (
+                          <li key={i} className="list-disc">{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Delivery Stats */}
+                  {sessionDetail.session.recommendationsJson.delivery && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Delivery Analysis</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                        <div>Words per minute: {sessionDetail.session.recommendationsJson.delivery.wordsPerMinute ?? "-"}</div>
+                        <div>Filler words: {sessionDetail.session.recommendationsJson.delivery.fillerWords?.count ?? 0}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Metadata */}
+              <div className="space-y-3 border-t pt-4">
+                <h3 className="font-semibold text-sm text-muted-foreground">Session Metadata</h3>
+                <div className="space-y-1 text-xs text-muted-foreground font-mono">
+                  <div>Session ID: {sessionDetail.session.id}</div>
+                  {sessionDetail.session.fileMeta?.durationSeconds > 0 && (
+                    <div>Duration: {Math.floor(sessionDetail.session.fileMeta.durationSeconds / 60)}:{String(sessionDetail.session.fileMeta.durationSeconds % 60).padStart(2, "0")}</div>
+                  )}
+                  {sessionDetail.session.fileMeta?.sizeBytes > 0 && (
+                    <div>File size: {(sessionDetail.session.fileMeta.sizeBytes / 1024 / 1024).toFixed(2)} MB</div>
+                  )}
+                  {sessionDetail.session.fileMeta?.format && (
+                    <div>Format: {sessionDetail.session.fileMeta.format}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="py-8 text-center text-muted-foreground">Session not found</p>
+          )}
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={!!selectedUserId} onOpenChange={(open) => !open && setSelectedUserId(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
