@@ -915,7 +915,7 @@ export default function AdminPage() {
                 <div className="flex items-center gap-3">
                   <span className="font-medium">Connection Status:</span>
                   {keapStatus?.connected ? (
-                    <Badge variant="default" className="gap-1">
+                    <Badge className="gap-1 bg-green-600 text-white dark:bg-green-600">
                       <CheckCircle className="h-3 w-3" />
                       Connected
                     </Badge>
