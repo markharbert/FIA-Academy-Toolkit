@@ -1,0 +1,236 @@
+Role: You are a senior full stack developer debugging an existing Replit web app. Google OAuth completes the provider flow and returns to our app, but the user is NOT being logged in and no user account is being created in our database. The app should create an account automatically on first OAuth sign up, establish a session, and redirect the user to the dashboard. That is the required behavior. Fix it.
+
+Do not assume it works because the provider flow completes. The provider redirect only proves Google OAuth is configured. The app is failing in user creation, identity linking, session creation, or the post callback redirect/auth check. Your job is to find the exact failure and fix it.
+
+High Priority Outcome
+When a brand new user clicks “Continue with Google”:
+
+The app creates a user record in the database.
+
+The app creates a linked identity record for Google.
+
+The app sets a valid auth session cookie.
+
+The browser is redirected to /dashboard and the user stays logged in on refresh.
+
+When an existing user clicks “Continue with Google”:
+
+The app finds the identity or links by verified email.
+
+The app sets the session cookie.
+
+The app redirects to /dashboard.
+
+Step 1: Confirm where the failure is, with evidence
+You must produce evidence from logs and database checks, not guesses.
+
+Add structured logs to the Google OAuth callback handler with a traceId:
+
+traceId start
+
+token exchange done
+
+profile received
+
+extracted email and providerUserId
+
+DB lookup identity result
+
+DB lookup user by email result
+
+user create attempted and result
+
+identity create attempted and result
+
+session create attempted and result
+
+redirect destination
+
+After callback completes, run a DB query and log:
+
+total users count
+
+whether a user with the Google email exists
+
+whether an identity row exists for that providerUserId
+
+In the browser, confirm cookie behavior:
+
+Is the session cookie set on callback response
+
+Is the cookie present on /dashboard requests
+
+Confirm /api/auth/me returns the logged in user after callback.
+
+Step 2: Fix account creation logic so a user is always created
+Implement a single, deterministic function:
+
+handleOAuthCallback(provider, profile) -> { userId, isNewUser }
+
+It must do:
+
+Validate required fields:
+
+providerUserId is required
+
+email is required for account creation in our app
+
+Normalize email:
+
+trim
+
+lowercase
+
+DB transaction (must be atomic):
+A. Check for existing identity by (provider, providerUserId)
+
+If found, return identity.userId and isNewUser false
+B. If not found, check for existing user by email
+
+If found, create identity row linked to user and return isNewUser false
+C. If no user, create user row then identity row then return isNewUser true
+
+If email is missing from provider:
+
+Create a temporary user record only if you already support users without email.
+
+If you do not support that, stop and redirect to a page that explains:
+“We could not get your email from Google. Please try again or use email signup.”
+
+But for Google this should not happen if scopes are correct.
+
+Required scopes for Google
+Ensure scopes include:
+
+openid
+
+email
+
+profile
+
+Step 3: Fix the most common silent blockers that prevent user creation
+You must check and remedy these specific blockers.
+
+Database migrations not applied
+
+Confirm Users and UserIdentities tables exist.
+
+If missing, create migrations and apply them.
+
+Unique constraint failures not handled
+
+If email is unique and a row exists with same email but different casing, normalize emails.
+
+If identity unique constraint fails, catch it and re-query identity and proceed.
+
+Wrong DB connection or environment
+
+Confirm the backend is writing to the same DB the app reads.
+
+Log the DB file path or connection string at startup.
+
+Confirm you are not using an in memory SQLite database that resets on restart.
+
+Callback handler not awaited
+
+Confirm user creation calls are awaited and not failing silently.
+
+If using async functions, ensure errors are caught and logged.
+
+Step 4: Fix session creation and redirect to dashboard
+Even if user is created, they will appear “not logged in” if the session is not set correctly.
+
+Requirements
+
+After you get a userId from handleOAuthCallback:
+
+Create the session
+
+Set the cookie
+
+Confirm cookie settings match environment:
+
+path: /
+
+httpOnly: true
+
+sameSite: Lax by default
+
+secure: false in local http dev, true only when you are sure https
+
+Ensure frontend calls include credentials:
+
+credentials: "include"
+
+Redirect flow:
+
+On success, redirect to /oauth/success
+
+/oauth/success should call /api/auth/me and then navigate to /dashboard
+
+If any error occurs
+
+Redirect to /oauth/error?provider=google&reason=SAFE_REASON
+
+Show friendly message and include traceId for debugging.
+
+Step 5: Add developer verification tools
+Add two short lived debugging endpoints only in development:
+
+GET /api/dev/whoami
+
+returns session status and user id
+
+GET /api/dev/db-check?email=...
+
+returns whether user and identity exist
+Protect them behind NODE_ENV not production.
+
+Step 6: Update the frontend so it never shows a false success
+If the frontend currently shows “social login failed”:
+
+Identify the exact condition triggering that message.
+
+Replace it with logic that checks /api/auth/me after redirect.
+
+Only show failure if /api/auth/me returns 401.
+
+Step 7: Concrete deliverables
+You must deliver:
+
+A fixed Google OAuth callback that always creates or links a user.
+
+A working session cookie set on OAuth success.
+
+Redirect to dashboard with logged in state maintained.
+
+Evidence in logs showing:
+
+user created
+
+identity created
+
+session created
+
+A short README update describing:
+
+required env vars
+
+redirect URI requirements
+
+troubleshooting steps
+
+Verification Checklist
+At the end, confirm:
+
+A first time Google user is inserted into Users table
+
+A UserIdentities row exists for google providerUserId
+
+Session cookie is set and present after redirect
+
+/api/auth/me returns the user
+
+User lands on /dashboard and remains logged in after refresh
+
+Now implement the fixes in the existing codebase. Start with Google only. Do not proceed to Facebook or Apple until Google sign up creates the user and logs them in successfully.

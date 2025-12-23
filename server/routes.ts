@@ -96,6 +96,13 @@ export async function registerRoutes(
   // Rolling sessions extend the timeout on each request
   const SESSION_INACTIVITY_TIMEOUT = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
   
+  // Determine if we're in production (deployed)
+  const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
+  console.log("[Session] isProduction:", isProduction, "NODE_ENV:", process.env.NODE_ENV, "REPLIT_DEPLOYMENT:", process.env.REPLIT_DEPLOYMENT);
+  
+  // Trust proxy - required for secure cookies behind Replit's reverse proxy
+  app.set("trust proxy", 1);
+  
   app.use(
     session({
       store: new PgSession({
@@ -108,12 +115,42 @@ export async function registerRoutes(
       saveUninitialized: false,
       rolling: true, // Reset expiration on each request (activity extends session)
       cookie: {
-        secure: process.env.NODE_ENV === "production",
+        secure: isProduction, // Use secure cookies in production (HTTPS)
         httpOnly: true,
+        sameSite: "lax", // Allows cookies on same-site navigations (like OAuth redirects)
         maxAge: SESSION_INACTIVITY_TIMEOUT, // 3 hours of inactivity
       },
     })
   );
+
+  // ===================
+  // DEBUG ROUTES (development only)
+  // ===================
+  
+  app.get("/api/debug/oauth-status", async (req: Request, res: Response) => {
+    try {
+      const appBaseUrl = process.env.APP_BASE_URL || 
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "unknown");
+      
+      res.json({
+        environment: {
+          NODE_ENV: process.env.NODE_ENV,
+          REPLIT_DEPLOYMENT: process.env.REPLIT_DEPLOYMENT,
+          isProduction,
+          hasGoogleCredentials: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+          hasFacebookCredentials: !!(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET),
+          hasAppleCredentials: !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID),
+          appBaseUrl,
+        },
+        session: {
+          userId: req.session.userId || null,
+          hasSession: !!req.session,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // ===================
   // AUTH ROUTES
