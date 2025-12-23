@@ -1,0 +1,178 @@
+Role: You are a senior full stack developer working inside my existing Replit project. Implement the functionality changes below without breaking current features. Provide working code and clear setup steps. Confirm each item in a checklist at the end.
+
+Change 1: Save and Deliver Videos as MP4 at 1080p With Compression
+Current behavior: videos are recorded in the browser and stored for download.
+New requirement: stored downloadable video files must be .mp4 at 1080p resolution, compressed to a small file size while maintaining high visual quality.
+
+Important constraints and guidance
+
+Browser MediaRecorder often outputs WebM. That is fine as an input. The stored downloadable output must be MP4.
+
+The target stored file must be:
+
+Container: mp4
+
+Resolution: 1920x1080 (1080p)
+
+Good quality for talking head content
+
+Small file size via modern encoding settings
+
+Use server side conversion with FFmpeg.
+
+If the incoming recording is lower than 1080p, do not upscale aggressively. Only scale to 1080p if the source is at least near that resolution, otherwise keep source resolution but still output mp4. Document this behavior.
+
+Provide a single conversion pipeline that works reliably in Replit.
+
+FFmpeg implementation requirements
+
+Add FFmpeg to the project.
+
+If Replit supports apt packages, install ffmpeg and document it in README.
+
+If not, use a Node package approach or static build that works in Replit, and document it.
+
+After a user saves a recording, run a conversion job:
+
+Input: uploaded WebM (or whatever the browser records)
+
+Output: MP4 file stored in the session’s videoPath and videoMimeType set to video/mp4
+
+Use H.264 encoding for broad compatibility and good compression.
+
+Recommended baseline settings (you may improve them, but stay stable):
+
+Video codec: libx264
+
+Profile: high
+
+Pixel format: yuv420p
+
+CRF: choose a balanced value that keeps quality high for talking head video while compressing well
+
+Preset: medium or slow if it will not time out in Replit
+
+Audio codec: aac
+
+Audio bitrate: 128k or 160k
+
+Fast start for streaming: move moov atom to beginning
+
+1080p scaling:
+
+If scaling is applied, use:
+scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2
+
+This preserves aspect ratio and pads if needed.
+
+Add a maximum duration guard if needed to prevent very large conversions.
+
+Quality and file size expectations
+
+Goal: best perceived quality for the smallest possible size.
+
+Default output should be suitable for download and playback on phones and desktop.
+
+Provide a note in README on how to adjust quality if I want smaller files or higher quality.
+
+Processing UX
+
+Update the processing stepper to include:
+
+Converting to MP4
+
+If conversion fails, keep the original file for debugging but do not expose it to the user. Show a friendly error and allow retry.
+
+Storage and retention updates
+
+Ensure the 7 day retention still works for the MP4 output file.
+
+Cleanup job must delete the MP4 file on expiration.
+
+Change 2: Logo Click Behavior
+Current behavior: logo click navigates within the app.
+New requirement:
+
+Clicking the logo opens my website markharbert.com in a new browser tab.
+
+Use target=_blank and rel=noopener noreferrer.
+
+Keep logo in header on all pages.
+
+Change 3: Dashboard Video Preview Thumbnail
+Current behavior: dashboard list shows sessions and an icon for availability.
+New requirement:
+
+Replace the camera icon in the “Video available” column with an actual small preview thumbnail of the video.
+
+This preview does not need to autoplay.
+
+It should show a poster frame preview.
+
+Clicking the preview should open the session details page.
+
+Implementation details for preview
+
+In the dashboard sessions list, render a small video element or thumbnail component, for example:
+
+A <video> tag with:
+
+muted
+
+preload="metadata"
+
+playsinline
+
+a constrained size like 120px by 68px (16:9)
+
+show the first frame if possible
+
+If the browser does not show a preview without playing, generate a server side thumbnail image from the MP4 using FFmpeg:
+
+Extract a frame at around 1 second
+
+Save as jpg or png
+
+Store thumbnail path in the Sessions table
+
+Prefer the FFmpeg thumbnail approach if it is stable, because it gives a consistent preview.
+
+Show “Expired” state clearly:
+
+If video expired or deleted, show a simple placeholder card with text “Expired” instead of a preview.
+
+Database updates
+Add these fields to Sessions:
+
+mp4Path (if you keep separate fields, otherwise reuse videoPath)
+
+thumbnailPath (nullable)
+
+API updates
+
+Update download endpoint to serve mp4.
+
+Add endpoint for thumbnail if needed:
+
+GET /api/sessions/:id/thumbnail
+
+Ensure auth checks so users only access their own videos and thumbnails.
+
+Final Checklist Output
+At the end of your response, provide a checklist confirming:
+
+MP4 conversion at 1080p implemented
+
+Compression settings documented
+
+Conversion step added to UI processing
+
+Logo opens markharbert.com in new tab
+
+Dashboard shows video preview thumbnail
+
+Expired videos show placeholder
+
+Retention cleanup deletes mp4 and thumbnails
+
+Now implement these changes in the existing codebase.

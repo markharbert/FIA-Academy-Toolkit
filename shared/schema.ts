@@ -104,6 +104,7 @@ export const sessions = pgTable("sessions", {
   videoPath: text("video_path"),
   videoMimeType: text("video_mime_type"),
   videoSizeBytes: integer("video_size_bytes"),
+  thumbnailPath: text("thumbnail_path"),
   expiresAt: timestamp("expires_at"),
   videoDeletedAt: timestamp("video_deleted_at"),
   transcriptText: text("transcript_text"),
