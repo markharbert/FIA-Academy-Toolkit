@@ -279,7 +279,12 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/keap/auth-url", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        window.location.href = data.authUrl;
+        // Use window.open for external OAuth - works better in iframes/webviews
+        const authWindow = window.open(data.authUrl, "_blank");
+        if (!authWindow) {
+          // Fallback if popup was blocked
+          window.location.href = data.authUrl;
+        }
       } else {
         const error = await res.json();
         toast({
