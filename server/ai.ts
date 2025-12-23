@@ -19,35 +19,112 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL!,
 });
 
+const MAX_INLINE_SIZE = 15 * 1024 * 1024; // 15MB threshold for inline vs File API
+
 export async function transcribeAudio(audioPath: string): Promise<string> {
   const absolutePath = path.resolve(audioPath);
   const audioBuffer = fs.readFileSync(absolutePath);
-  const base64Audio = audioBuffer.toString("base64");
+  const fileSizeMB = audioBuffer.length / 1024 / 1024;
   
   const ext = path.extname(audioPath).toLowerCase();
   const mimeType = ext === ".mp3" ? "audio/mpeg" : ext === ".wav" ? "audio/wav" : "audio/mpeg";
   
-  console.log(`[AI] Transcribing audio: ${path.basename(audioPath)} (${(audioBuffer.length / 1024 / 1024).toFixed(2)}MB)`);
+  console.log(`[AI] Transcribing audio: ${path.basename(audioPath)} (${fileSizeMB.toFixed(2)}MB)`);
   
-  const response = await gemini.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [
-      {
-        role: "user",
-        parts: [
+  let response;
+  
+  if (audioBuffer.length > MAX_INLINE_SIZE) {
+    console.log(`[AI] Using File API for large file upload...`);
+    
+    const uploadResult = await gemini.files.upload({
+      file: absolutePath,
+      config: {
+        mimeType,
+      },
+    });
+    
+    let file = uploadResult;
+    
+    if ('file' in uploadResult && uploadResult.file) {
+      file = uploadResult.file as typeof uploadResult;
+    }
+    
+    console.log(`[AI] File uploaded: ${file.name}, state: ${file.state}`);
+    
+    let attempts = 0;
+    const maxAttempts = 30;
+    while (file.state === "PROCESSING" && attempts < maxAttempts) {
+      console.log(`[AI] File still processing, waiting...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const fileStatus = await gemini.files.get({ name: file.name! });
+      if ('file' in fileStatus && fileStatus.file) {
+        file = fileStatus.file as typeof file;
+      } else {
+        file = fileStatus as typeof file;
+      }
+      attempts++;
+    }
+    
+    if (file.state !== "ACTIVE") {
+      throw new Error(`File upload failed or timed out. State: ${file.state}`);
+    }
+    
+    console.log(`[AI] File ready: ${file.uri}`);
+    
+    const fileName = file.name!;
+    
+    try {
+      response = await gemini.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
           {
-            inlineData: {
-              mimeType,
-              data: base64Audio,
-            },
-          },
-          {
-            text: "Please transcribe all the spoken words in this audio accurately. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
+            role: "user",
+            parts: [
+              {
+                fileData: {
+                  fileUri: file.uri!,
+                  mimeType: file.mimeType || mimeType,
+                },
+              },
+              {
+                text: "Please transcribe all the spoken words in this audio accurately. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
+              },
+            ],
           },
         ],
-      },
-    ],
-  });
+      });
+    } finally {
+      try {
+        await gemini.files.delete({ name: fileName });
+        console.log(`[AI] Cleaned up uploaded file: ${fileName}`);
+      } catch (cleanupErr) {
+        console.warn(`[AI] Failed to clean up uploaded file:`, cleanupErr);
+      }
+    }
+  } else {
+    console.log(`[AI] Using inline upload for small file...`);
+    const base64Audio = audioBuffer.toString("base64");
+    
+    response = await gemini.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: base64Audio,
+              },
+            },
+            {
+              text: "Please transcribe all the spoken words in this audio accurately. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
+            },
+          ],
+        },
+      ],
+    });
+  }
 
   const text = response.text || "";
   return text.trim();
