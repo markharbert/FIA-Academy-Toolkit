@@ -389,37 +389,56 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No video to convert" });
       }
 
-      const inputPath = path.join(UPLOADS_DIR, session.videoPath);
-      
-      const conversionResult = await convertToMp4(inputPath, UPLOADS_DIR);
-      
-      if (!conversionResult.success) {
-        return res.status(500).json({ message: conversionResult.error || "Video conversion failed" });
+      const videoFullPath = path.join(UPLOADS_DIR, session.videoPath);
+      let mp4Path = videoFullPath;
+      let outputFilename = session.videoPath;
+
+      if (session.videoPath.endsWith(".mp4")) {
+        console.log(`[Convert] Session ${session.id} already has MP4, skipping conversion`);
+        if (session.videoMimeType !== "video/mp4") {
+          await storage.updateSession(session.id, { videoMimeType: "video/mp4" });
+        }
+      } else {
+        const conversionResult = await convertToMp4(videoFullPath, UPLOADS_DIR);
+        
+        if (!conversionResult.success) {
+          return res.status(500).json({ message: conversionResult.error || "Video conversion failed" });
+        }
+
+        mp4Path = path.join(UPLOADS_DIR, conversionResult.outputPath!);
+        outputFilename = conversionResult.outputPath!;
+        const stat = fs.statSync(mp4Path);
+
+        await storage.updateSession(session.id, {
+          videoPath: outputFilename,
+          videoMimeType: "video/mp4",
+          videoSizeBytes: stat.size,
+        });
       }
 
-      const mp4Path = path.join(UPLOADS_DIR, conversionResult.outputPath!);
-      const stat = fs.statSync(mp4Path);
+      let thumbnailPath: string | null = session.thumbnailPath;
+      let thumbnailError: string | null = null;
 
-      await storage.updateSession(session.id, {
-        videoPath: conversionResult.outputPath!,
-        videoMimeType: "video/mp4",
-        videoSizeBytes: stat.size,
-      });
-
-      const thumbnailResult = await generateThumbnail(mp4Path, UPLOADS_DIR);
-      
-      if (thumbnailResult.success) {
-        await storage.updateSession(session.id, {
-          thumbnailPath: thumbnailResult.thumbnailPath!,
-        });
-      } else {
-        console.warn(`[Convert] Thumbnail generation failed for session ${session.id}`);
+      if (!session.thumbnailPath) {
+        const thumbnailResult = await generateThumbnail(mp4Path, UPLOADS_DIR);
+        
+        if (thumbnailResult.success) {
+          thumbnailPath = thumbnailResult.thumbnailPath!;
+          await storage.updateSession(session.id, {
+            thumbnailPath: thumbnailPath,
+          });
+          console.log(`[Convert] Thumbnail generated for session ${session.id}`);
+        } else {
+          thumbnailError = thumbnailResult.error || "Unknown thumbnail generation error";
+          console.warn(`[Convert] Thumbnail generation failed for session ${session.id}: ${thumbnailError}`);
+        }
       }
 
       res.json({ 
         message: "Video converted successfully",
-        videoPath: conversionResult.outputPath,
-        thumbnailPath: thumbnailResult.thumbnailPath || null,
+        videoPath: outputFilename,
+        thumbnailPath: thumbnailPath,
+        thumbnailError: thumbnailError,
       });
     } catch (err) {
       console.error("Convert error:", err);
