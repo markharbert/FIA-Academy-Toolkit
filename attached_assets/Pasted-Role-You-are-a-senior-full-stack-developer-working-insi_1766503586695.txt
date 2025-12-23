@@ -1,0 +1,163 @@
+Role: You are a senior full stack developer working inside my existing Replit project. Update the current app based on the change list below. Do not remove existing working features unless they conflict with these changes. Provide working code and clear setup steps.
+
+App Name Change
+Rename the app everywhere from the current name to:
+Fearless Video Coach
+
+This includes:
+
+Browser title
+
+Header and navigation
+
+Landing page headline and button text
+
+Any internal constants or project labels
+
+Footer text
+
+Branding and Logo
+I will attach my Mark Harbert logo file with this prompt. You must add it to the app UI.
+
+Requirements:
+
+Add the logo in the top left of the header on every page.
+
+Clicking the logo takes the user to the dashboard if logged in, or the landing page if logged out.
+
+Keep the header clean: logo left, navigation right.
+
+Store the file in a sensible location like:
+frontend public assets
+or
+frontend src assets
+and reference it properly based on the chosen stack.
+
+Add a favicon if possible using the same logo or a simplified version.
+
+Keap Integration Goal
+When a user signs up for an account inside Fearless Video Coach, the app must add that person to my Keap account as a contact, so they are added to my email list follow up.
+
+Keap Integration Requirements
+Use the Keap REST API with OAuth 2.0. Keap’s docs show:
+Authorization starts by redirecting to a Keap authorize URL, and tokens are retrieved by posting to https://api.infusionsoft.com/token
+. 
+developer.infusionsoft.com
++1
+
+Important: This is a single Keap account integration owned by me (the admin), not a bring your own Keap connection per user.
+
+Implement the pattern described by Keap as “making OAuth requests without user authorization”:
+
+Build an admin only page to connect Keap once.
+
+Store the Keap access token, refresh token, and expires data in a system settings table in the database.
+
+Auto refresh the access token as needed and persist the new refresh token after each refresh. 
+developer.infusionsoft.com
++2
+developer.infusionsoft.com
++2
+
+Admin UI for Keap Connection
+Create an admin page at:
+Admin Settings
+Keap Integration
+
+It must show:
+
+Connection status: Connected or Not Connected
+
+Button: Connect Keap
+
+Button: Disconnect Keap (deletes tokens from the database)
+
+A simple test button: “Send Test Contact” that creates or updates a test contact in Keap so I can confirm it works.
+
+Keap OAuth Flow Details
+Implement OAuth authorization code flow.
+Docs show an authorize endpoint and token endpoint. Some Keap docs show signin.infusionsoft.com and some show accounts.infusionsoft.com. Build it so the authorize base URL is configurable via env var, default to the current REST docs value, and document how to switch it if needed. 
+developer.infusionsoft.com
++1
+
+Environment variables needed:
+KEAP_CLIENT_ID
+KEAP_CLIENT_SECRET
+KEAP_REDIRECT_URI
+KEAP_AUTHORIZE_URL_BASE (default from docs)
+KEAP_TOKEN_URL (default https://api.infusionsoft.com/token
+)
+
+Token refresh rules:
+
+Access tokens expire and must be refreshed using the refresh token via the token endpoint. 
+developer.infusionsoft.com
++1
+
+When refreshing, Keap returns a new refresh token. Always store the newest refresh token. 
+developer.infusionsoft.com
++1
+
+Signup to Keap Contact Sync
+On successful user signup inside the app:
+
+Create or update a Keap contact for that user.
+
+Fields to send at minimum:
+Email
+Given name (if collected)
+Family name (if collected)
+
+Store the returned Keap contact id on the user record in our app, so we can update later.
+
+Apply a tag to the contact such as:
+Fearless Video Coach App Signup
+If the tag does not exist, document that I must create it in Keap and provide the tag id as an env var or admin setting.
+
+Important: If contact creation fails, the app signup must still succeed. Log the error, show a friendly message in the admin logs, and allow a retry from the admin page.
+
+Rate limiting and reliability
+Keap has throttling and quota rules for OAuth apps. Implement basic retry with backoff for 429 errors, and log rate limit related responses. 
+developer.infusionsoft.com
++1
+
+Data and Consent Notes
+Add a checkbox at signup:
+“I agree to receive emails related to my account and training.”
+
+Store that consent timestamp in the database.
+If Keap requires additional steps to email new contacts, document the recommended approach in the README.
+
+New Database Fields
+Add fields to Users:
+keapContactId (nullable)
+emailConsentAt (nullable)
+emailConsentIp (nullable)
+
+Add SystemSettings table if it does not exist:
+keapAccessToken
+keapRefreshToken
+keapTokenExpiresAt
+keapConnectedAt
+
+Implementation Checklist
+
+Rename app to Fearless Video Coach everywhere.
+
+Add Mark Harbert logo to header on all pages.
+
+Build admin Keap integration page.
+
+Implement OAuth connect flow and token storage.
+
+Implement token refresh flow and persistence.
+
+On user signup, create or update Keap contact and store keapContactId.
+
+Add tag application support with configurable tag id.
+
+Provide setup steps in README for Keap credentials and redirect URI.
+
+Provide a simple troubleshooting section.
+
+Now implement these changes fully in the existing codebase.

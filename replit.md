@@ -1,10 +1,16 @@
-# Video Confidence Coach
+# Fearless Video Coach
 
 ## Overview
 
-Video Confidence Coach is a web application for practicing video marketing skills. Users record short videos in-browser, receive automatic transcription, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA.
+Fearless Video Coach is a web application for practicing video marketing skills. Users record short videos in-browser, receive automatic transcription, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA.
 
 The app is designed for private practice—no public sharing or social features. Videos are stored for 7 days before automatic cleanup.
+
+## Branding
+
+- **App Name**: Fearless Video Coach
+- **Logo**: Mark Harbert logo displayed in header and auth pages
+- **Logo Location**: `attached_assets/Mark_Harbert_Logo_(2)_1766503621615.png`
 
 ## User Preferences
 
@@ -63,6 +69,32 @@ Preferred communication style: Simple, everyday language.
   - Environment: `DATABASE_URL`
   - Used for: Users, sessions, session store
 
+### Keap Integration (Email List Sync)
+- **Purpose**: Automatically add new signups to Keap email list
+- **OAuth Flow**: Admin connects Keap once via OAuth 2.0
+- **Token Storage**: Access/refresh tokens in `system_settings` table
+- **Auto-Refresh**: Tokens automatically refresh before expiration
+- **Rate Limiting**: Implements retry with backoff for 429 errors
+
+#### Keap Environment Variables
+- `KEAP_CLIENT_ID`: OAuth client ID from Keap developer portal
+- `KEAP_CLIENT_SECRET`: OAuth client secret
+- `KEAP_REDIRECT_URI`: Callback URL (e.g., https://yourapp.com/api/admin/keap/callback)
+- `KEAP_TAG_ID`: (Optional) Tag ID to apply to new contacts
+- `KEAP_AUTHORIZE_URL_BASE`: (Optional) Defaults to https://accounts.infusionsoft.com/app/oauth/authorize
+- `KEAP_TOKEN_URL`: (Optional) Defaults to https://api.infusionsoft.com/token
+
+#### Admin Page
+- Located at `/admin` (accessible to admin users only)
+- Connect/disconnect Keap integration
+- Send test contact to verify connection
+
+#### Signup to Keap Sync
+- On successful signup with email consent, user is added to Keap as contact
+- Contact includes email, first name, last name if provided
+- Tag is applied if KEAP_TAG_ID is configured
+- Failures are logged but don't block signup
+
 ### Key npm Dependencies
 - `drizzle-orm` / `drizzle-kit`: Database ORM and migrations
 - `@google/genai`: Gemini client for transcription
@@ -73,3 +105,29 @@ Preferred communication style: Simple, everyday language.
 - `@tanstack/react-query`: Frontend data fetching
 - `@radix-ui/*`: Accessible UI primitives
 - `wouter`: Client-side routing
+
+## Database Schema
+
+### Users Table
+- `id`: UUID primary key
+- `email`: Unique email address
+- `passwordHash`: Bcrypt hashed password
+- `createdAt`: Account creation timestamp
+- `keapContactId`: (Optional) Keap contact ID after sync
+- `emailConsentAt`: (Optional) Email consent timestamp
+- `emailConsentIp`: (Optional) IP address at consent time
+- `isAdmin`: Boolean flag for admin access
+
+### System Settings Table
+- `id`: Primary key (always 'keap_integration')
+- `keapAccessToken`: OAuth access token
+- `keapRefreshToken`: OAuth refresh token
+- `keapTokenExpiresAt`: Token expiration timestamp
+- `keapConnectedAt`: Connection timestamp
+
+## Making a User Admin
+
+To make a user an admin (required for Keap integration setup):
+```sql
+UPDATE users SET is_admin = true WHERE email = 'your-email@example.com';
+```

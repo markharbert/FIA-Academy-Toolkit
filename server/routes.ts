@@ -10,6 +10,14 @@ import fs from "fs";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
+import {
+  getKeapAuthUrl,
+  exchangeCodeForTokens,
+  isKeapConnected,
+  disconnectKeap,
+  createOrUpdateContact,
+  sendTestContact,
+} from "./keap";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const VIDEO_RETENTION_DAYS = 7;
@@ -55,6 +63,20 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Admin middleware
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  
+  const user = await storage.getUser(req.session.userId);
+  if (!user?.isAdmin) {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -91,7 +113,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
 
-      const { email, password } = parsed.data;
+      const { email, password, emailConsent, firstName, lastName } = parsed.data;
 
       const existing = await storage.getUserByEmail(email);
       if (existing) {
@@ -99,9 +121,32 @@ export async function registerRoutes(
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
-      const user = await storage.createUser({ email, passwordHash });
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      
+      const user = await storage.createUser({ 
+        email, 
+        passwordHash,
+        emailConsentAt: emailConsent ? new Date() : undefined,
+        emailConsentIp: emailConsent ? clientIp : undefined,
+      });
 
       req.session.userId = user.id;
+
+      if (emailConsent) {
+        const keapConnected = await isKeapConnected();
+        if (keapConnected) {
+          createOrUpdateContact(email, firstName, lastName)
+            .then(async (contactId) => {
+              if (contactId) {
+                await storage.updateUser(user.id, { keapContactId: String(contactId) });
+                console.log(`Synced user ${email} to Keap with contact ID: ${contactId}`);
+              }
+            })
+            .catch((err) => {
+              console.error(`Failed to sync user ${email} to Keap:`, err);
+            });
+        }
+      }
 
       res.status(201).json({ user: { id: user.id, email: user.email } });
     } catch (err) {
@@ -159,7 +204,77 @@ export async function registerRoutes(
       return res.status(401).json({ message: "User not found" });
     }
 
-    res.json({ user: { id: user.id, email: user.email } });
+    res.json({ user: { id: user.id, email: user.email, isAdmin: user.isAdmin } });
+  });
+
+  // ===================
+  // ADMIN ROUTES - KEAP INTEGRATION
+  // ===================
+
+  app.get("/api/admin/keap/status", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const connected = await isKeapConnected();
+      const settings = await storage.getSystemSettings();
+      
+      res.json({
+        connected,
+        connectedAt: settings?.keapConnectedAt || null,
+      });
+    } catch (err) {
+      console.error("Keap status error:", err);
+      res.status(500).json({ message: "Failed to get Keap status" });
+    }
+  });
+
+  app.get("/api/admin/keap/auth-url", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const authUrl = getKeapAuthUrl();
+      res.json({ authUrl });
+    } catch (err) {
+      console.error("Keap auth URL error:", err);
+      res.status(500).json({ message: "Failed to generate Keap auth URL. Check KEAP_CLIENT_ID and KEAP_REDIRECT_URI." });
+    }
+  });
+
+  app.get("/api/admin/keap/callback", async (req: Request, res: Response) => {
+    try {
+      const { code, error } = req.query;
+      
+      if (error) {
+        console.error("Keap OAuth error:", error);
+        return res.redirect("/admin?keap_error=oauth_denied");
+      }
+      
+      if (!code || typeof code !== "string") {
+        return res.redirect("/admin?keap_error=no_code");
+      }
+      
+      await exchangeCodeForTokens(code);
+      res.redirect("/admin?keap_success=connected");
+    } catch (err) {
+      console.error("Keap callback error:", err);
+      res.redirect("/admin?keap_error=token_exchange");
+    }
+  });
+
+  app.post("/api/admin/keap/disconnect", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await disconnectKeap();
+      res.json({ message: "Keap disconnected successfully" });
+    } catch (err) {
+      console.error("Keap disconnect error:", err);
+      res.status(500).json({ message: "Failed to disconnect Keap" });
+    }
+  });
+
+  app.post("/api/admin/keap/test", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const result = await sendTestContact();
+      res.json(result);
+    } catch (err) {
+      console.error("Keap test error:", err);
+      res.status(500).json({ success: false, message: "Failed to send test contact" });
+    }
   });
 
   // ===================

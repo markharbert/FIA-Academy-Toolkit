@@ -1,8 +1,8 @@
 import { 
-  users, sessions, 
+  users, sessions, systemSettings,
   type User, type InsertUser, 
   type Session, type InsertSession,
-  type ScoreResult
+  type ScoreResult, type SystemSettings
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, lt, isNull, desc } from "drizzle-orm";
@@ -11,7 +11,8 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  createUser(user: InsertUser & { emailConsentAt?: Date; emailConsentIp?: string }): Promise<User>;
+  updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   
   // Sessions
   getSession(id: string): Promise<Session | undefined>;
@@ -23,6 +24,10 @@ export interface IStorage {
   // Cleanup
   getExpiredSessions(): Promise<Session[]>;
   markVideoDeleted(id: string): Promise<void>;
+  
+  // System Settings (Keap)
+  getSystemSettings(): Promise<SystemSettings | undefined>;
+  upsertSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -37,9 +42,17 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
+  async createUser(insertUser: InsertUser & { emailConsentAt?: Date; emailConsentIp?: string }): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    const [user] = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return user || undefined;
   }
 
   // Sessions
@@ -85,6 +98,29 @@ export class DatabaseStorage implements IStorage {
     await db.update(sessions)
       .set({ videoDeletedAt: new Date(), videoPath: null })
       .where(eq(sessions.id, id));
+  }
+
+  // System Settings
+  async getSystemSettings(): Promise<SystemSettings | undefined> {
+    const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, "keap_integration"));
+    return settings || undefined;
+  }
+
+  async upsertSystemSettings(updates: Partial<SystemSettings>): Promise<SystemSettings> {
+    const existing = await this.getSystemSettings();
+    
+    if (existing) {
+      const [settings] = await db.update(systemSettings)
+        .set(updates)
+        .where(eq(systemSettings.id, "keap_integration"))
+        .returning();
+      return settings;
+    } else {
+      const [settings] = await db.insert(systemSettings)
+        .values({ id: "keap_integration", ...updates })
+        .returning();
+      return settings;
+    }
   }
 }
 

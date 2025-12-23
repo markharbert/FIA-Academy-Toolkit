@@ -2,13 +2,15 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./theme-toggle";
 import { useAuth } from "@/lib/auth";
-import { Video, LogOut, User } from "lucide-react";
+import { LogOut, User, Settings } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -22,9 +24,8 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-14 items-center justify-between gap-4 px-4">
-        <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2 font-semibold text-lg" data-testid="link-logo">
-          <Video className="h-6 w-6 text-primary" />
-          <span className="hidden sm:inline">Video Confidence Coach</span>
+        <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2" data-testid="link-logo">
+          <img src={logoImage} alt="Mark Harbert" className="h-8" />
         </Link>
 
         <div className="flex items-center gap-2">
@@ -41,6 +42,16 @@ export function Navbar() {
                 <DropdownMenuItem className="text-muted-foreground text-sm" disabled>
                   {user.email}
                 </DropdownMenuItem>
+                {user.isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setLocation("/admin")} data-testid="link-admin">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Admin Settings
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} data-testid="button-logout">
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out

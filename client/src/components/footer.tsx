@@ -9,7 +9,7 @@ export function Footer() {
             <Shield className="h-4 w-4" />
             <span>Your recordings are private and only visible to your account.</span>
           </div>
-          <p>&copy; {new Date().getFullYear()} Video Confidence Coach. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Fearless Video Coach. All rights reserved.</p>
         </div>
       </div>
     </footer>

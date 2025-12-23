@@ -129,7 +129,7 @@ export default function LandingPage() {
       <section className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="mb-12 text-center text-3xl font-bold md:text-4xl" data-testid="text-features-title">
-            Why Video Confidence Coach?
+            Why Fearless Video Coach?
           </h2>
           <div className="grid gap-8 md:grid-cols-3">
             {features.map((feature, index) => (

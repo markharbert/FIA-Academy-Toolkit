@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -9,6 +9,19 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  keapContactId: text("keap_contact_id"),
+  emailConsentAt: timestamp("email_consent_at"),
+  emailConsentIp: text("email_consent_ip"),
+  isAdmin: boolean("is_admin").default(false),
+});
+
+// System settings table for Keap OAuth tokens
+export const systemSettings = pgTable("system_settings", {
+  id: varchar("id").primaryKey().default(sql`'keap_integration'`),
+  keapAccessToken: text("keap_access_token"),
+  keapRefreshToken: text("keap_refresh_token"),
+  keapTokenExpiresAt: timestamp("keap_token_expires_at"),
+  keapConnectedAt: timestamp("keap_connected_at"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -111,6 +124,11 @@ export type Session = typeof sessions.$inferSelect;
 export const signupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  emailConsent: z.boolean().refine((val) => val === true, {
+    message: "You must agree to receive emails to create an account",
+  }),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
 });
 
 export const loginSchema = z.object({
@@ -120,3 +138,6 @@ export const loginSchema = z.object({
 
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+
+// System settings types
+export type SystemSettings = typeof systemSettings.$inferSelect;

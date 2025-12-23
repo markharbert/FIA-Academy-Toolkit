@@ -14,6 +14,7 @@ import SignupPage from "@/pages/signup";
 import DashboardPage from "@/pages/dashboard";
 import RecordPage from "@/pages/record";
 import SessionPage from "@/pages/session";
+import AdminPage from "@/pages/admin";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -86,6 +87,9 @@ function Router() {
       </Route>
       <Route path="/session/:id">
         {() => <ProtectedRoute component={SessionPage} />}
+      </Route>
+      <Route path="/admin">
+        {() => <ProtectedRoute component={AdminPage} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

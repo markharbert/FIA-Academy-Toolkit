@@ -1,11 +1,16 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import type { User } from "@shared/schema";
+
+interface AuthUser {
+  id: string;
+  email: string;
+  isAdmin?: boolean;
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, options?: { emailConsent?: boolean; firstName?: string; lastName?: string }) => Promise<void>;
   logout: () => Promise<void>;
   refetch: () => Promise<void>;
 }
@@ -13,7 +18,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refetch = useCallback(async () => {
@@ -51,11 +56,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   };
 
-  const signup = async (email: string, password: string) => {
+  const signup = async (email: string, password: string, options?: { emailConsent?: boolean; firstName?: string; lastName?: string }) => {
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ 
+        email, 
+        password, 
+        emailConsent: options?.emailConsent ?? true,
+        firstName: options?.firstName,
+        lastName: options?.lastName,
+      }),
       credentials: "include",
     });
     if (!res.ok) {

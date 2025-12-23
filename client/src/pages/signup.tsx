@@ -8,12 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Video, Loader2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2 } from "lucide-react";
+import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
 
 const signupFormSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   confirmPassword: z.string(),
+  emailConsent: z.boolean().refine((val) => val === true, {
+    message: "You must agree to receive emails to create an account",
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -30,9 +37,12 @@ export default function SignupPage() {
   const form = useForm<SignupFormInput>({
     resolver: zodResolver(signupFormSchema),
     defaultValues: {
+      firstName: "",
+      lastName: "",
       email: "",
       password: "",
       confirmPassword: "",
+      emailConsent: false,
     },
   });
 
@@ -40,7 +50,11 @@ export default function SignupPage() {
     setError(null);
     setIsLoading(true);
     try {
-      await signup(data.email, data.password);
+      await signup(data.email, data.password, {
+        emailConsent: data.emailConsent,
+        firstName: data.firstName,
+        lastName: data.lastName,
+      });
       setLocation("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed");
@@ -53,8 +67,8 @@ export default function SignupPage() {
     <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Video className="h-6 w-6 text-primary" />
+          <div className="mx-auto mb-4">
+            <img src={logoImage} alt="Mark Harbert" className="h-10 mx-auto" />
           </div>
           <CardTitle className="text-2xl" data-testid="text-signup-title">Create your account</CardTitle>
           <CardDescription>
@@ -69,6 +83,47 @@ export default function SignupPage() {
                   {error}
                 </div>
               )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="text"
+                          placeholder="John"
+                          autoComplete="given-name"
+                          data-testid="input-first-name"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="text"
+                          placeholder="Doe"
+                          autoComplete="family-name"
+                          data-testid="input-last-name"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               
               <FormField
                 control={form.control}
@@ -126,6 +181,28 @@ export default function SignupPage() {
                       />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="emailConsent"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="checkbox-email-consent"
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="text-sm font-normal">
+                        I agree to receive emails related to my account and training.
+                      </FormLabel>
+                      <FormMessage />
+                    </div>
                   </FormItem>
                 )}
               />
