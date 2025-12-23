@@ -68,7 +68,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSession(insertSession: InsertSession): Promise<Session> {
-    const [session] = await db.insert(sessions).values(insertSession).returning();
+    const [session] = await db.insert(sessions).values(insertSession as any).returning();
     return session;
   }
 
