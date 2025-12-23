@@ -3,13 +3,14 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as FacebookStrategy } from "passport-facebook";
+import AppleStrategy from "passport-apple";
 import { sendPasswordResetEmail } from "./email";
 import path from "path";
 import fs from "fs";
@@ -221,7 +222,17 @@ export async function registerRoutes(
       return res.status(401).json({ message: "User not found" });
     }
 
-    res.json({ user: { id: user.id, email: user.email, isAdmin: user.isAdmin } });
+    res.json({ 
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        displayName: user.displayName,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        emailConsentAt: user.emailConsentAt,
+        isAdmin: user.isAdmin,
+      } 
+    });
   });
 
   // ===================
@@ -359,10 +370,9 @@ export async function registerRoutes(
         const email = profile.emails?.[0]?.value?.toLowerCase();
         const providerUserId = profile.id;
         const emailVerified = profile.emails?.[0]?.verified || false;
-
-        if (!email) {
-          return done(null, false, { message: "No email provided by Google" });
-        }
+        const firstName = profile.name?.givenName;
+        const lastName = profile.name?.familyName;
+        const displayName = profile.displayName;
 
         // Check if identity already exists for this provider
         let identity = await storage.getUserIdentityByProvider("google", providerUserId);
@@ -371,7 +381,7 @@ export async function registerRoutes(
         if (identity) {
           // User already linked, just return them
           user = await storage.getUser(identity.userId);
-        } else {
+        } else if (email) {
           // Check if a user with this email already exists
           user = await storage.getUserByEmail(email);
 
@@ -383,12 +393,16 @@ export async function registerRoutes(
               providerUserId,
               emailFromProvider: email,
               emailVerifiedByProvider: emailVerified,
+              nameFromProvider: displayName,
             });
           } else {
             // Create new user without password (OAuth-only user)
             user = await storage.createUser({
               email,
               passwordHash: null as any,
+              firstName: firstName || null,
+              lastName: lastName || null,
+              displayName: displayName || null,
             });
 
             await storage.createUserIdentity({
@@ -397,8 +411,27 @@ export async function registerRoutes(
               providerUserId,
               emailFromProvider: email,
               emailVerifiedByProvider: emailVerified,
+              nameFromProvider: displayName,
             });
           }
+        } else {
+          // No email from provider - create user without email
+          user = await storage.createUser({
+            email: null as any,
+            passwordHash: null as any,
+            firstName: firstName || null,
+            lastName: lastName || null,
+            displayName: displayName || null,
+          });
+
+          await storage.createUserIdentity({
+            userId: user.id,
+            provider: "google",
+            providerUserId,
+            emailFromProvider: null,
+            emailVerifiedByProvider: false,
+            nameFromProvider: displayName,
+          });
         }
 
         done(null, user);
@@ -426,17 +459,16 @@ export async function registerRoutes(
       clientID: process.env.FACEBOOK_APP_ID,
       clientSecret: process.env.FACEBOOK_APP_SECRET,
       callbackURL: process.env.FACEBOOK_REDIRECT_URI || `${APP_BASE_URL}/api/auth/oauth/facebook/callback`,
-      profileFields: ["id", "emails", "name"],
+      profileFields: ["id", "emails", "name", "displayName"],
       enableProof: true,
       state: true,
     } as any, async (accessToken: string, refreshToken: string, profile: any, done: any) => {
       try {
         const email = profile.emails?.[0]?.value?.toLowerCase();
         const providerUserId = profile.id;
-
-        if (!email) {
-          return done(null, false, { message: "No email provided by Facebook" });
-        }
+        const firstName = profile.name?.givenName;
+        const lastName = profile.name?.familyName;
+        const displayName = profile.displayName;
 
         // Check if identity already exists for this provider
         let identity = await storage.getUserIdentityByProvider("facebook", providerUserId);
@@ -445,7 +477,7 @@ export async function registerRoutes(
         if (identity) {
           // User already linked, just return them
           user = await storage.getUser(identity.userId);
-        } else {
+        } else if (email) {
           // Check if a user with this email already exists
           user = await storage.getUserByEmail(email);
 
@@ -457,12 +489,16 @@ export async function registerRoutes(
               providerUserId,
               emailFromProvider: email,
               emailVerifiedByProvider: false,
+              nameFromProvider: displayName,
             });
           } else {
             // Create new user without password (OAuth-only user)
             user = await storage.createUser({
               email,
               passwordHash: null as any,
+              firstName: firstName || null,
+              lastName: lastName || null,
+              displayName: displayName || null,
             });
 
             await storage.createUserIdentity({
@@ -471,8 +507,27 @@ export async function registerRoutes(
               providerUserId,
               emailFromProvider: email,
               emailVerifiedByProvider: false,
+              nameFromProvider: displayName,
             });
           }
+        } else {
+          // No email from provider - create user without email
+          user = await storage.createUser({
+            email: null as any,
+            passwordHash: null as any,
+            firstName: firstName || null,
+            lastName: lastName || null,
+            displayName: displayName || null,
+          });
+
+          await storage.createUserIdentity({
+            userId: user.id,
+            provider: "facebook",
+            providerUserId,
+            emailFromProvider: null,
+            emailVerifiedByProvider: false,
+            nameFromProvider: displayName,
+          });
         }
 
         done(null, user);
@@ -481,9 +536,8 @@ export async function registerRoutes(
       }
     }));
 
-    app.get("/api/auth/oauth/facebook", passport.authenticate("facebook", {
+    app.get("/api/auth/oauth/facebook", passport.authenticate("facebook" as any, {
       scope: ["email"],
-      state: true,
     }));
 
     app.get("/api/auth/oauth/facebook/callback",
@@ -494,6 +548,115 @@ export async function registerRoutes(
       }
     );
   }
+
+  // Apple OAuth Strategy
+  if (process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY) {
+    passport.use(new AppleStrategy({
+      clientID: process.env.APPLE_CLIENT_ID,
+      teamID: process.env.APPLE_TEAM_ID,
+      keyID: process.env.APPLE_KEY_ID,
+      privateKeyString: process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      callbackURL: process.env.APPLE_REDIRECT_URI || `${APP_BASE_URL}/api/auth/oauth/apple/callback`,
+      passReqToCallback: true,
+    } as any, async (req: any, accessToken: any, refreshToken: any, idToken: any, profile: any, done: any) => {
+      try {
+        // Apple provides email only on first authorization
+        // The profile might have the email in different places
+        const email = profile?.email?.toLowerCase() || idToken?.email?.toLowerCase();
+        const providerUserId = profile?.id || idToken?.sub;
+        const firstName = profile?.name?.firstName || req.body?.user?.name?.firstName;
+        const lastName = profile?.name?.lastName || req.body?.user?.name?.lastName;
+        const displayName = firstName && lastName ? `${firstName} ${lastName}` : firstName || null;
+
+        if (!providerUserId) {
+          return done(null, false, { message: "No user ID from Apple" });
+        }
+
+        // Check if identity already exists for this provider
+        let identity = await storage.getUserIdentityByProvider("apple", providerUserId);
+        let user;
+
+        if (identity) {
+          // User already linked, just return them
+          user = await storage.getUser(identity.userId);
+        } else if (email) {
+          // Check if a user with this email already exists
+          user = await storage.getUserByEmail(email);
+
+          if (user) {
+            // Link the OAuth identity to existing user (don't modify their password)
+            await storage.createUserIdentity({
+              userId: user.id,
+              provider: "apple",
+              providerUserId,
+              emailFromProvider: email,
+              emailVerifiedByProvider: true, // Apple verifies emails
+              nameFromProvider: displayName,
+            });
+          } else {
+            // Create new user without password (OAuth-only user)
+            user = await storage.createUser({
+              email,
+              passwordHash: null as any,
+              firstName: firstName || null,
+              lastName: lastName || null,
+              displayName: displayName || null,
+            });
+
+            await storage.createUserIdentity({
+              userId: user.id,
+              provider: "apple",
+              providerUserId,
+              emailFromProvider: email,
+              emailVerifiedByProvider: true,
+              nameFromProvider: displayName,
+            });
+          }
+        } else {
+          // No email from provider - create user without email
+          user = await storage.createUser({
+            email: null as any,
+            passwordHash: null as any,
+            firstName: firstName || null,
+            lastName: lastName || null,
+            displayName: displayName || null,
+          });
+
+          await storage.createUserIdentity({
+            userId: user.id,
+            provider: "apple",
+            providerUserId,
+            emailFromProvider: null,
+            emailVerifiedByProvider: false,
+            nameFromProvider: displayName,
+          });
+        }
+
+        done(null, user);
+      } catch (err) {
+        done(err);
+      }
+    }));
+
+    app.get("/api/auth/oauth/apple", passport.authenticate("apple" as any, {
+      scope: ["name", "email"],
+    }));
+
+    // Apple uses POST for callback
+    app.post("/api/auth/oauth/apple/callback",
+      passport.authenticate("apple" as any, { failureRedirect: "/login?error=oauth_failed" }),
+      (req: Request, res: Response) => {
+        req.session.userId = (req.user as any).id;
+        res.redirect("/dashboard");
+      }
+    );
+  }
+
+  // Also add Apple connect route for account linking
+  app.get("/api/account/connect/apple", requireAuth, (req: Request, res: Response, next: NextFunction) => {
+    (req.session as any).connectingUserId = req.session.userId;
+    passport.authenticate("apple" as any, { scope: ["name", "email"] })(req, res, next);
+  });
 
   // ===================
   // ADMIN ROUTES - KEAP INTEGRATION
@@ -562,6 +725,217 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Keap test error:", err);
       res.status(500).json({ success: false, message: "Failed to send test contact" });
+    }
+  });
+
+  // ===================
+  // ACCOUNT ROUTES
+  // ===================
+
+  // Get current user's account info with connected providers
+  app.get("/api/account", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const identities = await storage.getUserIdentitiesByUser(user.id);
+      const connectedProviders = identities.map((i) => i.provider);
+      const hasPassword = !!user.passwordHash;
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        emailVerifiedAt: user.emailVerifiedAt,
+        emailConsentAt: user.emailConsentAt,
+        createdAt: user.createdAt,
+        connectedProviders,
+        hasPassword,
+      });
+    } catch (err) {
+      console.error("Get account error:", err);
+      res.status(500).json({ message: "Failed to fetch account" });
+    }
+  });
+
+  // Update account profile
+  app.patch("/api/account", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const parsed = updateAccountSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const { displayName, firstName, lastName, email } = parsed.data;
+      const updates: any = { updatedAt: new Date() };
+
+      if (displayName !== undefined) updates.displayName = displayName;
+      if (firstName !== undefined) updates.firstName = firstName;
+      if (lastName !== undefined) updates.lastName = lastName;
+
+      // Handle email change
+      if (email && email !== user.email) {
+        // Check if email is already taken
+        const existingUser = await storage.getUserByEmail(email.toLowerCase());
+        if (existingUser && existingUser.id !== user.id) {
+          return res.status(400).json({ message: "Email already in use" });
+        }
+        updates.email = email.toLowerCase();
+        updates.emailVerifiedAt = null; // Reset verification when email changes
+      }
+
+      const updatedUser = await storage.updateUser(user.id, updates);
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update account" });
+      }
+
+      const identities = await storage.getUserIdentitiesByUser(user.id);
+      const connectedProviders = identities.map((i) => i.provider);
+
+      res.json({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        displayName: updatedUser.displayName,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        emailVerifiedAt: updatedUser.emailVerifiedAt,
+        emailConsentAt: updatedUser.emailConsentAt,
+        createdAt: updatedUser.createdAt,
+        connectedProviders,
+        hasPassword: !!updatedUser.passwordHash,
+      });
+    } catch (err) {
+      console.error("Update account error:", err);
+      res.status(500).json({ message: "Failed to update account" });
+    }
+  });
+
+  // Set password for OAuth-only accounts
+  app.post("/api/account/set-password", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { password } = req.body;
+      if (!password || typeof password !== "string" || password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.passwordHash) {
+        return res.status(400).json({ message: "Password already set. Use change password instead." });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      await storage.updateUser(user.id, { passwordHash, updatedAt: new Date() });
+
+      res.json({ message: "Password set successfully" });
+    } catch (err) {
+      console.error("Set password error:", err);
+      res.status(500).json({ message: "Failed to set password" });
+    }
+  });
+
+  // Disconnect an OAuth provider
+  app.delete("/api/account/identities/:provider", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const provider = req.params.provider as AuthProvider;
+      if (!["google", "facebook", "apple"].includes(provider)) {
+        return res.status(400).json({ message: "Invalid provider" });
+      }
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const identities = await storage.getUserIdentitiesByUser(user.id);
+      const hasPassword = !!user.passwordHash;
+      const otherIdentities = identities.filter((i) => i.provider !== provider);
+
+      // Prevent lockout: must have at least one other sign-in method
+      if (!hasPassword && otherIdentities.length === 0) {
+        return res.status(400).json({ 
+          message: "Cannot disconnect. You need at least one sign-in method (password or another social login)." 
+        });
+      }
+
+      const deleted = await storage.deleteUserIdentity(user.id, provider);
+      if (!deleted) {
+        return res.status(404).json({ message: "Provider not connected" });
+      }
+
+      res.json({ message: `${provider} disconnected successfully` });
+    } catch (err) {
+      console.error("Disconnect provider error:", err);
+      res.status(500).json({ message: "Failed to disconnect provider" });
+    }
+  });
+
+  // Connect a new OAuth provider (redirects, similar to login flow but links to current user)
+  app.get("/api/account/connect/google", requireAuth, (req: Request, res: Response, next: NextFunction) => {
+    // Store userId in session to link after callback
+    (req.session as any).connectingUserId = req.session.userId;
+    passport.authenticate("google", { scope: ["profile", "email"] })(req, res, next);
+  });
+
+  app.get("/api/account/connect/facebook", requireAuth, (req: Request, res: Response, next: NextFunction) => {
+    (req.session as any).connectingUserId = req.session.userId;
+    passport.authenticate("facebook" as any, { scope: ["email"] })(req, res, next);
+  });
+
+  // Update consent for email
+  app.post("/api/account/consent", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { emailConsent } = req.body;
+      
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (emailConsent === true && !user.emailConsentAt) {
+        const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+        await storage.updateUser(user.id, {
+          emailConsentAt: new Date(),
+          emailConsentIp: clientIp,
+          updatedAt: new Date(),
+        });
+
+        // Sync to Keap if email exists
+        if (user.email) {
+          const keapConnected = await isKeapConnected();
+          if (keapConnected) {
+            createOrUpdateContact(user.email, user.firstName || undefined, user.lastName || undefined)
+              .then(async (contactId) => {
+                if (contactId) {
+                  await storage.updateUser(user.id, { keapContactId: String(contactId) });
+                  console.log(`Synced OAuth user ${user.email} to Keap with contact ID: ${contactId}`);
+                }
+              })
+              .catch((err) => {
+                console.error(`Failed to sync OAuth user ${user.email} to Keap:`, err);
+              });
+          }
+        }
+
+        res.json({ message: "Consent recorded" });
+      } else {
+        res.json({ message: "No changes made" });
+      }
+    } catch (err) {
+      console.error("Update consent error:", err);
+      res.status(500).json({ message: "Failed to update consent" });
     }
   });
 

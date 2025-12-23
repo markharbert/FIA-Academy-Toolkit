@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
-import { SiGoogle, SiFacebook } from "react-icons/si";
+import { SiGoogle, SiFacebook, SiApple } from "react-icons/si";
 import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
 
 export default function LoginPage() {
@@ -19,7 +19,7 @@ export default function LoginPage() {
   const searchString = useSearch();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | "apple" | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -176,6 +176,23 @@ export default function LoginPage() {
                 <SiFacebook className="mr-2 h-4 w-4" />
               )}
               Continue with Facebook
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setOauthLoading("apple");
+                window.location.href = "/api/auth/oauth/apple";
+              }}
+              disabled={oauthLoading !== null}
+              data-testid="button-oauth-apple"
+            >
+              {oauthLoading === "apple" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiApple className="mr-2 h-4 w-4" />
+              )}
+              Continue with Apple
             </Button>
           </div>
 

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
+import { SiGoogle, SiFacebook, SiApple } from "react-icons/si";
 import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
 
 const signupFormSchema = z.object({
@@ -31,8 +33,17 @@ type SignupFormInput = z.infer<typeof signupFormSchema>;
 export default function SignupPage() {
   const { signup } = useAuth();
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | "apple" | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    if (params.get("error") === "oauth_failed") {
+      setError("Social signup failed. Please try again or use email/password.");
+    }
+  }, [searchString]);
 
   const form = useForm<SignupFormInput>({
     resolver: zodResolver(signupFormSchema),
@@ -76,14 +87,77 @@ export default function SignupPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive" data-testid="text-signup-error">
+              {error}
+            </div>
+          )}
+
+          <div className="grid gap-3 mb-6">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setOauthLoading("google");
+                window.location.href = "/api/auth/oauth/google";
+              }}
+              disabled={oauthLoading !== null}
+              data-testid="button-oauth-google"
+            >
+              {oauthLoading === "google" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiGoogle className="mr-2 h-4 w-4" />
+              )}
+              Continue with Google
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setOauthLoading("facebook");
+                window.location.href = "/api/auth/oauth/facebook";
+              }}
+              disabled={oauthLoading !== null}
+              data-testid="button-oauth-facebook"
+            >
+              {oauthLoading === "facebook" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiFacebook className="mr-2 h-4 w-4" />
+              )}
+              Continue with Facebook
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setOauthLoading("apple");
+                window.location.href = "/api/auth/oauth/apple";
+              }}
+              disabled={oauthLoading !== null}
+              data-testid="button-oauth-apple"
+            >
+              {oauthLoading === "apple" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiApple className="mr-2 h-4 w-4" />
+              )}
+              Continue with Apple
+            </Button>
+          </div>
+
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <Separator className="w-full" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">or sign up with email</span>
+            </div>
+          </div>
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {error && (
-                <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" data-testid="text-signup-error">
-                  {error}
-                </div>
-              )}
-
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}

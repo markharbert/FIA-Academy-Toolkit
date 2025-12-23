@@ -10,9 +10,14 @@ export type AuthProvider = typeof authProviders[number];
 // Users table for authentication
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").notNull().unique(),
+  email: text("email"), // Nullable for OAuth users without email
   passwordHash: text("password_hash"), // Nullable for OAuth users
+  displayName: text("display_name"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  emailVerifiedAt: timestamp("email_verified_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   keapContactId: text("keap_contact_id"),
   emailConsentAt: timestamp("email_consent_at"),
   emailConsentIp: text("email_consent_ip"),
@@ -27,6 +32,7 @@ export const userIdentities = pgTable("user_identities", {
   providerUserId: text("provider_user_id").notNull(),
   emailFromProvider: text("email_from_provider"),
   emailVerifiedByProvider: boolean("email_verified_by_provider").default(false),
+  nameFromProvider: text("name_from_provider"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -54,10 +60,23 @@ export const systemSettings = pgTable("system_settings", {
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   passwordHash: true,
+  displayName: true,
+  firstName: true,
+  lastName: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Account update schema for profile changes
+export const updateAccountSchema = z.object({
+  displayName: z.string().max(40, "Display name must be 40 characters or less").optional().nullable(),
+  firstName: z.string().max(40, "First name must be 40 characters or less").optional().nullable(),
+  lastName: z.string().max(40, "Last name must be 40 characters or less").optional().nullable(),
+  email: z.string().email("Please enter a valid email address").optional(),
+});
+
+export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 
 // Goal types for video sessions
 export const goalTypes = ["sales", "lead", "education", "recruit"] as const;

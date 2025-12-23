@@ -1,0 +1,406 @@
+Role: You are a senior full stack developer working inside my existing Replit project. Implement the account and OAuth sign up changes below without breaking current features. Provide working code, database migrations, and clear setup steps. Confirm each item in a checklist at the end.
+
+Goal Summary
+
+Users can sign up with OAuth, without filling in a manual signup form.
+
+Support OAuth providers:
+
+Google
+
+Facebook
+
+Apple
+
+Keep email + password signup and login working as an option.
+
+Add an Account page where users can view and update their profile.
+
+Let users personalize their account with a Gravatar profile image.
+
+Part 1: OAuth Sign Up, Not Just Login
+
+User experience requirements
+
+On the landing page, add a clear call to action section:
+
+“Get started” with three buttons:
+
+Continue with Google
+
+Continue with Facebook
+
+Continue with Apple
+
+Below that, smaller link: “Or sign up with email”
+
+On the signup page:
+
+Put OAuth buttons at the top, with a divider “or”
+
+Email signup remains available but optional
+
+OAuth sign up must create the user account automatically:
+
+No extra form fields required to start using the product
+
+After successful OAuth sign up:
+
+Create the user record if it does not exist
+
+Log them in immediately
+
+Redirect to Dashboard
+
+If a provider does not return an email:
+
+Prompt the user to add an email on the Account page before they can use email based features
+
+Still allow them into the app, but show a persistent banner until email is added
+
+Account linking rules
+
+If a user signs up with Google and later uses Facebook with the same email:
+
+Link that new identity to the same user account rather than creating a duplicate
+
+If an existing email + password user logs in with OAuth using the same verified email:
+
+Link the OAuth identity to that existing user account
+
+Identity linking must be automatic only when the provider email is verified (when available). If not verified, handle carefully:
+
+Do not auto link
+
+Prompt user on Account page to confirm linking through an in app verification step
+
+Provider specific requirements
+Google
+
+Use OpenID Connect and request email + profile scopes.
+
+Facebook
+
+Request email scope. If email is missing, handle gracefully as above.
+
+Apple
+
+Implement Sign in with Apple.
+
+Apple may provide email only on first authorization. Store it immediately.
+
+Support Apple’s name fields when provided the first time.
+
+Technical implementation requirements
+Choose and implement one stable approach based on the existing stack:
+
+If app is Next.js:
+
+Use NextAuth with providers: Google, Facebook, Apple
+
+Configure callbacks to:
+
+Create user record on first OAuth sign in
+
+Link identities
+
+Store provider identifiers
+
+If app is React + Express:
+
+Use Passport.js providers:
+
+Google OAuth 2.0 strategy
+
+Facebook strategy
+
+Apple strategy
+
+Implement callback handlers that:
+
+Look up identity by (provider, providerUserId)
+
+If not found, attempt link by verified email
+
+If no match, create new user, then create identity
+
+Create session cookie and redirect
+
+OAuth routes
+Implement clear routes:
+
+GET /api/auth/oauth/google
+
+GET /api/auth/oauth/google/callback
+
+GET /api/auth/oauth/facebook
+
+GET /api/auth/oauth/facebook/callback
+
+GET /api/auth/oauth/apple
+
+POST or GET /api/auth/oauth/apple/callback (depending on Apple requirements)
+
+Environment variables for OAuth
+Google
+
+GOOGLE_CLIENT_ID
+
+GOOGLE_CLIENT_SECRET
+
+GOOGLE_REDIRECT_URI
+
+Facebook
+
+FACEBOOK_APP_ID
+
+FACEBOOK_APP_SECRET
+
+FACEBOOK_REDIRECT_URI
+
+Apple
+
+APPLE_CLIENT_ID (Service ID)
+
+APPLE_TEAM_ID
+
+APPLE_KEY_ID
+
+APPLE_PRIVATE_KEY (multiline env var supported)
+
+APPLE_REDIRECT_URI
+
+Also required
+
+APP_BASE_URL
+
+SESSION_SECRET (or JWT secret if applicable)
+
+Data model for OAuth identities
+Implement a separate identities table (preferred):
+UserIdentities
+
+id
+
+userId
+
+provider (google, facebook, apple)
+
+providerUserId
+
+emailFromProvider (nullable)
+
+emailVerified (nullable boolean)
+
+nameFromProvider (nullable)
+
+createdAt
+Unique constraint: (provider, providerUserId)
+
+Users table should support profile fields regardless of auth method:
+Users
+
+id
+
+email (nullable if provider did not supply)
+
+emailVerifiedAt (nullable)
+
+displayName (nullable)
+
+firstName (nullable)
+
+lastName (nullable)
+
+passwordHash (nullable for OAuth only accounts)
+
+createdAt
+
+updatedAt
+
+Important: Keep existing Keap contact sync behavior, but update it:
+
+Trigger Keap sync after successful OAuth sign up as well
+
+Only sync to Keap if user email exists and user consent checkbox is true
+
+If email is missing, defer Keap sync until email is added on Account page and consent is captured
+
+Consent requirement
+On first login or first dashboard visit for OAuth signups:
+
+Show a light modal or banner that requests consent checkbox:
+
+“I agree to receive emails related to my account and training.”
+
+If they accept, store emailConsentAt and emailConsentIp.
+
+If they skip, allow app usage but do not sync to Keap.
+
+Part 2: Account Page
+
+User experience requirements
+Add an “Account” page accessible from the navigation after login.
+
+Account page sections
+A. Profile Information
+Editable fields:
+
+Display name
+
+First name
+
+Last name
+
+Email (if blank, required to add)
+
+Optional: timezone
+Include:
+
+Save button
+
+Inline validation
+
+Success and error messages
+
+B. Connected Sign In Methods
+Show which methods are connected:
+
+Email and password (if set)
+
+Google
+
+Facebook
+
+Apple
+
+Allow actions:
+
+Connect another provider:
+
+Buttons to connect Google, Facebook, Apple
+
+Disconnect a provider:
+
+Only allow disconnect if at least one other sign in method remains
+
+Prevent lockout
+
+Set password (for OAuth accounts):
+
+“Set a password” flow inside Account page
+
+Requires entering a new password twice
+
+After setting, email + password login becomes available
+
+C. Profile Image via Gravatar
+Implement Gravatar support:
+
+Gravatar is based on MD5 hash of the lowercased, trimmed email.
+
+Show current profile image using:
+
+https://www.gravatar.com/avatar/{md5(email)}?s=200&d=identicon
+
+If email is missing, show a placeholder and prompt user to add email.
+
+Include a link: “Change your image on Gravatar”
+
+Opens Gravatar site in a new tab.
+
+Provide a “Refresh image” button if helpful.
+
+Cache busting:
+
+Add a query param like &v=timestamp when user clicks refresh.
+
+Backend API requirements for Account
+Add endpoints:
+
+GET /api/account
+
+PATCH /api/account
+Body: { displayName, firstName, lastName, email, timezone }
+Validation:
+
+displayName max 40
+
+firstName max 40
+
+lastName max 40
+
+email must be valid format
+
+If email changes:
+
+set emailVerifiedAt to null and require verification if you implement it
+
+update gravatar image immediately based on new email
+
+Provider connection endpoints
+If using Passport:
+
+GET /api/account/connect/google
+
+GET /api/account/connect/facebook
+
+GET /api/account/connect/apple
+Callbacks that link identity to current logged in user.
+
+If using NextAuth:
+
+Use built in account linking, but still enforce lockout protection.
+
+Disconnect endpoint
+
+DELETE /api/account/identities/:provider
+Rules:
+
+Cannot remove the last remaining sign in method.
+
+Frontend requirements
+
+Add Account page route and nav link.
+
+Add a simple profile card layout with lots of white space.
+
+Show Gravatar image at top left of the account page.
+
+Add connected methods list with connect and disconnect actions.
+
+Add set password section for OAuth only accounts.
+
+Testing checklist
+Provide a short checklist and confirm:
+
+Users can sign up using Google without filling manual form.
+
+Users can sign up using Facebook without filling manual form.
+
+Users can sign up using Apple without filling manual form.
+
+OAuth sign up creates a user record and logs them in.
+
+Identity linking avoids duplicates when emails match and are verified.
+
+Account page loads and profile fields update.
+
+Gravatar image displays correctly based on email.
+
+Users can connect and disconnect sign in methods without lockout.
+
+Keap sync triggers for OAuth signups when email exists and consent is true.
+
+README updates
+Update README with:
+
+Provider setup steps and redirect URIs
+
+Required env vars
+
+Notes about Apple email behavior
+
+How Gravatar works
+
+Now implement these changes in the existing codebase.

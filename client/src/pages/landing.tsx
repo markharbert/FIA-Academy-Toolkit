@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Video, FileText, TrendingUp, CheckCircle, Sparkles, Target } from "lucide-react";
+import { Video, FileText, TrendingUp, CheckCircle, Sparkles, Target, Loader2 } from "lucide-react";
+import { SiGoogle, SiFacebook, SiApple } from "react-icons/si";
 
 const steps = [
   {
@@ -40,6 +42,8 @@ const features = [
 ];
 
 export default function LandingPage() {
+  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | "apple" | null>(null);
+
   return (
     <div className="flex flex-col">
       <section className="relative overflow-hidden bg-background py-20 md:py-32">
@@ -54,15 +58,75 @@ export default function LandingPage() {
             Record practice videos, get AI-powered scoring on the 5-part video creation formula, 
             and receive specific suggestions to improve your delivery.
           </p>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-            <Link href="/signup">
-              <Button size="lg" className="h-12 px-8 text-base" data-testid="button-hero-signup">
-                Get Started Free
-              </Button>
-            </Link>
+          
+          <div className="mx-auto mt-10 max-w-sm space-y-3">
+            <p className="text-sm font-medium text-muted-foreground mb-4">Get started free</p>
+            <Button
+              variant="default"
+              size="lg"
+              className="w-full h-12"
+              onClick={() => {
+                setOauthLoading("google");
+                window.location.href = "/api/auth/oauth/google";
+              }}
+              disabled={oauthLoading !== null}
+              data-testid="button-hero-google"
+            >
+              {oauthLoading === "google" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiGoogle className="mr-2 h-4 w-4" />
+              )}
+              Continue with Google
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full h-12"
+              onClick={() => {
+                setOauthLoading("facebook");
+                window.location.href = "/api/auth/oauth/facebook";
+              }}
+              disabled={oauthLoading !== null}
+              data-testid="button-hero-facebook"
+            >
+              {oauthLoading === "facebook" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiFacebook className="mr-2 h-4 w-4" />
+              )}
+              Continue with Facebook
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full h-12"
+              onClick={() => {
+                setOauthLoading("apple");
+                window.location.href = "/api/auth/oauth/apple";
+              }}
+              disabled={oauthLoading !== null}
+              data-testid="button-hero-apple"
+            >
+              {oauthLoading === "apple" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiApple className="mr-2 h-4 w-4" />
+              )}
+              Continue with Apple
+            </Button>
+            <p className="text-sm text-muted-foreground pt-2">
+              Or{" "}
+              <Link href="/signup" className="font-medium text-brand-light hover:underline" data-testid="link-signup-email">
+                sign up with email
+              </Link>
+            </p>
+          </div>
+
+          <div className="mt-8 flex items-center justify-center gap-4">
             <Link href="/login">
-              <Button size="lg" variant="outline" className="h-12 px-8 text-base" data-testid="button-hero-login">
-                Log In
+              <Button size="lg" variant="ghost" className="h-12 px-8 text-base" data-testid="button-hero-login">
+                Already have an account? Log In
               </Button>
             </Link>
           </div>

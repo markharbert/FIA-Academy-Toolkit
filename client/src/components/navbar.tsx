@@ -44,16 +44,18 @@ export function Navbar() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem className="text-muted-foreground text-sm" disabled>
-                  {user.email}
+                  {user.email || user.displayName || "Account"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setLocation("/account")} data-testid="link-account">
+                  <User className="mr-2 h-4 w-4" />
+                  Account
                 </DropdownMenuItem>
                 {user.isAdmin && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setLocation("/admin")} data-testid="link-admin">
-                      <Settings className="mr-2 h-4 w-4" />
-                      Admin Settings
-                    </DropdownMenuItem>
-                  </>
+                  <DropdownMenuItem onClick={() => setLocation("/admin")} data-testid="link-admin">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Admin Settings
+                  </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} data-testid="button-logout">
@@ -100,7 +102,19 @@ export function Navbar() {
         <div className="md:hidden bg-brand-dark border-t border-white/10 px-4 py-4">
           {user ? (
             <div className="space-y-3">
-              <p className="text-white/70 text-sm px-2">{user.email}</p>
+              <p className="text-white/70 text-sm px-2">{user.email || user.displayName || "Account"}</p>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white font-medium hover:bg-white/10"
+                onClick={() => {
+                  setLocation("/account");
+                  setMobileMenuOpen(false);
+                }}
+                data-testid="mobile-link-account"
+              >
+                <User className="mr-2 h-4 w-4" />
+                Account
+              </Button>
               {user.isAdmin && (
                 <Button
                   variant="ghost"

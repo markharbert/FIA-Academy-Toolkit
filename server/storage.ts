@@ -42,6 +42,7 @@ export interface IStorage {
   getUserIdentityByProvider(provider: AuthProvider, providerUserId: string): Promise<UserIdentity | undefined>;
   getUserIdentitiesByUser(userId: string): Promise<UserIdentity[]>;
   createUserIdentity(identity: InsertUserIdentity): Promise<UserIdentity>;
+  deleteUserIdentity(userId: string, provider: AuthProvider): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -191,6 +192,16 @@ export class DatabaseStorage implements IStorage {
   async createUserIdentity(identity: InsertUserIdentity): Promise<UserIdentity> {
     const [newIdentity] = await db.insert(userIdentities).values(identity as any).returning();
     return newIdentity;
+  }
+
+  async deleteUserIdentity(userId: string, provider: AuthProvider): Promise<boolean> {
+    const result = await db.delete(userIdentities)
+      .where(and(
+        eq(userIdentities.userId, userId),
+        eq(userIdentities.provider, provider)
+      ))
+      .returning();
+    return result.length > 0;
   }
 }
 

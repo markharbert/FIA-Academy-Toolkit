@@ -100,7 +100,7 @@ Preferred communication style: Simple, everyday language.
 - `SMTP_FROM`: From email address for outgoing emails
 - `APP_BASE_URL`: Base URL for reset links (e.g., https://yourapp.replit.app)
 
-### OAuth Login (Google, Facebook)
+### OAuth Login (Google, Facebook, Apple)
 #### Google OAuth
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
@@ -110,6 +110,14 @@ Preferred communication style: Simple, everyday language.
 - `FACEBOOK_APP_ID`: Facebook App ID
 - `FACEBOOK_APP_SECRET`: Facebook App secret
 - `FACEBOOK_REDIRECT_URI`: (Optional) Callback URL, defaults to `{APP_BASE_URL}/api/auth/oauth/facebook/callback`
+
+#### Apple OAuth
+- `APPLE_CLIENT_ID`: Apple Services ID (e.g., com.example.webapp)
+- `APPLE_TEAM_ID`: Apple Developer Team ID
+- `APPLE_KEY_ID`: Key ID for the private key
+- `APPLE_PRIVATE_KEY`: Private key content (with \n for newlines)
+- `APPLE_REDIRECT_URI`: (Optional) Callback URL, defaults to `{APP_BASE_URL}/api/auth/oauth/apple/callback`
+- Note: Apple uses POST for callback, email is only provided on first authorization
 
 #### Admin Page
 - Located at `/admin` (accessible to admin users only)

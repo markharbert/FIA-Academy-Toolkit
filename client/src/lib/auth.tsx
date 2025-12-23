@@ -2,7 +2,11 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 
 interface AuthUser {
   id: string;
-  email: string;
+  email: string | null;
+  displayName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  emailConsentAt?: string | null;
   isAdmin?: boolean;
 }
 

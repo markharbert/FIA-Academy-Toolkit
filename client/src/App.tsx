@@ -17,6 +17,7 @@ import DashboardPage from "@/pages/dashboard";
 import RecordPage from "@/pages/record";
 import SessionPage from "@/pages/session";
 import AdminPage from "@/pages/admin";
+import AccountPage from "@/pages/account";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -98,6 +99,9 @@ function Router() {
       </Route>
       <Route path="/admin">
         {() => <ProtectedRoute component={AdminPage} />}
+      </Route>
+      <Route path="/account">
+        {() => <ProtectedRoute component={AccountPage} />}
       </Route>
       <Route component={NotFound} />
     </Switch>
