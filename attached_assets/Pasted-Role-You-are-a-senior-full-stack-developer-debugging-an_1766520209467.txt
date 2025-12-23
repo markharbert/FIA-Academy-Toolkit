@@ -1,0 +1,322 @@
+Role: You are a senior full stack developer debugging an existing Replit web app. Google OAuth completes the provider flow and returns to our app, but the app shows: “Social login failed. Please try again or use email/password.” This means the OAuth callback is being reached, but the backend is failing during one of these steps: token exchange, profile retrieval, user lookup or creation, identity linking, session cookie creation, redirect handling, or frontend auth state refresh.
+
+Your job is to identify the exact failure, fix it, and verify end to end that Google OAuth creates or links a user account and logs them in successfully. After Google works, keep the code structured so Facebook and Apple can work the same way.
+
+Important clarification on “emailing login details”
+Do not email passwords. Instead:
+
+For OAuth signups, do not send “login details.” The user logs in with the provider.
+
+If the user wants email/password later, provide a “Set a password” flow in the Account page.
+
+You may send a welcome email that confirms the account was created and tells them which login method they used, without including any password.
+Implement that welcome email after successful OAuth signup if email sending is configured.
+
+Step 1: Reproduce and capture full error details
+
+Reproduce the issue by clicking “Continue with Google.”
+
+Capture and log:
+
+The exact callback URL hit on our server
+
+Query parameters (code, state, error)
+
+Any backend logs during callback
+
+In the browser dev tools, capture:
+
+Network requests after redirect back to app
+
+Any /api/auth/me call response
+
+Any 401 or CORS errors
+
+Identify whether the “social login failed” message comes from:
+
+A backend redirect with an error query string
+
+A frontend state check failing after redirect
+
+A failed API call from frontend to confirm session
+
+Step 2: Add strict server side logging and error reporting
+Add structured logs to the OAuth callback handler. Log these checkpoints:
+
+Callback handler entered
+
+Token exchange success or failure
+
+User profile received and parsed
+
+Email extracted and validated
+
+Identity lookup by providerUserId
+
+User lookup by email (if linking)
+
+User created (if new) and user id
+
+Identity record created or linked
+
+Session cookie created and attached
+
+Redirect issued to frontend
+
+If any step fails, log:
+
+Error name
+
+Error message
+
+Stack trace
+
+Relevant provider payload (redact secrets)
+
+Also add a backend response path:
+
+Redirect to /login?error=oauth_google_failed&reason=SHORT_REASON
+Where SHORT_REASON is safe and not sensitive, for debugging.
+
+Step 3: Validate OAuth callback handler correctness
+Confirm the backend is doing all required steps.
+
+Required callback flow (must be implemented)
+
+Validate state parameter to prevent CSRF. If state mismatch occurs, it will fail.
+
+Exchange authorization code for tokens.
+
+Retrieve user profile and email.
+
+Determine if email is present.
+
+If no email, route user to Account page with “add your email” requirement.
+
+Find existing identity:
+
+provider = google
+
+providerUserId = google profile sub or id
+
+If identity exists:
+
+Load the user and login
+
+If identity does not exist:
+
+Try to find existing user by verified email
+
+If found, link identity to that user
+
+If not found, create new user record
+
+Create identity record linked to user
+
+Create a session and set cookie properly.
+
+Redirect to dashboard.
+
+Common failure points to check and fix
+
+Email missing because wrong scopes:
+
+Ensure Google OAuth requests the correct scopes:
+openid, email, profile
+
+Profile parsing bug:
+
+Ensure code reads email from the correct field.
+
+Database errors:
+
+Missing migration for identities table
+
+Unique constraints failing
+
+User email nullable but code assumes not null
+
+Session cookie not set:
+
+httpOnly cookie options wrong
+
+secure flag forcing HTTPS only when Replit uses a different scheme
+
+SameSite misconfigured causing cookie not stored during OAuth redirect
+
+Frontend cannot detect login:
+
+/api/auth/me endpoint not returning user
+
+CORS or credentials missing
+
+Fetch requests not using credentials: "include"
+
+Step 4: Fix session cookie persistence across OAuth redirect
+The most common cause when OAuth “works” but login fails is cookie not being stored or not being sent.
+
+Implement these checks and fixes
+
+Ensure cookie is set on the callback response before redirect.
+
+Ensure cookie settings match the environment:
+
+In local dev HTTP, secure should be false
+
+In production HTTPS, secure true is fine
+
+SameSite rules:
+
+If the OAuth callback is considered cross site, you may need SameSite=None; Secure
+
+But only if you are truly cross site. If frontend and backend share the same origin, Lax often works.
+
+Confirm the cookie domain and path are correct:
+
+domain should usually be omitted to default correctly
+
+path should be /
+
+Confirm frontend requests include credentials:
+
+fetch(..., { credentials: "include" })
+
+Confirm CORS allows credentials:
+
+Access-Control-Allow-Credentials true
+
+Access-Control-Allow-Origin must be the exact origin, not *
+
+Step 5: Fix account creation and linking logic
+Ensure a user account is created or linked properly.
+
+Database sanity checks
+
+Confirm tables exist:
+
+Users
+
+UserIdentities
+
+Confirm migration ran.
+
+Confirm unique constraints:
+
+(provider, providerUserId) unique
+
+email unique when not null, if desired
+
+Confirm transactions and error handling:
+
+Use a transaction when creating user + identity to prevent partial creation.
+
+Implement a safe create or link function
+Create a single function:
+handleOAuthLogin(provider, providerProfile)
+It must return a user object or throw a logged error.
+
+It should:
+
+Find identity by providerUserId
+
+If found, return linked user
+
+Else if email exists:
+
+Find user by email
+
+If found, link identity and return user
+
+Else create new user and identity
+
+Return user
+
+Step 6: Determine why frontend shows “social login failed”
+Find where that message is rendered. Fix the root trigger.
+Possible triggers:
+
+The callback redirect includes an error parameter
+
+The app navigates to a route that checks auth and fails
+
+The session cookie is missing so /api/auth/me fails
+
+Required fix
+After OAuth callback success, redirect to a special route:
+
+/oauth/success
+Frontend should:
+
+Call /api/auth/me with credentials included
+
+If user returned, redirect to /dashboard
+
+If not, show a diagnostic message with a “Try again” button
+
+Also implement:
+
+/oauth/error route that reads query params and shows a friendly error.
+
+Step 7: Add a welcome email after successful OAuth signup
+Requirement
+After a new user account is created through OAuth, send a welcome email.
+Do not send a password.
+
+Email content requirements
+Subject: Welcome to Fearless Video Coach
+Body includes:
+
+“Your account is ready.”
+
+“You signed up with Google.”
+
+“Next step: record your first practice session.”
+
+“If you want to use email and password later, go to Account and set a password.”
+
+If consent is required, mention their consent preference.
+
+Email send conditions
+
+Only send welcome email if:
+
+user has an email
+
+email sending is configured
+
+If email send fails:
+
+Do not fail login
+
+Log the error
+
+Step 8: Add developer diagnostics page for admin only (optional but helpful)
+Add a hidden admin diagnostics endpoint or page that shows:
+
+Last 20 OAuth callback logs
+
+Last OAuth error reason codes
+This helps you debug in Replit quickly.
+
+Step 9: Verification checklist
+At the end, provide a checklist and confirm each:
+
+Clicking Google OAuth completes provider flow.
+
+Callback hits backend and logs show each checkpoint.
+
+User record exists in database after first OAuth signup.
+
+UserIdentity record exists and links to user.
+
+Session cookie is set and persists after redirect.
+
+/api/auth/me returns the user after OAuth redirect.
+
+Frontend redirects to dashboard and does not show “social login failed.”
+
+Welcome email sends for new OAuth users when email is present.
+
+Existing users can OAuth login and are linked correctly.
+
+Now implement the fixes in the existing codebase, starting with Google. After Google works, keep the same structure to support Facebook and Apple next.
