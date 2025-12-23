@@ -8,6 +8,8 @@ interface AuthUser {
   lastName?: string | null;
   emailConsentAt?: string | null;
   isAdmin?: boolean;
+  role?: "user" | "admin";
+  isDisabled?: boolean;
 }
 
 interface AuthContextType {

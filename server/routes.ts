@@ -78,10 +78,12 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   }
   
   const user = await storage.getUser(req.session.userId);
-  if (!user?.isAdmin) {
+  if (!user?.isAdmin || user.isDisabled) {
     return res.status(403).json({ message: "Admin access required" });
   }
   
+  // Attach admin user to request for audit logging
+  (req as any).adminUser = user;
   next();
 }
 
@@ -239,6 +241,8 @@ export async function registerRoutes(
         lastName: user.lastName,
         emailConsentAt: user.emailConsentAt,
         isAdmin: user.isAdmin,
+        role: user.role || (user.isAdmin ? "admin" : "user"),
+        isDisabled: user.isDisabled,
       } 
     });
   });
@@ -724,6 +728,286 @@ export async function registerRoutes(
       res.redirect("/account?error=oauth_not_configured");
     });
   }
+
+  // ===================
+  // ADMIN ROUTES - USER MANAGEMENT
+  // ===================
+
+  // Admin stats overview
+  app.get("/api/admin/stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const stats = await storage.getAdminStats();
+      const keapSettings = await storage.getSystemSettings();
+      
+      let keapStatus = "not_connected";
+      if (keapSettings?.keapAccessToken) {
+        const expiresAt = keapSettings.keapTokenExpiresAt;
+        if (expiresAt) {
+          const hoursUntilExpiry = (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60);
+          if (hoursUntilExpiry < 24) {
+            keapStatus = "token_expiring_soon";
+          } else {
+            keapStatus = "connected";
+          }
+        } else {
+          keapStatus = "connected";
+        }
+      }
+      
+      res.json({
+        ...stats,
+        keapStatus,
+        keapTokenExpiresAt: keapSettings?.keapTokenExpiresAt || null,
+        keapLastError: keapSettings?.keapLastError || null,
+      });
+    } catch (err) {
+      console.error("Admin stats error:", err);
+      res.status(500).json({ message: "Failed to get admin stats" });
+    }
+  });
+
+  // List users with search, filter, sort, pagination
+  app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { search, role, status, provider, consent, keapStatus, sort, page, pageSize } = req.query;
+      
+      const result = await storage.getAllUsers({
+        search: search as string,
+        role: role as string,
+        status: status as string,
+        provider: provider as string,
+        consent: consent as string,
+        keapStatus: keapStatus as string,
+        sort: sort as string,
+        page: page ? parseInt(page as string) : undefined,
+        pageSize: pageSize ? parseInt(pageSize as string) : undefined,
+      });
+      
+      // Get identities for provider filter info
+      const usersWithProvider = await Promise.all(
+        result.users.map(async (user) => {
+          const identities = await storage.getUserIdentitiesByUser(user.id);
+          const providers = identities.map(i => i.provider);
+          const hasLocalPassword = !!user.passwordHash;
+          if (hasLocalPassword && !providers.includes("local")) {
+            providers.push("local");
+          }
+          // Destructure to exclude passwordHash from response
+          const { passwordHash: _, ...safeUser } = user;
+          return {
+            ...safeUser,
+            providers,
+          };
+        })
+      );
+      
+      // Filter by provider if specified
+      let filteredUsers = usersWithProvider;
+      if (provider && provider !== "all") {
+        filteredUsers = usersWithProvider.filter(u => u.providers.includes(provider as AuthProvider));
+      }
+      
+      res.json({
+        users: filteredUsers,
+        total: result.total,
+        page: page ? parseInt(page as string) : 1,
+        pageSize: pageSize ? parseInt(pageSize as string) : 25,
+      });
+    } catch (err) {
+      console.error("Admin list users error:", err);
+      res.status(500).json({ message: "Failed to list users" });
+    }
+  });
+
+  // Get single user with full details
+  app.get("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const userDetails = await storage.getUserWithDetails(id);
+      
+      if (!userDetails) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Check if user has local password
+      const hasLocalPassword = !!userDetails.user.passwordHash;
+      const providers = userDetails.identities.map(i => i.provider);
+      if (hasLocalPassword && !providers.includes("local")) {
+        providers.push("local");
+      }
+      
+      // Destructure to exclude passwordHash from response
+      const { passwordHash: _, ...safeUser } = userDetails.user;
+      
+      res.json({
+        ...userDetails,
+        user: safeUser,
+        providers,
+        hasLocalPassword,
+      });
+    } catch (err) {
+      console.error("Admin get user error:", err);
+      res.status(500).json({ message: "Failed to get user details" });
+    }
+  });
+
+  // Update user (role, disabled status, profile)
+  app.patch("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adminUser = (req as any).adminUser;
+      const updates = req.body;
+      
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Prevent demoting self if it would leave no admins
+      if (updates.role === "user" && targetUser.isAdmin && id === adminUser.id) {
+        const adminCount = await storage.getAdminCount();
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "Cannot demote yourself - you are the only admin" });
+        }
+      }
+      
+      // Prevent demoting to have 0 admins
+      if ((updates.isDisabled === true || updates.role === "user") && targetUser.isAdmin) {
+        const adminCount = await storage.getAdminCount();
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "Cannot remove the last admin" });
+        }
+      }
+      
+      const updateData: any = {};
+      
+      if (updates.role !== undefined) {
+        updateData.isAdmin = updates.role === "admin";
+        updateData.role = updates.role;
+      }
+      
+      if (updates.isDisabled !== undefined) {
+        updateData.isDisabled = updates.isDisabled;
+        updateData.disabledAt = updates.isDisabled ? new Date() : null;
+        updateData.disabledReason = updates.isDisabled ? (updates.disabledReason || null) : null;
+      }
+      
+      if (updates.displayName !== undefined) updateData.displayName = updates.displayName;
+      if (updates.firstName !== undefined) updateData.firstName = updates.firstName;
+      if (updates.lastName !== undefined) updateData.lastName = updates.lastName;
+      
+      const updatedUser = await storage.updateUser(id, updateData);
+      
+      // Create audit log
+      const action = updates.role !== undefined ? "role_change" : 
+                     updates.isDisabled !== undefined ? (updates.isDisabled ? "disable_user" : "enable_user") :
+                     "update_user";
+      await storage.createAuditLog({
+        adminUserId: adminUser.id,
+        action,
+        targetUserId: id,
+        metadataJson: { updates, previousValues: { isAdmin: targetUser.isAdmin, isDisabled: targetUser.isDisabled } },
+        ip: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      });
+      
+      res.json({ 
+        ...updatedUser, 
+        passwordHash: undefined 
+      });
+    } catch (err) {
+      console.error("Admin update user error:", err);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Force logout user (invalidate all sessions)
+  app.post("/api/admin/users/:id/force-logout", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adminUser = (req as any).adminUser;
+      
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Delete user sessions from session store using raw SQL
+      await pool.query(
+        `DELETE FROM user_sessions WHERE sess::jsonb->>'userId' = $1`,
+        [id]
+      );
+      
+      // Create audit log
+      await storage.createAuditLog({
+        adminUserId: adminUser.id,
+        action: "force_logout",
+        targetUserId: id,
+        ip: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      });
+      
+      res.json({ message: "User sessions invalidated" });
+    } catch (err) {
+      console.error("Admin force logout error:", err);
+      res.status(500).json({ message: "Failed to force logout user" });
+    }
+  });
+
+  // Trigger Keap sync for a specific user
+  app.post("/api/admin/users/:id/keap-sync", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const adminUser = (req as any).adminUser;
+      
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (!targetUser.email) {
+        return res.status(400).json({ message: "User has no email address" });
+      }
+      
+      if (!targetUser.emailConsentAt) {
+        return res.status(400).json({ message: "User has not given email consent" });
+      }
+      
+      // Trigger Keap sync
+      const contactId = await createOrUpdateContact(
+        targetUser.email!,
+        targetUser.firstName || undefined,
+        targetUser.lastName || undefined
+      );
+      
+      // Update user's keap sync status
+      if (contactId) {
+        await storage.updateUser(id, {
+          keapContactId: String(contactId),
+          keapSyncStatus: "synced",
+          keapLastSyncAt: new Date(),
+          keapSyncError: null,
+        });
+      }
+      
+      const result = { success: !!contactId, contactId };
+      
+      // Create audit log
+      await storage.createAuditLog({
+        adminUserId: adminUser.id,
+        action: "keap_sync",
+        targetUserId: id,
+        metadataJson: { result },
+        ip: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      });
+      
+      res.json(result);
+    } catch (err) {
+      console.error("Admin keap sync error:", err);
+      res.status(500).json({ message: "Failed to sync user to Keap" });
+    }
+  });
 
   // ===================
   // ADMIN ROUTES - KEAP INTEGRATION

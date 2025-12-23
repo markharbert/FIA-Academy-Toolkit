@@ -1,13 +1,14 @@
 import { 
-  users, sessions, systemSettings, passwordResetTokens, userIdentities,
+  users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult, type SystemSettings,
   type PasswordResetToken, type InsertPasswordResetToken,
-  type UserIdentity, type InsertUserIdentity, type AuthProvider
+  type UserIdentity, type InsertUserIdentity, type AuthProvider,
+  type AdminAuditLog, type InsertAdminAuditLog
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, lt, isNull, desc, gt } from "drizzle-orm";
+import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -43,6 +44,37 @@ export interface IStorage {
   getUserIdentitiesByUser(userId: string): Promise<UserIdentity[]>;
   createUserIdentity(identity: InsertUserIdentity): Promise<UserIdentity>;
   deleteUserIdentity(userId: string, provider: AuthProvider): Promise<boolean>;
+  
+  // Admin: User Management
+  getAllUsers(options: {
+    search?: string;
+    role?: string;
+    status?: string;
+    provider?: string;
+    consent?: string;
+    keapStatus?: string;
+    sort?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ users: User[]; total: number }>;
+  getAdminCount(): Promise<number>;
+  getUserWithDetails(id: string): Promise<{
+    user: User;
+    identities: UserIdentity[];
+    sessions: Session[];
+    sessionCount: number;
+  } | undefined>;
+  
+  // Admin: Audit Log
+  createAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
+  
+  // Admin: Stats
+  getAdminStats(): Promise<{
+    totalUsers: number;
+    newUsersLast7Days: number;
+    totalSessions: number;
+    sessionsLast7Days: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -202,6 +234,154 @@ export class DatabaseStorage implements IStorage {
       ))
       .returning();
     return result.length > 0;
+  }
+
+  // Admin: User Management
+  async getAllUsers(options: {
+    search?: string;
+    role?: string;
+    status?: string;
+    provider?: string;
+    consent?: string;
+    keapStatus?: string;
+    sort?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ users: User[]; total: number }> {
+    const { search, role, status, provider, consent, keapStatus, sort = "newest", page = 1, pageSize = 25 } = options;
+    
+    const conditions: any[] = [];
+    
+    if (search) {
+      conditions.push(
+        or(
+          ilike(users.email, `%${search}%`),
+          ilike(users.displayName, `%${search}%`),
+          ilike(users.firstName, `%${search}%`),
+          ilike(users.lastName, `%${search}%`)
+        )
+      );
+    }
+    
+    if (role === "admin") {
+      conditions.push(eq(users.isAdmin, true));
+    } else if (role === "user") {
+      conditions.push(eq(users.isAdmin, false));
+    }
+    
+    if (status === "active") {
+      conditions.push(eq(users.isDisabled, false));
+    } else if (status === "disabled") {
+      conditions.push(eq(users.isDisabled, true));
+    }
+    
+    if (consent === "yes") {
+      conditions.push(sql`${users.emailConsentAt} IS NOT NULL`);
+    } else if (consent === "no") {
+      conditions.push(isNull(users.emailConsentAt));
+    }
+    
+    if (keapStatus && keapStatus !== "all") {
+      conditions.push(eq(users.keapSyncStatus, keapStatus as "synced" | "pending" | "failed"));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Get total count
+    const [{ count: totalCount }] = await db.select({ count: count() }).from(users).where(whereClause);
+    
+    // Get users with sorting
+    let orderBy;
+    switch (sort) {
+      case "oldest":
+        orderBy = asc(users.createdAt);
+        break;
+      case "last_login":
+        orderBy = desc(users.lastLoginAt);
+        break;
+      case "newest":
+      default:
+        orderBy = desc(users.createdAt);
+    }
+    
+    const offset = (page - 1) * pageSize;
+    const userResults = await db.select().from(users)
+      .where(whereClause)
+      .orderBy(orderBy)
+      .limit(pageSize)
+      .offset(offset);
+    
+    return { users: userResults, total: Number(totalCount) };
+  }
+
+  async getAdminCount(): Promise<number> {
+    const [{ count: adminCount }] = await db.select({ count: count() })
+      .from(users)
+      .where(and(eq(users.isAdmin, true), eq(users.isDisabled, false)));
+    return Number(adminCount);
+  }
+
+  async getUserWithDetails(id: string): Promise<{
+    user: User;
+    identities: UserIdentity[];
+    sessions: Session[];
+    sessionCount: number;
+  } | undefined> {
+    const user = await this.getUser(id);
+    if (!user) return undefined;
+    
+    const identities = await this.getUserIdentitiesByUser(id);
+    
+    // Get last 10 sessions
+    const userSessions = await db.select().from(sessions)
+      .where(eq(sessions.userId, id))
+      .orderBy(desc(sessions.createdAt))
+      .limit(10);
+    
+    // Get total session count
+    const [{ count: sessionCount }] = await db.select({ count: count() })
+      .from(sessions)
+      .where(eq(sessions.userId, id));
+    
+    return {
+      user,
+      identities,
+      sessions: userSessions,
+      sessionCount: Number(sessionCount),
+    };
+  }
+
+  // Admin: Audit Log
+  async createAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog> {
+    const [auditLog] = await db.insert(adminAuditLog).values(log as any).returning();
+    return auditLog;
+  }
+
+  // Admin: Stats
+  async getAdminStats(): Promise<{
+    totalUsers: number;
+    newUsersLast7Days: number;
+    totalSessions: number;
+    sessionsLast7Days: number;
+  }> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const [{ count: totalUsers }] = await db.select({ count: count() }).from(users);
+    const [{ count: newUsersLast7Days }] = await db.select({ count: count() })
+      .from(users)
+      .where(gt(users.createdAt, sevenDaysAgo));
+    const [{ count: totalSessions }] = await db.select({ count: count() }).from(sessions);
+    const [{ count: sessionsLast7Days }] = await db.select({ count: count() })
+      .from(sessions)
+      .where(gt(sessions.createdAt, sevenDaysAgo));
+    
+    return {
+      totalUsers: Number(totalUsers),
+      newUsersLast7Days: Number(newUsersLast7Days),
+      totalSessions: Number(totalSessions),
+      sessionsLast7Days: Number(sessionsLast7Days),
+    };
   }
 }
 

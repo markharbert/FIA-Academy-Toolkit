@@ -31,7 +31,19 @@ export function Navbar() {
 
         <div className="hidden md:flex items-center gap-4">
           {user ? (
-            <DropdownMenu>
+            <>
+              {user.isAdmin && (
+                <Link href="/admin">
+                  <Button
+                    variant="ghost"
+                    className="text-white font-medium hover:bg-white/10"
+                    data-testid="link-admin-nav"
+                  >
+                    Admin
+                  </Button>
+                </Link>
+              )}
+              <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 
                   variant="ghost" 
@@ -64,6 +76,7 @@ export function Navbar() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </>
           ) : (
             <div className="flex items-center gap-3">
               <Link href="/login">

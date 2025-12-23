@@ -38,6 +38,28 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/login" />;
+  }
+
+  if (!user.isAdmin) {
+    return <Redirect to="/dashboard" />;
+  }
+
+  return <Component />;
+}
+
 function PublicOnlyRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
 
@@ -98,7 +120,7 @@ function Router() {
         {() => <ProtectedRoute component={SessionPage} />}
       </Route>
       <Route path="/admin">
-        {() => <ProtectedRoute component={AdminPage} />}
+        {() => <AdminRoute component={AdminPage} />}
       </Route>
       <Route path="/account">
         {() => <ProtectedRoute component={AccountPage} />}

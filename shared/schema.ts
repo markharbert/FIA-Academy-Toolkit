@@ -7,6 +7,10 @@ import { z } from "zod";
 export const authProviders = ["local", "google", "facebook", "apple"] as const;
 export type AuthProvider = typeof authProviders[number];
 
+// User role types
+export const userRoles = ["user", "admin"] as const;
+export type UserRole = typeof userRoles[number];
+
 // Users table for authentication
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -19,9 +23,17 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   keapContactId: text("keap_contact_id"),
+  keapLastSyncAt: timestamp("keap_last_sync_at"),
+  keapSyncStatus: text("keap_sync_status").$type<"synced" | "pending" | "failed">(),
+  keapSyncError: text("keap_sync_error"),
   emailConsentAt: timestamp("email_consent_at"),
   emailConsentIp: text("email_consent_ip"),
   isAdmin: boolean("is_admin").default(false),
+  role: text("role").default("user").$type<UserRole>(),
+  isDisabled: boolean("is_disabled").default(false),
+  disabledAt: timestamp("disabled_at"),
+  disabledReason: text("disabled_reason"),
+  lastLoginAt: timestamp("last_login_at"),
 });
 
 // User identities table for OAuth providers (supports multiple providers per user)
@@ -55,6 +67,20 @@ export const systemSettings = pgTable("system_settings", {
   keapRefreshToken: text("keap_refresh_token"),
   keapTokenExpiresAt: timestamp("keap_token_expires_at"),
   keapConnectedAt: timestamp("keap_connected_at"),
+  keapLastRefreshAt: timestamp("keap_last_refresh_at"),
+  keapLastError: text("keap_last_error"),
+});
+
+// Admin audit log table for tracking admin actions
+export const adminAuditLog = pgTable("admin_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminUserId: varchar("admin_user_id").notNull().references(() => users.id),
+  action: text("action").notNull(),
+  targetUserId: varchar("target_user_id").references(() => users.id),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -219,3 +245,19 @@ export const resetPasswordSchema = z.object({
 
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+// Admin audit log types
+export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
+export type InsertAdminAuditLog = typeof adminAuditLog.$inferInsert;
+
+// Admin user update schema
+export const adminUpdateUserSchema = z.object({
+  role: z.enum(["user", "admin"]).optional(),
+  isDisabled: z.boolean().optional(),
+  disabledReason: z.string().optional().nullable(),
+  displayName: z.string().max(40).optional().nullable(),
+  firstName: z.string().max(40).optional().nullable(),
+  lastName: z.string().max(40).optional().nullable(),
+});
+
+export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
