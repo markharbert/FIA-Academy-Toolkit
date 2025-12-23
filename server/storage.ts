@@ -95,6 +95,7 @@ export interface IStorage {
     message: string;
     reassignedSessions?: number;
     reassignedIdentities?: number;
+    skippedIdentities?: number;
   }>;
 }
 
@@ -464,12 +465,13 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // Admin: Account Merge
+  // Admin: Account Merge (transactional with conflict handling)
   async mergeUsers(primaryUserId: string, duplicateUserId: string): Promise<{
     success: boolean;
     message: string;
     reassignedSessions?: number;
     reassignedIdentities?: number;
+    skippedIdentities?: number;
   }> {
     if (primaryUserId === duplicateUserId) {
       return { success: false, message: "Cannot merge a user with itself" };
@@ -486,50 +488,83 @@ export class DatabaseStorage implements IStorage {
     }
     
     try {
-      // Reassign sessions from duplicate to primary
-      const sessionResult = await db.update(sessions)
-        .set({ userId: primaryUserId })
-        .where(eq(sessions.userId, duplicateUserId))
-        .returning({ id: sessions.id });
-      
-      // Reassign user identities from duplicate to primary
-      const identityResult = await db.update(userIdentities)
-        .set({ userId: primaryUserId })
-        .where(eq(userIdentities.userId, duplicateUserId))
-        .returning({ id: userIdentities.id });
-      
-      // Update audit logs to point to primary user
-      await db.update(adminAuditLog)
-        .set({ targetUserId: primaryUserId })
-        .where(eq(adminAuditLog.targetUserId, duplicateUserId));
-      
-      // Copy any fields from duplicate that primary is missing
-      const updates: Partial<User> = {};
-      if (!primary.firstName && duplicate.firstName) updates.firstName = duplicate.firstName;
-      if (!primary.lastName && duplicate.lastName) updates.lastName = duplicate.lastName;
-      if (!primary.displayName && duplicate.displayName) updates.displayName = duplicate.displayName;
-      if (!primary.keapContactId && duplicate.keapContactId) updates.keapContactId = duplicate.keapContactId;
-      if (!primary.emailConsentAt && duplicate.emailConsentAt) {
-        updates.emailConsentAt = duplicate.emailConsentAt;
-        updates.emailConsentIp = duplicate.emailConsentIp;
-      }
-      
-      if (Object.keys(updates).length > 0) {
-        await this.updateUser(primaryUserId, updates);
-      }
-      
-      // Soft-delete the duplicate user
-      await this.updateUser(duplicateUserId, {
-        isDisabled: true,
-        disabledAt: new Date(),
-        disabledReason: `Merged into user ${primaryUserId}`,
+      // Use a transaction to ensure atomicity
+      const result = await db.transaction(async (tx) => {
+        // Get identities for both users to check for conflicts
+        const primaryIdentities = await tx.select().from(userIdentities)
+          .where(eq(userIdentities.userId, primaryUserId));
+        const duplicateIdentities = await tx.select().from(userIdentities)
+          .where(eq(userIdentities.userId, duplicateUserId));
+        
+        const primaryProviders = new Set(primaryIdentities.map(i => i.provider));
+        
+        // Handle identity reassignment with conflict detection
+        let reassignedIdentityCount = 0;
+        let skippedIdentityCount = 0;
+        
+        for (const identity of duplicateIdentities) {
+          if (primaryProviders.has(identity.provider)) {
+            // Conflict: primary already has this provider - delete duplicate's identity
+            await tx.delete(userIdentities)
+              .where(eq(userIdentities.id, identity.id));
+            skippedIdentityCount++;
+          } else {
+            // No conflict: reassign to primary
+            await tx.update(userIdentities)
+              .set({ userId: primaryUserId })
+              .where(eq(userIdentities.id, identity.id));
+            reassignedIdentityCount++;
+          }
+        }
+        
+        // Reassign sessions from duplicate to primary
+        const sessionResult = await tx.update(sessions)
+          .set({ userId: primaryUserId })
+          .where(eq(sessions.userId, duplicateUserId))
+          .returning({ id: sessions.id });
+        
+        // Update audit logs to point to primary user
+        await tx.update(adminAuditLog)
+          .set({ targetUserId: primaryUserId })
+          .where(eq(adminAuditLog.targetUserId, duplicateUserId));
+        
+        // Copy any fields from duplicate that primary is missing
+        const updates: Partial<User> = {};
+        if (!primary.firstName && duplicate.firstName) updates.firstName = duplicate.firstName;
+        if (!primary.lastName && duplicate.lastName) updates.lastName = duplicate.lastName;
+        if (!primary.displayName && duplicate.displayName) updates.displayName = duplicate.displayName;
+        if (!primary.keapContactId && duplicate.keapContactId) updates.keapContactId = duplicate.keapContactId;
+        if (!primary.emailConsentAt && duplicate.emailConsentAt) {
+          updates.emailConsentAt = duplicate.emailConsentAt;
+          updates.emailConsentIp = duplicate.emailConsentIp;
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          await tx.update(users)
+            .set(updates)
+            .where(eq(users.id, primaryUserId));
+        }
+        
+        // Soft-delete the duplicate user
+        await tx.update(users)
+          .set({
+            isDisabled: true,
+            disabledAt: new Date(),
+            disabledReason: `Merged into user ${primaryUserId}`,
+          })
+          .where(eq(users.id, duplicateUserId));
+        
+        return {
+          reassignedSessions: sessionResult.length,
+          reassignedIdentities: reassignedIdentityCount,
+          skippedIdentities: skippedIdentityCount,
+        };
       });
       
       return {
         success: true,
         message: `Successfully merged user ${duplicateUserId} into ${primaryUserId}`,
-        reassignedSessions: sessionResult.length,
-        reassignedIdentities: identityResult.length,
+        ...result,
       };
     } catch (err: any) {
       return {

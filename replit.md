@@ -186,6 +186,18 @@ Preferred communication style: Simple, everyday language.
 - `keapTokenExpiresAt`: Token expiration timestamp
 - `keapConnectedAt`: Connection timestamp
 
+## Duplicate Account Prevention
+
+The system prevents duplicate accounts through:
+- **Case-insensitive unique index**: `LOWER(TRIM(email))` on users table
+- **Email normalization**: All emails are trimmed and lowercased before storage
+- **OAuth identity linking**: OAuth providers link to existing users by normalized email
+
+### Admin Duplicate Detection & Merge
+- `GET /api/admin/users/duplicates` - Finds any duplicate email accounts
+- `POST /api/admin/users/merge` - Merges duplicates with confirmation and audit logging
+- Merge is transactional and handles identity conflicts (skips if both users have same provider)
+
 ## Making a User Admin
 
 To make a user an admin (required for Keap integration setup):

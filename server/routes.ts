@@ -1168,6 +1168,58 @@ export async function registerRoutes(
     }
   });
 
+  // Detect duplicate email accounts
+  app.get("/api/admin/users/duplicates", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const duplicates = await storage.findDuplicateEmails();
+      res.json({ duplicates });
+    } catch (err) {
+      console.error("Find duplicates error:", err);
+      res.status(500).json({ message: "Failed to find duplicate accounts" });
+    }
+  });
+
+  // Merge duplicate accounts
+  app.post("/api/admin/users/merge", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { primaryUserId, duplicateUserId, confirm } = req.body;
+      
+      if (!primaryUserId || !duplicateUserId) {
+        return res.status(400).json({ message: "Both primaryUserId and duplicateUserId are required" });
+      }
+      
+      if (confirm !== "CONFIRM_MERGE") {
+        return res.status(400).json({ message: "Confirmation required. Pass confirm: 'CONFIRM_MERGE'" });
+      }
+      
+      const result = await storage.mergeUsers(primaryUserId, duplicateUserId);
+      
+      if (result.success) {
+        // Log the merge action with complete details
+        await storage.createAuditLog({
+          adminUserId: req.session.userId!,
+          action: "merge_users",
+          targetUserId: primaryUserId,
+          metadataJson: {
+            duplicateUserId,
+            reassignedSessions: result.reassignedSessions,
+            reassignedIdentities: result.reassignedIdentities,
+            skippedIdentities: result.skippedIdentities,
+          },
+          ip: req.ip || null,
+          userAgent: req.headers["user-agent"] || null,
+        });
+        
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (err) {
+      console.error("Merge users error:", err);
+      res.status(500).json({ message: "Failed to merge accounts" });
+    }
+  });
+
   // ===================
   // ACCOUNT ROUTES
   // ===================
