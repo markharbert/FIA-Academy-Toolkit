@@ -1,0 +1,199 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Update the Admin Dashboard “Overview” tab UI and backend to add an activity feed and adjust the stats cards exactly as described below. Do not break existing admin security. Admin only.
+
+High Priority Outcomes
+
+Overview tab shows the exact stats I want.
+
+Remove the “Keap Status” card/section from Overview.
+
+Add an activity feed below the stats that shows what users are creating so I can see usage at a glance.
+
+Part 1: Update the Overview Stats Cards
+
+Current state
+Overview shows some stats including Keap status. Remove the Keap status element from Overview.
+
+New required stats
+On the Overview tab, show these cards at the top:
+
+Total users (system-wide)
+
+Label: Total Users
+
+Value: count of all users in the database (excluding soft deleted if applicable)
+
+Total sessions in the last 7 days
+
+Label: Sessions (Last 7 Days)
+
+Value: count of sessions created in the last 7 days
+
+New users in the last 30 days
+
+Label: New Users (Last 30 Days)
+
+Value: count of users created in the last 30 days
+
+Remove these from Overview
+
+Remove any Keap status card or Keap status section entirely from the Overview tab.
+
+Backend API for stats
+Implement or update:
+GET /api/admin/overview/stats
+Return JSON:
+{
+"totalUsers": 123,
+"sessionsLast7Days": 45,
+"newUsersLast30Days": 12
+}
+
+Make sure:
+
+Endpoint is protected with requireAdmin
+
+Uses efficient DB queries with indexes on createdAt columns
+
+Part 2: Add an Activity Feed Below the Stats
+
+Goal
+Add a feed that shows what users are creating. This helps me see adoption and usage.
+
+Definition of “activity”
+Use session creation events as the activity source:
+
+When a user creates a new session (practice video session saved), that becomes a feed item.
+
+Feed UI requirements
+
+Place the feed directly below the stats cards.
+
+Show a list with the most recent activity at the top.
+
+Each feed item should display:
+
+User name (displayName, or first+last, or fallback to email)
+
+What they created:
+
+Session title (use the session title if available)
+
+If no title, show “Practice Session”
+
+Timestamp in relative format plus exact date on hover:
+
+Example: “3 hours ago” and tooltip “Dec 23, 2025 9:14 AM”
+
+Optional helpful details:
+
+Score summary if available (example: “Score: 78/100”)
+
+Transcript status (optional)
+
+Include a small “View” link or button to open the admin user drawer focused on that user, or open the session details page if an admin session view exists.
+
+Add pagination or “Load more”:
+
+Show the latest 20 by default
+
+“Load more” fetches next 20
+
+Backend API for feed
+Implement:
+GET /api/admin/overview/activity
+Query params:
+
+limit (default 20, max 50)
+
+cursor (optional, for pagination)
+
+Return JSON payload:
+{
+"items": [
+{
+"id": "activityIdOrSessionId",
+"type": "session_created",
+"sessionId": "...",
+"sessionTitle": "...",
+"sessionCreatedAt": "...",
+"scoreTotal": 78,
+"user": {
+"id": "...",
+"displayName": "...",
+"email": "..."
+}
+}
+],
+"nextCursor": "..."
+}
+
+Implementation notes
+
+You can use Sessions table directly as the feed source.
+
+Join Users table for displayName/email.
+
+Order by sessionCreatedAt desc.
+
+Use cursor-based pagination:
+
+Cursor = last item’s createdAt (and id as tie breaker)
+
+Protect endpoint with requireAdmin.
+
+Optional: Add a dedicated Activity table (only if needed)
+If you already have AdminAuditLog, do NOT use it for this feed. This feed is about user creation activity, not admin actions. Using Sessions is enough.
+
+Frontend integration
+
+On Overview tab load:
+
+Fetch stats from /api/admin/overview/stats
+
+Fetch feed from /api/admin/overview/activity?limit=20
+
+Render feed with a clean card style list.
+
+Add “Load more” button that appends items using nextCursor.
+
+Add empty state:
+
+“No activity yet. Once users create sessions, you’ll see them here.”
+
+Performance and indexing requirements
+
+Ensure DB indexes exist:
+
+Users.createdAt
+
+Sessions.createdAt
+
+Sessions.userId
+
+Avoid N+1 queries. Use a join.
+
+Security requirements
+
+Admin only.
+
+Do not expose video URLs or transcripts in the feed unless admin needs it.
+
+Do not allow non-admins to hit /api/admin/overview endpoints.
+
+Part 3: Final Verification Checklist
+
+At the end, confirm:
+
+Overview shows Total Users, Sessions (Last 7 Days), New Users (Last 30 Days)
+
+Keap Status is removed from Overview
+
+Activity feed appears under stats and shows latest session creation activity
+
+Feed shows user name, session title, timestamp, and score when available
+
+Feed supports Load more and pagination
+
+Admin-only protection enforced on all new endpoints
+
+Now implement these changes in the existing codebase.

@@ -784,6 +784,52 @@ export async function registerRoutes(
     }
   });
 
+  // Admin overview stats (new format)
+  app.get("/api/admin/overview/stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const stats = await storage.getOverviewStats();
+      res.json(stats);
+    } catch (err) {
+      console.error("Admin overview stats error:", err);
+      res.status(500).json({ message: "Failed to get overview stats" });
+    }
+  });
+
+  // Admin activity feed with cursor pagination
+  app.get("/api/admin/overview/activity", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { limit = "20", cursor } = req.query;
+      const limitNum = Math.min(Math.max(1, parseInt(limit as string) || 20), 50);
+      
+      // Parse cursor from query string (format: createdAt|id)
+      let cursorObj: { createdAt: Date; id: string } | undefined;
+      if (cursor && typeof cursor === "string") {
+        const [createdAtStr, id] = cursor.split("|");
+        if (createdAtStr && id) {
+          const createdAt = new Date(createdAtStr);
+          if (!isNaN(createdAt.getTime())) {
+            cursorObj = { createdAt, id };
+          }
+        }
+      }
+      
+      const result = await storage.getActivityFeed({ limit: limitNum, cursor: cursorObj });
+      
+      // Convert nextCursor to string format for client
+      const nextCursorStr = result.nextCursor 
+        ? `${result.nextCursor.createdAt.toISOString()}|${result.nextCursor.id}`
+        : null;
+      
+      res.json({
+        items: result.items,
+        nextCursor: nextCursorStr,
+      });
+    } catch (err) {
+      console.error("Admin activity feed error:", err);
+      res.status(500).json({ message: "Failed to get activity feed" });
+    }
+  });
+
   // List users with search, filter, sort, pagination
   app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
     try {

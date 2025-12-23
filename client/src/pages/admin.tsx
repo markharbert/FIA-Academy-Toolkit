@@ -70,6 +70,26 @@ interface AdminStats {
   keapLastError: string | null;
 }
 
+interface OverviewStats {
+  totalUsers: number;
+  sessionsLast7Days: number;
+  newUsersLast30Days: number;
+}
+
+interface ActivityItem {
+  id: string;
+  type: "session_created";
+  sessionId: string;
+  sessionTitle: string | null;
+  sessionCreatedAt: string;
+  scoreTotal: number | null;
+  user: {
+    id: string;
+    displayName: string | null;
+    email: string | null;
+  };
+}
+
 interface AdminUser {
   id: string;
   email: string | null;
@@ -140,6 +160,12 @@ export default function AdminPage() {
   const { toast } = useToast();
   
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [overviewStats, setOverviewStats] = useState<OverviewStats | null>(null);
+  const [overviewStatsLoading, setOverviewStatsLoading] = useState(true);
+  const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityNextCursor, setActivityNextCursor] = useState<string | null>(null);
+  const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [keapStatus, setKeapStatus] = useState<KeapStatus | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -218,6 +244,8 @@ export default function AdminPage() {
     if (user?.isAdmin) {
       fetchStats();
       fetchKeapStatus();
+      fetchOverviewStats();
+      fetchActivityFeed();
     }
   }, [user, authLoading, setLocation]);
 
@@ -258,6 +286,77 @@ export default function AdminPage() {
     } finally {
       setStatsLoading(false);
     }
+  };
+
+  const fetchOverviewStats = async () => {
+    try {
+      setOverviewStatsLoading(true);
+      const res = await fetch("/api/admin/overview/stats", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setOverviewStats(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch overview stats:", err);
+    } finally {
+      setOverviewStatsLoading(false);
+    }
+  };
+
+  const fetchActivityFeed = async (cursor?: string, append = false) => {
+    try {
+      if (append) {
+        setActivityLoadingMore(true);
+      } else {
+        setActivityLoading(true);
+      }
+      
+      const params = new URLSearchParams({ limit: "20" });
+      if (cursor) params.set("cursor", cursor);
+      
+      const res = await fetch(`/api/admin/overview/activity?${params}`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        if (append) {
+          setActivityFeed(prev => [...prev, ...data.items]);
+        } else {
+          setActivityFeed(data.items);
+        }
+        setActivityNextCursor(data.nextCursor);
+      }
+    } catch (err) {
+      console.error("Failed to fetch activity feed:", err);
+    } finally {
+      setActivityLoading(false);
+      setActivityLoadingMore(false);
+    }
+  };
+
+  const loadMoreActivity = () => {
+    if (activityNextCursor && !activityLoadingMore) {
+      fetchActivityFeed(activityNextCursor, true);
+    }
+  };
+
+  const formatRelativeTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
+    return format(date, "MMM d, yyyy");
+  };
+
+  const getActivityUserName = (user: ActivityItem["user"]) => {
+    if (user.displayName) return user.displayName;
+    if (user.email) return user.email.split("@")[0];
+    return "Unknown User";
   };
 
   const fetchKeapStatus = async () => {
@@ -658,90 +757,128 @@ export default function AdminPage() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Users</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {statsLoading ? (
+                {overviewStatsLoading ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
-                  <>
-                    <div className="text-2xl font-bold" data-testid="stat-total-users">{stats?.totalUsers || 0}</div>
-                    <p className="text-xs text-muted-foreground">
-                      +{stats?.newUsersLast7Days || 0} in last 7 days
-                    </p>
-                  </>
+                  <div className="text-2xl font-bold" data-testid="stat-total-users">{overviewStats?.totalUsers || 0}</div>
                 )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Sessions</CardTitle>
+                <CardTitle className="text-sm font-medium">Sessions (Last 7 Days)</CardTitle>
                 <Video className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {statsLoading ? (
+                {overviewStatsLoading ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
-                  <>
-                    <div className="text-2xl font-bold" data-testid="stat-total-sessions">{stats?.totalSessions || 0}</div>
-                    <p className="text-xs text-muted-foreground">
-                      +{stats?.sessionsLast7Days || 0} in last 7 days
-                    </p>
-                  </>
+                  <div className="text-2xl font-bold" data-testid="stat-sessions-7d">{overviewStats?.sessionsLast7Days || 0}</div>
                 )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">New Users (7d)</CardTitle>
+                <CardTitle className="text-sm font-medium">New Users (Last 30 Days)</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {statsLoading ? (
+                {overviewStatsLoading ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
-                  <div className="text-2xl font-bold" data-testid="stat-new-users">{stats?.newUsersLast7Days || 0}</div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Keap Status</CardTitle>
-                <Settings className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                {statsLoading ? (
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                ) : (
-                  <div className="flex items-center gap-2">
-                    {stats?.keapStatus === "connected" ? (
-                      <Badge className="gap-1">
-                        <CheckCircle className="h-3 w-3" />
-                        Connected
-                      </Badge>
-                    ) : stats?.keapStatus === "token_expiring_soon" ? (
-                      <Badge variant="secondary" className="gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        Token Expiring
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="gap-1">
-                        <XCircle className="h-3 w-3" />
-                        Not Connected
-                      </Badge>
-                    )}
-                  </div>
+                  <div className="text-2xl font-bold" data-testid="stat-new-users-30d">{overviewStats?.newUsersLast30Days || 0}</div>
                 )}
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>See what users are creating</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {activityLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : activityFeed.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No activity yet. Once users create sessions, you'll see them here.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {activityFeed.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start justify-between gap-4 border-b pb-4 last:border-0 last:pb-0"
+                      data-testid={`activity-item-${item.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">{getActivityUserName(item.user)}</span>
+                          <span className="text-muted-foreground">created</span>
+                          <span className="font-medium truncate">
+                            {item.sessionTitle || "Practice Session"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                          <span title={format(new Date(item.sessionCreatedAt), "MMM d, yyyy h:mm a")}>
+                            {formatRelativeTime(item.sessionCreatedAt)}
+                          </span>
+                          {item.scoreTotal !== null && (
+                            <Badge variant="secondary" className="text-xs">
+                              Score: {item.scoreTotal}/100
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedUserId(item.user.id);
+                        }}
+                        data-testid={`button-view-activity-user-${item.id}`}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                    </div>
+                  ))}
+                  
+                  {activityNextCursor && (
+                    <div className="flex justify-center pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={loadMoreActivity}
+                        disabled={activityLoadingMore}
+                        data-testid="button-load-more-activity"
+                      >
+                        {activityLoadingMore ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          "Load More"
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">

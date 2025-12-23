@@ -82,6 +82,34 @@ export interface IStorage {
     sessionsLast7Days: number;
   }>;
   
+  // Admin: Overview Stats (new format)
+  getOverviewStats(): Promise<{
+    totalUsers: number;
+    sessionsLast7Days: number;
+    newUsersLast30Days: number;
+  }>;
+  
+  // Admin: Activity Feed
+  getActivityFeed(options: {
+    limit: number;
+    cursor?: { createdAt: Date; id: string };
+  }): Promise<{
+    items: Array<{
+      id: string;
+      type: "session_created";
+      sessionId: string;
+      sessionTitle: string | null;
+      sessionCreatedAt: Date;
+      scoreTotal: number | null;
+      user: {
+        id: string;
+        displayName: string | null;
+        email: string | null;
+      };
+    }>;
+    nextCursor: { createdAt: Date; id: string } | null;
+  }>;
+  
   // Admin: Duplicate Detection
   findDuplicateEmails(): Promise<Array<{
     normalizedEmail: string;
@@ -421,6 +449,114 @@ export class DatabaseStorage implements IStorage {
       totalSessions: Number(totalSessions),
       sessionsLast7Days: Number(sessionsLast7Days),
     };
+  }
+
+  // Admin: Overview Stats (new format with 30-day new users)
+  async getOverviewStats(): Promise<{
+    totalUsers: number;
+    sessionsLast7Days: number;
+    newUsersLast30Days: number;
+  }> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const [{ count: totalUsers }] = await db.select({ count: count() }).from(users);
+    const [{ count: sessionsLast7Days }] = await db.select({ count: count() })
+      .from(sessions)
+      .where(gt(sessions.createdAt, sevenDaysAgo));
+    const [{ count: newUsersLast30Days }] = await db.select({ count: count() })
+      .from(users)
+      .where(gt(users.createdAt, thirtyDaysAgo));
+    
+    return {
+      totalUsers: Number(totalUsers),
+      sessionsLast7Days: Number(sessionsLast7Days),
+      newUsersLast30Days: Number(newUsersLast30Days),
+    };
+  }
+
+  // Admin: Activity Feed (session creation events with cursor pagination)
+  async getActivityFeed(options: {
+    limit: number;
+    cursor?: { createdAt: Date; id: string };
+  }): Promise<{
+    items: Array<{
+      id: string;
+      type: "session_created";
+      sessionId: string;
+      sessionTitle: string | null;
+      sessionCreatedAt: Date;
+      scoreTotal: number | null;
+      user: {
+        id: string;
+        displayName: string | null;
+        email: string | null;
+      };
+    }>;
+    nextCursor: { createdAt: Date; id: string } | null;
+  }> {
+    const limit = Math.min(options.limit, 50);
+    
+    // Build query with cursor-based pagination
+    let query = db.select({
+      sessionId: sessions.id,
+      sessionTitle: sessions.title,
+      sessionCreatedAt: sessions.createdAt,
+      scoreJson: sessions.scoreJson,
+      userId: users.id,
+      displayName: users.displayName,
+      email: users.email,
+    })
+    .from(sessions)
+    .innerJoin(users, eq(sessions.userId, users.id))
+    .orderBy(desc(sessions.createdAt), desc(sessions.id))
+    .limit(limit + 1); // Fetch one extra to check for more
+    
+    if (options.cursor) {
+      // Cursor pagination: get items older than cursor
+      query = query.where(
+        or(
+          lt(sessions.createdAt, options.cursor.createdAt),
+          and(
+            eq(sessions.createdAt, options.cursor.createdAt),
+            lt(sessions.id, options.cursor.id)
+          )
+        )
+      ) as any;
+    }
+    
+    const results = await query;
+    
+    // Check if there are more items
+    const hasMore = results.length > limit;
+    const items = hasMore ? results.slice(0, limit) : results;
+    
+    // Extract score total from scoreJson
+    const feedItems = items.map(row => ({
+      id: row.sessionId,
+      type: "session_created" as const,
+      sessionId: row.sessionId,
+      sessionTitle: row.sessionTitle,
+      sessionCreatedAt: row.sessionCreatedAt,
+      scoreTotal: row.scoreJson ? (row.scoreJson as any).totalScore || null : null,
+      user: {
+        id: row.userId,
+        displayName: row.displayName,
+        email: row.email,
+      },
+    }));
+    
+    // Build next cursor from last item
+    const lastItem = items[items.length - 1];
+    const nextCursor = hasMore && lastItem ? {
+      createdAt: lastItem.sessionCreatedAt,
+      id: lastItem.sessionId,
+    } : null;
+    
+    return { items: feedItems, nextCursor };
   }
 
   // Admin: Duplicate Detection
