@@ -13,15 +13,28 @@ export async function cleanupExpiredVideos(): Promise<number> {
 
     for (const session of expiredSessions) {
       if (session.videoPath) {
-        const fullPath = path.join(UPLOADS_DIR, session.videoPath);
+        const videoFullPath = path.join(UPLOADS_DIR, session.videoPath);
         
         try {
-          if (fs.existsSync(fullPath)) {
-            fs.unlinkSync(fullPath);
+          if (fs.existsSync(videoFullPath)) {
+            fs.unlinkSync(videoFullPath);
             console.log(`[Cleanup] Deleted video: ${session.videoPath}`);
           }
         } catch (err) {
-          console.error(`[Cleanup] Failed to delete file ${session.videoPath}:`, err);
+          console.error(`[Cleanup] Failed to delete video ${session.videoPath}:`, err);
+        }
+      }
+
+      if (session.thumbnailPath) {
+        const thumbFullPath = path.join(UPLOADS_DIR, session.thumbnailPath);
+        
+        try {
+          if (fs.existsSync(thumbFullPath)) {
+            fs.unlinkSync(thumbFullPath);
+            console.log(`[Cleanup] Deleted thumbnail: ${session.thumbnailPath}`);
+          }
+        } catch (err) {
+          console.error(`[Cleanup] Failed to delete thumbnail ${session.thumbnailPath}:`, err);
         }
       }
 

@@ -48,11 +48,12 @@ const tips = [
   { icon: Video, text: "Keep it short and focused - aim for 30-90 seconds" },
 ];
 
-type ProcessingStep = "idle" | "uploading" | "transcribing" | "scoring" | "done" | "error";
+type ProcessingStep = "idle" | "uploading" | "converting" | "transcribing" | "scoring" | "done" | "error";
 
 const stepLabels: Record<ProcessingStep, string> = {
   idle: "Ready",
   uploading: "Uploading video...",
+  converting: "Converting to MP4...",
   transcribing: "Transcribing audio...",
   scoring: "Scoring your video...",
   done: "Complete!",
@@ -60,7 +61,7 @@ const stepLabels: Record<ProcessingStep, string> = {
 };
 
 function ProcessingStepper({ currentStep }: { currentStep: ProcessingStep }) {
-  const steps: ProcessingStep[] = ["uploading", "transcribing", "scoring", "done"];
+  const steps: ProcessingStep[] = ["uploading", "converting", "transcribing", "scoring", "done"];
   const currentIndex = steps.indexOf(currentStep);
 
   return (
@@ -69,7 +70,7 @@ function ProcessingStepper({ currentStep }: { currentStep: ProcessingStep }) {
         {steps.map((step, index) => {
           const isActive = step === currentStep;
           const isComplete = currentIndex > index || currentStep === "done";
-          const Icon = step === "uploading" ? Upload : step === "transcribing" ? FileText : step === "scoring" ? TrendingUp : CheckCircle;
+          const Icon = step === "uploading" ? Upload : step === "converting" ? Video : step === "transcribing" ? FileText : step === "scoring" ? TrendingUp : CheckCircle;
 
           return (
             <div key={step} className="flex flex-1 items-center">
@@ -229,6 +230,14 @@ export default function RecordPage() {
       });
 
       if (!uploadRes.ok) throw new Error("Failed to upload video");
+
+      setProcessingStep("converting");
+      const convertRes = await fetch(`/api/sessions/${id}/convert`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!convertRes.ok) throw new Error("Failed to convert video to MP4");
 
       setProcessingStep("transcribing");
       const transcribeRes = await fetch(`/api/sessions/${id}/transcribe`, {

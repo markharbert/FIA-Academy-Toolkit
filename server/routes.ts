@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeVideo, scoreTranscript } from "./ai";
+import { convertToMp4, generateThumbnail } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType } from "@shared/schema";
 import bcrypt from "bcrypt";
 import multer from "multer";
@@ -372,6 +373,60 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/sessions/:id/convert", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.videoPath) {
+        return res.status(400).json({ message: "No video to convert" });
+      }
+
+      const inputPath = path.join(UPLOADS_DIR, session.videoPath);
+      
+      const conversionResult = await convertToMp4(inputPath, UPLOADS_DIR);
+      
+      if (!conversionResult.success) {
+        return res.status(500).json({ message: conversionResult.error || "Video conversion failed" });
+      }
+
+      const mp4Path = path.join(UPLOADS_DIR, conversionResult.outputPath!);
+      const stat = fs.statSync(mp4Path);
+
+      await storage.updateSession(session.id, {
+        videoPath: conversionResult.outputPath!,
+        videoMimeType: "video/mp4",
+        videoSizeBytes: stat.size,
+      });
+
+      const thumbnailResult = await generateThumbnail(mp4Path, UPLOADS_DIR);
+      
+      if (thumbnailResult.success) {
+        await storage.updateSession(session.id, {
+          thumbnailPath: thumbnailResult.thumbnailPath!,
+        });
+      } else {
+        console.warn(`[Convert] Thumbnail generation failed for session ${session.id}`);
+      }
+
+      res.json({ 
+        message: "Video converted successfully",
+        videoPath: conversionResult.outputPath,
+        thumbnailPath: thumbnailResult.thumbnailPath || null,
+      });
+    } catch (err) {
+      console.error("Convert error:", err);
+      res.status(500).json({ message: "Failed to convert video" });
+    }
+  });
+
   app.post("/api/sessions/:id/transcribe", requireAuth, async (req: Request, res: Response) => {
     try {
       const session = await storage.getSession(req.params.id);
@@ -543,7 +598,6 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Access denied" });
       }
 
-      // Check if video is expired
       if (session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date())) {
         return res.status(410).json({ message: "Video has expired and is no longer available for download" });
       }
@@ -558,14 +612,46 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Video file not found" });
       }
 
-      const filename = `practice-session-${session.id}.webm`;
+      const ext = session.videoMimeType === "video/mp4" ? ".mp4" : ".webm";
+      const filename = `practice-session-${session.id}${ext}`;
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      res.setHeader("Content-Type", session.videoMimeType || "video/webm");
+      res.setHeader("Content-Type", session.videoMimeType || "video/mp4");
       
       fs.createReadStream(videoPath).pipe(res);
     } catch (err) {
       console.error("Download error:", err);
       res.status(500).json({ message: "Failed to download video" });
+    }
+  });
+
+  app.get("/api/sessions/:id/thumbnail", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.thumbnailPath) {
+        return res.status(404).json({ message: "No thumbnail available" });
+      }
+
+      const thumbnailPath = path.join(UPLOADS_DIR, session.thumbnailPath);
+      
+      if (!fs.existsSync(thumbnailPath)) {
+        return res.status(404).json({ message: "Thumbnail file not found" });
+      }
+
+      res.setHeader("Content-Type", "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      fs.createReadStream(thumbnailPath).pipe(res);
+    } catch (err) {
+      console.error("Thumbnail error:", err);
+      res.status(500).json({ message: "Failed to get thumbnail" });
     }
   });
 

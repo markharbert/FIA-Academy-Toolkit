@@ -52,6 +52,38 @@ function ScoreCircle({ score }: { score: number }) {
   );
 }
 
+function VideoThumbnail({ session, isExpired }: { session: Session; isExpired: boolean | Date | null }) {
+  if (isExpired) {
+    return (
+      <div className="flex aspect-video w-full items-center justify-center bg-muted sm:w-40">
+        <div className="flex flex-col items-center gap-1 text-muted-foreground">
+          <AlertCircle className="h-6 w-6" />
+          <span className="text-xs font-medium">Expired</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (session.thumbnailPath) {
+    return (
+      <Link href={`/session/${session.id}`} className="block sm:w-40">
+        <img
+          src={`/api/sessions/${session.id}/thumbnail`}
+          alt="Video preview"
+          className="aspect-video w-full object-cover sm:w-40"
+          data-testid={`thumbnail-session-${session.id}`}
+        />
+      </Link>
+    );
+  }
+
+  return (
+    <Link href={`/session/${session.id}`} className="flex aspect-video w-full items-center justify-center bg-muted sm:w-40">
+      <Video className="h-8 w-8 text-muted-foreground" />
+    </Link>
+  );
+}
+
 function SessionCard({ session }: { session: Session }) {
   const isExpired = session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date());
   const score = session.scoreJson?.totalScore ?? null;
@@ -60,9 +92,7 @@ function SessionCard({ session }: { session: Session }) {
     <Card className="overflow-hidden transition-shadow hover:shadow-md" data-testid={`card-session-${session.id}`}>
       <CardContent className="p-0">
         <div className="flex flex-col sm:flex-row">
-          <div className="flex aspect-video w-full items-center justify-center bg-muted sm:w-40">
-            <Video className="h-8 w-8 text-muted-foreground" />
-          </div>
+          <VideoThumbnail session={session} isExpired={isExpired} />
           <div className="flex flex-1 flex-col justify-between p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
