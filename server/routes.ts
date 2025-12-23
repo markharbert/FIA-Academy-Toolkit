@@ -240,6 +240,15 @@ export async function registerRoutes(
 
       const { email } = parsed.data;
       const successMessage = "If an account exists for that email, we sent a reset link.";
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+      // IP-based rate limiting to prevent email enumeration attacks
+      const recentRequestsByIp = await storage.countRecentPasswordResetRequestsByIp(clientIp, oneHourAgo);
+      if (recentRequestsByIp >= MAX_RESET_REQUESTS_PER_HOUR * 3) {
+        console.warn(`[Password Reset] IP rate limit exceeded for ${clientIp}`);
+        return res.json({ message: successMessage });
+      }
 
       const user = await storage.getUserByEmail(email);
       
@@ -251,11 +260,10 @@ export async function registerRoutes(
         return res.json({ message: successMessage });
       }
 
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      // Per-user rate limiting
       const recentRequests = await storage.countRecentPasswordResetRequests(user.id, oneHourAgo);
-      
       if (recentRequests >= MAX_RESET_REQUESTS_PER_HOUR) {
-        console.warn(`[Password Reset] Rate limit exceeded for user ${user.id}`);
+        console.warn(`[Password Reset] User rate limit exceeded for user ${user.id}`);
         return res.json({ message: successMessage });
       }
 
@@ -267,7 +275,7 @@ export async function registerRoutes(
         userId: user.id,
         tokenHash,
         expiresAt,
-        requestIp: req.ip || req.socket.remoteAddress || null,
+        requestIp: clientIp,
         userAgent: req.get("user-agent") || null,
       });
 
@@ -345,32 +353,39 @@ export async function registerRoutes(
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL: process.env.GOOGLE_REDIRECT_URI || `${APP_BASE_URL}/api/auth/oauth/google/callback`,
+      state: true,
     }, async (accessToken, refreshToken, profile, done) => {
       try {
-        const email = profile.emails?.[0]?.value;
+        const email = profile.emails?.[0]?.value?.toLowerCase();
         const providerUserId = profile.id;
+        const emailVerified = profile.emails?.[0]?.verified || false;
 
         if (!email) {
           return done(null, false, { message: "No email provided by Google" });
         }
 
+        // Check if identity already exists for this provider
         let identity = await storage.getUserIdentityByProvider("google", providerUserId);
         let user;
 
         if (identity) {
+          // User already linked, just return them
           user = await storage.getUser(identity.userId);
         } else {
+          // Check if a user with this email already exists
           user = await storage.getUserByEmail(email);
 
           if (user) {
+            // Link the OAuth identity to existing user (don't modify their password)
             await storage.createUserIdentity({
               userId: user.id,
               provider: "google",
               providerUserId,
               emailFromProvider: email,
-              emailVerifiedByProvider: profile.emails?.[0]?.verified || false,
+              emailVerifiedByProvider: emailVerified,
             });
           } else {
+            // Create new user without password (OAuth-only user)
             user = await storage.createUser({
               email,
               passwordHash: null as any,
@@ -381,7 +396,7 @@ export async function registerRoutes(
               provider: "google",
               providerUserId,
               emailFromProvider: email,
-              emailVerifiedByProvider: profile.emails?.[0]?.verified || false,
+              emailVerifiedByProvider: emailVerified,
             });
           }
         }
@@ -412,24 +427,30 @@ export async function registerRoutes(
       clientSecret: process.env.FACEBOOK_APP_SECRET,
       callbackURL: process.env.FACEBOOK_REDIRECT_URI || `${APP_BASE_URL}/api/auth/oauth/facebook/callback`,
       profileFields: ["id", "emails", "name"],
-    }, async (accessToken, refreshToken, profile, done) => {
+      enableProof: true,
+      state: true,
+    } as any, async (accessToken: string, refreshToken: string, profile: any, done: any) => {
       try {
-        const email = profile.emails?.[0]?.value;
+        const email = profile.emails?.[0]?.value?.toLowerCase();
         const providerUserId = profile.id;
 
         if (!email) {
           return done(null, false, { message: "No email provided by Facebook" });
         }
 
+        // Check if identity already exists for this provider
         let identity = await storage.getUserIdentityByProvider("facebook", providerUserId);
         let user;
 
         if (identity) {
+          // User already linked, just return them
           user = await storage.getUser(identity.userId);
         } else {
+          // Check if a user with this email already exists
           user = await storage.getUserByEmail(email);
 
           if (user) {
+            // Link the OAuth identity to existing user (don't modify their password)
             await storage.createUserIdentity({
               userId: user.id,
               provider: "facebook",
@@ -438,6 +459,7 @@ export async function registerRoutes(
               emailVerifiedByProvider: false,
             });
           } else {
+            // Create new user without password (OAuth-only user)
             user = await storage.createUser({
               email,
               passwordHash: null as any,
@@ -461,6 +483,7 @@ export async function registerRoutes(
 
     app.get("/api/auth/oauth/facebook", passport.authenticate("facebook", {
       scope: ["email"],
+      state: true,
     }));
 
     app.get("/api/auth/oauth/facebook/callback",

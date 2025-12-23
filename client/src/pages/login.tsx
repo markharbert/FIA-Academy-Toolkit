@@ -19,6 +19,7 @@ export default function LoginPage() {
   const searchString = useSearch();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -145,19 +146,35 @@ export default function LoginPage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => window.location.href = "/api/auth/oauth/google"}
+              onClick={() => {
+                setOauthLoading("google");
+                window.location.href = "/api/auth/oauth/google";
+              }}
+              disabled={oauthLoading !== null}
               data-testid="button-oauth-google"
             >
-              <SiGoogle className="mr-2 h-4 w-4" />
+              {oauthLoading === "google" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiGoogle className="mr-2 h-4 w-4" />
+              )}
               Continue with Google
             </Button>
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => window.location.href = "/api/auth/oauth/facebook"}
+              onClick={() => {
+                setOauthLoading("facebook");
+                window.location.href = "/api/auth/oauth/facebook";
+              }}
+              disabled={oauthLoading !== null}
               data-testid="button-oauth-facebook"
             >
-              <SiFacebook className="mr-2 h-4 w-4" />
+              {oauthLoading === "facebook" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SiFacebook className="mr-2 h-4 w-4" />
+              )}
               Continue with Facebook
             </Button>
           </div>

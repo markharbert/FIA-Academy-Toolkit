@@ -36,6 +36,7 @@ export interface IStorage {
   getPasswordResetTokenByHash(tokenHash: string): Promise<PasswordResetToken | undefined>;
   markPasswordResetTokenUsed(id: string): Promise<void>;
   countRecentPasswordResetRequests(userId: string, since: Date): Promise<number>;
+  countRecentPasswordResetRequestsByIp(ip: string, since: Date): Promise<number>;
   
   // User Identities (OAuth)
   getUserIdentityByProvider(provider: AuthProvider, providerUserId: string): Promise<UserIdentity | undefined>;
@@ -158,6 +159,15 @@ export class DatabaseStorage implements IStorage {
     const tokens = await db.select().from(passwordResetTokens)
       .where(and(
         eq(passwordResetTokens.userId, userId),
+        gt(passwordResetTokens.createdAt, since)
+      ));
+    return tokens.length;
+  }
+
+  async countRecentPasswordResetRequestsByIp(ip: string, since: Date): Promise<number> {
+    const tokens = await db.select().from(passwordResetTokens)
+      .where(and(
+        eq(passwordResetTokens.requestIp, ip),
         gt(passwordResetTokens.createdAt, since)
       ));
     return tokens.length;

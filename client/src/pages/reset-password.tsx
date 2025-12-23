@@ -69,20 +69,20 @@ export default function ResetPassword() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="container-invalid-link">
+        <Card className="w-full max-w-md" data-testid="card-invalid-link">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900">
               <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
             </div>
-            <CardTitle>Invalid Link</CardTitle>
-            <CardDescription>
+            <CardTitle data-testid="text-invalid-title">Invalid Link</CardTitle>
+            <CardDescription data-testid="text-invalid-description">
               This password reset link is invalid. Please request a new one.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild className="w-full">
-              <Link href="/forgot-password" data-testid="link-forgot-password">
+            <Button asChild className="w-full" data-testid="button-request-new-link">
+              <Link href="/forgot-password">
                 Request New Link
               </Link>
             </Button>
@@ -94,20 +94,20 @@ export default function ResetPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="container-reset-success">
+        <Card className="w-full max-w-md" data-testid="card-reset-success">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-900">
               <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle>Password Reset</CardTitle>
-            <CardDescription>
+            <CardTitle data-testid="text-success-title">Password Reset</CardTitle>
+            <CardDescription data-testid="text-success-description">
               Your password has been reset successfully. You can now log in with your new password.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild className="w-full">
-              <Link href="/login" data-testid="link-login">
+            <Button asChild className="w-full" data-testid="button-go-to-login">
+              <Link href="/login">
                 Go to Login
               </Link>
             </Button>
@@ -118,14 +118,14 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="container-reset-password">
+      <Card className="w-full max-w-md" data-testid="card-reset-password">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src={logoPath} alt="Mark Harbert Logo" className="h-12" />
+            <img src={logoPath} alt="Mark Harbert Logo" className="h-12" data-testid="img-logo" />
           </div>
-          <CardTitle>Set New Password</CardTitle>
-          <CardDescription>
+          <CardTitle data-testid="text-page-title">Set New Password</CardTitle>
+          <CardDescription data-testid="text-page-description">
             Enter your new password below.
           </CardDescription>
         </CardHeader>

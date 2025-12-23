@@ -53,23 +53,23 @@ export default function ForgotPassword() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="container-forgot-password-success">
+        <Card className="w-full max-w-md" data-testid="card-success">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-900">
               <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle>Check Your Email</CardTitle>
-            <CardDescription>
+            <CardTitle data-testid="text-success-title">Check Your Email</CardTitle>
+            <CardDescription data-testid="text-success-description">
               If an account exists for that email, we sent a reset link. Check your inbox and follow the instructions.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground text-center">
+            <p className="text-sm text-muted-foreground text-center" data-testid="text-expiry-notice">
               The link will expire in 60 minutes.
             </p>
-            <Button asChild className="w-full" variant="outline">
-              <Link href="/login" data-testid="link-back-to-login">
+            <Button asChild className="w-full" variant="outline" data-testid="button-back-to-login">
+              <Link href="/login">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Login
               </Link>
@@ -81,14 +81,14 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="container-forgot-password">
+      <Card className="w-full max-w-md" data-testid="card-forgot-password">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src={logoPath} alt="Mark Harbert Logo" className="h-12" />
+            <img src={logoPath} alt="Mark Harbert Logo" className="h-12" data-testid="img-logo" />
           </div>
-          <CardTitle>Forgot Password</CardTitle>
-          <CardDescription>
+          <CardTitle data-testid="text-page-title">Forgot Password</CardTitle>
+          <CardDescription data-testid="text-page-description">
             Enter your email address and we'll send you a link to reset your password.
           </CardDescription>
         </CardHeader>
