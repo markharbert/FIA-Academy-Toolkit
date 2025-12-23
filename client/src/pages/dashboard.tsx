@@ -1,0 +1,211 @@
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Plus, Video, Clock, TrendingUp, Download, Eye, AlertCircle } from "lucide-react";
+import type { Session } from "@shared/schema";
+import { format } from "date-fns";
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function ScoreCircle({ score }: { score: number }) {
+  const circumference = 2 * Math.PI * 36;
+  const strokeDashoffset = circumference - (score / 100) * circumference;
+  const color = score >= 70 ? "text-green-500" : score >= 40 ? "text-yellow-500" : "text-red-500";
+
+  return (
+    <div className="relative h-20 w-20">
+      <svg className="h-20 w-20 -rotate-90">
+        <circle
+          className="text-muted"
+          strokeWidth="6"
+          stroke="currentColor"
+          fill="transparent"
+          r="36"
+          cx="40"
+          cy="40"
+        />
+        <circle
+          className={color}
+          strokeWidth="6"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          stroke="currentColor"
+          fill="transparent"
+          r="36"
+          cx="40"
+          cy="40"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+        {score}
+      </span>
+    </div>
+  );
+}
+
+function SessionCard({ session }: { session: Session }) {
+  const isExpired = session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date());
+  const score = session.scoreJson?.totalScore ?? null;
+
+  return (
+    <Card className="overflow-hidden transition-shadow hover:shadow-md" data-testid={`card-session-${session.id}`}>
+      <CardContent className="p-0">
+        <div className="flex flex-col sm:flex-row">
+          <div className="flex aspect-video w-full items-center justify-center bg-muted sm:w-40">
+            <Video className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <div className="flex flex-1 flex-col justify-between p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">
+                  {format(new Date(session.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {session.goalType}
+                  </Badge>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    {formatDuration(session.durationSeconds)}
+                  </span>
+                  {isExpired ? (
+                    <Badge variant="secondary" className="text-xs">
+                      Video Expired
+                    </Badge>
+                  ) : (
+                    <Badge variant="default" className="text-xs bg-green-600">
+                      Video Available
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              {score !== null && (
+                <ScoreCircle score={score} />
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Link href={`/session/${session.id}`}>
+                <Button variant="outline" size="sm" data-testid={`button-view-session-${session.id}`}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  View Details
+                </Button>
+              </Link>
+              {!isExpired && session.videoPath && (
+                <a href={`/api/sessions/${session.id}/download`} download>
+                  <Button variant="ghost" size="sm" data-testid={`button-download-session-${session.id}`}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download
+                  </Button>
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SessionCardSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex flex-col sm:flex-row">
+          <Skeleton className="aspect-video w-full sm:w-40" />
+          <div className="flex-1 p-4 space-y-4">
+            <div className="flex justify-between">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              <Skeleton className="h-20 w-20 rounded-full" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-28" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState() {
+  return (
+    <Card className="py-12">
+      <CardContent className="flex flex-col items-center justify-center text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+          <Video className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h3 className="mb-2 text-lg font-semibold">No practice sessions yet</h3>
+        <p className="mb-6 max-w-sm text-sm text-muted-foreground">
+          Record your first practice video to get AI-powered feedback on your delivery.
+        </p>
+        <Link href="/record">
+          <Button data-testid="button-empty-new-session">
+            <Plus className="mr-2 h-4 w-4" />
+            New Practice Session
+          </Button>
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function DashboardPage() {
+  const { data: sessions, isLoading, error } = useQuery<Session[]>({
+    queryKey: ["/api/sessions"],
+  });
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
+          <p className="text-muted-foreground">Your video practice sessions</p>
+        </div>
+        <Link href="/record">
+          <Button size="lg" data-testid="button-new-session">
+            <Plus className="mr-2 h-5 w-5" />
+            New Practice Session
+          </Button>
+        </Link>
+      </div>
+
+      {error && (
+        <Card className="mb-6 border-destructive">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <p className="text-sm text-destructive">Failed to load sessions. Please try again.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-4">
+          <SessionCardSkeleton />
+          <SessionCardSkeleton />
+          <SessionCardSkeleton />
+        </div>
+      ) : sessions && sessions.length > 0 ? (
+        <div className="space-y-4">
+          {sessions.map((session) => (
+            <SessionCard key={session.id} session={session} />
+          ))}
+        </div>
+      ) : (
+        <EmptyState />
+      )}
+    </div>
+  );
+}
