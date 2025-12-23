@@ -1,0 +1,226 @@
+Role: You are a senior frontend developer working inside my existing Replit project. Update the current app’s visual design system and UI styling to match the brand palette and layout rules below. Do not change core functionality. Do not remove existing pages or flows. Your job is purely UI, spacing, and styling.
+
+Design Goals
+
+Clean, modern UI with lots of white space.
+
+High contrast navigation and footer using dark blue backgrounds and bold white text.
+
+Red buttons as the primary action color.
+
+Light blue used only as subtle accents, not as the main background.
+
+Keep it simple and readable on mobile.
+
+Brand Color Palette
+
+Dark Blue: #06092a
+
+Light Blue: #3f92cc
+
+Red: #da0010
+
+White: #ffffff
+
+Global Layout Rules
+
+Default page background is white.
+
+Use generous padding and spacing:
+
+Page padding: 24px desktop, 16px mobile
+
+Section spacing: 24 to 40px
+
+Card padding: 20 to 24px
+
+Constrain content width so it breathes:
+
+Max content width: 1100px
+
+Center the main container
+
+Typography
+
+Use a clean system font stack.
+
+Keep headings bold and readable.
+
+Body text should be dark blue or near black for contrast on white.
+
+Header and Navigation
+Requirements
+
+Header background color: Dark Blue (#06092a)
+
+Navigation text color: White (#ffffff)
+
+Navigation text weight: bold
+
+Ensure strong contrast and accessible hover states.
+
+Logo remains top left.
+
+Navigation remains top right.
+
+Add subtle bottom border or shadow to separate header from white content.
+
+Border suggestion: 1px solid with a very light alpha or a subtle shadow.
+
+On mobile:
+
+Use a hamburger menu or stacked nav.
+
+Keep dark blue header background and bold white nav text.
+
+Footer
+Requirements
+
+Footer background color: Dark Blue (#06092a)
+
+Footer text color: White (#ffffff)
+
+Footer text weight: medium to bold
+
+Include light padding and keep it minimal.
+
+Buttons
+Primary Buttons
+
+Background: Red (#da0010)
+
+Text: White (#ffffff)
+
+Font weight: bold
+
+Border radius: 10 to 14px
+
+Padding: 12px 18px
+
+Hover state:
+
+Slightly darker red or reduce brightness by about 8 to 10 percent
+
+Focus state:
+
+Visible focus ring for accessibility using Light Blue (#3f92cc) glow or outline.
+
+Secondary Buttons
+
+Background: White
+
+Text: Dark Blue (#06092a)
+
+Border: 2px solid Dark Blue
+
+Hover: subtle light blue background tint with low opacity.
+
+Accents and Highlights
+Use Light Blue (#3f92cc) sparingly for:
+
+Links
+
+Small icons
+
+Focus outlines
+
+Progress stepper highlights
+
+Small section dividers
+Do not use light blue as a large background fill.
+
+Cards and Panels
+
+Use white cards on white background but with clear separation:
+
+Border: 1px solid with light gray tint
+
+Shadow: subtle
+
+Make spacing generous.
+
+Keep corners rounded: 14 to 18px
+
+Forms and Inputs
+
+Inputs on white background.
+
+Border: light neutral, with focus border turning Light Blue (#3f92cc).
+
+Labels and help text in dark blue or neutral gray.
+
+Score and Results Styling
+
+Total score area should feel like a dashboard card.
+
+Use light blue accents for progress bars or small badges.
+
+Use red only for primary actions and error states, not for large score areas.
+
+Use a simple badge style for part scores:
+
+White background
+
+Dark blue text
+
+Light blue border or small accent line
+
+Implementation Instructions
+You must implement these styles in a maintainable way:
+If the app uses Tailwind:
+
+Update tailwind.config to include the brand colors:
+
+brandDark: #06092a
+
+brandLight: #3f92cc
+
+brandRed: #da0010
+
+Replace existing colors across components with brand tokens.
+
+Ensure consistent button components and reuse them everywhere.
+
+If the app uses CSS modules or plain CSS:
+
+Create a global theme file:
+
+CSS variables under :root like:
+--brand-dark, --brand-light, --brand-red, --white
+
+Refactor components to use variables rather than hardcoded colors.
+
+Ensure header, footer, buttons, links, and focus states use the new palette.
+
+Pages to Update
+Update styling across all pages:
+
+Landing page
+
+Login and signup pages
+
+Dashboard
+
+New practice session page
+
+Session results page
+
+Admin settings page
+
+Quality Checklist
+
+Nav and footer are dark blue with bold white text.
+
+All primary buttons are red with bold white text.
+
+Plenty of white space across all pages.
+
+Light blue appears only as accents.
+
+Mobile layout is clean and readable.
+
+No low contrast text.
+
+No functionality breaks.
+
+Now implement these design changes in the existing codebase.
