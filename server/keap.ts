@@ -95,13 +95,30 @@ export function getKeapAuthUrl(state: string): string {
   const clientId = process.env.KEAP_CLIENT_ID;
   const redirectUri = process.env.KEAP_REDIRECT_URI;
   
-  console.log(`[Keap OAuth] Generating auth URL`);
-  console.log(`[Keap OAuth] KEAP_CLIENT_ID present: ${!!clientId}`);
-  console.log(`[Keap OAuth] KEAP_REDIRECT_URI: ${redirectUri}`);
-  console.log(`[Keap OAuth] KEAP_AUTHORIZE_URL_BASE: ${KEAP_AUTHORIZE_URL_BASE}`);
+  console.log(`[Keap OAuth Debug] ========================================`);
+  console.log(`[Keap OAuth Debug] Generating authorization URL`);
+  console.log(`[Keap OAuth Debug] ----------------------------------------`);
+  console.log(`[Keap OAuth Debug] KEAP_CLIENT_ID present: ${!!clientId}`);
+  console.log(`[Keap OAuth Debug] KEAP_CLIENT_ID value: ${clientId ? clientId.substring(0, 8) + '...' : 'NOT SET'}`);
+  console.log(`[Keap OAuth Debug] KEAP_REDIRECT_URI: "${redirectUri}"`);
+  console.log(`[Keap OAuth Debug] KEAP_AUTHORIZE_URL_BASE: ${KEAP_AUTHORIZE_URL_BASE}`);
+  console.log(`[Keap OAuth Debug] State (first 8 chars): ${state.substring(0, 8)}...`);
+  console.log(`[Keap OAuth Debug] ----------------------------------------`);
   
   if (!clientId || !redirectUri) {
+    console.error(`[Keap OAuth Debug] MISSING CREDENTIALS!`);
     throw new Error("Keap client ID and redirect URI must be configured");
+  }
+  
+  // Check for common redirect URI issues
+  if (redirectUri.endsWith('/')) {
+    console.warn(`[Keap OAuth Debug] WARNING: Redirect URI has trailing slash`);
+  }
+  if (!redirectUri.startsWith('https://')) {
+    console.warn(`[Keap OAuth Debug] WARNING: Redirect URI is not HTTPS`);
+  }
+  if (redirectUri.includes(' ')) {
+    console.warn(`[Keap OAuth Debug] WARNING: Redirect URI contains spaces`);
   }
   
   const params = new URLSearchParams({
@@ -113,7 +130,17 @@ export function getKeapAuthUrl(state: string): string {
   });
   
   const authUrl = `${KEAP_AUTHORIZE_URL_BASE}?${params.toString()}`;
-  console.log(`[Keap OAuth] Generated authorize URL: ${authUrl}`);
+  
+  console.log(`[Keap OAuth Debug] ----------------------------------------`);
+  console.log(`[Keap OAuth Debug] FULL AUTHORIZE URL:`);
+  console.log(`[Keap OAuth Debug] ${authUrl}`);
+  console.log(`[Keap OAuth Debug] ----------------------------------------`);
+  console.log(`[Keap OAuth Debug] URL Parameters breakdown:`);
+  console.log(`[Keap OAuth Debug]   client_id: ${clientId.substring(0, 8)}...`);
+  console.log(`[Keap OAuth Debug]   redirect_uri (encoded): ${encodeURIComponent(redirectUri)}`);
+  console.log(`[Keap OAuth Debug]   response_type: code`);
+  console.log(`[Keap OAuth Debug]   scope: full`);
+  console.log(`[Keap OAuth Debug] ========================================`);
   
   return authUrl;
 }
