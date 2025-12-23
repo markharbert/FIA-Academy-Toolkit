@@ -232,6 +232,8 @@ export async function registerRoutes(
       return res.status(401).json({ message: "User not found" });
     }
 
+    console.log("[Auth] /api/auth/me - user.isAdmin:", user.isAdmin, "user.role:", user.role, "user.email:", user.email);
+    
     res.json({ 
       user: { 
         id: user.id, 
