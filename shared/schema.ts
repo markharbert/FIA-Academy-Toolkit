@@ -8,7 +8,7 @@ export const authProviders = ["local", "google", "facebook", "apple"] as const;
 export type AuthProvider = typeof authProviders[number];
 
 // User role types
-export const userRoles = ["user", "admin"] as const;
+export const userRoles = ["user", "admin", "super_admin"] as const;
 export type UserRole = typeof userRoles[number];
 
 // Users table for authentication

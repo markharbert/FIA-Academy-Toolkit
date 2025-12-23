@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startCleanupJob } from "./cleanup";
+import { bootstrapSuperAdmins } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -92,8 +93,11 @@ app.use((req, res, next) => {
       host: "0.0.0.0",
       reusePort: true,
     },
-    () => {
+    async () => {
       log(`serving on port ${port}`);
+      
+      // Bootstrap super admins from environment
+      await bootstrapSuperAdmins();
       
       // Start cleanup job (runs every 24 hours)
       startCleanupJob();

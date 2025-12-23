@@ -386,3 +386,31 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+// Bootstrap super admins from environment variable
+export async function bootstrapSuperAdmins(): Promise<void> {
+  const superAdminEmails = process.env.SUPER_ADMIN_EMAILS;
+  if (!superAdminEmails) {
+    return;
+  }
+
+  const emails = superAdminEmails.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  
+  for (const email of emails) {
+    try {
+      const user = await storage.getUserByEmail(email);
+      if (user) {
+        if (!user.isAdmin || user.role !== 'super_admin') {
+          await storage.updateUser(user.id, { isAdmin: true, role: 'super_admin' });
+          console.log(`[Bootstrap] Promoted ${email} to super_admin`);
+        } else {
+          console.log(`[Bootstrap] ${email} is already super_admin`);
+        }
+      } else {
+        console.log(`[Bootstrap] User ${email} not found, skipping`);
+      }
+    } catch (err: any) {
+      console.error(`[Bootstrap] Failed to promote ${email}:`, err.message);
+    }
+  }
+}
