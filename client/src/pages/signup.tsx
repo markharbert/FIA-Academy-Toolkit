@@ -40,8 +40,11 @@ export default function SignupPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
-    if (params.get("error") === "oauth_failed") {
+    const errorType = params.get("error");
+    if (errorType === "oauth_failed") {
       setError("Social signup failed. Please try again or use email/password.");
+    } else if (errorType === "oauth_not_configured") {
+      setError("This login method is not yet configured. Please use email/password or contact support.");
     }
   }, [searchString]);
 

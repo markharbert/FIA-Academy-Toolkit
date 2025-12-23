@@ -339,7 +339,12 @@ export async function registerRoutes(
   // OAUTH ROUTES
   // ===================
 
-  const APP_BASE_URL = process.env.APP_BASE_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+  // Compute APP_BASE_URL from REPLIT_DEV_DOMAIN (modern Replit) or fallback
+  const APP_BASE_URL = process.env.APP_BASE_URL || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 
+    `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`);
+  
+  console.log("[OAuth] APP_BASE_URL:", APP_BASE_URL);
 
   // Initialize Passport
   app.use(passport.initialize());
@@ -451,6 +456,15 @@ export async function registerRoutes(
         res.redirect("/dashboard");
       }
     );
+  } else {
+    // Fallback routes when Google OAuth is not configured
+    app.get("/api/auth/oauth/google", (req: Request, res: Response) => {
+      console.log("[OAuth] Google OAuth not configured - missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
+      res.redirect("/login?error=oauth_not_configured");
+    });
+    app.get("/api/auth/oauth/google/callback", (req: Request, res: Response) => {
+      res.redirect("/login?error=oauth_not_configured");
+    });
   }
 
   // Facebook OAuth Strategy
@@ -547,6 +561,15 @@ export async function registerRoutes(
         res.redirect("/dashboard");
       }
     );
+  } else {
+    // Fallback routes when Facebook OAuth is not configured
+    app.get("/api/auth/oauth/facebook", (req: Request, res: Response) => {
+      console.log("[OAuth] Facebook OAuth not configured - missing FACEBOOK_APP_ID or FACEBOOK_APP_SECRET");
+      res.redirect("/login?error=oauth_not_configured");
+    });
+    app.get("/api/auth/oauth/facebook/callback", (req: Request, res: Response) => {
+      res.redirect("/login?error=oauth_not_configured");
+    });
   }
 
   // Apple OAuth Strategy
@@ -650,13 +673,25 @@ export async function registerRoutes(
         res.redirect("/dashboard");
       }
     );
+    
+    // Apple connect route for account linking
+    app.get("/api/account/connect/apple", requireAuth, (req: Request, res: Response, next: NextFunction) => {
+      (req.session as any).connectingUserId = req.session.userId;
+      passport.authenticate("apple" as any, { scope: ["name", "email"] })(req, res, next);
+    });
+  } else {
+    // Fallback routes when Apple OAuth is not configured
+    app.get("/api/auth/oauth/apple", (req: Request, res: Response) => {
+      console.log("[OAuth] Apple OAuth not configured - missing required env vars");
+      res.redirect("/login?error=oauth_not_configured");
+    });
+    app.post("/api/auth/oauth/apple/callback", (req: Request, res: Response) => {
+      res.redirect("/login?error=oauth_not_configured");
+    });
+    app.get("/api/account/connect/apple", requireAuth, (req: Request, res: Response) => {
+      res.redirect("/account?error=oauth_not_configured");
+    });
   }
-
-  // Also add Apple connect route for account linking
-  app.get("/api/account/connect/apple", requireAuth, (req: Request, res: Response, next: NextFunction) => {
-    (req.session as any).connectingUserId = req.session.userId;
-    passport.authenticate("apple" as any, { scope: ["name", "email"] })(req, res, next);
-  });
 
   // ===================
   // ADMIN ROUTES - KEAP INTEGRATION

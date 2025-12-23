@@ -1,0 +1,211 @@
+Role: You are a senior full stack developer debugging an existing Replit web app. Your job is to fix OAuth sign up so the buttons work and no longer route to a 404 page not found. The app currently shows an error like: “404 page not found” and “Did you forget to add the page to the router?” This strongly suggests the OAuth button is navigating to a frontend route that does not exist, instead of calling the backend OAuth endpoint, or the backend route is missing or miswired.
+
+Do not add new features. Focus only on making OAuth sign up work end to end. Fix Google first, then Facebook, then Apple. Provide clear changes, code edits, and a verification checklist.
+
+Step 1: Identify the current stack and where routing is failing
+
+Determine if the app is:
+
+React + Vite frontend with Express backend, OR
+
+Next.js full stack, OR
+
+Another stack already in the repo
+
+Identify whether the OAuth buttons are implemented as:
+
+Frontend SPA navigation (React Router links), OR
+
+Full page redirect to backend OAuth endpoint, OR
+
+Fetch request to an endpoint
+
+Reproduce the 404:
+
+Click “Continue with Google”
+
+Capture the exact URL it tries to open
+
+Note whether the 404 is the frontend router 404 or an Express 404
+
+Step 2: Fix the core cause: OAuth buttons must redirect to a backend OAuth start endpoint
+Fix the login buttons so they do a full redirect to the backend OAuth start endpoint, not SPA routing.
+
+Requirements for Google
+
+The Google button must redirect the browser to a backend route like:
+
+/api/auth/oauth/google
+
+The backend route must exist and must initiate the OAuth flow by redirecting to Google.
+
+The callback route must exist, for example:
+
+/api/auth/oauth/google/callback
+
+After callback success:
+
+Create or find user
+
+Create session cookie
+
+Redirect back to the frontend dashboard route, for example:
+
+/dashboard
+
+Frontend implementation requirement
+
+The OAuth buttons must use window.location.href or a normal anchor tag <a href="..."> so the browser performs a full request to the backend.
+
+Do not use React Router Link for OAuth.
+
+Step 3: Confirm backend routes exist and are mounted correctly
+
+Search the backend code for OAuth routes. Confirm the route is defined.
+
+Confirm the route is mounted under the correct base path, for example:
+
+app.use("/api/auth", authRouter)
+
+Confirm the final effective path matches what the frontend uses.
+
+Confirm there is no mismatch like:
+
+Frontend points to /auth/google but backend is /api/auth/oauth/google
+
+Or backend expects /api/auth/google but frontend uses /api/auth/oauth/google
+
+Step 4: Fix router and deployment path issues that cause 404
+Common causes to check and fix:
+
+Frontend dev server proxy is not configured, so /api/auth/... is going to the frontend router.
+
+If using Vite, ensure proxy is set in vite.config to forward /api to backend.
+
+If using Next.js, ensure API routes exist under /api or the backend server handles it.
+
+The backend server is not handling the OAuth route, or the route file is not imported.
+
+The app is using a catch all SPA route that intercepts /api routes incorrectly.
+
+Requirement
+
+/api/auth/oauth/google must be served by the backend, not the frontend router.
+
+Step 5: Fix Google OAuth end to end first
+
+Google OAuth config checks
+
+Confirm env vars exist and are loaded:
+
+GOOGLE_CLIENT_ID
+
+GOOGLE_CLIENT_SECRET
+
+GOOGLE_REDIRECT_URI
+
+APP_BASE_URL
+
+SESSION_SECRET
+
+Confirm redirect URI matches exactly what Google console expects.
+
+Confirm callback handler uses the same redirect path.
+
+Implement robust logging for debugging
+Add logs on:
+
+OAuth start endpoint hit
+
+OAuth callback endpoint hit
+
+Any errors from passport or provider response
+
+Session creation
+
+Final redirect destination
+
+Error handling
+If OAuth fails, redirect to:
+
+/login?error=oauth_google_failed
+And display a friendly message on login page.
+
+Step 6: After Google works, replicate same fixes for Facebook and Apple
+
+Facebook
+
+Ensure routes exist:
+
+/api/auth/oauth/facebook
+
+/api/auth/oauth/facebook/callback
+
+Confirm env vars:
+
+FACEBOOK_APP_ID
+
+FACEBOOK_APP_SECRET
+
+FACEBOOK_REDIRECT_URI
+
+Apple
+
+Ensure routes exist:
+
+/api/auth/oauth/apple
+
+/api/auth/oauth/apple/callback
+
+Confirm env vars:
+
+APPLE_CLIENT_ID
+
+APPLE_TEAM_ID
+
+APPLE_KEY_ID
+
+APPLE_PRIVATE_KEY
+
+APPLE_REDIRECT_URI
+
+Note: Apple callback method may be POST depending on strategy. Ensure server accepts it and router is set accordingly.
+
+Step 7: Concrete deliverables you must produce
+
+Fix the OAuth button implementation so it redirects to correct backend endpoints.
+
+Fix backend route definitions and mounting so no 404 happens.
+
+Fix dev proxy or server routing so /api/* does not go to frontend router.
+
+Confirm Google OAuth works end to end:
+
+Click button
+
+Google consent
+
+Returns to app
+
+User is logged in
+
+Redirect to dashboard
+
+Then confirm Facebook and Apple follow the same pattern.
+
+Verification checklist
+Provide a checklist at the end confirming:
+
+Clicking Google button hits /api/auth/oauth/google and no 404 occurs
+
+Callback route is hit and logs show it
+
+User session is created and persists across refresh
+
+User is redirected to dashboard successfully
+
+Same pattern implemented for Facebook and Apple
+
+No routes are handled by the frontend router incorrectly
+
+Now implement the fixes in the existing codebase.
