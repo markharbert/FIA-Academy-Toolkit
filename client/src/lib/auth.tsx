@@ -10,6 +10,7 @@ interface AuthUser {
   isAdmin?: boolean;
   role?: "user" | "admin" | "super_admin";
   isDisabled?: boolean;
+  gravatarUrl?: string | null;
 }
 
 interface AuthContextType {

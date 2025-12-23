@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import { LogOut, User, Settings, Menu, X } from "lucide-react";
+import { LogOut, User, Settings, Menu, X, LayoutDashboard } from "lucide-react";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
 
 export function Navbar() {
@@ -32,6 +33,16 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-4">
           {user ? (
             <>
+              <Link href="/dashboard">
+                <Button
+                  variant="ghost"
+                  className="text-white font-medium hover:bg-white/10"
+                  data-testid="link-dashboard-nav"
+                >
+                  <LayoutDashboard className="mr-2 h-4 w-4" />
+                  Dashboard
+                </Button>
+              </Link>
               {user.isAdmin && (
                 <Link href="/admin">
                   <Button
@@ -48,10 +59,20 @@ export function Navbar() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-white hover:bg-white/10"
+                  className="text-white hover:bg-white/10 p-0 rounded-full"
                   data-testid="button-user-menu"
                 >
-                  <User className="h-5 w-5" />
+                  <Avatar className="h-8 w-8">
+                    {user.gravatarUrl && (
+                      <AvatarImage 
+                        src={user.gravatarUrl} 
+                        alt={user.displayName || user.email || "User"} 
+                      />
+                    )}
+                    <AvatarFallback className="bg-primary/20">
+                      <User className="h-4 w-4 text-white" />
+                    </AvatarFallback>
+                  </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -116,6 +137,18 @@ export function Navbar() {
           {user ? (
             <div className="space-y-3">
               <p className="text-white/70 text-sm px-2">{user.email || user.displayName || "Account"}</p>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white font-medium hover:bg-white/10"
+                onClick={() => {
+                  setLocation("/dashboard");
+                  setMobileMenuOpen(false);
+                }}
+                data-testid="mobile-link-dashboard"
+              >
+                <LayoutDashboard className="mr-2 h-4 w-4" />
+                Dashboard
+              </Button>
               <Button
                 variant="ghost"
                 className="w-full justify-start text-white font-medium hover:bg-white/10"

@@ -1,0 +1,302 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Implement the UI and behavior fixes below without breaking existing auth, Keap OAuth, or core app functionality. Provide working code changes and clear verification steps. Confirm each item in a checklist at the end.
+
+High Priority Outcomes
+
+“Send Test Contact” works reliably using an on page popup modal.
+
+The Keap status gear icon is green when connected and red when disconnected.
+
+Keap tags are truly cached server side and persist across logout and login. Admin should see tags without clicking “Load Tags.”
+
+Tags auto refresh every 72 hours, and also refresh immediately when admin clicks “Refresh from Keap.”
+
+Add a Dashboard link to the top navigation bar (outside the profile dropdown).
+
+If a user has a Gravatar, show it in the header profile avatar. If not, keep the current fallback icon.
+
+Part 1: Fix “Send Test Contact” Button With On Page Popup
+
+Current issue
+The “Send Test Contact” button does not work properly.
+
+Required behavior
+
+Clicking “Send Test Contact” opens a small popup modal on the same screen (no page navigation).
+
+Modal fields:
+
+Email (required)
+
+First name (optional)
+
+Last name (optional)
+
+Tag (dropdown, optional)
+
+Default to currently selected default Keap tag if set
+
+Modal buttons:
+
+Cancel
+
+Send test contact
+
+Validation rules
+
+Validate email format.
+
+Disable “Send” until email is valid.
+
+Show loading state and disable inputs while sending.
+
+API requirements
+Implement or fix:
+POST /api/admin/keap/test-contact
+Body:
+{
+"email": "test@example.com
+",
+"firstName": "Test",
+"lastName": "User",
+"tagId": "123" (optional)
+}
+
+Endpoint logic
+
+Require admin auth.
+
+Require Keap connected.
+
+Normalize email (trim + lowercase).
+
+Contact lookup:
+
+Search by email first to avoid duplicates.
+
+If found, update the contact.
+
+If not found, create contact.
+
+Apply tag if tagId provided.
+
+Return result payload:
+{
+"created": true|false,
+"updated": true|false,
+"contactId": "...",
+"tagApplied": true|false,
+"tagId": "...",
+"message": "..."
+}
+
+UI result display
+
+After success, show a success message in the modal and the contactId.
+
+After error, show a clear error message and keep the modal open for retry.
+
+Also: find and fix why it currently “does not work”
+You must identify the actual break:
+
+Missing click handler
+
+Wrong endpoint URL
+
+Endpoint missing or protected incorrectly
+
+Fetch missing credentials: include
+
+403 due to admin middleware
+
+404 due to router path mismatch
+
+Fix the root cause and verify.
+
+Part 2: Keap Status Gear Icon Color
+
+Current UI
+There is a small red gear icon next to “Keap integration.”
+
+Required behavior
+
+If Keap is connected, gear icon must be green.
+
+If Keap is not connected, gear icon must be red.
+
+Implementation details
+
+The color must be driven by real backend status, not a hardcoded UI state.
+
+On admin page load, call:
+
+GET /api/admin/keap/status
+Return:
+{
+"connected": true|false,
+"tokenExpiresAt": "...",
+"connectedAt": "...",
+"lastError": "..."
+}
+
+Use connected boolean to style the icon:
+
+connected true -> green
+
+connected false -> red
+
+Ensure the icon updates immediately after connect or disconnect without refresh.
+
+Part 3: Keap Tags Must Cache Properly and Persist Across Logout/Login
+
+Current issue
+Tags load but do not persist. Logging out and back in forces admin to click “Load Tags” again.
+
+Required behavior
+
+Tags must be stored server side in the database, not only in frontend state.
+
+When admin logs in and visits Keap integration:
+
+Tags should populate automatically from cache if cache is still valid.
+
+Admin should not need to click “Load Tags.”
+
+Cache TTL:
+
+72 hours
+
+Tags should refresh:
+
+Automatically after 72 hours, server side
+
+Immediately when admin clicks “Refresh from Keap”
+
+Database changes
+In SystemSettings:
+
+keapTagsCacheJson (json/text)
+
+keapTagsCachedAt (datetime)
+
+keapTagsCacheExpiresAt (datetime)
+
+keapLastTagFetchError (text)
+
+Server logic
+Implement:
+GET /api/admin/keap/tags
+Behavior:
+
+If connected is false:
+
+Return 400 with message “Keap not connected”
+
+If cache exists and now < expiresAt:
+
+Return tags from cache with source="cache"
+
+If cache missing or expired:
+
+Fetch tags from Keap, update cache, return source="keap"
+
+If Keap fetch fails:
+
+If cached tags exist, return them with warning and source="cache"
+
+Also store keapLastTagFetchError
+
+Implement:
+POST /api/admin/keap/tags/refresh
+Behavior:
+
+Force fetch from Keap, overwrite cache, reset expiresAt
+
+Frontend behavior
+
+On admin Keap integration page mount:
+
+Call /api/admin/keap/status
+
+If connected true, immediately call /api/admin/keap/tags to populate dropdown
+
+“Load Tags” should be removed or renamed:
+
+Change label to “Refresh from Keap”
+
+It should call /api/admin/keap/tags/refresh
+
+Auto refresh every 72 hours
+Server side behavior is enough:
+
+If cache expired, GET /tags triggers refresh automatically.
+
+Part 4: Add Dashboard Link to Top Navigation Bar
+
+Requirement
+
+Add a top level nav item labeled “Dashboard.”
+
+It must appear in the main header navigation, not inside the profile dropdown.
+
+Clicking it goes to /dashboard.
+
+It must be visible only when logged in.
+
+It should show an active state when the user is on dashboard routes.
+
+Part 5: Show Gravatar in Header Profile Avatar
+
+Current behavior
+There is a profile icon or placeholder.
+
+Required behavior
+
+If user has a valid email, compute Gravatar URL:
+
+md5(lowercase(trim(email)))
+
+https://www.gravatar.com/avatar/{hash}?s=64&d=mp
+
+Use that image in the header avatar.
+
+If email is missing, or gravatar fails to load:
+
+Fall back to the existing placeholder avatar.
+
+The avatar must display in the top right where the profile dropdown exists.
+
+The Account page can keep the larger gravatar, but header should show a small version.
+
+Backend support (recommended)
+Update /api/auth/me response to include:
+
+email
+
+displayName
+Optionally include:
+
+gravatarUrl
+So frontend does not duplicate logic everywhere.
+
+Frontend implementation detail
+
+Use an <img> with onError fallback to placeholder.
+
+Final Verification Checklist
+At the end, confirm:
+
+Send Test Contact opens a popup modal and creates or updates a Keap contact
+
+Tag selection in test contact modal works
+
+Gear icon is green when connected, red when disconnected, based on /keap/status
+
+Tags persist across logout/login and load automatically from cache
+
+Tags refresh after 72 hours or when clicking Refresh from Keap
+
+Dashboard link appears in top nav and routes to /dashboard
+
+Header avatar displays Gravatar when available and falls back when not
+
+Now implement these changes in the existing codebase.

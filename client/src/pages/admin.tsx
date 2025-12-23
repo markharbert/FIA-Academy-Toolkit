@@ -232,6 +232,30 @@ export default function AdminPage() {
     }
   }, [user, authLoading, setLocation]);
 
+  // Auto-load tags when Keap is connected
+  useEffect(() => {
+    if (keapStatus?.connected && keapTags.length === 0) {
+      // Silently load tags from cache when page loads
+      (async () => {
+        try {
+          const res = await fetch("/api/admin/keap/tags", { credentials: "include" });
+          if (res.ok) {
+            const data = await res.json();
+            setKeapTags(data.tags || []);
+            setTagCacheInfo({
+              source: data.source,
+              cachedAt: data.cachedAt,
+              expiresAt: data.expiresAt,
+              warning: data.warning,
+            });
+          }
+        } catch (err) {
+          console.error("Failed to auto-load tags:", err);
+        }
+      })();
+    }
+  }, [keapStatus?.connected]);
+
   const fetchStats = async () => {
     try {
       setStatsLoading(true);
@@ -974,8 +998,8 @@ export default function AdminPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Settings className="h-5 w-5 text-primary" />
+                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${keapStatus?.connected ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"}`}>
+                  <Settings className={`h-5 w-5 ${keapStatus?.connected ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"}`} />
                 </div>
                 <div>
                   <CardTitle>Keap Integration</CardTitle>
@@ -1246,11 +1270,11 @@ export default function AdminPage() {
               onClick={() => setTestContactModalOpen(false)}
               data-testid="button-test-cancel"
             >
-              Close
+              Cancel
             </Button>
             <Button
               onClick={handleTestContactSubmit}
-              disabled={actionLoading === "test"}
+              disabled={actionLoading === "test" || (testContactForm.email.trim() !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testContactForm.email.trim()))}
               data-testid="button-test-submit"
             >
               {actionLoading === "test" ? (
