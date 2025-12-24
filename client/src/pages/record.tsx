@@ -322,7 +322,14 @@ export default function RecordPage() {
       videoBitsPerSecond: 4000000,
     };
 
-    const mediaRecorder = new MediaRecorder(streamRef.current, recorderOptions);
+    let mediaRecorder: MediaRecorder;
+    try {
+      mediaRecorder = new MediaRecorder(streamRef.current, recorderOptions);
+    } catch (err) {
+      console.error("[Recording] Failed to create MediaRecorder:", err);
+      setError("Your browser doesn't support video recording. Please try Chrome, Safari, or Firefox.");
+      return;
+    }
 
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) {
