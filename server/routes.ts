@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
-import { convertToMp4, generateThumbnail, extractAudio } from "./ffmpeg";
+import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -46,22 +46,26 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// Configure multer for video uploads
+// Configure multer for video uploads with broad format support
 const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOADS_DIR,
     filename: (req, file, cb) => {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, uniqueSuffix + path.extname(file.originalname) || ".webm");
+      const ext = path.extname(file.originalname).toLowerCase() || ".mp4";
+      cb(null, uniqueSuffix + ext);
     },
   }),
   limits: { fileSize: MAX_VIDEO_SIZE },
   fileFilter: (req, file, cb) => {
-    const allowed = ["video/webm", "video/mp4", "video/quicktime"];
-    if (allowed.includes(file.mimetype)) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const mimeOk = SUPPORTED_VIDEO_MIMETYPES.includes(file.mimetype) || file.mimetype.startsWith("video/");
+    const extOk = SUPPORTED_VIDEO_EXTENSIONS.includes(ext);
+    
+    if (mimeOk || extOk) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type. Only video files are allowed."));
+      cb(new Error(`Unsupported file type. Please upload MP4, MOV, WebM, MKV, AVI, or other common video formats.`));
     }
   },
 });
@@ -1898,13 +1902,74 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No video file provided" });
       }
 
+      const videoFullPath = path.join(UPLOADS_DIR, req.file.filename);
+      const probeResult = await probeVideo(videoFullPath);
+
+      if (!probeResult.success) {
+        try {
+          fs.unlinkSync(videoFullPath);
+        } catch {}
+        
+        await logUserAction({
+          userId: req.session.userId!,
+          actionType: "file_validation_failed",
+          actionLabel: ActionLabels.file_validation_failed,
+          entityType: "session",
+          entityId: session.id,
+          metadata: { error: probeResult.error, filename: req.file.originalname },
+          req,
+        });
+        
+        return res.status(400).json({ message: probeResult.error || "Invalid video file" });
+      }
+
+      if (!probeResult.hasAudio) {
+        try {
+          fs.unlinkSync(videoFullPath);
+        } catch {}
+        return res.status(400).json({ message: "Video must have an audio track for transcription" });
+      }
+
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      
       await storage.updateSession(session.id, {
         videoPath: req.file.filename,
         videoMimeType: req.file.mimetype,
         videoSizeBytes: req.file.size,
+        originalUploadFilename: req.file.originalname,
+        originalUploadMimeType: req.file.mimetype,
+        originalUploadSizeBytes: req.file.size,
+        originalUploadExtension: ext,
+        originalUploadPath: req.file.filename,
+        originalProbeJson: probeResult.data,
+        durationSeconds: Math.round(probeResult.duration),
+        finalVideoResolution: `${probeResult.width}x${probeResult.height}`,
+        processingStatus: "uploading",
+        processingProgress: 10,
+        processingMessage: "Video uploaded, preparing for processing...",
       });
 
-      res.json({ message: "Video uploaded successfully" });
+      await logUserAction({
+        userId: req.session.userId!,
+        actionType: "video_uploaded",
+        actionLabel: ActionLabels.video_uploaded,
+        entityType: "session",
+        entityId: session.id,
+        metadata: { 
+          filename: req.file.originalname, 
+          size: req.file.size,
+          duration: probeResult.duration,
+          resolution: `${probeResult.width}x${probeResult.height}`,
+        },
+        req,
+      });
+
+      res.json({ 
+        message: "Video uploaded successfully",
+        duration: probeResult.duration,
+        hasAudio: probeResult.hasAudio,
+        resolution: `${probeResult.width}x${probeResult.height}`,
+      });
     } catch (err) {
       console.error("Upload error:", err);
       res.status(500).json({ message: "Failed to upload video" });

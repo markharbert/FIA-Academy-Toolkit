@@ -1,8 +1,167 @@
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
+import type { FFProbeResult } from "@shared/schema";
 
 const MAX_DURATION_SECONDS = 600;
+
+// Supported video formats for upload
+export const SUPPORTED_VIDEO_EXTENSIONS = [
+  ".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".wmv",
+  ".flv", ".3gp", ".mpeg", ".mpg", ".ts", ".m2ts", ".ogv", ".ogg"
+];
+
+export const SUPPORTED_VIDEO_MIMETYPES = [
+  "video/mp4",
+  "video/quicktime",
+  "video/x-m4v",
+  "video/webm",
+  "video/x-matroska",
+  "video/avi",
+  "video/x-msvideo",
+  "video/x-ms-wmv",
+  "video/x-flv",
+  "video/3gpp",
+  "video/mpeg",
+  "video/mp2t",
+  "video/ogg",
+];
+
+export interface ProbeResult {
+  success: boolean;
+  data?: FFProbeResult;
+  hasVideo: boolean;
+  hasAudio: boolean;
+  duration: number;
+  width: number;
+  height: number;
+  error?: string;
+}
+
+export async function probeVideo(inputPath: string): Promise<ProbeResult> {
+  return new Promise((resolve) => {
+    if (!fs.existsSync(inputPath)) {
+      resolve({ success: false, hasVideo: false, hasAudio: false, duration: 0, width: 0, height: 0, error: "File not found" });
+      return;
+    }
+
+    const ffprobe = spawn("ffprobe", [
+      "-v", "quiet",
+      "-print_format", "json",
+      "-show_format",
+      "-show_streams",
+      inputPath
+    ]);
+
+    let stdout = "";
+    let stderr = "";
+
+    ffprobe.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    ffprobe.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    ffprobe.on("close", (code) => {
+      if (code !== 0) {
+        console.error(`[FFprobe] Failed with code ${code}:`, stderr);
+        resolve({ 
+          success: false, 
+          hasVideo: false, 
+          hasAudio: false, 
+          duration: 0, 
+          width: 0, 
+          height: 0, 
+          error: "Could not analyze video file. Please upload MP4, MOV, or WebM." 
+        });
+        return;
+      }
+
+      try {
+        const data = JSON.parse(stdout) as FFProbeResult;
+        const videoStream = data.streams?.find((s) => s.codec_type === "video");
+        const audioStream = data.streams?.find((s) => s.codec_type === "audio");
+        const duration = parseFloat(data.format?.duration || "0");
+        
+        if (!videoStream) {
+          resolve({ 
+            success: false, 
+            hasVideo: false, 
+            hasAudio: !!audioStream, 
+            duration, 
+            width: 0, 
+            height: 0, 
+            error: "No video stream found in file" 
+          });
+          return;
+        }
+
+        if (duration > MAX_DURATION_SECONDS) {
+          resolve({ 
+            success: false, 
+            hasVideo: true, 
+            hasAudio: !!audioStream, 
+            duration, 
+            width: videoStream.width || 0, 
+            height: videoStream.height || 0, 
+            error: `Video too long (${Math.round(duration)}s). Maximum is ${MAX_DURATION_SECONDS / 60} minutes.` 
+          });
+          return;
+        }
+
+        if (duration === 0) {
+          resolve({ 
+            success: false, 
+            hasVideo: true, 
+            hasAudio: !!audioStream, 
+            duration, 
+            width: videoStream.width || 0, 
+            height: videoStream.height || 0, 
+            error: "Video has zero duration" 
+          });
+          return;
+        }
+
+        resolve({
+          success: true,
+          data,
+          hasVideo: true,
+          hasAudio: !!audioStream,
+          duration,
+          width: videoStream.width || 0,
+          height: videoStream.height || 0,
+        });
+
+      } catch (parseErr) {
+        console.error(`[FFprobe] JSON parse error:`, parseErr);
+        resolve({ 
+          success: false, 
+          hasVideo: false, 
+          hasAudio: false, 
+          duration: 0, 
+          width: 0, 
+          height: 0, 
+          error: "Could not parse video metadata" 
+        });
+      }
+    });
+
+    ffprobe.on("error", (err) => {
+      console.error(`[FFprobe] Process error:`, err);
+      resolve({ 
+        success: false, 
+        hasVideo: false, 
+        hasAudio: false, 
+        duration: 0, 
+        width: 0, 
+        height: 0, 
+        error: "FFprobe process failed to start" 
+      });
+    });
+  });
+}
 
 export interface ConversionResult {
   success: boolean;

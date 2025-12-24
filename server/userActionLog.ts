@@ -42,4 +42,10 @@ export const ActionLabels = {
   keap_sync_attempted: "Keap sync attempted",
   keap_sync_succeeded: "Synced to Keap",
   keap_sync_failed: "Keap sync failed",
+  video_uploaded: "Uploaded video for processing",
+  upload_failed: "Video upload failed",
+  processing_started: "Video processing started",
+  processing_completed: "Video processing completed",
+  processing_failed: "Video processing failed",
+  file_validation_failed: "Video file validation failed",
 } as const;

@@ -119,6 +119,11 @@ export async function processSession(sessionId: string, userId: string): Promise
         videoPath: currentVideoPath,
         videoMimeType: "video/mp4",
         videoSizeBytes: stat.size,
+        finalVideoPath: currentVideoPath,
+      });
+    } else {
+      await storage.updateSession(sessionId, {
+        finalVideoPath: session.videoPath,
       });
     }
     

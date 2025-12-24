@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,13 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { Video, Circle, Square, RotateCcw, Save, Lightbulb, Mic, CheckCircle, Loader2, AlertCircle, Upload, FileText, TrendingUp, Camera, Settings } from "lucide-react";
+import { Video, Lightbulb, Mic, CheckCircle, Loader2, AlertCircle, Upload, FileText, TrendingUp, Settings, X, File } from "lucide-react";
 import type { GoalType } from "@shared/schema";
-
-interface MediaDeviceOption {
-  deviceId: string;
-  label: string;
-}
 
 const formulaParts = [
   {
@@ -49,25 +44,35 @@ const formulaParts = [
 ];
 
 const tips = [
-  { icon: Lightbulb, text: "Find good lighting - face a window or light source" },
+  { icon: Lightbulb, text: "Record in good lighting - face a window or light source" },
   { icon: Mic, text: "Speak clearly and at a steady pace" },
   { icon: Video, text: "Keep it short and focused - aim for 30-90 seconds" },
 ];
 
-type ProcessingStep = "idle" | "uploading" | "converting" | "transcribing" | "scoring" | "done" | "error";
+type ProcessingStep = "idle" | "uploading" | "validating" | "processing" | "done" | "error";
 
 const stepLabels: Record<ProcessingStep, string> = {
-  idle: "Ready",
+  idle: "Ready to upload",
   uploading: "Uploading video...",
-  converting: "Converting to MP4...",
-  transcribing: "Transcribing audio...",
-  scoring: "Scoring your video...",
+  validating: "Validating video...",
+  processing: "Processing video...",
   done: "Complete!",
   error: "Error occurred",
 };
 
-function ProcessingStepper({ currentStep }: { currentStep: ProcessingStep }) {
-  const steps: ProcessingStep[] = ["uploading", "converting", "transcribing", "scoring", "done"];
+const SUPPORTED_FORMATS = ".mp4, .mov, .webm, .mkv, .avi, .wmv, .mpeg, .mpg, .m4v, .3gp";
+const MAX_FILE_SIZE_MB = 250;
+const MAX_DURATION_MINUTES = 10;
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ProcessingStepper({ currentStep, uploadProgress }: { currentStep: ProcessingStep; uploadProgress: number }) {
+  const steps: ProcessingStep[] = ["uploading", "validating", "processing", "done"];
   const currentIndex = steps.indexOf(currentStep);
 
   return (
@@ -76,7 +81,7 @@ function ProcessingStepper({ currentStep }: { currentStep: ProcessingStep }) {
         {steps.map((step, index) => {
           const isActive = step === currentStep;
           const isComplete = currentIndex > index || currentStep === "done";
-          const Icon = step === "uploading" ? Upload : step === "converting" ? Video : step === "transcribing" ? FileText : step === "scoring" ? TrendingUp : CheckCircle;
+          const Icon = step === "uploading" ? Upload : step === "validating" ? FileText : step === "processing" ? TrendingUp : CheckCircle;
 
           return (
             <div key={step} className="flex flex-1 items-center">
@@ -101,286 +106,94 @@ function ProcessingStepper({ currentStep }: { currentStep: ProcessingStep }) {
         })}
       </div>
       <p className="text-center text-sm font-medium">{stepLabels[currentStep]}</p>
+      {currentStep === "uploading" && (
+        <Progress value={uploadProgress} className="h-2" />
+      )}
     </div>
   );
 }
 
 export default function RecordPage() {
   const [, setLocation] = useLocation();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
-  const [duration, setDuration] = useState(0);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [goalType, setGoalType] = useState<GoalType>("sales");
   const [processingStep, setProcessingStep] = useState<ProcessingStep>("idle");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [cameraReady, setCameraReady] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
 
-  const [cameras, setCameras] = useState<MediaDeviceOption[]>([]);
-  const [microphones, setMicrophones] = useState<MediaDeviceOption[]>([]);
-  const [selectedCamera, setSelectedCamera] = useState<string>("");
-  const [selectedMicrophone, setSelectedMicrophone] = useState<string>("");
-  const [audioLevel, setAudioLevel] = useState(0);
-  const [recordingMimeType, setRecordingMimeType] = useState<string>("video/webm");
+  const isProcessing = processingStep !== "idle" && processingStep !== "error";
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const audioAnimationRef = useRef<number | null>(null);
-  const isInitializedRef = useRef(false);
-
-  const cleanupAudio = useCallback(() => {
-    if (audioAnimationRef.current) {
-      cancelAnimationFrame(audioAnimationRef.current);
-      audioAnimationRef.current = null;
-    }
-    if (audioSourceRef.current) {
-      audioSourceRef.current.disconnect();
-      audioSourceRef.current = null;
-    }
-    analyserRef.current = null;
-    setAudioLevel(0);
-  }, []);
-
-  const startCamera = useCallback(async (cameraId?: string, micId?: string) => {
-    try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      cleanupAudio();
-
-      const constraints: MediaStreamConstraints = {
-        video: cameraId
-          ? { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-          : { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" },
-        audio: micId
-          ? { deviceId: { exact: micId } }
-          : true,
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.muted = true;
-      }
-      setCameraReady(true);
-
-      if (!audioContextRef.current || audioContextRef.current.state === "closed") {
-        audioContextRef.current = new AudioContext();
-      }
-      const audioContext = audioContextRef.current;
-      const source = audioContext.createMediaStreamSource(stream);
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      audioSourceRef.current = source;
-      analyserRef.current = analyser;
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const updateLevel = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-        setAudioLevel(Math.min(100, (avg / 128) * 100));
-        audioAnimationRef.current = requestAnimationFrame(updateLevel);
-      };
-      updateLevel();
-    } catch (err) {
-      setError("Could not access camera. Please allow camera permissions.");
-    }
-  }, [cleanupAudio]);
-
-  useEffect(() => {
-    const init = async () => {
-      try {
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      } catch {}
-      
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices
-        .filter((d) => d.kind === "videoinput")
-        .map((d, i) => ({
-          deviceId: d.deviceId,
-          label: d.label || `Camera ${i + 1}`,
-        }));
-      const audioDevices = devices
-        .filter((d) => d.kind === "audioinput")
-        .map((d, i) => ({
-          deviceId: d.deviceId,
-          label: d.label || `Microphone ${i + 1}`,
-        }));
-
-      setCameras(videoDevices);
-      setMicrophones(audioDevices);
-
-      const savedCamera = localStorage.getItem("selectedCameraId");
-      const savedMic = localStorage.getItem("selectedMicrophoneId");
-
-      const initialCamera = savedCamera && videoDevices.some((d) => d.deviceId === savedCamera)
-        ? savedCamera
-        : videoDevices[0]?.deviceId || "";
-      const initialMic = savedMic && audioDevices.some((d) => d.deviceId === savedMic)
-        ? savedMic
-        : audioDevices[0]?.deviceId || "";
-
-      setSelectedCamera(initialCamera);
-      setSelectedMicrophone(initialMic);
-
-      if (initialCamera || initialMic) {
-        await startCamera(initialCamera, initialMic);
-      }
-      isInitializedRef.current = true;
-    };
-    init();
-
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      cleanupAudio();
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-    };
-  }, [startCamera, cleanupAudio]);
-
-  const handleCameraChange = (deviceId: string) => {
-    setSelectedCamera(deviceId);
-    localStorage.setItem("selectedCameraId", deviceId);
-    if (isInitializedRef.current) {
-      startCamera(deviceId, selectedMicrophone);
-    }
-  };
-
-  const handleMicrophoneChange = (deviceId: string) => {
-    setSelectedMicrophone(deviceId);
-    localStorage.setItem("selectedMicrophoneId", deviceId);
-    if (isInitializedRef.current) {
-      startCamera(selectedCamera, deviceId);
-    }
-  };
-
-  const getBestMimeType = (): { mimeType: string; extension: string } => {
-    const mp4Options = [
-      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-      "video/mp4;codecs=avc1.4D401F,mp4a.40.2",
-      "video/mp4;codecs=avc1,mp4a",
-      "video/mp4",
-    ];
-    
-    for (const mimeType of mp4Options) {
-      if (MediaRecorder.isTypeSupported(mimeType)) {
-        console.log(`[Recording] Using MP4 format: ${mimeType}`);
-        return { mimeType, extension: "mp4" };
-      }
-    }
-    
-    const webmOptions = [
-      "video/webm;codecs=vp9,opus",
-      "video/webm;codecs=vp8,opus",
-      "video/webm;codecs=vp9",
-      "video/webm;codecs=vp8",
-      "video/webm",
-    ];
-    
-    for (const mimeType of webmOptions) {
-      if (MediaRecorder.isTypeSupported(mimeType)) {
-        console.log(`[Recording] Using WebM format: ${mimeType}`);
-        return { mimeType, extension: "webm" };
-      }
-    }
-    
-    console.log("[Recording] Falling back to default format");
-    return { mimeType: "video/webm", extension: "webm" };
-  };
-
-  const startRecording = () => {
-    if (!streamRef.current) return;
-
-    chunksRef.current = [];
-    setDuration(0);
-    setRecordedBlob(null);
-    setRecordedUrl(null);
+  const handleFileSelect = useCallback((file: File) => {
     setError(null);
-
-    const { mimeType, extension } = getBestMimeType();
-    setRecordingMimeType(mimeType);
     
-    const recorderOptions: MediaRecorderOptions = {
-      mimeType,
-      videoBitsPerSecond: 4000000,
-    };
-
-    let mediaRecorder: MediaRecorder;
-    try {
-      mediaRecorder = new MediaRecorder(streamRef.current, recorderOptions);
-    } catch (err) {
-      console.error("[Recording] Failed to create MediaRecorder:", err);
-      setError("Your browser doesn't support video recording. Please try Chrome, Safari, or Firefox.");
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setError(`File too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
       return;
     }
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
-      }
-    };
+    if (!file.type.startsWith("video/")) {
+      setError("Please select a video file.");
+      return;
+    }
 
-    mediaRecorder.onstop = () => {
-      const baseMimeType = mimeType.split(";")[0];
-      const blob = new Blob(chunksRef.current, { type: baseMimeType });
-      setRecordedBlob(blob);
-      const url = URL.createObjectURL(blob);
-      setRecordedUrl(url);
-      console.log(`[Recording] Saved as ${extension}, size: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
-    };
+    setSelectedFile(file);
+    
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(URL.createObjectURL(file));
+  }, [previewUrl]);
 
-    mediaRecorderRef.current = mediaRecorder;
-    mediaRecorder.start(1000);
-    setIsRecording(true);
-
-    timerRef.current = setInterval(() => {
-      setDuration((d) => d + 1);
-    }, 1000);
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
     }
   };
 
-  const retake = () => {
-    setRecordedBlob(null);
-    setRecordedUrl(null);
-    setDuration(0);
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  }, [handleFileSelect]);
+
+  const clearFile = () => {
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
     setError(null);
-    if (videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.muted = true;
+    setProcessingStep("idle");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
-  const saveSession = async () => {
-    if (!recordedBlob) return;
+  const uploadAndProcess = async () => {
+    if (!selectedFile) return;
 
     setProcessingStep("uploading");
+    setUploadProgress(0);
     setError(null);
 
     try {
@@ -389,7 +202,6 @@ export default function RecordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           goalType, 
-          durationSeconds: duration,
           title: sessionTitle.trim() || undefined,
         }),
         credentials: "include",
@@ -398,48 +210,52 @@ export default function RecordPage() {
       if (!createRes.ok) throw new Error("Failed to create session");
       const { id } = await createRes.json();
 
-      const isMP4 = recordingMimeType.startsWith("video/mp4");
-      const extension = isMP4 ? "mp4" : "webm";
-      
       const formData = new FormData();
-      formData.append("video", recordedBlob, `recording.${extension}`);
+      formData.append("video", selectedFile);
 
-      const uploadRes = await fetch(`/api/sessions/${id}/upload`, {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-
-      if (!uploadRes.ok) throw new Error("Failed to upload video");
-
-      setProcessingStep("converting");
-      const convertRes = await fetch(`/api/sessions/${id}/convert`, {
-        method: "POST",
-        credentials: "include",
-      });
-
-      const convertData = await convertRes.json();
-      if (!convertRes.ok) throw new Error("Failed to convert video to MP4");
+      const xhr = new XMLHttpRequest();
       
-      if (convertData.skipped) {
-        console.log("[Recording] Conversion skipped - already MP4");
+      await new Promise<void>((resolve, reject) => {
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            setUploadProgress(percent);
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            try {
+              const errData = JSON.parse(xhr.responseText);
+              reject(new Error(errData.message || "Upload failed"));
+            } catch {
+              reject(new Error("Upload failed"));
+            }
+          }
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+        xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+
+        xhr.open("POST", `/api/sessions/${id}/upload`);
+        xhr.withCredentials = true;
+        xhr.send(formData);
+      });
+
+      setProcessingStep("validating");
+
+      setProcessingStep("processing");
+      const processRes = await fetch(`/api/sessions/${id}/process`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!processRes.ok) {
+        const errData = await processRes.json().catch(() => ({}));
+        throw new Error(errData.message || "Processing failed");
       }
-
-      setProcessingStep("transcribing");
-      const transcribeRes = await fetch(`/api/sessions/${id}/transcribe`, {
-        method: "POST",
-        credentials: "include",
-      });
-
-      if (!transcribeRes.ok) throw new Error("Failed to transcribe video");
-
-      setProcessingStep("scoring");
-      const scoreRes = await fetch(`/api/sessions/${id}/score`, {
-        method: "POST",
-        credentials: "include",
-      });
-
-      if (!scoreRes.ok) throw new Error("Failed to score video");
 
       setProcessingStep("done");
       setTimeout(() => {
@@ -451,143 +267,128 @@ export default function RecordPage() {
     }
   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const isProcessing = processingStep !== "idle" && processingStep !== "error";
-
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto max-w-6xl p-4 md:p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold" data-testid="text-record-title">New Practice Session</h1>
-        <p className="text-muted-foreground">Record your video and get AI-powered feedback</p>
+        <h1 className="text-2xl font-bold" data-testid="text-page-title">Upload Video</h1>
+        <p className="text-muted-foreground">Upload a video to get AI-powered feedback on your marketing skills.</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3 space-y-6">
           <Card>
             <CardContent className="p-4">
-              <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
-                {recordedUrl ? (
-                  <video
-                    src={recordedUrl}
-                    controls
-                    className="h-full w-full object-cover"
-                    data-testid="video-playback"
+              {!selectedFile ? (
+                <div
+                  className={`relative aspect-video overflow-hidden rounded-lg border-2 border-dashed transition-colors cursor-pointer flex flex-col items-center justify-center gap-4 ${
+                    isDragging 
+                      ? "border-primary bg-primary/5" 
+                      : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="upload-dropzone"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={handleInputChange}
+                    className="hidden"
+                    data-testid="input-video-file"
                   />
-                ) : (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    className="h-full w-full object-cover"
-                    data-testid="video-preview"
-                  />
-                )}
-                {isRecording && (
-                  <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-destructive px-3 py-1 text-sm font-medium text-destructive-foreground">
-                    <Circle className="h-3 w-3 animate-pulse fill-current" />
-                    {formatTime(duration)}
+                  <Upload className={`h-16 w-16 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
+                  <div className="text-center px-4">
+                    <p className="text-lg font-medium">
+                      {isDragging ? "Drop your video here" : "Drag and drop your video here"}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      or click to browse your files
+                    </p>
                   </div>
-                )}
-                {!cameraReady && !recordedUrl && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-white" />
+                  <div className="text-center text-xs text-muted-foreground space-y-1">
+                    <p>Supported formats: {SUPPORTED_FORMATS}</p>
+                    <p>Maximum size: {MAX_FILE_SIZE_MB}MB | Maximum duration: {MAX_DURATION_MINUTES} minutes</p>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
+                    <video
+                      src={previewUrl || undefined}
+                      controls
+                      className="h-full w-full object-contain"
+                      data-testid="video-preview"
+                    />
+                  </div>
 
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-                {!recordedUrl ? (
-                  <>
-                    {!isRecording ? (
+                  <div className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-lg">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <File className="h-8 w-8 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-medium truncate" data-testid="text-filename">{selectedFile.name}</p>
+                        <p className="text-sm text-muted-foreground" data-testid="text-filesize">
+                          {formatFileSize(selectedFile.size)}
+                        </p>
+                      </div>
+                    </div>
+                    {!isProcessing && (
                       <Button
-                        size="lg"
-                        onClick={startRecording}
-                        disabled={!cameraReady}
-                        data-testid="button-start-recording"
+                        variant="ghost"
+                        size="icon"
+                        onClick={clearFile}
+                        data-testid="button-clear-file"
                       >
-                        <Circle className="mr-2 h-5 w-5 fill-current" />
-                        Start Recording
-                      </Button>
-                    ) : (
-                      <Button
-                        size="lg"
-                        variant="destructive"
-                        onClick={stopRecording}
-                        data-testid="button-stop-recording"
-                      >
-                        <Square className="mr-2 h-5 w-5 fill-current" />
-                        Stop Recording
+                        <X className="h-4 w-4" />
                       </Button>
                     )}
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={retake}
-                      disabled={isProcessing}
-                      data-testid="button-retake"
-                    >
-                      <RotateCcw className="mr-2 h-4 w-4" />
-                      Re-record
-                    </Button>
-                    <Button
-                      size="lg"
-                      onClick={saveSession}
-                      disabled={isProcessing}
-                      data-testid="button-save-session"
-                    >
-                      {isProcessing ? (
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      ) : (
-                        <Save className="mr-2 h-5 w-5" />
-                      )}
-                      Save Session
-                    </Button>
-                  </>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="mt-4 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive" data-testid="error-message">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <p>{error}</p>
+                </div>
+              )}
+
+              {isProcessing && (
+                <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                  <ProcessingStepper currentStep={processingStep} uploadProgress={uploadProgress} />
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                {selectedFile && !isProcessing && (
+                  <Button
+                    size="lg"
+                    onClick={uploadAndProcess}
+                    data-testid="button-upload-process"
+                  >
+                    <Upload className="mr-2 h-5 w-5" />
+                    Upload and Analyze
+                  </Button>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          {isProcessing && (
-            <Card>
-              <CardContent className="py-6">
-                <ProcessingStepper currentStep={processingStep} />
-              </CardContent>
-            </Card>
-          )}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {tips.map((tip, index) => (
+              <Card key={index}>
+                <CardContent className="flex items-start gap-3 p-4">
+                  <tip.icon className="h-5 w-5 shrink-0 text-primary" />
+                  <p className="text-sm">{tip.text}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
 
-          {error && (
-            <Card className="border-destructive">
-              <CardContent className="flex items-center gap-3 py-4">
-                <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
-                <p className="text-sm text-destructive">{error}</p>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Recording Tips</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {tips.map((tip, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <tip.icon className="h-4 w-4 text-primary" />
-                  </div>
-                  <p className="text-sm text-muted-foreground pt-1">{tip.text}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
+        <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -604,7 +405,7 @@ export default function RecordPage() {
                   onChange={(e) => setSessionTitle(e.target.value)}
                   placeholder="e.g., Product pitch practice"
                   maxLength={80}
-                  disabled={isRecording || isProcessing}
+                  disabled={isProcessing}
                   data-testid="input-session-title"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -614,7 +415,7 @@ export default function RecordPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="goal">Video Goal</Label>
-                <Select value={goalType} onValueChange={(v) => setGoalType(v as GoalType)} disabled={isRecording || isProcessing}>
+                <Select value={goalType} onValueChange={(v) => setGoalType(v as GoalType)} disabled={isProcessing}>
                   <SelectTrigger id="goal" data-testid="select-goal">
                     <SelectValue />
                   </SelectTrigger>
@@ -626,100 +427,31 @@ export default function RecordPage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="camera" className="flex items-center gap-2">
-                    <Camera className="h-4 w-4" />
-                    Camera
-                  </Label>
-                  {cameras.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No camera detected</p>
-                  ) : (
-                    <Select 
-                      value={selectedCamera} 
-                      onValueChange={handleCameraChange}
-                      disabled={isRecording || isProcessing}
-                    >
-                      <SelectTrigger id="camera" data-testid="select-camera">
-                        <SelectValue placeholder="Select camera" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {cameras.map((cam) => (
-                          <SelectItem key={cam.deviceId} value={cam.deviceId}>
-                            {cam.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="microphone" className="flex items-center gap-2">
-                    <Mic className="h-4 w-4" />
-                    Microphone
-                  </Label>
-                  {microphones.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No microphone detected</p>
-                  ) : (
-                    <Select 
-                      value={selectedMicrophone} 
-                      onValueChange={handleMicrophoneChange}
-                      disabled={isRecording || isProcessing}
-                    >
-                      <SelectTrigger id="microphone" data-testid="select-microphone">
-                        <SelectValue placeholder="Select microphone" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {microphones.map((mic) => (
-                          <SelectItem key={mic.deviceId} value={mic.deviceId}>
-                            {mic.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              </div>
-
-              {microphones.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Microphone Level</Label>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div 
-                      className="h-full bg-primary transition-all duration-75"
-                      style={{ width: `${audioLevel}%` }}
-                    />
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
-        </div>
 
-        <div className="lg:col-span-2 lg:sticky lg:top-20 lg:self-start">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Video className="h-5 w-5 text-primary" />
                 5-Part Video Formula
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {formulaParts.map((part) => (
-                <div key={part.num} className="space-y-2" data-testid={`formula-part-${part.num}`}>
+                <div key={part.num} className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <Badge className="h-6 w-6 shrink-0 items-center justify-center rounded-full p-0">
+                    <Badge variant="secondary" className="w-6 h-6 flex items-center justify-center p-0">
                       {part.num}
                     </Badge>
-                    <h4 className="font-semibold">{part.title}</h4>
+                    <span className="font-medium">{part.title}</span>
                   </div>
                   <p className="text-sm text-muted-foreground pl-8">{part.goal}</p>
-                  <ul className="space-y-1 pl-8">
-                    {part.examples.map((ex, i) => (
-                      <li key={i} className="text-xs text-muted-foreground">
-                        • {ex}
+                  <ul className="text-xs text-muted-foreground pl-8 space-y-0.5">
+                    {part.examples.map((example, i) => (
+                      <li key={i} className="flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3 text-primary" />
+                        {example}
                       </li>
                     ))}
                   </ul>
