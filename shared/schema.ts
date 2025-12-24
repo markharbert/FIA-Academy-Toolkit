@@ -150,6 +150,13 @@ export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 export const goalTypes = ["sales", "lead", "education", "recruit"] as const;
 export type GoalType = typeof goalTypes[number];
 
+export const goalTypeLabels: Record<GoalType, string> = {
+  sales: "Make Sales",
+  lead: "Generate Leads",
+  education: "Educate & Provide Value",
+  recruit: "Recruit & Attract Team Members",
+};
+
 // JSON structure for AI scoring results
 export const scoreResultSchema = z.object({
   totalScore: z.number().min(0).max(100),

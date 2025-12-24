@@ -431,6 +431,14 @@ export default function SessionPage() {
                 </Button>
               </a>
             )}
+            {session.scoreJson && (
+              <a href={`/api/sessions/${session.id}/pdf`} download>
+                <Button variant="outline" data-testid="button-download-pdf">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Download Report
+                </Button>
+              </a>
+            )}
             {session.expiresAt && !isExpired && (
               <Badge variant="secondary" className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />

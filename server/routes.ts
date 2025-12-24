@@ -34,6 +34,7 @@ import {
 } from "./keap";
 import { logUserAction, ActionLabels } from "./userActionLog";
 import { processSession, subscribeToSession } from "./processing";
+import { generateSessionPdfBuffer } from "./pdf";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const VIDEO_RETENTION_DAYS = 30;
@@ -2502,6 +2503,41 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Thumbnail error:", err);
       res.status(500).json({ message: "Failed to get thumbnail" });
+    }
+  });
+
+  // PDF report download
+  app.get("/api/sessions/:id/pdf", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.scoreJson) {
+        return res.status(400).json({ message: "No score data available for PDF generation" });
+      }
+
+      const pdfBuffer = await generateSessionPdfBuffer(session);
+      const sanitizedTitle = (session.title || "practice-session")
+        .replace(/[^a-zA-Z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .toLowerCase()
+        .slice(0, 50);
+      const filename = `${sanitizedTitle}-report.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", pdfBuffer.length);
+      res.send(pdfBuffer);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      res.status(500).json({ message: "Failed to generate PDF report" });
     }
   });
 

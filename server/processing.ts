@@ -64,11 +64,8 @@ async function updateProcessingStatus(
     processingProgress: progress,
     processingMessage: message,
     processingUpdatedAt: now,
+    processingError: error || null,
   };
-  
-  if (error) {
-    updates.processingError = error;
-  }
   
   if (status === "ready" || status === "failed") {
     updates.processingCompletedAt = now;
