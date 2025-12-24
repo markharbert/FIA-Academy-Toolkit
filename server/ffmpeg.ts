@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import type { FFProbeResult } from "@shared/schema";
 
-const MAX_DURATION_SECONDS = 600;
+const MAX_DURATION_SECONDS = 1800; // 30 minutes
 
 // Supported video formats for upload
 export const SUPPORTED_VIDEO_EXTENSIONS = [
