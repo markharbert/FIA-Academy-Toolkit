@@ -174,6 +174,7 @@ export default function RecordPage() {
     setError(null);
 
     try {
+      // Step 1: Create a session
       const createRes = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -187,39 +188,82 @@ export default function RecordPage() {
       if (!createRes.ok) throw new Error("Failed to create session");
       const { id } = await createRes.json();
 
-      const formData = new FormData();
-      formData.append("video", selectedFile);
+      // Step 2: Request a presigned URL for direct-to-cloud upload
+      // This bypasses the Replit proxy size limit
+      const urlRes = await fetch(`/api/sessions/${id}/request-upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: selectedFile.name,
+          size: selectedFile.size,
+          contentType: selectedFile.type || "video/mp4",
+        }),
+        credentials: "include",
+      });
 
+      if (!urlRes.ok) {
+        const errData = await urlRes.json();
+        throw new Error(errData.message || "Failed to get upload URL");
+      }
+
+      const { uploadURL, objectPath, traceId } = await urlRes.json();
+      console.log(`[Upload:${traceId}] Got presigned URL, uploading directly to cloud storage`);
+
+      setUploadProgress(5);
+
+      // Step 3: Upload directly to cloud storage (bypasses server proxy)
       const xhr = new XMLHttpRequest();
       
       await new Promise<void>((resolve, reject) => {
         xhr.upload.addEventListener("progress", (e) => {
           if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
+            // Progress from 5% to 90% for the actual upload
+            const percent = 5 + Math.round((e.loaded / e.total) * 85);
             setUploadProgress(percent);
           }
         });
 
         xhr.addEventListener("load", () => {
           if (xhr.status >= 200 && xhr.status < 300) {
+            console.log(`[Upload:${traceId}] Cloud storage upload complete`);
             resolve();
           } else {
-            try {
-              const errData = JSON.parse(xhr.responseText);
-              reject(new Error(errData.message || "Upload failed"));
-            } catch {
-              reject(new Error("Upload failed"));
-            }
+            console.error(`[Upload:${traceId}] Cloud storage upload failed:`, xhr.status, xhr.responseText);
+            reject(new Error("Failed to upload to cloud storage"));
           }
         });
 
-        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+        xhr.addEventListener("error", () => {
+          console.error(`[Upload:${traceId}] Network error during cloud storage upload`);
+          reject(new Error("Network error during upload"));
+        });
         xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
 
-        xhr.open("POST", `/api/sessions/${id}/upload`);
-        xhr.withCredentials = true;
-        xhr.send(formData);
+        xhr.open("PUT", uploadURL);
+        xhr.setRequestHeader("Content-Type", selectedFile.type || "video/mp4");
+        xhr.send(selectedFile);
       });
+
+      setUploadProgress(90);
+
+      // Step 4: Confirm upload and start processing
+      console.log(`[Upload:${traceId}] Confirming upload and starting processing`);
+      const confirmRes = await fetch(`/api/sessions/${id}/confirm-upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          objectPath,
+          filename: selectedFile.name,
+          size: selectedFile.size,
+          contentType: selectedFile.type || "video/mp4",
+        }),
+        credentials: "include",
+      });
+
+      if (!confirmRes.ok) {
+        const errData = await confirmRes.json();
+        throw new Error(errData.message || "Failed to confirm upload");
+      }
 
       // Upload complete - processing starts automatically on server
       // Redirect to session page immediately where progress will be shown via SSE

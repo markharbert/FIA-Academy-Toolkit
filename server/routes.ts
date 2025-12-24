@@ -35,6 +35,7 @@ import {
 import { logUserAction, ActionLabels } from "./userActionLog";
 import { processSession, subscribeToSession } from "./processing";
 import { generateSessionPdfBuffer } from "./pdf";
+import { ObjectStorageService } from "./replit_integrations/object_storage";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const VIDEO_RETENTION_DAYS = 30;
@@ -1883,6 +1884,265 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Update session error:", err);
       res.status(500).json({ message: "Failed to update session" });
+    }
+  });
+
+  // Request a presigned URL for direct-to-cloud video upload
+  // This bypasses the Replit proxy size limit for large files
+  const objectStorageService = new ObjectStorageService();
+  
+  app.post("/api/sessions/:id/request-upload-url", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `presign-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`[Presign:${traceId}] Requesting upload URL for session ${req.params.id}`);
+    
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        console.log(`[Presign:${traceId}] Session not found`);
+        return res.status(404).json({ message: "Session not found", traceId });
+      }
+
+      if (session.userId !== req.session.userId) {
+        console.log(`[Presign:${traceId}] Access denied`);
+        return res.status(403).json({ message: "Access denied", traceId });
+      }
+
+      const { name, size, contentType } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ message: "Missing required field: name", traceId });
+      }
+
+      // Validate file size
+      if (size && size > MAX_VIDEO_SIZE) {
+        return res.status(400).json({ 
+          message: `File too large. Maximum size is ${MAX_VIDEO_SIZE / (1024 * 1024 * 1024)}GB`,
+          traceId 
+        });
+      }
+
+      // Validate file extension
+      const ext = path.extname(name).toLowerCase();
+      if (!SUPPORTED_VIDEO_EXTENSIONS.includes(ext)) {
+        return res.status(400).json({ 
+          message: `Unsupported file type. Please upload MP4, MOV, WebM, MKV, AVI, or other common video formats.`,
+          traceId 
+        });
+      }
+
+      // Generate presigned URL for upload
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+      console.log(`[Presign:${traceId}] Generated upload URL, objectPath: ${objectPath}`);
+
+      // Store the pending upload info in session
+      await storage.updateSession(session.id, {
+        processingStatus: "uploading",
+        processingProgress: 0,
+        processingMessage: "Preparing for upload...",
+      });
+
+      res.json({
+        uploadURL,
+        objectPath,
+        traceId,
+        metadata: { name, size, contentType },
+      });
+    } catch (err) {
+      console.error(`[Presign:${traceId}] Error:`, err);
+      res.status(500).json({ 
+        message: "Failed to generate upload URL",
+        error: err instanceof Error ? err.message : "Unknown error",
+        traceId,
+      });
+    }
+  });
+
+  // Confirm upload completion and start processing (for direct-to-cloud uploads)
+  app.post("/api/sessions/:id/confirm-upload", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `confirm-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`[Confirm:${traceId}] Confirming upload for session ${req.params.id}`);
+    
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        console.log(`[Confirm:${traceId}] Session not found`);
+        return res.status(404).json({ message: "Session not found", traceId });
+      }
+
+      if (session.userId !== req.session.userId) {
+        console.log(`[Confirm:${traceId}] Access denied`);
+        return res.status(403).json({ message: "Access denied", traceId });
+      }
+
+      const { objectPath, filename, size, contentType } = req.body;
+      
+      if (!objectPath || !filename) {
+        return res.status(400).json({ message: "Missing required fields: objectPath, filename", traceId });
+      }
+
+      console.log(`[Confirm:${traceId}] Object path: ${objectPath}, filename: ${filename}, size: ${size}`);
+
+      // Download the file from cloud storage to local disk for processing
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const ext = path.extname(filename).toLowerCase() || ".mp4";
+      const localFilename = uniqueSuffix + ext;
+      const localPath = path.join(UPLOADS_DIR, localFilename);
+
+      console.log(`[Confirm:${traceId}] Streaming from cloud storage to ${localPath}`);
+
+      try {
+        const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+        
+        // Stream the file to disk instead of buffering in memory
+        // This is critical for handling large files (700MB+)
+        await new Promise<void>((resolve, reject) => {
+          const readStream = objectFile.createReadStream();
+          const writeStream = fs.createWriteStream(localPath);
+          
+          readStream.on("error", (err) => {
+            console.error(`[Confirm:${traceId}] Read stream error:`, err);
+            writeStream.destroy();
+            reject(err);
+          });
+          
+          writeStream.on("error", (err) => {
+            console.error(`[Confirm:${traceId}] Write stream error:`, err);
+            readStream.destroy();
+            reject(err);
+          });
+          
+          writeStream.on("finish", () => {
+            const stats = fs.statSync(localPath);
+            console.log(`[Confirm:${traceId}] Streamed ${stats.size} bytes to ${localPath}`);
+            resolve();
+          });
+          
+          readStream.pipe(writeStream);
+        });
+      } catch (downloadErr) {
+        console.error(`[Confirm:${traceId}] Failed to stream from cloud storage:`, downloadErr);
+        // Clean up partial file if it exists
+        try {
+          if (fs.existsSync(localPath)) {
+            fs.unlinkSync(localPath);
+          }
+        } catch {}
+        return res.status(500).json({ 
+          message: "Failed to download file from cloud storage",
+          error: downloadErr instanceof Error ? downloadErr.message : "Unknown error",
+          traceId,
+        });
+      }
+
+      // Probe the video file
+      const probeResult = await probeVideo(localPath);
+      
+      if (!probeResult.success) {
+        console.log(`[Confirm:${traceId}] Probe failed: ${probeResult.error}`);
+        try {
+          fs.unlinkSync(localPath);
+        } catch {}
+        
+        await logUserAction({
+          userId: req.session.userId!,
+          actionType: "file_validation_failed",
+          actionLabel: ActionLabels.file_validation_failed,
+          entityType: "session",
+          entityId: session.id,
+          metadata: { error: probeResult.error, filename, traceId },
+          req,
+        });
+        
+        return res.status(400).json({ message: probeResult.error || "Invalid video file", traceId });
+      }
+
+      if (!probeResult.hasAudio) {
+        console.log(`[Confirm:${traceId}] No audio track detected`);
+        try {
+          fs.unlinkSync(localPath);
+        } catch {}
+        return res.status(400).json({ message: "Video must have an audio track for transcription", traceId });
+      }
+      
+      console.log(`[Confirm:${traceId}] Probe successful: duration=${probeResult.duration}s, resolution=${probeResult.width}x${probeResult.height}`);
+
+      // Update session with all metadata and set to queued
+      await storage.updateSession(session.id, {
+        videoPath: localFilename,
+        videoMimeType: contentType || "video/mp4",
+        videoSizeBytes: size || fs.statSync(localPath).size,
+        originalUploadFilename: filename,
+        originalUploadMimeType: contentType || "video/mp4",
+        originalUploadSizeBytes: size || fs.statSync(localPath).size,
+        originalUploadExtension: ext,
+        originalUploadPath: localFilename,
+        originalProbeJson: probeResult.data,
+        durationSeconds: Math.round(probeResult.duration),
+        finalVideoResolution: `${probeResult.width}x${probeResult.height}`,
+        finalVideoPath: null,
+        processingStatus: "queued",
+        processingProgress: 10,
+        processingMessage: "Queued for processing...",
+        processingError: null,
+        processingStartedAt: null,
+        processingCompletedAt: null,
+        transcriptText: null,
+        transcriptEditedText: null,
+        scoreJson: null,
+        scoreUpdatedAt: null,
+      });
+
+      console.log(`[Confirm:${traceId}] Metadata persisted, session status is queued`);
+
+      await logUserAction({
+        userId: req.session.userId!,
+        actionType: "video_uploaded",
+        actionLabel: ActionLabels.video_uploaded,
+        entityType: "session",
+        entityId: session.id,
+        metadata: { 
+          filename, 
+          size: size || fs.statSync(localPath).size,
+          duration: probeResult.duration,
+          resolution: `${probeResult.width}x${probeResult.height}`,
+          traceId,
+          uploadMethod: "cloud_storage",
+        },
+        req,
+      });
+
+      // Start processing in background
+      const userId = req.session.userId!;
+      const sessionId = session.id;
+      setTimeout(() => {
+        console.log(`[Confirm:${traceId}] Starting background processing for session ${sessionId}`);
+        processSession(sessionId, userId).catch((err) => {
+          console.error(`[Confirm:${traceId}] Background processing error:`, err);
+        });
+      }, 0);
+
+      console.log(`[Confirm:${traceId}] Upload confirmed, processing scheduled`);
+
+      res.json({ 
+        success: true,
+        message: "Video uploaded successfully",
+        sessionId: session.id,
+        duration: probeResult.duration,
+        hasAudio: probeResult.hasAudio,
+        resolution: `${probeResult.width}x${probeResult.height}`,
+        traceId,
+      });
+    } catch (err) {
+      console.error(`[Confirm:${traceId}] Error:`, err);
+      res.status(500).json({ 
+        message: "Failed to confirm upload",
+        error: err instanceof Error ? err.message : "Unknown error",
+        traceId,
+      });
     }
   });
 
