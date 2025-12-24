@@ -1,0 +1,330 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Two issues remain:
+
+The processed video still is not reliably loading in the session page player.
+
+Some videos take too long to process, especially large uploads.
+
+You must implement a new approach that guarantees fast, consistent playback plus faster overall processing:
+
+Generate a lightweight “preview” MP4 as early as possible.
+
+Use that preview for in-browser playback and for transcription/scoring.
+
+Delete the original large uploaded file after preview is generated (unless needed for troubleshooting).
+
+Reduce processing time aggressively while keeping audio intact and transcript quality usable.
+
+High Priority Outcomes
+
+Session page always plays a video after upload by using a preview MP4 that is guaranteed browser-compatible.
+
+Time-to-first-playback is minimized. Preview should appear quickly even for very large files.
+
+Processing pipeline completes faster overall by doing less work, sooner.
+
+Original huge upload is deleted after preview is created to save storage, unless retention is required for debug.
+
+Transcript and scoring still work using preview audio.
+
+PART 1: Root Cause Check: Why Video Still Does Not Load
+
+Before changing the pipeline, identify the exact reason playback fails today and fix it, because preview output depends on correct streaming:
+
+Must check and fix:
+
+Session API must return a valid playback URL.
+
+Playback URL must return correct headers:
+
+Content-Type: video/mp4
+
+Accept-Ranges: bytes (and handle Range with 206)
+
+Content-Length
+
+If storage is protected, use signed URL or an authenticated streaming endpoint.
+
+Frontend must only mount video player when src exists and must remount when src changes:
+
+<video key={playbackUrl} src={playbackUrl} controls preload="metadata" playsInline />
+
+videoRef.load() on change
+
+Do not proceed until playback works for at least one known-good MP4. Then implement preview pipeline to improve speed.
+
+PART 2: New Pipeline: Create a Fast Preview MP4 Early
+
+Key change
+Instead of producing a heavy 1080p output first, produce a fast preview output first, then use preview as the main stored asset.
+
+Definition: Preview MP4
+
+Container: MP4
+
+Video codec: H.264
+
+Audio codec: AAC
+
+Resolution: low to medium, optimized for speed (example 854x480 or 640x360)
+
+Frame rate: cap at 24 or 30 fps
+
+Audio preserved and clear enough for transcription
+
+movflags +faststart for streaming
+
+Preview generation goals
+
+Fastest possible processing time.
+
+Small file size.
+
+Guaranteed browser playback compatibility.
+
+Transcode strategy (speed-first)
+Use ffmpeg with speed oriented settings:
+
+Use a fast preset (ultrafast or veryfast) for the preview.
+
+Use a reasonable CRF for preview (example 28 to 32).
+
+Downscale aggressively.
+
+Strip unnecessary streams.
+
+Always include +faststart.
+
+Preview output example target settings
+
+480p (or 360p) output
+
+H.264 baseline/main compatible profile
+
+AAC 128k audio
+
+30 fps max
+
+faststart enabled
+
+PART 3: Delete Original Upload After Preview Is Created
+
+Storage rules
+
+Upload original file to storage first.
+
+Immediately start a job that creates the preview mp4.
+
+When preview creation succeeds:
+
+Save preview storage key as the “playback asset”
+
+Delete the original uploaded file to reduce storage costs
+
+If preview creation fails:
+
+Keep original temporarily for debugging and show error.
+
+Database changes
+Add fields to Sessions:
+
+originalUploadStorageKey (existing)
+
+previewVideoStorageKey (new)
+
+previewVideoUrl (derived or signed)
+
+originalDeletedAt (datetime nullable)
+
+previewGeneratedAt (datetime nullable)
+
+When preview is ready:
+
+Set session.videoPlaybackKey = previewVideoStorageKey
+
+Set session.videoPlaybackType = "preview"
+
+Set previewGeneratedAt
+
+Delete original and set originalDeletedAt
+
+Important
+If your admin needs the original for higher quality later, do not delete it. But per my request, default is delete after preview exists.
+
+PART 4: Use Preview For Transcription and Scoring
+
+To speed up transcription
+
+Extract audio from preview video or directly extract audio from original immediately.
+
+Prefer extracting audio as soon as possible:
+
+If preview generation includes audio already, you can extract from preview.
+
+Ensure audio sample rate is stable (44.1k or 48k) and mono/stereo as needed.
+
+Scoring and recommendations
+
+Use transcript from preview audio.
+
+Use the same 5-part scoring logic.
+
+PART 5: Make Processing Faster Overall: Aggressive Optimizations
+
+You must implement the fastest practical processing approach while maintaining usable transcript quality.
+
+Do these optimizations:
+
+Parallelize where safe
+
+Start audio extraction immediately after upload completes.
+
+Start preview transcode in parallel if resources allow.
+
+If resources do not allow parallel, prioritize preview generation first for fast playback.
+
+Reduce workload
+
+Do not generate 1080p by default.
+
+Only generate higher quality as an optional “Upgrade render” later, not required.
+
+Default render is preview quality.
+
+Use faster ffmpeg settings
+
+Use hardware acceleration if available on the hosting environment (check if enabled).
+
+Use a speed-first preset for preview.
+
+Use scale filter for downscaling early.
+
+Limit max duration and file size if needed
+
+If you have extremely long videos, add a limit or warn users.
+
+Or process only the first X minutes for scoring if that fits your business rules.
+
+Make progress visible and honest
+Update the progress steps:
+
+Uploading
+
+Generating preview (fast playback)
+
+Extracting audio
+
+Transcribing
+
+Scoring
+
+Recommendations
+
+Ready
+
+Time-to-first-playback objective
+
+As soon as previewVideoUrl exists, Session page should load the player.
+
+The rest of the pipeline continues while they watch.
+
+PART 6: Update Session Page UI Behavior
+
+Required UI behavior
+
+Immediately after upload redirect:
+
+Show “Generating preview for playback…”
+
+Show progress bar
+
+Show elapsed time since processing started
+
+When preview is ready:
+
+Render the video player using previewVideoUrl
+
+Keep showing “Transcribing / Scoring” progress below
+
+When everything is done:
+
+Show transcript, score, recommendations
+
+Player remains playable
+
+No empty player rule
+
+Do not render a video element without a src.
+
+PART 7: API and Streaming Requirements For Preview
+
+Session API must return
+
+previewVideoUrl (or a signed URL)
+
+processing status fields
+
+Ensure preview URL works everywhere
+
+Must return Content-Type video/mp4.
+
+Must support byte-range requests:
+
+If Range header present, return 206.
+
+Must be reachable with auth or signed URL.
+
+If using signed URLs
+
+Generate a signed URL each time session page loads or when preview becomes ready.
+
+Signed URLs should last at least 30 minutes.
+
+PART 8: Cleanup and Retention Policy
+
+30 day retention stays the same
+
+The preview video stays available for 30 days.
+
+Delete preview after expiresAt.
+
+Original file
+
+Delete immediately after preview creation, per request.
+
+Keep optional feature flag to retain originals for debugging.
+
+PART 9: Verification Checklist
+
+You must verify:
+
+Upload a 1GB video:
+
+Preview playable within a short time window compared to current behavior.
+
+Original file deleted after preview created.
+
+Session page never shows empty player.
+
+Preview plays in Chrome and Safari.
+
+Transcript and scoring complete using preview audio.
+
+Video still expires after 30 days.
+
+Processing progress bar updates accurately.
+
+All endpoints protected and users only see their own videos.
+
+Deliverables
+
+Root cause for prior playback failure and the fix.
+
+New preview generation pipeline implementation.
+
+Deletion of original after preview creation.
+
+Updated session page UI logic for preview-first playback.
+
+Documented ffmpeg settings used and why they are speed-first.
+
+Now implement preview-first rendering, delete originals after preview generation, and optimize the pipeline for the fastest possible time-to-playback and time-to-results.

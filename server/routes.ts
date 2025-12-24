@@ -2849,65 +2849,101 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Access denied" });
       }
 
-      if (!session.videoPath || session.videoDeletedAt) {
+      if (session.videoDeletedAt) {
         return res.status(404).json({ message: "Video not available" });
       }
 
-      const videoPath = path.join(UPLOADS_DIR, session.videoPath);
-      const localFileExists = fs.existsSync(videoPath);
-      
-      // Try local file first
-      if (localFileExists) {
-        const stat = fs.statSync(videoPath);
-        const fileSize = stat.size;
-        const range = req.headers.range;
+      // Determine which video path to use (prefer preview video)
+      const preferredVideoPath = session.previewVideoPath || session.videoPath;
+      const preferredCloudPath = session.previewCloudStoragePath || session.cloudStoragePath;
 
-        if (range) {
-          const parts = range.replace(/bytes=/, "").split("-");
-          const start = parseInt(parts[0], 10);
-          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-          const chunkSize = end - start + 1;
-          const file = fs.createReadStream(videoPath, { start, end });
-          
-          res.writeHead(206, {
-            "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-            "Accept-Ranges": "bytes",
-            "Content-Length": chunkSize,
-            "Content-Type": session.videoMimeType || "video/webm",
-          });
-          file.pipe(res);
-        } else {
-          res.writeHead(200, {
-            "Content-Length": fileSize,
-            "Content-Type": session.videoMimeType || "video/webm",
-            "Accept-Ranges": "bytes",
-          });
-          fs.createReadStream(videoPath).pipe(res);
-        }
-        return;
+      if (!preferredVideoPath && !preferredCloudPath) {
+        return res.status(404).json({ message: "Video not available" });
       }
 
-      // Fall back to Object Storage if local file not found and we have a cloud path
-      if (session.cloudStoragePath) {
-        console.log(`[Video] Local file not found, streaming from cloud storage: ${session.cloudStoragePath}`);
+      const mimeType = session.videoMimeType || "video/mp4";
+
+      // Try local file first (prioritize preview if available)
+      if (preferredVideoPath) {
+        const videoPath = path.join(UPLOADS_DIR, preferredVideoPath);
+        if (fs.existsSync(videoPath)) {
+          const stat = fs.statSync(videoPath);
+          const fileSize = stat.size;
+          const range = req.headers.range;
+
+          if (range) {
+            const parts = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunkSize = end - start + 1;
+            const file = fs.createReadStream(videoPath, { start, end });
+            
+            res.writeHead(206, {
+              "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+              "Accept-Ranges": "bytes",
+              "Content-Length": chunkSize,
+              "Content-Type": mimeType,
+            });
+            file.pipe(res);
+          } else {
+            res.writeHead(200, {
+              "Content-Length": fileSize,
+              "Content-Type": mimeType,
+              "Accept-Ranges": "bytes",
+            });
+            fs.createReadStream(videoPath).pipe(res);
+          }
+          return;
+        }
+      }
+
+      // Fall back to Object Storage if local file not found
+      if (preferredCloudPath) {
+        console.log(`[Video] Local file not found, streaming from cloud storage: ${preferredCloudPath}`);
         try {
-          const objectFile = await objectStorageService.getObjectEntityFile(session.cloudStoragePath);
+          const objectFile = await objectStorageService.getObjectEntityFile(preferredCloudPath);
           const [metadata] = await objectFile.getMetadata();
+          const fileSize = parseInt(metadata.size?.toString() || "0", 10);
+          const range = req.headers.range;
           
-          res.set({
-            "Content-Type": session.videoMimeType || "video/mp4",
-            "Content-Length": metadata.size?.toString(),
-            "Accept-Ranges": "bytes",
-          });
-          
-          const stream = objectFile.createReadStream();
-          stream.on("error", (err) => {
-            console.error("[Video] Cloud storage stream error:", err);
-            if (!res.headersSent) {
-              res.status(500).json({ message: "Failed to stream video from cloud storage" });
-            }
-          });
-          stream.pipe(res);
+          if (range && fileSize > 0) {
+            // Handle range requests for cloud storage
+            const parts = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunkSize = end - start + 1;
+            
+            res.writeHead(206, {
+              "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+              "Accept-Ranges": "bytes",
+              "Content-Length": chunkSize,
+              "Content-Type": mimeType,
+            });
+            
+            const stream = objectFile.createReadStream({ start, end });
+            stream.on("error", (err) => {
+              console.error("[Video] Cloud storage stream error:", err);
+              if (!res.headersSent) {
+                res.status(500).json({ message: "Failed to stream video from cloud storage" });
+              }
+            });
+            stream.pipe(res);
+          } else {
+            res.writeHead(200, {
+              "Content-Type": mimeType,
+              "Content-Length": fileSize,
+              "Accept-Ranges": "bytes",
+            });
+            
+            const stream = objectFile.createReadStream();
+            stream.on("error", (err) => {
+              console.error("[Video] Cloud storage stream error:", err);
+              if (!res.headersSent) {
+                res.status(500).json({ message: "Failed to stream video from cloud storage" });
+              }
+            });
+            stream.pipe(res);
+          }
           return;
         } catch (cloudErr) {
           console.error("[Video] Failed to stream from cloud storage:", cloudErr);

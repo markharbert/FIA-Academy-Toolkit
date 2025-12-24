@@ -322,6 +322,10 @@ export const sessions = pgTable("sessions", {
   originalProbeJson: jsonb("original_probe_json").$type<FFProbeResult>(),
   originalUploadPath: text("original_upload_path"),
   cloudStoragePath: text("cloud_storage_path"),
+  previewVideoPath: text("preview_video_path"),
+  previewCloudStoragePath: text("preview_cloud_storage_path"),
+  previewGeneratedAt: timestamp("preview_generated_at"),
+  originalDeletedAt: timestamp("original_deleted_at"),
   finalVideoPath: text("final_video_path"),
   finalVideoResolution: text("final_video_resolution"),
 });

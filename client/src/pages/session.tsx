@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 const processingStepLabels: Record<ProcessingStatus, string> = {
   queued: "Preparing your video...",
   uploading: "Uploading video...",
-  transcoding: "Processing video...",
+  transcoding: "Generating preview for playback...",
   transcribing: "Transcribing audio with AI...",
   scoring: "Analyzing your video with AI...",
   ready: "Processing complete!",
@@ -295,11 +295,21 @@ export default function SessionPage() {
   });
 
   // Load video as blob URL with credentials
+  // Video can be loaded once preview is available (even if transcription/scoring is still running)
   useEffect(() => {
     const isExpiredNow = session?.videoDeletedAt || (session?.expiresAt && new Date(session.expiresAt) < new Date());
-    const shouldLoadVideo = session?.videoPath && 
-      (!session.processingStatus || session.processingStatus === "ready") && 
-      !isExpiredNow;
+    
+    // Video is ready to play if:
+    // 1. Session has a previewVideoPath (preview is generated), OR
+    // 2. Session has a videoPath and processing is at least past transcoding (transcribing, scoring, ready), OR
+    // 3. Session has a videoPath and processing status is ready
+    const hasPreviewReady = !!(session as any)?.previewVideoPath;
+    const processingPastTranscoding = session?.processingStatus && 
+      ["transcribing", "scoring", "ready"].includes(session.processingStatus);
+    const processingComplete = session?.processingStatus === "ready";
+    
+    const videoAvailable = session?.videoPath && (hasPreviewReady || processingPastTranscoding || processingComplete);
+    const shouldLoadVideo = videoAvailable && !isExpiredNow;
 
     if (!shouldLoadVideo || !sessionId) {
       setVideoBlobUrl(null);
@@ -341,7 +351,7 @@ export default function SessionPage() {
         URL.revokeObjectURL(videoBlobUrl);
       }
     };
-  }, [session?.id, session?.videoPath, session?.processingStatus, session?.videoDeletedAt, session?.expiresAt, sessionId]);
+  }, [session?.id, session?.videoPath, (session as any)?.previewVideoPath, session?.processingStatus, session?.videoDeletedAt, session?.expiresAt, sessionId]);
 
   if (isLoading) {
     return (

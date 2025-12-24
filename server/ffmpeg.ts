@@ -313,6 +313,99 @@ export async function convertToMp4(inputPath: string, uploadsDir: string): Promi
   }
 }
 
+export interface PreviewResult {
+  success: boolean;
+  outputPath?: string;
+  sizeBytes?: number;
+  durationSeconds?: number;
+  error?: string;
+}
+
+/**
+ * Generate a fast, lightweight preview MP4 optimized for browser playback.
+ * Settings: 480p, H.264 baseline, AAC 128k, ultrafast preset, faststart
+ * Goal: Fastest possible generation while maintaining usable quality for transcription
+ */
+export async function generatePreview(inputPath: string, uploadsDir: string): Promise<PreviewResult> {
+  try {
+    if (!fs.existsSync(inputPath)) {
+      return { success: false, error: "Input file not found" };
+    }
+
+    const inputFilename = path.basename(inputPath);
+    const previewFilename = inputFilename.replace(/\.[^.]+$/, "_preview.mp4");
+    const outputPath = path.join(uploadsDir, previewFilename);
+
+    console.log(`[FFmpeg] Generating fast preview for ${inputFilename}...`);
+    const startTime = Date.now();
+
+    // Get input resolution to calculate proper scaling
+    const resolution = await getVideoResolution(inputPath);
+    console.log(`[FFmpeg] Input resolution: ${resolution.width}x${resolution.height}`);
+
+    // Scale to 480p height, maintaining aspect ratio
+    // Use -2 to ensure width is divisible by 2 (required by H.264)
+    const scaleFilter = "scale=-2:480";
+
+    const ffmpegArgs = [
+      "-i", inputPath,
+      "-c:v", "libx264",
+      "-profile:v", "baseline",     // Maximum compatibility
+      "-level", "3.0",
+      "-pix_fmt", "yuv420p",
+      "-crf", "28",                  // Higher CRF = smaller file, still good for transcription
+      "-preset", "ultrafast",        // Fastest encoding
+      "-tune", "fastdecode",         // Optimize for fast decoding
+      "-vf", scaleFilter,
+      "-r", "24",                    // Cap at 24 fps
+      "-c:a", "aac",
+      "-b:a", "128k",
+      "-ac", "2",                    // Stereo audio
+      "-ar", "44100",                // Standard sample rate
+      "-movflags", "+faststart",     // Enable streaming
+      "-y",
+      outputPath
+    ];
+
+    return new Promise((resolve) => {
+      const ffmpeg = spawn("ffmpeg", ffmpegArgs);
+
+      let stderr = "";
+      ffmpeg.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      ffmpeg.on("close", async (code) => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        
+        if (code === 0 && fs.existsSync(outputPath)) {
+          const stat = fs.statSync(outputPath);
+          const duration = await getVideoDuration(outputPath);
+          console.log(`[FFmpeg] Preview generated in ${elapsed}s: ${previewFilename} (${(stat.size / 1024 / 1024).toFixed(2)}MB)`);
+          resolve({ 
+            success: true, 
+            outputPath: previewFilename,
+            sizeBytes: stat.size,
+            durationSeconds: Math.round(duration)
+          });
+        } else {
+          console.error(`[FFmpeg] Preview generation failed with code ${code}`);
+          console.error(`[FFmpeg] stderr: ${stderr.slice(-1000)}`);
+          resolve({ success: false, error: "Preview generation failed" });
+        }
+      });
+
+      ffmpeg.on("error", (err) => {
+        console.error(`[FFmpeg] Preview process error:`, err);
+        resolve({ success: false, error: "FFmpeg process failed to start" });
+      });
+    });
+  } catch (err) {
+    console.error(`[FFmpeg] Unexpected preview error:`, err);
+    return { success: false, error: "Unexpected error during preview generation" };
+  }
+}
+
 export interface AudioResult {
   success: boolean;
   audioPath?: string;

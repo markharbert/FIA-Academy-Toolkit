@@ -237,6 +237,46 @@ export class ObjectStorageService {
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
   }
+
+  // Uploads a file buffer to the given object path.
+  async uploadFile(objectPath: string, content: Buffer): Promise<void> {
+    let entityDir = this.getPrivateObjectDir();
+    if (!entityDir.endsWith("/")) {
+      entityDir = `${entityDir}/`;
+    }
+    
+    // Extract the entity ID from /objects/... path
+    let fullPath: string;
+    if (objectPath.startsWith("/objects/")) {
+      const entityId = objectPath.slice("/objects/".length);
+      fullPath = `${entityDir}${entityId}`;
+    } else {
+      fullPath = objectPath;
+    }
+    
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    
+    await file.save(content, {
+      contentType: "video/mp4",
+      resumable: false,
+    });
+  }
+
+  // Deletes an object from the given path.
+  async deleteObject(objectPath: string): Promise<void> {
+    try {
+      const objectFile = await this.getObjectEntityFile(objectPath);
+      await objectFile.delete();
+    } catch (err) {
+      if (err instanceof ObjectNotFoundError) {
+        // Object already doesn't exist, that's fine
+        return;
+      }
+      throw err;
+    }
+  }
 }
 
 function parseObjectPath(path: string): {
