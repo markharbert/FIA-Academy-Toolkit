@@ -1,8 +1,8 @@
 import { storage } from "./storage";
-import { generatePreview, generateThumbnail, extractAudio } from "./ffmpeg";
+import { generatePreview, generateThumbnail, extractAudioFast, probeVideo } from "./ffmpeg";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { ObjectStorageService } from "./replit_integrations/object_storage/objectStorage";
-import type { ProcessingStatus, GoalType } from "@shared/schema";
+import type { ProcessingStatus, GoalType, InsertProcessingMetric } from "@shared/schema";
 import path from "path";
 import fs from "fs";
 
@@ -78,6 +78,35 @@ async function updateProcessingStatus(
   notifyListeners(sessionId, { status, progress, message, error });
 }
 
+async function recordMetric(
+  sessionId: string, 
+  stepName: string, 
+  startedAt: Date,
+  success: boolean,
+  errorSummary?: string,
+  metadata?: Record<string, any>
+): Promise<void> {
+  try {
+    const endedAt = new Date();
+    const durationMs = endedAt.getTime() - startedAt.getTime();
+    
+    await storage.createProcessingMetric({
+      sessionId,
+      stepName,
+      startedAt,
+      endedAt,
+      durationMs,
+      success,
+      errorSummary: errorSummary || null,
+      metadata: metadata || null,
+    });
+    
+    console.log(`[Metrics] ${stepName}: ${durationMs}ms (${success ? 'success' : 'failed'})`);
+  } catch (err) {
+    console.warn("[Metrics] Failed to record metric:", err);
+  }
+}
+
 const activeProcessing = new Set<string>();
 
 async function uploadPreviewToCloud(previewPath: string, sessionId: string): Promise<string | null> {
@@ -105,7 +134,6 @@ async function deleteOriginalUpload(
   uploadsDir: string
 ): Promise<void> {
   try {
-    // Delete from cloud storage (original upload only, not preview)
     if (originalCloudPath) {
       console.log(`[Processing] Deleting original from cloud storage: ${originalCloudPath}`);
       try {
@@ -116,7 +144,6 @@ async function deleteOriginalUpload(
       }
     }
     
-    // Delete local original file (not preview)
     if (originalUploadPath) {
       const localOriginalPath = path.join(uploadsDir, originalUploadPath);
       if (fs.existsSync(localOriginalPath)) {
@@ -133,8 +160,72 @@ async function deleteOriginalUpload(
   }
 }
 
+async function generatePreviewInBackground(
+  sessionId: string,
+  videoFullPath: string,
+  originalUploadPath: string | null,
+  originalCloudPath: string | null
+): Promise<void> {
+  console.log(`[Processing] Starting background preview generation for session ${sessionId}`);
+  
+  try {
+    const previewStart = new Date();
+    const previewResult = await generatePreview(videoFullPath, UPLOADS_DIR);
+    
+    if (!previewResult.success) {
+      await recordMetric(sessionId, "preview_generation", previewStart, false, previewResult.error);
+      console.warn(`[Processing] Background preview generation failed: ${previewResult.error}`);
+      return;
+    }
+    
+    await recordMetric(sessionId, "preview_generation", previewStart, true, undefined, {
+      sizeBytes: previewResult.sizeBytes,
+      durationSeconds: previewResult.durationSeconds,
+    });
+    
+    const previewFullPath = path.join(UPLOADS_DIR, previewResult.outputPath!);
+    
+    const cloudStart = new Date();
+    const previewCloudPath = await uploadPreviewToCloud(previewFullPath, sessionId);
+    await recordMetric(sessionId, "preview_cloud_upload", cloudStart, !!previewCloudPath);
+    
+    await storage.updateSession(sessionId, {
+      previewVideoPath: previewResult.outputPath,
+      previewCloudStoragePath: previewCloudPath,
+      previewGeneratedAt: new Date(),
+      videoPath: previewResult.outputPath,
+      videoMimeType: "video/mp4",
+      videoSizeBytes: previewResult.sizeBytes,
+      durationSeconds: previewResult.durationSeconds,
+      finalVideoPath: previewResult.outputPath,
+      finalVideoResolution: "854x480",
+    });
+    
+    console.log(`[Processing] Background preview ready for session ${sessionId}`);
+    
+    const thumbnailStart = new Date();
+    const thumbnailResult = await generateThumbnail(previewFullPath, UPLOADS_DIR);
+    if (thumbnailResult.success) {
+      await storage.updateSession(sessionId, {
+        thumbnailPath: thumbnailResult.thumbnailPath,
+      });
+    }
+    await recordMetric(sessionId, "thumbnail_generation", thumbnailStart, thumbnailResult.success);
+    
+    if (previewCloudPath) {
+      const deleteStart = new Date();
+      await deleteOriginalUpload(sessionId, originalUploadPath, originalCloudPath, UPLOADS_DIR);
+      await recordMetric(sessionId, "original_deletion", deleteStart, true);
+    }
+    
+  } catch (err) {
+    console.error(`[Processing] Background preview error for session ${sessionId}:`, err);
+  }
+}
+
 export async function processSession(sessionId: string, userId: string): Promise<void> {
-  console.log(`[Processing] Starting preview-first processing for session ${sessionId}`);
+  console.log(`[Processing] Starting AUDIO-FIRST fast path for session ${sessionId}`);
+  const pipelineStart = new Date();
   
   if (activeProcessing.has(sessionId)) {
     console.log(`[Processing] Session ${sessionId} is already being processed, skipping`);
@@ -166,9 +257,9 @@ export async function processSession(sessionId: string, userId: string): Promise
     
     await storage.updateSession(sessionId, {
       processingStartedAt: new Date(),
-      processingStatus: "transcoding",
-      processingProgress: 10,
-      processingMessage: "Starting video processing...",
+      processingStatus: "transcribing",
+      processingProgress: 5,
+      processingMessage: "Extracting audio...",
     });
     
     if (!session.videoPath) {
@@ -182,8 +273,9 @@ export async function processSession(sessionId: string, userId: string): Promise
     if (!fs.existsSync(videoFullPath)) {
       if (session.cloudStoragePath) {
         console.log(`[Processing] Local file not found, downloading from cloud storage: ${session.cloudStoragePath}`);
+        const downloadStart = new Date();
         try {
-          await updateProcessingStatus(sessionId, "transcoding", 15, "Downloading video from cloud...");
+          await updateProcessingStatus(sessionId, "transcribing", 10, "Downloading video from cloud...");
           const objectFile = await objectStorageService.getObjectEntityFile(session.cloudStoragePath);
           const downloadPath = videoFullPath;
           
@@ -196,8 +288,10 @@ export async function processSession(sessionId: string, userId: string): Promise
             readStream.on("error", reject);
           });
           
+          await recordMetric(sessionId, "cloud_download", downloadStart, true);
           console.log(`[Processing] Downloaded video from cloud storage`);
         } catch (downloadErr) {
+          await recordMetric(sessionId, "cloud_download", downloadStart, false, String(downloadErr));
           console.error(`[Processing] Failed to download from cloud storage:`, downloadErr);
           await updateProcessingStatus(sessionId, "failed", 0, "Video file not available", "Could not retrieve video from storage");
           activeProcessing.delete(sessionId);
@@ -210,121 +304,52 @@ export async function processSession(sessionId: string, userId: string): Promise
       }
     }
     
-    // Save original paths before we update videoPath to point to preview
     const originalUploadPath = session.originalUploadPath || session.videoPath;
     const originalCloudPath = session.cloudStoragePath;
     
-    await updateProcessingStatus(sessionId, "transcoding", 20, "Generating preview video...");
+    await updateProcessingStatus(sessionId, "transcribing", 15, "Extracting audio from video...");
     
-    const startTime = Date.now();
-    const previewResult = await generatePreview(videoFullPath, UPLOADS_DIR);
+    const audioStart = new Date();
+    const audioResult = await extractAudioFast(videoFullPath, UPLOADS_DIR);
     
-    if (!previewResult.success) {
-      await updateProcessingStatus(sessionId, "failed", 20, "Preview generation failed", previewResult.error);
+    if (!audioResult.success) {
+      await recordMetric(sessionId, "audio_extraction", audioStart, false, audioResult.error);
+      await updateProcessingStatus(sessionId, "failed", 15, "Audio extraction failed", audioResult.error);
       activeProcessing.delete(sessionId);
       return;
     }
     
-    const previewFullPath = path.join(UPLOADS_DIR, previewResult.outputPath!);
-    const previewGenerationTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[Processing] Preview ready in ${previewGenerationTime}s`);
-    
-    const previewCloudPath = await uploadPreviewToCloud(previewFullPath, sessionId);
-    
-    await storage.updateSession(sessionId, {
-      previewVideoPath: previewResult.outputPath,
-      previewCloudStoragePath: previewCloudPath,
-      previewGeneratedAt: new Date(),
-      videoPath: previewResult.outputPath,
-      videoMimeType: "video/mp4",
-      videoSizeBytes: previewResult.sizeBytes,
-      durationSeconds: previewResult.durationSeconds || session.durationSeconds,
-      finalVideoPath: previewResult.outputPath,
-      finalVideoResolution: "854x480",
+    await recordMetric(sessionId, "audio_extraction", audioStart, true, undefined, {
+      durationSeconds: audioResult.durationSeconds,
+      sizeBytes: audioResult.sizeBytes,
     });
     
-    console.log(`[Processing] Preview saved, video is now playable`);
-    
-    await updateProcessingStatus(sessionId, "transcoding", 35, "Generating thumbnail...");
-    
-    if (!session.thumbnailPath) {
-      const thumbnailResult = await generateThumbnail(previewFullPath, UPLOADS_DIR);
-      if (thumbnailResult.success) {
-        await storage.updateSession(sessionId, {
-          thumbnailPath: thumbnailResult.thumbnailPath,
-        });
-      }
-    }
-    
-    await updateProcessingStatus(sessionId, "transcribing", 45, "Extracting audio...");
-    
-    const audioResult = await extractAudio(previewFullPath, UPLOADS_DIR);
-    if (!audioResult.success) {
-      await updateProcessingStatus(sessionId, "failed", 45, "Audio extraction failed", audioResult.error);
-      activeProcessing.delete(sessionId);
-      return;
+    if (audioResult.durationSeconds) {
+      await storage.updateSession(sessionId, {
+        durationSeconds: audioResult.durationSeconds,
+      });
     }
     
     const audioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
     
-    await updateProcessingStatus(sessionId, "transcribing", 55, "Transcribing audio...");
+    await updateProcessingStatus(sessionId, "transcribing", 30, "Transcribing audio with AI...");
     
+    let transcript: string;
     try {
-      const transcript = await transcribeAudio(audioPath);
+      const transcribeStart = new Date();
+      transcript = await transcribeAudio(audioPath);
+      await recordMetric(sessionId, "transcription", transcribeStart, true, undefined, {
+        transcriptLength: transcript.length,
+      });
       
       await storage.updateSession(sessionId, {
         transcriptText: transcript,
       });
       
-      try {
-        if (fs.existsSync(audioPath)) {
-          fs.unlinkSync(audioPath);
-        }
-      } catch {}
-      
-      await updateProcessingStatus(sessionId, "scoring", 75, "Analyzing video content...");
-      
-      const updatedSession = await storage.getSession(sessionId);
-      const finalTranscript = updatedSession?.transcriptEditedText || transcript;
-      
-      if (finalTranscript && finalTranscript.length > 0) {
-        const scoreResult = await scoreTranscript(
-          finalTranscript,
-          session.goalType as GoalType,
-          session.durationSeconds || 60
-        );
-        
-        await storage.updateSession(sessionId, {
-          scoreJson: scoreResult,
-          scoreUpdatedAt: new Date(),
-        });
-        
-        await updateProcessingStatus(sessionId, "scoring", 90, "Generating title...");
-        
-        if (!session.title && finalTranscript.length > 10) {
-          try {
-            const aiTitle = await generateTitle(finalTranscript);
-            await storage.updateSession(sessionId, {
-              title: aiTitle,
-              titleSource: "ai",
-              titleGeneratedAt: new Date(),
-            });
-          } catch (titleErr) {
-            console.warn("[Processing] Failed to generate title:", titleErr);
-          }
-        }
-      }
-      
-      // Delete original upload to save storage (only if preview cloud upload succeeded)
-      if (previewCloudPath && !session.originalDeletedAt) {
-        console.log(`[Processing] Deleting original upload to save storage...`);
-        await deleteOriginalUpload(sessionId, originalUploadPath, originalCloudPath, UPLOADS_DIR);
-      }
-      
-      await updateProcessingStatus(sessionId, "ready", 100, "Processing complete");
-      console.log(`[Processing] Session ${sessionId} processing complete`);
+      console.log(`[Processing] Transcript ready (${transcript.length} chars)`);
       
     } catch (transcribeErr) {
+      await recordMetric(sessionId, "transcription", new Date(), false, String(transcribeErr));
       try {
         if (fs.existsSync(audioPath)) {
           fs.unlinkSync(audioPath);
@@ -333,10 +358,72 @@ export async function processSession(sessionId: string, userId: string): Promise
       throw transcribeErr;
     }
     
+    try {
+      if (fs.existsSync(audioPath)) {
+        fs.unlinkSync(audioPath);
+      }
+    } catch {}
+    
+    await updateProcessingStatus(sessionId, "scoring", 60, "Analyzing video content with AI...");
+    
+    const updatedSession = await storage.getSession(sessionId);
+    const finalTranscript = updatedSession?.transcriptEditedText || transcript;
+    
+    if (finalTranscript && finalTranscript.length > 0) {
+      try {
+        const scoreStart = new Date();
+        const scoreResult = await scoreTranscript(
+          finalTranscript,
+          session.goalType as GoalType,
+          audioResult.durationSeconds || session.durationSeconds || 60
+        );
+        await recordMetric(sessionId, "scoring", scoreStart, true);
+        
+        await storage.updateSession(sessionId, {
+          scoreJson: scoreResult,
+          scoreUpdatedAt: new Date(),
+        });
+        
+        console.log(`[Processing] Score ready: ${scoreResult.totalScore}/100`);
+        
+      } catch (scoreErr) {
+        await recordMetric(sessionId, "scoring", new Date(), false, String(scoreErr));
+        console.error("[Processing] Scoring failed:", scoreErr);
+      }
+      
+      await updateProcessingStatus(sessionId, "scoring", 85, "Generating title...");
+      
+      if (!session.title && finalTranscript.length > 10) {
+        try {
+          const titleStart = new Date();
+          const aiTitle = await generateTitle(finalTranscript);
+          await storage.updateSession(sessionId, {
+            title: aiTitle,
+            titleSource: "ai",
+            titleGeneratedAt: new Date(),
+          });
+          await recordMetric(sessionId, "title_generation", titleStart, true);
+        } catch (titleErr) {
+          console.warn("[Processing] Failed to generate title:", titleErr);
+        }
+      }
+    }
+    
+    await updateProcessingStatus(sessionId, "ready", 100, "Processing complete");
+    
+    await recordMetric(sessionId, "full_pipeline", pipelineStart, true);
+    
+    const pipelineDuration = ((Date.now() - pipelineStart.getTime()) / 1000).toFixed(1);
+    console.log(`[Processing] Session ${sessionId} RESULTS READY in ${pipelineDuration}s (transcript + score)`);
+    
+    generatePreviewInBackground(sessionId, videoFullPath, originalUploadPath, originalCloudPath)
+      .catch(err => console.error(`[Processing] Background preview failed:`, err));
+    
   } catch (err) {
     console.error(`[Processing] Error processing session ${sessionId}:`, err);
     const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
     await updateProcessingStatus(sessionId, "failed", 0, "Processing failed", errorMessage);
+    await recordMetric(sessionId, "full_pipeline", pipelineStart, false, errorMessage);
   } finally {
     activeProcessing.delete(sessionId);
   }

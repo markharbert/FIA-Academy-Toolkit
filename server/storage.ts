@@ -1,12 +1,13 @@
 import { 
-  users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog,
+  users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult, type SystemSettings,
   type PasswordResetToken, type InsertPasswordResetToken,
   type UserIdentity, type InsertUserIdentity, type AuthProvider,
   type AdminAuditLog, type InsertAdminAuditLog,
-  type UserActionLog, type InsertUserActionLog, type UserActionType
+  type UserActionLog, type InsertUserActionLog, type UserActionType,
+  type ProcessingMetric, type InsertProcessingMetric
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizzle-orm";
@@ -149,6 +150,10 @@ export interface IStorage {
     items: UserActionLog[];
     nextCursor: { createdAt: Date; id: string } | null;
   }>;
+  
+  // Processing Metrics
+  createProcessingMetric(metric: InsertProcessingMetric): Promise<ProcessingMetric>;
+  getProcessingMetrics(sessionId: string): Promise<ProcessingMetric[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -837,6 +842,19 @@ export class DatabaseStorage implements IStorage {
     }
     
     return { items, nextCursor };
+  }
+  
+  // Processing Metrics
+  async createProcessingMetric(metric: InsertProcessingMetric): Promise<ProcessingMetric> {
+    const [result] = await db.insert(processingMetrics).values(metric as any).returning();
+    return result;
+  }
+  
+  async getProcessingMetrics(sessionId: string): Promise<ProcessingMetric[]> {
+    return await db.select()
+      .from(processingMetrics)
+      .where(eq(processingMetrics.sessionId, sessionId))
+      .orderBy(asc(processingMetrics.startedAt));
   }
 }
 

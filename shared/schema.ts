@@ -285,6 +285,22 @@ export interface FFProbeResult {
   }>;
 }
 
+// Processing metrics table for timing instrumentation
+export const processingMetrics = pgTable("processing_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  stepName: text("step_name").notNull(),
+  startedAt: timestamp("started_at").notNull(),
+  endedAt: timestamp("ended_at"),
+  durationMs: integer("duration_ms"),
+  success: boolean("success"),
+  errorSummary: text("error_summary"),
+  metadata: jsonb("metadata"),
+});
+
+export type ProcessingMetric = typeof processingMetrics.$inferSelect;
+export type InsertProcessingMetric = typeof processingMetrics.$inferInsert;
+
 // Sessions table for video practice sessions
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

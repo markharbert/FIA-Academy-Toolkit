@@ -1,0 +1,321 @@
+Role: You are a senior performance engineer and full stack developer working inside my existing Replit project (Fearless Video Coach). Video processing is taking far too long. I need you to aggressively reduce total processing time and time-to-results. The goal is speed first, while keeping transcript accuracy and scoring usefulness high enough to serve the product.
+
+Non-negotiable outcomes
+
+The user must get a transcript and score much faster than today.
+
+Processing speed must improve regardless of file size.
+
+The system must provide a clear “fast path” that does not wait on heavy video transcoding.
+
+The UI must show progress and quickly display results as soon as they are ready.
+
+You must diagnose the exact bottleneck(s) using real measurements, then implement the fastest architecture that still works.
+
+PART 1: Measure First, Then Fix (No Guessing)
+
+Add instrumentation around every step and log timing metrics per session:
+
+upload duration
+
+ffprobe duration
+
+audio extraction duration
+
+transcription duration
+
+scoring duration
+
+recommendations duration
+
+any video transcode duration (if still used)
+
+file delete duration
+
+Store metrics in DB:
+ProcessingMetrics
+
+sessionId
+
+stepName
+
+startedAt
+
+endedAt
+
+durationMs
+
+success
+
+errorSummary (nullable)
+
+Also add server resource telemetry:
+
+CPU usage during processing
+
+memory usage
+
+disk IO
+
+concurrent job count
+
+queue wait time
+
+After adding instrumentation:
+
+Run 3 tests (small, medium, large file).
+
+Identify the top 1 to 2 time sinks.
+
+Fix the biggest sink first.
+
+PART 2: Implement a “Speed-First” Processing Path (Default)
+
+Core idea
+Stop treating “video transcode” as a required prerequisite to transcript and score. Most of the value is the transcript + score. So make transcript and score happen as soon as the upload finishes, without waiting for a preview render.
+
+New default pipeline (fast path)
+
+Upload completes
+
+Immediately extract audio only (fast)
+
+Transcribe audio (fastest configuration that maintains usable quality)
+
+Score transcript
+
+Generate recommendations
+
+Mark “results ready”
+
+Video preview becomes optional and happens later or only if needed
+
+This way, even a huge video file can produce transcript + score quickly, because we are not doing heavy video work first.
+
+PART 3: Audio-Only Extraction (Fastest)
+
+Implement audio extraction immediately after upload complete:
+
+Extraction rules
+
+Use ffmpeg to extract audio stream directly:
+
+No re-encoding video
+
+Audio output format: WAV or MP3 depending on transcription engine speed
+
+If audio stream exists:
+
+Extract audio only
+
+Do not touch video
+
+If audio stream does not exist:
+
+Fail gracefully with a clear message: “No audio track found.”
+
+Key speed optimization
+
+If possible, avoid decoding the whole file:
+
+Map the audio stream directly:
+
+-map 0:a:0
+
+Use a fast audio encode:
+
+AAC or MP3
+
+Downmix to mono if it helps transcription speed and size:
+
+-ac 1
+
+Cap sample rate:
+
+-ar 16000 (often ideal for speech)
+
+Save extracted audio file as the primary artifact for transcription:
+
+sessions.audioStorageKey
+
+sessions.audioDurationSeconds
+
+sessions.audioMimeType
+
+Delete original video early (optional)
+If you truly do not need video playback for the product:
+
+Delete original video after audio extraction succeeds.
+If you still want playback:
+
+Keep a small preview generation job later, but do not block results.
+
+PART 4: Transcription Speed Optimizations
+
+You must make transcription faster. Do all applicable options:
+
+Choose the fastest transcription backend available in the existing stack
+
+If you are running transcription locally on Replit, it will be slow.
+
+Prefer a hosted transcription API that is optimized and scales.
+
+Use timestamped segments if needed, but prioritize speed.
+
+Reduce audio size before transcription
+
+Convert to mono
+
+16 kHz
+
+Compress (MP3 64 to 96 kbps) if API supports
+
+Stream transcription if supported
+
+If provider supports streaming partial results, show them as they arrive.
+
+Chunking for long audio
+
+For long videos, split audio into chunks (example 2 to 5 minutes)
+
+Transcribe chunks in parallel if API and rate limits allow
+
+Merge transcripts
+
+This dramatically reduces perceived wait time because you can show partial transcript early.
+
+Add “results-first” UI
+
+As soon as first chunk transcript is ready, begin scoring and show preliminary feedback.
+
+Then refine as more transcript arrives.
+
+PART 5: Scoring and Recommendations Must Be Fast
+
+Run scoring immediately after transcript is available.
+
+If recommendations generation is slow:
+
+Provide a “quick score” first (fast)
+
+Then generate “detailed suggestions” in a second pass
+
+Update the page when detailed suggestions are ready
+
+Store:
+
+scoreQuick
+
+scoreDetailed
+
+recommendationsQuick
+
+recommendationsDetailed
+
+PART 6: Make Video Preview Optional (And Non-Blocking)
+
+If video playback is still desired:
+
+Generate a tiny preview video as a background task after results are ready:
+
+360p or 480p
+
+ultrafast preset
+
+short keyframe interval for seek
+
+faststart
+
+But do not block transcript and scoring on this.
+
+If preview generation takes too long or fails:
+
+Still show transcript and score.
+
+Show a message: “Preview still processing.”
+
+PART 7: Concurrency, Queue, and Infrastructure Fixes
+
+Processing can be slow because of queue backlog or limited CPU.
+
+You must implement:
+
+Background job queue with concurrency control
+
+Limit concurrent ffmpeg jobs to 1 per instance to avoid thrashing
+
+But allow multiple transcription API calls in parallel if possible
+
+Make ffmpeg steps minimal
+
+Only audio extraction is required on the fast path
+
+If hosted on limited CPU
+
+Detect CPU and set presets accordingly
+
+Prefer offloading heavy work to external services where possible
+
+Add “max processing time” safeguards
+
+If a step exceeds a threshold, mark it and alert admin logs
+
+PART 8: UI Changes To Match Speed-First Flow
+
+Session page must show:
+
+“Extracting audio…” immediately after upload
+
+“Transcribing…” with partial progress
+
+“Scoring…” quickly after transcript appears
+
+Show transcript and score even if preview video is still unavailable
+
+Add an ETA style indicator
+
+Use observed average durations from recent sessions to estimate time remaining.
+
+Do not fake it. Use actual metrics.
+
+PART 9: Debug Why File Size Still Impacts Time
+
+You said “it doesn’t matter how big the file size is.” If time still grows with size, it usually means you are decoding/transcoding video. You must eliminate that from the critical path.
+
+Required checks
+
+Confirm there is no video transcode happening before transcription.
+
+Confirm audio extraction uses stream copy or minimal re-encode and is not decoding video.
+
+Confirm transcription receives the compressed audio, not raw full bitrate.
+
+PART 10: Acceptance Criteria and Verification
+
+You must implement and verify:
+
+A new fast path that produces transcript + score without waiting for video preview.
+
+On a large file:
+
+transcript begins appearing quickly (after audio extraction)
+
+score appears shortly after transcript
+
+Processing metrics prove improvement:
+
+show before vs after durations
+
+Video preview, if enabled, happens later and does not block results.
+
+Deliverables
+
+A bottleneck report with actual timing metrics per step.
+
+Code changes implementing audio-first fast path.
+
+Updated UI that shows transcript and scoring as soon as available.
+
+Optional preview generation that does not block.
+
+Now instrument the pipeline, identify the slowest steps, and implement the audio-first fast path so transcript and scoring arrive much faster than they do now.

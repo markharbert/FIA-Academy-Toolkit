@@ -409,7 +409,76 @@ export async function generatePreview(inputPath: string, uploadsDir: string): Pr
 export interface AudioResult {
   success: boolean;
   audioPath?: string;
+  durationSeconds?: number;
+  sizeBytes?: number;
   error?: string;
+}
+
+/**
+ * Fast audio extraction optimized for speech transcription.
+ * Uses mono, 16kHz sample rate, and MP3 compression for minimum file size
+ * while maintaining speech recognition quality.
+ * This is MUCH faster than extracting from a transcoded preview.
+ */
+export async function extractAudioFast(videoPath: string, uploadsDir: string): Promise<AudioResult> {
+  try {
+    if (!fs.existsSync(videoPath)) {
+      return { success: false, error: "Video file not found" };
+    }
+
+    const inputFilename = path.basename(videoPath);
+    const audioFilename = inputFilename.replace(/\.[^.]+$/, "_audio_fast.mp3");
+    const audioPath = path.join(uploadsDir, audioFilename);
+
+    console.log(`[FFmpeg] Fast audio extraction from ${inputFilename}...`);
+    const startTime = Date.now();
+
+    return new Promise((resolve) => {
+      const ffmpeg = spawn("ffmpeg", [
+        "-i", videoPath,
+        "-vn",                    // No video
+        "-map", "0:a:0",          // Map first audio stream only (fastest)
+        "-acodec", "libmp3lame",
+        "-ac", "1",               // Mono (half the data, fine for speech)
+        "-ar", "16000",           // 16kHz sample rate (optimal for speech recognition)
+        "-b:a", "64k",            // 64kbps bitrate (small file, good speech quality)
+        "-y",
+        audioPath,
+      ]);
+
+      let stderr = "";
+      ffmpeg.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      ffmpeg.on("close", async (code) => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+        
+        if (code === 0 && fs.existsSync(audioPath)) {
+          const stat = fs.statSync(audioPath);
+          const duration = await getVideoDuration(audioPath);
+          console.log(`[FFmpeg] Fast audio extracted in ${elapsed}s: ${audioFilename} (${(stat.size / 1024 / 1024).toFixed(2)}MB, ${Math.round(duration)}s)`);
+          resolve({ 
+            success: true, 
+            audioPath: audioFilename,
+            durationSeconds: Math.round(duration),
+            sizeBytes: stat.size
+          });
+        } else {
+          console.error(`[FFmpeg] Fast audio extraction failed in ${elapsed}s:`, stderr.slice(-500));
+          resolve({ success: false, error: "Audio extraction failed - no audio track found" });
+        }
+      });
+
+      ffmpeg.on("error", (err) => {
+        console.error(`[FFmpeg] Fast audio extraction process error:`, err);
+        resolve({ success: false, error: "FFmpeg process failed to start" });
+      });
+    });
+  } catch (err) {
+    console.error(`[FFmpeg] Unexpected fast audio extraction error:`, err);
+    return { success: false, error: "Unexpected error during audio extraction" };
+  }
 }
 
 export async function extractAudio(videoPath: string, uploadsDir: string): Promise<AudioResult> {
