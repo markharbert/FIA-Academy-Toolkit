@@ -1,0 +1,415 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Change the core session workflow: remove in-browser video recording completely and replace it with a local file upload workflow. Users will record videos on their own computer using any tool they want, then upload the video to the app to get transcription, scoring, recommendations, and all existing reporting. Keep the rest of the system behavior intact.
+
+High Priority Outcomes
+
+Remove all in-browser recording UI and logic from the session creation page.
+
+Add a clean, reliable upload workflow that accepts a local video file.
+
+Support a wide range of common video formats from Windows, Mac, iPhone, Android, and screen recorders.
+
+After upload completes, the video is stored, processed, and playable in the browser with an embedded player.
+
+Keep existing processing pipeline: transcode to MP4 1080p, compress, transcribe, score, recommend.
+
+Keep video availability window at 30 days from upload, with expiration cleanup.
+
+Progress bar and processing status must work for uploaded videos.
+
+Security: user can only view their own uploads; admin can view via admin panel.
+
+PART 1: UI Changes
+
+Session creation page changes
+
+Remove:
+
+camera selection
+
+mic selection
+
+record/stop controls
+
+any MediaRecorder logic
+
+Replace with:
+
+Upload section with a single primary button: “Upload Video”
+
+Drag and drop zone (optional but recommended)
+
+Supported file types note showing broad support
+
+Max file size note based on server limits
+
+Upload UX requirements
+
+Selecting a file immediately shows:
+
+file name
+
+file size
+
+detected type (if available)
+
+Use chunked upload for reliability if files can be large.
+
+Show upload progress (0 to 100) for the upload step.
+
+After upload finishes:
+
+Create the session
+
+Show an embedded player preview as soon as the file is available
+
+Show processing progress bar for post-upload steps
+
+Error states:
+
+invalid file type
+
+file too large
+
+upload interrupted
+Provide clear retry.
+
+Session results page
+
+Embedded player must use the stored MP4 output (post-transcode).
+
+Show the same transcript, scores, recommendations, and PDF download.
+
+Keep “video expires in 30 days” messaging and expiration date display.
+
+PART 2: Broad Video Format Support (Critical)
+
+Goal
+Accept a wide range of upload formats, then normalize them all into a single consistent playback and processing format (MP4 1080p + AAC audio).
+
+Important clarification
+WebP is typically an image format, not a video container. Some systems may produce animated WebP files. If an uploaded file is animated WebP, treat it as a supported upload only if the transcoder can decode it. Otherwise, display a friendly error. Prioritize true video containers.
+
+Accepted upload formats (minimum)
+Accept these common containers and codecs, as they represent the majority of devices and tools:
+Containers:
+
+.mp4 (H.264/H.265)
+
+.mov (common on Apple)
+
+.m4v
+
+.webm
+
+.mkv
+
+.avi
+
+.wmv (Windows)
+
+.flv (legacy)
+
+.3gp (older mobile)
+
+.mpeg / .mpg
+
+.ts (MPEG transport stream, some recorders)
+
+.m2ts (Blu-ray style, some cameras)
+Optional / best effort:
+
+animated .webp if ffmpeg supports decoding
+
+.ogv / .ogg video
+
+Validation approach (do not rely on extensions)
+
+Validate by MIME type when available.
+
+Also validate by probing the file content server-side:
+
+Use ffprobe to inspect container, codec, duration, streams.
+
+Reject:
+
+files with no video stream
+
+duration too long if you have limits
+
+zero length or corrupted files
+
+Normalization requirement
+Regardless of what is uploaded, always produce:
+
+Final video: MP4 container
+
+Video codec: H.264
+
+Audio codec: AAC
+
+Resolution: 1080p target (downscale if higher, upscale only if you explicitly choose to, but default to no upscaling)
+
+Frame rate: preserve original if reasonable, otherwise cap at 30 fps for size stability
+
+Audio sample rate: 44.1k or 48k
+
+Transcoding rules
+
+Use ffmpeg for transcoding and compression.
+
+Use a balanced preset for quality and file size.
+
+Enable fast start for streaming playback:
+
+movflags +faststart
+
+If audio stream is missing:
+
+still allow upload and scoring if your scoring can run without audio, but transcription will fail
+
+better: require audio stream for transcription and show clear message if missing
+
+Error handling for unsupported formats
+If ffprobe or ffmpeg fails:
+
+Mark session as failed with processingError indicating format not supported.
+
+Provide a user-friendly error message:
+
+“We could not process this file. Please upload MP4, MOV, or WebM.”
+
+Log the detailed ffmpeg error server-side for debugging.
+
+PART 3: Backend Upload API
+
+Design requirement
+Uploads must not depend on keeping the server request open for the entire file. Use one of these patterns:
+
+Option A (recommended): Pre-signed upload URL to object storage
+
+If project already uses S3, Cloudflare R2, or similar, generate pre-signed URLs.
+
+Browser uploads directly to storage.
+
+Backend then starts processing.
+
+Option B: Chunked upload to backend storage
+
+If storage is local filesystem, implement chunked upload endpoints to handle large files.
+
+Choose the option that matches the existing project. Prefer not to add new services unless needed.
+
+Endpoints required (example)
+
+POST /api/sessions/upload/init
+Request:
+{
+"filename": "...",
+"filesize": 12345678,
+"mimeType": "video/mp4"
+}
+Response:
+{
+"sessionId": "...",
+"uploadId": "...",
+"uploadUrl": "...",
+"chunkSize": 5242880,
+"expiresAt": "..."
+}
+
+If chunked:
+POST /api/sessions/upload/part
+Body:
+
+sessionId
+
+uploadId
+
+partNumber
+
+binary chunk
+
+POST /api/sessions/upload/complete
+Request:
+{
+"sessionId": "...",
+"uploadId": "...",
+"parts": [...]
+}
+Response:
+{
+"success": true
+}
+
+POST /api/sessions/:id/process
+Starts post-upload processing pipeline.
+
+Rules
+
+Auth required for all endpoints.
+
+Ownership required (user can only upload to their own session).
+
+Validate file type and size.
+
+Store upload metadata.
+
+Immediately run ffprobe after upload complete to validate the file and determine processing plan.
+
+PART 4: Session Data Model Updates
+
+Sessions table must track uploads and processing
+Add or ensure fields:
+
+sourceType: "upload" (new default)
+
+originalUploadFilename
+
+originalUploadMimeType
+
+originalUploadSizeBytes
+
+originalUploadExtension
+
+originalProbeJson (ffprobe output summary)
+
+originalUploadStorageKey
+
+finalVideoStorageKey (mp4 output)
+
+finalVideoMimeType (video/mp4)
+
+finalVideoResolution (example: 1920x1080)
+
+finalVideoDurationSeconds
+
+expiresAt (set to createdAt + 30 days)
+
+status: "uploading" | "processing" | "ready" | "failed" | "expired"
+
+processing fields:
+processingStatus, processingProgress, processingMessage, processingError, etc
+
+Expiration rules
+
+When upload completes:
+
+expiresAt = now + 30 days
+
+Cleanup job deletes originals and processed outputs for expired sessions and marks expired.
+
+PART 5: Processing Pipeline For Uploaded Videos
+
+Pipeline starting from uploaded file:
+
+ffprobe validation and stream detection
+
+Transcode to MP4 1080p output (H.264 + AAC) and compress
+
+Extract audio for transcription
+
+Transcribe with timestamped segments
+
+Score and generate recommendations
+
+Generate PDF report if implemented
+
+Mark session ready
+
+Progress bar steps
+
+Uploading
+
+Validating file
+
+Transcoding
+
+Compressing
+
+Transcribing
+
+Scoring
+
+Recommendations
+
+Ready
+
+Persist progress in DB and stream updates to UI.
+
+PART 6: Embedded Playback After Upload
+
+Requirement
+After processing, the user must be able to play the video in the browser.
+
+Implementation
+
+Use HTML5 video player.
+
+Always point to final MP4 output for maximum compatibility.
+
+Enable byte-range requests if hosting supports it for smooth streaming.
+
+PART 7: Admin Impacts
+
+Admin Recent Activity side panel
+
+Must show embedded video, scoring, transcript, recommendations.
+
+If video is stored with protected access, generate signed URLs for admin.
+
+Users table “Total Videos”
+
+Still equals sessions count.
+
+User action logs
+Log new action types:
+
+video_uploaded
+
+upload_failed
+
+processing_started
+
+processing_completed
+
+processing_failed
+
+file_validation_failed
+
+PART 8: Remove Recording Code Safely
+
+Required cleanup
+
+Remove frontend components related to MediaRecorder.
+
+Remove server endpoints that handled recording blobs if any.
+
+Remove camera and mic permission prompts.
+
+Remove related UI text about recording inside the browser.
+
+PART 9: Verification Checklist
+
+Confirm each:
+
+Session page no longer shows in-browser recording controls.
+
+User can upload MP4, MOV, WebM successfully.
+
+User can upload additional formats like MKV, AVI, WMV, MPEG when ffmpeg supports them.
+
+Uploaded file is validated with ffprobe and rejected cleanly if unsupported.
+
+Video is transcoded to MP4 1080p H.264 + AAC and is playable in browser.
+
+Transcription, scoring, recommendations still work.
+
+Video remains accessible for 30 days and then expires.
+
+Progress bar shows accurate pipeline status.
+
+Security: users cannot access other users’ videos.
+
+Admin can view sessions and videos in admin side panel.
+
+Now implement this change end to end in the existing codebase and ensure broad format support through ffprobe + ffmpeg normalization.

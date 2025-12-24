@@ -107,6 +107,12 @@ export const userActionTypes = [
   "keap_sync_attempted",
   "keap_sync_succeeded",
   "keap_sync_failed",
+  "video_uploaded",
+  "upload_failed",
+  "processing_started",
+  "processing_completed",
+  "processing_failed",
+  "file_validation_failed",
 ] as const;
 export type UserActionType = typeof userActionTypes[number];
 
@@ -253,6 +259,32 @@ export const processingStepNumbers: Record<ProcessingStatus, number> = {
   failed: 0,
 };
 
+// Source type for video sessions
+export const sourceTypes = ["upload"] as const;
+export type SourceType = typeof sourceTypes[number];
+
+// FFprobe output structure for video validation
+export interface FFProbeResult {
+  format: {
+    filename: string;
+    format_name: string;
+    format_long_name: string;
+    duration: string;
+    size: string;
+    bit_rate: string;
+  };
+  streams: Array<{
+    codec_type: "video" | "audio" | "data" | "subtitle";
+    codec_name?: string;
+    width?: number;
+    height?: number;
+    duration?: string;
+    bit_rate?: string;
+    sample_rate?: string;
+    channels?: number;
+  }>;
+}
+
 // Sessions table for video practice sessions
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -282,6 +314,15 @@ export const sessions = pgTable("sessions", {
   processingStartedAt: timestamp("processing_started_at"),
   processingUpdatedAt: timestamp("processing_updated_at"),
   processingCompletedAt: timestamp("processing_completed_at"),
+  sourceType: text("source_type").default("upload").$type<SourceType>(),
+  originalUploadFilename: text("original_upload_filename"),
+  originalUploadMimeType: text("original_upload_mime_type"),
+  originalUploadSizeBytes: integer("original_upload_size_bytes"),
+  originalUploadExtension: text("original_upload_extension"),
+  originalProbeJson: jsonb("original_probe_json").$type<FFProbeResult>(),
+  originalUploadPath: text("original_upload_path"),
+  finalVideoPath: text("final_video_path"),
+  finalVideoResolution: text("final_video_resolution"),
 });
 
 export const insertSessionSchema = createInsertSchema(sessions).omit({
