@@ -98,6 +98,19 @@ Preferred communication style: Simple, everyday language.
    - Independent status fields: `hlsStatus`, `transcriptStatus`, `scoreStatus`
    - Frontend displays progress for all three tracks in real-time
 
+14. **Video Poster Generation**: Generates a poster thumbnail for video player display:
+   - 640px width JPEG extracted from early video frame (0.5s → 1s → 0s fallback)
+   - Stored as `previewPosterPath` with metadata (`previewPosterMimeType`, `previewPosterGeneratedAt`)
+   - Served via `/api/sessions/:id/poster` endpoint with caching
+   - Video player uses poster while loading to improve perceived performance
+   - Cleanup job deletes poster files when session expires
+
+15. **Preview Video Persistence**: Enhanced preview video tracking with status and metadata:
+   - Status tracking: `previewVideoStatus` (queued → generating → ready → failed)
+   - Error capture: `previewVideoError` field for debugging failures
+   - Metadata: `previewVideoMimeType`, `previewVideoSizeBytes`, `previewVideoDurationSeconds`
+   - Cleanup job handles preview video, poster, thumbnail, and audio file deletion
+
 ## External Dependencies
 
 ### AI Services (via Replit AI Integrations)
