@@ -7,6 +7,7 @@ interface HlsVideoPlayerProps {
   sessionId: string;
   hlsStatus: "queued" | "generating" | "playable" | "complete" | "failed" | null;
   fallbackVideoPath: string | null;
+  posterUrl?: string | null;
   className?: string;
 }
 
@@ -14,6 +15,7 @@ export function HlsVideoPlayer({
   sessionId, 
   hlsStatus, 
   fallbackVideoPath,
+  posterUrl,
   className = "aspect-video w-full rounded-lg bg-black"
 }: HlsVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -202,6 +204,7 @@ export function HlsVideoPlayer({
         controls
         playsInline
         preload="metadata"
+        poster={posterUrl || undefined}
         className={className}
         style={{ display: loading ? "none" : "block" }}
         data-testid="video-player"

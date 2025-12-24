@@ -553,7 +553,6 @@ export default function SessionPage() {
   };
 
   const [downloadingTranscriptTxt, setDownloadingTranscriptTxt] = useState(false);
-  const [downloadingTranscriptPdf, setDownloadingTranscriptPdf] = useState(false);
 
   const downloadTranscriptTxt = async () => {
     if (!activeSessionId) return;
@@ -576,9 +575,18 @@ export default function SessionPage() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       
+      let filename = "transcript.txt";
+      const contentDisposition = response.headers.get("content-disposition");
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match) {
+          filename = match[1];
+        }
+      }
+      
       const a = document.createElement("a");
       a.href = url;
-      a.download = "transcript.txt";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -592,46 +600,6 @@ export default function SessionPage() {
       });
     } finally {
       setDownloadingTranscriptTxt(false);
-    }
-  };
-
-  const downloadTranscriptPdf = async () => {
-    if (!activeSessionId) return;
-    
-    setDownloadingTranscriptPdf(true);
-    try {
-      const response = await fetch(`/api/sessions/${activeSessionId}/transcript.pdf`, {
-        credentials: "include",
-      });
-      
-      if (!response.ok) {
-        const contentType = response.headers.get("content-type");
-        if (contentType?.includes("application/json")) {
-          const data = await response.json();
-          throw new Error(data.message || "Failed to download transcript PDF");
-        }
-        throw new Error("Failed to download transcript PDF");
-      }
-      
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "transcript.pdf";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Transcript PDF download error:", err);
-      toast({
-        title: "Download Failed",
-        description: err instanceof Error ? err.message : "Failed to download transcript PDF",
-        variant: "destructive",
-      });
-    } finally {
-      setDownloadingTranscriptPdf(false);
     }
   };
 
@@ -1024,6 +992,8 @@ export default function SessionPage() {
               const previewPath = (session as any)?.previewVideoPath;
               const previewReady = previewPath && previewPath !== "failed";
               const hasVideoPath = !!session?.videoPath;
+              const posterPath = (session as any)?.previewPosterPath;
+              const posterUrl = posterPath ? `/api/sessions/${activeSessionId}/poster` : null;
               const isStillProcessing = session?.processingStatus && 
                 !["ready", "failed"].includes(session.processingStatus);
               
@@ -1059,9 +1029,11 @@ export default function SessionPage() {
               if (activeSessionId && (hlsPlayable || previewReady || hasVideoPath)) {
                 return (
                   <HlsVideoPlayer
+                    key={activeSessionId}
                     sessionId={activeSessionId}
                     hlsStatus={hlsStatus}
                     fallbackVideoPath={previewReady ? previewPath : session?.videoPath || null}
+                    posterUrl={posterUrl}
                     className="aspect-video w-full rounded-lg bg-black"
                   />
                 );
@@ -1257,21 +1229,7 @@ export default function SessionPage() {
                 ) : (
                   <Download className="mr-2 h-4 w-4" />
                 )}
-                Download Transcript (TXT)
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={downloadTranscriptPdf}
-                disabled={downloadingTranscriptPdf}
-                data-testid="button-download-transcript-pdf"
-              >
-                {downloadingTranscriptPdf ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="mr-2 h-4 w-4" />
-                )}
-                Download Transcript (PDF)
+                Download Transcript
               </Button>
             </div>
           </CardContent>
