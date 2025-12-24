@@ -27,6 +27,7 @@ import type { Session, ScoreResult, ProcessingStatus, GoalType, HlsStatus } from
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { HlsVideoPlayer } from "@/components/hls-video-player";
+import { PipelineStatus } from "@/components/pipeline-status";
 
 const processingStepLabels: Record<ProcessingStatus, string> = {
   queued: "Preparing your video...",
@@ -1033,6 +1034,18 @@ export default function SessionPage() {
               <Badge variant="outline">{session.goalType}</Badge>
             )}
           </div>
+          
+          {session && session.processingStatus && session.processingStatus !== "ready" && (
+            <div className="mt-6 border-t pt-4">
+              <PipelineStatus
+                hlsStatus={(session as any)?.hlsStatus || null}
+                transcriptStatus={(session as any)?.transcriptStatus || null}
+                scoreStatus={(session as any)?.scoreStatus || null}
+                processingStatus={session.processingStatus}
+                processingProgress={session.processingProgress || 0}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
