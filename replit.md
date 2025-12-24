@@ -76,6 +76,13 @@ Preferred communication style: Simple, everyday language.
 
 10. **Theme Preferences**: Users can choose Light/Dark/System theme with dropdown toggle, persisted to database in `users.themePreference`.
 
+11. **Folder Organization**: Sessions can be organized into folders for better management:
+   - Create, rename, and delete folders from the sidebar
+   - Drag and drop sessions onto folders to move them
+   - Bulk select sessions with checkboxes for batch operations
+   - Bulk move or delete selected sessions
+   - Deleting a folder moves its sessions to "Unfiled" (doesn't delete them)
+
 ## External Dependencies
 
 ### AI Services (via Replit AI Integrations)
@@ -188,6 +195,7 @@ Preferred communication style: Simple, everyday language.
 ### Sessions Table
 - `id`: UUID primary key
 - `userId`: Foreign key to users table
+- `folderId`: (Optional) Foreign key to session_folders table
 - `createdAt`: Session creation timestamp
 - `goalType`: Video goal type (sales, lead, education, recruit)
 - `durationSeconds`: Video duration in seconds
@@ -202,6 +210,12 @@ Preferred communication style: Simple, everyday language.
 - `titleSource`: How title was created ('ai' or 'user')
 - `retranscribeCount`: Number of retranscription attempts
 - `lastRetranscribeAt`: Timestamp of last retranscription
+
+### Session Folders Table
+- `id`: UUID primary key
+- `userId`: Foreign key to users table
+- `name`: Folder name (max 50 characters)
+- `createdAt`: Folder creation timestamp
 
 ### System Settings Table
 - `id`: Primary key (always 'keap_integration')

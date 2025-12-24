@@ -1891,6 +1891,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "folderId must be a string or null" });
       }
       
+      // Validate folder ownership if moving to a folder
+      if (folderId !== null) {
+        const folders = await storage.getFoldersByUser(req.session.userId!);
+        if (!folders.some(f => f.id === folderId)) {
+          return res.status(404).json({ message: "Folder not found" });
+        }
+      }
+      
       const movedCount = await storage.moveSessions(sessionIds, req.session.userId!, folderId);
       
       logUserAction({
