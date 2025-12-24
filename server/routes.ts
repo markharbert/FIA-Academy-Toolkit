@@ -1902,6 +1902,24 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No video file provided" });
       }
 
+      // Clean up old files on re-upload
+      if (session.videoPath) {
+        const oldVideoPath = path.join(UPLOADS_DIR, session.videoPath);
+        try {
+          if (fs.existsSync(oldVideoPath)) {
+            fs.unlinkSync(oldVideoPath);
+          }
+        } catch {}
+      }
+      if (session.finalVideoPath && session.finalVideoPath !== session.videoPath) {
+        const oldFinalPath = path.join(UPLOADS_DIR, session.finalVideoPath);
+        try {
+          if (fs.existsSync(oldFinalPath)) {
+            fs.unlinkSync(oldFinalPath);
+          }
+        } catch {}
+      }
+
       const videoFullPath = path.join(UPLOADS_DIR, req.file.filename);
       const probeResult = await probeVideo(videoFullPath);
 
@@ -1944,9 +1962,17 @@ export async function registerRoutes(
         originalProbeJson: probeResult.data,
         durationSeconds: Math.round(probeResult.duration),
         finalVideoResolution: `${probeResult.width}x${probeResult.height}`,
+        finalVideoPath: null,
         processingStatus: "uploading",
         processingProgress: 10,
         processingMessage: "Video uploaded, preparing for processing...",
+        processingError: null,
+        processingStartedAt: null,
+        processingCompletedAt: null,
+        transcriptText: null,
+        transcriptEditedText: null,
+        scoreJson: null,
+        scoreUpdatedAt: null,
       });
 
       await logUserAction({
