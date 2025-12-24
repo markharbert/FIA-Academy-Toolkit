@@ -127,6 +127,7 @@ export default function RecordPage() {
   const [selectedCamera, setSelectedCamera] = useState<string>("");
   const [selectedMicrophone, setSelectedMicrophone] = useState<string>("");
   const [audioLevel, setAudioLevel] = useState(0);
+  const [recordingMimeType, setRecordingMimeType] = useState<string>("video/webm");
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -157,8 +158,8 @@ export default function RecordPage() {
 
       const constraints: MediaStreamConstraints = {
         video: cameraId
-          ? { deviceId: { exact: cameraId }, width: 1280, height: 720 }
-          : { width: 1280, height: 720, facingMode: "user" },
+          ? { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          : { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" },
         audio: micId
           ? { deviceId: { exact: micId } }
           : true,
@@ -270,6 +271,40 @@ export default function RecordPage() {
     }
   };
 
+  const getBestMimeType = (): { mimeType: string; extension: string } => {
+    const mp4Options = [
+      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+      "video/mp4;codecs=avc1.4D401F,mp4a.40.2",
+      "video/mp4;codecs=avc1,mp4a",
+      "video/mp4",
+    ];
+    
+    for (const mimeType of mp4Options) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        console.log(`[Recording] Using MP4 format: ${mimeType}`);
+        return { mimeType, extension: "mp4" };
+      }
+    }
+    
+    const webmOptions = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+    
+    for (const mimeType of webmOptions) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        console.log(`[Recording] Using WebM format: ${mimeType}`);
+        return { mimeType, extension: "webm" };
+      }
+    }
+    
+    console.log("[Recording] Falling back to default format");
+    return { mimeType: "video/webm", extension: "webm" };
+  };
+
   const startRecording = () => {
     if (!streamRef.current) return;
 
@@ -279,9 +314,15 @@ export default function RecordPage() {
     setRecordedUrl(null);
     setError(null);
 
-    const mediaRecorder = new MediaRecorder(streamRef.current, {
-      mimeType: "video/webm;codecs=vp9,opus",
-    });
+    const { mimeType, extension } = getBestMimeType();
+    setRecordingMimeType(mimeType);
+    
+    const recorderOptions: MediaRecorderOptions = {
+      mimeType,
+      videoBitsPerSecond: 4000000,
+    };
+
+    const mediaRecorder = new MediaRecorder(streamRef.current, recorderOptions);
 
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) {
@@ -290,10 +331,12 @@ export default function RecordPage() {
     };
 
     mediaRecorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
+      const baseMimeType = mimeType.split(";")[0];
+      const blob = new Blob(chunksRef.current, { type: baseMimeType });
       setRecordedBlob(blob);
       const url = URL.createObjectURL(blob);
       setRecordedUrl(url);
+      console.log(`[Recording] Saved as ${extension}, size: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
     };
 
     mediaRecorderRef.current = mediaRecorder;
@@ -348,8 +391,11 @@ export default function RecordPage() {
       if (!createRes.ok) throw new Error("Failed to create session");
       const { id } = await createRes.json();
 
+      const isMP4 = recordingMimeType.startsWith("video/mp4");
+      const extension = isMP4 ? "mp4" : "webm";
+      
       const formData = new FormData();
-      formData.append("video", recordedBlob, "recording.webm");
+      formData.append("video", recordedBlob, `recording.${extension}`);
 
       const uploadRes = await fetch(`/api/sessions/${id}/upload`, {
         method: "POST",
@@ -365,7 +411,12 @@ export default function RecordPage() {
         credentials: "include",
       });
 
+      const convertData = await convertRes.json();
       if (!convertRes.ok) throw new Error("Failed to convert video to MP4");
+      
+      if (convertData.skipped) {
+        console.log("[Recording] Conversion skipped - already MP4");
+      }
 
       setProcessingStep("transcribing");
       const transcribeRes = await fetch(`/api/sessions/${id}/transcribe`, {
