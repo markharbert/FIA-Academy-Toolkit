@@ -186,6 +186,9 @@ export default function SessionPage() {
   const [copied, setCopied] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
+  const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoLoading, setVideoLoading] = useState(false);
 
   // Check if processing is still in progress to enable auto-refresh
   const isProcessingActive = (data: Session | undefined) => {
@@ -290,6 +293,55 @@ export default function SessionPage() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
+  // Load video as blob URL with credentials
+  useEffect(() => {
+    const isExpiredNow = session?.videoDeletedAt || (session?.expiresAt && new Date(session.expiresAt) < new Date());
+    const shouldLoadVideo = session?.videoPath && 
+      (!session.processingStatus || session.processingStatus === "ready") && 
+      !isExpiredNow;
+
+    if (!shouldLoadVideo || !sessionId) {
+      setVideoBlobUrl(null);
+      return;
+    }
+
+    // Only load if we don't already have a blob URL for this session
+    if (videoBlobUrl) return;
+
+    setVideoLoading(true);
+    setVideoError(null);
+
+    fetch(`/api/sessions/${sessionId}/video`, { credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok) {
+          const contentType = res.headers.get("content-type");
+          if (contentType?.includes("application/json")) {
+            const data = await res.json();
+            throw new Error(data.message || `Failed to load video: ${res.status}`);
+          }
+          throw new Error(`Failed to load video: ${res.status}`);
+        }
+        return res.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        setVideoBlobUrl(url);
+        setVideoLoading(false);
+      })
+      .catch((err) => {
+        console.error("Video load error:", err);
+        setVideoError(err.message || "Failed to load video");
+        setVideoLoading(false);
+      });
+
+    // Cleanup blob URL when component unmounts or session changes
+    return () => {
+      if (videoBlobUrl) {
+        URL.revokeObjectURL(videoBlobUrl);
+      }
+    };
+  }, [session?.id, session?.videoPath, session?.processingStatus, session?.videoDeletedAt, session?.expiresAt, sessionId]);
 
   if (isLoading) {
     return (
@@ -499,21 +551,57 @@ export default function SessionPage() {
                 </div>
               </div>
             ) : session.videoPath ? (
-              <video
-                key={`${session.id}-${session.videoPath}`}
-                src={`/api/sessions/${session.id}/video`}
-                controls
-                playsInline
-                preload="metadata"
-                className="aspect-video w-full rounded-lg bg-black"
-                data-testid="video-player"
-                onError={(e) => {
-                  const video = e.currentTarget;
-                  const errorCode = video.error?.code;
-                  const errorMessage = video.error?.message || "Unknown error";
-                  console.error(`Video playback error: code=${errorCode}, message=${errorMessage}`);
-                }}
-              />
+              videoLoading ? (
+                <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
+                  <div className="text-center">
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                    <p className="mt-2 text-sm text-muted-foreground">Loading video...</p>
+                  </div>
+                </div>
+              ) : videoError ? (
+                <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
+                  <div className="text-center space-y-3">
+                    <AlertCircle className="mx-auto h-10 w-10 text-destructive" />
+                    <p className="font-medium text-destructive">Video failed to load</p>
+                    <p className="text-sm text-muted-foreground">{videoError}</p>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setVideoError(null);
+                        setVideoBlobUrl(null);
+                      }}
+                      data-testid="button-reload-video"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retry
+                    </Button>
+                  </div>
+                </div>
+              ) : videoBlobUrl ? (
+                <video
+                  key={videoBlobUrl}
+                  src={videoBlobUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="aspect-video w-full rounded-lg bg-black"
+                  data-testid="video-player"
+                  onError={(e) => {
+                    const video = e.currentTarget;
+                    const errorCode = video.error?.code;
+                    const errorMessage = video.error?.message || "Unknown error";
+                    console.error(`Video playback error: code=${errorCode}, message=${errorMessage}`);
+                    setVideoError(`Playback error: ${errorMessage}`);
+                  }}
+                />
+              ) : (
+                <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
+                  <div className="text-center">
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                    <p className="mt-2 text-sm text-muted-foreground">Preparing video...</p>
+                  </div>
+                </div>
+              )
             ) : (
               <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
                 <p className="text-muted-foreground">No video available</p>
