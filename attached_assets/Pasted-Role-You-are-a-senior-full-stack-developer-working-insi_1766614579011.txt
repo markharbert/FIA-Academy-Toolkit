@@ -1,0 +1,215 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). We are on the video Session page. Implement the changes below so playback and downloads are reliable and consistent.
+
+High Priority Outcomes
+
+The low-quality preview video, once generated, is saved and always loads on the Session page until the 30-day expiration.
+
+Every time the Session page is opened, the system must retrieve and display that preview video immediately if it exists.
+
+The video player shows a thumbnail poster image generated from the first few frames of the preview video.
+
+Remove transcript download as PDF. Keep transcript download as TXT only.
+
+The downloaded TXT filename must match the AI-generated session title (the session name) so the saved file is identifiable.
+
+PART 1: Persist the Preview Video and Always Show It Until Expiration
+
+Problem to solve
+Videos sometimes load inconsistently after updates. We need a durable persistence model and a deterministic way to load the preview asset on every page load.
+
+Required backend data model
+On session processing completion for the preview video, persist these fields in the Sessions table:
+
+previewVideoStorageKey (string, required once ready)
+
+previewVideoMimeType (always video/mp4)
+
+previewVideoGeneratedAt (datetime)
+
+previewVideoSizeBytes (int)
+
+previewVideoDurationSeconds (float)
+
+previewVideoExpiresAt (datetime, equals session.expiresAt)
+
+previewVideoStatus (queued | generating | ready | failed)
+
+previewVideoError (nullable)
+
+Session expiration rules
+
+The preview video remains available until session.expiresAt (30 days after creation).
+
+A cleanup job deletes the previewVideoStorageKey file at expiration.
+
+Required API behavior on every Session page load
+GET /api/sessions/:id must ALWAYS return a stable payload describing preview availability:
+{
+"id": "...",
+"title": "...",
+"expiresAt": "...",
+"video": {
+"mode": "mp4",
+"status": "ready" | "generating" | "failed",
+"previewUrl": "..." (present if ready),
+"posterUrl": "..." (present if ready),
+"generatedAt": "..."
+}
+}
+
+Preview URL generation
+
+Derive previewUrl from previewVideoStorageKey.
+
+If the storage requires auth, either:
+A) Serve it via an authenticated streaming endpoint:
+GET /api/sessions/:id/video/preview/stream
+or
+B) Generate a signed URL on request.
+Pick one approach and make it consistent across environments.
+
+No empty player rule
+If video.status is “ready” and previewUrl exists, the UI must render the player with src=previewUrl. If not ready, show the rendering meter and placeholder.
+
+PART 2: Make Preview Video Playback Reliable
+
+If using a backend stream endpoint, it must:
+
+Require auth and ownership/admin.
+
+Stream the file with correct headers:
+
+Content-Type: video/mp4
+
+Accept-Ranges: bytes
+
+Handle Range requests:
+
+Return 206 Partial Content when Range header exists.
+
+Never return an HTML page on auth failure. Return 401 JSON.
+
+Frontend must:
+
+Only mount the <video> element once previewUrl exists.
+
+Force remount on URL changes:
+
+<video key={previewUrl} src={previewUrl} controls preload="metadata" playsInline poster={posterUrl} />
+
+After previewUrl updates:
+
+call videoRef.load()
+
+PART 3: Generate and Persist a Thumbnail Poster From the First Few Frames
+
+Requirement
+The video embed must show a thumbnail poster image representing what is in the video. Use one of the first few frames (example: at 0.5 seconds or 1.0 second) so it is not a black first frame.
+
+Thumbnail generation
+When preview video is ready:
+
+Generate a JPG thumbnail using ffmpeg.
+
+Use a time offset:
+
+seek to 0.5s or 1.0s
+
+Output size should match the player’s expected aspect ratio, but keep it lightweight:
+
+example: width 640, maintain aspect ratio
+
+Persist these fields:
+
+previewPosterStorageKey
+
+previewPosterMimeType (image/jpeg)
+
+previewPosterGeneratedAt
+
+Expose posterUrl in the session API:
+
+video.posterUrl derived from previewPosterStorageKey.
+
+UI behavior
+
+Set the video tag poster attribute to posterUrl.
+
+Ensure posterUrl is accessible with the same auth model as previewUrl.
+
+PART 4: Transcript Download TXT Only (Remove PDF)
+
+UI changes
+
+Remove the “Download Transcript (PDF)” button from the Transcript section.
+
+Keep only one button:
+
+“Download Transcript (TXT)”
+
+Backend endpoint
+GET /api/sessions/:id/transcript.txt
+
+Response requirements
+
+Content-Type: text/plain; charset=utf-8
+
+Content-Disposition: attachment; filename="{sanitizedSessionTitle}.txt"
+
+Filename rule
+
+The filename must use the AI-generated session title (the session name/title saved in the session record).
+
+Sanitize the title for filenames:
+
+remove or replace characters not allowed by filesystems
+
+collapse whitespace
+
+limit length (example: 80 characters)
+If title is missing:
+
+fallback to “session-{id}.txt”
+
+TXT contents
+
+The transcript text in correct order.
+Optional:
+
+include the session title at the top line and created date.
+
+Frontend
+
+The button should download the TXT file directly. Do not generate it client-side.
+
+Ensure the filename comes from Content-Disposition.
+
+PART 5: Verification Checklist
+
+You must verify:
+
+After preview video generation completes, session record stores previewVideoStorageKey and previewPosterStorageKey.
+
+Reloading the session page always shows the preview video player and it plays.
+
+Preview remains accessible until session.expiresAt and then is deleted.
+
+Poster thumbnail shows before playback and reflects an early frame (not black).
+
+Transcript download is TXT only and downloads with filename matching the AI session title.
+
+Filename sanitization prevents invalid file names across Mac and Windows.
+
+All endpoints enforce ownership and do not leak files to other users.
+
+Deliverables
+
+Code changes to persist preview video and poster keys.
+
+Stable session API fields for previewUrl and posterUrl.
+
+ffmpeg thumbnail generation added to pipeline.
+
+UI changes: poster support, remove transcript PDF option, TXT filename based on session title.
+
+Now implement preview persistence, poster thumbnail generation, and TXT-only transcript download with the AI session title as the filename, exactly as described.
