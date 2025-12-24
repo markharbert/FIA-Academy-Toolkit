@@ -3316,6 +3316,39 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/sessions/:id/poster", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      const currentUser = await storage.getUser(req.session.userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      if (session.userId !== req.session.userId && !isAdmin) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.previewPosterPath) {
+        return res.status(404).json({ message: "No poster available" });
+      }
+
+      const posterPath = path.join(UPLOADS_DIR, session.previewPosterPath);
+      
+      if (!fs.existsSync(posterPath)) {
+        return res.status(404).json({ message: "Poster file not found" });
+      }
+
+      res.setHeader("Content-Type", session.previewPosterMimeType || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      fs.createReadStream(posterPath).pipe(res);
+    } catch (err) {
+      console.error("Poster error:", err);
+      res.status(500).json({ message: "Failed to get poster" });
+    }
+  });
+
   // PDF report download (legacy endpoint - keep for backward compatibility)
   app.get("/api/sessions/:id/pdf", requireAuth, async (req: Request, res: Response) => {
     const traceId = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -3405,7 +3438,7 @@ export async function registerRoutes(
     }
   });
 
-  // Transcript TXT download
+  // Transcript TXT download - filename uses AI-generated session title
   app.get("/api/sessions/:id/transcript.txt", requireAuth, async (req: Request, res: Response) => {
     try {
       const session = await storage.getSession(req.params.id);
@@ -3425,15 +3458,34 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No transcript available" });
       }
 
-      const sanitizedTitle = (session.title || "session")
-        .replace(/[^a-zA-Z0-9\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .toLowerCase()
-        .slice(0, 50);
+      // Sanitize title for cross-platform filename compatibility
+      let filename: string;
+      if (session.title) {
+        const sanitized = session.title
+          .replace(/[<>:"/\\|?*\x00-\x1f]/g, "") // Remove invalid chars for Windows/Mac/Linux
+          .replace(/[\s]+/g, " ") // Collapse whitespace
+          .trim()
+          .slice(0, 80); // Limit length
+        filename = sanitized ? `${sanitized}.txt` : `session-${session.id}.txt`;
+      } else {
+        filename = `session-${session.id}.txt`;
+      }
+
+      // Build transcript content with header info
+      const createdDate = session.createdAt ? new Date(session.createdAt).toLocaleDateString() : "";
+      const headerLines = [
+        session.title || "Untitled Session",
+        createdDate ? `Recorded: ${createdDate}` : "",
+        "",
+        "---",
+        "",
+      ].filter(Boolean);
+      
+      const content = headerLines.join("\n") + transcript;
 
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="${sanitizedTitle}-transcript.txt"`);
-      res.send(transcript);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(content);
     } catch (err) {
       console.error("Transcript TXT download error:", err);
       res.status(500).json({ message: "Failed to download transcript" });
