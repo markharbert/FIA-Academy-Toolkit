@@ -599,3 +599,158 @@ export async function generateThumbnail(videoPath: string, uploadsDir: string): 
     return { success: false, error: "Unexpected error during thumbnail generation" };
   }
 }
+
+export interface HlsResult {
+  success: boolean;
+  playlistPath?: string;
+  hlsDir?: string;
+  error?: string;
+}
+
+export interface HlsProgressCallback {
+  onPlayable?: (playlistPath: string, hlsDir: string) => void;
+  onComplete?: (playlistPath: string, hlsDir: string) => void;
+  onError?: (error: string) => void;
+}
+
+export async function generateHlsPreview(
+  inputPath: string,
+  uploadsDir: string,
+  sessionId: string,
+  callbacks?: HlsProgressCallback
+): Promise<HlsResult> {
+  try {
+    if (!fs.existsSync(inputPath)) {
+      callbacks?.onError?.("Input file not found");
+      return { success: false, error: "Input file not found" };
+    }
+
+    const hlsDirName = `hls_${sessionId}`;
+    const hlsDir = path.join(uploadsDir, hlsDirName);
+    
+    if (!fs.existsSync(hlsDir)) {
+      fs.mkdirSync(hlsDir, { recursive: true });
+    }
+
+    const playlistPath = path.join(hlsDir, "preview.m3u8");
+    const segmentPattern = path.join(hlsDir, "segment_%04d.m4s");
+    const initSegment = path.join(hlsDir, "init.mp4");
+
+    console.log(`[FFmpeg] Generating HLS preview for session ${sessionId}...`);
+    const startTime = Date.now();
+
+    const resolution = await getVideoResolution(inputPath);
+    console.log(`[FFmpeg] Input resolution: ${resolution.width}x${resolution.height}`);
+
+    const fps = 24;
+    const segmentDuration = 2;
+    const gopSize = fps * segmentDuration;
+
+    const ffmpegArgs = [
+      "-i", inputPath,
+      "-c:v", "libx264",
+      "-profile:v", "baseline",
+      "-level", "3.0",
+      "-pix_fmt", "yuv420p",
+      "-crf", "30",
+      "-preset", "ultrafast",
+      "-tune", "zerolatency",
+      "-vf", "scale=-2:360",
+      "-r", String(fps),
+      "-g", String(gopSize),
+      "-keyint_min", String(gopSize),
+      "-sc_threshold", "0",
+      "-c:a", "aac",
+      "-b:a", "96k",
+      "-ac", "2",
+      "-ar", "44100",
+      "-f", "hls",
+      "-hls_time", String(segmentDuration),
+      "-hls_list_size", "0",
+      "-hls_flags", "append_list+omit_endlist+independent_segments+temp_file",
+      "-hls_segment_type", "fmp4",
+      "-hls_fmp4_init_filename", "init.mp4",
+      "-hls_segment_filename", segmentPattern,
+      "-y",
+      playlistPath
+    ];
+
+    return new Promise((resolve) => {
+      const ffmpeg = spawn("ffmpeg", ffmpegArgs);
+
+      let stderr = "";
+      let playableNotified = false;
+      let checkInterval: NodeJS.Timeout | null = null;
+
+      const checkForFirstSegment = () => {
+        if (playableNotified) return;
+        
+        try {
+          const files = fs.readdirSync(hlsDir);
+          const hasPlaylist = files.includes("preview.m3u8");
+          const hasInit = files.includes("init.mp4");
+          const hasSegment = files.some(f => f.startsWith("segment_") && f.endsWith(".m4s"));
+          
+          if (hasPlaylist && hasInit && hasSegment) {
+            playableNotified = true;
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`[FFmpeg] HLS preview playable in ${elapsed}s`);
+            callbacks?.onPlayable?.(path.join(hlsDirName, "preview.m3u8"), hlsDirName);
+          }
+        } catch (err) {
+        }
+      };
+
+      checkInterval = setInterval(checkForFirstSegment, 500);
+
+      ffmpeg.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      ffmpeg.on("close", (code) => {
+        if (checkInterval) clearInterval(checkInterval);
+        
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        if (code === 0 && fs.existsSync(playlistPath)) {
+          console.log(`[FFmpeg] HLS preview complete in ${elapsed}s`);
+          
+          try {
+            let playlistContent = fs.readFileSync(playlistPath, "utf-8");
+            if (!playlistContent.includes("#EXT-X-ENDLIST")) {
+              playlistContent += "\n#EXT-X-ENDLIST\n";
+              fs.writeFileSync(playlistPath, playlistContent);
+            }
+          } catch (err) {
+            console.warn("[FFmpeg] Failed to finalize playlist:", err);
+          }
+
+          callbacks?.onComplete?.(path.join(hlsDirName, "preview.m3u8"), hlsDirName);
+          resolve({ 
+            success: true, 
+            playlistPath: path.join(hlsDirName, "preview.m3u8"),
+            hlsDir: hlsDirName
+          });
+        } else {
+          console.error(`[FFmpeg] HLS generation failed with code ${code}`);
+          console.error(`[FFmpeg] stderr: ${stderr.slice(-1000)}`);
+          const errorMsg = "HLS preview generation failed";
+          callbacks?.onError?.(errorMsg);
+          resolve({ success: false, error: errorMsg });
+        }
+      });
+
+      ffmpeg.on("error", (err) => {
+        if (checkInterval) clearInterval(checkInterval);
+        console.error(`[FFmpeg] HLS process error:`, err);
+        const errorMsg = "FFmpeg process failed to start";
+        callbacks?.onError?.(errorMsg);
+        resolve({ success: false, error: errorMsg });
+      });
+    });
+  } catch (err) {
+    console.error(`[FFmpeg] Unexpected HLS error:`, err);
+    callbacks?.onError?.("Unexpected error during HLS generation");
+    return { success: false, error: "Unexpected error during HLS generation" };
+  }
+}

@@ -283,6 +283,18 @@ export const processingStepNumbers: Record<ProcessingStatus, number> = {
   failed: 0,
 };
 
+// HLS Preview status types for progressive streaming
+export const hlsStatuses = ["queued", "generating", "playable", "complete", "failed"] as const;
+export type HlsStatus = typeof hlsStatuses[number];
+
+// Transcript status types for audio processing
+export const transcriptStatuses = ["not_started", "extracting_audio", "transcribing", "complete", "failed"] as const;
+export type TranscriptStatus = typeof transcriptStatuses[number];
+
+// Score status types for progressive scoring
+export const scoreStatuses = ["not_started", "partial", "final", "failed"] as const;
+export type ScoreStatus = typeof scoreStatuses[number];
+
 // Source type for video sessions
 export const sourceTypes = ["upload"] as const;
 export type SourceType = typeof sourceTypes[number];
@@ -370,6 +382,16 @@ export const sessions = pgTable("sessions", {
   originalDeletedAt: timestamp("original_deleted_at"),
   finalVideoPath: text("final_video_path"),
   finalVideoResolution: text("final_video_resolution"),
+  hlsStatus: text("hls_status").default("queued").$type<HlsStatus>(),
+  hlsPlaylistPath: text("hls_playlist_path"),
+  hlsDir: text("hls_dir"),
+  hlsReadyAt: timestamp("hls_ready_at"),
+  hlsCompleteAt: timestamp("hls_complete_at"),
+  hlsError: text("hls_error"),
+  transcriptStatus: text("transcript_status").default("not_started").$type<TranscriptStatus>(),
+  audioPath: text("audio_path"),
+  audioExtractedAt: timestamp("audio_extracted_at"),
+  scoreStatus: text("score_status").default("not_started").$type<ScoreStatus>(),
 });
 
 export const insertSessionSchema = createInsertSchema(sessions).omit({

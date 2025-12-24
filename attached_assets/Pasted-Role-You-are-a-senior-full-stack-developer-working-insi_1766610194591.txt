@@ -1,0 +1,366 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). I want the upload experience to feel instant. Two things must happen:
+
+A low quality video preview should start playing in the session video player while the preview is still being generated. The user should not have to wait for the full preview file to finish rendering before they can start watching. As more of the preview is generated, playback should buffer and continue.
+
+The transcript and score must appear as soon as possible. As soon as there is enough transcript to score, show an initial score and update it as more transcript arrives.
+
+Important note on feasibility
+A single MP4 file usually cannot be reliably streamed while it is still being written because the browser expects stable headers and Content-Length. The correct way to achieve “play while rendering” is to generate a streaming format progressively, like HLS (playlist + small segments). This lets the player start after the first segment is created and then keep playing as new segments arrive.
+
+Build this using HLS progressive preview first, then optionally also create a final preview MP4 later. Results (transcript + score) must not wait on full video preview rendering.
+
+HIGH PRIORITY OUTCOMES
+
+After upload completes, the session page shows a player that starts playback quickly using a progressive HLS preview.
+
+While HLS segments continue to generate, the player continues to buffer and play.
+
+Audio extraction starts immediately and transcription begins fast.
+
+Score appears as soon as transcript partial results exist and updates over time.
+
+The page always shows clear status, progress, and elapsed time.
+
+If any step fails, show a clear error and allow retry.
+
+PART 1: NEW PIPELINE OVERVIEW (DO NOT BLOCK RESULTS ON VIDEO)
+After upload completion, start these in parallel:
+A) STREAMING PREVIEW JOB (HLS low quality)
+B) AUDIO-ONLY FAST PATH (extract audio, transcribe, score quickly)
+
+The user should get:
+
+Video playback as soon as HLS has the first segment
+
+Transcript partial results quickly
+
+Initial score quickly
+
+Final score after transcription completes
+
+PART 2: IMPLEMENT PROGRESSIVE HLS PREVIEW
+
+A) HLS OUTPUT DETAILS
+Generate low quality HLS preview with short segments so playback can start quickly.
+
+Resolution: 640x360 (or 854x480 if still fast)
+
+Video codec: H.264
+
+Audio codec: AAC
+
+Segment duration: 2 seconds
+
+Keyframe interval aligned to segment duration for smooth segmentation
+
+Use fMP4 HLS segments (CMAF style) for faster start and stability
+
+Store:
+
+preview playlist: preview.m3u8
+
+preview segments: segment_0001.m4s, segment_0002.m4s, etc
+
+init segment if required: init.mp4
+
+B) FFmpeg COMMAND REQUIREMENTS (SPEED FIRST)
+Use a very fast preset and low bitrate.
+Create HLS playlist that updates while encoding:
+
+Do not write the endlist tag until done
+
+Append segments as they are created
+
+Keep the playlist small (last N segments) or allow full list, depending on your storage strategy
+
+Example requirements to implement (exact flags can be adjusted to match environment):
+
+hls_time 2
+
+hls_list_size 6 to 12
+
+hls_flags append_list + omit_endlist + independent_segments + temp_file
+
+hls_segment_type fmp4
+
+preset veryfast or ultrafast
+
+crf around 30 to 33 for speed and small output
+
+maxrate and bufsize for stable encoding
+
+gop set so keyframes align with segments (example: g = fps * 2 seconds)
+
+C) STORAGE AND ACCESS
+You must serve the playlist and segments to the logged-in user safely.
+Option 1: Serve from app storage with authenticated streaming endpoints (recommended for simplicity)
+
+GET /api/sessions/:id/preview/playlist.m3u8
+
+GET /api/sessions/:id/preview/segments/:name
+
+Rules:
+
+requireAuth
+
+ownership check or admin
+
+Set correct content types:
+
+playlist: application/vnd.apple.mpegurl
+
+segments: video/iso.segment for .m4s or video/mp4 as appropriate
+
+Option 2: Object storage
+
+Upload playlist and segments as they are generated
+
+Use signed URLs
+
+Ensure CORS is correct for playback
+
+D) PLAYER IMPLEMENTATION
+Use an HLS-capable player:
+
+Safari can play HLS natively
+
+Chrome and most desktops need hls.js
+
+Implementation requirements:
+
+If browser supports native HLS:
+
+Use <video src="playlistUrl" controls playsInline>
+
+Otherwise:
+
+Use hls.js to attach the playlist to the video element
+
+Auto-retry playlist fetch on temporary 404 while the first segment is being created.
+
+Show “Generating preview…” until playlist becomes available.
+
+Once playlist is available:
+
+Start playback
+
+If playback stalls, show buffering indicator, keep retrying
+
+E) SESSION STATE FIELDS
+Add fields to Sessions:
+
+previewHlsStatus: queued | generating | ready | failed
+
+previewHlsPlaylistKey or path
+
+previewHlsReadyAt
+
+previewHlsError
+
+Progress updates:
+
+As soon as playlist exists and first segment exists, mark previewHlsStatus = ready and allow playback.
+
+“Ready” here means playable, not fully complete. Add a separate flag if you want:
+
+previewHlsPlayable = true once first segment exists
+
+previewHlsComplete = true once encoding ends and playlist gets endlist
+
+PART 3: FASTEST TRANSCRIPT AND SCORE (ASAP, EVEN PARTIAL)
+
+A) AUDIO EXTRACTION IMMEDIATELY AFTER UPLOAD
+Do not wait for HLS preview completion.
+Extract audio as fast as possible:
+
+Map audio stream only
+
+Convert to mono 16k to reduce size and speed transcription
+
+Store audio artifact:
+
+sessions.audioKey
+
+sessions.audioDurationSeconds
+
+B) TRANSCRIBE IN CHUNKS AND STREAM RESULTS
+If transcription system supports chunking:
+
+Split audio into 2 to 5 minute chunks
+
+Transcribe chunks in parallel if possible
+
+As each chunk finishes:
+
+Store transcript segments immediately
+
+Mark partial transcript available
+
+Trigger scoring update
+
+If transcription supports streaming partial output:
+
+Surface partial results live
+
+C) SCORING AS SOON AS THERE IS TRANSCRIPT
+Add scoring states:
+
+scoreStatus: not_started | partial | final | failed
+
+scoreUpdatedAt
+
+Behavior:
+
+When first transcript chunk arrives:
+
+Generate an initial score and top 3 suggestions
+
+Show it immediately on the page
+
+As more transcript arrives:
+
+Re-run scoring incrementally
+
+Update the score and suggestions
+
+When transcription completes:
+
+Generate final score and full suggestions
+
+Mark scoreStatus = final
+
+Important: Avoid re-running expensive scoring too often.
+
+Debounce scoring updates (example: every 30 to 60 seconds or per chunk completion)
+
+PART 4: SESSION PAGE UX (ONE PAGE, NO EMPTY PLAYER)
+
+A) PAGE MUST SHOW THREE LAYERS OF STATUS
+
+Upload progress
+
+Preview playback readiness
+
+Transcript and score readiness
+
+B) VIDEO PLAYER BEHAVIOR
+
+Do not render an empty player without a source.
+
+While previewHlsPlaylistUrl is not available:
+
+Show a skeleton player box with “Generating preview…”
+
+As soon as playlist is available:
+
+Render video player and start playback
+
+If video fails to load:
+
+Show message and “Retry preview” button
+
+Retry should refetch playlist and reattach hls.js
+
+C) TRANSCRIPT AND SCORE SECTIONS
+
+Show “Transcribing…” immediately after upload complete.
+
+When partial transcript exists:
+
+Render transcript with a label “Partial transcript”
+
+Show score box as soon as initial scoring is done:
+
+Label “Initial score, updating”
+
+When final:
+
+Label “Final score”
+
+D) PROGRESS BAR
+Show a combined progress bar that reflects critical path to results:
+
+Extracting audio
+
+Transcribing
+
+Scoring
+Preview generation should have its own small indicator since it should not block results.
+
+PART 5: DEBUG AND RELIABILITY REQUIREMENTS
+
+A) INSTRUMENT EVERY STEP WITH TIMINGS
+Log:
+
+time to first HLS segment
+
+time to playlist availability
+
+time to first transcript chunk
+
+time to initial score
+
+time to final score
+
+B) COMMON FAILURE POINTS TO HANDLE
+
+First segment takes too long
+
+Show message and keep trying
+
+Provide fallback: generate a simple low-res MP4 preview in the background and use it if HLS fails
+
+HLS segments served with wrong content types
+
+Fix headers
+
+Auth blocks segment fetches
+
+Ensure same-origin cookie auth works in video playback
+
+Transcription slow
+
+Confirm audio downmix and sample rate reduction are applied
+
+Confirm you are not waiting on video transcode
+
+C) RETRY BUTTONS
+Add:
+
+Retry preview generation
+
+Retry transcription
+
+Retry scoring
+
+PART 6: ACCEPTANCE TESTS
+
+Upload a large video
+
+Session page shows “Generating preview…”
+
+Preview starts playing within a short time after upload completes (segment-based)
+
+Transcript begins appearing soon after
+
+Initial score appears soon after transcript starts
+
+Score updates as transcript completes
+
+Confirm playback continues as new segments arrive
+
+Confirm results appear even if preview is still generating
+
+Confirm no empty player state
+
+Deliverables
+
+Implement HLS progressive preview generation with playlist and segments served to authenticated users.
+
+Implement audio-first transcription and partial scoring updates.
+
+Add UI indicators for preview generating, transcribing, scoring.
+
+Add metrics that prove time-to-first-preview and time-to-first-score improved.
+
+Now implement this progressive preview playback while rendering, plus transcript and score as early as possible.
