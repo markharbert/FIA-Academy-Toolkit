@@ -83,6 +83,21 @@ Preferred communication style: Simple, everyday language.
    - Bulk move or delete selected sessions
    - Deleting a folder moves its sessions to "Unfiled" (doesn't delete them)
 
+12. **HLS Progressive Streaming**: Video preview uses HTTP Live Streaming (HLS) for fast playback:
+   - HLS generation runs in parallel with audio extraction and transcription
+   - Video becomes playable after first segment (~2-3 seconds)
+   - Status tracking: `hlsStatus` (queued → generating → playable → complete)
+   - Authenticated streaming endpoints prevent unauthorized access
+   - Frontend uses hls.js with fallback to MP4 for Safari native support
+   - Parallel pipeline status shown with PipelineStatus component
+
+13. **Parallel Processing Pipeline**: Three independent tracks run simultaneously:
+   - **HLS Preview**: 360p video segments for quick playback
+   - **Transcription**: Audio extraction → Gemini AI transcription
+   - **Scoring**: OpenAI analysis after transcript completes
+   - Independent status fields: `hlsStatus`, `transcriptStatus`, `scoreStatus`
+   - Frontend displays progress for all three tracks in real-time
+
 ## External Dependencies
 
 ### AI Services (via Replit AI Integrations)

@@ -18,6 +18,7 @@ export function HlsVideoPlayer({
 }: HlsVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,10 @@ export function HlsVideoPlayer({
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
+      }
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
       }
     };
 
@@ -117,6 +122,7 @@ export function HlsVideoPlayer({
         
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
+        blobUrlRef.current = url;
         video.src = url;
         
         video.onloadedmetadata = () => {
@@ -127,10 +133,7 @@ export function HlsVideoPlayer({
         video.onerror = () => {
           setError("Video playback failed");
           setLoading(false);
-          URL.revokeObjectURL(url);
         };
-        
-        return () => URL.revokeObjectURL(url);
       } catch (err) {
         console.error("[Video] Fallback error:", err);
         setError(err instanceof Error ? err.message : "Failed to load video");
