@@ -1,0 +1,317 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Update the user Dashboard page (the page that lists all video sessions) to add:
+
+Selectable delete (delete one by one using checkboxes).
+
+Select all and bulk delete option.
+
+A folder-based organization system for sessions.
+
+Drag and drop sessions into folders for easy organization.
+
+Do this without breaking existing session playback, transcript, scoring, admin tools, or auth.
+
+High Priority Outcomes
+
+Users can delete a single session easily.
+
+Users can select multiple sessions and delete them in one action.
+
+Users can create folders, rename folders, and delete folders (with clear behavior for sessions inside).
+
+Users can drag and drop sessions into folders.
+
+All actions are safe, confirmable, and reversible where reasonable.
+
+PART 1: Dashboard UI Changes
+
+A) Selection and Bulk Actions
+
+Add a checkbox on each session row/card.
+
+Add a “Select all” checkbox in the list header.
+
+Add a bulk actions bar that appears only when 1+ sessions are selected:
+
+“Delete Selected” button
+
+count of selected sessions (example: “3 selected”)
+
+Provide per-session quick delete:
+
+trash icon or “Delete” option in a menu on that session item
+
+Confirmation
+
+Any delete action must show a confirmation dialog:
+
+“Delete 3 sessions?”
+
+Warning: “This will remove the session, transcript, score, and video preview.”
+
+Add optional safety:
+
+“Type DELETE to confirm” only for delete all if you want.
+
+Show success toast:
+
+“Deleted 3 sessions.”
+
+Edge cases
+
+If a session is currently processing:
+
+Either block deletion with message, or allow deletion and cancel processing job.
+
+Pick one and implement consistently.
+
+B) Folder System UI
+Dashboard layout
+
+Add a left sidebar called “Folders”
+
+Default folders:
+
+All Sessions (virtual folder)
+
+Unfiled (sessions not assigned to a folder)
+
+Folder list supports:
+
+Create folder
+
+Rename folder
+
+Delete folder
+
+Folder behavior
+
+Clicking a folder filters the sessions list to that folder.
+
+“All Sessions” shows everything.
+
+“Unfiled” shows sessions with no folderId.
+
+Folder actions
+
+Create folder button
+
+Three-dot menu on each folder:
+
+Rename
+
+Delete
+
+Delete folder behavior (must be explicit)
+When deleting a folder:
+
+Do NOT delete sessions automatically.
+
+Move sessions inside it to “Unfiled.”
+Show confirmation:
+
+“Delete folder ‘Practice’?”
+
+“Sessions will be moved to Unfiled.”
+
+C) Drag and Drop
+Goal
+Users can drag session cards/rows and drop them onto a folder in the sidebar.
+
+Behavior
+
+Dragging a session shows a drag preview.
+
+Folders highlight on hover to indicate drop target.
+
+Dropping moves that session into that folder immediately:
+
+Update UI optimistically
+
+Persist via API call
+
+On failure, revert and show error toast
+
+Multi-drag (nice-to-have)
+If multiple sessions are selected and user drags one of them:
+
+Move all selected sessions into the folder.
+
+PART 2: Database Changes
+
+Add folders
+Create table: SessionFolder
+
+id
+
+userId
+
+name
+
+createdAt
+
+updatedAt
+
+Update sessions table
+Add:
+
+folderId (nullable, foreign key to SessionFolder.id)
+
+updatedAt (if not already)
+
+Indexes
+
+SessionFolder.userId
+
+Sessions.userId + folderId
+
+Sessions.userId + createdAt
+
+PART 3: Backend API Endpoints
+
+All endpoints must require auth and enforce ownership.
+
+Folders
+
+GET /api/folders
+Returns all folders for the logged-in user, plus counts:
+[
+{ "id": "...", "name": "Practice", "sessionCount": 12 }
+]
+
+POST /api/folders
+Body: { "name": "..." }
+Creates folder.
+
+PATCH /api/folders/:id
+Body: { "name": "..." }
+Renames folder.
+
+DELETE /api/folders/:id
+Deletes folder and moves sessions to Unfiled.
+
+Move sessions to folder
+5. POST /api/sessions/move
+Body:
+{
+"sessionIds": ["...","..."],
+"folderId": "..." | null
+}
+Moves one or many sessions to a folder, or null for Unfiled.
+
+Bulk delete sessions
+6. DELETE /api/sessions/bulk
+Body:
+{
+"sessionIds": ["...","..."]
+}
+
+Rules for delete
+
+Must delete associated stored artifacts:
+
+preview video (and audio files if used)
+
+transcript segments
+
+report pdf if stored
+
+Must remove session rows and related data safely in a transaction.
+
+Response
+{
+"success": true,
+"deletedCount": 3
+}
+
+Single delete (if not already present)
+7. DELETE /api/sessions/:id
+Keep or implement for per-session delete.
+
+PART 4: Frontend Implementation Notes
+
+List rendering
+
+Session list must be keyed and stable so selection doesn’t reset.
+
+Selecting:
+
+Shift-click to multi-select is optional but nice.
+
+Bulk bar:
+
+Sticky at top of list or floating at bottom.
+
+Folder sidebar
+
+Show folder counts.
+
+Show selected folder state.
+
+Provide create folder modal or inline input.
+
+Drag and drop library
+Use whatever is best for the current stack:
+
+If React: prefer @dnd-kit/core or react-beautiful-dnd alternative that is maintained.
+
+Keep it lightweight and stable.
+
+Optimistic updates
+
+On move:
+
+Update UI immediately
+
+Call API
+
+Revert on failure
+
+Toasts
+
+Success: deletion or move succeeded
+
+Error: show message
+
+PART 5: Logging and Admin Visibility
+
+User action logging
+Log user events:
+
+session_deleted
+
+sessions_bulk_deleted
+
+folder_created
+
+folder_renamed
+
+folder_deleted
+
+session_moved_to_folder
+
+Admin side
+No changes required, but deleted sessions must disappear from admin stats and feeds.
+
+PART 6: Verification Checklist
+
+You must verify:
+
+User can delete one session from the dashboard.
+
+User can select multiple sessions and delete selected.
+
+“Select all” selects all visible sessions in the current folder filter.
+
+Bulk delete shows confirmation and deletes sessions and artifacts.
+
+User can create, rename, and delete folders.
+
+Deleting a folder moves sessions to Unfiled.
+
+Drag and drop moves sessions into folders and persists after refresh.
+
+Multi-selected drag moves all selected sessions.
+
+No user can move or delete another user’s sessions.
+
+Now implement selection-based delete, select all and bulk delete, folder organization, and drag-and-drop moving of sessions into folders.

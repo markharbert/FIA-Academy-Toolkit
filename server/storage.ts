@@ -1,5 +1,5 @@
 import { 
-  users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics,
+  users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult, type SystemSettings,
@@ -7,7 +7,8 @@ import {
   type UserIdentity, type InsertUserIdentity, type AuthProvider,
   type AdminAuditLog, type InsertAdminAuditLog,
   type UserActionLog, type InsertUserActionLog, type UserActionType,
-  type ProcessingMetric, type InsertProcessingMetric
+  type ProcessingMetric, type InsertProcessingMetric,
+  type SessionFolder, type InsertSessionFolder
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizzle-orm";
@@ -154,6 +155,17 @@ export interface IStorage {
   // Processing Metrics
   createProcessingMetric(metric: InsertProcessingMetric): Promise<ProcessingMetric>;
   getProcessingMetrics(sessionId: string): Promise<ProcessingMetric[]>;
+  
+  // Session Folders
+  getFoldersByUser(userId: string): Promise<(SessionFolder & { sessionCount: number })[]>;
+  createFolder(folder: InsertSessionFolder): Promise<SessionFolder>;
+  updateFolder(id: string, userId: string, updates: { name?: string }): Promise<SessionFolder | undefined>;
+  deleteFolder(id: string, userId: string): Promise<boolean>;
+  
+  // Bulk Session Operations
+  moveSessions(sessionIds: string[], userId: string, folderId: string | null): Promise<number>;
+  deleteSessions(sessionIds: string[], userId: string): Promise<{ deletedCount: number; deletedPaths: string[] }>;
+  getSessionsByFolder(userId: string, folderId: string | null): Promise<Session[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -855,6 +867,110 @@ export class DatabaseStorage implements IStorage {
       .from(processingMetrics)
       .where(eq(processingMetrics.sessionId, sessionId))
       .orderBy(asc(processingMetrics.startedAt));
+  }
+  
+  // Session Folders
+  async getFoldersByUser(userId: string): Promise<(SessionFolder & { sessionCount: number })[]> {
+    const folders = await db.select()
+      .from(sessionFolders)
+      .where(eq(sessionFolders.userId, userId))
+      .orderBy(asc(sessionFolders.sortOrder), asc(sessionFolders.createdAt));
+    
+    const foldersWithCount = await Promise.all(folders.map(async (folder) => {
+      const [result] = await db.select({ count: count() })
+        .from(sessions)
+        .where(and(eq(sessions.userId, userId), eq(sessions.folderId, folder.id)));
+      return { ...folder, sessionCount: result?.count || 0 };
+    }));
+    
+    return foldersWithCount;
+  }
+  
+  async createFolder(folder: InsertSessionFolder): Promise<SessionFolder> {
+    const [result] = await db.insert(sessionFolders).values(folder).returning();
+    return result;
+  }
+  
+  async updateFolder(id: string, userId: string, updates: { name?: string }): Promise<SessionFolder | undefined> {
+    const [result] = await db.update(sessionFolders)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(sessionFolders.id, id), eq(sessionFolders.userId, userId)))
+      .returning();
+    return result || undefined;
+  }
+  
+  async deleteFolder(id: string, userId: string): Promise<boolean> {
+    await db.update(sessions)
+      .set({ folderId: null, updatedAt: new Date() })
+      .where(and(eq(sessions.folderId, id), eq(sessions.userId, userId)));
+    
+    const [result] = await db.delete(sessionFolders)
+      .where(and(eq(sessionFolders.id, id), eq(sessionFolders.userId, userId)))
+      .returning();
+    return !!result;
+  }
+  
+  // Bulk Session Operations
+  async moveSessions(sessionIds: string[], userId: string, folderId: string | null): Promise<number> {
+    if (sessionIds.length === 0) return 0;
+    
+    const result = await db.update(sessions)
+      .set({ folderId, updatedAt: new Date() })
+      .where(and(
+        eq(sessions.userId, userId),
+        sql`${sessions.id} = ANY(${sessionIds})`
+      ))
+      .returning({ id: sessions.id });
+    
+    return result.length;
+  }
+  
+  async deleteSessions(sessionIds: string[], userId: string): Promise<{ deletedCount: number; deletedPaths: string[] }> {
+    if (sessionIds.length === 0) return { deletedCount: 0, deletedPaths: [] };
+    
+    const sessionsToDelete = await db.select({
+      id: sessions.id,
+      videoPath: sessions.videoPath,
+      thumbnailPath: sessions.thumbnailPath,
+      previewVideoPath: sessions.previewVideoPath,
+      originalUploadPath: sessions.originalUploadPath,
+    })
+      .from(sessions)
+      .where(and(
+        eq(sessions.userId, userId),
+        sql`${sessions.id} = ANY(${sessionIds})`
+      ));
+    
+    const paths: string[] = [];
+    for (const s of sessionsToDelete) {
+      if (s.videoPath) paths.push(s.videoPath);
+      if (s.thumbnailPath) paths.push(s.thumbnailPath);
+      if (s.previewVideoPath && s.previewVideoPath !== 'failed') paths.push(s.previewVideoPath);
+      if (s.originalUploadPath) paths.push(s.originalUploadPath);
+    }
+    
+    const deleted = await db.delete(sessions)
+      .where(and(
+        eq(sessions.userId, userId),
+        sql`${sessions.id} = ANY(${sessionIds})`
+      ))
+      .returning({ id: sessions.id });
+    
+    return { deletedCount: deleted.length, deletedPaths: paths };
+  }
+  
+  async getSessionsByFolder(userId: string, folderId: string | null): Promise<Session[]> {
+    if (folderId === null) {
+      return await db.select()
+        .from(sessions)
+        .where(and(eq(sessions.userId, userId), isNull(sessions.folderId)))
+        .orderBy(desc(sessions.createdAt));
+    }
+    
+    return await db.select()
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), eq(sessions.folderId, folderId)))
+      .orderBy(desc(sessions.createdAt));
   }
 }
 

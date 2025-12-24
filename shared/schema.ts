@@ -95,11 +95,32 @@ export const adminAuditLog = pgTable("admin_audit_log", {
   userAgent: text("user_agent"),
 });
 
+// Session folders table for organizing practice sessions
+export const sessionFolders = pgTable("session_folders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSessionFolderSchema = createInsertSchema(sessionFolders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSessionFolder = z.infer<typeof insertSessionFolderSchema>;
+export type SessionFolder = typeof sessionFolders.$inferSelect;
+
 // User action types for lifetime activity logging
 export const userActionTypes = [
   "session_created",
   "session_deleted", 
+  "sessions_bulk_deleted",
   "session_title_updated",
+  "session_moved_to_folder",
   "transcript_regenerated",
   "login_success",
   "logout",
@@ -113,6 +134,9 @@ export const userActionTypes = [
   "processing_completed",
   "processing_failed",
   "file_validation_failed",
+  "folder_created",
+  "folder_renamed",
+  "folder_deleted",
 ] as const;
 export type UserActionType = typeof userActionTypes[number];
 
@@ -305,7 +329,9 @@ export type InsertProcessingMetric = typeof processingMetrics.$inferInsert;
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  folderId: varchar("folder_id").references(() => sessionFolders.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`),
   goalType: text("goal_type").notNull().$type<GoalType>(),
   durationSeconds: integer("duration_seconds"),
   videoPath: text("video_path"),
