@@ -64,7 +64,13 @@ Preferred communication style: Simple, everyday language.
 
 7. **Retranscribe**: Users can redo transcription up to 3 times per session if AI transcription is inaccurate.
 
-8. **Background Processing**: Video processing (upload → transcode → transcribe → score) runs in the background with real-time progress updates via SSE (Server-Sent Events) with polling fallback.
+8. **Audio-First Processing Pipeline**: Optimized for speed using audio-first architecture:
+   - Extract audio immediately from uploaded video (mono, 16kHz, 64kbps MP3)
+   - Transcribe and score the audio track without waiting for video preview
+   - Results (transcript + score) delivered in ~1-2 minutes
+   - Video preview generates in background (non-blocking)
+   - Frontend polls until preview is available
+   - Instrumented with ProcessingMetrics table for timing analysis
 
 9. **PDF Reports**: Users can download branded PDF reports of their session scores, including overall score, part-by-part breakdown, strengths, improvements, and transcript.
 
