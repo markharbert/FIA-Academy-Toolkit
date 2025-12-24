@@ -3316,8 +3316,97 @@ export async function registerRoutes(
     }
   });
 
-  // PDF report download
+  // PDF report download (legacy endpoint - keep for backward compatibility)
   app.get("/api/sessions/:id/pdf", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log(`[PDF:${traceId}] Starting PDF generation for session ${req.params.id}`);
+    
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        console.log(`[PDF:${traceId}] Session not found`);
+        return res.status(404).json({ message: "Session not found", traceId });
+      }
+
+      const currentUser = await storage.getUser(req.session.userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      if (session.userId !== req.session.userId && !isAdmin) {
+        console.log(`[PDF:${traceId}] Access denied - user ${req.session.userId} not owner`);
+        return res.status(403).json({ message: "Access denied", traceId });
+      }
+
+      console.log(`[PDF:${traceId}] Session found - transcript exists: ${!!session.transcriptText}, score exists: ${!!session.scoreJson}`);
+      
+      if (!session.scoreJson) {
+        console.log(`[PDF:${traceId}] No score data available`);
+        return res.status(400).json({ message: "No score data available for PDF generation", traceId });
+      }
+
+      console.log(`[PDF:${traceId}] Generating PDF buffer...`);
+      const pdfBuffer = await generateSessionPdfBuffer(session);
+      console.log(`[PDF:${traceId}] PDF generated successfully - size: ${pdfBuffer.length} bytes`);
+      
+      const sanitizedTitle = (session.title || "practice-session")
+        .replace(/[^a-zA-Z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .toLowerCase()
+        .slice(0, 50);
+      const filename = `Fearless-Video-Coach-${sanitizedTitle}-report.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", pdfBuffer.length);
+      res.send(pdfBuffer);
+    } catch (err) {
+      console.error(`[PDF:${traceId}] PDF generation error:`, err);
+      res.status(500).json({ message: "Failed to generate PDF report", traceId, error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  // PDF report download (new endpoint with .pdf extension)
+  app.get("/api/sessions/:id/report.pdf", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log(`[PDF:${traceId}] Starting PDF report generation for session ${req.params.id}`);
+    
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        console.log(`[PDF:${traceId}] Session not found`);
+        return res.status(404).json({ message: "Session not found", traceId });
+      }
+
+      const currentUser = await storage.getUser(req.session.userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      if (session.userId !== req.session.userId && !isAdmin) {
+        console.log(`[PDF:${traceId}] Access denied - user ${req.session.userId} not owner`);
+        return res.status(403).json({ message: "Access denied", traceId });
+      }
+
+      console.log(`[PDF:${traceId}] Session found - transcript exists: ${!!session.transcriptText}, score exists: ${!!session.scoreJson}`);
+      
+      if (!session.scoreJson) {
+        console.log(`[PDF:${traceId}] No score data available`);
+        return res.status(400).json({ message: "No score data available for PDF generation", traceId });
+      }
+
+      console.log(`[PDF:${traceId}] Generating PDF buffer...`);
+      const pdfBuffer = await generateSessionPdfBuffer(session);
+      console.log(`[PDF:${traceId}] PDF generated successfully - size: ${pdfBuffer.length} bytes`);
+      
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Fearless-Video-Coach-Report.pdf"`);
+      res.setHeader("Content-Length", pdfBuffer.length);
+      res.send(pdfBuffer);
+    } catch (err) {
+      console.error(`[PDF:${traceId}] PDF generation error:`, err);
+      res.status(500).json({ message: "Failed to generate PDF report", traceId, error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  // Transcript TXT download
+  app.get("/api/sessions/:id/transcript.txt", requireAuth, async (req: Request, res: Response) => {
     try {
       const session = await storage.getSession(req.params.id);
       
@@ -3325,29 +3414,71 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Session not found" });
       }
 
-      if (session.userId !== req.session.userId) {
+      const currentUser = await storage.getUser(req.session.userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      if (session.userId !== req.session.userId && !isAdmin) {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      if (!session.scoreJson) {
-        return res.status(400).json({ message: "No score data available for PDF generation" });
+      const transcript = session.transcriptEditedText || session.transcriptText;
+      if (!transcript) {
+        return res.status(400).json({ message: "No transcript available" });
       }
 
-      const pdfBuffer = await generateSessionPdfBuffer(session);
-      const sanitizedTitle = (session.title || "practice-session")
+      const sanitizedTitle = (session.title || "session")
         .replace(/[^a-zA-Z0-9\s-]/g, "")
         .replace(/\s+/g, "-")
         .toLowerCase()
         .slice(0, 50);
-      const filename = `${sanitizedTitle}-report.pdf`;
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${sanitizedTitle}-transcript.txt"`);
+      res.send(transcript);
+    } catch (err) {
+      console.error("Transcript TXT download error:", err);
+      res.status(500).json({ message: "Failed to download transcript" });
+    }
+  });
+
+  // Transcript PDF download
+  app.get("/api/sessions/:id/transcript.pdf", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `transcript-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found", traceId });
+      }
+
+      const currentUser = await storage.getUser(req.session.userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      if (session.userId !== req.session.userId && !isAdmin) {
+        return res.status(403).json({ message: "Access denied", traceId });
+      }
+
+      const transcript = session.transcriptEditedText || session.transcriptText;
+      if (!transcript) {
+        return res.status(400).json({ message: "No transcript available", traceId });
+      }
+
+      // Generate a simple transcript-only PDF using PDFKit
+      const { generateTranscriptPdfBuffer } = await import("./pdf");
+      const pdfBuffer = await generateTranscriptPdfBuffer(session);
+      
+      const sanitizedTitle = (session.title || "session")
+        .replace(/[^a-zA-Z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .toLowerCase()
+        .slice(0, 50);
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${sanitizedTitle}-transcript.pdf"`);
       res.setHeader("Content-Length", pdfBuffer.length);
       res.send(pdfBuffer);
     } catch (err) {
-      console.error("PDF generation error:", err);
-      res.status(500).json({ message: "Failed to generate PDF report" });
+      console.error(`[Transcript PDF:${traceId}] Error:`, err);
+      res.status(500).json({ message: "Failed to generate transcript PDF", traceId });
     }
   });
 

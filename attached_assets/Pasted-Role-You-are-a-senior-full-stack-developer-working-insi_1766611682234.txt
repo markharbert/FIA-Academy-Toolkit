@@ -1,0 +1,266 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Make the UI and functionality changes below on the video session page. Several items are currently broken or incomplete. Fix them properly and verify with real downloads.
+
+High Priority Outcomes
+
+The “Download Report” button is moved to the Score Summary and Detailed Feedback area (placed under Detailed Feedback at the bottom).
+
+PDF report generation is fixed so it downloads a real PDF. Right now it throws “failed to generate PDF.”
+
+Add a small “video still rendering” meter under the video player while the preview/render pipeline is still running.
+
+Rename the transcript button text from “Redo transcript” to “Refresh transcript.”
+
+Add a button to download the transcript as either PDF or TXT (support both if possible).
+
+PART 1: Move the Download Report Button (UI)
+
+Requirement
+On the session page, locate the scoring section:
+
+Score Summary
+
+Detailed Feedback
+
+Move the “Download Report” button out of its current location and place it at the bottom of the Detailed Feedback area, aligned cleanly with the design.
+
+UI details
+
+Button label: “Download PDF Report”
+
+Add a short helper line under the button:
+
+“Includes your score, feedback, and transcript.”
+
+Button must be disabled until report is available or can be generated.
+
+PART 2: Fix PDF Generation (Currently Failing)
+
+Problem
+Clicking the button currently fails with “failed to generate PDF” or downloads JSON. Fix this end to end.
+
+Step A: Confirm correct endpoint and response type
+Create or fix a dedicated endpoint:
+GET /api/sessions/:id/report.pdf
+
+This endpoint MUST:
+
+Require auth
+
+Enforce ownership or admin
+
+Return binary PDF
+
+Set headers:
+
+Content-Type: application/pdf
+
+Content-Disposition: attachment; filename="Fearless-Video-Coach-Report.pdf"
+
+Return status 200 on success
+
+If you currently have a JSON endpoint, keep it separate:
+
+/api/sessions/:id/report-data (JSON)
+But the download button must call the .pdf endpoint.
+
+Step B: Identify why generation fails
+Instrument with logs and return safe error detail:
+
+Add a traceId to PDF generation requests.
+
+Log:
+
+sessionId
+
+userId
+
+whether transcript exists
+
+whether score exists
+
+template render success
+
+pdf engine stderr
+
+Common root causes to check
+
+Missing dependency (Chromium / Puppeteer not installed or not runnable in Replit)
+
+Wrong file paths or permissions
+
+HTML template errors
+
+Attempting to return JSON from the pdf route
+
+Frontend expecting JSON and saving it as a file
+
+Step C: Use the most reliable PDF generator for Replit
+Choose the most reliable approach for this environment:
+
+Option 1 (preferred if feasible): Playwright instead of Puppeteer
+
+Playwright often handles Chromium installs more cleanly in many environments.
+
+Generate PDF from HTML using headless Chromium.
+
+Option 2 (fallback): PDFKit
+
+Generate a simple clean PDF programmatically.
+
+This avoids needing headless browsers entirely.
+
+If headless Chromium is failing in Replit, implement PDFKit as the default so the PDF always works.
+
+PDF Content Requirements (minimum)
+The PDF must include:
+
+Session title and created date
+
+Total score and breakdown by 5 parts
+
+Detailed feedback (recommendations)
+
+Transcript (full or trimmed if extremely long)
+
+Footer branding: Fearless Video Coach
+
+Caching (optional but recommended)
+
+If report generation is expensive, generate once when ready and store:
+
+sessions.reportPdfStorageKey
+
+sessions.reportPdfGeneratedAt
+
+If transcript is refreshed, invalidate cached PDF and regenerate on next request.
+
+Frontend download implementation
+The button must:
+
+call GET /api/sessions/:id/report.pdf
+
+treat response as a blob
+
+download with .pdf extension
+Do not parse JSON.
+
+PART 3: Add “Video Still Rendering” Meter Under the Player
+
+Requirement
+While the video preview/render pipeline is still running, show a small meter under the video.
+
+Behavior
+
+Only visible when preview/video rendering status is not complete.
+
+Show:
+
+label: “Video still rendering…”
+
+a small progress bar
+
+a status message (example: “Generating preview segments” or “Finalizing preview”)
+
+elapsed time since rendering started
+
+Data source
+Use existing session processing fields:
+
+previewHlsStatus or previewStatus
+
+previewProgress 0-100
+
+previewMessage
+
+previewStartedAt
+
+If you do not have previewProgress, add it:
+
+sessions.previewProgress
+
+sessions.previewMessage
+
+UI placement
+Under the player and above transcript is ideal.
+
+PART 4: Rename Transcript Button “Redo transcript” to “Refresh transcript”
+
+Requirement
+Change only the label in the UI:
+
+“Redo transcript” -> “Refresh transcript”
+
+Also confirm the button still triggers the same backend action, and returns a success toast:
+
+“Transcript refresh started.”
+
+PART 5: Add Transcript Download Buttons (PDF and TXT)
+
+Requirement
+Under the Transcript section, add:
+
+“Download Transcript (TXT)”
+
+Optional: “Download Transcript (PDF)”
+
+TXT download endpoint
+GET /api/sessions/:id/transcript.txt
+
+Response requirements
+
+Content-Type: text/plain; charset=utf-8
+
+Content-Disposition: attachment; filename="transcript.txt"
+
+Include transcript text in order.
+Optional: include timestamps or not, but keep it readable.
+
+PDF transcript endpoint (optional if easy)
+GET /api/sessions/:id/transcript.pdf
+
+If PDF generation is now stable (using Playwright/PDFKit), you can provide this too.
+If not, at minimum provide TXT download reliably.
+
+Access control
+
+Auth required
+
+Ownership or admin
+
+Frontend
+
+Buttons must download actual files, not JSON.
+
+Use blob download logic.
+
+PART 6: Verification Checklist
+
+You must verify:
+
+Download PDF report button is in the correct location (under Detailed Feedback).
+
+Clicking it downloads a real PDF that opens.
+
+No JSON file downloads from the PDF button.
+
+If report fails, error message includes traceId and logs show root cause.
+
+Rendering meter appears under the player while preview is generating and disappears when complete.
+
+Transcript button label reads “Refresh transcript.”
+
+Transcript TXT download works and contains correct transcript.
+
+Transcript PDF download works if implemented.
+
+Deliverables
+
+UI update for button placement and transcript label.
+
+Working PDF generation path with reliable engine for Replit.
+
+New transcript download endpoints (TXT required, PDF optional).
+
+Rendering meter under the player driven by real status fields.
+
+Now implement these changes and ensure downloads return correct file types with correct headers.

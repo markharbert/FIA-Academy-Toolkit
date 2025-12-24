@@ -309,7 +309,7 @@ export default function SessionPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions", activeSessionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      toast({ title: "Transcript Updated", description: "Your video has been retranscribed and rescored." });
+      toast({ title: "Transcript Updated", description: "Transcript refresh started." });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -508,7 +508,7 @@ export default function SessionPage() {
     
     setDownloadingPdf(true);
     try {
-      const response = await fetch(`/api/sessions/${activeSessionId}/pdf`, {
+      const response = await fetch(`/api/sessions/${activeSessionId}/report.pdf`, {
         credentials: "include",
       });
       
@@ -525,7 +525,7 @@ export default function SessionPage() {
       const url = URL.createObjectURL(blob);
       
       const contentDisposition = response.headers.get("content-disposition");
-      let filename = "video-report.pdf";
+      let filename = "Fearless-Video-Coach-Report.pdf";
       if (contentDisposition) {
         const match = contentDisposition.match(/filename="?([^"]+)"?/);
         if (match) {
@@ -549,6 +549,89 @@ export default function SessionPage() {
       });
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  const [downloadingTranscriptTxt, setDownloadingTranscriptTxt] = useState(false);
+  const [downloadingTranscriptPdf, setDownloadingTranscriptPdf] = useState(false);
+
+  const downloadTranscriptTxt = async () => {
+    if (!activeSessionId) return;
+    
+    setDownloadingTranscriptTxt(true);
+    try {
+      const response = await fetch(`/api/sessions/${activeSessionId}/transcript.txt`, {
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (contentType?.includes("application/json")) {
+          const data = await response.json();
+          throw new Error(data.message || "Failed to download transcript");
+        }
+        throw new Error("Failed to download transcript");
+      }
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "transcript.txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Transcript TXT download error:", err);
+      toast({
+        title: "Download Failed",
+        description: err instanceof Error ? err.message : "Failed to download transcript",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingTranscriptTxt(false);
+    }
+  };
+
+  const downloadTranscriptPdf = async () => {
+    if (!activeSessionId) return;
+    
+    setDownloadingTranscriptPdf(true);
+    try {
+      const response = await fetch(`/api/sessions/${activeSessionId}/transcript.pdf`, {
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (contentType?.includes("application/json")) {
+          const data = await response.json();
+          throw new Error(data.message || "Failed to download transcript PDF");
+        }
+        throw new Error("Failed to download transcript PDF");
+      }
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "transcript.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Transcript PDF download error:", err);
+      toast({
+        title: "Download Failed",
+        description: err instanceof Error ? err.message : "Failed to download transcript PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingTranscriptPdf(false);
     }
   };
 
@@ -1009,21 +1092,6 @@ export default function SessionPage() {
                 </Button>
               </a>
             )}
-            {session?.scoreJson && (
-              <Button 
-                variant="outline" 
-                onClick={downloadPdf}
-                disabled={downloadingPdf}
-                data-testid="button-download-pdf"
-              >
-                {downloadingPdf ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="mr-2 h-4 w-4" />
-                )}
-                Download Report
-              </Button>
-            )}
             {session?.expiresAt && !isExpired && (
               <Badge variant="secondary" className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -1034,6 +1102,41 @@ export default function SessionPage() {
               <Badge variant="outline">{session.goalType}</Badge>
             )}
           </div>
+          
+          {/* Video rendering progress meter */}
+          {session && (() => {
+            const hlsStatus = (session as any)?.hlsStatus as HlsStatus | null;
+            const isHlsGenerating = hlsStatus === "queued" || hlsStatus === "generating";
+            const hlsPlayable = hlsStatus === "playable" || hlsStatus === "complete";
+            
+            if (isHlsGenerating || (hlsPlayable && hlsStatus !== "complete")) {
+              return (
+                <div className="mt-4 rounded-lg border bg-muted/50 p-3" data-testid="video-rendering-meter">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Video still rendering...</p>
+                      <p className="text-xs text-muted-foreground">
+                        {hlsStatus === "queued" && "Preparing video preview"}
+                        {hlsStatus === "generating" && "Generating preview segments"}
+                        {hlsStatus === "playable" && "Finalizing preview"}
+                      </p>
+                    </div>
+                    {(session as any)?.processingStartedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date((session as any).processingStartedAt), { addSuffix: false })} elapsed
+                      </p>
+                    )}
+                  </div>
+                  <Progress 
+                    value={hlsStatus === "queued" ? 10 : hlsStatus === "generating" ? 50 : 90} 
+                    className="mt-2 h-1" 
+                  />
+                </div>
+              );
+            }
+            return null;
+          })()}
           
           {session && session.processingStatus && session.processingStatus !== "ready" && (
             <div className="mt-6 border-t pt-4">
@@ -1074,15 +1177,15 @@ export default function SessionPage() {
                       ) : (
                         <FileText className="mr-2 h-4 w-4" />
                       )}
-                      {retranscribeMutation.isPending ? "Processing..." : "Redo Transcript"}
+                      {retranscribeMutation.isPending ? "Processing..." : "Refresh Transcript"}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Retranscribe Video?</AlertDialogTitle>
+                      <AlertDialogTitle>Refresh Transcript?</AlertDialogTitle>
                       <AlertDialogDescription>
                         This will generate a new transcript from your video and update your scores. 
-                        You have {retranscribesRemaining} retranscription{retranscribesRemaining !== 1 ? "s" : ""} remaining for this session.
+                        You have {retranscribesRemaining} refresh{retranscribesRemaining !== 1 ? "es" : ""} remaining for this session.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -1106,7 +1209,7 @@ export default function SessionPage() {
               )}
               {(session?.retranscribeCount ?? 0) >= 3 && !isExpired && session?.videoPath && (
                 <Badge variant="secondary" className="text-xs">
-                  No retranscriptions remaining
+                  No refreshes remaining
                 </Badge>
               )}
               <Button variant="ghost" size="sm" onClick={copyTranscript} data-testid="button-copy-transcript">
@@ -1137,6 +1240,37 @@ export default function SessionPage() {
                 Re-score with Edited Transcript
               </Button>
             )}
+            
+            <div className="flex flex-wrap gap-2 pt-4 border-t">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={downloadTranscriptTxt}
+                disabled={downloadingTranscriptTxt}
+                data-testid="button-download-transcript-txt"
+              >
+                {downloadingTranscriptTxt ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Download Transcript (TXT)
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={downloadTranscriptPdf}
+                disabled={downloadingTranscriptPdf}
+                data-testid="button-download-transcript-pdf"
+              >
+                {downloadingTranscriptPdf ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="mr-2 h-4 w-4" />
+                )}
+                Download Transcript (PDF)
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -1216,6 +1350,24 @@ export default function SessionPage() {
                   />
                 ))}
               </Accordion>
+              
+              <div className="mt-6 pt-6 border-t space-y-2">
+                <Button 
+                  onClick={downloadPdf}
+                  disabled={downloadingPdf}
+                  data-testid="button-download-pdf-report"
+                >
+                  {downloadingPdf ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="mr-2 h-4 w-4" />
+                  )}
+                  Download PDF Report
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Includes your score, feedback, and transcript.
+                </p>
+              </div>
             </CardContent>
           </Card>
 
