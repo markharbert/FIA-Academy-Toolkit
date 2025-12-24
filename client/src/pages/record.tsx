@@ -61,7 +61,7 @@ const stepLabels: Record<ProcessingStep, string> = {
 };
 
 const SUPPORTED_FORMATS = ".mp4, .mov, .webm, .mkv, .avi, .wmv, .mpeg, .mpg, .m4v, .3gp";
-const MAX_FILE_SIZE_MB = 250;
+const MAX_FILE_SIZE_MB = 2048; // 2GB
 const MAX_DURATION_MINUTES = 10;
 
 function formatFileSize(bytes: number): string {
@@ -310,7 +310,7 @@ export default function RecordPage() {
                   </div>
                   <div className="text-center text-xs text-muted-foreground space-y-1">
                     <p>Supported formats: {SUPPORTED_FORMATS}</p>
-                    <p>Maximum size: {MAX_FILE_SIZE_MB}MB | Maximum duration: {MAX_DURATION_MINUTES} minutes</p>
+                    <p>Maximum size: 2GB | Maximum duration: {MAX_DURATION_MINUTES} minutes</p>
                   </div>
                 </div>
               ) : (

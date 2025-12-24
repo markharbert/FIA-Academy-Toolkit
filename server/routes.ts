@@ -38,7 +38,7 @@ import { generateSessionPdfBuffer } from "./pdf";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const VIDEO_RETENTION_DAYS = 30;
-const MAX_VIDEO_SIZE = 250 * 1024 * 1024; // 250MB
+const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_RETRANSCRIBES_PER_DAY = 3;
 
 // Ensure uploads directory exists
