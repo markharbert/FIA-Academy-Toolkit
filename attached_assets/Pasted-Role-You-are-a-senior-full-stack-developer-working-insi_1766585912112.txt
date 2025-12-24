@@ -1,0 +1,527 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Add the features below without breaking current recording, upload, transcription, scoring, Keap, or admin features. Build this in a way that is reliable, secure, and easy to maintain. Include backend changes, database migrations, frontend UI, and a verification checklist.
+
+Important constraints
+
+Show a real progress bar for video processing status, not fake.
+
+Transcript editor must be interactive and synced to playback.
+
+Add a button to download the scoring report as a PDF.
+
+Add a site-wide theme toggle: Light, Dark, System.
+
+Keep current design with lots of white space in Light mode.
+
+All new endpoints must be protected by auth and ownership checks for non-admin users.
+
+Step 1: Detect current stack and follow the existing project patterns
+
+Identify the frontend framework and routing (React, Next.js, etc).
+
+Identify backend framework (Express, Next API routes, etc).
+
+Identify database and ORM (SQLite/Postgres, Prisma/Drizzle/Knex, etc).
+
+Use the existing auth/session approach for all new endpoints.
+
+Use existing UI components where possible.
+
+PART A: Video Processing Progress Bar
+
+Goal
+Users need a clear progress bar and status text for the full processing pipeline after they finish a recording or upload.
+
+Define “processing”
+Processing includes the steps that happen after a video is captured:
+
+Upload complete
+
+Transcode to MP4 1080p (if not already)
+
+Compression pass (balanced quality and file size)
+
+Transcription
+
+Scoring (5-part formula)
+
+Recommendations generation
+
+Report ready
+
+Required UX
+
+On the Dashboard and on the Session page, each new session must show:
+
+A progress bar (0 to 100)
+
+A status label (example: “Transcribing”)
+
+A step indicator (example: “Step 4 of 7”)
+
+A last updated timestamp
+
+Progress must update automatically while the user stays on the page.
+
+If the user refreshes or logs out and logs back in:
+
+The progress state must persist and resume, based on server data.
+
+If processing fails:
+
+Show a clear error state and allow a retry action where possible (example: retry transcription).
+
+When processing finishes:
+
+Progress goes to 100%
+
+The session automatically transitions to the results view (video player, scoring, transcript, recommendations).
+
+Backend architecture
+Use one of these reliable patterns, whichever matches the existing stack:
+Option 1 (preferred): Server Sent Events (SSE)
+
+Client subscribes to /api/sessions/:id/progress/stream
+
+Server pushes updates when status changes
+Option 2: WebSockets
+
+Use an existing WS setup if already present
+Option 3: Polling (fallback)
+
+Client polls /api/sessions/:id/progress every 2 seconds until complete
+
+Database changes
+Add processing fields to the Sessions table:
+
+processingStatus (string, enum-like)
+Values:
+queued, uploading, transcoding, compressing, transcribing, scoring, recommending, ready, failed
+
+processingStep (integer 1-7)
+
+processingProgress (integer 0-100)
+
+processingMessage (string, short human label)
+
+processingError (text nullable)
+
+processingStartedAt (datetime nullable)
+
+processingUpdatedAt (datetime nullable)
+
+processingCompletedAt (datetime nullable)
+
+Also add a ProcessEvents table for better debug (recommended):
+ProcessEvents
+
+id
+
+sessionId
+
+status
+
+progress
+
+message
+
+createdAt
+This helps reliability and admin support.
+
+Server processing flow requirements
+
+When a session is created:
+
+Create DB row immediately with status queued and progress 0.
+
+Start processing pipeline in a background job:
+
+Do not block the HTTP request.
+
+After each step:
+
+Update sessions table fields
+
+Insert a ProcessEvents row
+
+Emit progress updates through SSE/WS if enabled
+
+Handle retries:
+
+If a step fails, store error and mark failed.
+
+Allow retry for steps that can be retried (transcription, scoring, recommendations).
+
+Retrying should not create a new session unless explicitly requested.
+
+Acceptance checks for progress
+
+Progress increases in real time
+
+Status labels match actual pipeline state
+
+Refreshing the page shows accurate current progress
+
+When done, the UI shows full results automatically
+
+PART B: Interactive Transcript Editor With Highlighting and Playback Sync
+
+Goal
+Users can edit the transcript, see text highlighted as the video plays, and click transcript text to jump the video to that moment.
+
+Key requirement
+To sync transcript to playback, you must store timestamps for transcript segments or words.
+
+Transcript data model
+Store transcript as structured segments with timestamps:
+TranscriptSegments
+
+id
+
+sessionId
+
+startMs (integer)
+
+endMs (integer)
+
+text (string)
+
+confidence (optional)
+
+createdAt
+
+updatedAt
+
+Do not rely on a single blob of text if we need sync and editing.
+If you already have transcript text stored, migrate it into segments after next transcription.
+
+Transcription output requirements
+Ensure transcription produces at least segment-level timestamps.
+
+Segment-level is acceptable.
+
+Word-level is a bonus if it is easy and stable.
+If using Whisper or similar, enable timestamped segments.
+
+Transcript editor UX
+On the Session results page, add a Transcript panel with:
+
+Playback synced highlighting
+
+As video plays, the current segment is highlighted.
+
+Past segments can have a subtle style difference.
+
+Click to seek
+
+Clicking a segment seeks the video to that segment start time.
+
+Inline editing
+
+User can click a segment and edit its text.
+
+Provide Save and Cancel controls.
+
+Auto-save is optional, but must be safe.
+
+Search inside transcript
+
+A search input that highlights matches and jumps to next match.
+
+“Reset transcript to original” option
+
+Restores the transcript to last generated version if the user wants.
+
+“Regenerate transcript” still exists if you already have it.
+
+But it should regenerate the segments too.
+
+Playback sync implementation
+
+Add a timeupdate listener on the video element (4 to 8 times per second max).
+
+Determine current segment by currentTimeMs and segment start/end.
+
+Efficient lookup:
+
+Use binary search on segment start times instead of scanning 900 segments each tick.
+
+Scroll behavior:
+
+Auto-scroll the transcript panel to keep the current segment visible.
+
+Do not fight user scrolling. Add a toggle like “Follow playback” on by default.
+
+Saving edits
+Implement endpoint:
+PATCH /api/sessions/:id/transcript
+Body:
+{
+"segments": [
+{ "id": "...", "text": "..." }
+]
+}
+Rules:
+
+Only owner of session (or admin) can edit.
+
+Validate max length per segment.
+
+Store updatedAt timestamps.
+
+Keep a copy of original transcript:
+Either:
+
+transcriptVersioning table, or
+
+store original JSON snapshot in sessions.transcriptOriginalJson
+
+Export implications
+When user edits transcript, use the edited transcript for:
+
+PDF report generation
+
+Any user facing display
+Do not silently overwrite original without keeping a backup.
+
+PART C: Download Scoring PDF Report
+
+Goal
+On the session results page, users can click a button and download a PDF that includes:
+
+Session title and date
+
+Overall score and breakdown by the 5 parts
+
+Recommendations and improvements
+
+Transcript (either full transcript or a trimmed version if it is extremely long)
+
+Optional metadata like duration
+
+User UX
+
+Add a button on session results page: “Download PDF Report”
+
+On click:
+
+Show a loading state
+
+Then download the PDF
+
+If report generation fails:
+
+Show a clear error message
+
+Admin side panel session view should also have a Download PDF button.
+
+PDF generation approach
+Use one stable method that fits the stack:
+Option 1 (recommended): Server-side HTML template rendered to PDF with headless Chromium (Puppeteer)
+
+Highest layout control, matches UI branding
+Option 2: PDFKit
+
+Less layout control, but simpler
+
+Brand styling for the PDF
+Use Fearless Video Coach look:
+
+Title, clean typography
+
+Use existing colors:
+dark blue #06092a for headers
+light blue #3f92cc for accents
+red #da0010 for small highlights
+
+Lots of whitespace, readable spacing
+
+Backend endpoint
+GET /api/sessions/:id/report.pdf
+Rules:
+
+Auth required
+
+Ownership required (or admin)
+
+Generate the PDF on demand, or cache it.
+
+Caching strategy (recommended)
+
+When session becomes ready, generate and store a PDF snapshot:
+
+Store file path or object storage URL
+
+Store reportGeneratedAt
+
+If transcript or recommendations are edited later:
+
+Mark report stale and regenerate on next download request
+
+Either way, the download must always work.
+
+PDF content structure
+
+Cover block:
+
+Session title
+
+User name (optional)
+
+Date created
+
+Score summary:
+
+Total score
+
+Breakdown table:
+Hook, Set the Hook, First CTA, Content, Final CTA
+
+Recommendations:
+
+Bulleted or sectioned by the 5 parts
+
+Transcript:
+
+Include with timestamps per segment, or plain text
+
+Footer:
+
+Fearless Video Coach branding
+
+PART D: Dark Mode, Light Mode, System Toggle
+
+Goal
+Add a global theme switcher that allows:
+
+Light
+
+Dark
+
+System (follows OS setting)
+
+UX requirements
+
+Add a theme toggle control in the header (near profile menu).
+
+Options:
+
+Light
+
+Dark
+
+System
+
+Default should be System for new users.
+
+Persist preference:
+
+Store in user profile in DB, and also in localStorage for instant loading.
+
+On load:
+
+Apply theme before first paint to avoid flashing.
+
+Technical approach
+Use CSS variables or Tailwind dark mode, depending on the current project.
+Requirements:
+
+Define theme tokens:
+
+background
+
+surface
+
+text
+
+muted text
+
+borders
+
+primary button
+
+Ensure the color palette still matches:
+
+In Light mode, keep the existing white space
+
+In Dark mode, use dark background and preserve contrast
+
+Keep red buttons readable in both modes
+
+Theme storage
+Add user preference field:
+Users.themePreference: "light" | "dark" | "system"
+
+Also implement:
+GET /api/account to include themePreference
+PATCH /api/account to update themePreference
+
+Apply theme logic
+
+If preference is system:
+
+Use window.matchMedia("(prefers-color-scheme: dark)")
+
+Listen for changes and update UI live
+
+If preference is light or dark:
+
+Override system and lock to that theme
+
+PART E: Deliverables and Verification
+
+Deliverables you must produce
+
+Database migrations for:
+
+Sessions processing fields
+
+TranscriptSegments table
+
+Any report cache fields
+
+Users.themePreference
+
+Backend endpoints:
+
+Progress stream or polling
+
+Transcript save
+
+Report PDF download
+
+Frontend UI:
+
+Processing progress bar with step labels
+
+Transcript editor with synced highlight and click-to-seek
+
+Download PDF Report button
+
+Theme toggle with Light, Dark, System
+
+Admin support:
+
+Admin can view session side panel with embedded video, stats, transcript, recommendations, and PDF download
+
+Verification checklist
+Confirm each:
+
+New session shows live progress and status updates through completion.
+
+Refreshing the page shows correct progress state.
+
+Transcript highlights current segment during playback.
+
+Clicking transcript seeks video correctly.
+
+Transcript edits save and persist.
+
+Download PDF Report generates a correct PDF and downloads successfully.
+
+PDF reflects current transcript and recommendations.
+
+Theme toggle works, persists, and system mode tracks OS setting.
+
+No auth leaks. Users can only access their own sessions and PDFs.
+
+Now implement these features in the existing codebase following existing project conventions.

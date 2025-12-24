@@ -1568,6 +1568,7 @@ export async function registerRoutes(
         createdAt: user.createdAt,
         connectedProviders,
         hasPassword,
+        themePreference: user.themePreference || "system",
       });
     } catch (err) {
       console.error("Get account error:", err);
@@ -1588,12 +1589,13 @@ export async function registerRoutes(
         return res.status(404).json({ message: "User not found" });
       }
 
-      const { displayName, firstName, lastName, email } = parsed.data;
+      const { displayName, firstName, lastName, email, themePreference } = parsed.data;
       const updates: any = { updatedAt: new Date() };
 
       if (displayName !== undefined) updates.displayName = displayName;
       if (firstName !== undefined) updates.firstName = firstName;
       if (lastName !== undefined) updates.lastName = lastName;
+      if (themePreference !== undefined) updates.themePreference = themePreference;
 
       // Handle email change
       if (email && email !== user.email) {
@@ -1635,6 +1637,7 @@ export async function registerRoutes(
         createdAt: updatedUser.createdAt,
         connectedProviders,
         hasPassword: !!updatedUser.passwordHash,
+        themePreference: updatedUser.themePreference || "system",
       });
     } catch (err) {
       console.error("Update account error:", err);

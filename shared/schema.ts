@@ -11,6 +11,10 @@ export type AuthProvider = typeof authProviders[number];
 export const userRoles = ["user", "admin", "super_admin"] as const;
 export type UserRole = typeof userRoles[number];
 
+// Theme preference types
+export const themePreferences = ["light", "dark", "system"] as const;
+export type ThemePreference = typeof themePreferences[number];
+
 // Users table for authentication
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -34,6 +38,7 @@ export const users = pgTable("users", {
   disabledAt: timestamp("disabled_at"),
   disabledReason: text("disabled_reason"),
   lastLoginAt: timestamp("last_login_at"),
+  themePreference: text("theme_preference").default("system").$type<ThemePreference>(),
 });
 
 // User identities table for OAuth providers (supports multiple providers per user)
@@ -136,6 +141,7 @@ export const updateAccountSchema = z.object({
   firstName: z.string().max(40, "First name must be 40 characters or less").optional().nullable(),
   lastName: z.string().max(40, "Last name must be 40 characters or less").optional().nullable(),
   email: z.string().email("Please enter a valid email address").optional(),
+  themePreference: z.enum(["light", "dark", "system"]).optional(),
 });
 
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
