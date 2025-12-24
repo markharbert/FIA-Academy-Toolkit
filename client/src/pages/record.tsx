@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { Video, Lightbulb, Mic, CheckCircle, Loader2, AlertCircle, Upload, FileText, TrendingUp, Settings, X, File } from "lucide-react";
+import { Video, Lightbulb, Mic, CheckCircle, Loader2, AlertCircle, Upload, Settings, X, File } from "lucide-react";
 import type { GoalType } from "@shared/schema";
 
 const formulaParts = [
@@ -49,14 +49,12 @@ const tips = [
   { icon: Video, text: "Keep it short and focused - aim for 30-90 seconds" },
 ];
 
-type ProcessingStep = "idle" | "uploading" | "validating" | "processing" | "done" | "error";
+type ProcessingStep = "idle" | "uploading" | "done" | "error";
 
 const stepLabels: Record<ProcessingStep, string> = {
   idle: "Ready to upload",
   uploading: "Uploading video...",
-  validating: "Validating video...",
-  processing: "Processing video...",
-  done: "Complete!",
+  done: "Upload complete! Redirecting...",
   error: "Error occurred",
 };
 
@@ -71,43 +69,22 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function ProcessingStepper({ currentStep, uploadProgress }: { currentStep: ProcessingStep; uploadProgress: number }) {
-  const steps: ProcessingStep[] = ["uploading", "validating", "processing", "done"];
-  const currentIndex = steps.indexOf(currentStep);
-
+function UploadProgress({ currentStep, uploadProgress }: { currentStep: ProcessingStep; uploadProgress: number }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        {steps.map((step, index) => {
-          const isActive = step === currentStep;
-          const isComplete = currentIndex > index || currentStep === "done";
-          const Icon = step === "uploading" ? Upload : step === "validating" ? FileText : step === "processing" ? TrendingUp : CheckCircle;
-
-          return (
-            <div key={step} className="flex flex-1 items-center">
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                isComplete ? "border-primary bg-primary text-primary-foreground" :
-                isActive ? "border-primary text-primary" :
-                "border-muted text-muted-foreground"
-              }`}>
-                {isComplete && step !== currentStep ? (
-                  <CheckCircle className="h-5 w-5" />
-                ) : isActive && currentStep !== "done" ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Icon className="h-5 w-5" />
-                )}
-              </div>
-              {index < steps.length - 1 && (
-                <div className={`h-0.5 flex-1 mx-2 ${isComplete ? "bg-primary" : "bg-muted"}`} />
-              )}
-            </div>
-          );
-        })}
+      <div className="flex items-center justify-center gap-3">
+        {currentStep === "uploading" ? (
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        ) : currentStep === "done" ? (
+          <CheckCircle className="h-6 w-6 text-primary" />
+        ) : null}
+        <p className="text-sm font-medium">{stepLabels[currentStep]}</p>
       </div>
-      <p className="text-center text-sm font-medium">{stepLabels[currentStep]}</p>
       {currentStep === "uploading" && (
-        <Progress value={uploadProgress} className="h-2" />
+        <div className="space-y-1">
+          <Progress value={uploadProgress} className="h-2" />
+          <p className="text-center text-xs text-muted-foreground">{uploadProgress}%</p>
+        </div>
       )}
     </div>
   );
@@ -244,26 +221,15 @@ export default function RecordPage() {
         xhr.send(formData);
       });
 
-      setProcessingStep("validating");
-
-      setProcessingStep("processing");
-      const processRes = await fetch(`/api/sessions/${id}/process`, {
-        method: "POST",
-        credentials: "include",
-      });
-
-      if (!processRes.ok) {
-        const errData = await processRes.json().catch(() => ({}));
-        throw new Error(errData.message || "Processing failed");
-      }
-
+      // Upload complete - processing starts automatically on server
+      // Redirect to session page immediately where progress will be shown via SSE
       setProcessingStep("done");
-      setTimeout(() => {
-        setLocation(`/session/${id}`);
-      }, 1000);
+      setLocation(`/session/${id}`);
     } catch (err) {
       setProcessingStep("error");
-      setError(err instanceof Error ? err.message : "An error occurred");
+      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      setError(errorMessage);
+      console.error("[Upload] Error:", errorMessage);
     }
   };
 
@@ -357,7 +323,7 @@ export default function RecordPage() {
 
               {isProcessing && (
                 <div className="mt-4 p-4 bg-muted/50 rounded-lg">
-                  <ProcessingStepper currentStep={processingStep} uploadProgress={uploadProgress} />
+                  <UploadProgress currentStep={processingStep} uploadProgress={uploadProgress} />
                 </div>
               )}
 

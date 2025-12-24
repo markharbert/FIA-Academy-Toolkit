@@ -1,0 +1,273 @@
+Role: You are a senior full stack developer debugging my existing Replit project (Fearless Video Coach). The upload UI shows progress, but at the end it errors with “Upload failed.” The file appears to upload, but something breaks in the finalization step. Your job is to find the root cause and fix the flow so that:
+
+Upload completes successfully without the “Upload failed” error.
+
+Immediately after a successful upload, the app routes the user to the new Session page.
+
+The Session page starts the normal processing pipeline: validate, transcode, transcribe, score, recommendations, and results.
+
+The user sees a progress bar on the Session page while processing happens.
+
+The session must end in a ready state with an embedded video player, transcript, scores, and recommendations.
+
+Do not guess. Use real logs, HTTP status codes, and server side file validation to pinpoint exactly where the failure occurs.
+
+PART 1: Reproduce and Capture the Exact Failure
+
+Reproduce the upload with a small MP4 first, then a larger file.
+
+Capture all network requests in the browser devtools for the upload flow:
+
+upload/init
+
+upload/part (if chunked)
+
+upload/complete (if used)
+
+sessions/:id/process (if used)
+
+Note which request returns non-2xx.
+
+Capture the response payload and any error message.
+
+Add a traceId to the upload flow:
+
+Generate traceId on upload start
+
+Include it in request headers (X-Trace-Id)
+
+Log it on the backend for every upload endpoint
+
+PART 2: Add Robust Server-Side Logging and Error Reporting
+
+Backend logging requirements (temporary but thorough)
+For every upload endpoint, log:
+
+traceId
+
+userId
+
+sessionId
+
+filename
+
+filesize
+
+mimeType
+
+storage destination path or key
+
+bytes received (for final size)
+
+finalization steps results
+
+Ensure logs include:
+
+HTTP status codes
+
+stack traces on errors
+
+any upstream storage errors
+
+Frontend error reporting requirements
+When the UI shows “Upload failed,” it must show a clearer message:
+
+“Upload failed during finalization” or “Upload failed during processing start”
+Also show:
+
+traceId
+
+a short error code from server
+
+PART 3: Identify the Most Likely Root Causes and Fix Them
+
+You must check and fix these common issues in order:
+
+A) Request size limits / reverse proxy limits
+
+Confirm server upload limit settings.
+
+In Node/Express, ensure body parsers are not used for raw binary upload endpoints.
+
+If using a platform proxy, ensure max size is not exceeded.
+
+B) Storage write failures
+
+If saving to filesystem:
+
+confirm write path exists and is writable
+
+confirm free disk space
+
+confirm filename sanitization
+
+If saving to object storage:
+
+confirm credentials, bucket, CORS, and pre-signed URL expiration
+
+confirm multipart complete call is valid
+
+C) Chunked upload mismatch (if chunked)
+
+Ensure all parts are uploaded and accounted for
+
+Ensure part numbers are correct
+
+Ensure server assembles chunks in correct order
+
+Ensure final file size matches expected
+
+D) MIME and format validation rejecting the file after upload
+
+If ffprobe runs after upload, it may be failing.
+
+Capture ffprobe stderr.
+
+If ffprobe fails, return a clear error:
+
+“We uploaded your file but could not read it for processing.”
+
+E) Wrong endpoint paths or 404/router issues
+
+Confirm every endpoint exists in the published environment.
+
+Ensure frontend calls the correct path prefix.
+
+F) Auth/session credentials missing on one request
+
+Ensure fetch includes credentials.
+
+Ensure CSRF requirements are met if enabled.
+
+PART 4: Fix the Upload Flow So It Redirects to the Session Page and Starts Processing
+
+Correct end-to-end flow
+
+User selects file.
+
+App creates a session record immediately and returns sessionId.
+
+App uploads file to storage for that sessionId.
+
+App finalizes upload (complete endpoint) and receives confirmation.
+
+App navigates to /sessions/:sessionId (Session page).
+
+Session page displays:
+
+embedded preview placeholder
+
+processing progress bar
+
+Backend starts the pipeline automatically after upload completes, or Session page triggers:
+
+POST /api/sessions/:id/process
+
+Session page subscribes to processing updates and updates UI until ready.
+
+Required implementation details
+
+A) Ensure upload/complete returns the sessionId and a clear success payload
+Response example:
+{
+"success": true,
+"sessionId": "...",
+"uploadedBytes": 12345678,
+"storageKey": "...",
+"message": "Upload complete"
+}
+
+B) Ensure processing starts reliably
+Choose one of these approaches:
+
+Approach 1 (preferred): Server starts processing automatically on upload complete
+
+After upload/complete succeeds:
+
+enqueue background job for processing
+
+update session status to “processing”
+
+Frontend immediately navigates to /sessions/:id
+
+Approach 2: Session page triggers processing start if not already started
+
+On /sessions/:id load:
+
+fetch session status
+
+if status == “uploaded” and not processing:
+
+call POST /api/sessions/:id/process
+
+show progress bar
+
+Use whichever matches existing architecture, but ensure it never double-starts.
+
+C) Prevent double processing
+
+Add sessions.processingStartedAt
+
+In process start endpoint, if processingStartedAt is set, return 200 with “already processing.”
+
+PART 5: Improve Error Messages and Recovery
+
+If upload fails before completion
+
+Show “Upload failed” with a retry button.
+
+Retry must resume or restart cleanly.
+
+If upload succeeds but processing fails
+
+The session page must show:
+
+“Processing failed at: Transcoding” (or step name)
+
+A “Retry processing” button (if possible)
+
+The traceId and error summary
+
+PART 6: Verification Steps You Must Perform
+
+Upload a small MP4:
+
+Upload completes without error
+
+Redirect happens to session page
+
+Processing pipeline runs
+
+Session ends ready with video, transcript, score, recommendations
+
+Upload a larger video:
+
+Upload completes
+
+Redirect happens
+
+Processing runs
+
+No timeouts
+
+Confirm server state persistence:
+
+Refresh during processing keeps accurate progress
+
+Logging out and back in shows session and continues processing
+
+Confirm the “upload failed” bug is gone
+
+No false failure after successful upload completion
+
+Deliverables
+
+Root cause summary with exact failing request and error log snippet (no secrets).
+
+Code changes fixing the failing step.
+
+Updated flow that redirects to session page and starts processing.
+
+Updated UI error messaging that includes traceId.
+
+Now debug the upload failure, fix the failing step, and implement the redirect-to-session plus processing start behavior exactly as described.

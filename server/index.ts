@@ -8,6 +8,12 @@ import { bootstrapSuperAdmins } from "./storage";
 const app = express();
 const httpServer = createServer(app);
 
+// Increase server timeouts for large file uploads (2GB max)
+// Default is 2 minutes, we need more for slow connections
+httpServer.timeout = 30 * 60 * 1000; // 30 minutes
+httpServer.keepAliveTimeout = 30 * 60 * 1000; // 30 minutes
+httpServer.headersTimeout = 31 * 60 * 1000; // 31 minutes (must be > keepAliveTimeout)
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

@@ -75,8 +75,17 @@ async function updateProcessingStatus(
   notifyListeners(sessionId, { status, progress, message, error });
 }
 
+// Track active processing sessions to prevent duplicate runs
+const activeProcessing = new Set<string>();
+
 export async function processSession(sessionId: string, userId: string): Promise<void> {
   console.log(`[Processing] Starting processing for session ${sessionId}`);
+  
+  // Check for duplicate processing - prevent concurrent runs
+  if (activeProcessing.has(sessionId)) {
+    console.log(`[Processing] Session ${sessionId} is already being processed, skipping`);
+    return;
+  }
   
   try {
     const session = await storage.getSession(sessionId);
@@ -88,12 +97,32 @@ export async function processSession(sessionId: string, userId: string): Promise
       throw new Error("Access denied");
     }
     
+    // Check if already completed
+    if (session.processingStatus === "ready" && session.scoreJson) {
+      console.log(`[Processing] Session ${sessionId} already completed, skipping`);
+      return;
+    }
+    
+    // Check if already in progress (database check)
+    const inProgressStatuses = ["transcoding", "transcribing", "scoring"];
+    if (session.processingStatus && inProgressStatuses.includes(session.processingStatus)) {
+      console.log(`[Processing] Session ${sessionId} is already processing (status: ${session.processingStatus}), skipping`);
+      return;
+    }
+    
+    // Add to active set
+    activeProcessing.add(sessionId);
+    
     await storage.updateSession(sessionId, {
       processingStartedAt: new Date(),
+      processingStatus: "transcoding",
+      processingProgress: 15,
+      processingMessage: "Starting video processing...",
     });
     
     if (!session.videoPath) {
       await updateProcessingStatus(sessionId, "failed", 0, "No video uploaded", "No video file found");
+      activeProcessing.delete(sessionId);
       return;
     }
     
@@ -212,5 +241,8 @@ export async function processSession(sessionId: string, userId: string): Promise
     console.error(`[Processing] Error processing session ${sessionId}:`, err);
     const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
     await updateProcessingStatus(sessionId, "failed", 0, "Processing failed", errorMessage);
+  } finally {
+    // Always clean up the active processing set
+    activeProcessing.delete(sessionId);
   }
 }

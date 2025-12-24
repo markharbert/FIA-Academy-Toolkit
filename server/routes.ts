@@ -1887,20 +1887,28 @@ export async function registerRoutes(
   });
 
   app.post("/api/sessions/:id/upload", requireAuth, upload.single("video"), async (req: Request, res: Response) => {
+    const traceId = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`[Upload:${traceId}] Starting upload for session ${req.params.id}`);
+    
     try {
       const session = await storage.getSession(req.params.id);
       
       if (!session) {
-        return res.status(404).json({ message: "Session not found" });
+        console.log(`[Upload:${traceId}] Session not found`);
+        return res.status(404).json({ message: "Session not found", traceId });
       }
 
       if (session.userId !== req.session.userId) {
-        return res.status(403).json({ message: "Access denied" });
+        console.log(`[Upload:${traceId}] Access denied`);
+        return res.status(403).json({ message: "Access denied", traceId });
       }
 
       if (!req.file) {
-        return res.status(400).json({ message: "No video file provided" });
+        console.log(`[Upload:${traceId}] No video file provided`);
+        return res.status(400).json({ message: "No video file provided", traceId });
       }
+
+      console.log(`[Upload:${traceId}] File received: ${req.file.originalname}, size: ${req.file.size}, path: ${req.file.filename}`);
 
       // Clean up old files on re-upload
       if (session.videoPath) {
@@ -1924,6 +1932,7 @@ export async function registerRoutes(
       const probeResult = await probeVideo(videoFullPath);
 
       if (!probeResult.success) {
+        console.log(`[Upload:${traceId}] Probe failed: ${probeResult.error}`);
         try {
           fs.unlinkSync(videoFullPath);
         } catch {}
@@ -1934,22 +1943,27 @@ export async function registerRoutes(
           actionLabel: ActionLabels.file_validation_failed,
           entityType: "session",
           entityId: session.id,
-          metadata: { error: probeResult.error, filename: req.file.originalname },
+          metadata: { error: probeResult.error, filename: req.file.originalname, traceId },
           req,
         });
         
-        return res.status(400).json({ message: probeResult.error || "Invalid video file" });
+        return res.status(400).json({ message: probeResult.error || "Invalid video file", traceId });
       }
 
       if (!probeResult.hasAudio) {
+        console.log(`[Upload:${traceId}] No audio track detected`);
         try {
           fs.unlinkSync(videoFullPath);
         } catch {}
-        return res.status(400).json({ message: "Video must have an audio track for transcription" });
+        return res.status(400).json({ message: "Video must have an audio track for transcription", traceId });
       }
+      
+      console.log(`[Upload:${traceId}] Probe successful: duration=${probeResult.duration}s, resolution=${probeResult.width}x${probeResult.height}`);
 
       const ext = path.extname(req.file.originalname).toLowerCase();
       
+      // Single database update with all metadata and status set to 'queued'
+      // This ensures all data is persisted atomically before processing starts
       await storage.updateSession(session.id, {
         videoPath: req.file.filename,
         videoMimeType: req.file.mimetype,
@@ -1963,9 +1977,9 @@ export async function registerRoutes(
         durationSeconds: Math.round(probeResult.duration),
         finalVideoResolution: `${probeResult.width}x${probeResult.height}`,
         finalVideoPath: null,
-        processingStatus: "uploading",
+        processingStatus: "queued",
         processingProgress: 10,
-        processingMessage: "Video uploaded, preparing for processing...",
+        processingMessage: "Queued for processing...",
         processingError: null,
         processingStartedAt: null,
         processingCompletedAt: null,
@@ -1974,6 +1988,8 @@ export async function registerRoutes(
         scoreJson: null,
         scoreUpdatedAt: null,
       });
+
+      console.log(`[Upload:${traceId}] Metadata persisted, session status is queued`);
 
       await logUserAction({
         userId: req.session.userId!,
@@ -1986,19 +2002,36 @@ export async function registerRoutes(
           size: req.file.size,
           duration: probeResult.duration,
           resolution: `${probeResult.width}x${probeResult.height}`,
+          traceId,
         },
         req,
       });
 
+      // Start processing in background after all data is persisted
+      // Use setTimeout with 0ms to ensure this runs after the current stack completes
+      const userId = req.session.userId!;
+      const sessionId = session.id;
+      setTimeout(() => {
+        console.log(`[Upload:${traceId}] Starting background processing for session ${sessionId}`);
+        processSession(sessionId, userId).catch((err) => {
+          console.error(`[Upload:${traceId}] Background processing error:`, err);
+        });
+      }, 0);
+
+      console.log(`[Upload:${traceId}] Upload complete, processing scheduled`);
+
       res.json({ 
+        success: true,
         message: "Video uploaded successfully",
+        sessionId: session.id,
         duration: probeResult.duration,
         hasAudio: probeResult.hasAudio,
         resolution: `${probeResult.width}x${probeResult.height}`,
+        traceId,
       });
     } catch (err) {
-      console.error("Upload error:", err);
-      res.status(500).json({ message: "Failed to upload video" });
+      console.error(`[Upload] Error:`, err);
+      res.status(500).json({ message: "Failed to upload video", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });
 
@@ -2094,6 +2127,17 @@ export async function registerRoutes(
 
       if (!session.videoPath) {
         return res.status(400).json({ message: "No video to process" });
+      }
+
+      // Check if already processing to prevent duplicate runs
+      const processingStatuses = ["queued", "transcoding", "transcribing", "scoring"];
+      if (session.processingStatus && processingStatuses.includes(session.processingStatus)) {
+        return res.json({ message: "Processing already in progress", status: session.processingStatus });
+      }
+
+      // Check if already completed
+      if (session.processingStatus === "ready" && session.scoreJson) {
+        return res.json({ message: "Processing already complete", status: "ready" });
       }
 
       // Start processing in background (don't await)
