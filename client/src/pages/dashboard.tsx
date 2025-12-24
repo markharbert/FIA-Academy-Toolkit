@@ -272,7 +272,7 @@ function EmptyState() {
         <p className="mb-6 max-w-sm text-sm text-muted-foreground">
           Record your first practice video to get AI-powered feedback on your delivery.
         </p>
-        <Link href="/record">
+        <Link href="/session">
           <Button data-testid="button-empty-new-session">
             <Plus className="mr-2 h-4 w-4" />
             New Practice Session
@@ -297,7 +297,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
           <p className="text-muted-foreground">Your video practice sessions</p>
         </div>
-        <Link href="/record">
+        <Link href="/session">
           <Button size="lg" data-testid="button-new-session">
             <Plus className="mr-2 h-5 w-5" />
             New Practice Session
