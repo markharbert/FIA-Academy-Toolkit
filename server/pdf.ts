@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit";
-import type { Session } from "@shared/schema";
-import { goalTypeLabels } from "@shared/schema";
+import type { Session, ScoreResult } from "@shared/schema";
+import { goalTypeLabels, type GoalType } from "@shared/schema";
 import fs from "fs";
 import path from "path";
 
@@ -15,10 +15,10 @@ const BRAND_COLORS = {
 
 const PART_LABELS: Record<string, string> = {
   hook: "Hook",
-  setTheHook: "Set the Hook",
-  firstCta: "First CTA",
+  setHook: "Set the Hook",
+  firstCTA: "First CTA",
   content: "Content",
-  finalCta: "Final CTA",
+  finalCTA: "Final CTA",
 };
 
 const LOGO_PATH = path.join(process.cwd(), "attached_assets", "Mark_Harbert_Logo_(2)_1766503621615.png");
@@ -78,7 +78,7 @@ export async function generateSessionPdfBuffer(session: Session): Promise<Buffer
     yPos += 15;
 
     // Goal type
-    const goalLabel = goalTypeLabels[session.goalType as keyof typeof goalTypeLabels] || session.goalType;
+    const goalLabel = goalTypeLabels[session.goalType as GoalType] || session.goalType;
     doc.text(`Goal Type: ${goalLabel}`, 50, yPos);
     yPos += 15;
 
@@ -89,14 +89,14 @@ export async function generateSessionPdfBuffer(session: Session): Promise<Buffer
     doc.text(`Duration: ${mins}:${secs.toString().padStart(2, "0")}`, 50, yPos);
     yPos += 30;
 
-    // Scores Section
-    const scoreJson = session.scoreJson as any;
+    // Scores Section - using actual ScoreResult schema
+    const scoreJson = session.scoreJson as ScoreResult | null;
     if (scoreJson) {
       // Overall Score Box
       doc.rect(50, yPos, pageWidth, 60)
         .fill(BRAND_COLORS.lightGray);
       
-      const overallScore = scoreJson.overallScore || 0;
+      const overallScore = scoreJson.totalScore || 0;
       doc.fontSize(14).fillColor(BRAND_COLORS.darkBlue).text("Overall Score", 70, yPos + 10);
       
       const scoreColor = overallScore >= 80 ? "#22c55e" : overallScore >= 60 ? "#f59e0b" : BRAND_COLORS.red;
@@ -104,28 +104,90 @@ export async function generateSessionPdfBuffer(session: Session): Promise<Buffer
       doc.fontSize(16).fillColor(BRAND_COLORS.gray).text(" / 100", { continued: false });
       yPos += 80;
 
-      // Part Scores
-      const partScores = scoreJson.partScores || {};
-      doc.fontSize(14).fillColor(BRAND_COLORS.darkBlue).text("Score Breakdown", 50, yPos);
-      yPos += 25;
+      // Part Scores (each is 0-20)
+      const partScores = scoreJson.partScores;
+      if (partScores) {
+        doc.fontSize(14).fillColor(BRAND_COLORS.darkBlue).text("Score Breakdown", 50, yPos);
+        yPos += 25;
 
-      for (const [partKey, partData] of Object.entries(partScores) as [string, any][]) {
-        const label = PART_LABELS[partKey] || partKey;
-        const score = partData?.score || 0;
-        const barColor = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : BRAND_COLORS.red;
+        const partKeys: (keyof typeof partScores)[] = ["hook", "setHook", "firstCTA", "content", "finalCTA"];
+        
+        for (const partKey of partKeys) {
+          const score = partScores[partKey] || 0;
+          const label = PART_LABELS[partKey] || partKey;
+          const percentage = (score / 20) * 100;
+          const barColor = score >= 14 ? "#22c55e" : score >= 8 ? "#f59e0b" : BRAND_COLORS.red;
 
-        doc.fontSize(11).fillColor(BRAND_COLORS.darkBlue).text(label, 50, yPos);
-        doc.fontSize(11).fillColor(BRAND_COLORS.gray).text(`${score}/100`, pageWidth - 20, yPos, { align: "right" });
+          doc.fontSize(11).fillColor(BRAND_COLORS.darkBlue).text(label, 50, yPos);
+          doc.fontSize(11).fillColor(BRAND_COLORS.gray).text(`${score}/20`, pageWidth - 20, yPos, { align: "right" });
 
-        // Progress bar background
-        const barY = yPos + 18;
-        doc.rect(50, barY, pageWidth, 8).fill("#e0e0e0");
-        doc.rect(50, barY, (pageWidth * score) / 100, 8).fill(barColor);
-        yPos += 35;
+          // Progress bar background
+          const barY = yPos + 18;
+          doc.rect(50, barY, pageWidth, 8).fill("#e0e0e0");
+          doc.rect(50, barY, (pageWidth * percentage) / 100, 8).fill(barColor);
+          yPos += 35;
+        }
       }
 
-      // Recommendations
-      if (scoreJson.recommendations && scoreJson.recommendations.length > 0) {
+      // Summary Section - Strengths and Top Improvements
+      const summary = scoreJson.summary;
+      if (summary) {
+        if (summary.strengths && summary.strengths.length > 0) {
+          yPos += 10;
+          
+          if (yPos > 650) {
+            doc.addPage();
+            yPos = 50;
+          }
+
+          doc.fontSize(14).fillColor("#22c55e").text("Strengths", 50, yPos);
+          yPos += 20;
+
+          for (const strength of summary.strengths) {
+            if (yPos > 700) {
+              doc.addPage();
+              yPos = 50;
+            }
+
+            doc.circle(60, yPos + 5, 3).fill("#22c55e");
+            doc.fontSize(10).fillColor(BRAND_COLORS.gray).text(strength, 75, yPos, {
+              width: pageWidth - 30,
+              align: "left",
+            });
+            yPos += doc.heightOfString(strength, { width: pageWidth - 30 }) + 10;
+          }
+        }
+
+        if (summary.topImprovements && summary.topImprovements.length > 0) {
+          yPos += 10;
+          
+          if (yPos > 650) {
+            doc.addPage();
+            yPos = 50;
+          }
+
+          doc.fontSize(14).fillColor(BRAND_COLORS.lightBlue).text("Top Improvements", 50, yPos);
+          yPos += 20;
+
+          for (const improvement of summary.topImprovements) {
+            if (yPos > 700) {
+              doc.addPage();
+              yPos = 50;
+            }
+
+            doc.circle(60, yPos + 5, 3).fill(BRAND_COLORS.lightBlue);
+            doc.fontSize(10).fillColor(BRAND_COLORS.gray).text(improvement, 75, yPos, {
+              width: pageWidth - 30,
+              align: "left",
+            });
+            yPos += doc.heightOfString(improvement, { width: pageWidth - 30 }) + 10;
+          }
+        }
+      }
+
+      // Delivery Stats
+      const delivery = scoreJson.delivery;
+      if (delivery) {
         yPos += 10;
         
         if (yPos > 650) {
@@ -133,21 +195,29 @@ export async function generateSessionPdfBuffer(session: Session): Promise<Buffer
           yPos = 50;
         }
 
-        doc.fontSize(14).fillColor(BRAND_COLORS.darkBlue).text("Recommendations", 50, yPos);
-        yPos += 25;
+        doc.fontSize(14).fillColor(BRAND_COLORS.darkBlue).text("Delivery Analysis", 50, yPos);
+        yPos += 20;
 
-        for (const rec of scoreJson.recommendations) {
-          if (yPos > 700) {
-            doc.addPage();
-            yPos = 50;
+        doc.fontSize(10).fillColor(BRAND_COLORS.gray);
+        doc.text(`Speaking Pace: ${delivery.wordsPerMinute || 0} words per minute`, 50, yPos);
+        yPos += 15;
+
+        if (delivery.fillerWords) {
+          doc.text(`Filler Words: ${delivery.fillerWords.count || 0}`, 50, yPos);
+          yPos += 15;
+        }
+
+        if (delivery.clarityNotes && delivery.clarityNotes.length > 0) {
+          doc.text("Clarity Notes:", 50, yPos);
+          yPos += 15;
+          for (const note of delivery.clarityNotes) {
+            if (yPos > 700) {
+              doc.addPage();
+              yPos = 50;
+            }
+            doc.text(`  - ${note}`, 60, yPos);
+            yPos += 12;
           }
-
-          doc.circle(60, yPos + 5, 3).fill(BRAND_COLORS.lightBlue);
-          doc.fontSize(10).fillColor(BRAND_COLORS.gray).text(rec, 75, yPos, {
-            width: pageWidth - 30,
-            align: "left",
-          });
-          yPos += doc.heightOfString(rec, { width: pageWidth - 30 }) + 10;
         }
       }
     }

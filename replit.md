@@ -64,6 +64,12 @@ Preferred communication style: Simple, everyday language.
 
 7. **Retranscribe**: Users can redo transcription up to 3 times per session if AI transcription is inaccurate.
 
+8. **Background Processing**: Video processing (upload → transcode → transcribe → score) runs in the background with real-time progress updates via SSE (Server-Sent Events) with polling fallback.
+
+9. **PDF Reports**: Users can download branded PDF reports of their session scores, including overall score, part-by-part breakdown, strengths, improvements, and transcript.
+
+10. **Theme Preferences**: Users can choose Light/Dark/System theme with dropdown toggle, persisted to database in `users.themePreference`.
+
 ## External Dependencies
 
 ### AI Services (via Replit AI Integrations)
