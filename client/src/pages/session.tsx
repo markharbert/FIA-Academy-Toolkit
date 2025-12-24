@@ -500,10 +500,19 @@ export default function SessionPage() {
               </div>
             ) : session.videoPath ? (
               <video
+                key={`${session.id}-${session.videoPath}`}
                 src={`/api/sessions/${session.id}/video`}
                 controls
+                playsInline
+                preload="metadata"
                 className="aspect-video w-full rounded-lg bg-black"
                 data-testid="video-player"
+                onError={(e) => {
+                  const video = e.currentTarget;
+                  const errorCode = video.error?.code;
+                  const errorMessage = video.error?.message || "Unknown error";
+                  console.error(`Video playback error: code=${errorCode}, message=${errorMessage}`);
+                }}
               />
             ) : (
               <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">

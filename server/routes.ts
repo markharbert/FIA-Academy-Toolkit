@@ -2880,6 +2880,7 @@ export async function registerRoutes(
         res.writeHead(200, {
           "Content-Length": fileSize,
           "Content-Type": session.videoMimeType || "video/webm",
+          "Accept-Ranges": "bytes",
         });
         fs.createReadStream(videoPath).pipe(res);
       }

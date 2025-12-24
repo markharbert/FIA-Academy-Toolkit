@@ -1,0 +1,247 @@
+Role: You are a senior full stack developer debugging my existing Replit project (Fearless Video Coach). The processing pipeline completes successfully (transcription, scoring, recommendations all work), but the processed video still does not load into the video player on the Session page. The player appears empty or cannot play the video. Your job is to diagnose the exact reason and fix it so that after processing completes, the Session page reliably displays and plays the processed MP4 in the embedded player.
+
+High Priority Outcomes
+
+When processing completes, the Session page video player loads the correct video URL and plays.
+
+The video player never renders “empty” once a playable video is available.
+
+If playback fails, show a clear, actionable error message.
+
+Fix must work consistently across Chrome, Safari, and mobile browsers.
+
+PART 1: Determine Whether This Is a URL, Storage, Auth, or Player State Issue
+
+Step 1: Inspect the session API response after processing completes
+
+Open devtools and call:
+
+GET /api/sessions/:id
+
+Confirm the response includes a non-empty video URL for playback:
+
+finalVideoUrl OR a derived URL from finalVideoStorageKey
+
+Confirm the URL is correct and points to the processed MP4 output.
+
+If finalVideoUrl is missing or null
+
+The backend is not persisting the processed output location correctly.
+Fix:
+
+Ensure the transcode step sets finalVideoStorageKey and persists it.
+
+Ensure API maps finalVideoStorageKey into finalVideoUrl.
+
+If finalVideoUrl exists
+
+Continue to the next steps.
+
+Step 2: Verify the video URL actually serves the MP4 correctly
+In the browser network tab, load the video URL directly and confirm:
+
+HTTP status is 200 or 206
+
+Response headers include:
+
+Content-Type: video/mp4
+
+Accept-Ranges: bytes (preferred)
+
+Content-Length present
+
+If using auth-protected routes:
+
+Confirm the request includes cookies/credentials
+
+Confirm it is not being blocked by CORS or SameSite cookie rules
+
+Common failure patterns and required fixes
+
+A) The endpoint returns HTML or JSON instead of MP4
+Symptoms:
+
+Content-Type is text/html or application/json
+Fix:
+
+Route is wrong or middleware returns an auth redirect.
+
+Ensure the video route returns the raw file stream and correct headers.
+
+Ensure auth failure returns 401 JSON, not a redirect to an HTML page.
+
+B) 403 or 401 when loading video
+Symptoms:
+
+request blocked due to missing credentials
+Fix:
+
+If video is served from your backend, ensure the video tag can access it with same-origin cookies.
+
+If served from another domain (object storage), use a signed URL so no cookies are needed.
+
+If using signed URL, ensure it is generated on demand and not expired.
+
+C) 404 not found
+Symptoms:
+
+finalVideoStorageKey points to wrong path
+Fix:
+
+Confirm file exists at storage key.
+
+Ensure path assembly is correct in published environment.
+
+D) 416 Range Not Satisfiable
+Symptoms:
+
+Safari and some browsers require byte-range support.
+Fix:
+
+Implement Range request support on the video streaming endpoint.
+
+Return 206 Partial Content when Range header present.
+
+E) Wrong mime type or missing faststart
+Symptoms:
+
+Video downloads but won’t stream well
+Fix:
+
+Ensure ffmpeg outputs with:
+
+-movflags +faststart
+
+Ensure server sets Content-Type video/mp4.
+
+PART 2: Confirm Frontend Player Is Actually Setting src When Ready
+
+Even if backend is correct, the player may not re-render after processing finishes.
+
+Required checks
+
+Confirm that when session status changes to ready, the UI sets:
+
+<video src={finalVideoUrl}>
+
+If the video element is mounted before finalVideoUrl is available, some browsers can get stuck.
+
+Fix requirements
+
+Only render the <video> element when finalVideoUrl exists.
+
+When finalVideoUrl becomes available, force a fresh mount by using a key:
+
+<video key={finalVideoUrl} src={finalVideoUrl} ... />
+
+After setting src, call:
+
+videoRef.current.load()
+
+If autoplay is not required, do not attempt autoplay. Provide user controls.
+
+Also ensure:
+
+controls is enabled
+
+preload="metadata" or preload="auto"
+
+playsInline (for iOS)
+
+PART 3: Standardize “Which Video URL Do We Use”
+
+Rule
+Always use the processed MP4 output for playback after processing completes.
+
+Implementation
+
+API should return:
+
+video.playbackUrl = processed mp4 URL
+
+UI should bind player to:
+
+playbackUrl
+
+Do not point the player at the original upload if it is a format not supported by the browser.
+
+PART 4: Ensure the File Is Publicly Streamable (Even if Protected)
+
+If using object storage
+
+The safest approach is:
+
+Generate a signed URL for playback on session load:
+GET /api/sessions/:id/video-url
+Return:
+{
+"url": "signed_url_here",
+"expiresAt": "..."
+}
+
+Store only storageKey in DB, not the signed URL.
+
+The session API can include a short lived url that the UI uses.
+
+If serving from backend filesystem
+
+Implement:
+GET /api/sessions/:id/video/stream
+
+requireAuth + ownership or admin
+
+stream file
+
+support Range headers
+
+set Content-Type video/mp4
+
+PART 5: Add a Clear Player Error State
+
+UI requirements
+
+If the video element triggers an error event:
+
+Show: “Video failed to load.”
+
+Provide a “Reload video” button that re-fetches the playback URL and remounts player.
+
+Log the error code and network status in console for debugging.
+
+PART 6: Verification Checklist You Must Perform
+
+Confirm session API returns playbackUrl after processing completes.
+
+Open playbackUrl directly in a new tab:
+
+it plays or downloads as MP4
+
+response is 200 or 206 with Content-Type video/mp4
+
+Confirm Range support:
+
+request includes Range and server returns 206
+
+Confirm Session page behavior:
+
+When processing transitions to ready, player appears with video
+
+Player can play video with controls
+
+Confirm Safari compatibility:
+
+playsInline attribute set
+
+Range supported
+
+Confirm admin side panel can also load the video.
+
+Deliverables
+
+Root cause identification (exact failing point: missing url, auth, range, UI not re-rendering, etc).
+
+Code changes to fix streaming or URL generation.
+
+Code changes to ensure the video element mounts only when src exists and remounts when it changes.
+
+Now diagnose why the processed MP4 is not loading in the player and implement the correct server streaming or signed URL behavior plus frontend remount logic so playback works reliably.
