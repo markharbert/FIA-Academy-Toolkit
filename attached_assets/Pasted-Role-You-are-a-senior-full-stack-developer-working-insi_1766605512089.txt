@@ -1,0 +1,310 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). We are changing the flow to remove the handoff between an Upload page and a separate Session page. There is a disconnect between the two pages that is causing video playback and processing issues. Your job is to merge the experience into a single “Session” page that handles upload, processing, preview playback, transcription, scoring, recommendations, and PDF download, all in one place.
+
+High Priority Outcomes
+
+Eliminate the separate upload-to-session redirect flow.
+
+The Session page becomes the upload page and the results page in one.
+
+User uploads the video on the Session page, sees a preview as soon as it is available, and stays on the same page while processing completes.
+
+Processing happens on that same page and updates in real time.
+
+Remove the 5-part formula list from the page. Keep the interface clean and focused on upload and results.
+
+Fix “Download PDF Report” so it downloads a real PDF, not a JSON file.
+
+Render the uploaded video to a low-quality preview-first MP4 to reduce processing time, while still looking good in-browser.
+
+PART 1: New UX Flow (Single Page)
+
+New page behavior
+Use ONE page route for session creation and review:
+
+/session (create/upload + processing + results)
+Optionally also support:
+
+/sessions/:id (for re-opening an existing session later)
+But the key requirement is: do not rely on redirecting right after upload to a separate page to start processing. The same page must do it all.
+
+Session page layout (simple)
+
+Upload section at top:
+
+Upload button
+
+Drag-and-drop zone (optional)
+
+Supported formats note (mp4, mov, webm, mkv, avi, wmv, etc)
+
+Once a file is selected:
+
+Show upload progress bar
+
+As soon as preview video is generated:
+
+Show embedded video player with controls
+
+Under the player:
+
+Processing progress (validating, preview render, transcribing, scoring, recommendations)
+
+When ready:
+
+Show scoring breakdown
+
+Show recommendations
+
+Show transcript panel
+
+Show “Download PDF Report” button (must download a PDF)
+
+Remove from this page
+
+The on-page list of the 5-part formula.
+
+Any recording UI.
+
+PART 2: Backend Flow Must Not Depend On Frontend Redirects
+
+Problem to solve
+Today there is a disconnect between upload and session processing. Fix by making upload finalization trigger processing server-side.
+
+Required server workflow
+
+User starts upload from the Session page.
+
+Backend creates a session immediately and returns sessionId.
+
+Upload completes for that sessionId.
+
+On upload complete, the backend MUST:
+
+Validate file
+
+Enqueue processing pipeline
+
+Update session status to processing
+This must happen automatically server-side, not dependent on a second page load.
+
+End-to-end steps
+
+POST /api/sessions/create
+
+Creates session row
+
+Returns sessionId
+
+Upload endpoints attach the upload to sessionId
+
+POST /api/sessions/:id/upload/complete
+
+Validates that the file exists and is readable
+
+Sets processingStartedAt
+
+Enqueues processing job
+
+Returns success and session status
+
+The Session page will then:
+
+Poll or subscribe to progress updates for that sessionId
+
+Render player and results when ready
+
+PART 3: Preview-First Low Quality Render For Speed
+
+Goal
+Reduce processing time by generating a “preview” MP4 at low to medium quality that still looks good in the browser, and use that as the stored playback video.
+
+Required output
+
+MP4 container
+
+H.264 video
+
+AAC audio
+
+faststart enabled
+
+Resolution: choose one speed-friendly default:
+
+640x360 or 854x480
+
+Frame rate: cap at 30 fps
+
+Audio intact for transcription
+
+Pipeline steps (speed-first)
+
+Uploading (client progress)
+
+Validating (ffprobe)
+
+Render preview MP4 (fast preset)
+
+Extract audio (from preview)
+
+Transcribe
+
+Score
+
+Recommendations
+
+Ready
+
+Storage cleanup
+After preview is created successfully:
+
+Delete original uploaded file to save space
+
+Keep preview video for 30 days
+
+Database fields
+Ensure Sessions includes:
+
+originalUploadStorageKey
+
+previewVideoStorageKey
+
+previewGeneratedAt
+
+originalDeletedAt
+
+processingStatus, processingProgress, processingMessage, processingError
+
+expiresAt (30 days)
+
+PART 4: Session Page Must Show Preview ASAP and Never Show an Empty Player
+
+UI rules
+
+Do not render <video> until a valid previewVideoUrl exists.
+
+As soon as previewVideoUrl exists:
+
+Mount player with:
+
+key={previewVideoUrl}
+
+controls
+
+preload="metadata"
+
+playsInline
+
+If video fails to load:
+
+Show “Video failed to load”
+
+Provide “Reload video” button that re-fetches video URL and remounts player
+
+Server streaming rules
+If using backend streaming route:
+
+Must support Range requests (206)
+
+Must set Content-Type video/mp4
+If using signed URLs:
+
+Generate fresh signed URL when session page requests it
+
+PART 5: Fix “Download PDF Report” (Currently Downloads JSON)
+
+Current bug
+Clicking “Download PDF Report” downloads a JSON file. That means the endpoint is returning JSON or the frontend is treating the response incorrectly.
+
+Required behavior
+The button must download an actual PDF file.
+
+Backend requirements
+
+Implement a dedicated PDF endpoint:
+GET /api/sessions/:id/report.pdf
+
+It must:
+
+Require auth and ownership (or admin)
+
+Return Content-Type: application/pdf
+
+Return Content-Disposition: attachment; filename="Fearless-Video-Coach-Report.pdf"
+
+Return actual PDF binary data
+
+If you already have a JSON endpoint like /api/sessions/:id/report
+
+Keep it for internal data
+
+But the download button must call the .pdf endpoint.
+
+Frontend requirements
+
+The download button must:
+
+Request the PDF endpoint with correct headers
+
+Treat the response as a blob
+
+Trigger a browser download of a .pdf
+
+Do NOT parse JSON.
+
+Confirm that the filename ends in .pdf.
+
+If report needs generation
+
+Generate on demand if not cached.
+
+Or generate at session ready and store a PDF file key.
+
+If transcript or recommendations change, mark PDF stale and regenerate.
+
+PART 6: Update Routing and Remove the Extra Page
+
+Requirement
+Remove the concept of a separate upload page that forwards to a session page. There should be one place to upload and view results.
+
+Implementation options
+Option A (preferred)
+
+Convert the old upload page route into the session page.
+
+The route creates sessionId and handles upload within it.
+
+After upload completes, update the URL to /sessions/:id without navigation, or keep /session with state, but store sessionId and allow refresh recovery.
+
+Option B
+
+Always route to /sessions/:id as soon as session is created, but do not rely on a second page to kick off processing.
+
+The key is: processing must begin on upload complete server-side, and UI must remain stable.
+
+Either option is fine if it removes the “disconnect” and the user experience is one continuous page.
+
+PART 7: Verification Checklist
+
+You must verify:
+
+User can upload from the Session page and stays on that page.
+
+Upload completes without errors.
+
+Processing begins automatically after upload complete (confirmed in logs and DB).
+
+Preview video appears and plays as soon as preview is generated.
+
+Transcript, scoring, and recommendations appear on the same page when ready.
+
+Original large upload is deleted after preview is created.
+
+Preview remains accessible for 30 days.
+
+Download PDF Report downloads a real PDF, not JSON, and opens correctly.
+
+No empty video player appears without a src.
+
+Refreshing the page preserves state and loads the existing session if in progress or ready.
+
+Now implement this combined single-page upload-plus-results flow, fix the PDF download to return a real PDF, and use a preview-first low-quality render to reduce processing time.
