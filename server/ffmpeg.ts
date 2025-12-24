@@ -600,6 +600,102 @@ export async function generateThumbnail(videoPath: string, uploadsDir: string): 
   }
 }
 
+export interface PosterResult {
+  success: boolean;
+  posterPath?: string;
+  error?: string;
+}
+
+export async function generatePoster(videoPath: string, uploadsDir: string, sessionId: string): Promise<PosterResult> {
+  try {
+    if (!fs.existsSync(videoPath)) {
+      return { success: false, error: "Video file not found" };
+    }
+
+    const posterFilename = `poster_${sessionId}.jpg`;
+    const posterPath = path.join(uploadsDir, posterFilename);
+
+    console.log(`[FFmpeg] Generating poster for session ${sessionId}...`);
+
+    return new Promise((resolve) => {
+      const ffmpeg = spawn("ffmpeg", [
+        "-i", videoPath,
+        "-ss", "0.5",
+        "-vframes", "1",
+        "-vf", "scale=640:-1",
+        "-q:v", "2",
+        "-y",
+        posterPath
+      ]);
+
+      let stderr = "";
+      ffmpeg.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      ffmpeg.on("close", (code) => {
+        if (code === 0 && fs.existsSync(posterPath)) {
+          console.log(`[FFmpeg] Poster generated: ${posterFilename}`);
+          resolve({ success: true, posterPath: posterFilename });
+        } else {
+          const ffmpegRetry = spawn("ffmpeg", [
+            "-i", videoPath,
+            "-ss", "1.0",
+            "-vframes", "1",
+            "-vf", "scale=640:-1",
+            "-q:v", "2",
+            "-y",
+            posterPath
+          ]);
+
+          ffmpegRetry.on("close", (retryCode) => {
+            if (retryCode === 0 && fs.existsSync(posterPath)) {
+              console.log(`[FFmpeg] Poster generated (retry at 1s): ${posterFilename}`);
+              resolve({ success: true, posterPath: posterFilename });
+            } else {
+              const ffmpegFallback = spawn("ffmpeg", [
+                "-i", videoPath,
+                "-ss", "0",
+                "-vframes", "1",
+                "-vf", "scale=640:-1",
+                "-q:v", "2",
+                "-y",
+                posterPath
+              ]);
+
+              ffmpegFallback.on("close", (fallbackCode) => {
+                if (fallbackCode === 0 && fs.existsSync(posterPath)) {
+                  console.log(`[FFmpeg] Poster generated (fallback at 0s): ${posterFilename}`);
+                  resolve({ success: true, posterPath: posterFilename });
+                } else {
+                  console.error(`[FFmpeg] Poster generation failed`);
+                  resolve({ success: false, error: "Poster generation failed" });
+                }
+              });
+
+              ffmpegFallback.on("error", () => {
+                resolve({ success: false, error: "FFmpeg process failed" });
+              });
+            }
+          });
+
+          ffmpegRetry.on("error", () => {
+            resolve({ success: false, error: "FFmpeg process failed" });
+          });
+        }
+      });
+
+      ffmpeg.on("error", (err) => {
+        console.error(`[FFmpeg] Poster process error:`, err);
+        resolve({ success: false, error: "FFmpeg process failed to start" });
+      });
+    });
+  } catch (err) {
+    console.error(`[FFmpeg] Unexpected poster error:`, err);
+    return { success: false, error: "Unexpected error during poster generation" };
+  }
+}
+
 export interface HlsResult {
   success: boolean;
   playlistPath?: string;

@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { generatePreview, generateThumbnail, extractAudioFast, probeVideo, generateHlsPreview } from "./ffmpeg";
+import { generatePreview, generateThumbnail, extractAudioFast, probeVideo, generateHlsPreview, generatePoster } from "./ffmpeg";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { ObjectStorageService } from "./replit_integrations/object_storage/objectStorage";
 import type { ProcessingStatus, GoalType, InsertProcessingMetric, HlsStatus, TranscriptStatus, ScoreStatus } from "@shared/schema";
@@ -236,6 +236,10 @@ async function generatePreviewInBackground(
 ): Promise<void> {
   console.log(`[Processing] Starting background preview generation for session ${sessionId}`);
   
+  await storage.updateSession(sessionId, {
+    previewVideoStatus: "generating",
+  });
+  
   try {
     const previewStart = new Date();
     const previewResult = await generatePreview(videoFullPath, UPLOADS_DIR);
@@ -246,6 +250,8 @@ async function generatePreviewInBackground(
       await storage.updateSession(sessionId, {
         previewVideoPath: "failed",
         previewGeneratedAt: new Date(),
+        previewVideoStatus: "failed",
+        previewVideoError: previewResult.error || "Preview generation failed",
       });
       return;
     }
@@ -265,6 +271,11 @@ async function generatePreviewInBackground(
       previewVideoPath: previewResult.outputPath,
       previewCloudStoragePath: previewCloudPath,
       previewGeneratedAt: new Date(),
+      previewVideoMimeType: "video/mp4",
+      previewVideoSizeBytes: previewResult.sizeBytes,
+      previewVideoDurationSeconds: previewResult.durationSeconds,
+      previewVideoStatus: "ready",
+      previewVideoError: null,
       videoPath: previewResult.outputPath,
       videoMimeType: "video/mp4",
       videoSizeBytes: previewResult.sizeBytes,
@@ -283,6 +294,18 @@ async function generatePreviewInBackground(
       });
     }
     await recordMetric(sessionId, "thumbnail_generation", thumbnailStart, thumbnailResult.success);
+    
+    const posterStart = new Date();
+    const posterResult = await generatePoster(previewFullPath, UPLOADS_DIR, sessionId);
+    if (posterResult.success) {
+      await storage.updateSession(sessionId, {
+        previewPosterPath: posterResult.posterPath,
+        previewPosterMimeType: "image/jpeg",
+        previewPosterGeneratedAt: new Date(),
+      });
+      console.log(`[Processing] Poster generated for session ${sessionId}`);
+    }
+    await recordMetric(sessionId, "poster_generation", posterStart, posterResult.success);
     
     if (previewCloudPath) {
       const deleteStart = new Date();
