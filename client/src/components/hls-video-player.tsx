@@ -20,7 +20,6 @@ export function HlsVideoPlayer({
 }: HlsVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
-  const blobUrlRef = useRef<string | null>(null);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +38,6 @@ export function HlsVideoPlayer({
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
-      }
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
       }
     };
 
@@ -111,28 +106,35 @@ export function HlsVideoPlayer({
       setError(null);
       
       try {
-        const response = await fetch(fallbackVideoUrl, { credentials: "include" });
+        // First check if the video endpoint is accessible
+        const checkResponse = await fetch(fallbackVideoUrl, { 
+          method: "HEAD",
+          credentials: "include" 
+        });
         
-        if (!response.ok) {
-          const contentType = response.headers.get("content-type");
-          if (contentType?.includes("application/json")) {
-            const data = await response.json();
-            throw new Error(data.message || `Failed to load video: ${response.status}`);
+        if (!checkResponse.ok) {
+          const contentType = checkResponse.headers.get("content-type");
+          // Try to get error message from a GET request if HEAD fails
+          if (checkResponse.status >= 400) {
+            const errorResponse = await fetch(fallbackVideoUrl, { credentials: "include" });
+            if (errorResponse.headers.get("content-type")?.includes("application/json")) {
+              const data = await errorResponse.json();
+              throw new Error(data.message || `Failed to load video: ${checkResponse.status}`);
+            }
+            throw new Error(`Failed to load video: ${checkResponse.status}`);
           }
-          throw new Error(`Failed to load video: ${response.status}`);
         }
         
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        blobUrlRef.current = url;
-        video.src = url;
+        // Use direct URL with credentials - browser handles range requests natively
+        video.src = fallbackVideoUrl;
         
         video.onloadedmetadata = () => {
           setLoading(false);
           setError(null);
         };
         
-        video.onerror = () => {
+        video.onerror = (e) => {
+          console.error("[Video] Native playback error:", e);
           setError("Video playback failed");
           setLoading(false);
         };

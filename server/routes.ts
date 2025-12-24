@@ -3057,6 +3057,49 @@ export async function registerRoutes(
     }
   });
 
+  app.head("/api/sessions/:id/video", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      const currentUser = await storage.getUser(req.session.userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      
+      if (session.userId !== req.session.userId && !isAdmin) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (session.videoDeletedAt) {
+        return res.status(404).json({ message: "Video not available" });
+      }
+
+      const preferredVideoPath = session.previewVideoPath || session.videoPath;
+      if (!preferredVideoPath) {
+        return res.status(404).json({ message: "Video not available" });
+      }
+
+      const videoPath = path.join(UPLOADS_DIR, preferredVideoPath);
+      if (!fs.existsSync(videoPath)) {
+        return res.status(404).json({ message: "Video file not found" });
+      }
+
+      const stat = fs.statSync(videoPath);
+      const mimeType = session.videoMimeType || "video/mp4";
+      
+      res.setHeader("Content-Length", stat.size);
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).end();
+    } catch (err) {
+      console.error("Video HEAD error:", err);
+      res.status(500).json({ message: "Failed to check video" });
+    }
+  });
+
   app.get("/api/sessions/:id/video", requireAuth, async (req: Request, res: Response) => {
     const traceId = `vid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const sessionId = req.params.id;
