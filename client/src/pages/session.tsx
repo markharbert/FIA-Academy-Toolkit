@@ -1023,11 +1023,12 @@ export default function SessionPage() {
               const hlsPlayable = hlsStatus === "playable" || hlsStatus === "complete";
               const previewPath = (session as any)?.previewVideoPath;
               const previewReady = previewPath && previewPath !== "failed";
-              const canShowVideo = hlsPlayable || previewReady;
+              const hasVideoPath = !!session?.videoPath;
               const isStillProcessing = session?.processingStatus && 
                 !["ready", "failed"].includes(session.processingStatus);
               
-              if (isStillProcessing && !canShowVideo) {
+              // Show processing indicator while still processing AND no video ready
+              if (isStillProcessing && !hlsPlayable && !previewReady && !hasVideoPath) {
                 return (
                   <div className="flex aspect-video items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
                     <div className="text-center space-y-4 w-full max-w-md px-8">
@@ -1054,7 +1055,8 @@ export default function SessionPage() {
                 );
               }
               
-              if (canShowVideo && activeSessionId) {
+              // Show video player if we have ANY video source available
+              if (activeSessionId && (hlsPlayable || previewReady || hasVideoPath)) {
                 return (
                   <HlsVideoPlayer
                     sessionId={activeSessionId}
@@ -1065,7 +1067,8 @@ export default function SessionPage() {
                 );
               }
               
-              if (session?.videoPath) {
+              // Still processing, show spinner
+              if (isStillProcessing) {
                 return (
                   <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
                     <div className="text-center">
