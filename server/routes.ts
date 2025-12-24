@@ -1776,6 +1776,218 @@ export async function registerRoutes(
   // SESSION ROUTES
   // ===================
 
+  // === FOLDER ROUTES ===
+  
+  app.get("/api/folders", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const folders = await storage.getFoldersByUser(req.session.userId!);
+      res.json(folders);
+    } catch (err) {
+      console.error("Get folders error:", err);
+      res.status(500).json({ message: "Failed to fetch folders" });
+    }
+  });
+
+  app.post("/api/folders", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { name } = req.body;
+      
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ message: "Folder name is required" });
+      }
+      
+      const trimmedName = name.trim().slice(0, 50);
+      
+      const folder = await storage.createFolder({
+        userId: req.session.userId!,
+        name: trimmedName,
+      });
+      
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "folder_created",
+        actionLabel: `Created folder "${trimmedName}"`,
+        entityType: "folder",
+        entityId: folder.id,
+        metadata: { name: trimmedName },
+        req,
+      });
+      
+      res.status(201).json(folder);
+    } catch (err) {
+      console.error("Create folder error:", err);
+      res.status(500).json({ message: "Failed to create folder" });
+    }
+  });
+
+  app.patch("/api/folders/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { name } = req.body;
+      
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ message: "Folder name is required" });
+      }
+      
+      const trimmedName = name.trim().slice(0, 50);
+      
+      const folder = await storage.updateFolder(req.params.id, req.session.userId!, { name: trimmedName });
+      
+      if (!folder) {
+        return res.status(404).json({ message: "Folder not found" });
+      }
+      
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "folder_renamed",
+        actionLabel: `Renamed folder to "${trimmedName}"`,
+        entityType: "folder",
+        entityId: folder.id,
+        metadata: { name: trimmedName },
+        req,
+      });
+      
+      res.json(folder);
+    } catch (err) {
+      console.error("Update folder error:", err);
+      res.status(500).json({ message: "Failed to update folder" });
+    }
+  });
+
+  app.delete("/api/folders/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteFolder(req.params.id, req.session.userId!);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Folder not found" });
+      }
+      
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "folder_deleted",
+        actionLabel: "Deleted folder",
+        entityType: "folder",
+        entityId: req.params.id,
+        req,
+      });
+      
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Delete folder error:", err);
+      res.status(500).json({ message: "Failed to delete folder" });
+    }
+  });
+
+  // === BULK SESSION OPERATIONS ===
+  
+  app.post("/api/sessions/move", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { sessionIds, folderId } = req.body;
+      
+      if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+        return res.status(400).json({ message: "sessionIds array is required" });
+      }
+      
+      if (folderId !== null && typeof folderId !== "string") {
+        return res.status(400).json({ message: "folderId must be a string or null" });
+      }
+      
+      const movedCount = await storage.moveSessions(sessionIds, req.session.userId!, folderId);
+      
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "session_moved_to_folder",
+        actionLabel: `Moved ${movedCount} session(s) to ${folderId ? 'folder' : 'Unfiled'}`,
+        entityType: "session",
+        metadata: { sessionIds, folderId, movedCount },
+        req,
+      });
+      
+      res.json({ success: true, movedCount });
+    } catch (err) {
+      console.error("Move sessions error:", err);
+      res.status(500).json({ message: "Failed to move sessions" });
+    }
+  });
+
+  app.delete("/api/sessions/bulk", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { sessionIds } = req.body;
+      
+      if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+        return res.status(400).json({ message: "sessionIds array is required" });
+      }
+      
+      const { deletedCount, deletedPaths } = await storage.deleteSessions(sessionIds, req.session.userId!);
+      
+      // Clean up files
+      for (const filePath of deletedPaths) {
+        try {
+          await fs.promises.unlink(filePath);
+        } catch (unlinkErr: any) {
+          if (unlinkErr.code !== 'ENOENT') {
+            console.error(`Failed to delete file ${filePath}:`, unlinkErr);
+          }
+        }
+      }
+      
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "sessions_bulk_deleted",
+        actionLabel: `Deleted ${deletedCount} session(s)`,
+        entityType: "session",
+        metadata: { sessionIds, deletedCount },
+        req,
+      });
+      
+      res.json({ success: true, deletedCount });
+    } catch (err) {
+      console.error("Bulk delete sessions error:", err);
+      res.status(500).json({ message: "Failed to delete sessions" });
+    }
+  });
+
+  app.delete("/api/sessions/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const { deletedCount, deletedPaths } = await storage.deleteSessions([req.params.id], req.session.userId!);
+      
+      // Clean up files
+      for (const filePath of deletedPaths) {
+        try {
+          await fs.promises.unlink(filePath);
+        } catch (unlinkErr: any) {
+          if (unlinkErr.code !== 'ENOENT') {
+            console.error(`Failed to delete file ${filePath}:`, unlinkErr);
+          }
+        }
+      }
+      
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "session_deleted",
+        actionLabel: `Deleted session "${session.title || 'Untitled'}"`,
+        entityType: "session",
+        entityId: req.params.id,
+        metadata: { title: session.title },
+        req,
+      });
+      
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Delete session error:", err);
+      res.status(500).json({ message: "Failed to delete session" });
+    }
+  });
+
   app.get("/api/sessions", requireAuth, async (req: Request, res: Response) => {
     try {
       const sessions = await storage.getSessionsByUser(req.session.userId!);
