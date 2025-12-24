@@ -175,6 +175,10 @@ async function generatePreviewInBackground(
     if (!previewResult.success) {
       await recordMetric(sessionId, "preview_generation", previewStart, false, previewResult.error);
       console.warn(`[Processing] Background preview generation failed: ${previewResult.error}`);
+      await storage.updateSession(sessionId, {
+        previewVideoPath: "failed",
+        previewGeneratedAt: new Date(),
+      });
       return;
     }
     
@@ -218,8 +222,17 @@ async function generatePreviewInBackground(
       await recordMetric(sessionId, "original_deletion", deleteStart, true);
     }
     
+    console.log(`[Processing] Preview generation complete for session ${sessionId}`);
+    
   } catch (err) {
     console.error(`[Processing] Background preview error for session ${sessionId}:`, err);
+    await recordMetric(sessionId, "preview_generation", new Date(), false, String(err));
+    try {
+      await storage.updateSession(sessionId, {
+        previewVideoPath: "failed",
+        previewGeneratedAt: new Date(),
+      });
+    } catch {}
   }
 }
 

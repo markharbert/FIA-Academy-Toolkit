@@ -232,7 +232,13 @@ export default function SessionPage() {
     if (!data) return activeSessionId ? true : false;
     const status = data.processingStatus;
     if (!status) return !data.transcriptText;
-    return !["ready", "failed"].includes(status);
+    if (status === "failed") return false;
+    if (status === "ready") {
+      const previewPath = (data as any).previewVideoPath;
+      const hasPreviewOrFailed = previewPath === "failed" || !!previewPath;
+      return !hasPreviewOrFailed;
+    }
+    return true;
   };
 
   const { data: session, isLoading, error } = useQuery<Session>({
@@ -501,12 +507,14 @@ export default function SessionPage() {
   useEffect(() => {
     const isExpiredNow = session?.videoDeletedAt || (session?.expiresAt && new Date(session.expiresAt) < new Date());
     
-    const hasPreviewReady = !!(session as any)?.previewVideoPath;
+    const previewPath = (session as any)?.previewVideoPath;
+    const previewFailed = previewPath === "failed";
+    const hasPreviewReady = previewPath && !previewFailed;
     const processingPastTranscoding = session?.processingStatus && 
       ["transcribing", "scoring", "ready"].includes(session.processingStatus);
     const processingComplete = session?.processingStatus === "ready";
     
-    const videoAvailable = session?.videoPath && (hasPreviewReady || processingPastTranscoding || processingComplete);
+    const videoAvailable = session?.videoPath && (hasPreviewReady || processingPastTranscoding || processingComplete) && !previewFailed;
     const shouldLoadVideo = videoAvailable && !isExpiredNow;
 
     if (!shouldLoadVideo || !activeSessionId) {
