@@ -129,9 +129,10 @@ interface SessionCardProps {
   isSelected: boolean;
   onSelect: (id: string, selected: boolean) => void;
   selectionMode: boolean;
+  selectedSessionIds: Set<string>;
 }
 
-function SessionCard({ session, isSelected, onSelect, selectionMode }: SessionCardProps) {
+function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSessionIds }: SessionCardProps) {
   const { toast } = useToast();
   const isExpired = session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date());
   const score = session.scoreJson?.totalScore ?? null;
@@ -170,10 +171,20 @@ function SessionCard({ session, isSelected, onSelect, selectionMode }: SessionCa
     setIsEditing(false);
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    const sessionIds = isSelected && selectedSessionIds.size > 0 
+      ? Array.from(selectedSessionIds) 
+      : [session.id];
+    e.dataTransfer.setData("application/json", JSON.stringify({ sessionIds }));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
   return (
     <Card 
-      className={`overflow-hidden transition-shadow hover:shadow-md ${isSelected ? 'ring-2 ring-primary' : ''}`} 
+      className={`overflow-hidden transition-shadow hover:shadow-md cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-primary' : ''}`} 
       data-testid={`card-session-${session.id}`}
+      draggable
+      onDragStart={handleDragStart}
     >
       <CardContent className="p-0">
         <div className="flex flex-col sm:flex-row">
@@ -349,9 +360,10 @@ interface FolderSidebarProps {
   selectedFolderId: string | null;
   onSelectFolder: (id: string | null) => void;
   sessions: Session[];
+  onDropSessions: (sessionIds: string[], folderId: string | null) => void;
 }
 
-function FolderSidebar({ folders, selectedFolderId, onSelectFolder, sessions }: FolderSidebarProps) {
+function FolderSidebar({ folders, selectedFolderId, onSelectFolder, sessions, onDropSessions }: FolderSidebarProps) {
   const { toast } = useToast();
   const [isCreating, setIsCreating] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -359,6 +371,30 @@ function FolderSidebar({ folders, selectedFolderId, onSelectFolder, sessions }: 
   const [editFolderName, setEditFolderName] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [folderToDelete, setFolderToDelete] = useState<SessionFolder | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null | "unfiled">(null);
+
+  const handleDragOver = (e: React.DragEvent, folderId: string | null | "unfiled") => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFolderId(folderId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverFolderId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    setDragOverFolderId(null);
+    try {
+      const data = JSON.parse(e.dataTransfer.getData("application/json"));
+      if (data.sessionIds && Array.isArray(data.sessionIds)) {
+        onDropSessions(data.sessionIds, folderId);
+      }
+    } catch (err) {
+      console.error("Failed to parse drop data:", err);
+    }
+  };
 
   const createFolderMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -528,8 +564,11 @@ function FolderSidebar({ folders, selectedFolderId, onSelectFolder, sessions }: 
         <button
           className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover-elevate ${
             selectedFolderId === "unfiled" ? "bg-accent text-accent-foreground" : ""
-          }`}
+          } ${dragOverFolderId === "unfiled" ? "ring-2 ring-primary bg-primary/10" : ""}`}
           onClick={() => onSelectFolder("unfiled")}
+          onDragOver={(e) => handleDragOver(e, "unfiled")}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, null)}
           data-testid="folder-unfiled"
         >
           <Folder className="h-4 w-4 shrink-0" />
@@ -578,8 +617,11 @@ function FolderSidebar({ folders, selectedFolderId, onSelectFolder, sessions }: 
               <button
                 className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover-elevate ${
                   selectedFolderId === folder.id ? "bg-accent text-accent-foreground" : ""
-                }`}
+                } ${dragOverFolderId === folder.id ? "ring-2 ring-primary bg-primary/10" : ""}`}
                 onClick={() => onSelectFolder(folder.id)}
+                onDragOver={(e) => handleDragOver(e, folder.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, folder.id)}
                 data-testid={`folder-${folder.id}`}
               >
                 <Folder className="h-4 w-4 shrink-0" />
@@ -826,6 +868,9 @@ export default function DashboardPage() {
           selectedFolderId={selectedFolderId}
           onSelectFolder={setSelectedFolderId}
           sessions={sessions}
+          onDropSessions={(sessionIds, folderId) => {
+            moveSessionsMutation.mutate({ sessionIds, folderId });
+          }}
         />
       )}
       <div className="flex-1 overflow-auto">
@@ -890,6 +935,7 @@ export default function DashboardPage() {
                   isSelected={selectedSessionIds.has(session.id)}
                   onSelect={handleSelectSession}
                   selectionMode={selectionMode}
+                  selectedSessionIds={selectedSessionIds}
                 />
               ))}
             </div>
