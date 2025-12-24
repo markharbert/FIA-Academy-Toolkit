@@ -212,6 +212,40 @@ export type ScoreResult = z.infer<typeof scoreResultSchema>;
 export const titleSources = ["ai", "user"] as const;
 export type TitleSource = typeof titleSources[number];
 
+// Processing status types for video processing pipeline
+export const processingStatuses = [
+  "queued",
+  "uploading",
+  "transcoding",
+  "transcribing",
+  "scoring",
+  "ready",
+  "failed",
+] as const;
+export type ProcessingStatus = typeof processingStatuses[number];
+
+// Processing step labels for UI display
+export const processingStepLabels: Record<ProcessingStatus, string> = {
+  queued: "Queued",
+  uploading: "Uploading video",
+  transcoding: "Converting video",
+  transcribing: "Transcribing audio",
+  scoring: "Analyzing and scoring",
+  ready: "Complete",
+  failed: "Failed",
+};
+
+// Processing step numbers (1-based)
+export const processingStepNumbers: Record<ProcessingStatus, number> = {
+  queued: 1,
+  uploading: 1,
+  transcoding: 2,
+  transcribing: 3,
+  scoring: 4,
+  ready: 5,
+  failed: 0,
+};
+
 // Sessions table for video practice sessions
 export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -234,6 +268,13 @@ export const sessions = pgTable("sessions", {
   titleGeneratedAt: timestamp("title_generated_at"),
   retranscribeCount: integer("retranscribe_count").default(0),
   lastRetranscribeAt: timestamp("last_retranscribe_at"),
+  processingStatus: text("processing_status").default("queued").$type<ProcessingStatus>(),
+  processingProgress: integer("processing_progress").default(0),
+  processingMessage: text("processing_message"),
+  processingError: text("processing_error"),
+  processingStartedAt: timestamp("processing_started_at"),
+  processingUpdatedAt: timestamp("processing_updated_at"),
+  processingCompletedAt: timestamp("processing_completed_at"),
 });
 
 export const insertSessionSchema = createInsertSchema(sessions).omit({

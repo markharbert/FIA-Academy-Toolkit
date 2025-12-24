@@ -33,6 +33,7 @@ import {
   applyTagToUser,
 } from "./keap";
 import { logUserAction, ActionLabels } from "./userActionLog";
+import { processSession, subscribeToSession } from "./processing";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const VIDEO_RETENTION_DAYS = 30;
@@ -1906,6 +1907,112 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Upload error:", err);
       res.status(500).json({ message: "Failed to upload video" });
+    }
+  });
+
+  // SSE endpoint for real-time processing progress
+  app.get("/api/sessions/:id/progress/stream", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      // Send current state immediately
+      const currentData = {
+        status: session.processingStatus || "queued",
+        progress: session.processingProgress || 0,
+        message: session.processingMessage || "Waiting...",
+        error: session.processingError || undefined,
+      };
+      res.write(`data: ${JSON.stringify(currentData)}\n\n`);
+
+      // Subscribe to updates
+      const unsubscribe = subscribeToSession(req.params.id, (data) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      });
+
+      // Heartbeat to keep connection alive
+      const heartbeat = setInterval(() => {
+        res.write(": heartbeat\n\n");
+      }, 30000);
+
+      req.on("close", () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+      });
+
+    } catch (err) {
+      console.error("Progress stream error:", err);
+      res.status(500).json({ message: "Failed to start progress stream" });
+    }
+  });
+
+  // Get current processing status (polling fallback)
+  app.get("/api/sessions/:id/progress", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      res.json({
+        status: session.processingStatus || "queued",
+        progress: session.processingProgress || 0,
+        message: session.processingMessage || "Waiting...",
+        error: session.processingError || undefined,
+        startedAt: session.processingStartedAt,
+        updatedAt: session.processingUpdatedAt,
+        completedAt: session.processingCompletedAt,
+      });
+    } catch (err) {
+      console.error("Get progress error:", err);
+      res.status(500).json({ message: "Failed to get progress" });
+    }
+  });
+
+  // Start background processing for a session
+  app.post("/api/sessions/:id/process", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.videoPath) {
+        return res.status(400).json({ message: "No video to process" });
+      }
+
+      // Start processing in background (don't await)
+      processSession(req.params.id, req.session.userId!).catch((err) => {
+        console.error("[Process] Background processing error:", err);
+      });
+
+      res.json({ message: "Processing started" });
+    } catch (err) {
+      console.error("Start processing error:", err);
+      res.status(500).json({ message: "Failed to start processing" });
     }
   });
 
