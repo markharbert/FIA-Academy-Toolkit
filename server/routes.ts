@@ -3058,45 +3058,73 @@ export async function registerRoutes(
   });
 
   app.get("/api/sessions/:id/video", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `vid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sessionId = req.params.id;
+    const userId = req.session.userId;
+    const rangeHeader = req.headers.range;
+    
+    console.log(`[Video:${traceId}] Request started - sessionId=${sessionId}, userId=${userId}, range=${rangeHeader || "none"}`);
+    
     try {
-      const session = await storage.getSession(req.params.id);
+      const session = await storage.getSession(sessionId);
       
       if (!session) {
-        return res.status(404).json({ message: "Session not found" });
+        console.log(`[Video:${traceId}] Session not found`);
+        return res.status(404).json({ message: "Session not found", traceId });
       }
 
-      if (session.userId !== req.session.userId) {
-        return res.status(403).json({ message: "Access denied" });
+      const currentUser = await storage.getUser(userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      
+      if (session.userId !== userId && !isAdmin) {
+        console.log(`[Video:${traceId}] Access denied - user ${userId} is not owner and not admin`);
+        return res.status(403).json({ message: "Access denied", traceId });
       }
 
       if (session.videoDeletedAt) {
-        return res.status(404).json({ message: "Video not available" });
+        console.log(`[Video:${traceId}] Video was deleted at ${session.videoDeletedAt}`);
+        return res.status(404).json({ message: "Video not available", traceId });
       }
 
-      // Determine which video path to use (prefer preview video)
       const preferredVideoPath = session.previewVideoPath || session.videoPath;
       const preferredCloudPath = session.previewCloudStoragePath || session.cloudStoragePath;
 
+      console.log(`[Video:${traceId}] Paths - local=${preferredVideoPath || "none"}, cloud=${preferredCloudPath || "none"}`);
+
       if (!preferredVideoPath && !preferredCloudPath) {
-        return res.status(404).json({ message: "Video not available" });
+        console.log(`[Video:${traceId}] No video path available`);
+        return res.status(404).json({ message: "Video not available", traceId });
       }
 
       const mimeType = session.videoMimeType || "video/mp4";
+      
+      res.setHeader("Cache-Control", "no-store");
 
-      // Try local file first (prioritize preview if available)
       if (preferredVideoPath) {
         const videoPath = path.join(UPLOADS_DIR, preferredVideoPath);
-        if (fs.existsSync(videoPath)) {
+        const exists = fs.existsSync(videoPath);
+        console.log(`[Video:${traceId}] Local file check - path=${videoPath}, exists=${exists}`);
+        
+        if (exists) {
           const stat = fs.statSync(videoPath);
           const fileSize = stat.size;
-          const range = req.headers.range;
+          console.log(`[Video:${traceId}] File size=${fileSize}`);
 
-          if (range) {
-            const parts = range.replace(/bytes=/, "").split("-");
-            const start = parseInt(parts[0], 10);
-            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          if (rangeHeader) {
+            const parts = rangeHeader.replace(/bytes=/, "").split("-");
+            let start = parseInt(parts[0], 10);
+            let end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            
+            if (isNaN(start) || start < 0) start = 0;
+            if (isNaN(end) || end >= fileSize) end = fileSize - 1;
+            if (start > end) {
+              console.log(`[Video:${traceId}] Invalid range: start=${start} > end=${end}`);
+              res.setHeader("Content-Range", `bytes */${fileSize}`);
+              return res.status(416).json({ message: "Range not satisfiable", traceId });
+            }
+            
             const chunkSize = end - start + 1;
-            const file = fs.createReadStream(videoPath, { start, end });
+            console.log(`[Video:${traceId}] Streaming range ${start}-${end}/${fileSize}`);
             
             res.writeHead(206, {
               "Content-Range": `bytes ${start}-${end}/${fileSize}`,
@@ -3104,34 +3132,52 @@ export async function registerRoutes(
               "Content-Length": chunkSize,
               "Content-Type": mimeType,
             });
+            
+            const file = fs.createReadStream(videoPath, { start, end });
+            file.on("error", (err) => {
+              console.error(`[Video:${traceId}] Stream error:`, err);
+            });
             file.pipe(res);
           } else {
+            console.log(`[Video:${traceId}] Streaming full file`);
             res.writeHead(200, {
               "Content-Length": fileSize,
               "Content-Type": mimeType,
               "Accept-Ranges": "bytes",
             });
-            fs.createReadStream(videoPath).pipe(res);
+            const file = fs.createReadStream(videoPath);
+            file.on("error", (err) => {
+              console.error(`[Video:${traceId}] Stream error:`, err);
+            });
+            file.pipe(res);
           }
           return;
         }
       }
 
-      // Fall back to Object Storage if local file not found
       if (preferredCloudPath) {
-        console.log(`[Video] Local file not found, streaming from cloud storage: ${preferredCloudPath}`);
+        console.log(`[Video:${traceId}] Streaming from cloud storage: ${preferredCloudPath}`);
         try {
           const objectFile = await objectStorageService.getObjectEntityFile(preferredCloudPath);
           const [metadata] = await objectFile.getMetadata();
           const fileSize = parseInt(metadata.size?.toString() || "0", 10);
-          const range = req.headers.range;
+          console.log(`[Video:${traceId}] Cloud file size=${fileSize}`);
           
-          if (range && fileSize > 0) {
-            // Handle range requests for cloud storage
-            const parts = range.replace(/bytes=/, "").split("-");
-            const start = parseInt(parts[0], 10);
-            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          if (rangeHeader && fileSize > 0) {
+            const parts = rangeHeader.replace(/bytes=/, "").split("-");
+            let start = parseInt(parts[0], 10);
+            let end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            
+            if (isNaN(start) || start < 0) start = 0;
+            if (isNaN(end) || end >= fileSize) end = fileSize - 1;
+            if (start > end) {
+              console.log(`[Video:${traceId}] Invalid cloud range: start=${start} > end=${end}`);
+              res.setHeader("Content-Range", `bytes */${fileSize}`);
+              return res.status(416).json({ message: "Range not satisfiable", traceId });
+            }
+            
             const chunkSize = end - start + 1;
+            console.log(`[Video:${traceId}] Cloud range ${start}-${end}/${fileSize}`);
             
             res.writeHead(206, {
               "Content-Range": `bytes ${start}-${end}/${fileSize}`,
@@ -3142,13 +3188,14 @@ export async function registerRoutes(
             
             const stream = objectFile.createReadStream({ start, end });
             stream.on("error", (err) => {
-              console.error("[Video] Cloud storage stream error:", err);
+              console.error(`[Video:${traceId}] Cloud stream error:`, err);
               if (!res.headersSent) {
-                res.status(500).json({ message: "Failed to stream video from cloud storage" });
+                res.status(500).json({ message: "Failed to stream video", traceId });
               }
             });
             stream.pipe(res);
           } else {
+            console.log(`[Video:${traceId}] Streaming full cloud file`);
             res.writeHead(200, {
               "Content-Type": mimeType,
               "Content-Length": fileSize,
@@ -3157,84 +3204,106 @@ export async function registerRoutes(
             
             const stream = objectFile.createReadStream();
             stream.on("error", (err) => {
-              console.error("[Video] Cloud storage stream error:", err);
+              console.error(`[Video:${traceId}] Cloud stream error:`, err);
               if (!res.headersSent) {
-                res.status(500).json({ message: "Failed to stream video from cloud storage" });
+                res.status(500).json({ message: "Failed to stream video", traceId });
               }
             });
             stream.pipe(res);
           }
           return;
         } catch (cloudErr) {
-          console.error("[Video] Failed to stream from cloud storage:", cloudErr);
-          return res.status(404).json({ message: "Video file not found in local or cloud storage" });
+          console.error(`[Video:${traceId}] Cloud storage error:`, cloudErr);
+          return res.status(404).json({ message: "Video file not found", traceId });
         }
       }
 
-      return res.status(404).json({ message: "Video file not found" });
+      console.log(`[Video:${traceId}] No video file found in any location`);
+      return res.status(404).json({ message: "Video file not found", traceId });
     } catch (err) {
-      console.error("Video stream error:", err);
-      res.status(500).json({ message: "Failed to stream video" });
+      console.error(`[Video:${traceId}] Unexpected error:`, err);
+      res.status(500).json({ message: "Failed to stream video", traceId });
     }
   });
 
   app.get("/api/sessions/:id/hls/playlist.m3u8", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `hls-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sessionId = req.params.id;
+    const userId = req.session.userId;
+    
+    console.log(`[HLS:${traceId}] Playlist request - sessionId=${sessionId}, userId=${userId}`);
+    
     try {
-      const session = await storage.getSession(req.params.id);
+      const session = await storage.getSession(sessionId);
       
       if (!session) {
-        return res.status(404).json({ message: "Session not found" });
+        console.log(`[HLS:${traceId}] Session not found`);
+        return res.status(404).json({ message: "Session not found", traceId });
       }
 
-      if (session.userId !== req.session.userId) {
-        return res.status(403).json({ message: "Access denied" });
+      const currentUser = await storage.getUser(userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      
+      if (session.userId !== userId && !isAdmin) {
+        console.log(`[HLS:${traceId}] Access denied - user ${userId} is not owner and not admin`);
+        return res.status(403).json({ message: "Access denied", traceId });
       }
 
       if (!session.hlsPlaylistPath || !session.hlsDir) {
-        return res.status(404).json({ message: "HLS preview not available" });
+        console.log(`[HLS:${traceId}] HLS not available - playlistPath=${session.hlsPlaylistPath}, dir=${session.hlsDir}`);
+        return res.status(404).json({ message: "HLS preview not available", traceId });
       }
 
       const playlistPath = path.join(UPLOADS_DIR, session.hlsPlaylistPath);
+      const exists = fs.existsSync(playlistPath);
+      console.log(`[HLS:${traceId}] Playlist file - path=${playlistPath}, exists=${exists}`);
       
-      if (!fs.existsSync(playlistPath)) {
-        return res.status(404).json({ message: "Playlist not found" });
+      if (!exists) {
+        return res.status(404).json({ message: "Playlist not found", traceId });
       }
 
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       fs.createReadStream(playlistPath).pipe(res);
     } catch (err) {
-      console.error("HLS playlist error:", err);
-      res.status(500).json({ message: "Failed to serve playlist" });
+      console.error(`[HLS:${traceId}] Playlist error:`, err);
+      res.status(500).json({ message: "Failed to serve playlist", traceId });
     }
   });
 
   app.get("/api/sessions/:id/hls/:segment", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `seg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sessionId = req.params.id;
+    const userId = req.session.userId;
+    const segmentName = req.params.segment;
+    
     try {
-      const session = await storage.getSession(req.params.id);
+      const session = await storage.getSession(sessionId);
       
       if (!session) {
-        return res.status(404).json({ message: "Session not found" });
+        return res.status(404).json({ message: "Session not found", traceId });
       }
 
-      if (session.userId !== req.session.userId) {
-        return res.status(403).json({ message: "Access denied" });
+      const currentUser = await storage.getUser(userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      
+      if (session.userId !== userId && !isAdmin) {
+        return res.status(403).json({ message: "Access denied", traceId });
       }
 
       if (!session.hlsDir) {
-        return res.status(404).json({ message: "HLS preview not available" });
+        return res.status(404).json({ message: "HLS preview not available", traceId });
       }
 
-      const segmentName = req.params.segment;
-      
       if (!segmentName.match(/^(init\.mp4|segment_\d{4}\.m4s)$/)) {
-        return res.status(400).json({ message: "Invalid segment name" });
+        return res.status(400).json({ message: "Invalid segment name", traceId });
       }
 
       const segmentPath = path.join(UPLOADS_DIR, session.hlsDir, segmentName);
       
       if (!fs.existsSync(segmentPath)) {
-        return res.status(404).json({ message: "Segment not found" });
+        console.log(`[HLS:${traceId}] Segment not found - path=${segmentPath}`);
+        return res.status(404).json({ message: "Segment not found", traceId });
       }
 
       const contentType = segmentName.endsWith(".mp4") ? "video/mp4" : "video/iso.segment";
@@ -3242,8 +3311,8 @@ export async function registerRoutes(
       res.setHeader("Cache-Control", "public, max-age=31536000");
       fs.createReadStream(segmentPath).pipe(res);
     } catch (err) {
-      console.error("HLS segment error:", err);
-      res.status(500).json({ message: "Failed to serve segment" });
+      console.error(`[HLS:${traceId}] Segment error:`, err);
+      res.status(500).json({ message: "Failed to serve segment", traceId });
     }
   });
 
@@ -3255,7 +3324,10 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Session not found" });
       }
 
-      if (session.userId !== req.session.userId) {
+      const currentUser = await storage.getUser(req.session.userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      
+      if (session.userId !== req.session.userId && !isAdmin) {
         return res.status(403).json({ message: "Access denied" });
       }
 
@@ -3277,6 +3349,7 @@ export async function registerRoutes(
       const filename = `practice-session-${session.id}${ext}`;
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Type", session.videoMimeType || "video/mp4");
+      res.setHeader("Cache-Control", "no-store");
       
       fs.createReadStream(videoPath).pipe(res);
     } catch (err) {
@@ -3293,7 +3366,10 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Session not found" });
       }
 
-      if (session.userId !== req.session.userId) {
+      const currentUser = await storage.getUser(req.session.userId!);
+      const isAdmin = currentUser?.isAdmin === true;
+      
+      if (session.userId !== req.session.userId && !isAdmin) {
         return res.status(403).json({ message: "Access denied" });
       }
 

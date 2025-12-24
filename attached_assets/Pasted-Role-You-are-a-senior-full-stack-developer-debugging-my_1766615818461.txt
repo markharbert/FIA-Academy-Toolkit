@@ -1,0 +1,301 @@
+Role: You are a senior full stack developer debugging my existing Replit project (Fearless Video Coach). Video playback previously worked perfectly. Now, after a user logs out and logs back in, the session page shows “Failed to load video 500” with a retry button. This is a server-side error. The preview video should be playable during generation if we use streaming preview, and once it is finished it must always be playable until the 30-day expiration. It must not “move” or become unavailable after logout/login.
+
+Your job is to find the exact root cause of the 500 error and fix it permanently. Do not guess. Use real logs, request tracing, and direct endpoint testing.
+
+High Priority Outcomes
+
+Fix the 500 error and restore reliable preview playback across sessions and after re-login.
+
+Ensure the stored preview asset is persistent and served from a stable key/path until expiration.
+
+Ensure auth works for video endpoints without redirects or HTML responses.
+
+Ensure caching and cookies do not break streaming endpoints.
+
+Add guardrails so this regression cannot happen again.
+
+PART 1: Reproduce and Capture the Exact Failing Request
+
+Pick a session that has completed encoding and should have a ready preview.
+
+Log out, log back in, open that session page.
+
+In browser devtools Network tab, identify the exact request returning 500:
+
+MP4 stream endpoint (example: /api/sessions/:id/video/preview/stream)
+or
+
+HLS playlist endpoint (.m3u8)
+or
+
+segment endpoint (.m4s/.ts)
+
+Record:
+
+request URL
+
+request headers (especially Cookie, Authorization, Range)
+
+response status 500
+
+response body (error message if any)
+
+response headers
+
+Also capture console errors from the player or hls.js.
+
+PART 2: Backend Logging With TraceId (Mandatory)
+
+Implement a traceId on every video request:
+
+Frontend adds X-Trace-Id header for video fetches if possible.
+
+Backend generates one if missing.
+
+For every request to video endpoints, log:
+
+traceId
+
+sessionId
+
+userId (from auth)
+
+endpoint name
+
+storageKey resolved
+
+file path resolved
+
+file exists check result
+
+fs stat results (size)
+
+Range header value
+
+whether request is partial (Range)
+
+response status
+
+error stack trace on 500
+
+Then reproduce again and use traceId to locate the precise failure.
+
+PART 3: Most Likely Root Causes (You Must Check All)
+
+Because it breaks after logout/login and results in 500, focus on these:
+
+A) Storage key resolution depends on session cookie state
+
+After login, code path might resolve the wrong userId or wrong environment storage path.
+Fix:
+
+Never derive storage key from cookie-only state.
+
+Always derive previewVideoStorageKey from the session record in DB by sessionId.
+
+Ensure ownership check happens separately and does not mutate the key.
+
+B) Video endpoint is trying to serve a signed URL that is expired or not regenerated
+
+If you store signed URLs in DB, they will expire and fail later.
+Fix:
+
+Store only storageKey in DB.
+
+Generate a fresh signed URL per request, never persist signed URLs.
+
+C) Pathing differences between “dev” and “published” environments
+
+After relogin, the app might run in a different environment or different base path.
+Fix:
+
+Use absolute, environment-safe paths.
+
+Do not rely on current working directory.
+
+Use a stable storage location, and store full storage keys.
+
+D) Range request handling bug
+
+The endpoint might crash when Range header exists.
+
+After relogin, the browser may request Range differently.
+Fix:
+
+Implement robust Range parsing:
+
+Validate range values
+
+Clamp ranges to file size
+
+Return 416 for invalid ranges, not 500
+
+Return 206 with correct Content-Range, Content-Length
+
+E) Auth middleware returns HTML redirect, and streaming code breaks parsing
+
+If middleware returns HTML, player might show errors, but your code might throw and cause 500.
+Fix:
+
+For /api/video endpoints, auth failures must return 401 JSON, never redirect.
+
+F) File is being deleted or moved after processing
+
+A cleanup task might be deleting preview files too early.
+Fix:
+
+Verify expiresAt logic.
+
+Ensure no job deletes preview before 30 days.
+
+Ensure “delete original upload” does not accidentally delete preview.
+
+G) Cache layer serving wrong response
+
+If you introduced caching headers incorrectly, you could be caching a 500 or a signed URL.
+Fix:
+
+For authenticated streaming endpoints, set:
+
+Cache-Control: no-store
+
+For signed URL playback, signed URL itself can be cached client-side briefly, but do not cache the API response for long.
+
+PART 4: Required Durable Playback Architecture (Implement This If Not Already)
+
+To make this bulletproof, implement the following:
+
+A) Store persistent keys, not URLs
+Sessions table must store:
+
+previewVideoStorageKey (persistent, never changes)
+
+previewPosterStorageKey (persistent)
+
+expiresAt (30 day expiration)
+
+Never store:
+
+signed playback URLs
+
+filesystem absolute paths that can change between deployments
+
+B) Playback endpoint must derive the file from DB every time
+GET /api/sessions/:id/video/preview/stream
+Steps:
+
+Authenticate user
+
+Authorize ownership/admin
+
+Load session record by :id
+
+Resolve previewVideoStorageKey
+
+Map storage key to a real file location or object storage
+
+Stream the file with Range support
+
+Return correct headers
+
+If previewVideoStorageKey is missing:
+
+return 404 with JSON: { error: "Preview not ready" }
+
+C) Signed URL approach (alternative)
+GET /api/sessions/:id/video/preview/url
+
+Generate a fresh signed URL each time
+
+Return it to client
+
+Client sets video src to signed URL
+Do not save the signed URL in DB.
+
+PART 5: Fix the “Preview during encoding” Expectation
+
+If using MP4 preview generation, you cannot reliably play while it is still being written.
+
+If you need playback while still generating, you must use HLS (playlist + segments).
+If you already implemented HLS:
+
+Confirm playlist and segments are persisted and served after relogin.
+
+Confirm playlist URL generation is not session-state dependent.
+
+Confirm segment endpoints have correct auth and do not 500.
+
+If you did not implement HLS, then update the UI language:
+
+While encoding: show “Generating preview”
+
+Only start playback once preview is ready
+This avoids false expectations.
+
+PART 6: Concrete Fix Requirements For The 500 Error
+
+You must implement all of these:
+
+Add safe error handling in streaming endpoints:
+
+return 404 if file not found
+
+return 401 if not auth
+
+return 403 if not authorized
+
+return 416 for invalid Range
+Never return 500 unless it is truly unexpected.
+
+Add file existence check before streaming:
+
+If file missing, log storageKey and return 404.
+
+Add Cache-Control for streaming:
+
+Cache-Control: no-store
+This prevents caching weird auth states.
+
+Validate that preview files are not being deleted:
+
+audit cleanup job conditions
+
+ensure expiration uses expiresAt and current time
+
+Ensure consistent environment paths:
+
+centralize storage path mapping function
+
+unit test it with published environment settings
+
+PART 7: Verification Checklist (Must Pass)
+
+Upload and process a video.
+
+Confirm preview plays.
+
+Log out, log back in.
+
+Open the same session page:
+
+preview must still load and play
+
+no 500 errors
+
+Repeat on 3 sessions.
+
+Confirm the preview is accessible until expiresAt and then becomes unavailable.
+
+Confirm video endpoint returns correct status codes for missing files and invalid Range, not 500.
+
+Deliverables
+
+Exact root cause identified with the failing endpoint and stack trace (redacted).
+
+Code fix that resolves 500 after relogin.
+
+Confirmed stable preview playback after logout/login.
+
+Added no-store caching and robust Range handling so regressions are less likely.
+
+Now diagnose the 500 video load failure after logout/login and implement the durable storageKey-based playback endpoint with correct auth, caching, and Range support so the preview video always loads until the 30-day expiration.
