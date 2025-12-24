@@ -993,7 +993,7 @@ export default function SessionPage() {
               const previewReady = previewPath && previewPath !== "failed";
               const hasVideoPath = !!session?.videoPath;
               const posterPath = (session as any)?.previewPosterPath;
-              const posterUrl = posterPath ? `/api/sessions/${activeSessionId}/poster` : null;
+              const posterUrl = posterPath && posterPath !== "failed" ? `/api/sessions/${activeSessionId}/poster` : null;
               const isStillProcessing = session?.processingStatus && 
                 !["ready", "failed"].includes(session.processingStatus);
               
