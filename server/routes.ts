@@ -1925,9 +1925,11 @@ export async function registerRoutes(
       const videoFullPath = path.join(UPLOADS_DIR, session.videoPath);
       let mp4Path = videoFullPath;
       let outputFilename = session.videoPath;
+      let skippedConversion = false;
 
       if (session.videoPath.endsWith(".mp4")) {
         console.log(`[Convert] Session ${session.id} already has MP4, skipping conversion`);
+        skippedConversion = true;
         if (session.videoMimeType !== "video/mp4") {
           await storage.updateSession(session.id, { videoMimeType: "video/mp4" });
         }
@@ -1968,10 +1970,11 @@ export async function registerRoutes(
       }
 
       res.json({ 
-        message: "Video converted successfully",
+        message: skippedConversion ? "Video already in MP4 format" : "Video converted successfully",
         videoPath: outputFilename,
         thumbnailPath: thumbnailPath,
         thumbnailError: thumbnailError,
+        skipped: skippedConversion,
       });
     } catch (err) {
       console.error("Convert error:", err);
