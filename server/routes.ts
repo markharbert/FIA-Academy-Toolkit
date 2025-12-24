@@ -3178,6 +3178,75 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/sessions/:id/hls/playlist.m3u8", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.hlsPlaylistPath || !session.hlsDir) {
+        return res.status(404).json({ message: "HLS preview not available" });
+      }
+
+      const playlistPath = path.join(UPLOADS_DIR, session.hlsPlaylistPath);
+      
+      if (!fs.existsSync(playlistPath)) {
+        return res.status(404).json({ message: "Playlist not found" });
+      }
+
+      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      fs.createReadStream(playlistPath).pipe(res);
+    } catch (err) {
+      console.error("HLS playlist error:", err);
+      res.status(500).json({ message: "Failed to serve playlist" });
+    }
+  });
+
+  app.get("/api/sessions/:id/hls/:segment", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.hlsDir) {
+        return res.status(404).json({ message: "HLS preview not available" });
+      }
+
+      const segmentName = req.params.segment;
+      
+      if (!segmentName.match(/^(init\.mp4|segment_\d{4}\.m4s)$/)) {
+        return res.status(400).json({ message: "Invalid segment name" });
+      }
+
+      const segmentPath = path.join(UPLOADS_DIR, session.hlsDir, segmentName);
+      
+      if (!fs.existsSync(segmentPath)) {
+        return res.status(404).json({ message: "Segment not found" });
+      }
+
+      const contentType = segmentName.endsWith(".mp4") ? "video/mp4" : "video/iso.segment";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=31536000");
+      fs.createReadStream(segmentPath).pipe(res);
+    } catch (err) {
+      console.error("HLS segment error:", err);
+      res.status(500).json({ message: "Failed to serve segment" });
+    }
+  });
+
   app.get("/api/sessions/:id/download", requireAuth, async (req: Request, res: Response) => {
     try {
       const session = await storage.getSession(req.params.id);

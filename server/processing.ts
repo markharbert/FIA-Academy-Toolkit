@@ -1,8 +1,8 @@
 import { storage } from "./storage";
-import { generatePreview, generateThumbnail, extractAudioFast, probeVideo } from "./ffmpeg";
+import { generatePreview, generateThumbnail, extractAudioFast, probeVideo, generateHlsPreview } from "./ffmpeg";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { ObjectStorageService } from "./replit_integrations/object_storage/objectStorage";
-import type { ProcessingStatus, GoalType, InsertProcessingMetric } from "@shared/schema";
+import type { ProcessingStatus, GoalType, InsertProcessingMetric, HlsStatus, TranscriptStatus, ScoreStatus } from "@shared/schema";
 import path from "path";
 import fs from "fs";
 
@@ -157,6 +157,74 @@ async function deleteOriginalUpload(
     });
   } catch (err) {
     console.error("[Processing] Error deleting original files:", err);
+  }
+}
+
+async function generateHlsInBackground(
+  sessionId: string,
+  videoFullPath: string
+): Promise<void> {
+  console.log(`[Processing] Starting HLS preview generation for session ${sessionId}`);
+  
+  try {
+    await storage.updateSession(sessionId, {
+      hlsStatus: "generating" as HlsStatus,
+    });
+    
+    const hlsStart = new Date();
+    const result = await generateHlsPreview(videoFullPath, UPLOADS_DIR, sessionId, {
+      onPlayable: async (playlistPath, hlsDir) => {
+        try {
+          await storage.updateSession(sessionId, {
+            hlsStatus: "playable" as HlsStatus,
+            hlsPlaylistPath: playlistPath,
+            hlsDir: hlsDir,
+            hlsReadyAt: new Date(),
+          });
+          console.log(`[Processing] HLS playable for session ${sessionId}`);
+          await recordMetric(sessionId, "hls_playable", hlsStart, true);
+        } catch (err) {
+          console.warn("[Processing] Failed to update HLS playable status:", err);
+        }
+      },
+      onComplete: async (playlistPath, hlsDir) => {
+        try {
+          await storage.updateSession(sessionId, {
+            hlsStatus: "complete" as HlsStatus,
+            hlsPlaylistPath: playlistPath,
+            hlsDir: hlsDir,
+            hlsCompleteAt: new Date(),
+          });
+          console.log(`[Processing] HLS complete for session ${sessionId}`);
+          await recordMetric(sessionId, "hls_complete", hlsStart, true);
+        } catch (err) {
+          console.warn("[Processing] Failed to update HLS complete status:", err);
+        }
+      },
+      onError: async (error) => {
+        try {
+          await storage.updateSession(sessionId, {
+            hlsStatus: "failed" as HlsStatus,
+            hlsError: error,
+          });
+          await recordMetric(sessionId, "hls_generation", hlsStart, false, error);
+        } catch (err) {
+          console.warn("[Processing] Failed to update HLS error status:", err);
+        }
+      },
+    });
+    
+    if (!result.success) {
+      console.warn(`[Processing] HLS generation failed: ${result.error}`);
+    }
+  } catch (err) {
+    console.error(`[Processing] HLS generation error for session ${sessionId}:`, err);
+    try {
+      await storage.updateSession(sessionId, {
+        hlsStatus: "failed" as HlsStatus,
+        hlsError: String(err),
+      });
+    } catch {}
   }
 }
 
@@ -320,6 +388,13 @@ export async function processSession(sessionId: string, userId: string): Promise
     const originalUploadPath = session.originalUploadPath || session.videoPath;
     const originalCloudPath = session.cloudStoragePath;
     
+    generateHlsInBackground(sessionId, videoFullPath)
+      .catch(err => console.error(`[Processing] HLS generation failed:`, err));
+    
+    await storage.updateSession(sessionId, {
+      transcriptStatus: "extracting_audio" as TranscriptStatus,
+    });
+    
     await updateProcessingStatus(sessionId, "transcribing", 15, "Extracting audio from video...");
     
     const audioStart = new Date();
@@ -337,11 +412,12 @@ export async function processSession(sessionId: string, userId: string): Promise
       sizeBytes: audioResult.sizeBytes,
     });
     
-    if (audioResult.durationSeconds) {
-      await storage.updateSession(sessionId, {
-        durationSeconds: audioResult.durationSeconds,
-      });
-    }
+    await storage.updateSession(sessionId, {
+      audioPath: audioResult.audioPath,
+      audioExtractedAt: new Date(),
+      durationSeconds: audioResult.durationSeconds || undefined,
+      transcriptStatus: "transcribing" as TranscriptStatus,
+    });
     
     const audioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
     
@@ -357,12 +433,18 @@ export async function processSession(sessionId: string, userId: string): Promise
       
       await storage.updateSession(sessionId, {
         transcriptText: transcript,
+        transcriptStatus: "complete" as TranscriptStatus,
+        scoreStatus: "partial" as ScoreStatus,
       });
       
       console.log(`[Processing] Transcript ready (${transcript.length} chars)`);
       
     } catch (transcribeErr) {
       await recordMetric(sessionId, "transcription", new Date(), false, String(transcribeErr));
+      await storage.updateSession(sessionId, {
+        transcriptStatus: "failed" as TranscriptStatus,
+        scoreStatus: "failed" as ScoreStatus,
+      });
       try {
         if (fs.existsSync(audioPath)) {
           fs.unlinkSync(audioPath);
@@ -395,12 +477,16 @@ export async function processSession(sessionId: string, userId: string): Promise
         await storage.updateSession(sessionId, {
           scoreJson: scoreResult,
           scoreUpdatedAt: new Date(),
+          scoreStatus: "final" as ScoreStatus,
         });
         
         console.log(`[Processing] Score ready: ${scoreResult.totalScore}/100`);
         
       } catch (scoreErr) {
         await recordMetric(sessionId, "scoring", new Date(), false, String(scoreErr));
+        await storage.updateSession(sessionId, {
+          scoreStatus: "failed" as ScoreStatus,
+        });
         console.error("[Processing] Scoring failed:", scoreErr);
       }
       
