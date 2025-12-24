@@ -1,0 +1,319 @@
+Role: You are a senior full stack developer debugging my existing Replit project (Fearless Video Coach). The upload now forwards to the Session page, but the Session page does not process the video. It shows an empty video player and nothing else. There is no transcription, no scoring, no recommendations, and no progress indicator. Your job is to identify the exact break in the post-upload processing pipeline and fix it so the Session page reliably processes the uploaded video and updates the UI as results become available.
+
+High Priority Outcomes
+
+After upload completes, the session enters a “processing” state and actually runs the processing pipeline.
+
+The Session page shows a clear processing indicator and progress until the session is ready.
+
+When processing completes, the Session page automatically displays:
+
+Embedded video player that actually plays
+
+Transcript
+
+Score and 5-part breakdown
+
+Recommendations
+
+If processing fails, the Session page shows a clear error state with a retry option.
+
+Do not guess. Use logs, DB inspection, and network traces to find the root cause.
+
+PART 1: Reproduce and Pinpoint Where Processing Fails
+
+Upload a small MP4 and land on the Session page.
+
+In browser devtools, capture network calls made by the Session page:
+
+GET session details (example: GET /api/sessions/:id)
+
+Any progress endpoint (example: GET /api/sessions/:id/progress or SSE stream)
+
+Any processing start endpoint (example: POST /api/sessions/:id/process)
+
+Determine:
+
+Is the Session page calling a processing-start endpoint at all?
+
+If yes, what is the response status and payload?
+
+If no, the UI never triggers processing and we must implement it.
+
+On the backend, inspect the session record in the database:
+
+status
+
+processingStatus
+
+processingProgress
+
+processingStartedAt
+
+processingUpdatedAt
+
+processingError
+
+originalUploadStorageKey / file path
+
+finalVideoStorageKey (should be empty until done)
+
+transcript fields (empty until done)
+
+score fields (empty until done)
+
+Confirm whether any background job runs:
+
+Search logs for “processing started” for that sessionId
+
+If nothing, pipeline never started
+
+If it started and stopped, find the step it failed on
+
+Add traceId
+
+Use a traceId that persists from upload through session processing.
+
+Log traceId in session row for debugging.
+
+PART 2: Ensure Processing Starts Reliably After Upload
+
+You must implement a reliable start mechanism and confirm it runs exactly once.
+
+Preferred approach: Start processing on upload completion
+
+In upload complete handler (or equivalent):
+
+Validate uploaded file exists and is readable
+
+Update session:
+
+status = "processing"
+
+processingStatus = "validating"
+
+processingProgress = 5
+
+processingStartedAt = now
+
+Enqueue background job to run pipeline with sessionId
+
+Immediately return success to frontend.
+
+Fallback approach: Session page starts processing if needed
+If the system cannot start processing at upload completion, then implement:
+
+On Session page mount:
+
+Fetch session details
+
+If session.status is "uploaded" or "queued" and processingStartedAt is null:
+
+POST /api/sessions/:id/process
+
+That endpoint must:
+
+Set processingStartedAt if not set
+
+Enqueue the background job
+
+Return success immediately
+
+Prevent double starts
+
+Use a DB guard:
+
+If processingStartedAt is already set, return “already processing” and do not enqueue again.
+
+PART 3: Fix Why the Video Player Is Empty
+
+An empty player usually means the video src is missing or points to a non-existent resource.
+
+Required checks
+
+Confirm the session API returns:
+
+finalVideoUrl (when ready)
+
+or originalUploadUrl (if you choose to show while processing)
+
+On initial load, before ready:
+
+The player should either be hidden, show a placeholder, or show the original upload if supported.
+
+After transcoding completes:
+
+Set finalVideoStorageKey and finalVideoUrl
+
+Ensure the client re-fetches or receives an update and then sets the player src.
+
+Fix rules
+
+If final video not ready, do not render an empty player with no src.
+
+Render a placeholder skeleton video box with a “Processing video…” label.
+
+Only show the actual player once src is available.
+
+Also confirm:
+
+If using protected file serving, confirm the video URL requires auth and is accessible.
+
+Ensure video route supports byte-range requests if needed.
+
+PART 4: Add a Real Processing Indicator on the Session Page
+
+UI behavior requirements
+
+Immediately after redirect to Session page, show:
+
+A status line: “Processing your video”
+
+A progress bar that reflects real backend progress
+
+A step label: “Transcribing” etc
+
+A timer: elapsed time since processingStartedAt (not a fake ETA)
+
+The page must auto update until ready.
+
+When ready:
+
+Progress bar disappears or shows complete
+
+Results render instantly
+
+Backend progress source
+Use one of these:
+Option A: SSE stream
+
+GET /api/sessions/:id/progress/stream
+Option B: Polling
+
+GET /api/sessions/:id
+Return processing fields
+Poll every 2 seconds until ready or failed
+
+Session API must include
+GET /api/sessions/:id returns:
+{
+"id": "...",
+"status": "uploaded"|"processing"|"ready"|"failed"|"expired",
+"processing": {
+"status": "validating"|"transcoding"|"compressing"|"transcribing"|"scoring"|"recommending"|"ready"|"failed",
+"progress": 0-100,
+"message": "...",
+"startedAt": "...",
+"updatedAt": "...",
+"error": "..." (nullable)
+},
+"video": {
+"finalUrl": "...", // only when ready
+"originalUrl": "...", // optional if you want preview while processing
+"thumbnailUrl": "..." // optional
+},
+"transcript": {
+"available": true|false
+},
+"score": {
+"available": true|false
+},
+"recommendations": {
+"available": true|false
+}
+}
+
+PART 5: Ensure Processing Pipeline Writes Results Correctly
+
+You must confirm each pipeline step writes back to the DB so the UI has something to render:
+
+After validate:
+
+update processingStatus and progress
+
+After transcode:
+
+finalVideoStorageKey set
+
+finalVideoUrl becomes resolvable
+
+processingStatus updates
+
+After transcription:
+
+transcriptSegments saved
+
+transcriptAvailable true
+
+After scoring:
+
+scoreTotal and breakdown saved
+
+scoreAvailable true
+
+After recommendations:
+
+recommendations saved
+
+session status set to ready
+
+If any step fails:
+
+session status set to failed
+
+processingError saved with a safe message
+
+log full error server side
+
+PART 6: Add a Clear “Nothing Yet” and “Failed” UI State
+
+If still processing
+
+Show progress, no empty player.
+
+Keep the page informative:
+
+“Transcribing your audio…”
+
+elapsed time
+
+If failed
+
+Show:
+
+“Processing failed”
+
+short reason
+
+traceId
+
+Button: “Retry processing”
+Retry endpoint:
+POST /api/sessions/:id/retry
+It must:
+
+clear processingError
+
+set status to processing
+
+re-enqueue pipeline
+
+PART 7: Verification Checklist
+
+You must verify:
+
+Upload redirects to Session page
+
+Session page immediately shows processing indicator and progress bar
+
+Processing actually starts (confirmed by server logs and DB fields updating)
+
+When ready, the player has a valid src and plays
+
+Transcript, scoring, and recommendations render automatically
+
+Refreshing during processing keeps progress visible
+
+Failures show a clear error and retry works
+
+Now debug why processing is not starting or results are not being saved, fix the pipeline trigger, add the processing indicator, and ensure the Session page transitions from processing to ready correctly.

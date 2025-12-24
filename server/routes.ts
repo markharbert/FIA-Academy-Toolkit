@@ -2743,6 +2743,63 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/sessions/:id/retry-processing", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `retry-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`[Retry:${traceId}] Retrying processing for session ${req.params.id}`);
+
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found", traceId });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied", traceId });
+      }
+
+      if (session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date())) {
+        return res.status(410).json({ message: "Video has expired and cannot be reprocessed", traceId });
+      }
+
+      if (!session.videoPath) {
+        return res.status(400).json({ message: "No video to process", traceId });
+      }
+
+      const videoPath = path.join(UPLOADS_DIR, session.videoPath);
+      if (!fs.existsSync(videoPath)) {
+        return res.status(404).json({ message: "Video file not found", traceId });
+      }
+
+      if (session.processingStatus && !["failed", "ready"].includes(session.processingStatus)) {
+        return res.status(409).json({ message: "Video is already being processed", traceId });
+      }
+
+      await storage.updateSession(session.id, {
+        processingStatus: "queued",
+        processingProgress: 0,
+        processingMessage: "Queued for reprocessing...",
+        processingError: null,
+        processingStartedAt: null,
+        processingCompletedAt: null,
+      });
+
+      const userId = req.session.userId!;
+      setTimeout(() => {
+        console.log(`[Retry:${traceId}] Starting background reprocessing for session ${session.id}`);
+        processSession(session.id, userId).catch((err) => {
+          console.error(`[Retry:${traceId}] Background reprocessing error:`, err);
+        });
+      }, 0);
+
+      console.log(`[Retry:${traceId}] Reprocessing scheduled`);
+      res.json({ success: true, message: "Processing restarted", traceId });
+    } catch (err) {
+      console.error(`[Retry:${traceId}] Error:`, err);
+      res.status(500).json({ message: "Failed to retry processing", traceId });
+    }
+  });
+
   app.post("/api/sessions/:id/generate-title", requireAuth, async (req: Request, res: Response) => {
     try {
       const session = await storage.getSession(req.params.id);

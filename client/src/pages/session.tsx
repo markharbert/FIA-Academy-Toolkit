@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { 
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
@@ -19,9 +20,19 @@ import {
   TrendingUp, MessageSquare, Lightbulb, AlertTriangle, Quote,
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText
 } from "lucide-react";
-import type { Session, ScoreResult } from "@shared/schema";
+import type { Session, ScoreResult, ProcessingStatus } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+
+const processingStepLabels: Record<ProcessingStatus, string> = {
+  queued: "Preparing your video...",
+  uploading: "Uploading video...",
+  transcoding: "Processing video...",
+  transcribing: "Transcribing audio with AI...",
+  scoring: "Analyzing your video with AI...",
+  ready: "Processing complete!",
+  failed: "Processing failed",
+};
 
 function ScoreCircle({ score, size = "lg" }: { score: number; size?: "sm" | "lg" }) {
   const radius = size === "lg" ? 54 : 36;
@@ -176,9 +187,40 @@ export default function SessionPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
 
+  // Check if processing is still in progress to enable auto-refresh
+  const isProcessingActive = (data: Session | undefined) => {
+    if (!data) return true;
+    const status = data.processingStatus;
+    if (!status) return !data.transcriptText;
+    return !["ready", "failed"].includes(status);
+  };
+
   const { data: session, isLoading, error } = useQuery<Session>({
     queryKey: ["/api/sessions", sessionId],
     enabled: !!sessionId,
+    refetchInterval: (query) => {
+      const data = query.state.data as Session | undefined;
+      return isProcessingActive(data) ? 2000 : false;
+    },
+  });
+
+  // Retry processing mutation
+  const retryProcessingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/sessions/${sessionId}/retry-processing`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to retry processing");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions", sessionId] });
+      toast({ title: "Processing Restarted", description: "Your video is being processed again." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
   });
 
   const rescoreMutation = useMutation({
@@ -407,6 +449,53 @@ export default function SessionPage() {
                   <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-2" />
                   <p className="font-medium">Video Expired</p>
                   <p className="text-sm text-muted-foreground">This video is no longer available for playback or download</p>
+                </div>
+              </div>
+            ) : session.processingStatus === "failed" ? (
+              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
+                <div className="text-center space-y-4">
+                  <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+                  <div>
+                    <p className="font-medium text-destructive">Processing Failed</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {session.processingError || "An error occurred while processing your video."}
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={() => retryProcessingMutation.mutate()}
+                    disabled={retryProcessingMutation.isPending}
+                    data-testid="button-retry-processing"
+                  >
+                    {retryProcessingMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                    )}
+                    Retry Processing
+                  </Button>
+                </div>
+              </div>
+            ) : session.processingStatus && session.processingStatus !== "ready" ? (
+              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
+                <div className="text-center space-y-4 w-full max-w-md px-8">
+                  <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
+                  <div>
+                    <p className="font-medium" data-testid="text-processing-status">
+                      {processingStepLabels[session.processingStatus as ProcessingStatus] || "Processing..."}
+                    </p>
+                    {session.processingMessage && (
+                      <p className="text-sm text-muted-foreground mt-1">{session.processingMessage}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Progress value={session.processingProgress || 0} className="h-2" />
+                    <p className="text-xs text-muted-foreground">{session.processingProgress || 0}% complete</p>
+                  </div>
+                  {session.processingStartedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Started {formatDistanceToNow(new Date(session.processingStartedAt), { addSuffix: true })}
+                    </p>
+                  )}
                 </div>
               </div>
             ) : session.videoPath ? (
