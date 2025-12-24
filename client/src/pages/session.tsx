@@ -23,9 +23,10 @@ import {
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText,
   Upload, Settings, File, Video, Mic
 } from "lucide-react";
-import type { Session, ScoreResult, ProcessingStatus, GoalType } from "@shared/schema";
+import type { Session, ScoreResult, ProcessingStatus, GoalType, HlsStatus } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { HlsVideoPlayer } from "@/components/hls-video-player";
 
 const processingStepLabels: Record<ProcessingStatus, string> = {
   queued: "Preparing your video...",
@@ -220,9 +221,6 @@ export default function SessionPage() {
   const [copied, setCopied] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
-  const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null);
-  const [videoError, setVideoError] = useState<string | null>(null);
-  const [videoLoading, setVideoLoading] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const isUploading = uploadStep === "uploading";
@@ -503,58 +501,6 @@ export default function SessionPage() {
       console.error("[Upload] Error:", errorMessage);
     }
   };
-
-  useEffect(() => {
-    const isExpiredNow = session?.videoDeletedAt || (session?.expiresAt && new Date(session.expiresAt) < new Date());
-    
-    const previewPath = (session as any)?.previewVideoPath;
-    const previewFailed = previewPath === "failed";
-    const hasPreviewReady = previewPath && !previewFailed;
-    const processingPastTranscoding = session?.processingStatus && 
-      ["transcribing", "scoring", "ready"].includes(session.processingStatus);
-    const processingComplete = session?.processingStatus === "ready";
-    
-    const videoAvailable = session?.videoPath && (hasPreviewReady || processingPastTranscoding || processingComplete) && !previewFailed;
-    const shouldLoadVideo = videoAvailable && !isExpiredNow;
-
-    if (!shouldLoadVideo || !activeSessionId) {
-      return;
-    }
-
-    if (videoBlobUrl) return;
-
-    setVideoLoading(true);
-    setVideoError(null);
-
-    fetch(`/api/sessions/${activeSessionId}/video`, { credentials: "include" })
-      .then(async (res) => {
-        if (!res.ok) {
-          const contentType = res.headers.get("content-type");
-          if (contentType?.includes("application/json")) {
-            const data = await res.json();
-            throw new Error(data.message || `Failed to load video: ${res.status}`);
-          }
-          throw new Error(`Failed to load video: ${res.status}`);
-        }
-        return res.blob();
-      })
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        setVideoBlobUrl(url);
-        setVideoLoading(false);
-      })
-      .catch((err) => {
-        console.error("Video load error:", err);
-        setVideoError(err.message || "Failed to load video");
-        setVideoLoading(false);
-      });
-
-    return () => {
-      if (videoBlobUrl) {
-        URL.revokeObjectURL(videoBlobUrl);
-      }
-    };
-  }, [session?.id, session?.videoPath, (session as any)?.previewVideoPath, session?.processingStatus, session?.videoDeletedAt, session?.expiresAt, activeSessionId]);
 
   const downloadPdf = async () => {
     if (!activeSessionId) return;
@@ -988,84 +934,70 @@ export default function SessionPage() {
                   </Button>
                 </div>
               </div>
-            ) : session?.processingStatus && session.processingStatus !== "ready" && !videoBlobUrl ? (
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
-                <div className="text-center space-y-4 w-full max-w-md px-8">
-                  <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
-                  <div>
-                    <p className="font-medium" data-testid="text-processing-status">
-                      {processingStepLabels[session.processingStatus as ProcessingStatus] || "Processing..."}
-                    </p>
-                    {session.processingMessage && (
-                      <p className="text-sm text-muted-foreground mt-1">{session.processingMessage}</p>
-                    )}
+            ) : (() => {
+              const hlsStatus = (session as any)?.hlsStatus as HlsStatus | null;
+              const hlsPlayable = hlsStatus === "playable" || hlsStatus === "complete";
+              const previewPath = (session as any)?.previewVideoPath;
+              const previewReady = previewPath && previewPath !== "failed";
+              const canShowVideo = hlsPlayable || previewReady;
+              const isStillProcessing = session?.processingStatus && 
+                !["ready", "failed"].includes(session.processingStatus);
+              
+              if (isStillProcessing && !canShowVideo) {
+                return (
+                  <div className="flex aspect-video items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
+                    <div className="text-center space-y-4 w-full max-w-md px-8">
+                      <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
+                      <div>
+                        <p className="font-medium" data-testid="text-processing-status">
+                          {processingStepLabels[session.processingStatus as ProcessingStatus] || "Processing..."}
+                        </p>
+                        {session.processingMessage && (
+                          <p className="text-sm text-muted-foreground mt-1">{session.processingMessage}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Progress value={session.processingProgress || 0} className="h-2" />
+                        <p className="text-xs text-muted-foreground">{session.processingProgress || 0}% complete</p>
+                      </div>
+                      {session.processingStartedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Started {formatDistanceToNow(new Date(session.processingStartedAt), { addSuffix: true })}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Progress value={session.processingProgress || 0} className="h-2" />
-                    <p className="text-xs text-muted-foreground">{session.processingProgress || 0}% complete</p>
+                );
+              }
+              
+              if (canShowVideo && activeSessionId) {
+                return (
+                  <HlsVideoPlayer
+                    sessionId={activeSessionId}
+                    hlsStatus={hlsStatus}
+                    fallbackVideoPath={previewReady ? previewPath : session?.videoPath || null}
+                    className="aspect-video w-full rounded-lg bg-black"
+                  />
+                );
+              }
+              
+              if (session?.videoPath) {
+                return (
+                  <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
+                    <div className="text-center">
+                      <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                      <p className="mt-2 text-sm text-muted-foreground">Preparing video...</p>
+                    </div>
                   </div>
-                  {session.processingStartedAt && (
-                    <p className="text-xs text-muted-foreground">
-                      Started {formatDistanceToNow(new Date(session.processingStartedAt), { addSuffix: true })}
-                    </p>
-                  )}
+                );
+              }
+              
+              return (
+                <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
+                  <p className="text-muted-foreground">No video available</p>
                 </div>
-              </div>
-            ) : videoBlobUrl ? (
-              <video
-                key={videoBlobUrl}
-                src={videoBlobUrl}
-                controls
-                playsInline
-                preload="metadata"
-                className="aspect-video w-full rounded-lg bg-black"
-                data-testid="video-player"
-                onError={(e) => {
-                  const video = e.currentTarget;
-                  const errorCode = video.error?.code;
-                  const errorMessage = video.error?.message || "Unknown error";
-                  console.error(`Video playback error: code=${errorCode}, message=${errorMessage}`);
-                  setVideoError(`Playback error: ${errorMessage}`);
-                }}
-              />
-            ) : videoLoading ? (
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
-                <div className="text-center">
-                  <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                  <p className="mt-2 text-sm text-muted-foreground">Loading video...</p>
-                </div>
-              </div>
-            ) : videoError ? (
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
-                <div className="text-center space-y-3">
-                  <AlertCircle className="mx-auto h-10 w-10 text-destructive" />
-                  <p className="font-medium text-destructive">Video failed to load</p>
-                  <p className="text-sm text-muted-foreground">{videoError}</p>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setVideoError(null);
-                      setVideoBlobUrl(null);
-                    }}
-                    data-testid="button-reload-video"
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Retry
-                  </Button>
-                </div>
-              </div>
-            ) : session?.videoPath ? (
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
-                <div className="text-center">
-                  <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                  <p className="mt-2 text-sm text-muted-foreground">Preparing video...</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
-                <p className="text-muted-foreground">No video available</p>
-              </div>
-            )}
+              );
+            })()}
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             {!isExpired && session?.videoPath && (
