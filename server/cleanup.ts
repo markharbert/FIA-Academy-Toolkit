@@ -38,6 +38,51 @@ export async function cleanupExpiredVideos(): Promise<number> {
         }
       }
 
+      // Delete preview video
+      const previewVideoPath = (session as any).previewVideoPath;
+      if (previewVideoPath && previewVideoPath !== "failed") {
+        const previewFullPath = path.join(UPLOADS_DIR, previewVideoPath);
+        
+        try {
+          if (fs.existsSync(previewFullPath)) {
+            fs.unlinkSync(previewFullPath);
+            console.log(`[Cleanup] Deleted preview video: ${previewVideoPath}`);
+          }
+        } catch (err) {
+          console.error(`[Cleanup] Failed to delete preview video ${previewVideoPath}:`, err);
+        }
+      }
+
+      // Delete poster image
+      const posterPath = (session as any).previewPosterPath;
+      if (posterPath) {
+        const posterFullPath = path.join(UPLOADS_DIR, posterPath);
+        
+        try {
+          if (fs.existsSync(posterFullPath)) {
+            fs.unlinkSync(posterFullPath);
+            console.log(`[Cleanup] Deleted poster: ${posterPath}`);
+          }
+        } catch (err) {
+          console.error(`[Cleanup] Failed to delete poster ${posterPath}:`, err);
+        }
+      }
+
+      // Delete audio file if exists
+      const audioPath = (session as any).audioPath;
+      if (audioPath) {
+        const audioFullPath = path.join(UPLOADS_DIR, audioPath);
+        
+        try {
+          if (fs.existsSync(audioFullPath)) {
+            fs.unlinkSync(audioFullPath);
+            console.log(`[Cleanup] Deleted audio: ${audioPath}`);
+          }
+        } catch (err) {
+          console.error(`[Cleanup] Failed to delete audio ${audioPath}:`, err);
+        }
+      }
+
       await storage.markVideoDeleted(session.id);
       cleanedCount++;
     }
