@@ -32,6 +32,7 @@ import {
   syncUserToKeap,
   applyTagToUser,
 } from "./keap";
+import { logUserAction, ActionLabels } from "./userActionLog";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const VIDEO_RETENTION_DAYS = 30;
@@ -210,6 +211,19 @@ export async function registerRoutes(
       }
 
       req.session.userId = user.id;
+      
+      // Update last login timestamp
+      await storage.updateUser(user.id, { lastLoginAt: new Date() });
+      
+      // Log successful login
+      logUserAction({
+        userId: user.id,
+        actionType: "login_success",
+        actionLabel: ActionLabels.login_success,
+        entityType: "auth",
+        metadata: { method: "email" },
+        req,
+      });
 
       res.json({ user: { id: user.id, email: user.email } });
     } catch (err) {
@@ -218,7 +232,20 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/logout", (req: Request, res: Response) => {
+  app.post("/api/auth/logout", async (req: Request, res: Response) => {
+    const userId = req.session.userId;
+    
+    // Log logout before destroying session
+    if (userId) {
+      logUserAction({
+        userId,
+        actionType: "logout",
+        actionLabel: ActionLabels.logout,
+        entityType: "auth",
+        req,
+      });
+    }
+    
     req.session.destroy((err) => {
       if (err) {
         console.error("Logout error:", err);
@@ -1035,6 +1062,43 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to get user details" });
     }
   });
+  
+  // Admin: Get user action history
+  app.get("/api/admin/users/:id/actions", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const cursorParam = req.query.cursor as string | undefined;
+      
+      let cursor: { createdAt: Date; id: string } | undefined;
+      if (cursorParam) {
+        const [createdAtStr, cursorId] = cursorParam.split("|");
+        if (createdAtStr && cursorId) {
+          cursor = { createdAt: new Date(createdAtStr), id: cursorId };
+        }
+      }
+      
+      const result = await storage.getUserActionLogs({ userId: id, limit, cursor });
+      
+      res.json({
+        items: result.items.map(item => ({
+          id: item.id,
+          actionType: item.actionType,
+          actionLabel: item.actionLabel,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          metadata: item.metadataJson,
+          createdAt: item.createdAt,
+        })),
+        nextCursor: result.nextCursor 
+          ? `${result.nextCursor.createdAt.toISOString()}|${result.nextCursor.id}` 
+          : null,
+      });
+    } catch (err) {
+      console.error("Admin get user actions error:", err);
+      res.status(500).json({ message: "Failed to get user actions" });
+    }
+  });
 
   // Update user (role, disabled status, profile)
   app.patch("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
@@ -1154,30 +1218,91 @@ export async function registerRoutes(
         return res.status(400).json({ message: "User has no email address" });
       }
       
-      if (!targetUser.emailConsentAt) {
-        return res.status(400).json({ message: "User has not given email consent" });
+      // Log attempt
+      logUserAction({
+        userId: id,
+        actionType: "keap_sync_attempted",
+        actionLabel: ActionLabels.keap_sync_attempted,
+        entityType: "keap",
+        metadata: { triggeredBy: "admin", adminUserId: adminUser.id },
+        req,
+      });
+      
+      // Check if Keap is connected
+      const keapConnected = await isKeapConnected();
+      if (!keapConnected) {
+        return res.status(400).json({ message: "Keap is not connected" });
       }
       
-      // Trigger Keap sync
+      // Create or update contact
       const contactId = await createOrUpdateContact(
         targetUser.email!,
         targetUser.firstName || undefined,
         targetUser.lastName || undefined
       );
       
-      // Update user's keap sync status
-      if (contactId) {
-        await storage.updateUser(id, {
-          keapContactId: String(contactId),
-          keapSyncStatus: "synced",
-          keapLastSyncAt: new Date(),
-          keapSyncError: null,
+      if (!contactId) {
+        // Log failure
+        logUserAction({
+          userId: id,
+          actionType: "keap_sync_failed",
+          actionLabel: ActionLabels.keap_sync_failed,
+          entityType: "keap",
+          metadata: { reason: "No contact ID returned" },
+          req,
         });
+        
+        await storage.updateUser(id, {
+          keapSyncStatus: "failed",
+          keapLastSyncAt: new Date(),
+          keapSyncError: "Failed to create or update contact",
+        });
+        
+        return res.status(500).json({ message: "Failed to sync user to Keap" });
       }
       
-      const result = { success: !!contactId, contactId };
+      // Determine if created or updated
+      const wasCreated = !targetUser.keapContactId || targetUser.keapContactId !== String(contactId);
       
-      // Create audit log
+      // Apply default tag if set
+      let tagApplied = false;
+      const defaultTag = await getDefaultTag();
+      if (defaultTag && defaultTag.id) {
+        try {
+          const tagResult = await applyTagToUser(String(contactId), defaultTag.id);
+          tagApplied = tagResult;
+        } catch (tagErr) {
+          console.error(`Failed to apply tag to contact ${contactId}:`, tagErr);
+        }
+      }
+      
+      // Update user's keap sync status
+      await storage.updateUser(id, {
+        keapContactId: String(contactId),
+        keapSyncStatus: "synced",
+        keapLastSyncAt: new Date(),
+        keapSyncError: null,
+      });
+      
+      // Log success
+      logUserAction({
+        userId: id,
+        actionType: "keap_sync_succeeded",
+        actionLabel: ActionLabels.keap_sync_succeeded,
+        entityType: "keap",
+        metadata: { contactId, wasCreated, tagApplied, tagId: defaultTag?.id },
+        req,
+      });
+      
+      const result = { 
+        success: true, 
+        created: wasCreated,
+        updated: !wasCreated,
+        contactId: String(contactId),
+        tagApplied,
+      };
+      
+      // Create admin audit log
       await storage.createAuditLog({
         adminUserId: adminUser.id,
         action: "keap_sync",
@@ -1188,9 +1313,27 @@ export async function registerRoutes(
       });
       
       res.json(result);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Admin keap sync error:", err);
-      res.status(500).json({ message: "Failed to sync user to Keap" });
+      const userId = req.params.id;
+      
+      // Log failure
+      logUserAction({
+        userId,
+        actionType: "keap_sync_failed",
+        actionLabel: ActionLabels.keap_sync_failed,
+        entityType: "keap",
+        metadata: { error: err.message },
+        req,
+      });
+      
+      await storage.updateUser(userId, {
+        keapSyncStatus: "failed",
+        keapLastSyncAt: new Date(),
+        keapSyncError: err.message,
+      });
+      
+      res.status(500).json({ message: err.message || "Failed to sync user to Keap" });
     }
   });
 
@@ -1467,6 +1610,16 @@ export async function registerRoutes(
       if (!updatedUser) {
         return res.status(500).json({ message: "Failed to update account" });
       }
+      
+      // Log account update
+      logUserAction({
+        userId: user.id,
+        actionType: "account_updated",
+        actionLabel: ActionLabels.account_updated,
+        entityType: "account",
+        metadata: { fieldsUpdated: Object.keys(updates).filter(k => k !== 'updatedAt') },
+        req,
+      });
 
       const identities = await storage.getUserIdentitiesByUser(user.id);
       const connectedProviders = identities.map((i) => i.provider);
@@ -1671,6 +1824,17 @@ export async function registerRoutes(
         title: trimmedTitle,
         titleSource: trimmedTitle ? "user" : null,
         titleGeneratedAt: trimmedTitle ? new Date() : null,
+      });
+      
+      // Log session created
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "session_created",
+        actionLabel: ActionLabels.session_created,
+        entityType: "session",
+        entityId: session.id,
+        metadata: { goalType, title: trimmedTitle, durationSeconds },
+        req,
       });
 
       res.status(201).json({ id: session.id });

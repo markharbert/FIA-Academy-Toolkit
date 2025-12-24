@@ -1,11 +1,12 @@
 import { 
-  users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog,
+  users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult, type SystemSettings,
   type PasswordResetToken, type InsertPasswordResetToken,
   type UserIdentity, type InsertUserIdentity, type AuthProvider,
-  type AdminAuditLog, type InsertAdminAuditLog
+  type AdminAuditLog, type InsertAdminAuditLog,
+  type UserActionLog, type InsertUserActionLog, type UserActionType
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizzle-orm";
@@ -62,7 +63,7 @@ export interface IStorage {
     sort?: string;
     page?: number;
     pageSize?: number;
-  }): Promise<{ users: User[]; total: number }>;
+  }): Promise<{ users: (User & { totalVideos: number })[]; total: number }>;
   getAdminCount(): Promise<number>;
   getUserWithDetails(id: string): Promise<{
     user: User;
@@ -137,6 +138,17 @@ export interface IStorage {
       lastName: string | null;
     };
   } | undefined>;
+  
+  // User Action Log
+  createUserActionLog(log: InsertUserActionLog): Promise<UserActionLog>;
+  getUserActionLogs(options: {
+    userId: string;
+    limit: number;
+    cursor?: { createdAt: Date; id: string };
+  }): Promise<{
+    items: UserActionLog[];
+    nextCursor: { createdAt: Date; id: string } | null;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -326,7 +338,7 @@ export class DatabaseStorage implements IStorage {
     sort?: string;
     page?: number;
     pageSize?: number;
-  }): Promise<{ users: User[]; total: number }> {
+  }): Promise<{ users: (User & { totalVideos: number })[]; total: number }> {
     const { search, role, status, provider, consent, keapStatus, sort = "newest", page = 1, pageSize = 25 } = options;
     
     const conditions: any[] = [];
@@ -369,28 +381,47 @@ export class DatabaseStorage implements IStorage {
     // Get total count
     const [{ count: totalCount }] = await db.select({ count: count() }).from(users).where(whereClause);
     
-    // Get users with sorting
-    let orderBy;
+    // Get users with sorting and totalVideos count via LEFT JOIN
+    let orderByColumn;
+    let orderDirection: "asc" | "desc" = "desc";
     switch (sort) {
       case "oldest":
-        orderBy = asc(users.createdAt);
+        orderByColumn = users.createdAt;
+        orderDirection = "asc";
         break;
       case "last_login":
-        orderBy = desc(users.lastLoginAt);
+        orderByColumn = users.lastLoginAt;
+        orderDirection = "desc";
         break;
       case "newest":
       default:
-        orderBy = desc(users.createdAt);
+        orderByColumn = users.createdAt;
+        orderDirection = "desc";
     }
     
     const offset = (page - 1) * pageSize;
-    const userResults = await db.select().from(users)
+    
+    // Use aggregation query with LEFT JOIN to count sessions
+    const userResults = await db
+      .select({
+        user: users,
+        totalVideos: sql<number>`COALESCE(COUNT(${sessions.id}), 0)::int`,
+      })
+      .from(users)
+      .leftJoin(sessions, eq(sessions.userId, users.id))
       .where(whereClause)
-      .orderBy(orderBy)
+      .groupBy(users.id)
+      .orderBy(orderDirection === "asc" ? asc(orderByColumn) : desc(orderByColumn))
       .limit(pageSize)
       .offset(offset);
     
-    return { users: userResults, total: Number(totalCount) };
+    // Flatten the result to include totalVideos directly on user
+    const usersWithCounts = userResults.map(r => ({
+      ...r.user,
+      totalVideos: r.totalVideos,
+    }));
+    
+    return { users: usersWithCounts, total: Number(totalCount) };
   }
 
   async getAdminCount(): Promise<number> {
@@ -753,6 +784,59 @@ export class DatabaseStorage implements IStorage {
       session: result[0].session,
       user: result[0].user,
     };
+  }
+
+  // User Action Log
+  async createUserActionLog(log: InsertUserActionLog): Promise<UserActionLog> {
+    const [actionLog] = await db.insert(userActionLog).values(log as any).returning();
+    return actionLog;
+  }
+
+  async getUserActionLogs(options: {
+    userId: string;
+    limit: number;
+    cursor?: { createdAt: Date; id: string };
+  }): Promise<{
+    items: UserActionLog[];
+    nextCursor: { createdAt: Date; id: string } | null;
+  }> {
+    const { userId, limit, cursor } = options;
+    const fetchLimit = Math.min(limit, 100) + 1; // Fetch one extra to determine if there's more
+    
+    let conditions = [eq(userActionLog.userId, userId)];
+    
+    if (cursor) {
+      // Use cursor-based pagination (older items)
+      conditions.push(
+        or(
+          lt(userActionLog.createdAt, cursor.createdAt),
+          and(
+            eq(userActionLog.createdAt, cursor.createdAt),
+            lt(userActionLog.id, cursor.id)
+          )
+        ) as any
+      );
+    }
+    
+    const results = await db.select()
+      .from(userActionLog)
+      .where(and(...conditions))
+      .orderBy(desc(userActionLog.createdAt), desc(userActionLog.id))
+      .limit(fetchLimit);
+    
+    const hasMore = results.length > Math.min(limit, 100);
+    const items = results.slice(0, Math.min(limit, 100));
+    
+    let nextCursor: { createdAt: Date; id: string } | null = null;
+    if (hasMore && items.length > 0) {
+      const lastItem = items[items.length - 1];
+      nextCursor = {
+        createdAt: lastItem.createdAt,
+        id: lastItem.id,
+      };
+    }
+    
+    return { items, nextCursor };
   }
 }
 

@@ -55,7 +55,7 @@ import {
 import { 
   Settings, Link2, Unlink, Loader2, CheckCircle, XCircle, AlertCircle,
   Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
-  CheckCircle2, LogOut, RefreshCw, Tag, Check, ChevronsUpDown, Search, Mail, Eye
+  CheckCircle2, LogOut, RefreshCw, Tag, Check, ChevronsUpDown, Search, Mail, Eye, Info, Clock
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -106,6 +106,17 @@ interface AdminUser {
   keapContactId: string | null;
   lastLoginAt: string | null;
   providers: string[];
+  totalVideos: number;
+}
+
+interface UserAction {
+  id: string;
+  actionType: string;
+  actionLabel: string;
+  entityType: string | null;
+  entityId: string | null;
+  metadata: Record<string, any> | null;
+  createdAt: string;
 }
 
 interface UserDetails {
@@ -265,6 +276,14 @@ export default function AdminPage() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [sessionDetailLoading, setSessionDetailLoading] = useState(false);
+  
+  // User actions drawer
+  const [actionsUserId, setActionsUserId] = useState<string | null>(null);
+  const [actionsUser, setActionsUser] = useState<AdminUser | null>(null);
+  const [userActions, setUserActions] = useState<UserAction[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
+  const [actionsNextCursor, setActionsNextCursor] = useState<string | null>(null);
+  const [actionsLoadingMore, setActionsLoadingMore] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -510,6 +529,42 @@ export default function AdminPage() {
   const handleUserClick = (userId: string) => {
     setSelectedUserId(userId);
     fetchUserDetails(userId);
+  };
+  
+  const fetchUserActions = async (userId: string, cursor?: string) => {
+    if (cursor) {
+      setActionsLoadingMore(true);
+    } else {
+      setActionsLoading(true);
+      setUserActions([]);
+    }
+    
+    try {
+      const params = new URLSearchParams({ limit: "50" });
+      if (cursor) params.append("cursor", cursor);
+      
+      const res = await fetch(`/api/admin/users/${userId}/actions?${params}`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        if (cursor) {
+          setUserActions(prev => [...prev, ...data.items]);
+        } else {
+          setUserActions(data.items);
+        }
+        setActionsNextCursor(data.nextCursor);
+      }
+    } catch (err) {
+      console.error("Failed to fetch user actions:", err);
+    } finally {
+      setActionsLoading(false);
+      setActionsLoadingMore(false);
+    }
+  };
+  
+  const handleActionsClick = (user: AdminUser) => {
+    setActionsUserId(user.id);
+    setActionsUser(user);
+    fetchUserActions(user.id);
   };
 
   const handleConnect = async () => {
@@ -1046,6 +1101,7 @@ export default function AdminPage() {
                         <TableRow>
                           <TableHead>User</TableHead>
                           <TableHead>Role</TableHead>
+                          <TableHead>Total Videos</TableHead>
                           <TableHead>Sign-up Method</TableHead>
                           <TableHead>Consent</TableHead>
                           <TableHead>Status</TableHead>
@@ -1056,7 +1112,7 @@ export default function AdminPage() {
                       <TableBody>
                         {users.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                               No users found
                             </TableCell>
                           </TableRow>
@@ -1070,9 +1126,18 @@ export default function AdminPage() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge variant={u.isAdmin ? "default" : "secondary"}>
-                                  {u.isAdmin ? "Admin" : "User"}
-                                </Badge>
+                                {u.isAdmin ? (
+                                  <Badge className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700">
+                                    Admin
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-700">
+                                    User
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center font-medium">
+                                {u.totalVideos || 0}
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-wrap gap-1">
@@ -1100,14 +1165,26 @@ export default function AdminPage() {
                                 {format(new Date(u.createdAt), "MMM d, yyyy")}
                               </TableCell>
                               <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleUserClick(u.id)}
-                                  data-testid={`button-view-user-${u.id}`}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleActionsClick(u)}
+                                    title="View action history"
+                                    data-testid={`button-actions-user-${u.id}`}
+                                  >
+                                    <Info className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleUserClick(u.id)}
+                                    title="View user details"
+                                    data-testid={`button-view-user-${u.id}`}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))
@@ -1830,6 +1907,86 @@ export default function AdminPage() {
             </div>
           ) : (
             <p className="py-8 text-center text-muted-foreground">User not found</p>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* User Actions History Sheet */}
+      <Sheet open={!!actionsUserId} onOpenChange={(open) => !open && setActionsUserId(null)}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Action History</SheetTitle>
+            <SheetDescription>
+              {actionsUser ? (
+                <span>Activity log for {actionsUser.displayName || actionsUser.email || "Unknown User"}</span>
+              ) : (
+                <span>View user action history</span>
+              )}
+            </SheetDescription>
+          </SheetHeader>
+
+          {actionsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : userActions.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">No actions recorded for this user</p>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {userActions.map((action) => (
+                <div 
+                  key={action.id} 
+                  className="flex items-start gap-3 border-b pb-3 last:border-b-0"
+                  data-testid={`action-item-${action.id}`}
+                >
+                  <div className="mt-0.5">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-sm">{action.actionLabel}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {action.actionType.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
+                    {action.entityType && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {action.entityType}: {action.entityId?.slice(0, 8)}...
+                      </div>
+                    )}
+                    {action.metadata && Object.keys(action.metadata).length > 0 && (
+                      <div className="text-xs text-muted-foreground mt-1 font-mono bg-muted rounded px-2 py-1 overflow-x-auto">
+                        {JSON.stringify(action.metadata)}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {format(new Date(action.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              {actionsNextCursor && (
+                <div className="pt-4 text-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => actionsUserId && fetchUserActions(actionsUserId, actionsNextCursor)}
+                    disabled={actionsLoadingMore}
+                    data-testid="button-load-more-actions"
+                  >
+                    {actionsLoadingMore ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      "Load More"
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
         </SheetContent>
       </Sheet>

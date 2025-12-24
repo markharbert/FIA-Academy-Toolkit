@@ -90,6 +90,35 @@ export const adminAuditLog = pgTable("admin_audit_log", {
   userAgent: text("user_agent"),
 });
 
+// User action types for lifetime activity logging
+export const userActionTypes = [
+  "session_created",
+  "session_deleted", 
+  "session_title_updated",
+  "transcript_regenerated",
+  "login_success",
+  "logout",
+  "account_updated",
+  "keap_sync_attempted",
+  "keap_sync_succeeded",
+  "keap_sync_failed",
+] as const;
+export type UserActionType = typeof userActionTypes[number];
+
+// User action log table for tracking lifetime user activity
+export const userActionLog = pgTable("user_action_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  actionType: text("action_type").notNull().$type<UserActionType>(),
+  actionLabel: text("action_label").notNull(),
+  entityType: text("entity_type"), // e.g. "session", "account", "auth"
+  entityId: text("entity_id"), // e.g. sessionId
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   passwordHash: true,
@@ -256,6 +285,10 @@ export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 // Admin audit log types
 export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
 export type InsertAdminAuditLog = typeof adminAuditLog.$inferInsert;
+
+// User action log types
+export type UserActionLog = typeof userActionLog.$inferSelect;
+export type InsertUserActionLog = typeof userActionLog.$inferInsert;
 
 // Admin user update schema
 export const adminUpdateUserSchema = z.object({

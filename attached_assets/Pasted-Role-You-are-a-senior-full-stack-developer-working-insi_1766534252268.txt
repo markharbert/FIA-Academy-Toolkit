@@ -1,0 +1,367 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). Update the Admin Dashboard “Users” tab UI and backend exactly as described below. Do not break admin security. Admin only. Provide working code and migrations. Confirm each item in a checklist at the end.
+
+High Priority Outcomes
+
+Role labels are color coded:
+
+Admin = green label
+
+User = light blue label with subtle blue outline
+
+Add a column showing each user’s total videos created (total sessions count).
+
+Implement lifetime user action logging so we can see everything a user has done.
+
+Clicking the small “i” Actions icon opens a side panel showing that user’s action log.
+
+Fix “Sync to Keap” admin action so it actually syncs and shows a green success toast: “Confirmed: sent to Keap.”
+
+Part 1: Role Labels UI
+
+Users table changes
+In the Role column:
+
+If role == "admin":
+
+Render a pill label with green background or green border and text “Admin”
+
+If role == "user":
+
+Render a pill label with light blue background (or white background with light blue border) and text “User”
+
+Styling requirements
+
+Small pill label shape (rounded)
+
+High contrast readable text
+
+Light blue should match the app palette (use existing light blue or a neutral light blue style)
+
+Admin label must clearly look “active/approved” using green
+
+Part 2: Add “Total Videos” Column
+
+Requirement
+Add a new column in the Users table:
+
+Column header: Total Videos
+
+Value: total number of sessions for that user (all time)
+
+Backend requirements
+Update admin users list endpoint (or create one) so it returns video count per user efficiently.
+
+Implement or update:
+GET /api/admin/users
+Return user rows including:
+
+id
+
+displayName
+
+email
+
+role
+
+createdAt
+
+totalVideos (integer)
+
+Implementation notes
+
+Do not do N+1 queries.
+
+Use an aggregated query:
+
+LEFT JOIN sessions on sessions.userId = users.id
+
+COUNT(sessions.id) as totalVideos
+
+GROUP BY users.id
+
+Ensure sessions table uses createdAt and userId indexes.
+
+Part 3: Lifetime User Action Logging
+
+Goal
+Track every meaningful user action for the lifetime of the account, including:
+
+create session (video created)
+
+delete session (video deleted)
+
+update session title
+
+transcript regenerated
+
+login success
+
+logout
+
+account updated (profile changes)
+
+any other key interactions you already support
+
+Important
+This is not AdminAuditLog. This is user activity tracking.
+
+Database changes
+Create table: UserActionLog
+Fields:
+
+id
+
+userId
+
+actionType (string enum-like)
+
+actionLabel (short human readable label)
+
+entityType (nullable, e.g. "session", "account", "auth")
+
+entityId (nullable, e.g. sessionId)
+
+metadataJson (nullable JSON/text)
+
+createdAt
+
+ip (nullable)
+
+userAgent (nullable)
+
+Indexes
+
+userId + createdAt
+
+actionType (optional)
+
+Server side logging helper
+Create a helper function:
+logUserAction({
+userId,
+actionType,
+actionLabel,
+entityType,
+entityId,
+metadata,
+req
+})
+
+Rules
+
+Never fail the main user flow if logging fails.
+
+Logging should be called from:
+
+session create endpoint
+
+session delete endpoint
+
+session update endpoint (rename, regenerate transcript)
+
+login callback success for OAuth and email login
+
+logout endpoint
+
+account update endpoint
+
+Metadata should be safe:
+
+Do not store raw transcript content in logs.
+
+Store summary fields like sessionTitle, scoreTotal, durationSeconds, etc.
+
+Action types to implement now (minimum)
+
+session_created
+
+session_deleted
+
+session_title_updated
+
+transcript_regenerated
+
+login_success
+
+logout
+
+account_updated
+
+keap_sync_attempted
+
+keap_sync_succeeded
+
+keap_sync_failed
+
+Part 4: “Actions” info icon opens a side panel with the user’s action log
+
+UI requirement
+
+In the Users table, keep the small “i” icon for Actions.
+
+Clicking it opens a right side panel (drawer).
+
+That panel shows a chronological list of actions for that user (most recent first).
+
+Panel content for each log item
+
+Timestamp (relative + exact tooltip)
+
+Action label (human readable)
+
+Optional details line:
+
+session title if relevant
+
+score total if relevant
+
+entity id or link for admin if helpful
+
+Filtering and pagination
+
+Default load: last 50 actions
+
+Add “Load more” for older actions.
+
+API endpoint required
+GET /api/admin/users/:id/actions
+Query params:
+
+limit (default 50, max 100)
+
+cursor (optional)
+
+Return:
+{
+"items": [
+{
+"id": "...",
+"actionType": "...",
+"actionLabel": "...",
+"entityType": "...",
+"entityId": "...",
+"metadata": {...},
+"createdAt": "..."
+}
+],
+"nextCursor": "..."
+}
+
+Admin security
+
+requireAdmin on this endpoint.
+
+Part 5: Fix “Sync to Keap” in the View side panel
+
+Current issue
+The Sync to Keap action seems not to work.
+
+Required behavior
+
+In the admin user view panel, “Sync to Keap” must:
+
+Create or update Keap contact by email (no duplicates)
+
+Apply the default signup tag (if set)
+
+Save keapContactId on user if returned
+
+Record sync status on user and in KeapSyncLog
+
+It must return a success response if it succeeded.
+
+Frontend must show a green toast popup:
+
+Text: “Confirmed: sent to Keap.”
+
+If it fails:
+
+Show a red toast with a short reason.
+
+Backend endpoint
+POST /api/admin/users/:id/keap-sync
+
+Server logic
+
+requireAdmin
+
+Load user by id
+
+Validate:
+
+user has email
+
+Keap connected
+
+Call a single sync function:
+syncUserToKeap(userId, mode="manual_admin")
+Must:
+
+Search contact by email first
+
+Update if exists
+
+Create if not exists
+
+Apply default tag if configured
+
+Return contactId and what happened (created/updated/tagged)
+
+Return payload:
+{
+"success": true,
+"created": true|false,
+"updated": true|false,
+"contactId": "...",
+"tagApplied": true|false
+}
+
+Logging requirements
+
+Write user action log entries:
+
+keap_sync_attempted
+
+keap_sync_succeeded or keap_sync_failed
+
+Update user fields:
+
+keapLastSyncAt
+
+keapLastSyncStatus
+
+keapLastSyncError (if failed)
+
+Frontend requirements
+
+Wire the Sync to Keap button to call the endpoint.
+
+Show loading state on the button.
+
+On success:
+
+Show green toast: “Confirmed: sent to Keap.”
+
+On error:
+
+Show red toast with a concise message.
+
+Ensure requests include credentials.
+
+Part 6: Verification Checklist
+
+At the end, confirm:
+
+Admin role label appears green and User label appears light blue with outline
+
+Users table includes Total Videos column and values are correct
+
+UserActionLog table exists and logging is triggered for key actions
+
+Clicking the “i” Actions icon opens a side panel with lifetime action history
+
+Action log supports Load more and does not lag
+
+Sync to Keap works, creates or updates contact without duplicates, applies tag, and shows green confirmation toast
+
+Now implement these changes in the existing codebase.
