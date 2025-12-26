@@ -129,7 +129,7 @@ export async function registerRoutes(
       }),
       secret: process.env.SESSION_SECRET || "video-confidence-coach-secret-key",
       resave: true, // Enable resave for rolling sessions
-      saveUninitialized: false,
+      saveUninitialized: true, // Required for OAuth state storage before callback
       rolling: true, // Reset expiration on each request (activity extends session)
       cookie: {
         secure: isProduction, // Use secure cookies in production (HTTPS)
