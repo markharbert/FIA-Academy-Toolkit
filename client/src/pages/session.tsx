@@ -13,11 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { 
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogTrigger
-} from "@/components/ui/alert-dialog";
-import { 
   Download, Copy, Check, RefreshCw, AlertCircle, Clock, 
   TrendingUp, MessageSquare, Lightbulb, AlertTriangle, Quote,
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText,
@@ -96,15 +91,24 @@ function ScoreCircle({ score, size = "lg" }: { score: number; size?: "sm" | "lg"
   );
 }
 
+function getScoreLevel(score: number): { color: string; label: string; textColor: string } {
+  if (score >= 15) return { color: "bg-green-500", label: "Excellent", textColor: "text-green-600 dark:text-green-400" };
+  if (score >= 10) return { color: "bg-yellow-500", label: "Good", textColor: "text-yellow-600 dark:text-yellow-400" };
+  return { color: "bg-red-500", label: "Needs work", textColor: "text-red-600 dark:text-red-400" };
+}
+
 function PartScoreBar({ label, score }: { label: string; score: number }) {
   const percentage = (score / 20) * 100;
-  const color = score >= 14 ? "bg-green-500" : score >= 8 ? "bg-yellow-500" : "bg-red-500";
+  const { color, label: levelLabel, textColor } = getScoreLevel(score);
 
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-sm">
         <span>{label}</span>
-        <span className="font-medium">{score}/20</span>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs ${textColor}`}>{levelLabel}</span>
+          <span className="font-medium">{score}/20</span>
+        </div>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
         <div className={`h-full ${color} transition-all`} style={{ width: `${percentage}%` }} />
@@ -221,7 +225,6 @@ export default function SessionPage() {
   const [copied, setCopied] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const isUploading = uploadStep === "uploading";
   const activeSessionId = createdSessionId || sessionId;
@@ -286,25 +289,6 @@ export default function SessionPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions", activeSessionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       setIsEditingTitle(false);
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const retranscribeMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/sessions/${activeSessionId}/retranscribe`);
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to retranscribe");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sessions", activeSessionId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      toast({ title: "Transcript Updated", description: "Transcript refresh started." });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -498,105 +482,6 @@ export default function SessionPage() {
     }
   };
 
-  const downloadPdf = async () => {
-    if (!activeSessionId) return;
-    
-    setDownloadingPdf(true);
-    try {
-      const response = await fetch(`/api/sessions/${activeSessionId}/report.pdf`, {
-        credentials: "include",
-      });
-      
-      if (!response.ok) {
-        const contentType = response.headers.get("content-type");
-        if (contentType?.includes("application/json")) {
-          const data = await response.json();
-          throw new Error(data.message || "Failed to download PDF");
-        }
-        throw new Error("Failed to download PDF");
-      }
-      
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      
-      const contentDisposition = response.headers.get("content-disposition");
-      let filename = "Fearless-Video-Coach-Report.pdf";
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (match) {
-          filename = match[1];
-        }
-      }
-      
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("PDF download error:", err);
-      toast({
-        title: "Download Failed",
-        description: err instanceof Error ? err.message : "Failed to download PDF",
-        variant: "destructive",
-      });
-    } finally {
-      setDownloadingPdf(false);
-    }
-  };
-
-  const [downloadingTranscriptTxt, setDownloadingTranscriptTxt] = useState(false);
-
-  const downloadTranscriptTxt = async () => {
-    if (!activeSessionId) return;
-    
-    setDownloadingTranscriptTxt(true);
-    try {
-      const response = await fetch(`/api/sessions/${activeSessionId}/transcript.txt`, {
-        credentials: "include",
-      });
-      
-      if (!response.ok) {
-        const contentType = response.headers.get("content-type");
-        if (contentType?.includes("application/json")) {
-          const data = await response.json();
-          throw new Error(data.message || "Failed to download transcript");
-        }
-        throw new Error("Failed to download transcript");
-      }
-      
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      
-      let filename = "transcript.txt";
-      const contentDisposition = response.headers.get("content-disposition");
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (match) {
-          filename = match[1];
-        }
-      }
-      
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Transcript TXT download error:", err);
-      toast({
-        title: "Download Failed",
-        description: err instanceof Error ? err.message : "Failed to download transcript",
-        variant: "destructive",
-      });
-    } finally {
-      setDownloadingTranscriptTxt(false);
-    }
-  };
 
   if (isNewSession && !createdSessionId) {
     return (
@@ -831,8 +716,6 @@ export default function SessionPage() {
   };
 
   const displayTitle = session?.title || "Practice Session";
-  const canRetranscribe = !isExpired && session?.transcriptText && (session?.retranscribeCount ?? 0) < 3;
-  const retranscribesRemaining = 3 - (session?.retranscribeCount ?? 0);
 
   const handleStartEditTitle = () => {
     setEditTitle(session?.title || "");
@@ -1013,21 +896,17 @@ export default function SessionPage() {
               }
               
               return (
-                <div className="flex aspect-[3/2] items-center justify-center rounded-lg bg-muted/50 border-2 border-dashed border-muted-foreground/20">
-                  <div className="text-center space-y-2">
-                    <FileText className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="text-sm text-muted-foreground">
-                      Video processed - transcript ready below
-                    </p>
+                <div className="flex items-center gap-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500">
+                    <Check className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-green-700 dark:text-green-300">Transcript ready</p>
+                    <p className="text-sm text-green-600/80 dark:text-green-400/80">Review your transcript and score below</p>
                   </div>
                 </div>
               );
             })()}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            {session?.goalType && (
-              <Badge variant="outline">{session.goalType}</Badge>
-            )}
           </div>
           
           {session && session.processingStatus && session.processingStatus !== "ready" && (
@@ -1054,55 +933,6 @@ export default function SessionPage() {
               <CardDescription>Edit the transcript for more accurate scoring</CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              {canRetranscribe && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      disabled={retranscribeMutation.isPending}
-                      data-testid="button-retranscribe"
-                    >
-                      {retranscribeMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <FileText className="mr-2 h-4 w-4" />
-                      )}
-                      {retranscribeMutation.isPending ? "Processing..." : "Refresh Transcript"}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Refresh Transcript?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will generate a new transcript from your audio and update your scores. 
-                        You have {retranscribesRemaining} refresh{retranscribesRemaining !== 1 ? "es" : ""} remaining for this session.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel disabled={retranscribeMutation.isPending}>Cancel</AlertDialogCancel>
-                      <AlertDialogAction 
-                        onClick={() => retranscribeMutation.mutate()}
-                        disabled={retranscribeMutation.isPending}
-                      >
-                        {retranscribeMutation.isPending ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          "Retranscribe"
-                        )}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
-              {(session?.retranscribeCount ?? 0) >= 3 && !isExpired && session?.transcriptText && (
-                <Badge variant="secondary" className="text-xs">
-                  No refreshes remaining
-                </Badge>
-              )}
               <a href={`/api/sessions/${session.id}/transcript.txt`} download>
                 <Button variant="ghost" size="sm" data-testid="button-download-transcript">
                   <Download className="mr-2 h-4 w-4" />
@@ -1137,23 +967,6 @@ export default function SessionPage() {
                 Re-score with Edited Transcript
               </Button>
             )}
-            
-            <div className="flex flex-wrap gap-2 pt-4 border-t">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={downloadTranscriptTxt}
-                disabled={downloadingTranscriptTxt}
-                data-testid="button-download-transcript-txt"
-              >
-                {downloadingTranscriptTxt ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                Download Transcript
-              </Button>
-            </div>
           </CardContent>
         </Card>
       )}
@@ -1233,24 +1046,6 @@ export default function SessionPage() {
                   />
                 ))}
               </Accordion>
-              
-              <div className="mt-6 pt-6 border-t space-y-2">
-                <Button 
-                  onClick={downloadPdf}
-                  disabled={downloadingPdf}
-                  data-testid="button-download-pdf-report"
-                >
-                  {downloadingPdf ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileText className="mr-2 h-4 w-4" />
-                  )}
-                  Download PDF Report
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Includes your score, feedback, and transcript.
-                </p>
-              </div>
             </CardContent>
           </Card>
 
