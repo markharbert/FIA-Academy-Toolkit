@@ -1,8 +1,8 @@
 import { storage } from "./storage";
-import { generatePreview, generateThumbnail, extractAudioFast, probeVideo, generateHlsPreview, generatePoster } from "./ffmpeg";
+import { extractAudioFast, probeVideo } from "./ffmpeg";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { ObjectStorageService } from "./replit_integrations/object_storage/objectStorage";
-import type { ProcessingStatus, GoalType, InsertProcessingMetric, HlsStatus, TranscriptStatus, ScoreStatus } from "@shared/schema";
+import type { ProcessingStatus, GoalType, InsertProcessingMetric, TranscriptStatus, ScoreStatus } from "@shared/schema";
 import path from "path";
 import fs from "fs";
 
@@ -109,23 +109,6 @@ async function recordMetric(
 
 const activeProcessing = new Set<string>();
 
-async function uploadPreviewToCloud(previewPath: string, sessionId: string): Promise<string | null> {
-  try {
-    const previewFilename = path.basename(previewPath);
-    const objectPath = `/objects/.private/previews/${sessionId}/${previewFilename}`;
-    
-    console.log(`[Processing] Uploading preview to cloud storage: ${objectPath}`);
-    
-    const fileBuffer = fs.readFileSync(previewPath);
-    await objectStorageService.uploadFile(objectPath, fileBuffer);
-    
-    console.log(`[Processing] Preview uploaded to cloud storage successfully`);
-    return objectPath;
-  } catch (err) {
-    console.error("[Processing] Failed to upload preview to cloud storage:", err);
-    return null;
-  }
-}
 
 async function deleteOriginalUpload(
   sessionId: string, 
@@ -160,172 +143,6 @@ async function deleteOriginalUpload(
   }
 }
 
-async function generateHlsInBackground(
-  sessionId: string,
-  videoFullPath: string
-): Promise<void> {
-  console.log(`[Processing] Starting HLS preview generation for session ${sessionId}`);
-  
-  try {
-    await storage.updateSession(sessionId, {
-      hlsStatus: "generating" as HlsStatus,
-    });
-    
-    const hlsStart = new Date();
-    const result = await generateHlsPreview(videoFullPath, UPLOADS_DIR, sessionId, {
-      onPlayable: async (playlistPath, hlsDir) => {
-        try {
-          await storage.updateSession(sessionId, {
-            hlsStatus: "playable" as HlsStatus,
-            hlsPlaylistPath: playlistPath,
-            hlsDir: hlsDir,
-            hlsReadyAt: new Date(),
-          });
-          console.log(`[Processing] HLS playable for session ${sessionId}`);
-          await recordMetric(sessionId, "hls_playable", hlsStart, true);
-        } catch (err) {
-          console.warn("[Processing] Failed to update HLS playable status:", err);
-        }
-      },
-      onComplete: async (playlistPath, hlsDir) => {
-        try {
-          await storage.updateSession(sessionId, {
-            hlsStatus: "complete" as HlsStatus,
-            hlsPlaylistPath: playlistPath,
-            hlsDir: hlsDir,
-            hlsCompleteAt: new Date(),
-          });
-          console.log(`[Processing] HLS complete for session ${sessionId}`);
-          await recordMetric(sessionId, "hls_complete", hlsStart, true);
-        } catch (err) {
-          console.warn("[Processing] Failed to update HLS complete status:", err);
-        }
-      },
-      onError: async (error) => {
-        try {
-          await storage.updateSession(sessionId, {
-            hlsStatus: "failed" as HlsStatus,
-            hlsError: error,
-          });
-          await recordMetric(sessionId, "hls_generation", hlsStart, false, error);
-        } catch (err) {
-          console.warn("[Processing] Failed to update HLS error status:", err);
-        }
-      },
-    });
-    
-    if (!result.success) {
-      console.warn(`[Processing] HLS generation failed: ${result.error}`);
-    }
-  } catch (err) {
-    console.error(`[Processing] HLS generation error for session ${sessionId}:`, err);
-    try {
-      await storage.updateSession(sessionId, {
-        hlsStatus: "failed" as HlsStatus,
-        hlsError: String(err),
-      });
-    } catch {}
-  }
-}
-
-async function generatePreviewInBackground(
-  sessionId: string,
-  videoFullPath: string,
-  originalUploadPath: string | null,
-  originalCloudPath: string | null
-): Promise<void> {
-  console.log(`[Processing] Starting background preview generation for session ${sessionId}`);
-  
-  await storage.updateSession(sessionId, {
-    previewVideoStatus: "generating",
-  });
-  
-  try {
-    const previewStart = new Date();
-    const previewResult = await generatePreview(videoFullPath, UPLOADS_DIR);
-    
-    if (!previewResult.success) {
-      await recordMetric(sessionId, "preview_generation", previewStart, false, previewResult.error);
-      console.warn(`[Processing] Background preview generation failed: ${previewResult.error}`);
-      await storage.updateSession(sessionId, {
-        previewVideoPath: "failed",
-        previewGeneratedAt: new Date(),
-        previewVideoStatus: "failed",
-        previewVideoError: previewResult.error || "Preview generation failed",
-      });
-      return;
-    }
-    
-    await recordMetric(sessionId, "preview_generation", previewStart, true, undefined, {
-      sizeBytes: previewResult.sizeBytes,
-      durationSeconds: previewResult.durationSeconds,
-    });
-    
-    const previewFullPath = path.join(UPLOADS_DIR, previewResult.outputPath!);
-    
-    const cloudStart = new Date();
-    const previewCloudPath = await uploadPreviewToCloud(previewFullPath, sessionId);
-    await recordMetric(sessionId, "preview_cloud_upload", cloudStart, !!previewCloudPath);
-    
-    await storage.updateSession(sessionId, {
-      previewVideoPath: previewResult.outputPath,
-      previewCloudStoragePath: previewCloudPath,
-      previewGeneratedAt: new Date(),
-      previewVideoMimeType: "video/mp4",
-      previewVideoSizeBytes: previewResult.sizeBytes,
-      previewVideoDurationSeconds: previewResult.durationSeconds,
-      previewVideoStatus: "ready",
-      previewVideoError: null,
-      videoPath: previewResult.outputPath,
-      videoMimeType: "video/mp4",
-      videoSizeBytes: previewResult.sizeBytes,
-      durationSeconds: previewResult.durationSeconds,
-      finalVideoPath: previewResult.outputPath,
-      finalVideoResolution: "854x480",
-    });
-    
-    console.log(`[Processing] Background preview ready for session ${sessionId}`);
-    
-    const thumbnailStart = new Date();
-    const thumbnailResult = await generateThumbnail(previewFullPath, UPLOADS_DIR);
-    if (thumbnailResult.success) {
-      await storage.updateSession(sessionId, {
-        thumbnailPath: thumbnailResult.thumbnailPath,
-      });
-    }
-    await recordMetric(sessionId, "thumbnail_generation", thumbnailStart, thumbnailResult.success);
-    
-    const posterStart = new Date();
-    const posterResult = await generatePoster(previewFullPath, UPLOADS_DIR, sessionId);
-    if (posterResult.success) {
-      await storage.updateSession(sessionId, {
-        previewPosterPath: posterResult.posterPath,
-        previewPosterMimeType: "image/jpeg",
-        previewPosterGeneratedAt: new Date(),
-      });
-      console.log(`[Processing] Poster generated for session ${sessionId}`);
-    }
-    await recordMetric(sessionId, "poster_generation", posterStart, posterResult.success);
-    
-    if (previewCloudPath) {
-      const deleteStart = new Date();
-      await deleteOriginalUpload(sessionId, originalUploadPath, originalCloudPath, UPLOADS_DIR);
-      await recordMetric(sessionId, "original_deletion", deleteStart, true);
-    }
-    
-    console.log(`[Processing] Preview generation complete for session ${sessionId}`);
-    
-  } catch (err) {
-    console.error(`[Processing] Background preview error for session ${sessionId}:`, err);
-    await recordMetric(sessionId, "preview_generation", new Date(), false, String(err));
-    try {
-      await storage.updateSession(sessionId, {
-        previewVideoPath: "failed",
-        previewGeneratedAt: new Date(),
-      });
-    } catch {}
-  }
-}
 
 export async function processSession(sessionId: string, userId: string): Promise<void> {
   console.log(`[Processing] Starting AUDIO-FIRST fast path for session ${sessionId}`);
@@ -411,9 +228,6 @@ export async function processSession(sessionId: string, userId: string): Promise
     const originalUploadPath = session.originalUploadPath || session.videoPath;
     const originalCloudPath = session.cloudStoragePath;
     
-    generateHlsInBackground(sessionId, videoFullPath)
-      .catch(err => console.error(`[Processing] HLS generation failed:`, err));
-    
     await storage.updateSession(sessionId, {
       transcriptStatus: "extracting_audio" as TranscriptStatus,
     });
@@ -441,6 +255,15 @@ export async function processSession(sessionId: string, userId: string): Promise
       durationSeconds: audioResult.durationSeconds || undefined,
       transcriptStatus: "transcribing" as TranscriptStatus,
     });
+    
+    console.log(`[Processing] Audio extracted successfully, deleting video file immediately`);
+    const deleteStart = new Date();
+    await deleteOriginalUpload(sessionId, originalUploadPath, originalCloudPath, UPLOADS_DIR);
+    await storage.updateSession(sessionId, {
+      videoDeletedAt: new Date(),
+    });
+    await recordMetric(sessionId, "video_deletion", deleteStart, true);
+    console.log(`[Processing] Video file deleted after audio extraction`);
     
     const audioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
     
@@ -537,9 +360,6 @@ export async function processSession(sessionId: string, userId: string): Promise
     
     const pipelineDuration = ((Date.now() - pipelineStart.getTime()) / 1000).toFixed(1);
     console.log(`[Processing] Session ${sessionId} RESULTS READY in ${pipelineDuration}s (transcript + score)`);
-    
-    generatePreviewInBackground(sessionId, videoFullPath, originalUploadPath, originalCloudPath)
-      .catch(err => console.error(`[Processing] Background preview failed:`, err));
     
   } catch (err) {
     console.error(`[Processing] Error processing session ${sessionId}:`, err);

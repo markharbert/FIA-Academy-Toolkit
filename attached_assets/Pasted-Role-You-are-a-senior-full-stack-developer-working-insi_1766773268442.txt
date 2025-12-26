@@ -1,0 +1,281 @@
+Role: You are a senior full stack developer working inside my existing Replit project (Fearless Video Coach). I want to completely revamp the Practice Sessions page to eliminate all video playback and storage. This is intentional to avoid streaming and browser playback issues.
+
+High Priority Outcomes
+
+Remove the video embed/player and any video preview UI. No video should be displayed anywhere on the Practice Sessions page.
+
+The user uploads a video file only as an input for processing.
+
+The system extracts audio, transcribes it, scores it using the 5-part formula, generates feedback, then deletes the original video file.
+
+After processing, the page shows:
+
+Transcript
+
+Score summary
+
+Score breakdown by the five parts
+
+Detailed feedback and improvement suggestions
+
+The video file is not kept. It should be deleted immediately after transcription (or after scoring if needed). Do not store any playable preview.
+
+Remove the folder organization feature from the dashboard and the Practice Sessions list UI (no folders, no drag and drop, no folder sidebar).
+
+Keep the existing 30-day retention concept for the transcript + score results only (the session record, transcript, and analysis remain available for 30 days). The video is not retained.
+
+PART 1: UI CHANGES (PRACTICE SESSIONS PAGE)
+
+A) Remove all video elements
+Delete:
+
+Video player component
+
+Thumbnail/poster logic
+
+“Download video” button
+
+Rendering meter related to video playback
+
+Any HLS/MP4 playback code
+
+Any “preview is generating” messaging
+
+B) Add a clean upload-only section
+At the top of the page:
+
+Upload button and drag-drop zone
+
+Supported formats text: accept common video types (mp4, mov, webm, mkv, avi, etc)
+
+Max file size message if needed
+
+A short note:
+“We use your video to generate a transcript and feedback. The video file is deleted after processing.”
+
+C) Processing indicators
+While processing:
+
+Show progress with steps:
+
+Uploading
+
+Extracting audio
+
+Transcribing
+
+Scoring
+
+Generating feedback
+
+Complete
+
+Show elapsed time
+
+Show clear error message and retry options if a step fails
+
+D) Results sections (same page)
+After processing:
+
+Transcript section
+
+Display transcript
+
+Button: “Refresh transcript” (keeps same semantics)
+
+Button: “Download transcript (TXT)” only
+
+Scoring section
+
+Score summary
+
+Breakdown across the five parts:
+
+Hook
+
+Set the Hook
+
+First Call to Action
+
+Content
+
+Final Call to Action
+
+Detailed feedback
+
+Download report button (optional)
+
+“Download PDF Report” can remain if it works, but must not include video.
+
+If PDF is still unreliable, remove it or leave it behind a feature flag.
+
+PART 2: PROCESSING PIPELINE CHANGES (VIDEO IS TEMPORARY INPUT ONLY)
+
+A) Store video only as a temporary upload
+Rules:
+
+Upload video to a temp location tied to sessionId.
+
+Immediately extract audio from the video.
+
+After audio extraction succeeds:
+
+Delete the uploaded video file (early delete)
+
+Transcribe from the extracted audio file.
+
+Score transcript and generate recommendations.
+
+Delete audio file after transcription and scoring completes, unless you need it for transcript refresh.
+Preferred:
+
+Keep the transcript in DB
+
+Allow transcript refresh by re-processing transcript from stored transcript text, not from audio
+If transcript refresh requires audio:
+
+Store audio temporarily for a limited short window (example 24 hours) but default is delete. Implement whichever supports your UX.
+
+B) Ensure no video artifacts exist
+Remove:
+
+previewVideoStorageKey
+
+poster keys
+
+any storage cleanup logic for preview video
+
+any endpoints for video streaming
+
+C) Session retention
+Keep:
+
+session record
+
+transcript text / transcript segments
+
+scoring breakdown
+
+recommendations
+Set:
+
+sessions.expiresAt = createdAt + 30 days
+On expiration:
+
+Delete session record and associated analysis data.
+
+PART 3: DATABASE AND MODEL UPDATES
+
+A) Session table fields to remove or ignore
+
+previewVideoStorageKey
+
+previewPosterStorageKey
+
+any HLS playlist keys
+Stop reading or writing these.
+
+B) Add explicit “video deleted” status fields
+
+videoUploadDeletedAt
+
+audioDeletedAt
+These are for audit/debug only.
+
+C) Add a clear session type if needed
+
+sessionType = "practice_transcript_only"
+So future features don’t accidentally reintroduce playback.
+
+PART 4: API ENDPOINT UPDATES
+
+Upload endpoints
+
+Continue to accept uploads, but treat them as temporary.
+
+Remove playback endpoints
+Delete or disable:
+
+/video/preview/stream
+
+any HLS playlist/segment endpoints
+
+Transcript download endpoint
+GET /api/sessions/:id/transcript.txt
+
+Return TXT
+
+Filename should use the session title
+
+Content-Disposition must be correct
+
+Session details endpoint
+GET /api/sessions/:id
+
+Must return transcript + scoring + recommendations
+
+Must NOT return any video URLs
+
+PART 5: REMOVE FOLDER FEATURE COMPLETELY
+
+A) UI removal
+On the dashboard/practice sessions list:
+
+Remove folders sidebar
+
+Remove folder create/rename/delete controls
+
+Remove drag-and-drop logic
+
+Remove folder filters and folder badges
+
+B) Backend cleanup
+If folders were implemented:
+
+Stop using folderId in session queries
+
+Optionally remove folder tables and folder endpoints
+If you do not want to delete tables yet:
+
+Feature-flag them off and hide everything, but ensure UI and routing do not reference folders.
+
+C) Data migration
+If sessions have folderId:
+
+Ignore it and show sessions in a single list.
+
+No need to migrate unless it breaks queries.
+
+PART 6: VERIFICATION CHECKLIST
+
+You must verify:
+
+Practice Sessions page has no video player, no thumbnail, no video links.
+
+User uploads a video, sees progress, and gets transcript + score + feedback.
+
+After processing completes:
+
+Video file is deleted (confirm via logs/storage)
+
+No playback endpoints are called
+
+Reopening the session shows transcript and score (no video).
+
+Dashboard shows sessions in a simple list (no folders).
+
+Session data expires after 30 days and is removed.
+
+Deliverables
+
+UI updates removing video preview and folder UI.
+
+Processing pipeline updates extracting audio and deleting video promptly.
+
+Removal of video streaming endpoints.
+
+Updated session API schema without video fields.
+
+Simple sessions list on dashboard without folder organization.
+
+Now implement this transcript-only practice workflow and remove video preview and folder organization entirely.

@@ -1,9 +1,8 @@
-import { CheckCircle, Circle, Loader2, AlertCircle, Video, FileAudio, Brain, Sparkles } from "lucide-react";
+import { CheckCircle, Circle, Loader2, AlertCircle, Upload, FileAudio, Brain, Sparkles } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import type { HlsStatus, TranscriptStatus, ScoreStatus, ProcessingStatus } from "@shared/schema";
+import type { TranscriptStatus, ScoreStatus, ProcessingStatus } from "@shared/schema";
 
 interface PipelineStatusProps {
-  hlsStatus: HlsStatus | null;
   transcriptStatus: TranscriptStatus | null;
   scoreStatus: ScoreStatus | null;
   processingStatus: ProcessingStatus | null;
@@ -13,7 +12,7 @@ interface PipelineStatusProps {
 interface StageProps {
   label: string;
   status: "pending" | "in_progress" | "complete" | "failed";
-  icon: typeof Video;
+  icon: typeof Upload;
   detail?: string;
 }
 
@@ -60,25 +59,24 @@ function Stage({ label, status, icon: Icon, detail }: StageProps) {
 }
 
 export function PipelineStatus({
-  hlsStatus,
   transcriptStatus,
   scoreStatus,
   processingStatus,
   processingProgress
 }: PipelineStatusProps) {
-  const getHlsStageStatus = (): "pending" | "in_progress" | "complete" | "failed" => {
-    if (!hlsStatus || hlsStatus === "queued") return "pending";
-    if (hlsStatus === "generating") return "in_progress";
-    if (hlsStatus === "playable" || hlsStatus === "complete") return "complete";
-    if (hlsStatus === "failed") return "failed";
+  const getUploadStageStatus = (): "pending" | "in_progress" | "complete" | "failed" => {
+    if (!processingStatus || processingStatus === "queued") return "pending";
+    if (processingStatus === "uploading" || processingStatus === "transcoding") return "in_progress";
+    if (processingStatus && processingStatus !== "failed") return "complete";
+    if (processingStatus === "failed" && !transcriptStatus) return "failed";
     return "pending";
   };
 
-  const getHlsDetail = (): string => {
-    if (hlsStatus === "playable") return "Video is playable";
-    if (hlsStatus === "complete") return "Full quality ready";
-    if (hlsStatus === "generating") return "Preparing preview...";
-    if (hlsStatus === "failed") return "Preview failed";
+  const getUploadDetail = (): string => {
+    if (!processingStatus || processingStatus === "queued") return "Waiting...";
+    if (processingStatus === "uploading") return "Uploading...";
+    if (processingStatus === "transcoding") return "Extracting audio...";
+    if (processingStatus && processingStatus !== "failed") return "Audio extracted";
     return "Waiting...";
   };
 
@@ -126,12 +124,10 @@ export function PipelineStatus({
   };
 
   const allComplete = 
-    (hlsStatus === "playable" || hlsStatus === "complete") &&
     (transcriptStatus === "complete" || processingStatus === "ready") &&
     (scoreStatus === "final" || processingStatus === "ready");
 
   const anyFailed = 
-    hlsStatus === "failed" || 
     transcriptStatus === "failed" || 
     scoreStatus === "failed" ||
     processingStatus === "failed";
@@ -163,10 +159,10 @@ export function PipelineStatus({
 
       <div className="space-y-3">
         <Stage
-          label="Video Preview"
-          status={getHlsStageStatus()}
-          icon={Video}
-          detail={getHlsDetail()}
+          label="Upload & Extract Audio"
+          status={getUploadStageStatus()}
+          icon={Upload}
+          detail={getUploadDetail()}
         />
         <Stage
           label="Transcription"
@@ -177,7 +173,7 @@ export function PipelineStatus({
         <Stage
           label="AI Scoring"
           status={getScoreStageStatus()}
-          icon={Brain}
+          icon={Sparkles}
           detail={getScoreDetail()}
         />
       </div>

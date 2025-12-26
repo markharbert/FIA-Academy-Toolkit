@@ -23,18 +23,17 @@ import {
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText,
   Upload, Settings, File, Video, Mic
 } from "lucide-react";
-import type { Session, ScoreResult, ProcessingStatus, GoalType, HlsStatus } from "@shared/schema";
+import type { Session, ScoreResult, ProcessingStatus, GoalType } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { HlsVideoPlayer } from "@/components/hls-video-player";
 import { PipelineStatus } from "@/components/pipeline-status";
 
 const processingStepLabels: Record<ProcessingStatus, string> = {
-  queued: "Preparing your video...",
-  uploading: "Uploading video...",
-  transcoding: "Generating preview for playback...",
-  transcribing: "Transcribing audio with AI...",
-  scoring: "Analyzing your video with AI...",
+  queued: "Preparing your recording...",
+  uploading: "Uploading...",
+  transcoding: "Extracting audio...",
+  transcribing: "Transcribing with AI...",
+  scoring: "Analyzing with AI...",
   ready: "Processing complete!",
   failed: "Processing failed",
 };
@@ -232,11 +231,7 @@ export default function SessionPage() {
     const status = data.processingStatus;
     if (!status) return !data.transcriptText;
     if (status === "failed") return false;
-    if (status === "ready") {
-      const previewPath = (data as any).previewVideoPath;
-      const hasPreviewOrFailed = previewPath === "failed" || !!previewPath;
-      return !hasPreviewOrFailed;
-    }
+    if (status === "ready") return false;
     return true;
   };
 
@@ -811,7 +806,7 @@ export default function SessionPage() {
     );
   }
 
-  const isExpired = session?.videoDeletedAt || (session?.expiresAt && new Date(session.expiresAt) < new Date());
+  const isExpired = session?.expiresAt && new Date(session.expiresAt) < new Date();
   const score = session?.scoreJson as ScoreResult | null;
   const transcript = editedTranscript ?? session?.transcriptEditedText ?? session?.transcriptText ?? "";
 
@@ -836,7 +831,7 @@ export default function SessionPage() {
   };
 
   const displayTitle = session?.title || "Practice Session";
-  const canRetranscribe = !isExpired && session?.videoPath && (session?.retranscribeCount ?? 0) < 3;
+  const canRetranscribe = !isExpired && session?.transcriptText && (session?.retranscribeCount ?? 0) < 3;
   const retranscribesRemaining = 3 - (session?.retranscribeCount ?? 0);
 
   const handleStartEditTitle = () => {
@@ -945,31 +940,31 @@ export default function SessionPage() {
         <CardContent className="p-6">
           <div className="mx-auto max-w-3xl">
             {showUploadComplete ? (
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
+              <div className="flex aspect-[3/2] items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
                 <div className="text-center space-y-4 w-full max-w-md px-8">
                   <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
                   <div>
                     <p className="font-medium">Upload complete! Starting processing...</p>
-                    <p className="text-sm text-muted-foreground mt-1">Your video is being prepared</p>
+                    <p className="text-sm text-muted-foreground mt-1">Extracting audio and transcribing...</p>
                   </div>
                 </div>
               </div>
             ) : isExpired ? (
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
+              <div className="flex aspect-[3/2] items-center justify-center rounded-lg bg-muted">
                 <div className="text-center">
                   <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-2" />
-                  <p className="font-medium">Video Expired</p>
-                  <p className="text-sm text-muted-foreground">This video is no longer available for playback or download</p>
+                  <p className="font-medium">Session Expired</p>
+                  <p className="text-sm text-muted-foreground">This session has expired and is no longer available</p>
                 </div>
               </div>
             ) : session?.processingStatus === "failed" ? (
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
+              <div className="flex aspect-[3/2] items-center justify-center rounded-lg bg-muted">
                 <div className="text-center space-y-4">
                   <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
                   <div>
                     <p className="font-medium text-destructive">Processing Failed</p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {session.processingError || "An error occurred while processing your video."}
+                      {session.processingError || "An error occurred while processing your recording."}
                     </p>
                   </div>
                   <Button 
@@ -987,20 +982,12 @@ export default function SessionPage() {
                 </div>
               </div>
             ) : (() => {
-              const hlsStatus = (session as any)?.hlsStatus as HlsStatus | null;
-              const hlsPlayable = hlsStatus === "playable" || hlsStatus === "complete";
-              const previewPath = (session as any)?.previewVideoPath;
-              const previewReady = previewPath && previewPath !== "failed";
-              const hasVideoPath = !!session?.videoPath;
-              const posterPath = (session as any)?.previewPosterPath;
-              const posterUrl = posterPath && posterPath !== "failed" ? `/api/sessions/${activeSessionId}/poster` : null;
               const isStillProcessing = session?.processingStatus && 
                 !["ready", "failed"].includes(session.processingStatus);
               
-              // Show processing indicator while still processing AND no video ready
-              if (isStillProcessing && !hlsPlayable && !previewReady && !hasVideoPath) {
+              if (isStillProcessing) {
                 return (
-                  <div className="flex aspect-video items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
+                  <div className="flex aspect-[3/2] items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
                     <div className="text-center space-y-4 w-full max-w-md px-8">
                       <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
                       <div>
@@ -1025,98 +1012,27 @@ export default function SessionPage() {
                 );
               }
               
-              // Show video player if we have ANY video source available
-              if (activeSessionId && (hlsPlayable || previewReady || hasVideoPath)) {
-                return (
-                  <HlsVideoPlayer
-                    key={activeSessionId}
-                    sessionId={activeSessionId}
-                    hlsStatus={hlsStatus}
-                    fallbackVideoPath={previewReady ? previewPath : session?.videoPath || null}
-                    posterUrl={posterUrl}
-                    className="aspect-video w-full rounded-lg bg-black"
-                  />
-                );
-              }
-              
-              // Still processing, show spinner
-              if (isStillProcessing) {
-                return (
-                  <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
-                    <div className="text-center">
-                      <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                      <p className="mt-2 text-sm text-muted-foreground">Preparing video...</p>
-                    </div>
-                  </div>
-                );
-              }
-              
               return (
-                <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
-                  <p className="text-muted-foreground">No video available</p>
+                <div className="flex aspect-[3/2] items-center justify-center rounded-lg bg-muted/50 border-2 border-dashed border-muted-foreground/20">
+                  <div className="text-center space-y-2">
+                    <FileText className="mx-auto h-12 w-12 text-muted-foreground/50" />
+                    <p className="text-sm text-muted-foreground">
+                      Video processed - transcript ready below
+                    </p>
+                  </div>
                 </div>
               );
             })()}
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            {!isExpired && session?.videoPath && (
-              <a href={`/api/sessions/${session.id}/download`} download>
-                <Button variant="outline" data-testid="button-download">
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Video
-                </Button>
-              </a>
-            )}
-            {session?.expiresAt && !isExpired && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Expires {formatDistanceToNow(new Date(session.expiresAt), { addSuffix: true })}
-              </Badge>
-            )}
             {session?.goalType && (
               <Badge variant="outline">{session.goalType}</Badge>
             )}
           </div>
           
-          {/* Video rendering progress meter */}
-          {session && (() => {
-            const hlsStatus = (session as any)?.hlsStatus as HlsStatus | null;
-            const isHlsGenerating = hlsStatus === "queued" || hlsStatus === "generating";
-            const hlsPlayable = hlsStatus === "playable" || hlsStatus === "complete";
-            
-            if (isHlsGenerating || (hlsPlayable && hlsStatus !== "complete")) {
-              return (
-                <div className="mt-4 rounded-lg border bg-muted/50 p-3" data-testid="video-rendering-meter">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Video still rendering...</p>
-                      <p className="text-xs text-muted-foreground">
-                        {hlsStatus === "queued" && "Preparing video preview"}
-                        {hlsStatus === "generating" && "Generating preview segments"}
-                        {hlsStatus === "playable" && "Finalizing preview"}
-                      </p>
-                    </div>
-                    {(session as any)?.processingStartedAt && (
-                      <p className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date((session as any).processingStartedAt), { addSuffix: false })} elapsed
-                      </p>
-                    )}
-                  </div>
-                  <Progress 
-                    value={hlsStatus === "queued" ? 10 : hlsStatus === "generating" ? 50 : 90} 
-                    className="mt-2 h-1" 
-                  />
-                </div>
-              );
-            }
-            return null;
-          })()}
-          
           {session && session.processingStatus && session.processingStatus !== "ready" && (
             <div className="mt-6 border-t pt-4">
               <PipelineStatus
-                hlsStatus={(session as any)?.hlsStatus || null}
                 transcriptStatus={(session as any)?.transcriptStatus || null}
                 scoreStatus={(session as any)?.scoreStatus || null}
                 processingStatus={session.processingStatus}
@@ -1159,7 +1075,7 @@ export default function SessionPage() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Refresh Transcript?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will generate a new transcript from your video and update your scores. 
+                        This will generate a new transcript from your audio and update your scores. 
                         You have {retranscribesRemaining} refresh{retranscribesRemaining !== 1 ? "es" : ""} remaining for this session.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -1182,11 +1098,17 @@ export default function SessionPage() {
                   </AlertDialogContent>
                 </AlertDialog>
               )}
-              {(session?.retranscribeCount ?? 0) >= 3 && !isExpired && session?.videoPath && (
+              {(session?.retranscribeCount ?? 0) >= 3 && !isExpired && session?.transcriptText && (
                 <Badge variant="secondary" className="text-xs">
                   No refreshes remaining
                 </Badge>
               )}
+              <a href={`/api/sessions/${session.id}/transcript.txt`} download>
+                <Button variant="ghost" size="sm" data-testid="button-download-transcript">
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
+                </Button>
+              </a>
               <Button variant="ghost" size="sm" onClick={copyTranscript} data-testid="button-copy-transcript">
                 {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
                 {copied ? "Copied!" : "Copy"}
