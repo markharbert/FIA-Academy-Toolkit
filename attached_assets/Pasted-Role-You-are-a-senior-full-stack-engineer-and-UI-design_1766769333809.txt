@@ -1,0 +1,568 @@
+Role
+You are a senior full stack engineer and UI designer. You build production-ready web apps with clean UX, strong data hygiene, and clear guardrails. You will implement a new module called Topic Pulse Finder inside an existing members area tool called Fearless Video Coach.
+
+Goal
+Build a Topic Pulse Finder for YouTube focused affiliate marketers that:
+
+Finds in-demand video topics people are actively searching for and talking about.
+
+Lets the user click any topic and instantly generate a YouTube script using Mark Harbert’s 5-part video creation formula:
+Hook
+Set the Hook
+First Call to Action
+Content
+Final Call to Action
+
+Constraints
+
+Target platform: Replit. The app must run smoothly in Replit and be easy to deploy there.
+
+Organic traffic focus. The tool is for YouTube organic content.
+
+This is a new page or set of pages inside the Fearless Video Coach members area. It must feel like part of the same product, not a separate random app.
+
+Simple for beginners, powerful for intermediates.
+
+No gimmicks, no “rank #1 instantly” claims. Provide real research signals and clear reasoning.
+
+Assumptions about existing system
+
+Fearless Video Coach already has authentication and a members area layout with navigation.
+
+We can either:
+Option A: Add this module inside the existing codebase and reuse the current auth session.
+Option B: Run as a separate internal app but embedded in the members area via iframe, using secure single sign-on (JWT signed token) so users do not log in twice.
+Choose the option that fits the existing codebase best. If unknown, implement Option A first.
+
+Deliverables
+
+Working Topic Pulse Finder module with these pages:
+
+Topic Pulse Dashboard
+
+Topic Explorer (results list, filters, details panel)
+
+Script Generator (based on the 5-part formula)
+
+Saved Topics and Scripts library
+
+Settings (API keys status, defaults, user preferences)
+
+Data layer:
+
+Database tables for users, saved topics, saved scripts, run history, and source snapshots.
+
+Caching to reduce API calls and speed up results.
+
+Rate limits to prevent quota blowups.
+
+A clean UI that matches the existing Fearless Video Coach styling.
+
+Brand and UI direction
+
+Dark, modern, clean.
+
+Base color: #1a2537
+
+Accent color: a strong red for buttons and highlights.
+
+Lots of whitespace, readable typography, obvious buttons.
+
+“Card” layout for topic results.
+
+Left nav in the members area should include a new item: Topic Pulse Finder.
+
+Core user story
+As a member, I want to:
+
+Enter a niche or product category I promote.
+
+See real topic ideas with evidence they are in demand.
+
+Filter topics by intent (review, comparison, how-to, problem fix, beginner guide).
+
+Click a topic and instantly get a full script that fits Mark’s video formula.
+
+Save topics and scripts to a library for later.
+
+Export scripts to text and copy to clipboard.
+
+Topic Pulse Finder: what it must do
+
+A. Inputs
+Provide a simple input box plus optional advanced settings.
+
+Required input
+
+Niche seed: keywords or a short phrase. Example: “keto snacks” or “email marketing for beginners”
+
+Optional inputs
+
+Affiliate product name (if they already know it)
+
+Audience level: beginner, intermediate
+
+Tone preference: friendly, direct, coach style
+
+Video type: review, top list, vs, tutorial, problem fix, beginner guide
+
+Region: US, UK, CA, AU, global
+
+Recency window: 7 days, 30 days, 90 days
+
+B. Topic sources and signals
+The tool should produce topics using multiple signals, then combine them into a single ranked list.
+
+Use these sources (minimum set)
+
+YouTube autocomplete suggestions for the seed phrase
+
+YouTube search results metadata for those suggestions (top videos, view counts, publish recency, channel size)
+
+Google Trends (if available via API or a fallback approach) for rising interest signals
+
+Reddit and forum style signals (optional first release, but recommended): pull common questions and repeated phrases from relevant subreddits or sources
+
+If APIs are not available, implement graceful fallbacks
+
+If YouTube Data API is not configured, still show autocomplete-based topics and label them “autocomplete only.”
+
+Allow the admin to plug in API keys later without code changes.
+
+C. Output for each topic
+Each topic card must display:
+
+Topic title (human friendly)
+
+Keyword phrase (the exact query)
+
+Intent label: review, comparison, how-to, problem fix, beginner guide
+
+Demand signals:
+
+Autocomplete present (yes/no)
+
+Relative interest trend: rising, steady, falling, unknown
+
+Freshness score based on how many top results were published in the last 90 days
+
+Competition score based on average channel size of top results and how “locked up” the top results seem
+
+A single “Opportunity Score” from 0 to 100 that you compute from the above signals
+
+A short “Why this topic” explanation in plain language
+
+Important: show the reasons, not just the number. Members need confidence.
+
+D. Topic details panel
+When a topic is clicked, show a details view with:
+
+Suggested video angles (3 to 5 angles)
+
+Suggested hook ideas (5 hook lines)
+
+Suggested title options (10)
+
+Suggested thumbnail text options (5)
+
+Common questions people ask about this topic (pulled from sources when possible)
+
+A checklist for the user to validate the topic:
+
+Can you solve a specific problem?
+
+Can you show proof or a demo?
+
+Can you naturally mention an affiliate product?
+
+Then provide two buttons:
+
+Generate Script
+
+Save Topic
+
+Script Generator requirements
+
+A. Script creation flow
+When the user clicks Generate Script:
+
+Ask for minimal details in a small modal:
+
+Video length target: 3 to 5 minutes, 6 to 10 minutes, 10 to 15 minutes
+
+Affiliate offer name
+
+Affiliate link placeholder label (they can paste link later)
+
+Primary promise of the video in one sentence
+
+Optional: their personal angle or quick story (one paragraph)
+
+Create the script using Mark’s 5-part video creation formula.
+
+B. Output format
+The generated script must be structured like this:
+
+Hook
+
+10 to 20 seconds
+
+One strong promise
+
+One curiosity line
+
+One quick “who this is for”
+
+Set the Hook
+
+20 to 40 seconds
+
+Agitate the problem
+
+Show what will happen by the end of the video
+
+Transition line into the main content
+
+First Call to Action
+
+Quick, not salesy
+
+Subscribe or comment prompt that fits the topic
+
+If appropriate, mention “I dropped a resource below” but do not hard sell
+
+Content
+
+Clear numbered sections with timestamps
+
+Examples and simple explanations
+
+Optional mini story or proof
+
+1 to 3 natural mentions of the affiliate offer, framed as “this can help with X”
+
+Include “on-screen text” suggestions for key moments
+
+Include “B-roll ideas” suggestions for key moments
+
+Final Call to Action
+
+Clear next step
+
+Mention the affiliate link placeholder and what it helps them do
+
+Suggest a related next video topic from the Topic Pulse list
+
+C. Script variations
+After generating the main script, also generate:
+
+A short version for a YouTube Short (30 to 45 seconds)
+
+A pinned comment draft
+
+A description draft that includes:
+
+2 line summary
+
+the affiliate disclosure line
+
+link placeholder section
+
+5 to 10 tags suggestions
+
+D. Save and export
+
+Save script to the user’s library with topic metadata.
+
+Provide buttons:
+
+Copy full script
+
+Copy Shorts script
+
+Copy pinned comment
+
+Copy description
+
+Data model (minimum)
+Use a relational DB (SQLite is fine for MVP, Postgres if already used).
+
+Tables
+users
+
+id
+
+email
+
+created_at
+
+topic_runs
+
+id
+
+user_id
+
+created_at
+
+seed_query
+
+settings_json
+
+status
+
+runtime_ms
+
+topics
+
+id
+
+run_id
+
+topic_title
+
+keyword_query
+
+intent
+
+opportunity_score
+
+demand_signals_json
+
+why_text
+
+created_at
+
+saved_topics
+
+id
+
+user_id
+
+topic_id
+
+notes
+
+created_at
+
+scripts
+
+id
+
+user_id
+
+topic_id
+
+inputs_json
+
+script_json (store sections and variations separately inside JSON)
+
+created_at
+
+link_placeholders
+
+id
+
+user_id
+
+label
+
+url
+
+created_at
+
+updated_at
+
+APIs and keys
+Support these keys as environment variables in Replit:
+
+YOUTUBE_API_KEY
+
+OPENAI_API_KEY (or the LLM provider you choose)
+
+REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET (optional)
+
+DATABASE_URL if using Postgres
+
+If keys are missing:
+
+Show a clear “Some features are unavailable until keys are added” panel in Settings.
+
+Still allow the tool to function using autocomplete-only topics and basic script generation (if the LLM key exists).
+
+Backend logic details
+
+Topic generation pipeline
+
+Take seed query.
+
+Generate 20 to 50 candidate queries via:
+
+YouTube autocomplete
+
+Related keyword expansion (simple synonyms, “best”, “review”, “vs”, “how to”, “for beginners”, “2026”)
+
+For each candidate query:
+
+Pull top N YouTube results and collect:
+
+view counts
+
+publish dates
+
+channel subscriber count (if accessible)
+
+video length
+
+title patterns
+
+Compute signals:
+
+Freshness: % of top results in last 90 days
+
+Competition: average channel size and dominance of top videos
+
+Demand: presence in autocomplete, plus trend data if available
+
+Compute Opportunity Score 0 to 100.
+Explain it in plain language.
+
+Script generation
+
+Use the selected topic’s data to inform script.
+
+Use the 5-part formula exactly and label each section.
+
+Keep the tone conversational and direct.
+
+Avoid hype and vague claims.
+
+Add practical examples and clear steps.
+
+Performance
+
+Cache results per seed query and region window for at least 24 hours.
+
+Debounce search requests.
+
+Add server-side rate limiting per user.
+
+UI components checklist
+
+Dashboard
+
+“Start a topic pulse” input at top
+
+Quick presets: Review, Comparison, How-to, Problem Fix
+
+Recent runs list
+
+Saved topics count, saved scripts count
+
+Topic Explorer
+
+Left column: filters
+
+intent
+
+recency window
+
+opportunity score range
+
+competition level
+
+Middle: topic cards list
+
+Right: topic details panel with Generate Script button
+
+Script Generator page
+
+Script preview with collapsible sections
+
+Tabs: Full Script, Shorts, Pinned Comment, Description
+
+Copy buttons
+
+Save button
+
+Saved Library
+
+Search bar
+
+Filters: by niche, by intent, by date
+
+Each item opens to view and edit notes
+
+Settings
+
+API key status indicators
+
+Default video length
+
+Default CTA style (comment, subscribe, resource mention)
+
+Export preferences
+
+Integration with Fearless Video Coach
+
+Add navigation item Topic Pulse Finder
+
+Use the same header, footer, and member layout
+
+Use the same user identity and database user id
+
+If Fearless Video Coach uses a session token, reuse it
+
+If separate app is required, implement SSO:
+
+Members area generates a short-lived signed JWT
+
+Embedded app validates JWT and creates a session
+
+No shared secrets in the browser
+
+Security and compliance
+
+Store API keys only in server environment variables
+
+Do not expose keys to the client
+
+Log API usage per user for debugging and quota control
+
+Include an affiliate disclosure template in the description output
+
+Provide a simple privacy note: we store topics, scripts, and inputs for the user
+
+Quality bar
+
+The tool must feel fast, clean, and easy.
+
+It must produce topics that make sense, not random fluff.
+
+It must produce scripts that feel human, structured, and usable immediately.
+
+It must be stable in Replit with clear setup steps.
+
+Build plan
+Phase 1 MVP
+
+Topic pulse from YouTube autocomplete + YouTube API results
+
+Opportunity score + explanations
+
+Script generation with 5-part formula
+
+Save topics and scripts
+
+Clean UI and integration into members area
+
+Phase 2
+
+Add trends signal
+
+Add competitor comment mining
+
+Add more script variations and better title and thumbnail suggestions
+
+Add link health checking and click tracking
+
+Now begin implementation. Start by auditing the existing Fearless Video Coach codebase, then add the Topic Pulse Finder module as described. Include setup instructions for Replit and a short admin guide for adding API keys.

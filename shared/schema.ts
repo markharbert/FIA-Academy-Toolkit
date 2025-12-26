@@ -473,3 +473,243 @@ export const adminUpdateUserSchema = z.object({
 });
 
 export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
+
+// ==========================================
+// Topic Pulse Finder Module
+// ==========================================
+
+// Intent types for video topics
+export const topicIntents = ["review", "comparison", "how-to", "problem-fix", "beginner-guide", "top-list"] as const;
+export type TopicIntent = typeof topicIntents[number];
+
+// Video type preferences
+export const videoTypes = ["review", "top-list", "vs", "tutorial", "problem-fix", "beginner-guide"] as const;
+export type VideoType = typeof videoTypes[number];
+
+// Audience levels
+export const audienceLevels = ["beginner", "intermediate", "advanced"] as const;
+export type AudienceLevel = typeof audienceLevels[number];
+
+// Tone preferences
+export const tonePreferences = ["friendly", "direct", "coach"] as const;
+export type TonePreference = typeof tonePreferences[number];
+
+// Topic run status
+export const topicRunStatuses = ["pending", "processing", "complete", "failed"] as const;
+export type TopicRunStatus = typeof topicRunStatuses[number];
+
+// Trend direction
+export const trendDirections = ["rising", "steady", "falling", "unknown"] as const;
+export type TrendDirection = typeof trendDirections[number];
+
+// Video length targets
+export const videoLengthTargets = ["3-5", "6-10", "10-15"] as const;
+export type VideoLengthTarget = typeof videoLengthTargets[number];
+
+// Topic runs table for tracking topic generation requests
+export const topicRuns = pgTable("topic_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  seedQuery: text("seed_query").notNull(),
+  settingsJson: jsonb("settings_json").$type<{
+    affiliateProduct?: string;
+    audienceLevel?: AudienceLevel;
+    tonePreference?: TonePreference;
+    videoType?: VideoType;
+    region?: string;
+    recencyDays?: number;
+  }>(),
+  status: text("status").default("pending").$type<TopicRunStatus>(),
+  runtimeMs: integer("runtime_ms"),
+  topicCount: integer("topic_count").default(0),
+  errorMessage: text("error_message"),
+});
+
+export const insertTopicRunSchema = createInsertSchema(topicRuns).omit({
+  id: true,
+  createdAt: true,
+  runtimeMs: true,
+  topicCount: true,
+  errorMessage: true,
+});
+
+export type InsertTopicRun = z.infer<typeof insertTopicRunSchema>;
+export type TopicRun = typeof topicRuns.$inferSelect;
+
+// Demand signals JSON structure
+export const demandSignalsSchema = z.object({
+  autocompletePresent: z.boolean(),
+  trendDirection: z.enum(trendDirections),
+  freshnessScore: z.number().min(0).max(100),
+  competitionScore: z.number().min(0).max(100),
+  avgChannelSize: z.number().optional(),
+  topVideoViews: z.array(z.number()).optional(),
+  recentVideoCount: z.number().optional(),
+});
+
+export type DemandSignals = z.infer<typeof demandSignalsSchema>;
+
+// Topics table for generated topic ideas
+export const topics = pgTable("topics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  runId: varchar("run_id").notNull().references(() => topicRuns.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  topicTitle: text("topic_title").notNull(),
+  keywordQuery: text("keyword_query").notNull(),
+  intent: text("intent").$type<TopicIntent>(),
+  opportunityScore: integer("opportunity_score").default(0),
+  demandSignalsJson: jsonb("demand_signals_json").$type<DemandSignals>(),
+  whyText: text("why_text"),
+  suggestedAngles: jsonb("suggested_angles").$type<string[]>(),
+  suggestedHooks: jsonb("suggested_hooks").$type<string[]>(),
+  suggestedTitles: jsonb("suggested_titles").$type<string[]>(),
+  suggestedThumbnailText: jsonb("suggested_thumbnail_text").$type<string[]>(),
+  commonQuestions: jsonb("common_questions").$type<string[]>(),
+});
+
+export const insertTopicSchema = createInsertSchema(topics).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTopic = z.infer<typeof insertTopicSchema>;
+export type Topic = typeof topics.$inferSelect;
+
+// Saved topics table for user's bookmarked topics
+export const savedTopics = pgTable("saved_topics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  topicId: varchar("topic_id").notNull().references(() => topics.id, { onDelete: "cascade" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSavedTopicSchema = createInsertSchema(savedTopics).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSavedTopic = z.infer<typeof insertSavedTopicSchema>;
+export type SavedTopic = typeof savedTopics.$inferSelect;
+
+// Script structure for the 5-part formula
+export const scriptSectionSchema = z.object({
+  hook: z.object({
+    text: z.string(),
+    duration: z.string(),
+    onScreenText: z.array(z.string()).optional(),
+  }),
+  setHook: z.object({
+    text: z.string(),
+    duration: z.string(),
+    onScreenText: z.array(z.string()).optional(),
+  }),
+  firstCTA: z.object({
+    text: z.string(),
+    duration: z.string(),
+  }),
+  content: z.object({
+    text: z.string(),
+    sections: z.array(z.object({
+      title: z.string(),
+      content: z.string(),
+      timestamp: z.string().optional(),
+      brollIdeas: z.array(z.string()).optional(),
+      onScreenText: z.array(z.string()).optional(),
+    })),
+  }),
+  finalCTA: z.object({
+    text: z.string(),
+    duration: z.string(),
+    nextVideoSuggestion: z.string().optional(),
+  }),
+});
+
+export const scriptJsonSchema = z.object({
+  fullScript: scriptSectionSchema,
+  shortsScript: z.string().optional(),
+  pinnedComment: z.string().optional(),
+  description: z.object({
+    summary: z.string(),
+    affiliateDisclosure: z.string(),
+    linkSection: z.string(),
+    tags: z.array(z.string()),
+  }).optional(),
+});
+
+export type ScriptJson = z.infer<typeof scriptJsonSchema>;
+
+// Scripts table for generated video scripts
+export const scripts = pgTable("scripts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  topicId: varchar("topic_id").references(() => topics.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  title: text("title").notNull(),
+  inputsJson: jsonb("inputs_json").$type<{
+    videoLengthTarget: VideoLengthTarget;
+    affiliateOffer: string;
+    affiliateLinkLabel: string;
+    primaryPromise: string;
+    personalAngle?: string;
+    tonePreference?: TonePreference;
+  }>(),
+  scriptJson: jsonb("script_json").$type<ScriptJson>(),
+  notes: text("notes"),
+});
+
+export const insertScriptSchema = createInsertSchema(scripts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertScript = z.infer<typeof insertScriptSchema>;
+export type Script = typeof scripts.$inferSelect;
+
+// Link placeholders for affiliate links
+export const linkPlaceholders = pgTable("link_placeholders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  url: text("url"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertLinkPlaceholderSchema = createInsertSchema(linkPlaceholders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertLinkPlaceholder = z.infer<typeof insertLinkPlaceholderSchema>;
+export type LinkPlaceholder = typeof linkPlaceholders.$inferSelect;
+
+// Topic search input schema for API validation
+export const topicSearchInputSchema = z.object({
+  seedQuery: z.string().min(2, "Please enter at least 2 characters"),
+  affiliateProduct: z.string().optional(),
+  audienceLevel: z.enum(audienceLevels).optional(),
+  tonePreference: z.enum(tonePreferences).optional(),
+  videoType: z.enum(videoTypes).optional(),
+  region: z.string().optional(),
+  recencyDays: z.number().min(7).max(90).optional(),
+});
+
+export type TopicSearchInput = z.infer<typeof topicSearchInputSchema>;
+
+// Script generation input schema for API validation
+export const scriptGenerationInputSchema = z.object({
+  topicId: z.string(),
+  videoLengthTarget: z.enum(videoLengthTargets),
+  affiliateOffer: z.string().min(1, "Please enter the affiliate offer name"),
+  affiliateLinkLabel: z.string().min(1, "Please enter a link label"),
+  primaryPromise: z.string().min(10, "Please describe the main promise of your video"),
+  personalAngle: z.string().optional(),
+  tonePreference: z.enum(tonePreferences).optional(),
+});
+
+export type ScriptGenerationInput = z.infer<typeof scriptGenerationInputSchema>;

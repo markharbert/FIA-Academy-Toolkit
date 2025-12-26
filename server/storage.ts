@@ -1,5 +1,6 @@
 import { 
   users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult, type SystemSettings,
@@ -8,7 +9,12 @@ import {
   type AdminAuditLog, type InsertAdminAuditLog,
   type UserActionLog, type InsertUserActionLog, type UserActionType,
   type ProcessingMetric, type InsertProcessingMetric,
-  type SessionFolder, type InsertSessionFolder
+  type SessionFolder, type InsertSessionFolder,
+  type TopicRun, type InsertTopicRun,
+  type Topic, type InsertTopic,
+  type SavedTopic, type InsertSavedTopic,
+  type Script, type InsertScript,
+  type LinkPlaceholder, type InsertLinkPlaceholder
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizzle-orm";
@@ -166,6 +172,37 @@ export interface IStorage {
   moveSessions(sessionIds: string[], userId: string, folderId: string | null): Promise<number>;
   deleteSessions(sessionIds: string[], userId: string): Promise<{ deletedCount: number; deletedPaths: string[] }>;
   getSessionsByFolder(userId: string, folderId: string | null): Promise<Session[]>;
+  
+  // Topic Pulse Finder: Topic Runs
+  createTopicRun(run: InsertTopicRun): Promise<TopicRun>;
+  getTopicRun(id: string): Promise<TopicRun | undefined>;
+  getTopicRunsByUser(userId: string, limit?: number): Promise<TopicRun[]>;
+  updateTopicRun(id: string, updates: Partial<TopicRun>): Promise<TopicRun | undefined>;
+  
+  // Topic Pulse Finder: Topics
+  createTopic(topic: InsertTopic): Promise<Topic>;
+  createTopics(topics: InsertTopic[]): Promise<Topic[]>;
+  getTopic(id: string): Promise<Topic | undefined>;
+  getTopicsByRun(runId: string): Promise<Topic[]>;
+  
+  // Topic Pulse Finder: Saved Topics
+  saveTopicForUser(savedTopic: InsertSavedTopic): Promise<SavedTopic>;
+  getSavedTopicsByUser(userId: string): Promise<(SavedTopic & { topic: Topic })[]>;
+  deleteSavedTopic(id: string, userId: string): Promise<boolean>;
+  isSavedTopic(topicId: string, userId: string): Promise<boolean>;
+  
+  // Topic Pulse Finder: Scripts
+  createScript(script: InsertScript): Promise<Script>;
+  getScript(id: string): Promise<Script | undefined>;
+  getScriptsByUser(userId: string): Promise<(Script & { topic?: Topic })[]>;
+  updateScript(id: string, userId: string, updates: Partial<Script>): Promise<Script | undefined>;
+  deleteScript(id: string, userId: string): Promise<boolean>;
+  
+  // Topic Pulse Finder: Link Placeholders
+  createLinkPlaceholder(link: InsertLinkPlaceholder): Promise<LinkPlaceholder>;
+  getLinkPlaceholdersByUser(userId: string): Promise<LinkPlaceholder[]>;
+  updateLinkPlaceholder(id: string, userId: string, updates: { label?: string; url?: string }): Promise<LinkPlaceholder | undefined>;
+  deleteLinkPlaceholder(id: string, userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -971,6 +1008,154 @@ export class DatabaseStorage implements IStorage {
       .from(sessions)
       .where(and(eq(sessions.userId, userId), eq(sessions.folderId, folderId)))
       .orderBy(desc(sessions.createdAt));
+  }
+  
+  // Topic Pulse Finder: Topic Runs
+  async createTopicRun(run: InsertTopicRun): Promise<TopicRun> {
+    const [result] = await db.insert(topicRuns).values(run as any).returning();
+    return result;
+  }
+  
+  async getTopicRun(id: string): Promise<TopicRun | undefined> {
+    const [result] = await db.select().from(topicRuns).where(eq(topicRuns.id, id));
+    return result || undefined;
+  }
+  
+  async getTopicRunsByUser(userId: string, limit = 20): Promise<TopicRun[]> {
+    return db.select().from(topicRuns)
+      .where(eq(topicRuns.userId, userId))
+      .orderBy(desc(topicRuns.createdAt))
+      .limit(limit);
+  }
+  
+  async updateTopicRun(id: string, updates: Partial<TopicRun>): Promise<TopicRun | undefined> {
+    const [result] = await db.update(topicRuns)
+      .set(updates)
+      .where(eq(topicRuns.id, id))
+      .returning();
+    return result || undefined;
+  }
+  
+  // Topic Pulse Finder: Topics
+  async createTopic(topic: InsertTopic): Promise<Topic> {
+    const [result] = await db.insert(topics).values(topic as any).returning();
+    return result;
+  }
+  
+  async createTopics(topicsData: InsertTopic[]): Promise<Topic[]> {
+    if (topicsData.length === 0) return [];
+    return db.insert(topics).values(topicsData as any).returning();
+  }
+  
+  async getTopic(id: string): Promise<Topic | undefined> {
+    const [result] = await db.select().from(topics).where(eq(topics.id, id));
+    return result || undefined;
+  }
+  
+  async getTopicsByRun(runId: string): Promise<Topic[]> {
+    return db.select().from(topics)
+      .where(eq(topics.runId, runId))
+      .orderBy(desc(topics.opportunityScore));
+  }
+  
+  // Topic Pulse Finder: Saved Topics
+  async saveTopicForUser(savedTopic: InsertSavedTopic): Promise<SavedTopic> {
+    const [result] = await db.insert(savedTopics).values(savedTopic).returning();
+    return result;
+  }
+  
+  async getSavedTopicsByUser(userId: string): Promise<(SavedTopic & { topic: Topic })[]> {
+    const results = await db.select()
+      .from(savedTopics)
+      .innerJoin(topics, eq(savedTopics.topicId, topics.id))
+      .where(eq(savedTopics.userId, userId))
+      .orderBy(desc(savedTopics.createdAt));
+    
+    return results.map(r => ({
+      ...r.saved_topics,
+      topic: r.topics
+    }));
+  }
+  
+  async deleteSavedTopic(id: string, userId: string): Promise<boolean> {
+    const [result] = await db.delete(savedTopics)
+      .where(and(eq(savedTopics.id, id), eq(savedTopics.userId, userId)))
+      .returning();
+    return !!result;
+  }
+  
+  async isSavedTopic(topicId: string, userId: string): Promise<boolean> {
+    const [result] = await db.select({ id: savedTopics.id })
+      .from(savedTopics)
+      .where(and(eq(savedTopics.topicId, topicId), eq(savedTopics.userId, userId)))
+      .limit(1);
+    return !!result;
+  }
+  
+  // Topic Pulse Finder: Scripts
+  async createScript(script: InsertScript): Promise<Script> {
+    const [result] = await db.insert(scripts).values(script).returning();
+    return result;
+  }
+  
+  async getScript(id: string): Promise<Script | undefined> {
+    const [result] = await db.select().from(scripts).where(eq(scripts.id, id));
+    return result || undefined;
+  }
+  
+  async getScriptsByUser(userId: string): Promise<(Script & { topic?: Topic })[]> {
+    const results = await db.select()
+      .from(scripts)
+      .leftJoin(topics, eq(scripts.topicId, topics.id))
+      .where(eq(scripts.userId, userId))
+      .orderBy(desc(scripts.createdAt));
+    
+    return results.map(r => ({
+      ...r.scripts,
+      topic: r.topics || undefined
+    }));
+  }
+  
+  async updateScript(id: string, userId: string, updates: Partial<Script>): Promise<Script | undefined> {
+    const [result] = await db.update(scripts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(scripts.id, id), eq(scripts.userId, userId)))
+      .returning();
+    return result || undefined;
+  }
+  
+  async deleteScript(id: string, userId: string): Promise<boolean> {
+    const [result] = await db.delete(scripts)
+      .where(and(eq(scripts.id, id), eq(scripts.userId, userId)))
+      .returning();
+    return !!result;
+  }
+  
+  // Topic Pulse Finder: Link Placeholders
+  async createLinkPlaceholder(link: InsertLinkPlaceholder): Promise<LinkPlaceholder> {
+    const [result] = await db.insert(linkPlaceholders).values(link).returning();
+    return result;
+  }
+  
+  async getLinkPlaceholdersByUser(userId: string): Promise<LinkPlaceholder[]> {
+    return db.select().from(linkPlaceholders)
+      .where(eq(linkPlaceholders.userId, userId))
+      .orderBy(desc(linkPlaceholders.createdAt));
+  }
+  
+  async updateLinkPlaceholder(id: string, userId: string, updates: { label?: string; url?: string }): Promise<LinkPlaceholder | undefined> {
+    const [result] = await db.update(linkPlaceholders)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(linkPlaceholders.id, id), eq(linkPlaceholders.userId, userId)))
+      .returning();
+    return result || undefined;
+  }
+  
+  async deleteLinkPlaceholder(id: string, userId: string): Promise<boolean> {
+    const [result] = await db.delete(linkPlaceholders)
+      .where(and(eq(linkPlaceholders.id, id), eq(linkPlaceholders.userId, userId)))
+      .returning();
+    return !!result;
   }
 }
 

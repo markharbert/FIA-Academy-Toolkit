@@ -17,6 +17,12 @@ import DashboardPage from "@/pages/dashboard";
 import SessionPage from "@/pages/session";
 import AdminPage from "@/pages/admin";
 import AccountPage from "@/pages/account";
+import TopicPulsePage from "@/pages/topic-pulse";
+import TopicPulseExplorePage from "@/pages/topic-pulse-explore";
+import TopicPulseScriptPage from "@/pages/topic-pulse-script";
+import TopicPulseScriptsPage from "@/pages/topic-pulse-scripts";
+import TopicPulseSavedPage from "@/pages/topic-pulse-saved";
+import TopicPulseSettingsPage from "@/pages/topic-pulse-settings";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -126,6 +132,24 @@ function Router() {
       </Route>
       <Route path="/account">
         {() => <ProtectedRoute component={AccountPage} />}
+      </Route>
+      <Route path="/topic-pulse">
+        {() => <ProtectedRoute component={TopicPulsePage} />}
+      </Route>
+      <Route path="/topic-pulse/explore/:runId">
+        {() => <ProtectedRoute component={TopicPulseExplorePage} />}
+      </Route>
+      <Route path="/topic-pulse/scripts/:scriptId">
+        {() => <ProtectedRoute component={TopicPulseScriptPage} />}
+      </Route>
+      <Route path="/topic-pulse/scripts">
+        {() => <ProtectedRoute component={TopicPulseScriptsPage} />}
+      </Route>
+      <Route path="/topic-pulse/saved">
+        {() => <ProtectedRoute component={TopicPulseSavedPage} />}
+      </Route>
+      <Route path="/topic-pulse/settings">
+        {() => <ProtectedRoute component={TopicPulseSettingsPage} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

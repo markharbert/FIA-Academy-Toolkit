@@ -3653,5 +3653,353 @@ export async function registerRoutes(
     }
   });
 
+  // ==========================================
+  // Topic Pulse Finder API Routes
+  // ==========================================
+  
+  const { generateTopics, enrichTopicDetails, generateScript, getApiKeyStatus } = await import("./topic-pulse");
+  const { topicSearchInputSchema, scriptGenerationInputSchema } = await import("@shared/schema");
+
+  app.get("/api/topic-pulse/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const status = getApiKeyStatus();
+      res.json(status);
+    } catch (err) {
+      console.error("[TopicPulse] Status error:", err);
+      res.status(500).json({ message: "Failed to get status" });
+    }
+  });
+
+  app.get("/api/topic-pulse/runs", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const runs = await storage.getTopicRunsByUser(req.session.userId!, 20);
+      res.json(runs);
+    } catch (err) {
+      console.error("[TopicPulse] Get runs error:", err);
+      res.status(500).json({ message: "Failed to get topic runs" });
+    }
+  });
+
+  app.post("/api/topic-pulse/search", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const parsed = topicSearchInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const startTime = Date.now();
+      
+      const run = await storage.createTopicRun({
+        userId: req.session.userId!,
+        seedQuery: parsed.data.seedQuery,
+        settingsJson: {
+          affiliateProduct: parsed.data.affiliateProduct,
+          audienceLevel: parsed.data.audienceLevel,
+          tonePreference: parsed.data.tonePreference,
+          videoType: parsed.data.videoType,
+          region: parsed.data.region,
+          recencyDays: parsed.data.recencyDays,
+        },
+        status: "processing",
+      });
+
+      const topicsData = await generateTopics(parsed.data, run.id);
+      const createdTopics = await storage.createTopics(topicsData);
+
+      const runtimeMs = Date.now() - startTime;
+      await storage.updateTopicRun(run.id, {
+        status: "complete",
+        runtimeMs,
+        topicCount: createdTopics.length,
+      });
+
+      res.json({
+        runId: run.id,
+        topics: createdTopics,
+        runtimeMs,
+      });
+    } catch (err) {
+      console.error("[TopicPulse] Search error:", err);
+      res.status(500).json({ message: "Failed to search topics" });
+    }
+  });
+
+  app.get("/api/topic-pulse/runs/:runId/topics", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const run = await storage.getTopicRun(req.params.runId);
+      if (!run) {
+        return res.status(404).json({ message: "Run not found" });
+      }
+      if (run.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const topics = await storage.getTopicsByRun(req.params.runId);
+      res.json(topics);
+    } catch (err) {
+      console.error("[TopicPulse] Get topics error:", err);
+      res.status(500).json({ message: "Failed to get topics" });
+    }
+  });
+
+  app.get("/api/topic-pulse/topics/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const topic = await storage.getTopic(req.params.id);
+      if (!topic) {
+        return res.status(404).json({ message: "Topic not found" });
+      }
+
+      const run = await storage.getTopicRun(topic.runId);
+      if (!run || run.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      res.json(topic);
+    } catch (err) {
+      console.error("[TopicPulse] Get topic error:", err);
+      res.status(500).json({ message: "Failed to get topic" });
+    }
+  });
+
+  app.post("/api/topic-pulse/topics/:id/enrich", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const topic = await storage.getTopic(req.params.id);
+      if (!topic) {
+        return res.status(404).json({ message: "Topic not found" });
+      }
+
+      const run = await storage.getTopicRun(topic.runId);
+      if (!run || run.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const enrichedData = await enrichTopicDetails(topic);
+      
+      const { db } = await import("./db");
+      const { topics } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      const [updatedTopic] = await db.update(topics)
+        .set(enrichedData as any)
+        .where(eq(topics.id, topic.id))
+        .returning();
+
+      res.json(updatedTopic);
+    } catch (err) {
+      console.error("[TopicPulse] Enrich error:", err);
+      res.status(500).json({ message: "Failed to enrich topic" });
+    }
+  });
+
+  app.post("/api/topic-pulse/topics/:id/save", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const topic = await storage.getTopic(req.params.id);
+      if (!topic) {
+        return res.status(404).json({ message: "Topic not found" });
+      }
+
+      const run = await storage.getTopicRun(topic.runId);
+      if (!run || run.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const alreadySaved = await storage.isSavedTopic(topic.id, req.session.userId!);
+      if (alreadySaved) {
+        return res.status(400).json({ message: "Topic already saved" });
+      }
+
+      const savedTopic = await storage.saveTopicForUser({
+        userId: req.session.userId!,
+        topicId: topic.id,
+        notes: req.body.notes || null,
+      });
+
+      res.json(savedTopic);
+    } catch (err) {
+      console.error("[TopicPulse] Save topic error:", err);
+      res.status(500).json({ message: "Failed to save topic" });
+    }
+  });
+
+  app.get("/api/topic-pulse/saved-topics", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const savedTopics = await storage.getSavedTopicsByUser(req.session.userId!);
+      res.json(savedTopics);
+    } catch (err) {
+      console.error("[TopicPulse] Get saved topics error:", err);
+      res.status(500).json({ message: "Failed to get saved topics" });
+    }
+  });
+
+  app.delete("/api/topic-pulse/saved-topics/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteSavedTopic(req.params.id, req.session.userId!);
+      if (!deleted) {
+        return res.status(404).json({ message: "Saved topic not found" });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[TopicPulse] Delete saved topic error:", err);
+      res.status(500).json({ message: "Failed to delete saved topic" });
+    }
+  });
+
+  app.post("/api/topic-pulse/scripts/generate", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const parsed = scriptGenerationInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const topic = await storage.getTopic(parsed.data.topicId);
+      if (!topic) {
+        return res.status(404).json({ message: "Topic not found" });
+      }
+
+      const run = await storage.getTopicRun(topic.runId);
+      if (!run || run.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const scriptJson = await generateScript(parsed.data, topic);
+
+      const script = await storage.createScript({
+        userId: req.session.userId!,
+        topicId: topic.id,
+        title: topic.topicTitle,
+        inputsJson: {
+          videoLengthTarget: parsed.data.videoLengthTarget,
+          affiliateOffer: parsed.data.affiliateOffer,
+          affiliateLinkLabel: parsed.data.affiliateLinkLabel,
+          primaryPromise: parsed.data.primaryPromise,
+          personalAngle: parsed.data.personalAngle,
+          tonePreference: parsed.data.tonePreference,
+        },
+        scriptJson,
+        notes: null,
+      });
+
+      res.json(script);
+    } catch (err) {
+      console.error("[TopicPulse] Generate script error:", err);
+      res.status(500).json({ message: "Failed to generate script" });
+    }
+  });
+
+  app.get("/api/topic-pulse/scripts", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const scripts = await storage.getScriptsByUser(req.session.userId!);
+      res.json(scripts);
+    } catch (err) {
+      console.error("[TopicPulse] Get scripts error:", err);
+      res.status(500).json({ message: "Failed to get scripts" });
+    }
+  });
+
+  app.get("/api/topic-pulse/scripts/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const script = await storage.getScript(req.params.id);
+      if (!script) {
+        return res.status(404).json({ message: "Script not found" });
+      }
+      if (script.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      res.json(script);
+    } catch (err) {
+      console.error("[TopicPulse] Get script error:", err);
+      res.status(500).json({ message: "Failed to get script" });
+    }
+  });
+
+  app.patch("/api/topic-pulse/scripts/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const updates: { notes?: string; title?: string } = {};
+      if (typeof req.body.notes === "string") updates.notes = req.body.notes;
+      if (typeof req.body.title === "string") updates.title = req.body.title;
+
+      const script = await storage.updateScript(req.params.id, req.session.userId!, updates);
+      if (!script) {
+        return res.status(404).json({ message: "Script not found" });
+      }
+      res.json(script);
+    } catch (err) {
+      console.error("[TopicPulse] Update script error:", err);
+      res.status(500).json({ message: "Failed to update script" });
+    }
+  });
+
+  app.delete("/api/topic-pulse/scripts/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteScript(req.params.id, req.session.userId!);
+      if (!deleted) {
+        return res.status(404).json({ message: "Script not found" });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[TopicPulse] Delete script error:", err);
+      res.status(500).json({ message: "Failed to delete script" });
+    }
+  });
+
+  app.get("/api/topic-pulse/links", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const links = await storage.getLinkPlaceholdersByUser(req.session.userId!);
+      res.json(links);
+    } catch (err) {
+      console.error("[TopicPulse] Get links error:", err);
+      res.status(500).json({ message: "Failed to get link placeholders" });
+    }
+  });
+
+  app.post("/api/topic-pulse/links", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!req.body.label || typeof req.body.label !== "string") {
+        return res.status(400).json({ message: "Label is required" });
+      }
+
+      const link = await storage.createLinkPlaceholder({
+        userId: req.session.userId!,
+        label: req.body.label,
+        url: req.body.url || null,
+      });
+
+      res.json(link);
+    } catch (err) {
+      console.error("[TopicPulse] Create link error:", err);
+      res.status(500).json({ message: "Failed to create link placeholder" });
+    }
+  });
+
+  app.patch("/api/topic-pulse/links/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const updates: { label?: string; url?: string } = {};
+      if (typeof req.body.label === "string") updates.label = req.body.label;
+      if (typeof req.body.url === "string") updates.url = req.body.url;
+
+      const link = await storage.updateLinkPlaceholder(req.params.id, req.session.userId!, updates);
+      if (!link) {
+        return res.status(404).json({ message: "Link not found" });
+      }
+      res.json(link);
+    } catch (err) {
+      console.error("[TopicPulse] Update link error:", err);
+      res.status(500).json({ message: "Failed to update link placeholder" });
+    }
+  });
+
+  app.delete("/api/topic-pulse/links/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteLinkPlaceholder(req.params.id, req.session.userId!);
+      if (!deleted) {
+        return res.status(404).json({ message: "Link not found" });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[TopicPulse] Delete link error:", err);
+      res.status(500).json({ message: "Failed to delete link placeholder" });
+    }
+  });
+
   return httpServer;
 }
