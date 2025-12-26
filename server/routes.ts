@@ -522,24 +522,28 @@ export async function registerRoutes(
     }));
 
     app.get("/api/auth/oauth/google/callback", (req: Request, res: Response, next: NextFunction) => {
+      console.log("[OAuth Google] Callback received, query:", JSON.stringify(req.query));
       passport.authenticate("google", (err: any, user: any, info: any) => {
+        console.log("[OAuth Google] Passport result - err:", err?.message || null, "user:", user?.id || null, "info:", JSON.stringify(info));
         if (err) {
-          console.error("[OAuth Google] Authentication error:", err.message);
-          return res.redirect("/login?error=oauth_failed");
+          console.error("[OAuth Google] Authentication error:", err.message, err.stack);
+          return res.redirect("/login?error=oauth_failed&reason=auth_error");
         }
         
         if (!user) {
-          console.error("[OAuth Google] No user returned from strategy");
-          return res.redirect("/login?error=oauth_failed");
+          console.error("[OAuth Google] No user returned from strategy, info:", JSON.stringify(info));
+          return res.redirect("/login?error=oauth_failed&reason=no_user");
         }
         
         // Set session and save before redirect
+        console.log("[OAuth Google] Setting session for user:", user.id);
         req.session.userId = user.id;
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error("[OAuth Google] Session save error:", saveErr);
-            return res.redirect("/login?error=oauth_failed");
+            return res.redirect("/login?error=oauth_failed&reason=session_save");
           }
+          console.log("[OAuth Google] Session saved, redirecting to dashboard");
           res.redirect("/dashboard");
         });
       })(req, res, next);
