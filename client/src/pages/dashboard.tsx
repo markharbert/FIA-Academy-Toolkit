@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +27,8 @@ import {
   X,
   Loader2,
   Trash2,
+  Pencil,
+  Check,
 } from "lucide-react";
 import type { Session } from "@shared/schema";
 import { format } from "date-fns";
