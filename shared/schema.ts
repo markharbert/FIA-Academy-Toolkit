@@ -595,6 +595,7 @@ export const savedTopics = pgTable("saved_topics", {
   topicId: varchar("topic_id").notNull().references(() => topics.id, { onDelete: "cascade" }),
   notes: text("notes"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  completedAt: timestamp("completed_at"),
 });
 
 export const insertSavedTopicSchema = createInsertSchema(savedTopics).omit({

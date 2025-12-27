@@ -3476,6 +3476,32 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/topic-pulse/saved-topics/:id/complete", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const result = await storage.markSavedTopicComplete(req.params.id, req.session.userId!);
+      if (!result) {
+        return res.status(404).json({ message: "Saved topic not found" });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error("[TopicPulse] Mark complete error:", err);
+      res.status(500).json({ message: "Failed to mark topic complete" });
+    }
+  });
+
+  app.post("/api/topic-pulse/saved-topics/:id/reset", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const result = await storage.resetSavedTopicComplete(req.params.id, req.session.userId!);
+      if (!result) {
+        return res.status(404).json({ message: "Saved topic not found" });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error("[TopicPulse] Reset complete error:", err);
+      res.status(500).json({ message: "Failed to reset topic" });
+    }
+  });
+
   app.post("/api/topic-pulse/scripts/generate", requireAuth, async (req: Request, res: Response) => {
     try {
       const parsed = scriptGenerationInputSchema.safeParse(req.body);

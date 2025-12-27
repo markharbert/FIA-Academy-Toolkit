@@ -1091,6 +1091,22 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     return !!result;
   }
+
+  async markSavedTopicComplete(id: string, userId: string): Promise<SavedTopic | undefined> {
+    const [result] = await db.update(savedTopics)
+      .set({ completedAt: new Date() })
+      .where(and(eq(savedTopics.id, id), eq(savedTopics.userId, userId)))
+      .returning();
+    return result || undefined;
+  }
+
+  async resetSavedTopicComplete(id: string, userId: string): Promise<SavedTopic | undefined> {
+    const [result] = await db.update(savedTopics)
+      .set({ completedAt: null })
+      .where(and(eq(savedTopics.id, id), eq(savedTopics.userId, userId)))
+      .returning();
+    return result || undefined;
+  }
   
   // Topic Pulse Finder: Scripts
   async createScript(script: InsertScript): Promise<Script> {

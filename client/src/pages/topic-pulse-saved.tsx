@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Loader2, ArrowLeft, Trash2, FileText, Bookmark, 
   HelpCircle, TrendingUp, TrendingDown, Minus, Sparkles,
-  CheckCircle2, AlertCircle, Lightbulb
+  CheckCircle2, AlertCircle, Lightbulb, Check, RotateCcw
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -108,6 +108,42 @@ export default function TopicPulseSavedPage() {
     },
   });
 
+  const completeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/topic-pulse/saved-topics/${id}/complete`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Topic marked as complete" });
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/saved-topics"] });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to mark complete",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/topic-pulse/saved-topics/${id}/reset`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Topic moved back to active" });
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/saved-topics"] });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to reset topic",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const enrichMutation = useMutation({
     mutationFn: async (topicId: string) => {
       const res = await apiRequest("POST", `/api/topic-pulse/topics/${topicId}/enrich`, {});
@@ -158,6 +194,64 @@ export default function TopicPulseSavedPage() {
     return savedTopics?.find(s => s.topic.id === topicId);
   };
 
+  const activeTopics = savedTopics?.filter(s => !s.completedAt) || [];
+  const completedTopics = savedTopics?.filter(s => s.completedAt) || [];
+
+  const TopicCard = ({ saved, isCompleted }: { saved: SavedTopic & { topic: Topic }; isCompleted?: boolean }) => (
+    <Card 
+      key={saved.id} 
+      className={`cursor-pointer transition-colors ${selectedTopic?.id === saved.topic.id ? "ring-2 ring-primary" : "hover-elevate"}`}
+      onClick={() => setSelectedTopic(saved.topic)}
+      data-testid={`card-saved-${saved.id}`}
+    >
+      <CardContent className="py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              {isCompleted && <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />}
+              <p className={`font-medium ${isCompleted ? "text-muted-foreground" : ""}`}>{saved.topic.topicTitle}</p>
+            </div>
+            <p className="text-sm text-muted-foreground truncate">{saved.topic.keywordQuery}</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge 
+                  variant="outline" 
+                  className="font-mono cursor-help bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                >
+                  {formatSearchVolume(saved.topic.monthlySearchVolume)}/mo
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="font-medium">Monthly Search Volume</p>
+              </TooltipContent>
+            </Tooltip>
+            {saved.topic.intent && (
+              <Badge variant="outline">
+                {intentLabels[saved.topic.intent]}
+              </Badge>
+            )}
+            <TrendIcon direction={getTrendFromData(saved.topic.trendData as TrendDataPoint[] | null).direction} />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge 
+                  variant="outline" 
+                  className={`font-mono cursor-help border-0 ${getOpportunityLevel(saved.topic.opportunityScore || 0).bgClass} ${getOpportunityLevel(saved.topic.opportunityScore || 0).color}`}
+                >
+                  {saved.topic.opportunityScore}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="font-medium">{getOpportunityLevel(saved.topic.opportunityScore || 0).label}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-full flex flex-col">
       <div className="border-b p-4">
@@ -168,7 +262,7 @@ export default function TopicPulseSavedPage() {
           <div>
             <h1 className="text-xl font-semibold" data-testid="text-page-title">Saved Topics</h1>
             <p className="text-sm text-muted-foreground">
-              {savedTopics?.length || 0} topics saved
+              {activeTopics.length} active, {completedTopics.length} completed
             </p>
           </div>
         </div>
@@ -176,63 +270,43 @@ export default function TopicPulseSavedPage() {
 
       <div className="flex-1 flex overflow-hidden">
         <ScrollArea className="flex-1">
-          <div className="p-4 space-y-2">
+          <div className="p-4 space-y-6">
             {isLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : savedTopics && savedTopics.length > 0 ? (
-              savedTopics.map((saved) => (
-                <Card 
-                  key={saved.id} 
-                  className={`cursor-pointer transition-colors ${selectedTopic?.id === saved.topic.id ? "ring-2 ring-primary" : "hover-elevate"}`}
-                  onClick={() => setSelectedTopic(saved.topic)}
-                  data-testid={`card-saved-${saved.id}`}
-                >
-                  <CardContent className="py-3">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium">{saved.topic.topicTitle}</p>
-                        <p className="text-sm text-muted-foreground truncate">{saved.topic.keywordQuery}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge 
-                              variant="outline" 
-                              className="font-mono cursor-help bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                            >
-                              {formatSearchVolume(saved.topic.monthlySearchVolume)}/mo
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            <p className="font-medium">Monthly Search Volume</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        {saved.topic.intent && (
-                          <Badge variant="outline">
-                            {intentLabels[saved.topic.intent]}
-                          </Badge>
-                        )}
-                        <TrendIcon direction={getTrendFromData(saved.topic.trendData as TrendDataPoint[] | null).direction} />
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge 
-                              variant="outline" 
-                              className={`font-mono cursor-help border-0 ${getOpportunityLevel(saved.topic.opportunityScore || 0).bgClass} ${getOpportunityLevel(saved.topic.opportunityScore || 0).color}`}
-                            >
-                              {saved.topic.opportunityScore}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            <p className="font-medium">{getOpportunityLevel(saved.topic.opportunityScore || 0).label}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
+              <>
+                <div>
+                  <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                    <Bookmark className="h-4 w-4" />
+                    Active Topics ({activeTopics.length})
+                  </h2>
+                  {activeTopics.length > 0 ? (
+                    <div className="space-y-2">
+                      {activeTopics.map((saved) => (
+                        <TopicCard key={saved.id} saved={saved} />
+                      ))}
                     </div>
-                  </CardContent>
-                </Card>
-              ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground py-4">No active topics. All topics have been completed!</p>
+                  )}
+                </div>
+
+                {completedTopics.length > 0 && (
+                  <div>
+                    <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      Completed ({completedTopics.length})
+                    </h2>
+                    <div className="space-y-2">
+                      {completedTopics.map((saved) => (
+                        <TopicCard key={saved.id} saved={saved} isCompleted />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <Card>
                 <CardContent className="py-8 text-center">
@@ -252,27 +326,57 @@ export default function TopicPulseSavedPage() {
                   <h2 className="text-lg font-semibold mb-1" data-testid="text-topic-title">{selectedTopic.topicTitle}</h2>
                   <p className="text-sm text-muted-foreground mb-4">{selectedTopic.keywordQuery}</p>
                   
-                  <div className="flex gap-2 mb-4 flex-wrap">
-                    <Button 
-                      onClick={() => setScriptDialogOpen(true)}
-                      data-testid="button-generate-script"
-                    >
-                      <FileText className="h-4 w-4 mr-2" />
-                      Generate Script
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => {
-                        const savedEntry = getSavedEntryForTopic(selectedTopic.id);
-                        if (savedEntry) deleteMutation.mutate(savedEntry.id);
-                      }}
-                      disabled={deleteMutation.isPending}
-                      data-testid="button-remove-saved"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Remove
-                    </Button>
-                  </div>
+                  {(() => {
+                    const savedEntry = getSavedEntryForTopic(selectedTopic.id);
+                    const isCompleted = savedEntry?.completedAt;
+                    return (
+                      <div className="flex gap-2 mb-4 flex-wrap">
+                        <Button 
+                          onClick={() => setScriptDialogOpen(true)}
+                          data-testid="button-generate-script"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Generate Script
+                        </Button>
+                        {isCompleted ? (
+                          <Button 
+                            variant="outline" 
+                            onClick={() => {
+                              if (savedEntry) resetMutation.mutate(savedEntry.id);
+                            }}
+                            disabled={resetMutation.isPending}
+                            data-testid="button-reset-topic"
+                          >
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            Reset
+                          </Button>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            onClick={() => {
+                              if (savedEntry) completeMutation.mutate(savedEntry.id);
+                            }}
+                            disabled={completeMutation.isPending}
+                            data-testid="button-mark-complete"
+                          >
+                            <Check className="h-4 w-4 mr-2" />
+                            Mark Complete
+                          </Button>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => {
+                            if (savedEntry) deleteMutation.mutate(savedEntry.id);
+                          }}
+                          disabled={deleteMutation.isPending}
+                          data-testid="button-remove-saved"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="space-y-4">
