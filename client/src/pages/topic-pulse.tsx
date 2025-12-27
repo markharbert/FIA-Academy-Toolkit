@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Coins } from "lucide-react";
+import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Coins, ExternalLink } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun, Topic } from "@shared/schema";
@@ -118,10 +118,31 @@ export default function TopicPulsePage() {
           </p>
           <div className="mt-4 flex items-center justify-center gap-2" data-testid="credits-display">
             {creditsData?.credits !== null && creditsData?.credits !== undefined ? (
-              <Badge variant="outline" className="text-sm py-1 px-3">
-                <Coins className="h-3.5 w-3.5 mr-1.5" />
-                Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
-              </Badge>
+              creditsData.credits < 1000 ? (
+                <a
+                  href="https://keywordseverywhere.com/credits.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex"
+                  data-testid="link-purchase-credits"
+                >
+                  <Badge className="text-sm py-1 px-3 bg-red-500 dark:bg-red-600 text-white border-red-600 dark:border-red-700">
+                    <Coins className="h-3.5 w-3.5 mr-1.5" />
+                    Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
+                    <ExternalLink className="h-3 w-3 ml-1.5" />
+                  </Badge>
+                </a>
+              ) : creditsData.credits < 5000 ? (
+                <Badge className="text-sm py-1 px-3 bg-yellow-500 dark:bg-yellow-600 text-black dark:text-black border-yellow-600 dark:border-yellow-700">
+                  <Coins className="h-3.5 w-3.5 mr-1.5" />
+                  Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
+                </Badge>
+              ) : (
+                <Badge className="text-sm py-1 px-3 bg-green-500 dark:bg-green-600 text-white border-green-600 dark:border-green-700">
+                  <Coins className="h-3.5 w-3.5 mr-1.5" />
+                  Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
+                </Badge>
+              )
             ) : creditsData?.error ? (
               <Badge variant="secondary" className="text-sm py-1 px-3">
                 <Coins className="h-3.5 w-3.5 mr-1.5" />
