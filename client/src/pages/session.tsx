@@ -10,12 +10,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { 
   Download, Copy, Check, RefreshCw, AlertCircle, Clock, 
   TrendingUp, MessageSquare, Lightbulb, AlertTriangle, Quote,
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText,
-  Upload, File, Video
+  Upload, File, Video, Youtube, Link as LinkIcon
 } from "lucide-react";
+import { SiYoutube } from "react-icons/si";
 import type { Session, ScoreResult, ProcessingStatus, GoalType } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -213,6 +217,11 @@ export default function SessionPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
+  
+  const [inputMode, setInputMode] = useState<"upload" | "youtube">("upload");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeRightsConfirmed, setYoutubeRightsConfirmed] = useState(false);
+  const [isSubmittingYoutube, setIsSubmittingYoutube] = useState(false);
 
   const [editedTranscript, setEditedTranscript] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -475,8 +484,53 @@ export default function SessionPage() {
     }
   };
 
+  const submitYoutubeUrl = async () => {
+    if (!youtubeUrl.trim() || !youtubeRightsConfirmed) return;
+    
+    setUploadError(null);
+    setUploadStep("uploading");
+    setIsSubmittingYoutube(true);
+    
+    try {
+      const res = await apiRequest("POST", "/api/sessions/youtube", {
+        youtubeUrl: youtubeUrl.trim(),
+        goalType,
+        title: sessionTitle.trim() || undefined,
+        rightsConfirmed: true,
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to process YouTube video");
+      }
+      
+      const data = await res.json();
+      setCreatedSessionId(data.id);
+      setUploadStep("done");
+      
+      window.history.replaceState(null, "", `/video-score-upload/${data.id}`);
+      
+      toast({ title: "Success", description: "YouTube video submitted for analysis." });
+    } catch (err) {
+      setUploadStep("idle");
+      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      setUploadError(errorMessage);
+      console.error("[YouTube] Error:", errorMessage);
+    } finally {
+      setIsSubmittingYoutube(false);
+    }
+  };
 
-  if (isNewSession && (!createdSessionId || uploadStep === "uploading")) {
+  const isValidYoutubeUrl = (url: string): boolean => {
+    const patterns = [
+      /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?v=[\w-]+/,
+      /^(https?:\/\/)?(www\.)?youtube\.com\/shorts\/[\w-]+/,
+      /^(https?:\/\/)?youtu\.be\/[\w-]+/,
+    ];
+    return patterns.some(pattern => pattern.test(url));
+  };
+
+  if (isNewSession && (!createdSessionId || uploadStep === "uploading" || isSubmittingYoutube)) {
     return (
       <div className="container mx-auto max-w-4xl p-4 md:p-6">
         <div className="mb-6">
@@ -487,8 +541,8 @@ export default function SessionPage() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold" data-testid="text-page-title">Upload Video</h1>
-              <p className="text-muted-foreground">Upload a video to get AI-powered feedback on your marketing skills.</p>
+              <h1 className="text-2xl font-bold" data-testid="text-page-title">Add Video</h1>
+              <p className="text-muted-foreground">Upload a video or paste a YouTube link to get AI-powered feedback.</p>
             </div>
           </div>
         </div>
@@ -496,66 +550,173 @@ export default function SessionPage() {
         <div className="space-y-6">
           <Card>
             <CardContent className="p-4">
-              {!selectedFile ? (
-                <div
-                  className={`relative aspect-video overflow-hidden rounded-lg border-2 border-dashed transition-colors cursor-pointer flex flex-col items-center justify-center gap-4 ${
-                    isDragging 
-                      ? "border-primary bg-primary/5" 
-                      : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  data-testid="upload-dropzone"
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="video/*"
-                    onChange={handleInputChange}
-                    className="hidden"
-                    data-testid="input-video-file"
-                  />
-                  <Upload className={`h-16 w-16 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
-                  <div className="text-center px-4">
-                    <p className="text-lg font-medium">
-                      {isDragging ? "Drop your video here" : "Drag and drop your video here"}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      or click to browse your files
-                    </p>
-                  </div>
-                  <div className="text-center text-xs text-muted-foreground space-y-1">
-                    <p>Supported formats: {SUPPORTED_FORMATS}</p>
-                    <p>Maximum size: 2GB</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                      <Video className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium truncate" data-testid="text-filename">{selectedFile.name}</p>
-                      <p className="text-sm text-muted-foreground" data-testid="text-filesize">
-                        {formatFileSize(selectedFile.size)}
-                      </p>
-                    </div>
-                  </div>
-                  {!isUploading && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={clearFile}
-                      data-testid="button-clear-file"
+              <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as "upload" | "youtube")} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="upload" className="flex items-center gap-2" data-testid="tab-upload">
+                    <Upload className="h-4 w-4" />
+                    Upload File
+                  </TabsTrigger>
+                  <TabsTrigger value="youtube" className="flex items-center gap-2" data-testid="tab-youtube">
+                    <SiYoutube className="h-4 w-4" />
+                    YouTube Link
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="upload" className="mt-0">
+                  {!selectedFile ? (
+                    <div
+                      className={`relative aspect-video overflow-hidden rounded-lg border-2 border-dashed transition-colors cursor-pointer flex flex-col items-center justify-center gap-4 ${
+                        isDragging 
+                          ? "border-primary bg-primary/5" 
+                          : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
+                      }`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      data-testid="upload-dropzone"
                     >
-                      <X className="h-4 w-4" />
-                    </Button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="video/*"
+                        onChange={handleInputChange}
+                        className="hidden"
+                        data-testid="input-video-file"
+                      />
+                      <Upload className={`h-16 w-16 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
+                      <div className="text-center px-4">
+                        <p className="text-lg font-medium">
+                          {isDragging ? "Drop your video here" : "Drag and drop your video here"}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          or click to browse your files
+                        </p>
+                      </div>
+                      <div className="text-center text-xs text-muted-foreground space-y-1">
+                        <p>Supported formats: {SUPPORTED_FORMATS}</p>
+                        <p>Maximum size: 2GB</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                          <Video className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate" data-testid="text-filename">{selectedFile.name}</p>
+                          <p className="text-sm text-muted-foreground" data-testid="text-filesize">
+                            {formatFileSize(selectedFile.size)}
+                          </p>
+                        </div>
+                      </div>
+                      {!isUploading && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={clearFile}
+                          data-testid="button-clear-file"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
+
+                  {isUploading && (
+                    <div className="mt-4 p-6 bg-muted/50 rounded-lg space-y-4">
+                      <div className="flex items-center justify-center gap-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <p className="text-lg font-medium">Uploading video...</p>
+                      </div>
+                      <div className="space-y-2 max-w-md mx-auto">
+                        <Progress value={uploadProgress} className="h-3" />
+                        <p className="text-center text-sm text-muted-foreground">{uploadProgress}%</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                    {selectedFile && !isUploading && (
+                      <Button
+                        size="lg"
+                        onClick={uploadAndProcess}
+                        data-testid="button-upload-process"
+                      >
+                        <Upload className="mr-2 h-5 w-5" />
+                        Upload and Analyze
+                      </Button>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="youtube" className="mt-0">
+                  <div className="space-y-6">
+                    <div className="flex flex-col items-center justify-center gap-4 py-8">
+                      <SiYoutube className="h-16 w-16 text-red-600" />
+                      <div className="w-full max-w-lg space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="youtube-url">YouTube Video URL</Label>
+                          <div className="relative">
+                            <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              id="youtube-url"
+                              type="url"
+                              placeholder="https://www.youtube.com/watch?v=..."
+                              value={youtubeUrl}
+                              onChange={(e) => setYoutubeUrl(e.target.value)}
+                              className="pl-10"
+                              data-testid="input-youtube-url"
+                            />
+                          </div>
+                          {youtubeUrl && !isValidYoutubeUrl(youtubeUrl) && (
+                            <p className="text-sm text-destructive">Please enter a valid YouTube URL</p>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+                          <Checkbox
+                            id="rights-confirmation"
+                            checked={youtubeRightsConfirmed}
+                            onCheckedChange={(checked) => setYoutubeRightsConfirmed(checked === true)}
+                            data-testid="checkbox-rights-confirmation"
+                          />
+                          <Label htmlFor="rights-confirmation" className="text-sm leading-relaxed cursor-pointer">
+                            I confirm that I have the right to use this video content, or it is my own video.
+                          </Label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isSubmittingYoutube && (
+                      <div className="p-6 bg-muted/50 rounded-lg space-y-4">
+                        <div className="flex items-center justify-center gap-3">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          <p className="text-lg font-medium">Processing YouTube video...</p>
+                        </div>
+                        <p className="text-center text-sm text-muted-foreground">
+                          Downloading audio and preparing for analysis
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      {!isSubmittingYoutube && (
+                        <Button
+                          size="lg"
+                          onClick={submitYoutubeUrl}
+                          disabled={!youtubeUrl.trim() || !isValidYoutubeUrl(youtubeUrl) || !youtubeRightsConfirmed}
+                          data-testid="button-submit-youtube"
+                        >
+                          <SiYoutube className="mr-2 h-5 w-5" />
+                          Analyze Video
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
 
               {uploadError && (
                 <div className="mt-4 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive" data-testid="error-message">
@@ -563,32 +724,6 @@ export default function SessionPage() {
                   <p>{uploadError}</p>
                 </div>
               )}
-
-              {isUploading && (
-                <div className="mt-4 p-6 bg-muted/50 rounded-lg space-y-4">
-                  <div className="flex items-center justify-center gap-3">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="text-lg font-medium">Uploading video...</p>
-                  </div>
-                  <div className="space-y-2 max-w-md mx-auto">
-                    <Progress value={uploadProgress} className="h-3" />
-                    <p className="text-center text-sm text-muted-foreground">{uploadProgress}%</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-                {selectedFile && !isUploading && (
-                  <Button
-                    size="lg"
-                    onClick={uploadAndProcess}
-                    data-testid="button-upload-process"
-                  >
-                    <Upload className="mr-2 h-5 w-5" />
-                    Upload and Analyze
-                  </Button>
-                )}
-              </div>
             </CardContent>
           </Card>
         </div>

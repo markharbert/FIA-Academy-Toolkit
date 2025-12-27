@@ -2030,6 +2030,56 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/sessions/:id/thumbnail", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.thumbnailPath) {
+        return res.status(404).json({ message: "No thumbnail available" });
+      }
+
+      const thumbnailFullPath = path.join(UPLOADS_DIR, session.thumbnailPath);
+      
+      try {
+        if (!fs.existsSync(thumbnailFullPath)) {
+          console.warn(`[Thumbnail] File not found for session ${session.id}`);
+          return res.status(404).json({ message: "Thumbnail unavailable" });
+        }
+
+        const stat = fs.statSync(thumbnailFullPath);
+        const ext = path.extname(session.thumbnailPath).toLowerCase();
+        const mimeType = ext === ".webp" ? "image/webp" : ext === ".png" ? "image/png" : "image/jpeg";
+
+        res.setHeader("Content-Type", mimeType);
+        res.setHeader("Content-Length", stat.size);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        
+        const readStream = fs.createReadStream(thumbnailFullPath);
+        readStream.on("error", (streamErr) => {
+          console.error(`[Thumbnail] Stream error for session ${session.id}:`, streamErr);
+          if (!res.headersSent) {
+            res.status(500).json({ message: "Failed to serve thumbnail" });
+          }
+        });
+        readStream.pipe(res);
+      } catch (fsErr) {
+        console.error(`[Thumbnail] Filesystem error for session ${session.id}:`, fsErr);
+        return res.status(404).json({ message: "Thumbnail unavailable" });
+      }
+    } catch (err) {
+      console.error("[Thumbnail] Error:", err);
+      res.status(404).json({ message: "Thumbnail unavailable" });
+    }
+  });
+
   app.post("/api/sessions", requireAuth, async (req: Request, res: Response) => {
     try {
       const { goalType, durationSeconds, title } = req.body;
@@ -2084,7 +2134,7 @@ export async function registerRoutes(
     console.log(`[YouTube:${traceId}] Processing YouTube URL submission`);
     
     try {
-      const { youtubeUrl, goalType, title } = req.body;
+      const { youtubeUrl, goalType, title, rightsConfirmed } = req.body;
       
       if (!youtubeUrl || typeof youtubeUrl !== "string") {
         return res.status(400).json({ message: "YouTube URL is required", traceId });
@@ -2097,6 +2147,12 @@ export async function registerRoutes(
       if (!goalTypes.includes(goalType)) {
         return res.status(400).json({ message: "Invalid goal type", traceId });
       }
+      
+      if (rightsConfirmed !== true) {
+        return res.status(400).json({ message: "You must confirm you have rights to use this content", traceId });
+      }
+      
+      const sanitizedTitle = title && typeof title === "string" ? title.trim().slice(0, 80) : null;
       
       const videoId = extractYouTubeVideoId(youtubeUrl);
       if (!videoId) {
@@ -2118,7 +2174,7 @@ export async function registerRoutes(
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + VIDEO_RETENTION_DAYS);
       
-      const sessionTitle = title?.trim().slice(0, 80) || downloadResult.videoInfo?.title?.slice(0, 80) || null;
+      const sessionTitle = sanitizedTitle || downloadResult.videoInfo?.title?.slice(0, 80) || null;
       
       const session = await storage.createSession({
         userId: req.session.userId!,
