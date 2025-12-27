@@ -4,10 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, ArrowLeft, Trash2, FileText, Bookmark } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedTopic, Topic, TopicIntent } from "@shared/schema";
+
+function getOpportunityLevel(score: number): { color: string; label: string; bgClass: string } {
+  if (score >= 70) return { color: "text-green-600 dark:text-green-400", label: "Great opportunity", bgClass: "bg-green-500/10" };
+  if (score >= 50) return { color: "text-yellow-600 dark:text-yellow-400", label: "Good potential", bgClass: "bg-yellow-500/10" };
+  return { color: "text-red-600 dark:text-red-400", label: "Challenging", bgClass: "bg-red-500/10" };
+}
 
 const intentLabels: Record<TopicIntent, string> = {
   "review": "Review",
@@ -85,9 +92,19 @@ export default function TopicPulseSavedPage() {
                             {intentLabels[saved.topic.intent]}
                           </Badge>
                         )}
-                        <Badge variant="secondary" className="font-mono">
-                          {saved.topic.opportunityScore}
-                        </Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge 
+                              variant="outline" 
+                              className={`font-mono cursor-help border-0 ${getOpportunityLevel(saved.topic.opportunityScore || 0).bgClass} ${getOpportunityLevel(saved.topic.opportunityScore || 0).color}`}
+                            >
+                              {saved.topic.opportunityScore}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p className="font-medium">{getOpportunityLevel(saved.topic.opportunityScore || 0).label}</p>
+                          </TooltipContent>
+                        </Tooltip>
                         <Button
                           variant="ghost"
                           size="icon"

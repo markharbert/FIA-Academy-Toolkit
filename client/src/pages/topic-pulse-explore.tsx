@@ -14,8 +14,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Minus, Bookmark, 
-  FileText, Sparkles, CheckCircle2, AlertCircle, Lightbulb 
+  FileText, Sparkles, CheckCircle2, AlertCircle, Lightbulb, HelpCircle 
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Topic, TopicRun, DemandSignals, TopicIntent, VideoLengthTarget, TonePreference } from "@shared/schema";
@@ -44,15 +45,29 @@ function TrendIcon({ direction }: { direction: string }) {
   return <Minus className="h-4 w-4 text-muted-foreground" />;
 }
 
+function getOpportunityLevel(score: number): { color: string; label: string; bgClass: string } {
+  if (score >= 70) return { color: "text-green-600 dark:text-green-400", label: "Great opportunity", bgClass: "bg-green-500/10" };
+  if (score >= 50) return { color: "text-yellow-600 dark:text-yellow-400", label: "Good potential", bgClass: "bg-yellow-500/10" };
+  return { color: "text-red-600 dark:text-red-400", label: "Challenging", bgClass: "bg-red-500/10" };
+}
+
 function OpportunityBadge({ score }: { score: number }) {
-  let variant: "default" | "secondary" | "outline" = "outline";
-  if (score >= 70) variant = "default";
-  else if (score >= 50) variant = "secondary";
+  const { color, label, bgClass } = getOpportunityLevel(score);
   
   return (
-    <Badge variant={variant} className="font-mono">
-      {score}
-    </Badge>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="outline" className={`font-mono cursor-help ${bgClass} ${color} border-0`}>
+          {score}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <p className="font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">
+          Based on search demand, competition, and trend direction
+        </p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -265,11 +280,28 @@ export default function TopicPulseExplorePage() {
                 </div>
 
                 <div>
-                  <h3 className="font-medium mb-2">Opportunity Score</h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-medium">Opportunity Score</h3>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-xs">
+                          Measures how promising this topic is based on search demand, competition level, and trend direction. Higher = better opportunity.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <div className="flex items-center gap-3">
                     <Progress value={selectedTopic.opportunityScore || 0} className="flex-1" />
-                    <span className="font-mono text-lg font-bold">{selectedTopic.opportunityScore}</span>
+                    <span className={`font-mono text-lg font-bold ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
+                      {selectedTopic.opportunityScore}
+                    </span>
                   </div>
+                  <p className={`text-sm mt-1 ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
+                    {getOpportunityLevel(selectedTopic.opportunityScore || 0).label}
+                  </p>
                 </div>
 
                 {selectedTopic.demandSignalsJson && (
