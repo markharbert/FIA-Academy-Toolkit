@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import { LogOut, User, Settings, Menu, X, LayoutDashboard, TrendingUp } from "lucide-react";
+import { LogOut, User, Settings, Menu, X, LayoutDashboard, TrendingUp, Video } from "lucide-react";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -41,6 +41,16 @@ export function Navbar() {
                 >
                   <LayoutDashboard className="mr-2 h-4 w-4" />
                   Dashboard
+                </Button>
+              </Link>
+              <Link href="/video-score">
+                <Button
+                  variant="ghost"
+                  className="text-white font-medium hover:bg-white/10"
+                  data-testid="link-video-score-nav"
+                >
+                  <Video className="mr-2 h-4 w-4" />
+                  Video Score
                 </Button>
               </Link>
               <Link href="/topic-pulse">
@@ -163,13 +173,25 @@ export function Navbar() {
                 variant="ghost"
                 className="w-full justify-start text-white font-medium hover:bg-white/10"
                 onClick={() => {
+                  setLocation("/video-score");
+                  setMobileMenuOpen(false);
+                }}
+                data-testid="mobile-link-video-score"
+              >
+                <Video className="mr-2 h-4 w-4" />
+                Video Score
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-white font-medium hover:bg-white/10"
+                onClick={() => {
                   setLocation("/topic-pulse");
                   setMobileMenuOpen(false);
                 }}
                 data-testid="mobile-link-topic-pulse"
               >
                 <TrendingUp className="mr-2 h-4 w-4" />
-                Topic Pulse
+                Video Pulse
               </Button>
               <Button
                 variant="ghost"
