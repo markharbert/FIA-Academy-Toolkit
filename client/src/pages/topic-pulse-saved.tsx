@@ -52,6 +52,7 @@ function IntentAnalysisSection({ topicId, existingAnalysis }: { topicId: string;
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger asChild>
         <button 
+          type="button"
           className="flex items-center justify-between w-full p-3 rounded-md bg-muted/50 hover-elevate text-left"
           data-testid="button-intent-analysis-toggle"
         >
