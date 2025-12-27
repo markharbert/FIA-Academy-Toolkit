@@ -246,7 +246,7 @@ export const scoreResultSchema = z.object({
 export type ScoreResult = z.infer<typeof scoreResultSchema>;
 
 // Title source types for sessions
-export const titleSources = ["ai", "user"] as const;
+export const titleSources = ["ai", "user", "youtube"] as const;
 export type TitleSource = typeof titleSources[number];
 
 // Processing status types for video processing pipeline
@@ -296,7 +296,7 @@ export const scoreStatuses = ["not_started", "partial", "final", "failed"] as co
 export type ScoreStatus = typeof scoreStatuses[number];
 
 // Source type for video sessions
-export const sourceTypes = ["upload"] as const;
+export const sourceTypes = ["upload", "youtube"] as const;
 export type SourceType = typeof sourceTypes[number];
 
 // FFprobe output structure for video validation
@@ -369,6 +369,9 @@ export const sessions = pgTable("sessions", {
   processingUpdatedAt: timestamp("processing_updated_at"),
   processingCompletedAt: timestamp("processing_completed_at"),
   sourceType: text("source_type").default("upload").$type<SourceType>(),
+  youtubeUrl: text("youtube_url"),
+  youtubeVideoId: text("youtube_video_id"),
+  youtubeTitle: text("youtube_title"),
   originalUploadFilename: text("original_upload_filename"),
   originalUploadMimeType: text("original_upload_mime_type"),
   originalUploadSizeBytes: integer("original_upload_size_bytes"),

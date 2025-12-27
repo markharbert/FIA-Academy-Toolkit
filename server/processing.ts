@@ -144,8 +144,8 @@ async function deleteOriginalUpload(
 }
 
 
-export async function processSession(sessionId: string, userId: string): Promise<void> {
-  console.log(`[Processing] Starting AUDIO-FIRST fast path for session ${sessionId}`);
+export async function processSession(sessionId: string, userId: string, preExtractedAudioPath?: string): Promise<void> {
+  console.log(`[Processing] Starting AUDIO-FIRST fast path for session ${sessionId}${preExtractedAudioPath ? " (pre-extracted audio)" : ""}`);
   const pipelineStart = new Date();
   
   if (activeProcessing.has(sessionId)) {
@@ -180,92 +180,111 @@ export async function processSession(sessionId: string, userId: string): Promise
       processingStartedAt: new Date(),
       processingStatus: "transcribing",
       processingProgress: 5,
-      processingMessage: "Extracting audio...",
+      processingMessage: preExtractedAudioPath ? "Preparing transcription..." : "Extracting audio...",
     });
     
-    if (!session.videoPath) {
-      await updateProcessingStatus(sessionId, "failed", 0, "No video uploaded", "No video file found");
-      activeProcessing.delete(sessionId);
-      return;
-    }
+    let audioPath: string;
     
-    const videoFullPath = path.join(UPLOADS_DIR, session.videoPath);
-    
-    if (!fs.existsSync(videoFullPath)) {
-      if (session.cloudStoragePath) {
-        console.log(`[Processing] Local file not found, downloading from cloud storage: ${session.cloudStoragePath}`);
-        const downloadStart = new Date();
-        try {
-          await updateProcessingStatus(sessionId, "transcribing", 10, "Downloading video from cloud...");
-          const objectFile = await objectStorageService.getObjectEntityFile(session.cloudStoragePath);
-          const downloadPath = videoFullPath;
-          
-          await new Promise<void>((resolve, reject) => {
-            const writeStream = fs.createWriteStream(downloadPath);
-            const readStream = objectFile.createReadStream();
-            readStream.pipe(writeStream);
-            writeStream.on("finish", resolve);
-            writeStream.on("error", reject);
-            readStream.on("error", reject);
-          });
-          
-          await recordMetric(sessionId, "cloud_download", downloadStart, true);
-          console.log(`[Processing] Downloaded video from cloud storage`);
-        } catch (downloadErr) {
-          await recordMetric(sessionId, "cloud_download", downloadStart, false, String(downloadErr));
-          console.error(`[Processing] Failed to download from cloud storage:`, downloadErr);
-          await updateProcessingStatus(sessionId, "failed", 0, "Video file not available", "Could not retrieve video from storage");
-          activeProcessing.delete(sessionId);
-          return;
-        }
-      } else {
-        await updateProcessingStatus(sessionId, "failed", 0, "Video file not found", "Video file missing from storage");
+    if (preExtractedAudioPath) {
+      console.log(`[Processing] Using pre-extracted audio: ${preExtractedAudioPath}`);
+      audioPath = preExtractedAudioPath;
+      
+      if (!fs.existsSync(audioPath)) {
+        await updateProcessingStatus(sessionId, "failed", 0, "Audio file not found", "Pre-extracted audio file missing");
         activeProcessing.delete(sessionId);
         return;
       }
+      
+      await storage.updateSession(sessionId, {
+        audioPath: path.basename(audioPath),
+        audioExtractedAt: new Date(),
+        transcriptStatus: "transcribing" as TranscriptStatus,
+      });
+    } else {
+      if (!session.videoPath) {
+        await updateProcessingStatus(sessionId, "failed", 0, "No video uploaded", "No video file found");
+        activeProcessing.delete(sessionId);
+        return;
+      }
+      
+      const videoFullPath = path.join(UPLOADS_DIR, session.videoPath);
+      
+      if (!fs.existsSync(videoFullPath)) {
+        if (session.cloudStoragePath) {
+          console.log(`[Processing] Local file not found, downloading from cloud storage: ${session.cloudStoragePath}`);
+          const downloadStart = new Date();
+          try {
+            await updateProcessingStatus(sessionId, "transcribing", 10, "Downloading video from cloud...");
+            const objectFile = await objectStorageService.getObjectEntityFile(session.cloudStoragePath);
+            const downloadPath = videoFullPath;
+            
+            await new Promise<void>((resolve, reject) => {
+              const writeStream = fs.createWriteStream(downloadPath);
+              const readStream = objectFile.createReadStream();
+              readStream.pipe(writeStream);
+              writeStream.on("finish", resolve);
+              writeStream.on("error", reject);
+              readStream.on("error", reject);
+            });
+            
+            await recordMetric(sessionId, "cloud_download", downloadStart, true);
+            console.log(`[Processing] Downloaded video from cloud storage`);
+          } catch (downloadErr) {
+            await recordMetric(sessionId, "cloud_download", downloadStart, false, String(downloadErr));
+            console.error(`[Processing] Failed to download from cloud storage:`, downloadErr);
+            await updateProcessingStatus(sessionId, "failed", 0, "Video file not available", "Could not retrieve video from storage");
+            activeProcessing.delete(sessionId);
+            return;
+          }
+        } else {
+          await updateProcessingStatus(sessionId, "failed", 0, "Video file not found", "Video file missing from storage");
+          activeProcessing.delete(sessionId);
+          return;
+        }
+      }
+      
+      const originalUploadPath = session.originalUploadPath || session.videoPath;
+      const originalCloudPath = session.cloudStoragePath;
+      
+      await storage.updateSession(sessionId, {
+        transcriptStatus: "extracting_audio" as TranscriptStatus,
+      });
+      
+      await updateProcessingStatus(sessionId, "transcribing", 15, "Extracting audio from video...");
+      
+      const audioStart = new Date();
+      const audioResult = await extractAudioFast(videoFullPath, UPLOADS_DIR);
+      
+      if (!audioResult.success) {
+        await recordMetric(sessionId, "audio_extraction", audioStart, false, audioResult.error);
+        await updateProcessingStatus(sessionId, "failed", 15, "Audio extraction failed", audioResult.error);
+        activeProcessing.delete(sessionId);
+        return;
+      }
+      
+      await recordMetric(sessionId, "audio_extraction", audioStart, true, undefined, {
+        durationSeconds: audioResult.durationSeconds,
+        sizeBytes: audioResult.sizeBytes,
+      });
+      
+      await storage.updateSession(sessionId, {
+        audioPath: audioResult.audioPath,
+        audioExtractedAt: new Date(),
+        durationSeconds: audioResult.durationSeconds || undefined,
+        transcriptStatus: "transcribing" as TranscriptStatus,
+      });
+      
+      console.log(`[Processing] Audio extracted successfully, deleting video file immediately`);
+      const deleteStart = new Date();
+      await deleteOriginalUpload(sessionId, originalUploadPath, originalCloudPath, UPLOADS_DIR);
+      await storage.updateSession(sessionId, {
+        videoDeletedAt: new Date(),
+      });
+      await recordMetric(sessionId, "video_deletion", deleteStart, true);
+      console.log(`[Processing] Video file deleted after audio extraction`);
+      
+      audioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
     }
-    
-    const originalUploadPath = session.originalUploadPath || session.videoPath;
-    const originalCloudPath = session.cloudStoragePath;
-    
-    await storage.updateSession(sessionId, {
-      transcriptStatus: "extracting_audio" as TranscriptStatus,
-    });
-    
-    await updateProcessingStatus(sessionId, "transcribing", 15, "Extracting audio from video...");
-    
-    const audioStart = new Date();
-    const audioResult = await extractAudioFast(videoFullPath, UPLOADS_DIR);
-    
-    if (!audioResult.success) {
-      await recordMetric(sessionId, "audio_extraction", audioStart, false, audioResult.error);
-      await updateProcessingStatus(sessionId, "failed", 15, "Audio extraction failed", audioResult.error);
-      activeProcessing.delete(sessionId);
-      return;
-    }
-    
-    await recordMetric(sessionId, "audio_extraction", audioStart, true, undefined, {
-      durationSeconds: audioResult.durationSeconds,
-      sizeBytes: audioResult.sizeBytes,
-    });
-    
-    await storage.updateSession(sessionId, {
-      audioPath: audioResult.audioPath,
-      audioExtractedAt: new Date(),
-      durationSeconds: audioResult.durationSeconds || undefined,
-      transcriptStatus: "transcribing" as TranscriptStatus,
-    });
-    
-    console.log(`[Processing] Audio extracted successfully, deleting video file immediately`);
-    const deleteStart = new Date();
-    await deleteOriginalUpload(sessionId, originalUploadPath, originalCloudPath, UPLOADS_DIR);
-    await storage.updateSession(sessionId, {
-      videoDeletedAt: new Date(),
-    });
-    await recordMetric(sessionId, "video_deletion", deleteStart, true);
-    console.log(`[Processing] Video file deleted after audio extraction`);
-    
-    const audioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
     
     await updateProcessingStatus(sessionId, "transcribing", 30, "Transcribing audio with AI...");
     

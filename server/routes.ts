@@ -36,6 +36,7 @@ import { logUserAction, ActionLabels } from "./userActionLog";
 import { processSession, subscribeToSession } from "./processing";
 import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
+import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const VIDEO_RETENTION_DAYS = 30;
@@ -2075,6 +2076,106 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Create session error:", err);
       res.status(500).json({ message: "Failed to create session" });
+    }
+  });
+
+  app.post("/api/sessions/youtube", requireAuth, async (req: Request, res: Response) => {
+    const traceId = `yt-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`[YouTube:${traceId}] Processing YouTube URL submission`);
+    
+    try {
+      const { youtubeUrl, goalType, title } = req.body;
+      
+      if (!youtubeUrl || typeof youtubeUrl !== "string") {
+        return res.status(400).json({ message: "YouTube URL is required", traceId });
+      }
+      
+      if (!isValidYouTubeUrl(youtubeUrl)) {
+        return res.status(400).json({ message: "Invalid YouTube URL. Please provide a valid YouTube video link.", traceId });
+      }
+      
+      if (!goalTypes.includes(goalType)) {
+        return res.status(400).json({ message: "Invalid goal type", traceId });
+      }
+      
+      const videoId = extractYouTubeVideoId(youtubeUrl);
+      if (!videoId) {
+        return res.status(400).json({ message: "Could not extract video ID from URL", traceId });
+      }
+      
+      console.log(`[YouTube:${traceId}] Downloading audio and thumbnail for video ${videoId}`);
+      
+      const downloadResult = await downloadYouTubeAudio(youtubeUrl, UPLOADS_DIR);
+      
+      if (!downloadResult.success || !downloadResult.audioPath) {
+        console.error(`[YouTube:${traceId}] Download failed:`, downloadResult.error);
+        return res.status(400).json({ 
+          message: downloadResult.error || "Failed to download YouTube video",
+          traceId 
+        });
+      }
+      
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + VIDEO_RETENTION_DAYS);
+      
+      const sessionTitle = title?.trim().slice(0, 80) || downloadResult.videoInfo?.title?.slice(0, 80) || null;
+      
+      const session = await storage.createSession({
+        userId: req.session.userId!,
+        goalType: goalType as GoalType,
+        durationSeconds: downloadResult.videoInfo?.duration || null,
+        expiresAt,
+        videoPath: null,
+        videoMimeType: null,
+        videoSizeBytes: null,
+        videoDeletedAt: null,
+        transcriptText: null,
+        transcriptEditedText: null,
+        scoreJson: null,
+        scoreUpdatedAt: null,
+        title: sessionTitle,
+        titleSource: title?.trim() ? "user" : downloadResult.videoInfo?.title ? "youtube" : null,
+        titleGeneratedAt: sessionTitle ? new Date() : null,
+        sourceType: "youtube",
+        youtubeUrl,
+        youtubeVideoId: videoId,
+        youtubeTitle: downloadResult.videoInfo?.title || null,
+        thumbnailPath: downloadResult.thumbnailPath || null,
+        processingStatus: "queued",
+        processingProgress: 0,
+        processingMessage: "YouTube video downloaded, preparing for transcription...",
+      });
+      
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "session_created",
+        actionLabel: ActionLabels.session_created,
+        entityType: "session",
+        entityId: session.id,
+        metadata: { goalType, title: sessionTitle, sourceType: "youtube", youtubeVideoId: videoId, traceId },
+        req,
+      });
+      
+      console.log(`[YouTube:${traceId}] Session created: ${session.id}, starting processing`);
+      
+      processSession(session.id, req.session.userId!, downloadResult.audioPath).catch((err) => {
+        console.error(`[YouTube:${traceId}] Processing error for session ${session.id}:`, err);
+      });
+      
+      res.status(201).json({ 
+        id: session.id, 
+        title: sessionTitle,
+        duration: downloadResult.videoInfo?.duration,
+        thumbnailPath: downloadResult.thumbnailPath,
+        traceId 
+      });
+    } catch (err) {
+      console.error(`[YouTube:${traceId}] Error:`, err);
+      res.status(500).json({ 
+        message: "Failed to process YouTube video",
+        error: err instanceof Error ? err.message : "Unknown error",
+        traceId 
+      });
     }
   });
 
