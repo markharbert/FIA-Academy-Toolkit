@@ -16,6 +16,13 @@ function getOpportunityLevel(score: number): { color: string; label: string; bgC
   return { color: "text-red-600 dark:text-red-400", label: "Challenging", bgClass: "bg-red-500/10" };
 }
 
+function formatSearchVolume(volume: number | null | undefined): string {
+  if (volume === null || volume === undefined) return "N/A";
+  if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
+  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
+  return volume.toString();
+}
+
 const intentLabels: Record<TopicIntent, string> = {
   "review": "Review",
   "comparison": "Comparison",
@@ -92,6 +99,20 @@ export default function TopicPulseSavedPage() {
                             {intentLabels[saved.topic.intent]}
                           </Badge>
                         )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge 
+                              variant="outline" 
+                              className="font-mono cursor-help bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                              data-testid={`badge-volume-${saved.id}`}
+                            >
+                              {formatSearchVolume(saved.topic.monthlySearchVolume)}/mo
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p className="font-medium">Monthly Search Volume</p>
+                          </TooltipContent>
+                        </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Badge 

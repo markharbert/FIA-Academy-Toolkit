@@ -47,48 +47,57 @@ async function getSearchVolumes(keywords: string[]): Promise<Map<string, number 
   }
   
   try {
-    const formData = new URLSearchParams();
-    formData.append("dataSource", "gkp");
-    formData.append("country", "us");
-    formData.append("currency", "USD");
-    uncachedKeywords.slice(0, 100).forEach(kw => formData.append("kw[]", kw));
-    
-    const response = await fetch("https://api.keywordseverywhere.com/v1/get_keyword_data", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${KEYWORDS_EVERYWHERE_API_KEY}`,
-        "Accept": "application/json",
-      },
-      body: formData,
-    });
-    
-    if (!response.ok) {
-      console.error("[KeywordsEverywhere] API error:", response.status, await response.text());
-      uncachedKeywords.forEach(kw => results.set(kw.toLowerCase(), null));
-      return results;
-    }
-    
-    const data = await response.json();
-    
-    if (data.data && Array.isArray(data.data)) {
-      for (const item of data.data as KeywordsEverywhereResult[]) {
-        const volume = item.vol || 0;
-        results.set(item.keyword.toLowerCase(), volume);
-        searchVolumeCache.set(item.keyword.toLowerCase(), { volume, timestamp: Date.now() });
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < uncachedKeywords.length; i += BATCH_SIZE) {
+      const batch = uncachedKeywords.slice(i, i + BATCH_SIZE);
+      
+      const formData = new URLSearchParams();
+      formData.append("dataSource", "gkp");
+      formData.append("country", "us");
+      formData.append("currency", "USD");
+      batch.forEach(kw => formData.append("kw[]", kw));
+      
+      const response = await fetch("https://api.keywordseverywhere.com/v1/get_keyword_data", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${KEYWORDS_EVERYWHERE_API_KEY}`,
+          "Accept": "application/json",
+        },
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        console.error("[KeywordsEverywhere] API error:", response.status, await response.text());
+        batch.forEach(kw => results.set(kw.toLowerCase(), null));
+        continue;
       }
-    }
-    
-    for (const kw of uncachedKeywords) {
-      if (!results.has(kw.toLowerCase())) {
-        results.set(kw.toLowerCase(), null);
-        searchVolumeCache.set(kw.toLowerCase(), { volume: null, timestamp: Date.now() });
+      
+      const data = await response.json();
+      
+      if (data.data && Array.isArray(data.data)) {
+        for (const item of data.data as KeywordsEverywhereResult[]) {
+          const volume = item.vol || 0;
+          results.set(item.keyword.toLowerCase(), volume);
+          searchVolumeCache.set(item.keyword.toLowerCase(), { volume, timestamp: Date.now() });
+        }
       }
+      
+      for (const kw of batch) {
+        if (!results.has(kw.toLowerCase())) {
+          results.set(kw.toLowerCase(), 0);
+          searchVolumeCache.set(kw.toLowerCase(), { volume: 0, timestamp: Date.now() });
+        }
+      }
+      
+      console.log(`[KeywordsEverywhere] Fetched batch ${Math.floor(i / BATCH_SIZE) + 1}: ${data.data?.length || 0} keyword volumes`);
     }
-    
-    console.log(`[KeywordsEverywhere] Fetched ${data.data?.length || 0} keyword volumes`);
   } catch (err) {
     console.error("[KeywordsEverywhere] Error fetching search volumes:", err);
-    uncachedKeywords.forEach(kw => results.set(kw.toLowerCase(), null));
+    uncachedKeywords.forEach(kw => {
+      if (!results.has(kw.toLowerCase())) {
+        results.set(kw.toLowerCase(), null);
+      }
+    });
   }
   
   return results;

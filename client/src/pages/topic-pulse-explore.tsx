@@ -51,6 +51,38 @@ function getOpportunityLevel(score: number): { color: string; label: string; bgC
   return { color: "text-red-600 dark:text-red-400", label: "Challenging", bgClass: "bg-red-500/10" };
 }
 
+function formatSearchVolume(volume: number | null | undefined): string {
+  if (volume === null || volume === undefined) return "N/A";
+  if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
+  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
+  return volume.toString();
+}
+
+function SearchVolumeBadge({ volume, testId }: { volume: number | null | undefined; testId?: string }) {
+  const formatted = formatSearchVolume(volume);
+  const hasData = volume !== null && volume !== undefined;
+  
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge 
+          variant="outline" 
+          className={`font-mono cursor-help ${hasData ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}
+          data-testid={testId || "badge-search-volume"}
+        >
+          {formatted}/mo
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <p className="font-medium">Monthly Search Volume</p>
+        <p className="text-xs text-muted-foreground">
+          Estimated monthly searches on Google (via Keywords Everywhere)
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function OpportunityBadge({ score }: { score: number }) {
   const { color, label, bgClass } = getOpportunityLevel(score);
   
@@ -237,6 +269,7 @@ export default function TopicPulseExplorePage() {
                       <p className="text-sm text-muted-foreground truncate">{topic.keywordQuery}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <SearchVolumeBadge volume={topic.monthlySearchVolume} testId={`badge-volume-${topic.id}`} />
                       {topic.intent && (
                         <Badge variant="outline" className={intentColors[topic.intent]}>
                           {intentLabels[topic.intent]}
@@ -279,29 +312,46 @@ export default function TopicPulseExplorePage() {
                   </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-medium">Opportunity Score</h3>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs">
-                        <p className="text-xs">
-                          Measures how promising this topic is based on search demand, competition level, and trend direction. Higher = better opportunity.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-medium text-sm">Monthly Searches</h3>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-xs">
+                            Estimated monthly searches on Google for this keyword (via Keywords Everywhere).
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <p className="font-mono text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {formatSearchVolume(selectedTopic.monthlySearchVolume)}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Progress value={selectedTopic.opportunityScore || 0} className="flex-1" />
-                    <span className={`font-mono text-lg font-bold ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-medium text-sm">Opportunity</h3>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-xs">
+                            Based on search demand, competition level, and trend direction.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <p className={`font-mono text-2xl font-bold ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
                       {selectedTopic.opportunityScore}
-                    </span>
+                    </p>
+                    <p className={`text-xs ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
+                      {getOpportunityLevel(selectedTopic.opportunityScore || 0).label}
+                    </p>
                   </div>
-                  <p className={`text-sm mt-1 ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
-                    {getOpportunityLevel(selectedTopic.opportunityScore || 0).label}
-                  </p>
                 </div>
 
                 {selectedTopic.demandSignalsJson && (
