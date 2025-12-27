@@ -12,8 +12,87 @@ const openai = new OpenAI({
 });
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const KEYWORDS_EVERYWHERE_API_KEY = process.env.KEYWORDS_EVERYWHERE_API_KEY;
 const topicCache = new Map<string, { topics: InsertTopic[]; timestamp: number }>();
+const searchVolumeCache = new Map<string, { volume: number | null; timestamp: number }>();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface KeywordsEverywhereResult {
+  keyword: string;
+  vol: number;
+  cpc?: { value: number; currency: string };
+  competition?: number;
+}
+
+async function getSearchVolumes(keywords: string[]): Promise<Map<string, number | null>> {
+  const results = new Map<string, number | null>();
+  
+  if (!KEYWORDS_EVERYWHERE_API_KEY || keywords.length === 0) {
+    keywords.forEach(kw => results.set(kw.toLowerCase(), null));
+    return results;
+  }
+  
+  const uncachedKeywords: string[] = [];
+  for (const kw of keywords) {
+    const cached = searchVolumeCache.get(kw.toLowerCase());
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      results.set(kw.toLowerCase(), cached.volume);
+    } else {
+      uncachedKeywords.push(kw);
+    }
+  }
+  
+  if (uncachedKeywords.length === 0) {
+    return results;
+  }
+  
+  try {
+    const formData = new URLSearchParams();
+    formData.append("dataSource", "gkp");
+    formData.append("country", "us");
+    formData.append("currency", "USD");
+    uncachedKeywords.slice(0, 100).forEach(kw => formData.append("kw[]", kw));
+    
+    const response = await fetch("https://api.keywordseverywhere.com/v1/get_keyword_data", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${KEYWORDS_EVERYWHERE_API_KEY}`,
+        "Accept": "application/json",
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      console.error("[KeywordsEverywhere] API error:", response.status, await response.text());
+      uncachedKeywords.forEach(kw => results.set(kw.toLowerCase(), null));
+      return results;
+    }
+    
+    const data = await response.json();
+    
+    if (data.data && Array.isArray(data.data)) {
+      for (const item of data.data as KeywordsEverywhereResult[]) {
+        const volume = item.vol || 0;
+        results.set(item.keyword.toLowerCase(), volume);
+        searchVolumeCache.set(item.keyword.toLowerCase(), { volume, timestamp: Date.now() });
+      }
+    }
+    
+    for (const kw of uncachedKeywords) {
+      if (!results.has(kw.toLowerCase())) {
+        results.set(kw.toLowerCase(), null);
+        searchVolumeCache.set(kw.toLowerCase(), { volume: null, timestamp: Date.now() });
+      }
+    }
+    
+    console.log(`[KeywordsEverywhere] Fetched ${data.data?.length || 0} keyword volumes`);
+  } catch (err) {
+    console.error("[KeywordsEverywhere] Error fetching search volumes:", err);
+    uncachedKeywords.forEach(kw => results.set(kw.toLowerCase(), null));
+  }
+  
+  return results;
+}
 
 async function getYouTubeAutocomplete(query: string): Promise<string[]> {
   try {
@@ -141,6 +220,8 @@ export async function generateTopics(input: TopicSearchInput, runId: string): Pr
   
   const allQueries = Array.from(new Set([...autocompleteSuggestions, ...variations]));
   
+  const searchVolumes = await getSearchVolumes(allQueries);
+  
   const topics: InsertTopic[] = [];
   
   for (const query of allQueries) {
@@ -159,6 +240,7 @@ export async function generateTopics(input: TopicSearchInput, runId: string): Pr
     
     const opportunityScore = calculateOpportunityScore(signals);
     const whyText = generateWhyText(query, signals);
+    const monthlySearchVolume = searchVolumes.get(query.toLowerCase()) ?? null;
     
     topics.push({
       runId,
@@ -166,6 +248,7 @@ export async function generateTopics(input: TopicSearchInput, runId: string): Pr
       keywordQuery: query,
       intent,
       opportunityScore,
+      monthlySearchVolume,
       demandSignalsJson: signals,
       whyText,
       suggestedAngles: null,
