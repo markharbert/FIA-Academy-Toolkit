@@ -1006,6 +1006,27 @@ export default function SessionPage() {
             </CardContent>
           </Card>
 
+          {score.summary.overallSummary && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  AI Coach Summary
+                </CardTitle>
+                <CardDescription>Personalized feedback to help you improve</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  {score.summary.overallSummary.split('\n\n').map((paragraph, i) => (
+                    <p key={i} className="text-muted-foreground leading-relaxed mb-4 last:mb-0">
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
