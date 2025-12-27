@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Loader2, ArrowLeft, Trash2, FileText, Bookmark, 
   HelpCircle, TrendingUp, TrendingDown, Minus, Sparkles,
-  CheckCircle2, AlertCircle, Lightbulb, Check, RotateCcw
+  CheckCircle2, AlertCircle, Lightbulb, Check, RotateCcw, X
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -348,11 +348,21 @@ export default function TopicPulseSavedPage() {
         </ScrollArea>
 
         {selectedTopic && (
-          <div className="w-96 border-l">
-            <ScrollArea className="h-full">
+          <div className="w-96 border-l flex flex-col">
+            <div className="flex items-center justify-between gap-2 p-4 border-b">
+              <h2 className="text-lg font-semibold truncate" data-testid="text-topic-title">{selectedTopic.topicTitle}</h2>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setSelectedTopic(null)}
+                data-testid="button-close-panel"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <ScrollArea className="flex-1">
               <div className="p-4 space-y-6">
                 <div>
-                  <h2 className="text-lg font-semibold mb-1" data-testid="text-topic-title">{selectedTopic.topicTitle}</h2>
                   <p className="text-sm text-muted-foreground mb-4">{selectedTopic.keywordQuery}</p>
                   
                   {(() => {

@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Minus, Bookmark, 
   FileText, Sparkles, CheckCircle2, AlertCircle, Lightbulb, HelpCircle,
-  ArrowUpDown, ArrowDown, ArrowUp
+  ArrowUpDown, ArrowDown, ArrowUp, X
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -374,11 +374,21 @@ export default function TopicPulseExplorePage() {
         </ScrollArea>
 
         {selectedTopic && (
-          <div className="w-96 border-l">
-            <ScrollArea className="h-full">
+          <div className="w-96 border-l flex flex-col">
+            <div className="flex items-center justify-between gap-2 p-4 border-b">
+              <h2 className="text-lg font-semibold truncate" data-testid="text-topic-title">{selectedTopic.topicTitle}</h2>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setSelectedTopic(null)}
+                data-testid="button-close-panel"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <ScrollArea className="flex-1">
               <div className="p-4 space-y-6">
                 <div>
-                  <h2 className="text-lg font-semibold mb-1" data-testid="text-topic-title">{selectedTopic.topicTitle}</h2>
                   <p className="text-sm text-muted-foreground mb-4">{selectedTopic.keywordQuery}</p>
                   
                   <div className="flex gap-2 mb-4">
