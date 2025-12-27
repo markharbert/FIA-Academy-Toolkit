@@ -46,7 +46,8 @@ export function isValidYouTubeUrl(url: string): boolean {
 
 export async function getYouTubeVideoInfo(url: string): Promise<YouTubeVideoInfo | null> {
   return new Promise((resolve) => {
-    const ytdlp = spawn("yt-dlp", [
+    const ytdlpPath = process.env.YTDLP_PATH || "/tmp/yt-dlp";
+    const ytdlp = spawn(ytdlpPath, [
       "--dump-json",
       "--no-playlist",
       "--no-warnings",
@@ -119,8 +120,10 @@ export async function downloadYouTubeAudio(
   return new Promise((resolve) => {
     console.log(`[yt-dlp] Downloading audio for ${videoId}...`);
     
-    const ytdlp = spawn("yt-dlp", [
-      "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[height<=480]",
+    const ytdlpPath = process.env.YTDLP_PATH || "/tmp/yt-dlp";
+    const ytdlp = spawn(ytdlpPath, [
+      "-4",
+      "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
       "-x",
       "--audio-format", "mp3",
       "--audio-quality", "0",
@@ -130,6 +133,7 @@ export async function downloadYouTubeAudio(
       "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "--write-thumbnail",
       "--convert-thumbnails", "jpg",
+      "--no-check-certificates",
       "-o", audioPath.replace(".m4a", ".%(ext)s"),
       url
     ]);
