@@ -335,7 +335,7 @@ export async function processSession(sessionId: string, userId: string, preExtra
         const scoreResult = await scoreTranscript(
           finalTranscript,
           session.goalType as GoalType,
-          audioResult.durationSeconds || session.durationSeconds || 60
+          session.durationSeconds || 60
         );
         await recordMetric(sessionId, "scoring", scoreStart, true);
         
