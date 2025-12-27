@@ -20,10 +20,7 @@ import {
 import {
   Plus,
   Video,
-  Clock,
-  Download,
   Eye,
-  AlertCircle,
   X,
   Loader2,
   Trash2,
@@ -44,61 +41,50 @@ function formatDuration(seconds: number | null): string {
 }
 
 function ScoreCircle({ score }: { score: number }) {
-  const circumference = 2 * Math.PI * 36;
+  const circumference = 2 * Math.PI * 28;
   const strokeDashoffset = circumference - (score / 100) * circumference;
   const color = score >= 70 ? "text-green-500" : score >= 40 ? "text-yellow-500" : "text-red-500";
 
   return (
-    <div className="relative h-20 w-20">
-      <svg className="h-20 w-20 -rotate-90">
+    <div className="relative h-16 w-16">
+      <svg className="h-16 w-16 -rotate-90">
         <circle
           className="text-muted"
-          strokeWidth="6"
+          strokeWidth="5"
           stroke="currentColor"
           fill="transparent"
-          r="36"
-          cx="40"
-          cy="40"
+          r="28"
+          cx="32"
+          cy="32"
         />
         <circle
           className={color}
-          strokeWidth="6"
+          strokeWidth="5"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
           stroke="currentColor"
           fill="transparent"
-          r="36"
-          cx="40"
-          cy="40"
+          r="28"
+          cx="32"
+          cy="32"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+      <span className="absolute inset-0 flex items-center justify-center text-base font-bold">
         {score}
       </span>
     </div>
   );
 }
 
-function VideoThumbnail({ session, isExpired }: { session: Session; isExpired: boolean | Date | null }) {
-  if (isExpired) {
-    return (
-      <div className="flex aspect-video w-full items-center justify-center bg-muted sm:w-40">
-        <div className="flex flex-col items-center gap-1 text-muted-foreground">
-          <AlertCircle className="h-6 w-6" />
-          <span className="text-xs font-medium">Expired</span>
-        </div>
-      </div>
-    );
-  }
-
+function VideoThumbnail({ session }: { session: Session }) {
   if (session.thumbnailPath) {
     return (
-      <Link href={`/video-score-upload/${session.id}`} className="block sm:w-40">
+      <Link href={`/video-score-upload/${session.id}`} className="block sm:w-32">
         <img
           src={`/api/sessions/${session.id}/thumbnail`}
           alt="Video preview"
-          className="aspect-video w-full object-cover sm:w-40"
+          className="aspect-video w-full object-cover sm:w-32 rounded-md"
           data-testid={`thumbnail-session-${session.id}`}
         />
       </Link>
@@ -106,8 +92,8 @@ function VideoThumbnail({ session, isExpired }: { session: Session; isExpired: b
   }
 
   return (
-    <Link href={`/video-score-upload/${session.id}`} className="flex aspect-video w-full items-center justify-center bg-muted sm:w-40">
-      <Video className="h-8 w-8 text-muted-foreground" />
+    <Link href={`/video-score-upload/${session.id}`} className="flex aspect-video w-full items-center justify-center bg-muted sm:w-32 rounded-md">
+      <Video className="h-6 w-6 text-muted-foreground" />
     </Link>
   );
 }
@@ -122,7 +108,6 @@ interface SessionCardProps {
 
 function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSessionIds }: SessionCardProps) {
   const { toast } = useToast();
-  const isExpired = session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date());
   const score = session.scoreJson?.totalScore ?? null;
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(session.title || "");
@@ -190,9 +175,9 @@ function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSes
                 />
               </div>
             )}
-            <VideoThumbnail session={session} isExpired={isExpired} />
+            <VideoThumbnail session={session} />
           </div>
-          <div className="flex flex-1 flex-col justify-between p-4">
+          <div className="flex flex-1 flex-col justify-between p-3">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1 flex-1">
                 {isEditing ? (
@@ -247,47 +232,21 @@ function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSes
                     </Button>
                   </div>
                 )}
-                <p className="text-sm text-muted-foreground">
-                  {dateStr} at {format(new Date(session.createdAt), "h:mm a")}
+                <p className="text-xs text-muted-foreground">
+                  {dateStr} · {formatDuration(session.durationSeconds)}
                 </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
-                    {session.goalType}
-                  </Badge>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    {formatDuration(session.durationSeconds)}
-                  </span>
-                  {isExpired ? (
-                    <Badge variant="secondary" className="text-xs">
-                      Video Expired
-                    </Badge>
-                  ) : (
-                    <Badge variant="default" className="text-xs bg-green-600">
-                      Video Available
-                    </Badge>
-                  )}
-                </div>
               </div>
               {score !== null && (
                 <ScoreCircle score={score} />
               )}
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <Link href={`/video-score-upload/${session.id}`}>
                 <Button variant="outline" size="sm" data-testid={`button-view-session-${session.id}`}>
                   <Eye className="mr-2 h-4 w-4" />
-                  View Details
+                  View
                 </Button>
               </Link>
-              {!isExpired && session.videoPath && (
-                <a href={`/api/sessions/${session.id}/download`} download>
-                  <Button variant="ghost" size="sm" data-testid={`button-download-session-${session.id}`}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download
-                  </Button>
-                </a>
-              )}
             </div>
           </div>
         </div>
@@ -301,19 +260,16 @@ function SessionCardSkeleton() {
     <Card className="overflow-hidden">
       <CardContent className="p-0">
         <div className="flex flex-col sm:flex-row">
-          <Skeleton className="aspect-video w-full sm:w-40" />
-          <div className="flex-1 p-4 space-y-4">
+          <Skeleton className="aspect-video w-full sm:w-32 rounded-md" />
+          <div className="flex-1 p-3 space-y-3">
             <div className="flex justify-between">
               <div className="space-y-2">
                 <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-20" />
               </div>
-              <Skeleton className="h-20 w-20 rounded-full" />
+              <Skeleton className="h-16 w-16 rounded-full" />
             </div>
-            <div className="flex gap-2">
-              <Skeleton className="h-9 w-28" />
-              <Skeleton className="h-9 w-24" />
-            </div>
+            <Skeleton className="h-8 w-16" />
           </div>
         </div>
       </CardContent>
