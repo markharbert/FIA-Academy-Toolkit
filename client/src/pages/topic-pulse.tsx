@@ -73,7 +73,7 @@ export default function TopicPulsePage() {
     <div className="min-h-full p-6 space-y-8">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">Topic Pulse Finder</h1>
+          <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">Video Pulse Finder</h1>
           <p className="text-muted-foreground">
             Find in-demand YouTube video topics and generate scripts using Mark's 5-part formula
           </p>

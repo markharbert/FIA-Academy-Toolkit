@@ -20,7 +20,7 @@ export default function TopicPulseSettingsPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-xl font-semibold" data-testid="text-page-title">Topic Pulse Settings</h1>
+            <h1 className="text-xl font-semibold" data-testid="text-page-title">Video Pulse Settings</h1>
             <p className="text-sm text-muted-foreground">API keys and preferences</p>
           </div>
         </div>
@@ -34,7 +34,7 @@ export default function TopicPulseSettingsPage() {
               API Configuration
             </CardTitle>
             <CardDescription>
-              These services power Topic Pulse Finder. Some features require API keys.
+              These services power Video Pulse Finder. Some features require API keys.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -109,7 +109,7 @@ export default function TopicPulseSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <p>
-              <strong className="text-foreground">Without YouTube API:</strong> Topic Pulse uses YouTube autocomplete 
+              <strong className="text-foreground">Without YouTube API:</strong> Video Pulse uses YouTube autocomplete 
               suggestions to find in-demand topics. Results are based on search patterns and keyword variations.
             </p>
             <p>

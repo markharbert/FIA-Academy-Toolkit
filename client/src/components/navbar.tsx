@@ -50,7 +50,7 @@ export function Navbar() {
                   data-testid="link-topic-pulse-nav"
                 >
                   <TrendingUp className="mr-2 h-4 w-4" />
-                  Topic Pulse
+                  Video Pulse
                 </Button>
               </Link>
               {user.isAdmin && (
