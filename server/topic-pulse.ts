@@ -3,7 +3,7 @@ import { storage } from "./storage";
 import type { 
   Topic, InsertTopic, TopicRun, 
   TopicSearchInput, ScriptGenerationInput, ScriptJson,
-  TopicIntent, DemandSignals, TrendDirection
+  TopicIntent, DemandSignals, TrendDirection, TrendDataPoint
 } from "@shared/schema";
 
 const openai = new OpenAI({
@@ -14,29 +14,38 @@ const openai = new OpenAI({
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const KEYWORDS_EVERYWHERE_API_KEY = process.env.KEYWORDS_EVERYWHERE_API_KEY;
 const topicCache = new Map<string, { topics: InsertTopic[]; timestamp: number }>();
-const searchVolumeCache = new Map<string, { volume: number | null; timestamp: number }>();
+const keywordDataCache = new Map<string, { data: KeywordData; timestamp: number }>();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface KeywordData {
+  volume: number | null;
+  cpc: number | null;
+  competition: number | null;
+  trend: TrendDataPoint[] | null;
+}
 
 interface KeywordsEverywhereResult {
   keyword: string;
   vol: number;
   cpc?: { value: number; currency: string };
   competition?: number;
+  trend?: Array<{ month: string; year: number; value: number }>;
 }
 
-async function getSearchVolumes(keywords: string[]): Promise<Map<string, number | null>> {
-  const results = new Map<string, number | null>();
+async function getKeywordData(keywords: string[]): Promise<Map<string, KeywordData>> {
+  const results = new Map<string, KeywordData>();
+  const defaultData: KeywordData = { volume: null, cpc: null, competition: null, trend: null };
   
   if (!KEYWORDS_EVERYWHERE_API_KEY || keywords.length === 0) {
-    keywords.forEach(kw => results.set(kw.toLowerCase(), null));
+    keywords.forEach(kw => results.set(kw.toLowerCase(), defaultData));
     return results;
   }
   
   const uncachedKeywords: string[] = [];
   for (const kw of keywords) {
-    const cached = searchVolumeCache.get(kw.toLowerCase());
+    const cached = keywordDataCache.get(kw.toLowerCase());
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-      results.set(kw.toLowerCase(), cached.volume);
+      results.set(kw.toLowerCase(), cached.data);
     } else {
       uncachedKeywords.push(kw);
     }
@@ -68,7 +77,7 @@ async function getSearchVolumes(keywords: string[]): Promise<Map<string, number 
       
       if (!response.ok) {
         console.error("[KeywordsEverywhere] API error:", response.status, await response.text());
-        batch.forEach(kw => results.set(kw.toLowerCase(), null));
+        batch.forEach(kw => results.set(kw.toLowerCase(), defaultData));
         continue;
       }
       
@@ -76,26 +85,32 @@ async function getSearchVolumes(keywords: string[]): Promise<Map<string, number 
       
       if (data.data && Array.isArray(data.data)) {
         for (const item of data.data as KeywordsEverywhereResult[]) {
-          const volume = item.vol || 0;
-          results.set(item.keyword.toLowerCase(), volume);
-          searchVolumeCache.set(item.keyword.toLowerCase(), { volume, timestamp: Date.now() });
+          const keywordData: KeywordData = {
+            volume: item.vol || 0,
+            cpc: item.cpc?.value ?? null,
+            competition: item.competition ?? null,
+            trend: item.trend || null,
+          };
+          results.set(item.keyword.toLowerCase(), keywordData);
+          keywordDataCache.set(item.keyword.toLowerCase(), { data: keywordData, timestamp: Date.now() });
         }
       }
       
       for (const kw of batch) {
         if (!results.has(kw.toLowerCase())) {
-          results.set(kw.toLowerCase(), 0);
-          searchVolumeCache.set(kw.toLowerCase(), { volume: 0, timestamp: Date.now() });
+          const emptyData: KeywordData = { volume: 0, cpc: null, competition: null, trend: null };
+          results.set(kw.toLowerCase(), emptyData);
+          keywordDataCache.set(kw.toLowerCase(), { data: emptyData, timestamp: Date.now() });
         }
       }
       
-      console.log(`[KeywordsEverywhere] Fetched batch ${Math.floor(i / BATCH_SIZE) + 1}: ${data.data?.length || 0} keyword volumes`);
+      console.log(`[KeywordsEverywhere] Fetched batch ${Math.floor(i / BATCH_SIZE) + 1}: ${data.data?.length || 0} keywords with full data`);
     }
   } catch (err) {
-    console.error("[KeywordsEverywhere] Error fetching search volumes:", err);
+    console.error("[KeywordsEverywhere] Error fetching keyword data:", err);
     uncachedKeywords.forEach(kw => {
       if (!results.has(kw.toLowerCase())) {
-        results.set(kw.toLowerCase(), null);
+        results.set(kw.toLowerCase(), defaultData);
       }
     });
   }
@@ -191,22 +206,87 @@ function generateWhyText(query: string, signals: DemandSignals): string {
   return parts.join(" ");
 }
 
-function calculateOpportunityScore(signals: DemandSignals): number {
-  let score = 50;
+function calculateOpportunityScore(
+  signals: DemandSignals, 
+  keywordData: KeywordData
+): number {
+  let score = 0;
   
-  if (signals.autocompletePresent) score += 15;
+  // Volume component (0-30 points) - higher volume = higher score
+  const volume = keywordData.volume || 0;
+  if (volume >= 10000) score += 30;
+  else if (volume >= 5000) score += 25;
+  else if (volume >= 1000) score += 20;
+  else if (volume >= 500) score += 15;
+  else if (volume >= 100) score += 10;
+  else if (volume > 0) score += 5;
   
-  if (signals.freshnessScore > 60) score += 10;
-  else if (signals.freshnessScore < 30) score += 5;
+  // Competition component (0-30 points) - lower competition = higher score
+  const competition = keywordData.competition;
+  if (competition !== null) {
+    if (competition <= 0.2) score += 30;
+    else if (competition <= 0.4) score += 25;
+    else if (competition <= 0.5) score += 20;
+    else if (competition <= 0.6) score += 15;
+    else if (competition <= 0.8) score += 10;
+    else score += 5;
+  } else {
+    score += 15; // Default if no data
+  }
   
-  if (signals.competitionScore < 30) score += 20;
-  else if (signals.competitionScore < 50) score += 10;
-  else if (signals.competitionScore > 80) score -= 10;
+  // CPC component (0-20 points) - higher CPC = more commercial value = higher score
+  const cpc = keywordData.cpc;
+  if (cpc !== null) {
+    if (cpc >= 5) score += 20;
+    else if (cpc >= 2) score += 15;
+    else if (cpc >= 1) score += 12;
+    else if (cpc >= 0.5) score += 8;
+    else if (cpc > 0) score += 5;
+  } else {
+    score += 10; // Default if no data
+  }
   
-  if (signals.trendDirection === "rising") score += 10;
-  else if (signals.trendDirection === "falling") score -= 10;
+  // Trend component (0-10 points) - analyze if trend is rising
+  const trend = keywordData.trend;
+  if (trend && trend.length >= 6) {
+    const recentMonths = trend.slice(-3);
+    const olderMonths = trend.slice(-6, -3);
+    const recentAvg = recentMonths.reduce((sum, t) => sum + t.value, 0) / recentMonths.length;
+    const olderAvg = olderMonths.reduce((sum, t) => sum + t.value, 0) / olderMonths.length;
+    
+    if (olderAvg > 0) {
+      const growthRate = (recentAvg - olderAvg) / olderAvg;
+      if (growthRate > 0.2) score += 10; // Rising trend
+      else if (growthRate > 0) score += 7;
+      else if (growthRate > -0.1) score += 5; // Stable
+      else score += 2; // Declining
+    } else {
+      score += 5;
+    }
+  } else {
+    score += 5; // Default if no trend data
+  }
+  
+  // Autocomplete bonus (0-10 points) - appearing in autocomplete = active demand
+  if (signals.autocompletePresent) score += 10;
   
   return Math.max(0, Math.min(100, score));
+}
+
+function getTrendDirection(trend: TrendDataPoint[] | null): TrendDirection {
+  if (!trend || trend.length < 6) return "unknown";
+  
+  const recentMonths = trend.slice(-3);
+  const olderMonths = trend.slice(-6, -3);
+  const recentAvg = recentMonths.reduce((sum, t) => sum + t.value, 0) / recentMonths.length;
+  const olderAvg = olderMonths.reduce((sum, t) => sum + t.value, 0) / olderMonths.length;
+  
+  if (olderAvg === 0) return "unknown";
+  
+  const growthRate = (recentAvg - olderAvg) / olderAvg;
+  if (growthRate > 0.1) return "rising";
+  if (growthRate < -0.1) return "falling";
+  return "steady";
 }
 
 function createTopicTitle(query: string): string {
@@ -229,7 +309,7 @@ export async function generateTopics(input: TopicSearchInput, runId: string): Pr
   
   const allQueries = Array.from(new Set([...autocompleteSuggestions, ...variations]));
   
-  const searchVolumes = await getSearchVolumes(allQueries);
+  const keywordDataMap = await getKeywordData(allQueries);
   
   const topics: InsertTopic[] = [];
   
@@ -240,16 +320,22 @@ export async function generateTopics(input: TopicSearchInput, runId: string): Pr
       continue;
     }
     
-    const signals: DemandSignals = {
-      autocompletePresent: autocompleteSuggestions.includes(query),
-      trendDirection: "unknown" as TrendDirection,
-      freshnessScore: 50,
-      competitionScore: 50,
+    const kwData = keywordDataMap.get(query.toLowerCase()) || { 
+      volume: null, cpc: null, competition: null, trend: null 
     };
     
-    const opportunityScore = calculateOpportunityScore(signals);
+    const trendDirection = getTrendDirection(kwData.trend);
+    const competitionScore = kwData.competition !== null ? Math.round(kwData.competition * 100) : 50;
+    
+    const signals: DemandSignals = {
+      autocompletePresent: autocompleteSuggestions.includes(query),
+      trendDirection,
+      freshnessScore: 50,
+      competitionScore,
+    };
+    
+    const opportunityScore = calculateOpportunityScore(signals, kwData);
     const whyText = generateWhyText(query, signals);
-    const monthlySearchVolume = searchVolumes.get(query.toLowerCase()) ?? null;
     
     topics.push({
       runId,
@@ -257,7 +343,10 @@ export async function generateTopics(input: TopicSearchInput, runId: string): Pr
       keywordQuery: query,
       intent,
       opportunityScore,
-      monthlySearchVolume,
+      monthlySearchVolume: kwData.volume,
+      cpc: kwData.cpc,
+      competition: kwData.competition,
+      trendData: kwData.trend,
       demandSignalsJson: signals,
       whyText,
       suggestedAngles: null,
