@@ -751,3 +751,21 @@ export const scriptGenerationInputSchema = z.object({
 });
 
 export type ScriptGenerationInput = z.infer<typeof scriptGenerationInputSchema>;
+
+// Video Trends monthly credits for users
+export const videoTrendsCredits = pgTable("video_trends_credits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  creditsUsed: integer("credits_used").default(0).notNull(),
+  monthlyLimit: integer("monthly_limit").default(1000).notNull(),
+  windowStartedAt: timestamp("window_started_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertVideoTrendsCreditsSchema = createInsertSchema(videoTrendsCredits).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertVideoTrendsCredits = z.infer<typeof insertVideoTrendsCreditsSchema>;
+export type VideoTrendsCredits = typeof videoTrendsCredits.$inferSelect;
