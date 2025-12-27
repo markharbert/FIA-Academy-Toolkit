@@ -1042,7 +1042,15 @@ export class DatabaseStorage implements IStorage {
     const run = await this.getTopicRun(id);
     if (!run || run.userId !== userId) return false;
     
-    await db.delete(topics).where(eq(topics.runId, id));
+    // Only delete topics that are NOT saved - saved topics should remain
+    const topicsInRun = await db.select({ id: topics.id }).from(topics).where(eq(topics.runId, id));
+    for (const topic of topicsInRun) {
+      const isSaved = await this.isSavedTopic(topic.id, userId);
+      if (!isSaved) {
+        await db.delete(topics).where(eq(topics.id, topic.id));
+      }
+    }
+    
     const [result] = await db.delete(topicRuns)
       .where(and(eq(topicRuns.id, id), eq(topicRuns.userId, userId)))
       .returning();
@@ -1052,7 +1060,14 @@ export class DatabaseStorage implements IStorage {
   async deleteAllTopicRuns(userId: string): Promise<number> {
     const runs = await this.getTopicRunsByUser(userId, 1000);
     for (const run of runs) {
-      await db.delete(topics).where(eq(topics.runId, run.id));
+      // Only delete topics that are NOT saved - saved topics should remain
+      const topicsInRun = await db.select({ id: topics.id }).from(topics).where(eq(topics.runId, run.id));
+      for (const topic of topicsInRun) {
+        const isSaved = await this.isSavedTopic(topic.id, userId);
+        if (!isSaved) {
+          await db.delete(topics).where(eq(topics.id, topic.id));
+        }
+      }
     }
     const result = await db.delete(topicRuns)
       .where(eq(topicRuns.userId, userId))
