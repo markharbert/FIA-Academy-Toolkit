@@ -121,11 +121,18 @@ function DetailedPartFeedback({
   score: number; 
   data: { whatWorked: string[]; whatMissing: string[]; suggestions: string[]; exampleLines: string[] };
 }) {
+  const { color, textColor } = getScoreLevel(score);
+  const badgeClass = score >= 15 
+    ? "bg-green-500 hover:bg-green-500 text-white" 
+    : score >= 10 
+      ? "bg-yellow-500 hover:bg-yellow-500 text-white" 
+      : "bg-red-500 hover:bg-red-500 text-white";
+  
   return (
     <AccordionItem value={partKey}>
       <AccordionTrigger className="hover:no-underline">
         <div className="flex items-center gap-3">
-          <Badge variant={score >= 14 ? "default" : score >= 8 ? "secondary" : "destructive"} className="text-xs">
+          <Badge className={`text-xs ${badgeClass}`}>
             {score}/20
           </Badge>
           <span className="font-semibold">{title}</span>
