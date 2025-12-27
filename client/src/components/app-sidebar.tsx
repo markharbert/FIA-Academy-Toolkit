@@ -49,10 +49,10 @@ const navItems = [
     testId: "nav-video-score",
   },
   {
-    title: "Video Pulse",
+    title: "Video Trends",
     url: "/topic-pulse",
     icon: TrendingUp,
-    testId: "nav-video-pulse",
+    testId: "nav-video-trends",
   },
   {
     title: "Scripts",

@@ -60,7 +60,7 @@ export function Navbar() {
                   data-testid="link-topic-pulse-nav"
                 >
                   <TrendingUp className="mr-2 h-4 w-4" />
-                  Video Pulse
+                  Video Trends
                 </Button>
               </Link>
               {user.isAdmin && (
@@ -191,7 +191,7 @@ export function Navbar() {
                 data-testid="mobile-link-topic-pulse"
               >
                 <TrendingUp className="mr-2 h-4 w-4" />
-                Video Pulse
+                Video Trends
               </Button>
               <Button
                 variant="ghost"

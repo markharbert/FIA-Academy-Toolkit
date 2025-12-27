@@ -80,7 +80,7 @@ export default function TopicPulseSettingsPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-xl font-semibold" data-testid="text-page-title">Video Pulse Settings</h1>
+            <h1 className="text-xl font-semibold" data-testid="text-page-title">Video Trends Settings</h1>
             <p className="text-sm text-muted-foreground">API keys and preferences</p>
           </div>
         </div>
@@ -200,7 +200,7 @@ export default function TopicPulseSettingsPage() {
               System API Configuration
             </CardTitle>
             <CardDescription>
-              These services power Video Pulse Finder. System-level API keys are managed by your administrator.
+              These services power Video Trends. System-level API keys are managed by your administrator.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -279,7 +279,7 @@ export default function TopicPulseSettingsPage() {
               and competition data for each topic. Credits are consumed per keyword lookup ($10 = 100,000 credits).
             </p>
             <p>
-              <strong className="text-foreground">Without YouTube API:</strong> Video Pulse uses YouTube autocomplete 
+              <strong className="text-foreground">Without YouTube API:</strong> Video Trends uses YouTube autocomplete 
               suggestions to find in-demand topics. Results are based on search patterns and keyword variations.
             </p>
             <p>

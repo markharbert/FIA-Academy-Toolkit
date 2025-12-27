@@ -43,11 +43,11 @@ export default function DashboardPage() {
       testId: "card-video-score",
     },
     {
-      title: "Video Pulse",
+      title: "Video Trends",
       description: "Research trending topics and keywords for your video content with YouTube autocomplete and metrics.",
       icon: <Search className="h-6 w-6" />,
       href: "/topic-pulse",
-      testId: "card-video-pulse",
+      testId: "card-video-trends",
     },
     {
       title: "Scripts",

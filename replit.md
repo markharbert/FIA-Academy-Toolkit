@@ -52,7 +52,7 @@ Preferred communication style: Simple, everyday language.
 - **Parallel Processing Pipeline**: HLS, Transcription, and Scoring run concurrently with independent status tracking.
 - **Video Poster Generation**: Generates and serves a poster thumbnail for improved perceived performance.
 - **Preview Video Persistence**: Detailed tracking of preview video status and metadata.
-- **Video Pulse Finder**: YouTube topic research and script generation based on Mark's 5-part formula, using YouTube autocomplete and OpenAI.
+- **Video Trends**: YouTube topic research and script generation based on Mark's 5-part formula, using YouTube autocomplete and OpenAI.
 
 ## External Dependencies
 
