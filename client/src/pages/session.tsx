@@ -476,7 +476,7 @@ export default function SessionPage() {
   };
 
 
-  if (isNewSession && !createdSessionId) {
+  if (isNewSession && (!createdSessionId || uploadStep === "uploading")) {
     return (
       <div className="container mx-auto max-w-4xl p-4 md:p-6">
         <div className="mb-6">
