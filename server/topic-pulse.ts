@@ -491,6 +491,39 @@ Respond in valid JSON:
   return JSON.parse(content) as ScriptJson;
 }
 
+export async function generateIntentAnalysis(topic: Topic): Promise<string> {
+  const prompt = `You are a YouTube growth strategist helping creators understand their audience. Analyze the search intent behind this keyword and provide deep psychological insights.
+
+KEYWORD: "${topic.keywordQuery}"
+TOPIC TITLE: "${topic.topicTitle}"
+CLASSIFIED INTENT: ${topic.intent || "unknown"}
+${topic.monthlySearchVolume ? `MONTHLY SEARCHES: ${topic.monthlySearchVolume.toLocaleString()}` : ""}
+
+Provide a brief but highly insightful analysis (2-4 sentences) that reveals:
+1. The specific pain point, desire, or curiosity driving someone to search this
+2. Where they likely are in their decision/learning journey
+3. What outcome they're hoping to achieve
+4. Any emotional undertones or urgency signals
+
+Be specific and vivid - avoid generic statements. Write as if explaining to a content creator why this search matters and what the searcher truly wants.
+
+Respond with ONLY the analysis text, no JSON or formatting.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.7,
+    max_tokens: 300,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("Failed to generate intent analysis");
+  }
+
+  return content.trim();
+}
+
 export function getApiKeyStatus(): { youtube: boolean; openai: boolean; reddit: boolean; keywordsEverywhere: boolean } {
   return {
     youtube: !!YOUTUBE_API_KEY,

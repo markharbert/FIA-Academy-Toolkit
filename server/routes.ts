@@ -3289,7 +3289,7 @@ export async function registerRoutes(
   // Topic Pulse Finder API Routes
   // ==========================================
   
-  const { generateTopics, enrichTopicDetails, generateScript, getApiKeyStatus, getKeywordsEverywhereCredits } = await import("./topic-pulse");
+  const { generateTopics, enrichTopicDetails, generateScript, generateIntentAnalysis, getApiKeyStatus, getKeywordsEverywhereCredits } = await import("./topic-pulse");
   const { topicSearchInputSchema, scriptGenerationInputSchema } = await import("@shared/schema");
 
   app.get("/api/topic-pulse/status", requireAuth, async (req: Request, res: Response) => {
@@ -3495,6 +3495,39 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[TopicPulse] Enrich error:", err);
       res.status(500).json({ message: "Failed to enrich topic" });
+    }
+  });
+
+  app.post("/api/topic-pulse/topics/:id/intent-analysis", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const topic = await storage.getTopic(req.params.id);
+      if (!topic) {
+        return res.status(404).json({ message: "Topic not found" });
+      }
+
+      const run = await storage.getTopicRun(topic.runId);
+      if (!run || run.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (topic.intentAnalysis) {
+        return res.json({ analysis: topic.intentAnalysis, cached: true });
+      }
+
+      const analysis = await generateIntentAnalysis(topic);
+      
+      const { db } = await import("./db");
+      const { topics } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      await db.update(topics)
+        .set({ intentAnalysis: analysis })
+        .where(eq(topics.id, topic.id));
+
+      res.json({ analysis, cached: false });
+    } catch (err) {
+      console.error("[TopicPulse] Intent analysis error:", err);
+      res.status(500).json({ message: "Failed to generate intent analysis" });
     }
   });
 
