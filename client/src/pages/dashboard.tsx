@@ -1,11 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
@@ -18,32 +17,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Plus,
   Video,
   Clock,
   Download,
   Eye,
   AlertCircle,
-  Pencil,
-  Check,
   X,
   Loader2,
-  Folder,
-  FolderPlus,
-  MoreVertical,
   Trash2,
-  FolderInput,
-  ChevronRight,
-  FileVideo,
 } from "lucide-react";
-import type { Session, SessionFolder } from "@shared/schema";
+import type { Session } from "@shared/schema";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -355,356 +339,17 @@ function EmptyState() {
   );
 }
 
-interface FolderSidebarProps {
-  folders: SessionFolder[];
-  selectedFolderId: string | null;
-  onSelectFolder: (id: string | null) => void;
-  sessions: Session[];
-  onDropSessions: (sessionIds: string[], folderId: string | null) => void;
-}
-
-function FolderSidebar({ folders, selectedFolderId, onSelectFolder, sessions, onDropSessions }: FolderSidebarProps) {
-  const { toast } = useToast();
-  const [isCreating, setIsCreating] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [editFolderName, setEditFolderName] = useState("");
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [folderToDelete, setFolderToDelete] = useState<SessionFolder | null>(null);
-  const [dragOverFolderId, setDragOverFolderId] = useState<string | null | "unfiled">(null);
-
-  const handleDragOver = (e: React.DragEvent, folderId: string | null | "unfiled") => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverFolderId(folderId);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverFolderId(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, folderId: string | null) => {
-    e.preventDefault();
-    setDragOverFolderId(null);
-    try {
-      const data = JSON.parse(e.dataTransfer.getData("application/json"));
-      if (data.sessionIds && Array.isArray(data.sessionIds)) {
-        onDropSessions(data.sessionIds, folderId);
-      }
-    } catch (err) {
-      console.error("Failed to parse drop data:", err);
-    }
-  };
-
-  const createFolderMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const res = await apiRequest("POST", "/api/folders", { name });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to create folder");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-      setIsCreating(false);
-      setNewFolderName("");
-      toast({ title: "Folder created" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const updateFolderMutation = useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const res = await apiRequest("PATCH", `/api/folders/${id}`, { name });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to rename folder");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-      setEditingFolderId(null);
-      setEditFolderName("");
-      toast({ title: "Folder renamed" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const deleteFolderMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("DELETE", `/api/folders/${id}`);
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to delete folder");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      if (selectedFolderId === folderToDelete?.id) {
-        onSelectFolder(null);
-      }
-      setDeleteDialogOpen(false);
-      setFolderToDelete(null);
-      toast({ title: "Folder deleted", description: "Sessions moved to Unfiled" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const handleCreateFolder = () => {
-    const trimmed = newFolderName.trim();
-    if (trimmed) {
-      createFolderMutation.mutate(trimmed);
-    }
-  };
-
-  const handleRenameFolder = (id: string) => {
-    const trimmed = editFolderName.trim();
-    if (trimmed) {
-      updateFolderMutation.mutate({ id, name: trimmed });
-    }
-  };
-
-  const startEditing = (folder: SessionFolder) => {
-    setEditingFolderId(folder.id);
-    setEditFolderName(folder.name);
-  };
-
-  const cancelEditing = () => {
-    setEditingFolderId(null);
-    setEditFolderName("");
-  };
-
-  const getSessionCount = (folderId: string | null) => {
-    return sessions.filter(s => s.folderId === folderId).length;
-  };
-
-  return (
-    <div className="w-64 shrink-0 border-r bg-muted/30 p-4" data-testid="folder-sidebar">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-semibold">Folders</h2>
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => setIsCreating(true)}
-          data-testid="button-create-folder"
-        >
-          <FolderPlus className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {isCreating && (
-        <div className="mb-2 flex items-center gap-1">
-          <Input
-            value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-            placeholder="Folder name"
-            className="h-8 text-sm"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreateFolder();
-              if (e.key === "Escape") {
-                setIsCreating(false);
-                setNewFolderName("");
-              }
-            }}
-            data-testid="input-new-folder-name"
-          />
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 shrink-0"
-            onClick={handleCreateFolder}
-            disabled={createFolderMutation.isPending}
-            data-testid="button-save-new-folder"
-          >
-            {createFolderMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 shrink-0"
-            onClick={() => {
-              setIsCreating(false);
-              setNewFolderName("");
-            }}
-            data-testid="button-cancel-new-folder"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
-
-      <div className="space-y-1">
-        <button
-          className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover-elevate ${
-            selectedFolderId === null ? "bg-accent text-accent-foreground" : ""
-          }`}
-          onClick={() => onSelectFolder(null)}
-          data-testid="folder-all-sessions"
-        >
-          <FileVideo className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">All Sessions</span>
-          <span className="text-xs text-muted-foreground">{sessions.length}</span>
-        </button>
-
-        <button
-          className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover-elevate ${
-            selectedFolderId === "unfiled" ? "bg-accent text-accent-foreground" : ""
-          } ${dragOverFolderId === "unfiled" ? "ring-2 ring-primary bg-primary/10" : ""}`}
-          onClick={() => onSelectFolder("unfiled")}
-          onDragOver={(e) => handleDragOver(e, "unfiled")}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, null)}
-          data-testid="folder-unfiled"
-        >
-          <Folder className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">Unfiled</span>
-          <span className="text-xs text-muted-foreground">{getSessionCount(null)}</span>
-        </button>
-
-        {folders.map((folder) => (
-          <div key={folder.id} className="group relative">
-            {editingFolderId === folder.id ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  value={editFolderName}
-                  onChange={(e) => setEditFolderName(e.target.value)}
-                  className="h-8 text-sm"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleRenameFolder(folder.id);
-                    if (e.key === "Escape") cancelEditing();
-                  }}
-                  data-testid={`input-rename-folder-${folder.id}`}
-                />
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => handleRenameFolder(folder.id)}
-                  disabled={updateFolderMutation.isPending}
-                >
-                  {updateFolderMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Check className="h-4 w-4" />
-                  )}
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 shrink-0"
-                  onClick={cancelEditing}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <button
-                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover-elevate ${
-                  selectedFolderId === folder.id ? "bg-accent text-accent-foreground" : ""
-                } ${dragOverFolderId === folder.id ? "ring-2 ring-primary bg-primary/10" : ""}`}
-                onClick={() => onSelectFolder(folder.id)}
-                onDragOver={(e) => handleDragOver(e, folder.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, folder.id)}
-                data-testid={`folder-${folder.id}`}
-              >
-                <Folder className="h-4 w-4 shrink-0" />
-                <span className="flex-1 truncate text-left">{folder.name}</span>
-                <span className="text-xs text-muted-foreground">{getSessionCount(folder.id)}</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      data-testid={`button-folder-menu-${folder.id}`}
-                    >
-                      <MoreVertical className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => startEditing(folder)}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Rename
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive"
-                      onClick={() => {
-                        setFolderToDelete(folder);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete folder?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will delete the folder "{folderToDelete?.name}". Sessions in this folder will be moved to Unfiled.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => folderToDelete && deleteFolderMutation.mutate(folderToDelete.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteFolderMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
-}
-
 interface BulkActionsBarProps {
   selectedCount: number;
-  folders: SessionFolder[];
-  onMove: (folderId: string | null) => void;
   onDelete: () => void;
   onClearSelection: () => void;
-  isMoving: boolean;
   isDeleting: boolean;
 }
 
 function BulkActionsBar({
   selectedCount,
-  folders,
-  onMove,
   onDelete,
   onClearSelection,
-  isMoving,
   isDeleting,
 }: BulkActionsBarProps) {
   return (
@@ -716,55 +361,26 @@ function BulkActionsBar({
           Clear
         </Button>
       </div>
-      <div className="flex items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={isMoving}>
-              {isMoving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FolderInput className="mr-2 h-4 w-4" />
-              )}
-              Move to Folder
-              <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onMove(null)}>
-              <Folder className="mr-2 h-4 w-4" />
-              Unfiled
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {folders.map((folder) => (
-              <DropdownMenuItem key={folder.id} onClick={() => onMove(folder.id)}>
-                <Folder className="mr-2 h-4 w-4" />
-                {folder.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={onDelete}
-          disabled={isDeleting}
-          data-testid="button-bulk-delete"
-        >
-          {isDeleting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="mr-2 h-4 w-4" />
-          )}
-          Delete
-        </Button>
-      </div>
+      <Button
+        variant="destructive"
+        size="sm"
+        onClick={onDelete}
+        disabled={isDeleting}
+        data-testid="button-bulk-delete"
+      >
+        {isDeleting ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Trash2 className="mr-2 h-4 w-4" />
+        )}
+        Delete
+      </Button>
     </div>
   );
 }
 
 export default function DashboardPage() {
   const { toast } = useToast();
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -772,31 +388,6 @@ export default function DashboardPage() {
     queryKey: ["/api/sessions"],
     staleTime: 0,
     refetchOnMount: "always",
-  });
-
-  const { data: folders, isLoading: foldersLoading } = useQuery<SessionFolder[]>({
-    queryKey: ["/api/folders"],
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
-
-  const moveSessionsMutation = useMutation({
-    mutationFn: async ({ sessionIds, folderId }: { sessionIds: string[]; folderId: string | null }) => {
-      const res = await apiRequest("POST", "/api/sessions/move", { sessionIds, folderId });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to move sessions");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
-      setSelectedSessionIds(new Set());
-      toast({ title: `Moved ${data.movedCount} session(s)` });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
   });
 
   const deleteSessionsMutation = useMutation({
@@ -819,13 +410,6 @@ export default function DashboardPage() {
     },
   });
 
-  const filteredSessions = useMemo(() => {
-    if (!sessions) return [];
-    if (selectedFolderId === null) return sessions;
-    if (selectedFolderId === "unfiled") return sessions.filter(s => s.folderId === null);
-    return sessions.filter(s => s.folderId === selectedFolderId);
-  }, [sessions, selectedFolderId]);
-
   const handleSelectSession = (id: string, selected: boolean) => {
     setSelectedSessionIds(prev => {
       const next = new Set(prev);
@@ -839,18 +423,12 @@ export default function DashboardPage() {
   };
 
   const handleSelectAll = () => {
-    if (selectedSessionIds.size === filteredSessions.length) {
+    if (!sessions) return;
+    if (selectedSessionIds.size === sessions.length) {
       setSelectedSessionIds(new Set());
     } else {
-      setSelectedSessionIds(new Set(filteredSessions.map(s => s.id)));
+      setSelectedSessionIds(new Set(sessions.map(s => s.id)));
     }
-  };
-
-  const handleMove = (folderId: string | null) => {
-    moveSessionsMutation.mutate({
-      sessionIds: Array.from(selectedSessionIds),
-      folderId,
-    });
   };
 
   const handleDelete = () => {
@@ -858,91 +436,74 @@ export default function DashboardPage() {
   };
 
   const selectionMode = selectedSessionIds.size > 0;
-  const isLoading = sessionsLoading || foldersLoading;
 
   return (
-    <div className="flex h-full">
-      {!isLoading && sessions && folders && (
-        <FolderSidebar
-          folders={folders}
-          selectedFolderId={selectedFolderId}
-          onSelectFolder={setSelectedFolderId}
-          sessions={sessions}
-          onDropSessions={(sessionIds, folderId) => {
-            moveSessionsMutation.mutate({ sessionIds, folderId });
-          }}
-        />
-      )}
-      <div className="flex-1 overflow-auto">
-        <div className="container mx-auto px-4 py-8">
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
-              <p className="text-muted-foreground">Your video practice sessions</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {filteredSessions.length > 0 && (
-                <Button
-                  variant="outline"
-                  onClick={handleSelectAll}
-                  data-testid="button-select-all"
-                >
-                  {selectedSessionIds.size === filteredSessions.length ? "Deselect All" : "Select All"}
-                </Button>
-              )}
-              <Link href="/session">
-                <Button size="lg" data-testid="button-new-session">
-                  <Plus className="mr-2 h-5 w-5" />
-                  New Practice Session
-                </Button>
-              </Link>
-            </div>
+    <div className="flex-1 overflow-auto">
+      <div className="container mx-auto px-4 py-8">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
+            <p className="text-muted-foreground">Your video practice sessions</p>
           </div>
-
-          {selectionMode && folders && (
-            <BulkActionsBar
-              selectedCount={selectedSessionIds.size}
-              folders={folders}
-              onMove={handleMove}
-              onDelete={() => setDeleteDialogOpen(true)}
-              onClearSelection={() => setSelectedSessionIds(new Set())}
-              isMoving={moveSessionsMutation.isPending}
-              isDeleting={deleteSessionsMutation.isPending}
-            />
-          )}
-
-          {sessionsError && (
-            <Card className="mb-6 border-destructive">
-              <CardContent className="flex items-center gap-3 py-4">
-                <AlertCircle className="h-5 w-5 text-destructive" />
-                <p className="text-sm text-destructive">Failed to load sessions. Please try again.</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {isLoading ? (
-            <div className="space-y-4">
-              <SessionCardSkeleton />
-              <SessionCardSkeleton />
-              <SessionCardSkeleton />
-            </div>
-          ) : filteredSessions && filteredSessions.length > 0 ? (
-            <div className="space-y-4">
-              {filteredSessions.map((session) => (
-                <SessionCard
-                  key={session.id}
-                  session={session}
-                  isSelected={selectedSessionIds.has(session.id)}
-                  onSelect={handleSelectSession}
-                  selectionMode={selectionMode}
-                  selectedSessionIds={selectedSessionIds}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyState />
-          )}
+          <div className="flex items-center gap-2">
+            {sessions && sessions.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={handleSelectAll}
+                data-testid="button-select-all"
+              >
+                {selectedSessionIds.size === sessions.length ? "Deselect All" : "Select All"}
+              </Button>
+            )}
+            <Link href="/session">
+              <Button size="lg" data-testid="button-new-session">
+                <Plus className="mr-2 h-5 w-5" />
+                New Practice Session
+              </Button>
+            </Link>
+          </div>
         </div>
+
+        {selectionMode && (
+          <BulkActionsBar
+            selectedCount={selectedSessionIds.size}
+            onDelete={() => setDeleteDialogOpen(true)}
+            onClearSelection={() => setSelectedSessionIds(new Set())}
+            isDeleting={deleteSessionsMutation.isPending}
+          />
+        )}
+
+        {sessionsError && (
+          <Card className="mb-6 border-destructive">
+            <CardContent className="flex items-center gap-3 py-4">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              <p className="text-sm text-destructive">Failed to load sessions. Please try again.</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {sessionsLoading ? (
+          <div className="space-y-4">
+            <SessionCardSkeleton />
+            <SessionCardSkeleton />
+            <SessionCardSkeleton />
+          </div>
+        ) : sessions && sessions.length > 0 ? (
+          <div className="space-y-4">
+            {sessions.map((session) => (
+              <SessionCard
+                key={session.id}
+                session={session}
+                isSelected={selectedSessionIds.has(session.id)}
+                onSelect={handleSelectSession}
+                selectionMode={selectionMode}
+                selectedSessionIds={selectedSessionIds}
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState />
+        )}
       </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
