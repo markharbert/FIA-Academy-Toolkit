@@ -559,6 +559,7 @@ export const topics = pgTable("topics", {
   keywordQuery: text("keyword_query").notNull(),
   intent: text("intent").$type<TopicIntent>(),
   opportunityScore: integer("opportunity_score").default(0),
+  monthlySearchVolume: integer("monthly_search_volume"),
   demandSignalsJson: jsonb("demand_signals_json").$type<DemandSignals>(),
   whyText: text("why_text"),
   suggestedAngles: jsonb("suggested_angles").$type<string[]>(),
