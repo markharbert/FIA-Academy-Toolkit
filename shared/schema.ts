@@ -506,6 +506,30 @@ export type TrendDirection = typeof trendDirections[number];
 export const videoLengthTargets = ["3-5", "6-10", "10-15"] as const;
 export type VideoLengthTarget = typeof videoLengthTargets[number];
 
+// API key providers for user-specific keys
+export const apiKeyProviders = ["keywords_everywhere"] as const;
+export type ApiKeyProvider = typeof apiKeyProviders[number];
+
+// User API keys table for storing user-specific external API keys
+export const userApiKeys = pgTable("user_api_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().$type<ApiKeyProvider>(),
+  encryptedKey: text("encrypted_key").notNull(),
+  keyLastFour: text("key_last_four"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertUserApiKeySchema = createInsertSchema(userApiKeys).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertUserApiKey = z.infer<typeof insertUserApiKeySchema>;
+export type UserApiKey = typeof userApiKeys.$inferSelect;
+
 // Topic runs table for tracking topic generation requests
 export const topicRuns = pgTable("topic_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
