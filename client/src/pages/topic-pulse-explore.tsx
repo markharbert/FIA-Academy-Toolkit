@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Minus, Bookmark, 
   FileText, Sparkles, CheckCircle2, AlertCircle, Lightbulb, HelpCircle,
-  ArrowUpDown, ArrowDown, ArrowUp, X
+  ArrowUpDown, ArrowDown, ArrowUp, X, Search
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -222,6 +222,25 @@ export default function TopicPulseExplorePage() {
     },
   });
 
+  const researchDeeperMutation = useMutation({
+    mutationFn: async (seedQuery: string) => {
+      const res = await apiRequest("POST", "/api/topic-pulse/search", { seedQuery });
+      return res.json();
+    },
+    onSuccess: (data: { runId: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
+      toast({ title: "New search started!" });
+      navigate(`/topic-pulse/explore/${data.runId}`);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Search failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredTopics = (topics?.filter((topic) => {
     if (intentFilter !== "all" && topic.intent !== intentFilter) return false;
     if ((topic.opportunityScore || 0) < minScore) return false;
@@ -391,7 +410,7 @@ export default function TopicPulseExplorePage() {
                 <div>
                   <p className="text-sm text-muted-foreground mb-4">{selectedTopic.keywordQuery}</p>
                   
-                  <div className="flex gap-2 mb-4">
+                  <div className="flex gap-2 mb-4 flex-wrap">
                     <Button 
                       onClick={() => setScriptDialogOpen(true)}
                       data-testid="button-generate-script"
@@ -407,6 +426,19 @@ export default function TopicPulseExplorePage() {
                     >
                       <Bookmark className="h-4 w-4 mr-2" />
                       Save
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => researchDeeperMutation.mutate(selectedTopic.keywordQuery)}
+                      disabled={researchDeeperMutation.isPending}
+                      data-testid="button-research-deeper"
+                    >
+                      {researchDeeperMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4 mr-2" />
+                      )}
+                      Research Deeper
                     </Button>
                   </div>
                 </div>

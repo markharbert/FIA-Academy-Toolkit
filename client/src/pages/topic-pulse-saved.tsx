@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Loader2, ArrowLeft, Trash2, FileText, Bookmark, 
   HelpCircle, TrendingUp, TrendingDown, Minus, Sparkles,
-  CheckCircle2, AlertCircle, Lightbulb, Check, RotateCcw, X
+  CheckCircle2, AlertCircle, Lightbulb, Check, RotateCcw, X, Search
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -235,6 +235,25 @@ export default function TopicPulseSavedPage() {
     },
   });
 
+  const researchDeeperMutation = useMutation({
+    mutationFn: async (seedQuery: string) => {
+      const res = await apiRequest("POST", "/api/topic-pulse/search", { seedQuery });
+      return res.json();
+    },
+    onSuccess: (data: { runId: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
+      toast({ title: "New search started!" });
+      navigate(`/topic-pulse/explore/${data.runId}`);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Search failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleGenerateScript = () => {
     if (!selectedTopic) return;
     scriptMutation.mutate({
@@ -402,6 +421,19 @@ export default function TopicPulseSavedPage() {
                             Mark Complete
                           </Button>
                         )}
+                        <Button 
+                          variant="outline" 
+                          onClick={() => researchDeeperMutation.mutate(selectedTopic.keywordQuery)}
+                          disabled={researchDeeperMutation.isPending}
+                          data-testid="button-research-deeper"
+                        >
+                          {researchDeeperMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Search className="h-4 w-4 mr-2" />
+                          )}
+                          Research Deeper
+                        </Button>
                         <Button 
                           variant="ghost" 
                           size="icon"
