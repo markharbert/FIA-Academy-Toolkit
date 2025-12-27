@@ -30,6 +30,14 @@ function IntentAnalysisSection({ topicId, existingAnalysis }: { topicId: string;
   const [error, setError] = useState(false);
   const [hasRequested, setHasRequested] = useState(false);
   
+  useEffect(() => {
+    setAnalysis(existingAnalysis || null);
+    setIsOpen(false);
+    setIsLoading(false);
+    setError(false);
+    setHasRequested(false);
+  }, [topicId, existingAnalysis]);
+  
   const fetchAnalysis = async () => {
     if (analysis || isLoading || hasRequested) return;
     setHasRequested(true);
