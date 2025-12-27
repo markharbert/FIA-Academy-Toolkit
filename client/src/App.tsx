@@ -183,15 +183,17 @@ function AppLayout() {
   if (user) {
     return (
       <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger className="-ml-1" data-testid="button-sidebar-toggle" />
-          </header>
-          <main className="flex-1 overflow-auto">
-            <ProtectedRoutes />
-          </main>
-        </SidebarInset>
+        <div className="flex h-screen w-full">
+          <AppSidebar />
+          <SidebarInset>
+            <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+              <SidebarTrigger className="-ml-1" data-testid="button-sidebar-toggle" />
+            </header>
+            <main className="flex-1 overflow-auto">
+              <ProtectedRoutes />
+            </main>
+          </SidebarInset>
+        </div>
       </SidebarProvider>
     );
   }

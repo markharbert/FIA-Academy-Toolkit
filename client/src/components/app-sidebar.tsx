@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
   Sidebar,
@@ -26,7 +26,6 @@ import {
   Video,
   TrendingUp,
   FileText,
-  Settings,
   User,
   LogOut,
   ChevronUp,
@@ -95,14 +94,13 @@ export function AppSidebar() {
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton
-                    asChild
                     isActive={location === item.url || (item.url !== "/dashboard" && location.startsWith(item.url))}
                     tooltip={item.title}
+                    onClick={() => setLocation(item.url)}
+                    data-testid={item.testId}
                   >
-                    <Link href={item.url} data-testid={item.testId}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
+                    <item.icon />
+                    <span>{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -119,14 +117,13 @@ export function AppSidebar() {
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      asChild
                       isActive={location === "/admin"}
                       tooltip="Admin"
+                      onClick={() => setLocation("/admin")}
+                      data-testid="nav-admin"
                     >
-                      <Link href="/admin" data-testid="nav-admin">
-                        <Shield />
-                        <span>Admin Panel</span>
-                      </Link>
+                      <Shield />
+                      <span>Admin Panel</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
