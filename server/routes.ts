@@ -3289,7 +3289,7 @@ export async function registerRoutes(
   // Topic Pulse Finder API Routes
   // ==========================================
   
-  const { generateTopics, enrichTopicDetails, generateScript, generateIntentAnalysis, getApiKeyStatus, getKeywordsEverywhereCredits } = await import("./topic-pulse");
+  const { generateTopics, enrichTopicDetails, generateScript, generateIntentAnalysis, getApiKeyStatus } = await import("./topic-pulse");
   const { topicSearchInputSchema, scriptGenerationInputSchema } = await import("@shared/schema");
 
   app.get("/api/topic-pulse/status", requireAuth, async (req: Request, res: Response) => {
@@ -3302,13 +3302,13 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/topic-pulse/keywords-everywhere-credits", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/topic-pulse/credits", requireAuth, async (req: Request, res: Response) => {
     try {
-      const result = await getKeywordsEverywhereCredits(req.session.userId!);
-      res.json(result);
+      const credits = await storage.getVideoTrendsCredits(req.session.userId!);
+      res.json(credits);
     } catch (err) {
-      console.error("[TopicPulse] Keywords Everywhere credits error:", err);
-      res.status(500).json({ credits: null, error: "Failed to fetch credits" });
+      console.error("[VideoTrends] Credits error:", err);
+      res.status(500).json({ error: "Failed to fetch credits" });
     }
   });
   
@@ -3371,6 +3371,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
 
+      const CREDITS_PER_SEARCH = 10;
+      const credits = await storage.getVideoTrendsCredits(req.session.userId!);
+      
+      if (credits.remaining < CREDITS_PER_SEARCH) {
+        const resetsAt = new Date(credits.resetsAt);
+        const daysRemaining = Math.ceil((resetsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+        return res.status(403).json({ 
+          message: `You've used all your Video Trends credits for this month. Your credits will reset in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
+          creditsRemaining: credits.remaining,
+          resetsAt: credits.resetsAt,
+        });
+      }
+
       const startTime = Date.now();
       
       const run = await storage.createTopicRun({
@@ -3389,6 +3402,8 @@ export async function registerRoutes(
 
       const topicsData = await generateTopics(parsed.data, run.id, req.session.userId);
       const createdTopics = await storage.createTopics(topicsData);
+
+      await storage.useVideoTrendsCredits(req.session.userId!, CREDITS_PER_SEARCH);
 
       const runtimeMs = Date.now() - startTime;
       await storage.updateTopicRun(run.id, {
