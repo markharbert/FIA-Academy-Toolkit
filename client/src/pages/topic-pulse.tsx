@@ -116,14 +116,19 @@ export default function TopicPulsePage() {
           <p className="text-muted-foreground">
             Find in-demand YouTube video topics and generate scripts using Mark's 5-part formula
           </p>
-          {creditsData?.credits !== null && creditsData?.credits !== undefined && (
-            <div className="mt-4 flex items-center justify-center gap-2" data-testid="credits-display">
+          <div className="mt-4 flex items-center justify-center gap-2" data-testid="credits-display">
+            {creditsData?.credits !== null && creditsData?.credits !== undefined ? (
               <Badge variant="outline" className="text-sm py-1 px-3">
                 <Coins className="h-3.5 w-3.5 mr-1.5" />
                 Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
               </Badge>
-            </div>
-          )}
+            ) : creditsData?.error ? (
+              <Badge variant="secondary" className="text-sm py-1 px-3">
+                <Coins className="h-3.5 w-3.5 mr-1.5" />
+                Keywords Everywhere: Credits unavailable
+              </Badge>
+            ) : null}
+          </div>
         </div>
 
         <Card className="mb-8">

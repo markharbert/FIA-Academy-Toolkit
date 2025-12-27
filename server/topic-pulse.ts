@@ -497,12 +497,19 @@ export async function getKeywordsEverywhereCredits(): Promise<{ credits: number 
   }
 
   try {
-    const response = await fetch("https://api.keywordseverywhere.com/v1/get_credits", {
-      method: "GET",
+    const formData = new URLSearchParams();
+    formData.append("dataSource", "gkp");
+    formData.append("country", "us");
+    formData.append("currency", "USD");
+    formData.append("kw[]", "test");
+    
+    const response = await fetch("https://api.keywordseverywhere.com/v1/get_keyword_data", {
+      method: "POST",
       headers: {
         "Authorization": `Bearer ${KEYWORDS_EVERYWHERE_API_KEY}`,
         "Accept": "application/json",
       },
+      body: formData,
     });
 
     if (!response.ok) {
