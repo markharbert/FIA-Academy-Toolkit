@@ -349,8 +349,8 @@ export default function TopicPulseSavedPage() {
 
         {selectedTopic && (
           <div className="w-96 border-l flex flex-col">
-            <div className="flex items-center justify-between gap-2 p-4 border-b">
-              <h2 className="text-lg font-semibold truncate" data-testid="text-topic-title">{selectedTopic.topicTitle}</h2>
+            <div className="flex items-start justify-between gap-2 p-4 border-b">
+              <h2 className="text-lg font-semibold" data-testid="text-topic-title">{selectedTopic.topicTitle}</h2>
               <Button 
                 variant="ghost" 
                 size="icon" 
