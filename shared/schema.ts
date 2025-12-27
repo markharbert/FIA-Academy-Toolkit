@@ -602,6 +602,7 @@ export const topics = pgTable("topics", {
   suggestedTitles: jsonb("suggested_titles").$type<string[]>(),
   suggestedThumbnailText: jsonb("suggested_thumbnail_text").$type<string[]>(),
   commonQuestions: jsonb("common_questions").$type<string[]>(),
+  intentAnalysis: text("intent_analysis"),
 });
 
 export const insertTopicSchema = createInsertSchema(topics).omit({
