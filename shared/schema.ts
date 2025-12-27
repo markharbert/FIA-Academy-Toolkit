@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -550,6 +550,14 @@ export const demandSignalsSchema = z.object({
 
 export type DemandSignals = z.infer<typeof demandSignalsSchema>;
 
+// Trend data point for 12-month historical data
+export const trendDataPointSchema = z.object({
+  month: z.string(),
+  year: z.number(),
+  value: z.number(),
+});
+export type TrendDataPoint = z.infer<typeof trendDataPointSchema>;
+
 // Topics table for generated topic ideas
 export const topics = pgTable("topics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -560,6 +568,9 @@ export const topics = pgTable("topics", {
   intent: text("intent").$type<TopicIntent>(),
   opportunityScore: integer("opportunity_score").default(0),
   monthlySearchVolume: integer("monthly_search_volume"),
+  cpc: real("cpc"),
+  competition: real("competition"),
+  trendData: jsonb("trend_data").$type<TrendDataPoint[]>(),
   demandSignalsJson: jsonb("demand_signals_json").$type<DemandSignals>(),
   whyText: text("why_text"),
   suggestedAngles: jsonb("suggested_angles").$type<string[]>(),
