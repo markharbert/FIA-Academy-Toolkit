@@ -12,6 +12,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -32,6 +33,7 @@ import {
   Shield,
 } from "lucide-react";
 import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
+import faviconImage from "@assets/markharbert-favicon_1766871449750.png";
 
 const navItems = [
   {
@@ -63,6 +65,7 @@ const navItems = [
 export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
+  const { state } = useSidebar();
 
   const handleLogout = async () => {
     await logout();
@@ -76,11 +79,16 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <a href="https://markharbert.com" target="_blank" rel="noopener noreferrer" data-testid="link-logo">
-                <img src={logoImage} alt="Mark Harbert" className="h-6 w-auto" />
-                <span className="font-semibold text-sm">Fearless Video Coach</span>
-              </a>
+            <SidebarMenuButton
+              size="lg"
+              onClick={() => window.open("https://markharbert.com", "_blank")}
+              data-testid="link-logo"
+            >
+              {state === "collapsed" ? (
+                <img src={faviconImage} alt="Mark Harbert" className="h-6 w-6" />
+              ) : (
+                <img src={logoImage} alt="Mark Harbert" className="h-8 w-auto" />
+              )}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
