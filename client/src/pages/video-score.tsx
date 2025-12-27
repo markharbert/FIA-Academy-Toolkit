@@ -335,7 +335,7 @@ function EmptyState() {
         <Link href="/session">
           <Button data-testid="button-empty-new-session">
             <Plus className="mr-2 h-4 w-4" />
-            New Practice Session
+            Score New Video
           </Button>
         </Link>
       </CardContent>
@@ -456,7 +456,7 @@ export default function VideoScorePage() {
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold" data-testid="text-video-score-title">Video Score</h1>
-            <p className="text-muted-foreground">Your video practice sessions and AI feedback</p>
+            <p className="text-muted-foreground">Score your video with AI Feedback</p>
           </div>
           <div className="flex items-center gap-2">
             {sessions && sessions.length > 0 && (
@@ -471,7 +471,7 @@ export default function VideoScorePage() {
             <Link href="/session">
               <Button size="lg" data-testid="button-new-session">
                 <Plus className="mr-2 h-5 w-5" />
-                New Practice Session
+                Score New Video
               </Button>
             </Link>
           </div>
