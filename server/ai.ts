@@ -87,7 +87,7 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
                 },
               },
               {
-                text: "Please transcribe all the spoken words in this audio accurately. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
+                text: "Please transcribe all the spoken words in this audio accurately. Format the transcript with paragraph breaks when the speaker changes topics, pauses, or transitions to a new thought. Each paragraph should be separated by a blank line. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
               },
             ],
           },
@@ -118,7 +118,7 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
               },
             },
             {
-              text: "Please transcribe all the spoken words in this audio accurately. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
+              text: "Please transcribe all the spoken words in this audio accurately. Format the transcript with paragraph breaks when the speaker changes topics, pauses, or transitions to a new thought. Each paragraph should be separated by a blank line. Only output the transcript text, nothing else. If there is no speech, return an empty string.",
             },
           ],
         },
