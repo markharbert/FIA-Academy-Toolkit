@@ -19,7 +19,7 @@ import {
 } from "@shared/schema";
 import crypto from "crypto";
 import { db } from "./db";
-import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizzle-orm";
+import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
 
 // Email normalization helper - centralizes email handling to prevent duplicates
 export function normalizeEmail(email: string | null | undefined): string | null {
@@ -1000,7 +1000,7 @@ export class DatabaseStorage implements IStorage {
       .set({ folderId, updatedAt: new Date() })
       .where(and(
         eq(sessions.userId, userId),
-        sql`${sessions.id} = ANY(${sessionIds})`
+        inArray(sessions.id, sessionIds)
       ))
       .returning({ id: sessions.id });
     
@@ -1020,7 +1020,7 @@ export class DatabaseStorage implements IStorage {
       .from(sessions)
       .where(and(
         eq(sessions.userId, userId),
-        sql`${sessions.id} = ANY(${sessionIds})`
+        inArray(sessions.id, sessionIds)
       ));
     
     const paths: string[] = [];
@@ -1034,7 +1034,7 @@ export class DatabaseStorage implements IStorage {
     const deleted = await db.delete(sessions)
       .where(and(
         eq(sessions.userId, userId),
-        sql`${sessions.id} = ANY(${sessionIds})`
+        inArray(sessions.id, sessionIds)
       ))
       .returning({ id: sessions.id });
     
