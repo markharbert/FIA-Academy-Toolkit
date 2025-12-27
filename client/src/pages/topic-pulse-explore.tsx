@@ -19,7 +19,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Topic, TopicRun, DemandSignals, TopicIntent, VideoLengthTarget, TonePreference } from "@shared/schema";
+import type { Topic, TopicRun, DemandSignals, TopicIntent, VideoLengthTarget, TonePreference, TrendDataPoint } from "@shared/schema";
 
 const intentLabels: Record<TopicIntent, string> = {
   "review": "Review",
@@ -56,6 +56,39 @@ function formatSearchVolume(volume: number | null | undefined): string {
   if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
   if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
   return volume.toString();
+}
+
+function formatCPC(cpc: number | null | undefined): string {
+  if (cpc === null || cpc === undefined) return "N/A";
+  return `$${cpc.toFixed(2)}`;
+}
+
+function formatCompetition(competition: number | null | undefined): { label: string; color: string; value: string } {
+  if (competition === null || competition === undefined) {
+    return { label: "N/A", color: "text-muted-foreground", value: "" };
+  }
+  const percent = Math.round(competition * 100);
+  if (competition <= 0.33) return { label: "Low", color: "text-green-600 dark:text-green-400", value: `${percent}%` };
+  if (competition <= 0.66) return { label: "Medium", color: "text-yellow-600 dark:text-yellow-400", value: `${percent}%` };
+  return { label: "High", color: "text-red-600 dark:text-red-400", value: `${percent}%` };
+}
+
+function getTrendFromData(trend: TrendDataPoint[] | null | undefined): { direction: string; label: string } {
+  if (!trend || trend.length < 6) return { direction: "unknown", label: "Unknown" };
+  
+  const recentMonths = trend.slice(-3);
+  const olderMonths = trend.slice(-6, -3);
+  const recentAvg = recentMonths.reduce((sum, t) => sum + t.value, 0) / recentMonths.length;
+  const olderAvg = olderMonths.reduce((sum, t) => sum + t.value, 0) / olderMonths.length;
+  
+  if (olderAvg === 0) return { direction: "unknown", label: "Unknown" };
+  
+  const growthRate = (recentAvg - olderAvg) / olderAvg;
+  const percentChange = Math.round(growthRate * 100);
+  
+  if (growthRate > 0.1) return { direction: "rising", label: `+${percentChange}%` };
+  if (growthRate < -0.1) return { direction: "falling", label: `${percentChange}%` };
+  return { direction: "steady", label: "Steady" };
 }
 
 function SearchVolumeBadge({ volume, testId }: { volume: number | null | undefined; testId?: string }) {
@@ -312,71 +345,126 @@ export default function TopicPulseExplorePage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-medium text-sm">Monthly Searches</h3>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs">
-                          <p className="text-xs">
-                            Estimated monthly searches on Google for this keyword (via Keywords Everywhere).
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-xs font-medium text-muted-foreground">Monthly Searches</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-xs">Estimated monthly searches on Google</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <p className="font-mono text-xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-search-volume">
+                        {formatSearchVolume(selectedTopic.monthlySearchVolume)}
+                      </p>
                     </div>
-                    <p className="font-mono text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {formatSearchVolume(selectedTopic.monthlySearchVolume)}
-                    </p>
+                    <div className="p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-xs font-medium text-muted-foreground">Opportunity</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-xs">Composite score based on volume, competition, CPC value, and trend</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <p className={`font-mono text-xl font-bold ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`} data-testid="text-opportunity-score">
+                        {selectedTopic.opportunityScore}/100
+                      </p>
+                      <p className={`text-xs ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
+                        {getOpportunityLevel(selectedTopic.opportunityScore || 0).label}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-medium text-sm">Opportunity</h3>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs">
-                          <p className="text-xs">
-                            Based on search demand, competition level, and trend direction.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-xs font-medium text-muted-foreground">CPC</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-xs">Cost-per-click in Google Ads. Higher CPC = more commercial intent</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <p className="font-mono text-lg font-semibold" data-testid="text-cpc">
+                        {formatCPC(selectedTopic.cpc)}
+                      </p>
                     </div>
-                    <p className={`font-mono text-2xl font-bold ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
-                      {selectedTopic.opportunityScore}
-                    </p>
-                    <p className={`text-xs ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
-                      {getOpportunityLevel(selectedTopic.opportunityScore || 0).label}
-                    </p>
+                    <div className="p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-xs font-medium text-muted-foreground">Competition</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-xs">Ad competition level (0-1 scale). Lower = easier to rank</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <p className={`font-mono text-lg font-semibold ${formatCompetition(selectedTopic.competition).color}`} data-testid="text-competition">
+                        {formatCompetition(selectedTopic.competition).label}
+                        {formatCompetition(selectedTopic.competition).value && (
+                          <span className="text-sm font-normal ml-1">({formatCompetition(selectedTopic.competition).value})</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-xs font-medium text-muted-foreground">Trend</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-xs">Search interest trend over recent months</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex items-center gap-1.5" data-testid="text-trend">
+                        <TrendIcon direction={getTrendFromData(selectedTopic.trendData as TrendDataPoint[] | null).direction} />
+                        <span className={`font-mono text-lg font-semibold ${
+                          getTrendFromData(selectedTopic.trendData as TrendDataPoint[] | null).direction === "rising" 
+                            ? "text-green-600 dark:text-green-400" 
+                            : getTrendFromData(selectedTopic.trendData as TrendDataPoint[] | null).direction === "falling" 
+                              ? "text-red-600 dark:text-red-400" 
+                              : "text-muted-foreground"
+                        }`}>
+                          {getTrendFromData(selectedTopic.trendData as TrendDataPoint[] | null).label}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {selectedTopic.demandSignalsJson && (
                   <div>
-                    <h3 className="font-medium mb-2">Demand Signals</h3>
+                    <h3 className="font-medium mb-2">Additional Signals</h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Autocomplete</span>
+                        <span className="text-muted-foreground">In YouTube Autocomplete</span>
                         {(selectedTopic.demandSignalsJson as DemandSignals).autocompletePresent ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Yes
+                          </span>
                         ) : (
-                          <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <AlertCircle className="h-4 w-4" />
+                            No
+                          </span>
                         )}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Trend</span>
-                        <TrendIcon direction={(selectedTopic.demandSignalsJson as DemandSignals).trendDirection} />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Freshness</span>
-                        <span>{(selectedTopic.demandSignalsJson as DemandSignals).freshnessScore}%</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Competition</span>
-                        <span>{(selectedTopic.demandSignalsJson as DemandSignals).competitionScore}%</span>
                       </div>
                     </div>
                   </div>

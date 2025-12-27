@@ -213,40 +213,45 @@ function calculateOpportunityScore(
   let score = 0;
   
   // Volume component (0-30 points) - higher volume = higher score
-  const volume = keywordData.volume || 0;
-  if (volume >= 10000) score += 30;
-  else if (volume >= 5000) score += 25;
-  else if (volume >= 1000) score += 20;
-  else if (volume >= 500) score += 15;
-  else if (volume >= 100) score += 10;
-  else if (volume > 0) score += 5;
+  // No data = 0 points (not a default)
+  const volume = keywordData.volume;
+  if (volume !== null && volume > 0) {
+    if (volume >= 10000) score += 30;
+    else if (volume >= 5000) score += 25;
+    else if (volume >= 1000) score += 20;
+    else if (volume >= 500) score += 15;
+    else if (volume >= 100) score += 10;
+    else score += 5;
+  }
+  // else: no data = 0 points
   
   // Competition component (0-30 points) - lower competition = higher score
+  // No data = 0 points
   const competition = keywordData.competition;
   if (competition !== null) {
     if (competition <= 0.2) score += 30;
-    else if (competition <= 0.4) score += 25;
-    else if (competition <= 0.5) score += 20;
-    else if (competition <= 0.6) score += 15;
-    else if (competition <= 0.8) score += 10;
-    else score += 5;
-  } else {
-    score += 15; // Default if no data
+    else if (competition <= 0.4) score += 24;
+    else if (competition <= 0.5) score += 18;
+    else if (competition <= 0.7) score += 12;
+    else if (competition <= 0.9) score += 6;
+    else score += 3;
   }
+  // else: no data = 0 points
   
   // CPC component (0-20 points) - higher CPC = more commercial value = higher score
+  // No data = 0 points
   const cpc = keywordData.cpc;
-  if (cpc !== null) {
+  if (cpc !== null && cpc > 0) {
     if (cpc >= 5) score += 20;
-    else if (cpc >= 2) score += 15;
+    else if (cpc >= 2) score += 16;
     else if (cpc >= 1) score += 12;
     else if (cpc >= 0.5) score += 8;
-    else if (cpc > 0) score += 5;
-  } else {
-    score += 10; // Default if no data
+    else score += 4;
   }
+  // else: no data = 0 points
   
-  // Trend component (0-10 points) - analyze if trend is rising
+  // Trend component (0-10 points) - rising trend = higher score
+  // No data = 0 points
   const trend = keywordData.trend;
   if (trend && trend.length >= 6) {
     const recentMonths = trend.slice(-3);
@@ -256,18 +261,15 @@ function calculateOpportunityScore(
     
     if (olderAvg > 0) {
       const growthRate = (recentAvg - olderAvg) / olderAvg;
-      if (growthRate > 0.2) score += 10; // Rising trend
-      else if (growthRate > 0) score += 7;
-      else if (growthRate > -0.1) score += 5; // Stable
-      else score += 2; // Declining
-    } else {
-      score += 5;
+      if (growthRate > 0.2) score += 10;      // Strong rising
+      else if (growthRate > 0.05) score += 7; // Rising
+      else if (growthRate >= -0.05) score += 4; // Stable
+      else score += 1;                         // Declining
     }
-  } else {
-    score += 5; // Default if no trend data
   }
+  // else: no data = 0 points
   
-  // Autocomplete bonus (0-10 points) - appearing in autocomplete = active demand
+  // Autocomplete presence (0-10 points) - appearing in YouTube autocomplete = active demand
   if (signals.autocompletePresent) score += 10;
   
   return Math.max(0, Math.min(100, score));
