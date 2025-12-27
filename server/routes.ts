@@ -2080,6 +2080,55 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/sessions/:id/poster", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.previewPosterPath) {
+        return res.status(404).json({ message: "No poster available" });
+      }
+
+      const posterFullPath = path.join(UPLOADS_DIR, session.previewPosterPath);
+      
+      try {
+        if (!fs.existsSync(posterFullPath)) {
+          console.warn(`[Poster] File not found for session ${session.id}`);
+          return res.status(404).json({ message: "Poster unavailable" });
+        }
+
+        const stat = fs.statSync(posterFullPath);
+        const mimeType = session.previewPosterMimeType || "image/jpeg";
+
+        res.setHeader("Content-Type", mimeType);
+        res.setHeader("Content-Length", stat.size);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        
+        const readStream = fs.createReadStream(posterFullPath);
+        readStream.on("error", (streamErr) => {
+          console.error(`[Poster] Stream error for session ${session.id}:`, streamErr);
+          if (!res.headersSent) {
+            res.status(500).json({ message: "Failed to serve poster" });
+          }
+        });
+        readStream.pipe(res);
+      } catch (fsErr) {
+        console.error(`[Poster] Filesystem error for session ${session.id}:`, fsErr);
+        return res.status(404).json({ message: "Poster unavailable" });
+      }
+    } catch (err) {
+      console.error("[Poster] Error:", err);
+      res.status(404).json({ message: "Poster unavailable" });
+    }
+  });
+
   app.post("/api/sessions", requireAuth, async (req: Request, res: Response) => {
     try {
       const { goalType, durationSeconds, title } = req.body;

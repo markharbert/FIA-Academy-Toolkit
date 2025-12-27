@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { extractAudioFast, probeVideo } from "./ffmpeg";
+import { extractAudioFast, probeVideo, generatePoster } from "./ffmpeg";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { ObjectStorageService } from "./replit_integrations/object_storage/objectStorage";
 import type { ProcessingStatus, GoalType, InsertProcessingMetric, TranscriptStatus, ScoreStatus } from "@shared/schema";
@@ -274,7 +274,24 @@ export async function processSession(sessionId: string, userId: string, preExtra
         transcriptStatus: "transcribing" as TranscriptStatus,
       });
       
-      console.log(`[Processing] Audio extracted successfully, deleting video file immediately`);
+      console.log(`[Processing] Audio extracted successfully, generating poster before deleting video`);
+      
+      try {
+        const posterResult = await generatePoster(videoFullPath, UPLOADS_DIR, sessionId);
+        if (posterResult.success && posterResult.posterPath) {
+          await storage.updateSession(sessionId, {
+            previewPosterPath: posterResult.posterPath,
+            previewPosterMimeType: "image/jpeg",
+            previewPosterGeneratedAt: new Date(),
+          });
+          console.log(`[Processing] Poster generated: ${posterResult.posterPath}`);
+        } else {
+          console.warn(`[Processing] Poster generation failed: ${posterResult.error}`);
+        }
+      } catch (posterErr) {
+        console.warn(`[Processing] Poster generation error:`, posterErr);
+      }
+      
       const deleteStart = new Date();
       await deleteOriginalUpload(sessionId, originalUploadPath, originalCloudPath, UPLOADS_DIR);
       await storage.updateSession(sessionId, {

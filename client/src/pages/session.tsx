@@ -834,13 +834,25 @@ export default function SessionPage() {
               }
               
               return (
-                <div className="flex items-center gap-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500">
-                    <Check className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-green-700 dark:text-green-300">Transcript ready</p>
-                    <p className="text-sm text-green-600/80 dark:text-green-400/80">Review your transcript and score below</p>
+                <div className="space-y-4">
+                  {(session as any)?.previewPosterPath && (
+                    <div className="rounded-lg overflow-hidden border">
+                      <img 
+                        src={`/api/sessions/${session?.id}/poster`}
+                        alt="Video thumbnail"
+                        className="w-full aspect-video object-cover"
+                        data-testid="img-video-poster"
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500">
+                      <Check className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-700 dark:text-green-300">Transcript ready</p>
+                      <p className="text-sm text-green-600/80 dark:text-green-400/80">Review your transcript and score below</p>
+                    </div>
                   </div>
                 </div>
               );
