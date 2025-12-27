@@ -73,6 +73,59 @@ const intentLabels: Record<TopicIntent, string> = {
   "top-list": "Top List",
 };
 
+const intentColors: Record<TopicIntent, string> = {
+  "review": "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  "comparison": "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+  "how-to": "bg-green-500/10 text-green-600 dark:text-green-400",
+  "problem-fix": "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+  "beginner-guide": "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+  "top-list": "bg-pink-500/10 text-pink-600 dark:text-pink-400",
+};
+
+function SearchVolumeBadge({ volume }: { volume: number | null | undefined }) {
+  const formatted = formatSearchVolume(volume);
+  const hasData = volume !== null && volume !== undefined;
+  
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge 
+          variant="outline" 
+          className={`font-mono cursor-help ${hasData ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}
+        >
+          {formatted}/mo
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <p className="font-medium">Monthly Search Volume</p>
+        <p className="text-xs text-muted-foreground">
+          Estimated monthly searches on Google (via Keywords Everywhere)
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function OpportunityBadge({ score }: { score: number }) {
+  const { color, label, bgClass } = getOpportunityLevel(score);
+  
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="outline" className={`font-mono cursor-help ${bgClass} ${color} border-0`}>
+          {score}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <p className="font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">
+          Based on search demand, competition, and trend direction
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export default function TopicPulseSavedPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -214,38 +267,14 @@ export default function TopicPulseSavedPage() {
             <p className="text-sm text-muted-foreground truncate">{saved.topic.keywordQuery}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge 
-                  variant="outline" 
-                  className="font-mono cursor-help bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                >
-                  {formatSearchVolume(saved.topic.monthlySearchVolume)}/mo
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p className="font-medium">Monthly Search Volume</p>
-              </TooltipContent>
-            </Tooltip>
+            <SearchVolumeBadge volume={saved.topic.monthlySearchVolume} />
             {saved.topic.intent && (
-              <Badge variant="outline">
+              <Badge variant="outline" className={intentColors[saved.topic.intent]}>
                 {intentLabels[saved.topic.intent]}
               </Badge>
             )}
             <TrendIcon direction={getTrendFromData(saved.topic.trendData as TrendDataPoint[] | null).direction} />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge 
-                  variant="outline" 
-                  className={`font-mono cursor-help border-0 ${getOpportunityLevel(saved.topic.opportunityScore || 0).bgClass} ${getOpportunityLevel(saved.topic.opportunityScore || 0).color}`}
-                >
-                  {saved.topic.opportunityScore}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p className="font-medium">{getOpportunityLevel(saved.topic.opportunityScore || 0).label}</p>
-              </TooltipContent>
-            </Tooltip>
+            <OpportunityBadge score={saved.topic.opportunityScore || 0} />
           </div>
         </div>
       </CardContent>
