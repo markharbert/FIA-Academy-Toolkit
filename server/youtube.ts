@@ -121,6 +121,7 @@ export async function downloadYouTubeAudio(
     console.log(`[yt-dlp] Downloading audio for ${videoId}...`);
     
     const ytdlpPath = process.env.YTDLP_PATH || "/tmp/yt-dlp";
+    const denoPath = process.env.DENO_PATH || "/nix/store/ddmrl40inwn71m5v94lplkyx4rq5mc3s-deno-1.43.6/bin/deno";
     const ytdlp = spawn(ytdlpPath, [
       "-4",
       "-f", "140/139/251/18/best",
@@ -132,6 +133,7 @@ export async function downloadYouTubeAudio(
       "--write-thumbnail",
       "--convert-thumbnails", "jpg",
       "--no-check-certificates",
+      "--js-runtimes", `deno:${denoPath}`,
       "-o", audioPath.replace(".m4a", ".%(ext)s"),
       url
     ]);
