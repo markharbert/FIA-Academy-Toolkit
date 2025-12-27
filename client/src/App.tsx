@@ -14,6 +14,7 @@ import SignupPage from "@/pages/signup";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import DashboardPage from "@/pages/dashboard";
+import VideoScorePage from "@/pages/video-score";
 import SessionPage from "@/pages/session";
 import AdminPage from "@/pages/admin";
 import AccountPage from "@/pages/account";
@@ -117,6 +118,9 @@ function Router() {
       </Route>
       <Route path="/dashboard">
         {() => <ProtectedRoute component={DashboardPage} />}
+      </Route>
+      <Route path="/video-score">
+        {() => <ProtectedRoute component={VideoScorePage} />}
       </Route>
       <Route path="/session">
         {() => <ProtectedRoute component={SessionPage} />}
