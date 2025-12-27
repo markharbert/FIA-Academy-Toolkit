@@ -14,7 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Minus, Bookmark, 
-  FileText, Sparkles, CheckCircle2, AlertCircle, Lightbulb, HelpCircle 
+  FileText, Sparkles, CheckCircle2, AlertCircle, Lightbulb, HelpCircle,
+  ArrowUpDown, ArrowDown, ArrowUp
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -144,6 +145,8 @@ export default function TopicPulseExplorePage() {
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [intentFilter, setIntentFilter] = useState<string>("all");
   const [minScore, setMinScore] = useState(0);
+  const [sortBy, setSortBy] = useState<"score" | "volume" | "competition">("score");
+  const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [scriptDialogOpen, setScriptDialogOpen] = useState(false);
   const [scriptForm, setScriptForm] = useState({
     videoLengthTarget: "6-10" as VideoLengthTarget,
@@ -219,11 +222,33 @@ export default function TopicPulseExplorePage() {
     },
   });
 
-  const filteredTopics = topics?.filter((topic) => {
+  const filteredTopics = (topics?.filter((topic) => {
     if (intentFilter !== "all" && topic.intent !== intentFilter) return false;
     if ((topic.opportunityScore || 0) < minScore) return false;
     return true;
-  }) || [];
+  }) || []).sort((a, b) => {
+    let aVal = 0, bVal = 0;
+    if (sortBy === "score") {
+      aVal = a.opportunityScore || 0;
+      bVal = b.opportunityScore || 0;
+    } else if (sortBy === "volume") {
+      aVal = a.monthlySearchVolume || 0;
+      bVal = b.monthlySearchVolume || 0;
+    } else if (sortBy === "competition") {
+      aVal = a.competition || 0;
+      bVal = b.competition || 0;
+    }
+    return sortDirection === "desc" ? bVal - aVal : aVal - bVal;
+  });
+
+  const toggleSort = (field: "score" | "volume" | "competition") => {
+    if (sortBy === field) {
+      setSortDirection(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setSortBy(field);
+      setSortDirection("desc");
+    }
+  };
 
   const handleGenerateScript = () => {
     if (!selectedTopic) return;
@@ -241,6 +266,23 @@ export default function TopicPulseExplorePage() {
     );
   }
 
+  const SortButton = ({ field, label }: { field: "score" | "volume" | "competition"; label: string }) => (
+    <Button
+      variant={sortBy === field ? "secondary" : "ghost"}
+      size="sm"
+      onClick={() => toggleSort(field)}
+      className="gap-1"
+      data-testid={`button-sort-${field}`}
+    >
+      {label}
+      {sortBy === field ? (
+        sortDirection === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />
+      ) : (
+        <ArrowUpDown className="h-3 w-3 opacity-50" />
+      )}
+    </Button>
+  );
+
   return (
     <div className="min-h-full flex flex-col">
       <div className="border-b p-4">
@@ -248,7 +290,7 @@ export default function TopicPulseExplorePage() {
           <Button variant="ghost" size="icon" onClick={() => navigate("/topic-pulse")} data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-xl font-semibold" data-testid="text-run-query">{run?.seedQuery}</h1>
             <p className="text-sm text-muted-foreground">
               {filteredTopics.length} topics {intentFilter !== "all" && `(filtered from ${topics?.length})`}
@@ -257,12 +299,12 @@ export default function TopicPulseExplorePage() {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="w-56 border-r p-4 space-y-6">
-          <div>
-            <Label className="text-sm font-medium mb-2 block">Intent</Label>
+      <div className="border-b bg-muted/30 p-3">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Filter:</span>
             <Select value={intentFilter} onValueChange={setIntentFilter}>
-              <SelectTrigger data-testid="select-intent-filter">
+              <SelectTrigger className="w-40" data-testid="select-intent-filter">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -274,18 +316,31 @@ export default function TopicPulseExplorePage() {
             </Select>
           </div>
 
-          <div>
-            <Label className="text-sm font-medium mb-2 block">Min Score: {minScore}</Label>
-            <Slider
-              value={[minScore]}
-              onValueChange={([v]) => setMinScore(v)}
-              max={100}
-              step={5}
-              data-testid="slider-min-score"
-            />
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Min Score:</span>
+            <div className="flex items-center gap-2 w-40">
+              <Slider
+                value={[minScore]}
+                onValueChange={([v]) => setMinScore(v)}
+                max={100}
+                step={5}
+                className="flex-1"
+                data-testid="slider-min-score"
+              />
+              <span className="text-sm font-mono w-8 text-right">{minScore}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 ml-auto">
+            <span className="text-sm font-medium text-muted-foreground mr-1">Sort:</span>
+            <SortButton field="score" label="Score" />
+            <SortButton field="volume" label="Volume" />
+            <SortButton field="competition" label="Competition" />
           </div>
         </div>
+      </div>
 
+      <div className="flex-1 flex overflow-hidden">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-2">
             {filteredTopics.map((topic) => (
@@ -295,8 +350,8 @@ export default function TopicPulseExplorePage() {
                 onClick={() => setSelectedTopic(topic)}
                 data-testid={`card-topic-${topic.id}`}
               >
-                <CardContent className="py-4">
-                  <div className="flex items-start justify-between gap-4">
+                <CardContent className="py-3">
+                  <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium">{topic.topicTitle}</p>
                       <p className="text-sm text-muted-foreground truncate">{topic.keywordQuery}</p>
@@ -304,10 +359,11 @@ export default function TopicPulseExplorePage() {
                     <div className="flex items-center gap-2 shrink-0">
                       <SearchVolumeBadge volume={topic.monthlySearchVolume} testId={`badge-volume-${topic.id}`} />
                       {topic.intent && (
-                        <Badge variant="outline" className={intentColors[topic.intent]}>
+                        <Badge variant="outline" className={intentColors[topic.intent]} data-testid={`badge-intent-${topic.id}`}>
                           {intentLabels[topic.intent]}
                         </Badge>
                       )}
+                      <TrendIcon direction={getTrendFromData(topic.trendData as TrendDataPoint[] | null).direction} />
                       <OpportunityBadge score={topic.opportunityScore || 0} />
                     </div>
                   </div>
