@@ -589,7 +589,7 @@ export const topics = pgTable("topics", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   topicTitle: text("topic_title").notNull(),
   keywordQuery: text("keyword_query").notNull(),
-  intent: text("intent").$type<TopicIntent>(),
+  intents: text("intents").array().$type<TopicIntent[]>(),
   opportunityScore: integer("opportunity_score").default(0),
   monthlySearchVolume: integer("monthly_search_volume"),
   cpc: real("cpc"),

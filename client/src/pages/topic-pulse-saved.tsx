@@ -386,11 +386,11 @@ export default function TopicPulseSavedPage() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <SearchVolumeBadge volume={saved.topic.monthlySearchVolume} />
-            {saved.topic.intent && (
-              <Badge variant="outline" className={intentColors[saved.topic.intent]}>
-                {intentLabels[saved.topic.intent]}
+            {(saved.topic.intents || []).map((intent) => (
+              <Badge key={intent} variant="outline" className={intentColors[intent]}>
+                {intentLabels[intent]}
               </Badge>
-            )}
+            ))}
             <TrendIcon direction={getTrendFromData(saved.topic.trendData as TrendDataPoint[] | null).direction} />
             <OpportunityBadge score={saved.topic.opportunityScore || 0} />
           </div>

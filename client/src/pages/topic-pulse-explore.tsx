@@ -341,7 +341,7 @@ export default function TopicPulseExplorePage() {
   });
 
   const filteredTopics = (topics?.filter((topic) => {
-    if (intentFilter !== "all" && topic.intent !== intentFilter) return false;
+    if (intentFilter !== "all" && !(topic.intents || []).includes(intentFilter as any)) return false;
     if ((topic.opportunityScore || 0) < minScore) return false;
     return true;
   }) || []).sort((a, b) => {
@@ -476,11 +476,11 @@ export default function TopicPulseExplorePage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <SearchVolumeBadge volume={topic.monthlySearchVolume} testId={`badge-volume-${topic.id}`} />
-                      {topic.intent && (
-                        <Badge variant="outline" className={intentColors[topic.intent]} data-testid={`badge-intent-${topic.id}`}>
-                          {intentLabels[topic.intent]}
+                      {(topic.intents || []).map((intent) => (
+                        <Badge key={intent} variant="outline" className={intentColors[intent]} data-testid={`badge-intent-${topic.id}-${intent}`}>
+                          {intentLabels[intent]}
                         </Badge>
-                      )}
+                      ))}
                       <TrendIcon direction={getTrendFromData(topic.trendData as TrendDataPoint[] | null).direction} />
                       <OpportunityBadge score={topic.opportunityScore || 0} />
                     </div>

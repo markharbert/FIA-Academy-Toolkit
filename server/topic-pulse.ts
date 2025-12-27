@@ -160,29 +160,33 @@ function generateKeywordVariations(seed: string): string[] {
   return variations.slice(0, 20);
 }
 
-function classifyIntent(query: string): TopicIntent {
+function classifyIntents(query: string): TopicIntent[] {
   const lowerQuery = query.toLowerCase();
+  const intents: TopicIntent[] = [];
   
   if (lowerQuery.includes("review") || lowerQuery.includes("worth it")) {
-    return "review";
+    intents.push("review");
   }
   if (lowerQuery.includes("vs") || lowerQuery.includes("versus") || lowerQuery.includes("compared")) {
-    return "comparison";
+    intents.push("comparison");
   }
   if (lowerQuery.includes("how to") || lowerQuery.includes("tutorial") || lowerQuery.includes("step by step")) {
-    return "how-to";
+    intents.push("how-to");
   }
   if (lowerQuery.includes("fix") || lowerQuery.includes("problem") || lowerQuery.includes("issue") || lowerQuery.includes("not working")) {
-    return "problem-fix";
+    intents.push("problem-fix");
   }
   if (lowerQuery.includes("beginner") || lowerQuery.includes("starter") || lowerQuery.includes("basics")) {
-    return "beginner-guide";
+    intents.push("beginner-guide");
   }
   if (lowerQuery.includes("top") || lowerQuery.includes("best") || lowerQuery.includes("list")) {
-    return "top-list";
+    intents.push("top-list");
+  }
+  if (lowerQuery.includes("buy") || lowerQuery.includes("price") || lowerQuery.includes("cost") || lowerQuery.includes("where to get") || lowerQuery.includes("purchase") || lowerQuery.includes("cheap") || lowerQuery.includes("discount") || lowerQuery.includes("deal")) {
+    intents.push("buyer");
   }
   
-  return "how-to";
+  return intents.length > 0 ? intents : ["how-to"];
 }
 
 function generateWhyText(query: string, signals: DemandSignals): string {
@@ -325,9 +329,9 @@ export async function generateTopics(input: TopicSearchInput, runId: string, use
   const topics: InsertTopic[] = [];
   
   for (const query of allQueries) {
-    const intent = classifyIntent(query);
+    const intents = classifyIntents(query);
     
-    if (input.videoType && intent !== input.videoType) {
+    if (input.videoType && !intents.includes(input.videoType as TopicIntent)) {
       continue;
     }
     
@@ -352,7 +356,7 @@ export async function generateTopics(input: TopicSearchInput, runId: string, use
       runId,
       topicTitle: createTopicTitle(query),
       keywordQuery: query,
-      intent,
+      intents,
       opportunityScore,
       monthlySearchVolume: kwData.volume,
       cpc: kwData.cpc,
@@ -382,7 +386,7 @@ export async function enrichTopicDetails(topic: Topic): Promise<Partial<Topic>> 
 
 Topic: "${topic.topicTitle}"
 Keyword: "${topic.keywordQuery}"
-Intent: ${topic.intent}
+Intents: ${topic.intents?.join(", ") || "general"}
 
 Generate content ideas for this topic. Respond in valid JSON only:
 {
@@ -437,7 +441,7 @@ export async function generateScript(input: ScriptGenerationInput, topic: Topic)
 
 TOPIC: ${topic.topicTitle}
 KEYWORD: ${topic.keywordQuery}
-INTENT: ${topic.intent}
+INTENTS: ${topic.intents?.join(", ") || "general"}
 AFFILIATE OFFER: ${input.affiliateOffer}
 LINK LABEL: ${input.affiliateLinkLabel}
 PRIMARY PROMISE: ${input.primaryPromise}
@@ -496,7 +500,7 @@ export async function generateIntentAnalysis(topic: Topic): Promise<string> {
 
 KEYWORD: "${topic.keywordQuery}"
 TOPIC TITLE: "${topic.topicTitle}"
-CLASSIFIED INTENT: ${topic.intent || "unknown"}
+CLASSIFIED INTENTS: ${topic.intents?.join(", ") || "unknown"}
 ${topic.monthlySearchVolume ? `MONTHLY SEARCHES: ${topic.monthlySearchVolume.toLocaleString()}` : ""}
 
 Provide a brief but highly insightful analysis (2-4 sentences) that reveals:
