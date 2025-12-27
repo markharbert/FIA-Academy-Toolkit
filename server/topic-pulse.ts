@@ -482,10 +482,39 @@ Respond in valid JSON:
   return JSON.parse(content) as ScriptJson;
 }
 
-export function getApiKeyStatus(): { youtube: boolean; openai: boolean; reddit: boolean } {
+export function getApiKeyStatus(): { youtube: boolean; openai: boolean; reddit: boolean; keywordsEverywhere: boolean } {
   return {
     youtube: !!YOUTUBE_API_KEY,
     openai: !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY),
     reddit: !!(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET),
+    keywordsEverywhere: !!KEYWORDS_EVERYWHERE_API_KEY,
   };
+}
+
+export async function getKeywordsEverywhereCredits(): Promise<{ credits: number | null; error?: string }> {
+  if (!KEYWORDS_EVERYWHERE_API_KEY) {
+    return { credits: null, error: "API key not configured" };
+  }
+
+  try {
+    const response = await fetch("https://api.keywordseverywhere.com/v1/get_credits", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${KEYWORDS_EVERYWHERE_API_KEY}`,
+        "Accept": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("[KeywordsEverywhere] Credits API error:", response.status, text);
+      return { credits: null, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    return { credits: data.credits ?? null };
+  } catch (err) {
+    console.error("[KeywordsEverywhere] Credits fetch error:", err);
+    return { credits: null, error: "Failed to fetch credits" };
+  }
 }

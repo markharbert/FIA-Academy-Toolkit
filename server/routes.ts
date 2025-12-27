@@ -3289,7 +3289,7 @@ export async function registerRoutes(
   // Topic Pulse Finder API Routes
   // ==========================================
   
-  const { generateTopics, enrichTopicDetails, generateScript, getApiKeyStatus } = await import("./topic-pulse");
+  const { generateTopics, enrichTopicDetails, generateScript, getApiKeyStatus, getKeywordsEverywhereCredits } = await import("./topic-pulse");
   const { topicSearchInputSchema, scriptGenerationInputSchema } = await import("@shared/schema");
 
   app.get("/api/topic-pulse/status", requireAuth, async (req: Request, res: Response) => {
@@ -3299,6 +3299,16 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[TopicPulse] Status error:", err);
       res.status(500).json({ message: "Failed to get status" });
+    }
+  });
+
+  app.get("/api/topic-pulse/keywords-everywhere-credits", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const result = await getKeywordsEverywhereCredits();
+      res.json(result);
+    } catch (err) {
+      console.error("[TopicPulse] Keywords Everywhere credits error:", err);
+      res.status(500).json({ credits: null, error: "Failed to fetch credits" });
     }
   });
 

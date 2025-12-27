@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2 } from "lucide-react";
+import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Coins } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun, Topic } from "@shared/schema";
@@ -33,6 +33,11 @@ export default function TopicPulsePage() {
 
   const { data: scripts } = useQuery<any[]>({
     queryKey: ["/api/topic-pulse/scripts"],
+  });
+
+  const { data: creditsData } = useQuery<{ credits: number | null; error?: string }>({
+    queryKey: ["/api/topic-pulse/keywords-everywhere-credits"],
+    staleTime: 5 * 60 * 1000,
   });
 
   const searchMutation = useMutation({
@@ -111,6 +116,14 @@ export default function TopicPulsePage() {
           <p className="text-muted-foreground">
             Find in-demand YouTube video topics and generate scripts using Mark's 5-part formula
           </p>
+          {creditsData?.credits !== null && creditsData?.credits !== undefined && (
+            <div className="mt-4 flex items-center justify-center gap-2" data-testid="credits-display">
+              <Badge variant="outline" className="text-sm py-1 px-3">
+                <Coins className="h-3.5 w-3.5 mr-1.5" />
+                Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
+              </Badge>
+            </div>
+          )}
         </div>
 
         <Card className="mb-8">
