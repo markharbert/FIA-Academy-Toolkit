@@ -145,7 +145,7 @@ export default function TopicPulseExplorePage() {
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [intentFilter, setIntentFilter] = useState<string>("all");
   const [minScore, setMinScore] = useState(0);
-  const [sortBy, setSortBy] = useState<"score" | "volume" | "competition">("score");
+  const [sortBy, setSortBy] = useState<"score" | "volume" | "competition" | "trend">("score");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [scriptDialogOpen, setScriptDialogOpen] = useState(false);
   const [scriptForm, setScriptForm] = useState({
@@ -237,11 +237,16 @@ export default function TopicPulseExplorePage() {
     } else if (sortBy === "competition") {
       aVal = a.competition || 0;
       bVal = b.competition || 0;
+    } else if (sortBy === "trend") {
+      const aTrend = getTrendFromData(a.trendData as TrendDataPoint[] | null);
+      const bTrend = getTrendFromData(b.trendData as TrendDataPoint[] | null);
+      aVal = aTrend.direction === "up" ? 1 : aTrend.direction === "down" ? -1 : 0;
+      bVal = bTrend.direction === "up" ? 1 : bTrend.direction === "down" ? -1 : 0;
     }
     return sortDirection === "desc" ? bVal - aVal : aVal - bVal;
   });
 
-  const toggleSort = (field: "score" | "volume" | "competition") => {
+  const toggleSort = (field: "score" | "volume" | "competition" | "trend") => {
     if (sortBy === field) {
       setSortDirection(d => d === "desc" ? "asc" : "desc");
     } else {
@@ -266,7 +271,7 @@ export default function TopicPulseExplorePage() {
     );
   }
 
-  const SortButton = ({ field, label }: { field: "score" | "volume" | "competition"; label: string }) => (
+  const SortButton = ({ field, label }: { field: "score" | "volume" | "competition" | "trend"; label: string }) => (
     <Button
       variant={sortBy === field ? "secondary" : "ghost"}
       size="sm"
@@ -336,6 +341,7 @@ export default function TopicPulseExplorePage() {
             <SortButton field="score" label="Score" />
             <SortButton field="volume" label="Volume" />
             <SortButton field="competition" label="Competition" />
+            <SortButton field="trend" label="Trend" />
           </div>
         </div>
       </div>
