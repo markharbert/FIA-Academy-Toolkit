@@ -178,6 +178,8 @@ export interface IStorage {
   getTopicRun(id: string): Promise<TopicRun | undefined>;
   getTopicRunsByUser(userId: string, limit?: number): Promise<TopicRun[]>;
   updateTopicRun(id: string, updates: Partial<TopicRun>): Promise<TopicRun | undefined>;
+  deleteTopicRun(id: string, userId: string): Promise<boolean>;
+  deleteAllTopicRuns(userId: string): Promise<number>;
   
   // Topic Pulse Finder: Topics
   createTopic(topic: InsertTopic): Promise<Topic>;
@@ -1034,6 +1036,28 @@ export class DatabaseStorage implements IStorage {
       .where(eq(topicRuns.id, id))
       .returning();
     return result || undefined;
+  }
+  
+  async deleteTopicRun(id: string, userId: string): Promise<boolean> {
+    const run = await this.getTopicRun(id);
+    if (!run || run.userId !== userId) return false;
+    
+    await db.delete(topics).where(eq(topics.runId, id));
+    const [result] = await db.delete(topicRuns)
+      .where(and(eq(topicRuns.id, id), eq(topicRuns.userId, userId)))
+      .returning();
+    return !!result;
+  }
+  
+  async deleteAllTopicRuns(userId: string): Promise<number> {
+    const runs = await this.getTopicRunsByUser(userId, 1000);
+    for (const run of runs) {
+      await db.delete(topics).where(eq(topics.runId, run.id));
+    }
+    const result = await db.delete(topicRuns)
+      .where(eq(topicRuns.userId, userId))
+      .returning();
+    return result.length;
   }
   
   // Topic Pulse Finder: Topics

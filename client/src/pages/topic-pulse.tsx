@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks } from "lucide-react";
+import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun, Topic } from "@shared/schema";
@@ -47,6 +47,40 @@ export default function TopicPulsePage() {
     onError: (err: Error) => {
       toast({
         title: "Search failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteRunMutation = useMutation({
+    mutationFn: async (runId: string) => {
+      await apiRequest("DELETE", `/api/topic-pulse/runs/${runId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
+      toast({ title: "Search deleted" });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Delete failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteAllRunsMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/topic-pulse/runs");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
+      toast({ title: "All searches cleared" });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Clear failed",
         description: err.message,
         variant: "destructive",
       });
@@ -178,7 +212,25 @@ export default function TopicPulsePage() {
         </div>
 
         <div>
-          <h2 className="text-xl font-semibold mb-4">Recent Searches</h2>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h2 className="text-xl font-semibold">Recent Searches</h2>
+            {recentRuns && recentRuns.length > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => deleteAllRunsMutation.mutate()}
+                disabled={deleteAllRunsMutation.isPending}
+                data-testid="button-clear-all-searches"
+              >
+                {deleteAllRunsMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Clear All
+              </Button>
+            )}
+          </div>
           {runsLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -208,6 +260,18 @@ export default function TopicPulsePage() {
                         <span className="text-sm text-muted-foreground">
                           {new Date(run.createdAt).toLocaleDateString()}
                         </span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteRunMutation.mutate(run.id);
+                          }}
+                          disabled={deleteRunMutation.isPending}
+                          data-testid={`button-delete-run-${run.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   </CardContent>

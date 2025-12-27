@@ -3374,6 +3374,29 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/topic-pulse/runs/:runId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteTopicRun(req.params.runId, req.session.userId!);
+      if (!deleted) {
+        return res.status(404).json({ message: "Run not found or access denied" });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[TopicPulse] Delete run error:", err);
+      res.status(500).json({ message: "Failed to delete run" });
+    }
+  });
+
+  app.delete("/api/topic-pulse/runs", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const count = await storage.deleteAllTopicRuns(req.session.userId!);
+      res.json({ success: true, deletedCount: count });
+    } catch (err) {
+      console.error("[TopicPulse] Delete all runs error:", err);
+      res.status(500).json({ message: "Failed to delete runs" });
+    }
+  });
+
   app.get("/api/topic-pulse/topics/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const topic = await storage.getTopic(req.params.id);
