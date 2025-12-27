@@ -10,16 +10,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { 
   Download, Copy, Check, RefreshCw, AlertCircle, Clock, 
   TrendingUp, MessageSquare, Lightbulb, AlertTriangle, Quote,
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText,
-  Upload, File, Video, Youtube, Link as LinkIcon
+  Upload, File, Video
 } from "lucide-react";
-import { SiYoutube } from "react-icons/si";
 import type { Session, ScoreResult, ProcessingStatus, GoalType } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -218,10 +214,6 @@ export default function SessionPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   
-  const [inputMode, setInputMode] = useState<"upload" | "youtube">("upload");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [youtubeRightsConfirmed, setYoutubeRightsConfirmed] = useState(false);
-  const [isSubmittingYoutube, setIsSubmittingYoutube] = useState(false);
 
   const [editedTranscript, setEditedTranscript] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -484,53 +476,7 @@ export default function SessionPage() {
     }
   };
 
-  const submitYoutubeUrl = async () => {
-    if (!youtubeUrl.trim() || !youtubeRightsConfirmed) return;
-    
-    setUploadError(null);
-    setUploadStep("uploading");
-    setIsSubmittingYoutube(true);
-    
-    try {
-      const res = await apiRequest("POST", "/api/sessions/youtube", {
-        youtubeUrl: youtubeUrl.trim(),
-        goalType,
-        title: sessionTitle.trim() || undefined,
-        rightsConfirmed: true,
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Failed to process YouTube video");
-      }
-      
-      const data = await res.json();
-      setCreatedSessionId(data.id);
-      setUploadStep("done");
-      
-      window.history.replaceState(null, "", `/video-score-upload/${data.id}`);
-      
-      toast({ title: "Success", description: "YouTube video submitted for analysis." });
-    } catch (err) {
-      setUploadStep("idle");
-      const errorMessage = err instanceof Error ? err.message : "An error occurred";
-      setUploadError(errorMessage);
-      console.error("[YouTube] Error:", errorMessage);
-    } finally {
-      setIsSubmittingYoutube(false);
-    }
-  };
-
-  const isValidYoutubeUrl = (url: string): boolean => {
-    const patterns = [
-      /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?v=[\w-]+/,
-      /^(https?:\/\/)?(www\.)?youtube\.com\/shorts\/[\w-]+/,
-      /^(https?:\/\/)?youtu\.be\/[\w-]+/,
-    ];
-    return patterns.some(pattern => pattern.test(url));
-  };
-
-  if (isNewSession && (!createdSessionId || uploadStep === "uploading" || isSubmittingYoutube)) {
+  if (isNewSession && (!createdSessionId || uploadStep === "uploading")) {
     return (
       <div className="container mx-auto max-w-4xl p-4 md:p-6">
         <div className="mb-6">
@@ -542,7 +488,7 @@ export default function SessionPage() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold" data-testid="text-page-title">Add Video</h1>
-              <p className="text-muted-foreground">Upload a video or paste a YouTube link to get AI-powered feedback.</p>
+              <p className="text-muted-foreground">Upload a video to get AI-powered feedback.</p>
             </div>
           </div>
         </div>
@@ -550,19 +496,7 @@ export default function SessionPage() {
         <div className="space-y-6">
           <Card>
             <CardContent className="p-4">
-              <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as "upload" | "youtube")} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
-                  <TabsTrigger value="upload" className="flex items-center gap-2" data-testid="tab-upload">
-                    <Upload className="h-4 w-4" />
-                    Upload File
-                  </TabsTrigger>
-                  <TabsTrigger value="youtube" className="flex items-center gap-2" data-testid="tab-youtube">
-                    <SiYoutube className="h-4 w-4" />
-                    YouTube Link
-                  </TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="upload" className="mt-0">
+              <div className="w-full">
                   {!selectedFile ? (
                     <div
                       className={`relative aspect-video overflow-hidden rounded-lg border-2 border-dashed transition-colors cursor-pointer flex flex-col items-center justify-center gap-4 ${
@@ -649,74 +583,7 @@ export default function SessionPage() {
                       </Button>
                     )}
                   </div>
-                </TabsContent>
-
-                <TabsContent value="youtube" className="mt-0">
-                  <div className="space-y-6">
-                    <div className="flex flex-col items-center justify-center gap-4 py-8">
-                      <SiYoutube className="h-16 w-16 text-red-600" />
-                      <div className="w-full max-w-lg space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="youtube-url">YouTube Video URL</Label>
-                          <div className="relative">
-                            <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              id="youtube-url"
-                              type="url"
-                              placeholder="https://www.youtube.com/watch?v=..."
-                              value={youtubeUrl}
-                              onChange={(e) => setYoutubeUrl(e.target.value)}
-                              className="pl-10"
-                              data-testid="input-youtube-url"
-                            />
-                          </div>
-                          {youtubeUrl && !isValidYoutubeUrl(youtubeUrl) && (
-                            <p className="text-sm text-destructive">Please enter a valid YouTube URL</p>
-                          )}
-                        </div>
-                        
-                        <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
-                          <Checkbox
-                            id="rights-confirmation"
-                            checked={youtubeRightsConfirmed}
-                            onCheckedChange={(checked) => setYoutubeRightsConfirmed(checked === true)}
-                            data-testid="checkbox-rights-confirmation"
-                          />
-                          <Label htmlFor="rights-confirmation" className="text-sm leading-relaxed cursor-pointer">
-                            I confirm that I have the right to use this video content, or it is my own video.
-                          </Label>
-                        </div>
-                      </div>
-                    </div>
-
-                    {isSubmittingYoutube && (
-                      <div className="p-6 bg-muted/50 rounded-lg space-y-4">
-                        <div className="flex items-center justify-center gap-3">
-                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                          <p className="text-lg font-medium">Processing YouTube video...</p>
-                        </div>
-                        <p className="text-center text-sm text-muted-foreground">
-                          Downloading audio and preparing for analysis
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center justify-center gap-3">
-                      {!isSubmittingYoutube && (
-                        <Button
-                          size="lg"
-                          onClick={submitYoutubeUrl}
-                          disabled={!youtubeUrl.trim() || !isValidYoutubeUrl(youtubeUrl) || !youtubeRightsConfirmed}
-                          data-testid="button-submit-youtube"
-                        >
-                          <SiYoutube className="mr-2 h-5 w-5" />
-                          Analyze Video
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
+              </div>
 
               {uploadError && (
                 <div className="mt-4 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive" data-testid="error-message">
