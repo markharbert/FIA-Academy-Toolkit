@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -11,14 +11,91 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Loader2, ArrowLeft, Trash2, FileText, Bookmark, 
   HelpCircle, TrendingUp, TrendingDown, Minus, Sparkles,
-  CheckCircle2, AlertCircle, Lightbulb, Check, RotateCcw, X, Search
+  CheckCircle2, AlertCircle, Lightbulb, Check, RotateCcw, X, Search, Brain, ChevronDown
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedTopic, Topic, TopicIntent, DemandSignals, VideoLengthTarget, TonePreference, TrendDataPoint } from "@shared/schema";
+
+function IntentAnalysisSection({ topicId, existingAnalysis }: { topicId: string; existingAnalysis?: string | null }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [hasRequested, setHasRequested] = useState(false);
+  
+  const analysisMutation = useMutation({
+    mutationFn: async (): Promise<{ analysis: string; cached: boolean }> => {
+      const res = await fetch(`/api/topic-pulse/topics/${topicId}/intent-analysis`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to generate analysis");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/saved-topics"] });
+    },
+  });
+
+  useEffect(() => {
+    if (isOpen && !hasRequested && !existingAnalysis && !analysisMutation.isPending && !analysisMutation.data) {
+      setHasRequested(true);
+      analysisMutation.mutate();
+    }
+  }, [isOpen, hasRequested, existingAnalysis, analysisMutation]);
+
+  const analysis = existingAnalysis || analysisMutation.data?.analysis;
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <button 
+          className="flex items-center justify-between w-full p-3 rounded-md bg-muted/50 hover-elevate text-left"
+          data-testid="button-intent-analysis-toggle"
+        >
+          <div className="flex items-center gap-2">
+            <Brain className="h-4 w-4 text-purple-500" />
+            <span className="font-medium text-sm">Intent Analysis</span>
+          </div>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2">
+        <div className="p-3 rounded-md bg-muted/30 border border-border/50" data-testid="section-intent-analysis">
+          {analysisMutation.isPending ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Analyzing search intent...
+            </div>
+          ) : analysisMutation.isError ? (
+            <div className="text-sm text-destructive">
+              Failed to generate analysis. 
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="p-0 h-auto ml-1 underline"
+                onClick={() => analysisMutation.mutate()}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : analysis ? (
+            <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-intent-analysis">
+              {analysis}
+            </p>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading...
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 function getOpportunityLevel(score: number): { color: string; label: string; bgClass: string } {
   if (score >= 70) return { color: "text-green-600 dark:text-green-400", label: "Great opportunity", bgClass: "bg-green-500/10" };
@@ -574,6 +651,11 @@ export default function TopicPulseSavedPage() {
                     </div>
                   </div>
                 )}
+
+                <IntentAnalysisSection 
+                  topicId={selectedTopic.id} 
+                  existingAnalysis={selectedTopic.intentAnalysis} 
+                />
 
                 {selectedTopic.whyText && (
                   <div>
