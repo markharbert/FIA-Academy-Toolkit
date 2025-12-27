@@ -120,7 +120,10 @@ export async function downloadYouTubeAudio(
     console.log(`[yt-dlp] Downloading audio for ${videoId}...`);
     
     const ytdlp = spawn("yt-dlp", [
-      "-f", "bestaudio[ext=m4a]/bestaudio",
+      "-f", "bestaudio/best",
+      "-x",
+      "--audio-format", "mp3",
+      "--audio-quality", "0",
       "--no-playlist",
       "--no-warnings",
       "--write-thumbnail",
