@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
+import { AppSidebar } from "@/components/app-sidebar";
+import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { Loader2 } from "lucide-react";
 
 import LandingPage from "@/pages/landing";
@@ -84,38 +86,9 @@ function PublicOnlyRoute({ component: Component }: { component: React.ComponentT
   return <Component />;
 }
 
-function Router() {
-  const { user, isLoading } = useAuth();
-
+function ProtectedRoutes() {
   return (
     <Switch>
-      <Route path="/">
-        {() => {
-          if (isLoading) {
-            return (
-              <div className="flex min-h-[60vh] items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            );
-          }
-          if (user) {
-            return <Redirect to="/dashboard" />;
-          }
-          return <LandingPage />;
-        }}
-      </Route>
-      <Route path="/login">
-        {() => <PublicOnlyRoute component={LoginPage} />}
-      </Route>
-      <Route path="/signup">
-        {() => <PublicOnlyRoute component={SignupPage} />}
-      </Route>
-      <Route path="/forgot-password">
-        {() => <PublicOnlyRoute component={ForgotPasswordPage} />}
-      </Route>
-      <Route path="/reset-password">
-        {() => <PublicOnlyRoute component={ResetPasswordPage} />}
-      </Route>
       <Route path="/dashboard">
         {() => <ProtectedRoute component={DashboardPage} />}
       </Route>
@@ -160,18 +133,86 @@ function Router() {
   );
 }
 
+function PublicRoutes() {
+  const { user, isLoading } = useAuth();
+
+  return (
+    <Switch>
+      <Route path="/">
+        {() => {
+          if (isLoading) {
+            return (
+              <div className="flex min-h-[60vh] items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            );
+          }
+          if (user) {
+            return <Redirect to="/dashboard" />;
+          }
+          return <LandingPage />;
+        }}
+      </Route>
+      <Route path="/login">
+        {() => <PublicOnlyRoute component={LoginPage} />}
+      </Route>
+      <Route path="/signup">
+        {() => <PublicOnlyRoute component={SignupPage} />}
+      </Route>
+      <Route path="/forgot-password">
+        {() => <PublicOnlyRoute component={ForgotPasswordPage} />}
+      </Route>
+      <Route path="/reset-password">
+        {() => <PublicOnlyRoute component={ResetPasswordPage} />}
+      </Route>
+    </Switch>
+  );
+}
+
+function AppLayout() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (user) {
+    return (
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+            <SidebarTrigger className="-ml-1" data-testid="button-sidebar-toggle" />
+          </header>
+          <main className="flex-1 overflow-auto">
+            <ProtectedRoutes />
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <Navbar />
+      <main className="flex-1">
+        <PublicRoutes />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <div className="flex min-h-screen flex-col">
-            <Navbar />
-            <main className="flex-1">
-              <Router />
-            </main>
-            <Footer />
-          </div>
+          <AppLayout />
           <Toaster />
         </AuthProvider>
       </TooltipProvider>
