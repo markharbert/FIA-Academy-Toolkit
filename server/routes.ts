@@ -3371,7 +3371,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
 
-      const CREDITS_PER_SEARCH = 10;
+      const CREDITS_PER_SEARCH = 1;
       const credits = await storage.getVideoTrendsCredits(req.session.userId!);
       
       if (credits.remaining < CREDITS_PER_SEARCH) {

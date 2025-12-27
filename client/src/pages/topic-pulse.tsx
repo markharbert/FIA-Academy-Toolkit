@@ -5,10 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Coins, ExternalLink } from "lucide-react";
+import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun, Topic } from "@shared/schema";
+
+interface CreditsData {
+  creditsUsed: number;
+  monthlyLimit: number;
+  windowStartedAt: string;
+  remaining: number;
+  resetsAt: string;
+}
 
 const presets = [
   { label: "Review", icon: ShoppingBag, type: "review" as const },
@@ -35,10 +43,13 @@ export default function TopicPulsePage() {
     queryKey: ["/api/topic-pulse/scripts"],
   });
 
-  const { data: creditsData } = useQuery<{ credits: number | null; error?: string }>({
-    queryKey: ["/api/topic-pulse/keywords-everywhere-credits"],
-    staleTime: 5 * 60 * 1000,
+  const { data: creditsData } = useQuery<CreditsData>({
+    queryKey: ["/api/topic-pulse/credits"],
+    staleTime: 60 * 1000,
   });
+
+  const creditsRemaining = creditsData?.remaining ?? 1000;
+  const creditsExhausted = creditsRemaining < 1;
 
   const searchMutation = useMutation({
     mutationFn: async (input: { seedQuery: string; videoType?: string }) => {
@@ -47,9 +58,11 @@ export default function TopicPulsePage() {
     },
     onSuccess: (data: { runId: string; topics: Topic[] }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
       navigate(`/topic-pulse/explore/${data.runId}`);
     },
     onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
       toast({
         title: "Search failed",
         description: err.message,
@@ -116,40 +129,23 @@ export default function TopicPulsePage() {
           <p className="text-muted-foreground">
             Find in-demand YouTube video topics and generate scripts using Mark's 5-part formula
           </p>
-          <div className="mt-4 flex items-center justify-center gap-2" data-testid="credits-display">
-            {creditsData?.credits !== null && creditsData?.credits !== undefined ? (
-              creditsData.credits < 1000 ? (
-                <a
-                  href="https://keywordseverywhere.com/credits.html"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex"
-                  data-testid="link-purchase-credits"
-                >
-                  <Badge className="text-sm py-1 px-3 bg-red-500 dark:bg-red-600 text-white border-red-600 dark:border-red-700">
-                    <Coins className="h-3.5 w-3.5 mr-1.5" />
-                    Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
-                    <ExternalLink className="h-3 w-3 ml-1.5" />
-                  </Badge>
-                </a>
-              ) : creditsData.credits < 5000 ? (
-                <Badge className="text-sm py-1 px-3 bg-yellow-500 dark:bg-yellow-600 text-black dark:text-black border-yellow-600 dark:border-yellow-700">
-                  <Coins className="h-3.5 w-3.5 mr-1.5" />
-                  Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
+          {creditsData && (
+            <div className="mt-4 flex items-center justify-center gap-2" data-testid="credits-display">
+              {creditsExhausted ? (
+                <Badge variant="destructive" className="text-sm py-1 px-3">
+                  Credits exhausted - Resets {new Date(creditsData.resetsAt).toLocaleDateString()}
+                </Badge>
+              ) : creditsRemaining < 100 ? (
+                <Badge className="text-sm py-1 px-3 bg-yellow-500 dark:bg-yellow-600 text-black border-yellow-600 dark:border-yellow-700">
+                  {creditsRemaining} / {creditsData.monthlyLimit} credits remaining
                 </Badge>
               ) : (
-                <Badge className="text-sm py-1 px-3 bg-green-500 dark:bg-green-600 text-white border-green-600 dark:border-green-700">
-                  <Coins className="h-3.5 w-3.5 mr-1.5" />
-                  Keywords Everywhere: {creditsData.credits.toLocaleString()} credits remaining
+                <Badge variant="secondary" className="text-sm py-1 px-3">
+                  {creditsRemaining} / {creditsData.monthlyLimit} credits this month
                 </Badge>
-              )
-            ) : creditsData?.error ? (
-              <Badge variant="secondary" className="text-sm py-1 px-3">
-                <Coins className="h-3.5 w-3.5 mr-1.5" />
-                Keywords Everywhere: Credits unavailable
-              </Badge>
-            ) : null}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
         <Card className="mb-8">
@@ -167,7 +163,7 @@ export default function TopicPulsePage() {
                 />
                 <Button 
                   onClick={handleSearch} 
-                  disabled={searchMutation.isPending || !seedQuery.trim()}
+                  disabled={searchMutation.isPending || !seedQuery.trim() || creditsExhausted}
                   data-testid="button-search"
                 >
                   {searchMutation.isPending ? (
@@ -175,7 +171,7 @@ export default function TopicPulsePage() {
                   ) : (
                     <Search className="h-4 w-4 mr-2" />
                   )}
-                  Find Topics
+                  {creditsExhausted ? "No Credits" : "Find Topics"}
                 </Button>
               </div>
 
