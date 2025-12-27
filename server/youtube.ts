@@ -123,13 +123,11 @@ export async function downloadYouTubeAudio(
     const ytdlpPath = process.env.YTDLP_PATH || "/tmp/yt-dlp";
     const ytdlp = spawn(ytdlpPath, [
       "-4",
-      "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+      "-f", "140/139/251/18/best",
       "-x",
       "--audio-format", "mp3",
       "--audio-quality", "0",
       "--no-playlist",
-      "--no-warnings",
-      "--extractor-args", "youtube:player_client=web",
       "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "--write-thumbnail",
       "--convert-thumbnails", "jpg",
