@@ -76,16 +76,17 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader>
+      <SidebarHeader className="flex items-center justify-center">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
               onClick={() => window.open("https://markharbert.com", "_blank")}
               data-testid="link-logo"
+              className="flex items-center justify-center"
             >
               {state === "collapsed" ? (
-                <img src={faviconImage} alt="Mark Harbert" className="h-6 w-6" />
+                <img src={faviconImage} alt="Mark Harbert" className="h-8 w-8 shrink-0" />
               ) : (
                 <img src={logoImage} alt="Mark Harbert" className="h-8 w-auto" />
               )}
