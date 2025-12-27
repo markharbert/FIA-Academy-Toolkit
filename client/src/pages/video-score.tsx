@@ -94,7 +94,7 @@ function VideoThumbnail({ session, isExpired }: { session: Session; isExpired: b
 
   if (session.thumbnailPath) {
     return (
-      <Link href={`/session/${session.id}`} className="block sm:w-40">
+      <Link href={`/video-score-upload/${session.id}`} className="block sm:w-40">
         <img
           src={`/api/sessions/${session.id}/thumbnail`}
           alt="Video preview"
@@ -106,7 +106,7 @@ function VideoThumbnail({ session, isExpired }: { session: Session; isExpired: b
   }
 
   return (
-    <Link href={`/session/${session.id}`} className="flex aspect-video w-full items-center justify-center bg-muted sm:w-40">
+    <Link href={`/video-score-upload/${session.id}`} className="flex aspect-video w-full items-center justify-center bg-muted sm:w-40">
       <Video className="h-8 w-8 text-muted-foreground" />
     </Link>
   );
@@ -274,7 +274,7 @@ function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSes
               )}
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Link href={`/session/${session.id}`}>
+              <Link href={`/video-score-upload/${session.id}`}>
                 <Button variant="outline" size="sm" data-testid={`button-view-session-${session.id}`}>
                   <Eye className="mr-2 h-4 w-4" />
                   View Details
@@ -332,7 +332,7 @@ function EmptyState() {
         <p className="mb-6 max-w-sm text-sm text-muted-foreground">
           Record your first practice video to get AI-powered feedback on your delivery.
         </p>
-        <Link href="/session">
+        <Link href="/video-score-upload">
           <Button data-testid="button-empty-new-session">
             <Plus className="mr-2 h-4 w-4" />
             Score New Video
@@ -468,7 +468,7 @@ export default function VideoScorePage() {
                 {selectedSessionIds.size === sessions.length ? "Deselect All" : "Select All"}
               </Button>
             )}
-            <Link href="/session">
+            <Link href="/video-score-upload">
               <Button size="lg" data-testid="button-new-session">
                 <Plus className="mr-2 h-5 w-5" />
                 Score New Video

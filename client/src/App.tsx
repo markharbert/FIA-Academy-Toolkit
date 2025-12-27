@@ -95,10 +95,10 @@ function ProtectedRoutes() {
       <Route path="/video-score">
         {() => <ProtectedRoute component={VideoScorePage} />}
       </Route>
-      <Route path="/session">
+      <Route path="/video-score-upload">
         {() => <ProtectedRoute component={SessionPage} />}
       </Route>
-      <Route path="/session/:id">
+      <Route path="/video-score-upload/:id">
         {() => <ProtectedRoute component={SessionPage} />}
       </Route>
       <Route path="/record">

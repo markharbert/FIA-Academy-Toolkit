@@ -195,8 +195,8 @@ function DetailedPartFeedback({
 }
 
 export default function SessionPage() {
-  const [matchWithId, paramsWithId] = useRoute("/session/:id");
-  const [matchWithoutId] = useRoute("/session");
+  const [matchWithId, paramsWithId] = useRoute("/video-score-upload/:id");
+  const [matchWithoutId] = useRoute("/video-score-upload");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
@@ -465,7 +465,7 @@ export default function SessionPage() {
       setUploadStep("done");
       setUploadProgress(100);
       
-      window.history.replaceState(null, "", `/session/${id}`);
+      window.history.replaceState(null, "", `/video-score-upload/${id}`);
       
     } catch (err) {
       setUploadStep("error");

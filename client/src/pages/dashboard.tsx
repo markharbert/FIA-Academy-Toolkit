@@ -92,10 +92,10 @@ export default function DashboardPage() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4">
-              <Link href="/session">
+              <Link href="/video-score-upload">
                 <Button data-testid="button-new-session">
                   <Video className="mr-2 h-4 w-4" />
-                  New Practice Session
+                  Score New Video
                 </Button>
               </Link>
               <Link href="/topic-pulse">

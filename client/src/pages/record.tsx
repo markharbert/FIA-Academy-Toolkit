@@ -268,7 +268,7 @@ export default function RecordPage() {
       // Upload complete - processing starts automatically on server
       // Redirect to session page immediately where progress will be shown via SSE
       setProcessingStep("done");
-      setLocation(`/session/${id}`);
+      setLocation(`/video-score-upload/${id}`);
     } catch (err) {
       setProcessingStep("error");
       const errorMessage = err instanceof Error ? err.message : "An error occurred";
