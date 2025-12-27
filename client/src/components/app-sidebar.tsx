@@ -86,7 +86,7 @@ export function AppSidebar() {
               className="flex items-center justify-center"
             >
               {state === "collapsed" ? (
-                <img src={faviconImage} alt="Mark Harbert" className="h-8 w-8 shrink-0" />
+                <img src={faviconImage} alt="Mark Harbert" className="size-5 shrink-0 object-contain" />
               ) : (
                 <img src={logoImage} alt="Mark Harbert" className="h-8 w-auto" />
               )}
