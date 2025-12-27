@@ -479,7 +479,7 @@ export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
 // ==========================================
 
 // Intent types for video topics
-export const topicIntents = ["review", "comparison", "how-to", "problem-fix", "beginner-guide", "top-list"] as const;
+export const topicIntents = ["review", "comparison", "how-to", "problem-fix", "beginner-guide", "top-list", "buyer"] as const;
 export type TopicIntent = typeof topicIntents[number];
 
 // Video type preferences

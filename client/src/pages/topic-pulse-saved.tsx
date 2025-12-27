@@ -168,6 +168,7 @@ const intentLabels: Record<TopicIntent, string> = {
   "problem-fix": "Problem Fix",
   "beginner-guide": "Beginner Guide",
   "top-list": "Top List",
+  "buyer": "Buyer",
 };
 
 const intentColors: Record<TopicIntent, string> = {
@@ -177,6 +178,7 @@ const intentColors: Record<TopicIntent, string> = {
   "problem-fix": "bg-orange-500/10 text-orange-600 dark:text-orange-400",
   "beginner-guide": "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
   "top-list": "bg-pink-500/10 text-pink-600 dark:text-pink-400",
+  "buyer": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 };
 
 function SearchVolumeBadge({ volume }: { volume: number | null | undefined }) {
