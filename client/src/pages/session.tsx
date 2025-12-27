@@ -836,7 +836,7 @@ export default function SessionPage() {
               return (
                 <div className="space-y-4">
                   {(session as any)?.previewPosterPath && (
-                    <div className="rounded-lg overflow-hidden border">
+                    <div className="-mx-6 -mt-6 mb-4">
                       <img 
                         src={`/api/sessions/${session?.id}/poster`}
                         alt="Video thumbnail"
