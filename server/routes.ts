@@ -3304,11 +3304,53 @@ export async function registerRoutes(
 
   app.get("/api/topic-pulse/keywords-everywhere-credits", requireAuth, async (req: Request, res: Response) => {
     try {
-      const result = await getKeywordsEverywhereCredits();
+      const result = await getKeywordsEverywhereCredits(req.session.userId!);
       res.json(result);
     } catch (err) {
       console.error("[TopicPulse] Keywords Everywhere credits error:", err);
       res.status(500).json({ credits: null, error: "Failed to fetch credits" });
+    }
+  });
+  
+  app.get("/api/topic-pulse/api-keys/keywords-everywhere", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const apiKey = await storage.getUserApiKey(req.session.userId!, "keywords_everywhere");
+      res.json({
+        configured: !!apiKey,
+        keyLastFour: apiKey?.keyLastFour || null,
+        updatedAt: apiKey?.updatedAt || null,
+      });
+    } catch (err) {
+      console.error("[TopicPulse] Get API key status error:", err);
+      res.status(500).json({ message: "Failed to get API key status" });
+    }
+  });
+  
+  app.post("/api/topic-pulse/api-keys/keywords-everywhere", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { apiKey } = req.body;
+      if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length < 10) {
+        return res.status(400).json({ message: "Invalid API key format" });
+      }
+      
+      const result = await storage.setUserApiKey(req.session.userId!, "keywords_everywhere", apiKey.trim());
+      res.json({
+        success: true,
+        keyLastFour: result.keyLastFour,
+      });
+    } catch (err) {
+      console.error("[TopicPulse] Set API key error:", err);
+      res.status(500).json({ message: "Failed to save API key" });
+    }
+  });
+  
+  app.delete("/api/topic-pulse/api-keys/keywords-everywhere", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteUserApiKey(req.session.userId!, "keywords_everywhere");
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[TopicPulse] Delete API key error:", err);
+      res.status(500).json({ message: "Failed to delete API key" });
     }
   });
 
@@ -3345,7 +3387,7 @@ export async function registerRoutes(
         status: "processing",
       });
 
-      const topicsData = await generateTopics(parsed.data, run.id);
+      const topicsData = await generateTopics(parsed.data, run.id, req.session.userId);
       const createdTopics = await storage.createTopics(topicsData);
 
       const runtimeMs = Date.now() - startTime;

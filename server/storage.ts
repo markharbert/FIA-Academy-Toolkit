@@ -1,6 +1,6 @@
 import { 
   users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
-  topicRuns, topics, savedTopics, scripts, linkPlaceholders,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult, type SystemSettings,
@@ -14,8 +14,10 @@ import {
   type Topic, type InsertTopic,
   type SavedTopic, type InsertSavedTopic,
   type Script, type InsertScript,
-  type LinkPlaceholder, type InsertLinkPlaceholder
+  type LinkPlaceholder, type InsertLinkPlaceholder,
+  type UserApiKey, type InsertUserApiKey, type ApiKeyProvider
 } from "@shared/schema";
+import crypto from "crypto";
 import { db } from "./db";
 import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizzle-orm";
 
@@ -23,6 +25,37 @@ import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc } from "drizz
 export function normalizeEmail(email: string | null | undefined): string | null {
   if (!email) return null;
   return email.trim().toLowerCase();
+}
+
+// API key encryption helpers using SESSION_SECRET
+const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
+
+function getEncryptionKey(): Buffer {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error('SESSION_SECRET required for API key encryption');
+  return crypto.scryptSync(secret, 'salt', 32);
+}
+
+export function encryptApiKey(plainKey: string): string {
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
+  let encrypted = cipher.update(plainKey, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+}
+
+export function decryptApiKey(encryptedData: string): string {
+  const key = getEncryptionKey();
+  const [ivHex, authTagHex, encrypted] = encryptedData.split(':');
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
 }
 
 export interface IStorage {
@@ -205,6 +238,12 @@ export interface IStorage {
   getLinkPlaceholdersByUser(userId: string): Promise<LinkPlaceholder[]>;
   updateLinkPlaceholder(id: string, userId: string, updates: { label?: string; url?: string }): Promise<LinkPlaceholder | undefined>;
   deleteLinkPlaceholder(id: string, userId: string): Promise<boolean>;
+  
+  // User API Keys (encrypted)
+  getUserApiKey(userId: string, provider: ApiKeyProvider): Promise<UserApiKey | undefined>;
+  setUserApiKey(userId: string, provider: ApiKeyProvider, plainKey: string): Promise<UserApiKey>;
+  deleteUserApiKey(userId: string, provider: ApiKeyProvider): Promise<boolean>;
+  getDecryptedUserApiKey(userId: string, provider: ApiKeyProvider): Promise<string | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1211,6 +1250,59 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(linkPlaceholders.id, id), eq(linkPlaceholders.userId, userId)))
       .returning();
     return !!result;
+  }
+  
+  // User API Keys (encrypted)
+  async getUserApiKey(userId: string, provider: ApiKeyProvider): Promise<UserApiKey | undefined> {
+    const [result] = await db.select().from(userApiKeys)
+      .where(and(eq(userApiKeys.userId, userId), eq(userApiKeys.provider, provider)));
+    return result || undefined;
+  }
+  
+  async setUserApiKey(userId: string, provider: ApiKeyProvider, plainKey: string): Promise<UserApiKey> {
+    const encryptedKey = encryptApiKey(plainKey);
+    const keyLastFour = plainKey.slice(-4);
+    
+    const existing = await this.getUserApiKey(userId, provider);
+    if (existing) {
+      const [result] = await db.update(userApiKeys)
+        .set({ encryptedKey, keyLastFour, updatedAt: new Date() })
+        .where(and(eq(userApiKeys.userId, userId), eq(userApiKeys.provider, provider)))
+        .returning();
+      return result;
+    }
+    
+    const [result] = await db.insert(userApiKeys).values({
+      userId,
+      provider,
+      encryptedKey,
+      keyLastFour,
+    }).returning();
+    return result;
+  }
+  
+  async deleteUserApiKey(userId: string, provider: ApiKeyProvider): Promise<boolean> {
+    const [result] = await db.delete(userApiKeys)
+      .where(and(eq(userApiKeys.userId, userId), eq(userApiKeys.provider, provider)))
+      .returning();
+    return !!result;
+  }
+  
+  async getDecryptedUserApiKey(userId: string, provider: ApiKeyProvider): Promise<string | null> {
+    const apiKey = await this.getUserApiKey(userId, provider);
+    if (!apiKey || !apiKey.encryptedKey) return null;
+    
+    try {
+      const parts = apiKey.encryptedKey.split(':');
+      if (parts.length !== 3) {
+        console.error('Malformed encrypted API key format');
+        return null;
+      }
+      return decryptApiKey(apiKey.encryptedKey);
+    } catch (e) {
+      console.error('Failed to decrypt API key:', e);
+      return null;
+    }
   }
 }
 

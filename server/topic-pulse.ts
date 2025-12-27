@@ -12,10 +12,18 @@ const openai = new OpenAI({
 });
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const KEYWORDS_EVERYWHERE_API_KEY = process.env.KEYWORDS_EVERYWHERE_API_KEY;
+const SYSTEM_KEYWORDS_EVERYWHERE_API_KEY = process.env.KEYWORDS_EVERYWHERE_API_KEY;
 const topicCache = new Map<string, { topics: InsertTopic[]; timestamp: number }>();
 const keywordDataCache = new Map<string, { data: KeywordData; timestamp: number }>();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function getEffectiveKeywordsEverywhereApiKey(userId?: string): Promise<string | null> {
+  if (userId) {
+    const userKey = await storage.getDecryptedUserApiKey(userId, "keywords_everywhere");
+    if (userKey) return userKey;
+  }
+  return SYSTEM_KEYWORDS_EVERYWHERE_API_KEY || null;
+}
 
 interface KeywordData {
   volume: number | null;
@@ -32,11 +40,12 @@ interface KeywordsEverywhereResult {
   trend?: Array<{ month: string; year: number; value: number }>;
 }
 
-async function getKeywordData(keywords: string[]): Promise<Map<string, KeywordData>> {
+async function getKeywordData(keywords: string[], userId?: string): Promise<Map<string, KeywordData>> {
   const results = new Map<string, KeywordData>();
   const defaultData: KeywordData = { volume: null, cpc: null, competition: null, trend: null };
   
-  if (!KEYWORDS_EVERYWHERE_API_KEY || keywords.length === 0) {
+  const apiKey = await getEffectiveKeywordsEverywhereApiKey(userId);
+  if (!apiKey || keywords.length === 0) {
     keywords.forEach(kw => results.set(kw.toLowerCase(), defaultData));
     return results;
   }
@@ -69,7 +78,7 @@ async function getKeywordData(keywords: string[]): Promise<Map<string, KeywordDa
       const response = await fetch("https://api.keywordseverywhere.com/v1/get_keyword_data", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${KEYWORDS_EVERYWHERE_API_KEY}`,
+          "Authorization": `Bearer ${apiKey}`,
           "Accept": "application/json",
         },
         body: formData,
@@ -298,7 +307,7 @@ function createTopicTitle(query: string): string {
     .join(" ");
 }
 
-export async function generateTopics(input: TopicSearchInput, runId: string): Promise<InsertTopic[]> {
+export async function generateTopics(input: TopicSearchInput, runId: string, userId?: string): Promise<InsertTopic[]> {
   const cacheKey = `${input.seedQuery}:${input.region || "global"}`;
   const cached = topicCache.get(cacheKey);
   
@@ -311,7 +320,7 @@ export async function generateTopics(input: TopicSearchInput, runId: string): Pr
   
   const allQueries = Array.from(new Set([...autocompleteSuggestions, ...variations]));
   
-  const keywordDataMap = await getKeywordData(allQueries);
+  const keywordDataMap = await getKeywordData(allQueries, userId);
   
   const topics: InsertTopic[] = [];
   
@@ -487,12 +496,13 @@ export function getApiKeyStatus(): { youtube: boolean; openai: boolean; reddit: 
     youtube: !!YOUTUBE_API_KEY,
     openai: !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY),
     reddit: !!(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET),
-    keywordsEverywhere: !!KEYWORDS_EVERYWHERE_API_KEY,
+    keywordsEverywhere: !!SYSTEM_KEYWORDS_EVERYWHERE_API_KEY,
   };
 }
 
-export async function getKeywordsEverywhereCredits(): Promise<{ credits: number | null; error?: string }> {
-  if (!KEYWORDS_EVERYWHERE_API_KEY) {
+export async function getKeywordsEverywhereCredits(userId?: string): Promise<{ credits: number | null; error?: string }> {
+  const apiKey = await getEffectiveKeywordsEverywhereApiKey(userId);
+  if (!apiKey) {
     return { credits: null, error: "API key not configured" };
   }
 
@@ -506,7 +516,7 @@ export async function getKeywordsEverywhereCredits(): Promise<{ credits: number 
     const response = await fetch("https://api.keywordseverywhere.com/v1/get_keyword_data", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${KEYWORDS_EVERYWHERE_API_KEY}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Accept": "application/json",
       },
       body: formData,
