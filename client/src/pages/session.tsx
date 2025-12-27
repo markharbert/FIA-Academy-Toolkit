@@ -532,37 +532,28 @@ export default function SessionPage() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
-                    <video
-                      src={localPreviewUrl || undefined}
-                      controls
-                      className="h-full w-full object-contain"
-                      data-testid="video-preview"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <File className="h-8 w-8 text-muted-foreground shrink-0" />
-                      <div className="min-w-0">
-                        <p className="font-medium truncate" data-testid="text-filename">{selectedFile.name}</p>
-                        <p className="text-sm text-muted-foreground" data-testid="text-filesize">
-                          {formatFileSize(selectedFile.size)}
-                        </p>
-                      </div>
+                <div className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                      <Video className="h-6 w-6 text-primary" />
                     </div>
-                    {!isUploading && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={clearFile}
-                        data-testid="button-clear-file"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <div className="min-w-0">
+                      <p className="font-medium truncate" data-testid="text-filename">{selectedFile.name}</p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-filesize">
+                        {formatFileSize(selectedFile.size)}
+                      </p>
+                    </div>
                   </div>
+                  {!isUploading && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={clearFile}
+                      data-testid="button-clear-file"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -574,14 +565,14 @@ export default function SessionPage() {
               )}
 
               {isUploading && (
-                <div className="mt-4 p-4 bg-muted/50 rounded-lg space-y-3">
+                <div className="mt-4 p-6 bg-muted/50 rounded-lg space-y-4">
                   <div className="flex items-center justify-center gap-3">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    <p className="text-sm font-medium">Uploading video...</p>
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-lg font-medium">Uploading video...</p>
                   </div>
-                  <div className="space-y-1">
-                    <Progress value={uploadProgress} className="h-2" />
-                    <p className="text-center text-xs text-muted-foreground">{uploadProgress}%</p>
+                  <div className="space-y-2 max-w-md mx-auto">
+                    <Progress value={uploadProgress} className="h-3" />
+                    <p className="text-center text-sm text-muted-foreground">{uploadProgress}%</p>
                   </div>
                 </div>
               )}
@@ -768,8 +759,12 @@ export default function SessionPage() {
                 <div className="text-center space-y-4 w-full max-w-md px-8">
                   <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
                   <div>
-                    <p className="font-medium">Upload complete! Starting processing...</p>
-                    <p className="text-sm text-muted-foreground mt-1">Extracting audio and transcribing...</p>
+                    <p className="font-medium">Processing your video...</p>
+                    <p className="text-sm text-muted-foreground mt-1">Extracting audio and preparing for transcription</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Progress value={5} className="h-3" />
+                    <p className="text-sm text-muted-foreground">5%</p>
                   </div>
                 </div>
               </div>
@@ -823,8 +818,8 @@ export default function SessionPage() {
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Progress value={session.processingProgress || 0} className="h-2" />
-                        <p className="text-xs text-muted-foreground">{session.processingProgress || 0}% complete</p>
+                        <Progress value={session.processingProgress || 0} className="h-3" />
+                        <p className="text-sm text-muted-foreground">{session.processingProgress || 0}%</p>
                       </div>
                       {session.processingStartedAt && (
                         <p className="text-xs text-muted-foreground">
