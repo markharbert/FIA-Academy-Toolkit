@@ -25,61 +25,71 @@ import type { Topic, TopicRun, DemandSignals, TopicIntent, VideoLengthTarget, To
 
 function IntentAnalysisSection({ topicId, existingAnalysis }: { topicId: string; existingAnalysis?: string | null }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [analysis, setAnalysis] = useState<string | null>(existingAnalysis || null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [hasRequested, setHasRequested] = useState(false);
   
-  const analysisMutation = useMutation({
-    mutationFn: async (): Promise<{ analysis: string; cached: boolean }> => {
+  const fetchAnalysis = async () => {
+    if (analysis || isLoading || hasRequested) return;
+    setHasRequested(true);
+    setIsLoading(true);
+    setError(false);
+    try {
       const res = await fetch(`/api/topic-pulse/topics/${topicId}/intent-analysis`, {
         method: "POST",
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to generate analysis");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
-    },
-  });
-
-  useEffect(() => {
-    if (isOpen && !hasRequested && !existingAnalysis && !analysisMutation.isPending && !analysisMutation.data) {
-      setHasRequested(true);
-      analysisMutation.mutate();
+      const data = await res.json();
+      setAnalysis(data.analysis);
+    } catch {
+      setError(true);
+      setHasRequested(false);
+    } finally {
+      setIsLoading(false);
     }
-  }, [isOpen, hasRequested, existingAnalysis, analysisMutation]);
+  };
 
-  const analysis = existingAnalysis || analysisMutation.data?.analysis;
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (open && !analysis && !isLoading) {
+      fetchAnalysis();
+    }
+  };
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger asChild>
-        <button 
-          type="button"
-          className="flex items-center justify-between w-full p-3 rounded-md bg-muted/50 hover-elevate text-left"
+        <div 
+          role="button"
+          tabIndex={0}
+          className="flex items-center justify-between w-full p-3 rounded-md bg-muted/50 hover-elevate text-left cursor-pointer"
           data-testid="button-intent-analysis-toggle"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenChange(!isOpen); } }}
         >
           <div className="flex items-center gap-2">
             <Brain className="h-4 w-4 text-purple-500" />
             <span className="font-medium text-sm">Intent Analysis</span>
           </div>
           <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
-        </button>
+        </div>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2">
         <div className="p-3 rounded-md bg-muted/30 border border-border/50" data-testid="section-intent-analysis">
-          {analysisMutation.isPending ? (
+          {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Analyzing search intent...
             </div>
-          ) : analysisMutation.isError ? (
+          ) : error ? (
             <div className="text-sm text-destructive">
               Failed to generate analysis. 
               <Button 
                 variant="ghost" 
                 size="sm" 
                 className="p-0 h-auto ml-1 underline"
-                onClick={() => analysisMutation.mutate()}
+                onClick={() => { setHasRequested(false); fetchAnalysis(); }}
               >
                 Try again
               </Button>
