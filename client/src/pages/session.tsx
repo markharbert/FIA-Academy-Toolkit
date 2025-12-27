@@ -9,14 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { 
   Download, Copy, Check, RefreshCw, AlertCircle, Clock, 
   TrendingUp, MessageSquare, Lightbulb, AlertTriangle, Quote,
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText,
-  Upload, Settings, File, Video, Mic
+  Upload, File, Video
 } from "lucide-react";
 import type { Session, ScoreResult, ProcessingStatus, GoalType } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
@@ -36,11 +34,6 @@ const processingStepLabels: Record<ProcessingStatus, string> = {
 const SUPPORTED_FORMATS = ".mp4, .mov, .webm, .mkv, .avi, .wmv, .mpeg, .mpg, .m4v, .3gp";
 const MAX_FILE_SIZE_MB = 2048;
 
-const tips = [
-  { icon: Lightbulb, text: "Record in good lighting - face a window or light source" },
-  { icon: Mic, text: "Speak clearly and at a steady pace" },
-  { icon: Video, text: "Keep it short and focused - aim for 30-90 seconds" },
-];
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) {
@@ -607,58 +600,6 @@ export default function SessionPage() {
               </div>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Settings className="h-5 w-5 text-primary" />
-                Session Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Session Name (optional)</Label>
-                <Input
-                  id="title"
-                  value={sessionTitle}
-                  onChange={(e) => setSessionTitle(e.target.value)}
-                  placeholder="e.g., Product pitch practice"
-                  maxLength={80}
-                  disabled={isUploading}
-                  data-testid="input-session-title"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave blank to auto-generate from your transcript
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="goal">Video Goal</Label>
-                <Select value={goalType} onValueChange={(v) => setGoalType(v as GoalType)} disabled={isUploading}>
-                  <SelectTrigger id="goal" data-testid="select-goal">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sales">Sales</SelectItem>
-                    <SelectItem value="lead">Lead Capture</SelectItem>
-                    <SelectItem value="education">Content Education</SelectItem>
-                    <SelectItem value="recruit">Recruitment / Invite</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {tips.map((tip, index) => (
-              <Card key={index}>
-                <CardContent className="flex items-start gap-3 p-4">
-                  <tip.icon className="h-5 w-5 shrink-0 text-primary" />
-                  <p className="text-sm">{tip.text}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         </div>
       </div>
     );
