@@ -2129,6 +2129,59 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/sessions/:id/timeline/:frameIndex", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.getSession(req.params.id);
+      const frameIndex = parseInt(req.params.frameIndex, 10);
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      if (!session.timelineFrames || !Array.isArray(session.timelineFrames)) {
+        return res.status(404).json({ message: "No timeline frames available" });
+      }
+
+      if (isNaN(frameIndex) || frameIndex < 0 || frameIndex >= session.timelineFrames.length) {
+        return res.status(404).json({ message: "Invalid frame index" });
+      }
+
+      const framePath = session.timelineFrames[frameIndex];
+      const frameFullPath = path.join(UPLOADS_DIR, framePath);
+      
+      try {
+        if (!fs.existsSync(frameFullPath)) {
+          console.warn(`[Timeline] Frame not found for session ${session.id}, index ${frameIndex}`);
+          return res.status(404).json({ message: "Frame unavailable" });
+        }
+
+        const stat = fs.statSync(frameFullPath);
+        res.setHeader("Content-Type", "image/jpeg");
+        res.setHeader("Content-Length", stat.size);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        
+        const readStream = fs.createReadStream(frameFullPath);
+        readStream.on("error", (streamErr) => {
+          console.error(`[Timeline] Stream error for session ${session.id}:`, streamErr);
+          if (!res.headersSent) {
+            res.status(500).json({ message: "Failed to serve frame" });
+          }
+        });
+        readStream.pipe(res);
+      } catch (fsErr) {
+        console.error(`[Timeline] Filesystem error for session ${session.id}:`, fsErr);
+        return res.status(404).json({ message: "Frame unavailable" });
+      }
+    } catch (err) {
+      console.error("[Timeline] Error:", err);
+      res.status(404).json({ message: "Frame unavailable" });
+    }
+  });
+
   app.post("/api/sessions", requireAuth, async (req: Request, res: Response) => {
     try {
       const { goalType, durationSeconds, title } = req.body;
