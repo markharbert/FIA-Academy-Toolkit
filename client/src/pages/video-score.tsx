@@ -41,6 +41,22 @@ function formatDuration(seconds: number | null): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function getVideoQualityLabel(resolution: string | null): { label: string; isHighQuality: boolean } {
+  if (!resolution) return { label: "Unknown", isHighQuality: false };
+  
+  const parts = resolution.split('x');
+  if (parts.length !== 2) return { label: resolution, isHighQuality: false };
+  
+  const height = parseInt(parts[1], 10);
+  
+  if (height >= 2160) return { label: "4K", isHighQuality: true };
+  if (height >= 1440) return { label: "2K", isHighQuality: true };
+  if (height >= 1080) return { label: "1080p", isHighQuality: true };
+  if (height >= 720) return { label: "720p", isHighQuality: false };
+  if (height >= 480) return { label: "480p", isHighQuality: false };
+  return { label: `${height}p`, isHighQuality: false };
+}
+
 function ScoreCircle({ score }: { score: number }) {
   const circumference = 2 * Math.PI * 28;
   const strokeDashoffset = circumference - (score / 100) * circumference;
@@ -256,9 +272,27 @@ function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSes
                 </>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {dateStr} · {formatDuration(session.durationSeconds)}
-            </p>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className="text-xs text-muted-foreground">{dateStr}</span>
+              <span className="text-xs text-muted-foreground">·</span>
+              <span className="text-xs text-muted-foreground">Video Length: {formatDuration(session.durationSeconds)}</span>
+              {session.finalVideoResolution && (() => {
+                const qualityInfo = getVideoQualityLabel(session.finalVideoResolution);
+                return (
+                  <>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <Badge 
+                      className={`text-[10px] px-1.5 py-0 ${qualityInfo.isHighQuality 
+                        ? "bg-green-600 hover:bg-green-700 text-white" 
+                        : "bg-red-600 hover:bg-red-700 text-white"
+                      }`}
+                    >
+                      {qualityInfo.label}
+                    </Badge>
+                  </>
+                );
+              })()}
+            </div>
             {quickSummary && (
               <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                 {quickSummary}

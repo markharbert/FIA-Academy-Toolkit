@@ -1242,7 +1242,6 @@ export default function SessionPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <VideoQualityInfo resolution={session?.finalVideoResolution} durationSeconds={session?.durationSeconds} />
               <div className="grid gap-8 md:grid-cols-2">
                 <div className="flex flex-col items-center justify-center">
                   <ScoreCircle score={score.totalScore} />
