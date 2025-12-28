@@ -14,7 +14,7 @@ import {
   Download, Copy, Check, RefreshCw, AlertCircle, Clock, 
   TrendingUp, MessageSquare, Lightbulb, AlertTriangle, Quote,
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText,
-  Upload, File, Video, Film
+  Upload, File, Video, Film, ChevronRight, ChevronDown, Play, Square
 } from "lucide-react";
 import type { Session, ScoreResult, ProcessingStatus, GoalType } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
@@ -228,104 +228,86 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
   }
 
   return (
-    <Card data-testid="card-video-timeline">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Film className="h-5 w-5" />
-          Video Timeline
-        </CardTitle>
-        <CardDescription>Key moments from your video</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="relative">
-          {rows.map((row, rowIndex) => {
-            if (row.length === 0) return null;
-            
-            const isReversed = rowIndex % 2 === 1;
-            
-            return (
-              <div key={rowIndex} className="relative">
-                <div className={`flex gap-3 ${isReversed ? 'justify-end' : 'justify-start'}`}>
-                  {row.map((frameIndex, colIndex) => {
-                    const isFirstFrame = rowIndex === 0 && colIndex === 0;
-                    const isLastFrame = rowIndex === rows.length - 1 && colIndex === row.length - 1;
-                    const isRightEdge = colIndex === row.length - 1;
-                    const isLeftEdge = colIndex === 0;
-                    const isLoading = !loadedFrames.has(frameIndex) && !failedFrames.has(frameIndex);
-                    const hasFailed = failedFrames.has(frameIndex);
-                    
-                    return (
-                      <div key={frameIndex} className="relative" data-testid={`timeline-frame-${frameIndex}`}>
-                        <div className="relative overflow-hidden rounded-md border border-border bg-muted">
+    <div className="hidden md:block" data-testid="video-timeline">
+      <div className="relative py-4">
+        {rows.map((row, rowIndex) => {
+          if (row.length === 0) return null;
+          
+          const isReversed = rowIndex % 2 === 1;
+          const hasNextRow = rowIndex < rows.length - 1 && rows[rowIndex + 1].length > 0;
+          
+          return (
+            <div key={rowIndex} className="relative">
+              <div className={`flex items-center ${isReversed ? 'flex-row-reverse' : 'flex-row'}`}>
+                {row.map((frameIndex, colIndex) => {
+                  const isFirstFrame = rowIndex === 0 && colIndex === 0;
+                  const isLastFrame = rowIndex === rows.length - 1 && colIndex === row.length - 1;
+                  const isLastInRow = colIndex === row.length - 1;
+                  const isLoading = !loadedFrames.has(frameIndex) && !failedFrames.has(frameIndex);
+                  const hasFailed = failedFrames.has(frameIndex);
+                  
+                  return (
+                    <div key={frameIndex} className="flex items-center" data-testid={`timeline-frame-${frameIndex}`}>
+                      <div className="relative">
+                        <div className="relative overflow-hidden rounded-lg border-2 border-border bg-muted shadow-sm">
                           {isLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-muted">
-                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-muted z-10">
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                             </div>
                           )}
                           {hasFailed ? (
-                            <div className="w-16 h-10 sm:w-20 sm:h-12 md:w-24 md:h-14 flex items-center justify-center">
-                              <Video className="h-3 w-3 text-muted-foreground opacity-50" />
+                            <div className="w-[120px] h-[68px] flex items-center justify-center">
+                              <Video className="h-5 w-5 text-muted-foreground opacity-50" />
                             </div>
                           ) : (
                             <img
                               src={`/api/sessions/${sessionId}/timeline/${frameIndex}`}
                               alt={`Frame ${frameIndex + 1}`}
-                              className={`w-16 h-10 sm:w-20 sm:h-12 md:w-24 md:h-14 object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+                              className={`w-[120px] h-[68px] object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
                               loading="lazy"
                               onLoad={() => handleLoad(frameIndex)}
                               onError={() => handleError(frameIndex)}
                             />
                           )}
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5">
-                            <span className="text-[9px] text-white font-medium">{frameIndex + 1}</span>
-                          </div>
                         </div>
-                        
-                        {!isReversed && !isRightEdge && row.length > 1 && (
-                          <div className="absolute top-1/2 -right-3 w-3 h-0.5 bg-primary/40" />
-                        )}
-                        {isReversed && !isLeftEdge && row.length > 1 && (
-                          <div className="absolute top-1/2 -left-3 w-3 h-0.5 bg-primary/40" />
-                        )}
-                        
                         {isFirstFrame && (
-                          <div className="absolute -left-2 top-1/2 -translate-y-1/2">
-                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium text-primary flex items-center gap-1">
+                            <Play className="h-3 w-3 fill-primary" />
+                            Start
                           </div>
                         )}
                         {isLastFrame && (
-                          <div className="absolute -right-2 top-1/2 -translate-y-1/2">
-                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium text-primary flex items-center gap-1">
+                            <Square className="h-3 w-3 fill-primary" />
+                            End
                           </div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-                
-                {rowIndex < rows.length - 1 && rows[rowIndex + 1].length > 0 && (
-                  <div className={`h-6 flex ${!isReversed ? 'justify-end pr-[calc(3rem+6px)] sm:pr-[calc(4rem+6px)] md:pr-[calc(4.5rem+6px)]' : 'justify-start pl-[calc(3rem+6px)] sm:pl-[calc(4rem+6px)] md:pl-[calc(4.5rem+6px)]'}`}>
-                    <div className="w-0.5 h-full bg-primary/40" />
-                  </div>
-                )}
+                      
+                      {!isLastInRow && (
+                        <div className="flex items-center px-1">
+                          <div className="w-6 h-0.5 bg-primary/60" />
+                          <ChevronRight className={`h-4 w-4 text-primary/60 -ml-1 ${isReversed ? 'rotate-180' : ''}`} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-          
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-primary" />
-              <span>Start</span>
+              
+              {hasNextRow && (
+                <div className={`flex ${isReversed ? 'justify-start pl-[60px]' : 'justify-end pr-[60px]'} py-1`}>
+                  <div className="flex flex-col items-center">
+                    <div className="w-0.5 h-4 bg-primary/60" />
+                    <ChevronDown className="h-4 w-4 text-primary/60 -my-1" />
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="w-8 h-0.5 bg-primary/40" />
-            <div className="flex items-center gap-1">
-              <span>End</span>
-              <div className="w-2 h-2 rounded-full bg-primary" />
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -968,9 +950,26 @@ export default function SessionPage() {
                 );
               }
               
+              const hasTimeline = session?.timelineFrames && session.timelineFrames.length > 0;
+              const hasPoster = (session as any)?.previewPosterPath;
+              
               return (
                 <div className="space-y-4">
-                  {(session as any)?.previewPosterPath && (
+                  {hasTimeline ? (
+                    <div className="-mx-6 -mt-6 mb-4 px-6 pt-8 pb-4 bg-muted/30">
+                      <VideoTimeline sessionId={session!.id} frameCount={session!.timelineFrames!.length} />
+                      <div className="md:hidden">
+                        {hasPoster && (
+                          <img 
+                            src={`/api/sessions/${session?.id}/poster`}
+                            alt="Video thumbnail"
+                            className="w-full aspect-video object-cover rounded-lg"
+                            data-testid="img-video-poster"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ) : hasPoster ? (
                     <div className="-mx-6 -mt-6 mb-4">
                       <img 
                         src={`/api/sessions/${session?.id}/poster`}
@@ -979,7 +978,7 @@ export default function SessionPage() {
                         data-testid="img-video-poster"
                       />
                     </div>
-                  )}
+                  ) : null}
                   <div className="flex items-center gap-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500">
                       <Check className="h-5 w-5 text-white" />
@@ -1113,10 +1112,6 @@ export default function SessionPage() {
               </div>
             </CardContent>
           </Card>
-
-          {session?.timelineFrames && session.timelineFrames.length > 0 && (
-            <VideoTimeline sessionId={session.id} frameCount={session.timelineFrames.length} />
-          )}
 
           <Card>
             <CardHeader>
