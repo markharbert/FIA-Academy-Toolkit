@@ -205,16 +205,6 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
   const [loadedFrames, setLoadedFrames] = useState<Set<number>>(new Set());
   const [failedFrames, setFailedFrames] = useState<Set<number>>(new Set());
   
-  const frames = Array.from({ length: frameCount }, (_, i) => i);
-  
-  const framesPerRow = 4;
-  const rows: number[][] = [];
-  for (let i = 0; i < frames.length; i += framesPerRow) {
-    const row = frames.slice(i, i + framesPerRow);
-    const rowIndex = Math.floor(i / framesPerRow);
-    rows.push(rowIndex % 2 === 1 ? row.reverse() : row);
-  }
-
   const handleLoad = useCallback((index: number) => {
     setLoadedFrames(prev => new Set(prev).add(index));
   }, []);
@@ -227,122 +217,157 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
     return null;
   }
 
+  const thumbW = 120;
+  const thumbH = 68;
+  const gapX = 40;
+  const gapY = 24;
+  const framesPerRow = 4;
+  const rowCount = Math.ceil(frameCount / framesPerRow);
+  
+  const totalWidth = framesPerRow * thumbW + (framesPerRow - 1) * gapX;
+  const totalHeight = rowCount * thumbH + (rowCount - 1) * gapY + 40;
+
+  const getFrameCenter = (frameIndex: number) => {
+    const row = Math.floor(frameIndex / framesPerRow);
+    const col = frameIndex % framesPerRow;
+    const isReversed = row % 2 === 1;
+    const actualCol = isReversed ? (framesPerRow - 1 - col) : col;
+    const x = actualCol * (thumbW + gapX) + thumbW / 2;
+    const y = row * (thumbH + gapY) + thumbH / 2 + 20;
+    return { x, y };
+  };
+
+  const buildPath = () => {
+    const points: { x: number; y: number }[] = [];
+    for (let i = 0; i < frameCount; i++) {
+      points.push(getFrameCenter(i));
+    }
+    
+    if (points.length === 0) return "";
+    
+    let d = `M ${points[0].x} ${points[0].y}`;
+    
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const prevRow = Math.floor((i - 1) / framesPerRow);
+      const currRow = Math.floor(i / framesPerRow);
+      
+      if (prevRow !== currRow) {
+        const midY = prev.y + (curr.y - prev.y) / 2;
+        d += ` L ${prev.x} ${midY}`;
+        d += ` Q ${prev.x} ${midY + 12} ${(prev.x + curr.x) / 2} ${midY + 12}`;
+        d += ` Q ${curr.x} ${midY + 12} ${curr.x} ${curr.y}`;
+      } else {
+        d += ` L ${curr.x} ${curr.y}`;
+      }
+    }
+    
+    return d;
+  };
+
+  const pathD = buildPath();
+
+  const frames = Array.from({ length: frameCount }, (_, i) => i);
+  const rows: number[][] = [];
+  for (let i = 0; i < frames.length; i += framesPerRow) {
+    rows.push(frames.slice(i, i + framesPerRow));
+  }
+
   return (
     <div className="hidden md:block" data-testid="video-timeline">
-      <div className="relative py-6">
-        {rows.map((row, rowIndex) => {
-          if (row.length === 0) return null;
-          
-          const isReversed = rowIndex % 2 === 1;
-          const hasNextRow = rowIndex < rows.length - 1 && rows[rowIndex + 1].length > 0;
-          
-          return (
-            <div key={rowIndex} className="relative">
-              <div className={`flex items-center ${isReversed ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className="relative" style={{ width: totalWidth, margin: '0 auto' }}>
+        <svg 
+          width={totalWidth} 
+          height={totalHeight} 
+          className="absolute top-0 left-0 pointer-events-none"
+          style={{ zIndex: 0 }}
+        >
+          <defs>
+            <marker
+              id="timeline-arrow"
+              markerWidth="10"
+              markerHeight="10"
+              refX="5"
+              refY="5"
+              orient="auto"
+              markerUnits="strokeWidth"
+            >
+              <path d="M0,2 L6,5 L0,8 Z" fill="currentColor" className="text-primary" />
+            </marker>
+          </defs>
+          <path
+            d={pathD}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-primary"
+            markerMid="url(#timeline-arrow)"
+            markerEnd="url(#timeline-arrow)"
+          />
+        </svg>
+        
+        <div className="relative pt-5 pb-6" style={{ zIndex: 1 }}>
+          {rows.map((row, rowIndex) => {
+            const isReversed = rowIndex % 2 === 1;
+            
+            return (
+              <div 
+                key={rowIndex} 
+                className={`flex ${isReversed ? 'flex-row-reverse' : 'flex-row'}`}
+                style={{ gap: gapX, marginBottom: rowIndex < rows.length - 1 ? gapY : 0 }}
+              >
                 {row.map((frameIndex, colIndex) => {
-                  const isFirstFrame = rowIndex === 0 && colIndex === 0;
-                  const isLastFrame = rowIndex === rows.length - 1 && colIndex === row.length - 1;
-                  const isLastInRow = colIndex === row.length - 1;
+                  const isFirstFrame = frameIndex === 0;
+                  const isLastFrame = frameIndex === frameCount - 1;
                   const isLoading = !loadedFrames.has(frameIndex) && !failedFrames.has(frameIndex);
                   const hasFailed = failedFrames.has(frameIndex);
                   
                   return (
-                    <div key={frameIndex} className="flex items-center" data-testid={`timeline-frame-${frameIndex}`}>
-                      <div className="relative">
-                        <div className="relative overflow-hidden rounded-lg border-2 border-border bg-muted shadow-sm">
-                          {isLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-muted z-10">
-                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                            </div>
-                          )}
-                          {hasFailed ? (
-                            <div className="w-[120px] h-[68px] flex items-center justify-center">
-                              <Video className="h-5 w-5 text-muted-foreground opacity-50" />
-                            </div>
-                          ) : (
-                            <img
-                              src={`/api/sessions/${sessionId}/timeline/${frameIndex}`}
-                              alt={`Frame ${frameIndex + 1}`}
-                              className={`w-[120px] h-[68px] object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-                              loading="lazy"
-                              onLoad={() => handleLoad(frameIndex)}
-                              onError={() => handleError(frameIndex)}
-                            />
-                          )}
-                        </div>
-                        {isFirstFrame && (
-                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1">
-                            <Play className="h-3 w-3 fill-primary" />
-                            Start
+                    <div key={frameIndex} className="relative" data-testid={`timeline-frame-${frameIndex}`}>
+                      <div className="relative overflow-hidden rounded-lg border-2 border-border bg-muted shadow-sm">
+                        {isLoading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-muted z-10">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                           </div>
                         )}
-                        {isLastFrame && (
-                          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1">
-                            <Square className="h-3 w-3 fill-primary" />
-                            End
+                        {hasFailed ? (
+                          <div style={{ width: thumbW, height: thumbH }} className="flex items-center justify-center">
+                            <Video className="h-5 w-5 text-muted-foreground opacity-50" />
                           </div>
+                        ) : (
+                          <img
+                            src={`/api/sessions/${sessionId}/timeline/${frameIndex}`}
+                            alt={`Frame ${frameIndex + 1}`}
+                            style={{ width: thumbW, height: thumbH }}
+                            className={`object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+                            loading="lazy"
+                            onLoad={() => handleLoad(frameIndex)}
+                            onError={() => handleError(frameIndex)}
+                          />
                         )}
                       </div>
-                      
-                      {!isLastInRow && (
-                        <svg width="32" height="12" className="mx-0.5" viewBox="0 0 32 12">
-                          <line x1="0" y1="6" x2="24" y2="6" stroke="currentColor" strokeWidth="3" className="text-primary" strokeLinecap="round" />
-                          <polygon points="22,2 30,6 22,10" fill="currentColor" className="text-primary" />
-                        </svg>
+                      {isFirstFrame && (
+                        <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1 whitespace-nowrap">
+                          <Play className="h-3 w-3 fill-primary" />
+                          Start
+                        </div>
+                      )}
+                      {isLastFrame && (
+                        <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1 whitespace-nowrap">
+                          <Square className="h-3 w-3 fill-primary" />
+                          End
+                        </div>
                       )}
                     </div>
                   );
                 })}
               </div>
-              
-              {hasNextRow && (
-                <div className={`flex ${isReversed ? 'justify-start pl-[40px]' : 'justify-end pr-[40px]'} my-0`}>
-                  {isReversed ? (
-                    <svg width="80" height="48" viewBox="0 0 80 48" className="text-primary">
-                      <path
-                        d="M40 0 V16 Q40 28 52 28 H70"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <polygon points="66,22 78,28 66,34" fill="currentColor" />
-                      <path
-                        d="M40 28 V40"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                      />
-                      <polygon points="34,36 40,48 46,36" fill="currentColor" />
-                    </svg>
-                  ) : (
-                    <svg width="80" height="48" viewBox="0 0 80 48" className="text-primary">
-                      <path
-                        d="M40 0 V16 Q40 28 28 28 H10"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <polygon points="14,22 2,28 14,34" fill="currentColor" />
-                      <path
-                        d="M40 28 V40"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                      />
-                      <polygon points="34,36 40,48 46,36" fill="currentColor" />
-                    </svg>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
