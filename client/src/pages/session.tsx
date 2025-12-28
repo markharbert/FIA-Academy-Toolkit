@@ -340,6 +340,11 @@ function VideoTimeline({ sessionId, frameCount, durationSeconds, resolution }: {
             </div>
           )}
         </div>
+        {resolution && qualityInfo.isHighQuality && (
+          <p className="text-xs text-green-600 dark:text-green-400 text-center max-w-md">
+            Great video quality! Keep recording in high definition for the best results.
+          </p>
+        )}
         {resolution && !qualityInfo.isHighQuality && (
           <p className="text-xs text-red-600 dark:text-red-400 text-center max-w-md">
             For best results, record and export your videos in 1080p or higher resolution.
