@@ -1484,6 +1484,32 @@ export async function registerRoutes(
     }
   });
 
+  // Keywords Everywhere Admin Status
+  app.get("/api/admin/keywords-everywhere/status", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { getKeywordsEverywhereCredits: getKECredits } = await import("./topic-pulse");
+      
+      // Get system KE account credits (no user ID = system key)
+      const keCredits = await getKECredits();
+      
+      // Get aggregate usage from all users
+      const aggregateStats = await storage.getAggregateVideoTrendsCredits();
+      
+      res.json({
+        apiConfigured: keCredits.credits !== null || !keCredits.error?.includes("not configured"),
+        accountCredits: keCredits.credits,
+        accountError: keCredits.error || null,
+        totalCreditsUsedAllTime: aggregateStats.totalCreditsUsedAllTime,
+        totalCreditsUsedThisMonth: aggregateStats.totalCreditsUsedThisMonth,
+        activeUsersThisMonth: aggregateStats.activeUsers,
+        topUsers: aggregateStats.topUsers,
+      });
+    } catch (err) {
+      console.error("Keywords Everywhere status error:", err);
+      res.status(500).json({ message: "Failed to get Keywords Everywhere status" });
+    }
+  });
+
   // Apply tag to a specific user
   app.post("/api/admin/users/:id/apply-tag", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -3553,7 +3579,7 @@ export async function registerRoutes(
   // Topic Pulse Finder API Routes
   // ==========================================
   
-  const { generateTopics, enrichTopicDetails, generateScript, generateIntentAnalysis, getApiKeyStatus } = await import("./topic-pulse");
+  const { generateTopics, enrichTopicDetails, generateScript, generateIntentAnalysis, getApiKeyStatus, getKeywordsEverywhereCredits } = await import("./topic-pulse");
   const { topicSearchInputSchema, scriptGenerationInputSchema } = await import("@shared/schema");
 
   app.get("/api/topic-pulse/status", requireAuth, async (req: Request, res: Response) => {

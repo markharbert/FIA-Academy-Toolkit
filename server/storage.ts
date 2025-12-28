@@ -246,8 +246,9 @@ export interface IStorage {
   getDecryptedUserApiKey(userId: string, provider: ApiKeyProvider): Promise<string | null>;
   
   // Video Trends Credits
-  getVideoTrendsCredits(userId: string): Promise<{ creditsUsed: number; monthlyLimit: number; windowStartedAt: Date; remaining: number; resetsAt: Date }>;
+  getVideoTrendsCredits(userId: string): Promise<{ creditsUsed: number; totalCreditsUsed: number; monthlyLimit: number; windowStartedAt: Date; remaining: number; resetsAt: Date }>;
   useVideoTrendsCredits(userId: string, amount: number): Promise<{ success: boolean; remaining: number; error?: string }>;
+  getAggregateVideoTrendsCredits(): Promise<{ totalCreditsUsedAllTime: number; totalCreditsUsedThisMonth: number; activeUsers: number; topUsers: Array<{ userId: string; email: string | null; displayName: string | null; creditsThisMonth: number; creditsTotal: number }> }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1389,6 +1390,66 @@ export class DatabaseStorage implements IStorage {
     }
     
     return { success: true, remaining: credits.monthlyLimit - newCreditsUsed };
+  }
+  
+  async getAggregateVideoTrendsCredits(): Promise<{ totalCreditsUsedAllTime: number; totalCreditsUsedThisMonth: number; activeUsers: number; topUsers: Array<{ userId: string; email: string | null; displayName: string | null; creditsThisMonth: number; creditsTotal: number }> }> {
+    const now = new Date();
+    const windowDays = this.CREDITS_WINDOW_DAYS;
+    
+    // Get all credits records with user info
+    const records = await db
+      .select({
+        userId: videoTrendsCredits.userId,
+        creditsUsed: videoTrendsCredits.creditsUsed,
+        totalCreditsUsed: videoTrendsCredits.totalCreditsUsed,
+        windowStartedAt: videoTrendsCredits.windowStartedAt,
+        email: users.email,
+        displayName: users.displayName,
+      })
+      .from(videoTrendsCredits)
+      .leftJoin(users, eq(videoTrendsCredits.userId, users.id));
+    
+    let totalCreditsUsedAllTime = 0;
+    let totalCreditsUsedThisMonth = 0;
+    let activeUsers = 0;
+    
+    const usersWithCredits: Array<{ userId: string; email: string | null; displayName: string | null; creditsThisMonth: number; creditsTotal: number }> = [];
+    
+    for (const record of records) {
+      const totalUsed = record.totalCreditsUsed || 0;
+      totalCreditsUsedAllTime += totalUsed;
+      
+      // Check if within current window
+      const windowEnd = new Date(record.windowStartedAt.getTime() + windowDays * 24 * 60 * 60 * 1000);
+      const isCurrentWindow = now < windowEnd;
+      const monthlyUsed = isCurrentWindow ? record.creditsUsed : 0;
+      
+      totalCreditsUsedThisMonth += monthlyUsed;
+      
+      if (monthlyUsed > 0) {
+        activeUsers++;
+      }
+      
+      usersWithCredits.push({
+        userId: record.userId,
+        email: record.email,
+        displayName: record.displayName,
+        creditsThisMonth: monthlyUsed,
+        creditsTotal: totalUsed,
+      });
+    }
+    
+    // Sort by total credits and get top 10
+    const topUsers = usersWithCredits
+      .sort((a, b) => b.creditsTotal - a.creditsTotal)
+      .slice(0, 10);
+    
+    return {
+      totalCreditsUsedAllTime,
+      totalCreditsUsedThisMonth,
+      activeUsers,
+      topUsers,
+    };
   }
 }
 
