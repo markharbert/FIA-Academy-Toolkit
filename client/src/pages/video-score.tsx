@@ -399,11 +399,15 @@ function BulkActionsBar({
   );
 }
 
+const INITIAL_VISIBLE_COUNT = 8;
+const LOAD_MORE_COUNT = 4;
+
 export default function VideoScorePage() {
   const { toast } = useToast();
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
 
   const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useQuery<Session[]>({
     queryKey: ["/api/sessions"],
@@ -531,7 +535,7 @@ export default function VideoScorePage() {
           </div>
         ) : sessions && sessions.length > 0 ? (
           <div className="space-y-3">
-            {sessions.map((session) => (
+            {sessions.slice(0, visibleCount).map((session) => (
               <SessionCard
                 key={session.id}
                 session={session}
@@ -542,6 +546,17 @@ export default function VideoScorePage() {
                 onDelete={handleSingleDelete}
               />
             ))}
+            {sessions.length > visibleCount && (
+              <div className="flex justify-center pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setVisibleCount(prev => prev + LOAD_MORE_COUNT)}
+                  data-testid="button-show-more"
+                >
+                  Show More ({sessions.length - visibleCount} remaining)
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <EmptyState />
