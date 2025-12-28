@@ -201,6 +201,7 @@ export const scoreResultSchema = z.object({
     strengths: z.array(z.string()),
     topImprovements: z.array(z.string()),
     overallSummary: z.string().optional(),
+    actionChecklist: z.array(z.string()).optional(),
   }),
   parts: z.object({
     hook: z.object({

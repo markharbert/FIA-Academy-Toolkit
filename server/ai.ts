@@ -218,7 +218,8 @@ Respond with a JSON object matching this exact structure:
   "summary": {
     "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
     "topImprovements": ["<improvement 1>", "<improvement 2>", "<improvement 3>"],
-    "overallSummary": "<A 2-3 paragraph personalized coaching summary that synthesizes all the feedback. Start with what they did well, then give specific actionable advice on the 1-2 most important things to focus on for their next video. Be encouraging but direct. Address them as 'you'.>"
+    "overallSummary": "<A 2-3 paragraph personalized coaching summary that synthesizes all the feedback. Start with what they did well, then give specific actionable advice on the 1-2 most important things to focus on for their next video. Be encouraging but direct. Address them as 'you'.>",
+    "actionChecklist": ["<Short action item 1 - start with a verb>", "<Short action item 2>", "<Short action item 3>", "<Short action item 4 if needed>", "<Short action item 5 if needed>"]
   },
   "parts": {
     "hook": {

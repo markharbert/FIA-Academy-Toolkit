@@ -1383,7 +1383,7 @@ export default function SessionPage() {
                 </CardTitle>
                 <CardDescription>Personalized feedback to help you improve</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-6">
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   {score.summary.overallSummary.split('\n\n').map((paragraph, i) => (
                     <p key={i} className="text-muted-foreground leading-relaxed mb-4 last:mb-0">
@@ -1391,6 +1391,25 @@ export default function SessionPage() {
                     </p>
                   ))}
                 </div>
+                
+                {score.summary.actionChecklist && score.summary.actionChecklist.length > 0 && (
+                  <div className="border-t pt-6">
+                    <h4 className="flex items-center gap-2 font-semibold mb-4">
+                      <Check className="h-5 w-5 text-primary" />
+                      Your Action Checklist
+                    </h4>
+                    <ul className="space-y-2">
+                      {score.summary.actionChecklist.map((item, i) => (
+                        <li key={i} className="flex items-start gap-3">
+                          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 border-primary/50 mt-0.5">
+                            <span className="text-xs font-medium text-primary">{i + 1}</span>
+                          </div>
+                          <span className="text-sm text-muted-foreground">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
