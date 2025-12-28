@@ -201,7 +201,13 @@ function DetailedPartFeedback({
   );
 }
 
-function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCount: number }) {
+function formatTimestamp(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function VideoTimeline({ sessionId, frameCount, durationSeconds }: { sessionId: string; frameCount: number; durationSeconds: number | null }) {
   const [loadedFrames, setLoadedFrames] = useState<Set<number>>(new Set());
   const [failedFrames, setFailedFrames] = useState<Set<number>>(new Set());
   
@@ -320,6 +326,9 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
                   const isLastFrame = frameIndex === frameCount - 1;
                   const isLoading = !loadedFrames.has(frameIndex) && !failedFrames.has(frameIndex);
                   const hasFailed = failedFrames.has(frameIndex);
+                  const frameTimestamp = durationSeconds 
+                    ? (frameIndex + 1) * (durationSeconds / (frameCount + 1))
+                    : null;
                   
                   return (
                     <div key={frameIndex} className="relative" data-testid={`timeline-frame-${frameIndex}`}>
@@ -343,6 +352,11 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
                             onLoad={() => handleLoad(frameIndex)}
                             onError={() => handleError(frameIndex)}
                           />
+                        )}
+                        {frameTimestamp !== null && (
+                          <div className="absolute top-1 right-1 bg-black/70 text-white text-xs font-semibold px-1.5 py-0.5 rounded">
+                            {formatTimestamp(frameTimestamp)}
+                          </div>
                         )}
                       </div>
                       {isFirstFrame && (
@@ -1015,7 +1029,7 @@ export default function SessionPage() {
                 <div className="space-y-4">
                   {hasTimeline ? (
                     <div className="-mx-6 -mt-6 mb-4 px-6 pt-8 pb-4 bg-muted/30">
-                      <VideoTimeline sessionId={session!.id} frameCount={session!.timelineFrames!.length} />
+                      <VideoTimeline sessionId={session!.id} frameCount={session!.timelineFrames!.length} durationSeconds={session!.durationSeconds} />
                       <div className="md:hidden">
                         {hasPoster && (
                           <img 
