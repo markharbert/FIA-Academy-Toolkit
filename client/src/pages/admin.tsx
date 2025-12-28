@@ -154,6 +154,22 @@ interface KeapStatus {
   lastTagSyncAt: string | null;
 }
 
+interface KeywordsEverywhereStatus {
+  apiConfigured: boolean;
+  accountCredits: number | null;
+  accountError: string | null;
+  totalCreditsUsedAllTime: number;
+  totalCreditsUsedThisMonth: number;
+  activeUsersThisMonth: number;
+  topUsers: Array<{
+    userId: string;
+    email: string | null;
+    displayName: string | null;
+    creditsThisMonth: number;
+    creditsTotal: number;
+  }>;
+}
+
 interface KeapTag {
   id: number;
   name: string;
@@ -234,6 +250,8 @@ export default function AdminPage() {
   const [activityNextCursor, setActivityNextCursor] = useState<string | null>(null);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [keapStatus, setKeapStatus] = useState<KeapStatus | null>(null);
+  const [keStatus, setKeStatus] = useState<KeywordsEverywhereStatus | null>(null);
+  const [keStatusLoading, setKeStatusLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [keapTags, setKeapTags] = useState<KeapTag[]>([]);
@@ -324,6 +342,7 @@ export default function AdminPage() {
     if (user?.isAdmin) {
       fetchStats();
       fetchKeapStatus();
+      fetchKeStatus();
       fetchOverviewStats();
       fetchActivityFeed();
     }
@@ -477,6 +496,21 @@ export default function AdminPage() {
       }
     } catch (err) {
       console.error("Failed to fetch Keap status:", err);
+    }
+  };
+
+  const fetchKeStatus = async () => {
+    try {
+      setKeStatusLoading(true);
+      const res = await fetch("/api/admin/keywords-everywhere/status", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setKeStatus(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch Keywords Everywhere status:", err);
+    } finally {
+      setKeStatusLoading(false);
     }
   };
 
@@ -899,6 +933,7 @@ export default function AdminPage() {
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="keap" data-testid="tab-keap">Keap Integration</TabsTrigger>
+          <TabsTrigger value="keywords" data-testid="tab-keywords">Keywords Everywhere</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -1443,6 +1478,133 @@ export default function AdminPage() {
                       </ul>
                     </div>
                   </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="keywords">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${keStatus?.apiConfigured ? "bg-green-100 dark:bg-green-900/30" : "bg-amber-100 dark:bg-amber-900/30"}`}>
+                  <Search className={`h-5 w-5 ${keStatus?.apiConfigured ? "text-green-600 dark:text-green-500" : "text-amber-600 dark:text-amber-500"}`} />
+                </div>
+                <div>
+                  <CardTitle>Keywords Everywhere</CardTitle>
+                  <CardDescription>
+                    API credits and user usage for Video Trends feature
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {keStatusLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : keStatus ? (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">API Credits Remaining</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {keStatus.accountCredits !== null ? (
+                          <div className="text-2xl font-bold" data-testid="stat-ke-credits">
+                            {keStatus.accountCredits.toLocaleString()}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">
+                            {keStatus.accountError || "Not configured"}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Used (Active Windows)</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold" data-testid="stat-ke-monthly">
+                          {keStatus.totalCreditsUsedThisMonth.toLocaleString()}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Used All Time</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold" data-testid="stat-ke-alltime">
+                          {keStatus.totalCreditsUsedAllTime.toLocaleString()}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Active Users</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold" data-testid="stat-ke-active-users">
+                          {keStatus.activeUsersThisMonth}
+                        </div>
+                        <p className="text-xs text-muted-foreground">With active 30-day window</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {keStatus.topUsers.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-4">Top Users by Credit Usage</h3>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>User</TableHead>
+                            <TableHead className="text-right">Active Window</TableHead>
+                            <TableHead className="text-right">All Time</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {keStatus.topUsers.map((u) => (
+                            <TableRow key={u.userId} data-testid={`ke-user-row-${u.userId}`}>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{u.displayName || "Unknown"}</p>
+                                  <p className="text-sm text-muted-foreground">{u.email || "-"}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">{u.creditsThisMonth.toLocaleString()}</TableCell>
+                              <TableCell className="text-right">{u.creditsTotal.toLocaleString()}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+
+                  {!keStatus.apiConfigured && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/50">
+                      <div className="flex gap-3">
+                        <AlertCircle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
+                        <div className="text-sm">
+                          <p className="font-medium text-amber-800 dark:text-amber-200">API Not Configured</p>
+                          <p className="mt-1 text-amber-700 dark:text-amber-300">
+                            Set KEYWORDS_EVERYWHERE_API_KEY in environment to enable Video Trends.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Failed to load Keywords Everywhere status
                 </div>
               )}
             </CardContent>
