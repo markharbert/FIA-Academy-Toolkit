@@ -224,15 +224,17 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
   const framesPerRow = 4;
   const rowCount = Math.ceil(frameCount / framesPerRow);
   
-  const totalWidth = framesPerRow * thumbW + (framesPerRow - 1) * gapX;
+  const staggerOffset = 30;
+  const totalWidth = framesPerRow * thumbW + (framesPerRow - 1) * gapX + staggerOffset;
   const totalHeight = rowCount * thumbH + (rowCount - 1) * gapY + 40;
-
+  
   const getFrameCenter = (frameIndex: number) => {
     const row = Math.floor(frameIndex / framesPerRow);
     const col = frameIndex % framesPerRow;
     const isReversed = row % 2 === 1;
     const actualCol = isReversed ? (framesPerRow - 1 - col) : col;
-    const x = actualCol * (thumbW + gapX) + thumbW / 2;
+    const rowOffset = isReversed ? staggerOffset : 0;
+    const x = actualCol * (thumbW + gapX) + thumbW / 2 + rowOffset;
     const y = row * (thumbH + gapY) + thumbH / 2 + 20;
     return { x, y };
   };
@@ -317,7 +319,11 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
               <div 
                 key={rowIndex} 
                 className={`flex ${isReversed ? 'flex-row-reverse' : 'flex-row'}`}
-                style={{ gap: gapX, marginBottom: rowIndex < rows.length - 1 ? gapY : 0 }}
+                style={{ 
+                  gap: gapX, 
+                  marginBottom: rowIndex < rows.length - 1 ? gapY : 0,
+                  marginLeft: isReversed ? staggerOffset : 0
+                }}
               >
                 {row.map((frameIndex, colIndex) => {
                   const isFirstFrame = frameIndex === 0;
