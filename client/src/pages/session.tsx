@@ -110,6 +110,29 @@ function PartScoreBar({ label, score }: { label: string; score: number }) {
   );
 }
 
+const partDefinitions: Record<string, { question: string; definition: string }> = {
+  hook: {
+    question: "What is a Hook?",
+    definition: "The opening moment that grabs attention and makes viewers want to keep watching. A strong hook creates curiosity or addresses a pain point within the first few seconds."
+  },
+  setHook: {
+    question: "What is Setting the Hook?",
+    definition: "The follow-up that builds on your hook by establishing credibility, deepening curiosity, or promising value. This keeps viewers engaged after the initial grab."
+  },
+  firstCTA: {
+    question: "What is the First Call-to-Action?",
+    definition: "An early prompt that encourages engagement, like asking viewers to comment, follow, or stay tuned. This plants a seed before delivering your main content."
+  },
+  content: {
+    question: "What is the Content?",
+    definition: "The main body of your video where you deliver value, teach something, share your story, or make your case. Good content is clear, engaging, and delivers on the hook's promise."
+  },
+  finalCTA: {
+    question: "What is the Final Call-to-Action?",
+    definition: "Your closing request that tells viewers exactly what to do next, whether it's buying, subscribing, booking a call, or taking another specific action."
+  }
+};
+
 function DetailedPartFeedback({ 
   partKey, 
   title, 
@@ -128,6 +151,8 @@ function DetailedPartFeedback({
       ? "bg-yellow-500 hover:bg-yellow-500 text-white" 
       : "bg-red-500 hover:bg-red-500 text-white";
   
+  const definition = partDefinitions[partKey];
+  
   return (
     <AccordionItem value={partKey}>
       <AccordionTrigger className="hover:no-underline">
@@ -139,6 +164,12 @@ function DetailedPartFeedback({
         </div>
       </AccordionTrigger>
       <AccordionContent className="space-y-4 pt-4">
+        {definition && (
+          <div className="rounded-lg bg-muted/50 p-3 mb-2">
+            <p className="text-sm font-medium mb-1">{definition.question}</p>
+            <p className="text-sm text-muted-foreground">{definition.definition}</p>
+          </div>
+        )}
         {data.whatWorked.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
