@@ -229,7 +229,7 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
 
   return (
     <div className="hidden md:block" data-testid="video-timeline">
-      <div className="relative py-4">
+      <div className="relative py-6">
         {rows.map((row, rowIndex) => {
           if (row.length === 0) return null;
           
@@ -238,74 +238,108 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
           
           return (
             <div key={rowIndex} className="relative">
-              <div className={`flex items-start ${isReversed ? 'flex-row-reverse' : 'flex-row'}`}>
+              <div className={`flex items-center ${isReversed ? 'flex-row-reverse' : 'flex-row'}`}>
                 {row.map((frameIndex, colIndex) => {
                   const isFirstFrame = rowIndex === 0 && colIndex === 0;
                   const isLastFrame = rowIndex === rows.length - 1 && colIndex === row.length - 1;
                   const isLastInRow = colIndex === row.length - 1;
                   const isLoading = !loadedFrames.has(frameIndex) && !failedFrames.has(frameIndex);
                   const hasFailed = failedFrames.has(frameIndex);
-                  const showConnectorBelow = hasNextRow && ((isReversed && colIndex === row.length - 1) || (!isReversed && colIndex === row.length - 1));
                   
                   return (
-                    <div key={frameIndex} className="flex flex-col" data-testid={`timeline-frame-${frameIndex}`}>
-                      <div className="flex items-center">
-                        <div className="relative">
-                          <div className="relative overflow-hidden rounded-lg border-2 border-border bg-muted shadow-sm">
-                            {isLoading && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-muted z-10">
-                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                              </div>
-                            )}
-                            {hasFailed ? (
-                              <div className="w-[120px] h-[68px] flex items-center justify-center">
-                                <Video className="h-5 w-5 text-muted-foreground opacity-50" />
-                              </div>
-                            ) : (
-                              <img
-                                src={`/api/sessions/${sessionId}/timeline/${frameIndex}`}
-                                alt={`Frame ${frameIndex + 1}`}
-                                className={`w-[120px] h-[68px] object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-                                loading="lazy"
-                                onLoad={() => handleLoad(frameIndex)}
-                                onError={() => handleError(frameIndex)}
-                              />
-                            )}
-                          </div>
-                          {isFirstFrame && (
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1">
-                              <Play className="h-3 w-3 fill-primary" />
-                              Start
+                    <div key={frameIndex} className="flex items-center" data-testid={`timeline-frame-${frameIndex}`}>
+                      <div className="relative">
+                        <div className="relative overflow-hidden rounded-lg border-2 border-border bg-muted shadow-sm">
+                          {isLoading && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-muted z-10">
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                             </div>
                           )}
-                          {isLastFrame && (
-                            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1">
-                              <Square className="h-3 w-3 fill-primary" />
-                              End
+                          {hasFailed ? (
+                            <div className="w-[120px] h-[68px] flex items-center justify-center">
+                              <Video className="h-5 w-5 text-muted-foreground opacity-50" />
                             </div>
+                          ) : (
+                            <img
+                              src={`/api/sessions/${sessionId}/timeline/${frameIndex}`}
+                              alt={`Frame ${frameIndex + 1}`}
+                              className={`w-[120px] h-[68px] object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+                              loading="lazy"
+                              onLoad={() => handleLoad(frameIndex)}
+                              onError={() => handleError(frameIndex)}
+                            />
                           )}
                         </div>
-                        
-                        {!isLastInRow && (
-                          <div className="flex items-center">
-                            <div className="w-8 h-1 bg-primary rounded-full" />
-                            <ChevronRight className={`h-5 w-5 text-primary -ml-2 ${isReversed ? 'rotate-180' : ''}`} />
+                        {isFirstFrame && (
+                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1">
+                            <Play className="h-3 w-3 fill-primary" />
+                            Start
+                          </div>
+                        )}
+                        {isLastFrame && (
+                          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1">
+                            <Square className="h-3 w-3 fill-primary" />
+                            End
                           </div>
                         )}
                       </div>
                       
-                      {showConnectorBelow && (
-                        <div className="flex justify-center mt-1">
-                          <div className="flex flex-col items-center">
-                            <div className="w-1 h-5 bg-primary rounded-full" />
-                            <ChevronDown className="h-5 w-5 text-primary -mt-2" />
-                          </div>
-                        </div>
+                      {!isLastInRow && (
+                        <svg width="32" height="12" className="mx-0.5" viewBox="0 0 32 12">
+                          <line x1="0" y1="6" x2="24" y2="6" stroke="currentColor" strokeWidth="3" className="text-primary" strokeLinecap="round" />
+                          <polygon points="22,2 30,6 22,10" fill="currentColor" className="text-primary" />
+                        </svg>
                       )}
                     </div>
                   );
                 })}
               </div>
+              
+              {hasNextRow && (
+                <div className={`flex ${isReversed ? 'justify-start pl-[40px]' : 'justify-end pr-[40px]'} my-0`}>
+                  {isReversed ? (
+                    <svg width="80" height="48" viewBox="0 0 80 48" className="text-primary">
+                      <path
+                        d="M40 0 V16 Q40 28 52 28 H70"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <polygon points="66,22 78,28 66,34" fill="currentColor" />
+                      <path
+                        d="M40 28 V40"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                      />
+                      <polygon points="34,36 40,48 46,36" fill="currentColor" />
+                    </svg>
+                  ) : (
+                    <svg width="80" height="48" viewBox="0 0 80 48" className="text-primary">
+                      <path
+                        d="M40 0 V16 Q40 28 28 28 H10"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <polygon points="14,22 2,28 14,34" fill="currentColor" />
+                      <path
+                        d="M40 28 V40"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                      />
+                      <polygon points="34,36 40,48 46,36" fill="currentColor" />
+                    </svg>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
