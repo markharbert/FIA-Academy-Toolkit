@@ -207,7 +207,32 @@ function formatTimestamp(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function VideoTimeline({ sessionId, frameCount, durationSeconds }: { sessionId: string; frameCount: number; durationSeconds: number | null }) {
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  if (mins === 0) {
+    return `${secs} seconds`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function getVideoQualityLabel(resolution: string | null): { label: string; badge: string } {
+  if (!resolution) return { label: "Unknown", badge: "secondary" };
+  
+  const parts = resolution.split('x');
+  if (parts.length !== 2) return { label: resolution, badge: "secondary" };
+  
+  const height = parseInt(parts[1], 10);
+  
+  if (height >= 2160) return { label: "4K Ultra HD", badge: "default" };
+  if (height >= 1440) return { label: "2K QHD", badge: "default" };
+  if (height >= 1080) return { label: "1080p Full HD", badge: "default" };
+  if (height >= 720) return { label: "720p HD", badge: "secondary" };
+  if (height >= 480) return { label: "480p SD", badge: "outline" };
+  return { label: `${height}p`, badge: "outline" };
+}
+
+function VideoTimeline({ sessionId, frameCount, durationSeconds, resolution }: { sessionId: string; frameCount: number; durationSeconds: number | null; resolution: string | null }) {
   const [loadedFrames, setLoadedFrames] = useState<Set<number>>(new Set());
   const [failedFrames, setFailedFrames] = useState<Set<number>>(new Set());
   
@@ -287,8 +312,27 @@ function VideoTimeline({ sessionId, frameCount, durationSeconds }: { sessionId: 
     rows.push(frames.slice(i, i + framesPerRow));
   }
 
+  const qualityInfo = getVideoQualityLabel(resolution);
+
   return (
     <div className="hidden md:block" data-testid="video-timeline">
+      <div className="flex items-center justify-center gap-6 mb-4">
+        {resolution && (
+          <div className="flex items-center gap-2">
+            <Film className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Quality:</span>
+            <Badge variant={qualityInfo.badge as "default" | "secondary" | "outline"}>{qualityInfo.label}</Badge>
+          </div>
+        )}
+        {durationSeconds && (
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Duration:</span>
+            <span className="text-sm font-semibold">{formatDuration(durationSeconds)}</span>
+          </div>
+        )}
+      </div>
+      
       <div className="relative" style={{ width: totalWidth, margin: '0 auto' }}>
         <svg 
           width={totalWidth} 
@@ -1029,7 +1073,7 @@ export default function SessionPage() {
                 <div className="space-y-4">
                   {hasTimeline ? (
                     <div className="-mx-6 -mt-6 mb-4 px-6 pt-8 pb-4 bg-muted/30">
-                      <VideoTimeline sessionId={session!.id} frameCount={session!.timelineFrames!.length} durationSeconds={session!.durationSeconds} />
+                      <VideoTimeline sessionId={session!.id} frameCount={session!.timelineFrames!.length} durationSeconds={session!.durationSeconds} resolution={(session as any)?.finalVideoResolution} />
                       <div className="md:hidden">
                         {hasPoster && (
                           <img 
