@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { extractAudioFast, probeVideo, generatePoster } from "./ffmpeg";
+import { extractAudioFast, probeVideo, generatePoster, generateTimelineFrames } from "./ffmpeg";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { ObjectStorageService } from "./replit_integrations/object_storage/objectStorage";
 import type { ProcessingStatus, GoalType, InsertProcessingMetric, TranscriptStatus, ScoreStatus } from "@shared/schema";
@@ -290,6 +290,24 @@ export async function processSession(sessionId: string, userId: string, preExtra
         }
       } catch (posterErr) {
         console.warn(`[Processing] Poster generation error:`, posterErr);
+      }
+      
+      try {
+        const videoDuration = audioResult.durationSeconds || session.durationSeconds || 0;
+        if (videoDuration > 0) {
+          const timelineResult = await generateTimelineFrames(videoFullPath, UPLOADS_DIR, sessionId, videoDuration, 12);
+          if (timelineResult.success && timelineResult.framePaths) {
+            await storage.updateSession(sessionId, {
+              timelineFrames: timelineResult.framePaths,
+              timelineFramesGeneratedAt: new Date(),
+            });
+            console.log(`[Processing] Timeline frames generated: ${timelineResult.framePaths.length} frames`);
+          } else {
+            console.warn(`[Processing] Timeline frame generation failed: ${timelineResult.error}`);
+          }
+        }
+      } catch (timelineErr) {
+        console.warn(`[Processing] Timeline frame generation error:`, timelineErr);
       }
       
       const deleteStart = new Date();
