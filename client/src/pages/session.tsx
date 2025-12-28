@@ -238,71 +238,74 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
           
           return (
             <div key={rowIndex} className="relative">
-              <div className={`flex items-center ${isReversed ? 'flex-row-reverse' : 'flex-row'}`}>
+              <div className={`flex items-start ${isReversed ? 'flex-row-reverse' : 'flex-row'}`}>
                 {row.map((frameIndex, colIndex) => {
                   const isFirstFrame = rowIndex === 0 && colIndex === 0;
                   const isLastFrame = rowIndex === rows.length - 1 && colIndex === row.length - 1;
                   const isLastInRow = colIndex === row.length - 1;
                   const isLoading = !loadedFrames.has(frameIndex) && !failedFrames.has(frameIndex);
                   const hasFailed = failedFrames.has(frameIndex);
+                  const showConnectorBelow = hasNextRow && ((isReversed && colIndex === row.length - 1) || (!isReversed && colIndex === row.length - 1));
                   
                   return (
-                    <div key={frameIndex} className="flex items-center" data-testid={`timeline-frame-${frameIndex}`}>
-                      <div className="relative">
-                        <div className="relative overflow-hidden rounded-lg border-2 border-border bg-muted shadow-sm">
-                          {isLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-muted z-10">
-                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <div key={frameIndex} className="flex flex-col" data-testid={`timeline-frame-${frameIndex}`}>
+                      <div className="flex items-center">
+                        <div className="relative">
+                          <div className="relative overflow-hidden rounded-lg border-2 border-border bg-muted shadow-sm">
+                            {isLoading && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-muted z-10">
+                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              </div>
+                            )}
+                            {hasFailed ? (
+                              <div className="w-[120px] h-[68px] flex items-center justify-center">
+                                <Video className="h-5 w-5 text-muted-foreground opacity-50" />
+                              </div>
+                            ) : (
+                              <img
+                                src={`/api/sessions/${sessionId}/timeline/${frameIndex}`}
+                                alt={`Frame ${frameIndex + 1}`}
+                                className={`w-[120px] h-[68px] object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+                                loading="lazy"
+                                onLoad={() => handleLoad(frameIndex)}
+                                onError={() => handleError(frameIndex)}
+                              />
+                            )}
+                          </div>
+                          {isFirstFrame && (
+                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1">
+                              <Play className="h-3 w-3 fill-primary" />
+                              Start
                             </div>
                           )}
-                          {hasFailed ? (
-                            <div className="w-[120px] h-[68px] flex items-center justify-center">
-                              <Video className="h-5 w-5 text-muted-foreground opacity-50" />
+                          {isLastFrame && (
+                            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1">
+                              <Square className="h-3 w-3 fill-primary" />
+                              End
                             </div>
-                          ) : (
-                            <img
-                              src={`/api/sessions/${sessionId}/timeline/${frameIndex}`}
-                              alt={`Frame ${frameIndex + 1}`}
-                              className={`w-[120px] h-[68px] object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-                              loading="lazy"
-                              onLoad={() => handleLoad(frameIndex)}
-                              onError={() => handleError(frameIndex)}
-                            />
                           )}
                         </div>
-                        {isFirstFrame && (
-                          <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium text-primary flex items-center gap-1">
-                            <Play className="h-3 w-3 fill-primary" />
-                            Start
-                          </div>
-                        )}
-                        {isLastFrame && (
-                          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium text-primary flex items-center gap-1">
-                            <Square className="h-3 w-3 fill-primary" />
-                            End
+                        
+                        {!isLastInRow && (
+                          <div className="flex items-center">
+                            <div className="w-8 h-1 bg-primary rounded-full" />
+                            <ChevronRight className={`h-5 w-5 text-primary -ml-2 ${isReversed ? 'rotate-180' : ''}`} />
                           </div>
                         )}
                       </div>
                       
-                      {!isLastInRow && (
-                        <div className="flex items-center px-1">
-                          <div className="w-6 h-0.5 bg-primary/60" />
-                          <ChevronRight className={`h-4 w-4 text-primary/60 -ml-1 ${isReversed ? 'rotate-180' : ''}`} />
+                      {showConnectorBelow && (
+                        <div className="flex justify-center mt-1">
+                          <div className="flex flex-col items-center">
+                            <div className="w-1 h-5 bg-primary rounded-full" />
+                            <ChevronDown className="h-5 w-5 text-primary -mt-2" />
+                          </div>
                         </div>
                       )}
                     </div>
                   );
                 })}
               </div>
-              
-              {hasNextRow && (
-                <div className={`flex ${isReversed ? 'justify-start pl-[60px]' : 'justify-end pr-[60px]'} py-1`}>
-                  <div className="flex flex-col items-center">
-                    <div className="w-0.5 h-4 bg-primary/60" />
-                    <ChevronDown className="h-4 w-4 text-primary/60 -my-1" />
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
