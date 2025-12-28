@@ -220,7 +220,7 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
   const thumbW = 120;
   const thumbH = 68;
   const gapX = 40;
-  const gapY = 24;
+  const gapY = 48;
   const framesPerRow = 4;
   const rowCount = Math.ceil(frameCount / framesPerRow);
   
@@ -256,10 +256,15 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
       const currRow = Math.floor(i / framesPerRow);
       
       if (prevRow !== currRow) {
-        const midY = prev.y + (curr.y - prev.y) / 2;
-        d += ` L ${prev.x} ${midY}`;
-        d += ` Q ${prev.x} ${midY + 12} ${(prev.x + curr.x) / 2} ${midY + 12}`;
-        d += ` Q ${curr.x} ${midY + 12} ${curr.x} ${curr.y}`;
+        const dropY = prev.y + thumbH / 2 + 8;
+        const riseY = curr.y - thumbH / 2 - 8;
+        const midY = (dropY + riseY) / 2;
+        const curveRadius = 16;
+        
+        d += ` L ${prev.x} ${dropY}`;
+        d += ` Q ${prev.x} ${midY} ${(prev.x + curr.x) / 2} ${midY}`;
+        d += ` Q ${curr.x} ${midY} ${curr.x} ${riseY}`;
+        d += ` L ${curr.x} ${curr.y}`;
       } else {
         d += ` L ${curr.x} ${curr.y}`;
       }
