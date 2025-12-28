@@ -1101,7 +1101,7 @@ export default function AdminPage() {
                         <TableRow>
                           <TableHead>User</TableHead>
                           <TableHead>Role</TableHead>
-                          <TableHead>Total Videos</TableHead>
+                          <TableHead>Total Scores</TableHead>
                           <TableHead>Sign-up Method</TableHead>
                           <TableHead>Consent</TableHead>
                           <TableHead>Status</TableHead>
