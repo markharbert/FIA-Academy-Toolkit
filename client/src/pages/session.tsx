@@ -290,19 +290,6 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
           className="absolute top-0 left-0 pointer-events-none"
           style={{ zIndex: 0 }}
         >
-          <defs>
-            <marker
-              id="timeline-arrow"
-              markerWidth="10"
-              markerHeight="10"
-              refX="5"
-              refY="5"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M0,2 L6,5 L0,8 Z" fill="currentColor" className="text-primary" />
-            </marker>
-          </defs>
           <path
             d={pathD}
             fill="none"
@@ -310,9 +297,7 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
             strokeWidth="4"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-primary"
-            markerMid="url(#timeline-arrow)"
-            markerEnd="url(#timeline-arrow)"
+            className="text-primary/50"
           />
         </svg>
         
