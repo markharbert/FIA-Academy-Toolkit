@@ -14,7 +14,7 @@ import {
   Download, Copy, Check, RefreshCw, AlertCircle, Clock, 
   TrendingUp, MessageSquare, Lightbulb, AlertTriangle, Quote,
   Gauge, Timer, ArrowLeft, Loader2, Pencil, X, Sparkles, FileText,
-  Upload, File, Video
+  Upload, File, Video, Film
 } from "lucide-react";
 import type { Session, ScoreResult, ProcessingStatus, GoalType } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
@@ -198,6 +198,134 @@ function DetailedPartFeedback({
         )}
       </AccordionContent>
     </AccordionItem>
+  );
+}
+
+function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCount: number }) {
+  const [loadedFrames, setLoadedFrames] = useState<Set<number>>(new Set());
+  const [failedFrames, setFailedFrames] = useState<Set<number>>(new Set());
+  
+  const frames = Array.from({ length: frameCount }, (_, i) => i);
+  
+  const framesPerRow = 4;
+  const rows: number[][] = [];
+  for (let i = 0; i < frames.length; i += framesPerRow) {
+    const row = frames.slice(i, i + framesPerRow);
+    const rowIndex = Math.floor(i / framesPerRow);
+    rows.push(rowIndex % 2 === 1 ? row.reverse() : row);
+  }
+
+  const handleLoad = useCallback((index: number) => {
+    setLoadedFrames(prev => new Set(prev).add(index));
+  }, []);
+
+  const handleError = useCallback((index: number) => {
+    setFailedFrames(prev => new Set(prev).add(index));
+  }, []);
+
+  if (frameCount === 0) {
+    return null;
+  }
+
+  return (
+    <Card data-testid="card-video-timeline">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Film className="h-5 w-5" />
+          Video Timeline
+        </CardTitle>
+        <CardDescription>Key moments from your video</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="relative">
+          {rows.map((row, rowIndex) => {
+            if (row.length === 0) return null;
+            
+            const isReversed = rowIndex % 2 === 1;
+            
+            return (
+              <div key={rowIndex} className="relative">
+                <div className={`flex gap-3 ${isReversed ? 'justify-end' : 'justify-start'}`}>
+                  {row.map((frameIndex, colIndex) => {
+                    const isFirstFrame = rowIndex === 0 && colIndex === 0;
+                    const isLastFrame = rowIndex === rows.length - 1 && colIndex === row.length - 1;
+                    const isRightEdge = colIndex === row.length - 1;
+                    const isLeftEdge = colIndex === 0;
+                    const isLoading = !loadedFrames.has(frameIndex) && !failedFrames.has(frameIndex);
+                    const hasFailed = failedFrames.has(frameIndex);
+                    
+                    return (
+                      <div key={frameIndex} className="relative" data-testid={`timeline-frame-${frameIndex}`}>
+                        <div className="relative overflow-hidden rounded-md border border-border bg-muted">
+                          {isLoading && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                            </div>
+                          )}
+                          {hasFailed ? (
+                            <div className="w-16 h-10 sm:w-20 sm:h-12 md:w-24 md:h-14 flex items-center justify-center">
+                              <Video className="h-3 w-3 text-muted-foreground opacity-50" />
+                            </div>
+                          ) : (
+                            <img
+                              src={`/api/sessions/${sessionId}/timeline/${frameIndex}`}
+                              alt={`Frame ${frameIndex + 1}`}
+                              className={`w-16 h-10 sm:w-20 sm:h-12 md:w-24 md:h-14 object-cover transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+                              loading="lazy"
+                              onLoad={() => handleLoad(frameIndex)}
+                              onError={() => handleError(frameIndex)}
+                            />
+                          )}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5">
+                            <span className="text-[9px] text-white font-medium">{frameIndex + 1}</span>
+                          </div>
+                        </div>
+                        
+                        {!isReversed && !isRightEdge && row.length > 1 && (
+                          <div className="absolute top-1/2 -right-3 w-3 h-0.5 bg-primary/40" />
+                        )}
+                        {isReversed && !isLeftEdge && row.length > 1 && (
+                          <div className="absolute top-1/2 -left-3 w-3 h-0.5 bg-primary/40" />
+                        )}
+                        
+                        {isFirstFrame && (
+                          <div className="absolute -left-2 top-1/2 -translate-y-1/2">
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          </div>
+                        )}
+                        {isLastFrame && (
+                          <div className="absolute -right-2 top-1/2 -translate-y-1/2">
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {rowIndex < rows.length - 1 && rows[rowIndex + 1].length > 0 && (
+                  <div className={`h-6 flex ${!isReversed ? 'justify-end pr-[calc(3rem+6px)] sm:pr-[calc(4rem+6px)] md:pr-[calc(4.5rem+6px)]' : 'justify-start pl-[calc(3rem+6px)] sm:pl-[calc(4rem+6px)] md:pl-[calc(4.5rem+6px)]'}`}>
+                    <div className="w-0.5 h-full bg-primary/40" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-primary" />
+              <span>Start</span>
+            </div>
+            <div className="w-8 h-0.5 bg-primary/40" />
+            <div className="flex items-center gap-1">
+              <span>End</span>
+              <div className="w-2 h-2 rounded-full bg-primary" />
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -985,6 +1113,10 @@ export default function SessionPage() {
               </div>
             </CardContent>
           </Card>
+
+          {session?.timelineFrames && session.timelineFrames.length > 0 && (
+            <VideoTimeline sessionId={session.id} frameCount={session.timelineFrames.length} />
+          )}
 
           <Card>
             <CardHeader>
