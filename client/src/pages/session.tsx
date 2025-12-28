@@ -513,6 +513,18 @@ export default function SessionPage() {
   const [copied, setCopied] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
+  const [openFeedbackSections, setOpenFeedbackSections] = useState<string[]>([]);
+
+  const allFeedbackKeys = ["hook", "setHook", "firstCTA", "content", "finalCTA"];
+  const allSectionsOpen = allFeedbackKeys.every(key => openFeedbackSections.includes(key));
+  
+  const toggleAllSections = () => {
+    if (allSectionsOpen) {
+      setOpenFeedbackSections([]);
+    } else {
+      setOpenFeedbackSections([...allFeedbackKeys]);
+    }
+  };
 
   const isUploading = uploadStep === "uploading";
   const activeSessionId = createdSessionId || sessionId;
@@ -1291,12 +1303,28 @@ export default function SessionPage() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Detailed Feedback by Part</CardTitle>
-              <CardDescription>Click each section to see specific feedback and suggestions</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+              <div>
+                <CardTitle>Detailed Feedback by Part</CardTitle>
+                <CardDescription>Click each section to see specific feedback and suggestions</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleAllSections}
+                data-testid="button-toggle-all-sections"
+              >
+                {allSectionsOpen ? "Collapse All" : "Expand All"}
+              </Button>
             </CardHeader>
             <CardContent>
-              <Accordion type="multiple" className="w-full" data-testid="accordion-feedback">
+              <Accordion 
+                type="multiple" 
+                className="w-full" 
+                value={openFeedbackSections}
+                onValueChange={setOpenFeedbackSections}
+                data-testid="accordion-feedback"
+              >
                 {(["hook", "setHook", "firstCTA", "content", "finalCTA"] as const).map((key) => (
                   <DetailedPartFeedback
                     key={key}
