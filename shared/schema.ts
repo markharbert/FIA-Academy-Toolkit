@@ -391,6 +391,8 @@ export const sessions = pgTable("sessions", {
   previewPosterPath: text("preview_poster_path"),
   previewPosterMimeType: text("preview_poster_mime_type"),
   previewPosterGeneratedAt: timestamp("preview_poster_generated_at"),
+  timelineFrames: text("timeline_frames").array(),
+  timelineFramesGeneratedAt: timestamp("timeline_frames_generated_at"),
   originalDeletedAt: timestamp("original_deleted_at"),
   finalVideoPath: text("final_video_path"),
   finalVideoResolution: text("final_video_resolution"),

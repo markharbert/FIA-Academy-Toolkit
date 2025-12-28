@@ -696,6 +696,95 @@ export async function generatePoster(videoPath: string, uploadsDir: string, sess
   }
 }
 
+export interface TimelineFramesResult {
+  success: boolean;
+  framePaths?: string[];
+  error?: string;
+}
+
+export async function generateTimelineFrames(
+  videoPath: string,
+  uploadsDir: string,
+  sessionId: string,
+  durationSeconds: number,
+  frameCount: number = 12
+): Promise<TimelineFramesResult> {
+  try {
+    if (!fs.existsSync(videoPath)) {
+      return { success: false, error: "Video file not found" };
+    }
+
+    if (durationSeconds <= 0) {
+      return { success: false, error: "Invalid video duration" };
+    }
+
+    console.log(`[FFmpeg] Generating ${frameCount} timeline frames for session ${sessionId}...`);
+
+    const frameDir = path.join(uploadsDir, `timeline_${sessionId}`);
+    if (!fs.existsSync(frameDir)) {
+      fs.mkdirSync(frameDir, { recursive: true });
+    }
+
+    const framePaths: string[] = [];
+    const interval = durationSeconds / (frameCount + 1);
+
+    const extractFrame = (index: number, timestamp: number): Promise<string | null> => {
+      return new Promise((resolve) => {
+        const frameFilename = `frame_${sessionId}_${String(index).padStart(2, '0')}.jpg`;
+        const framePath = path.join(frameDir, frameFilename);
+        const relativeFramePath = `timeline_${sessionId}/${frameFilename}`;
+
+        const ffmpeg = spawn("ffmpeg", [
+          "-ss", String(Math.max(0, timestamp)),
+          "-i", videoPath,
+          "-vframes", "1",
+          "-vf", "scale=160:-1",
+          "-q:v", "3",
+          "-y",
+          framePath
+        ]);
+
+        ffmpeg.on("close", (code) => {
+          if (code === 0 && fs.existsSync(framePath)) {
+            resolve(relativeFramePath);
+          } else {
+            resolve(null);
+          }
+        });
+
+        ffmpeg.on("error", () => {
+          resolve(null);
+        });
+      });
+    };
+
+    const extractionPromises: Promise<string | null>[] = [];
+    for (let i = 0; i < frameCount; i++) {
+      const timestamp = interval * (i + 1);
+      extractionPromises.push(extractFrame(i, timestamp));
+    }
+
+    const results = await Promise.all(extractionPromises);
+    
+    for (const result of results) {
+      if (result) {
+        framePaths.push(result);
+      }
+    }
+
+    if (framePaths.length === 0) {
+      console.error(`[FFmpeg] No timeline frames could be extracted`);
+      return { success: false, error: "Failed to extract any frames" };
+    }
+
+    console.log(`[FFmpeg] Generated ${framePaths.length}/${frameCount} timeline frames`);
+    return { success: true, framePaths };
+  } catch (err) {
+    console.error(`[FFmpeg] Unexpected timeline frames error:`, err);
+    return { success: false, error: "Unexpected error during timeline frame generation" };
+  }
+}
+
 export interface HlsResult {
   success: boolean;
   playlistPath?: string;
