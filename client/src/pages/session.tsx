@@ -232,6 +232,48 @@ function getVideoQualityLabel(resolution: string | null): { label: string; isHig
   return { label: `${height}p`, isHighQuality: false, height };
 }
 
+function VideoQualityInfo({ resolution, durationSeconds }: { resolution: string | null | undefined; durationSeconds: number | null | undefined }) {
+  const qualityInfo = getVideoQualityLabel(resolution ?? null);
+  
+  return (
+    <div className="flex flex-col items-center gap-2 mb-6 pb-6 border-b">
+      <div className="flex items-center justify-center gap-6 flex-wrap">
+        {resolution && (
+          <div className="flex items-center gap-2">
+            <Film className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Quality:</span>
+            <Badge 
+              className={qualityInfo.isHighQuality 
+                ? "bg-green-600 hover:bg-green-700 text-white" 
+                : "bg-red-600 hover:bg-red-700 text-white"
+              }
+            >
+              {qualityInfo.label}
+            </Badge>
+          </div>
+        )}
+        {durationSeconds && (
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Video Length:</span>
+            <span className="text-sm font-semibold">{formatDuration(durationSeconds)}</span>
+          </div>
+        )}
+      </div>
+      {resolution && qualityInfo.isHighQuality && (
+        <p className="text-xs text-green-600 dark:text-green-400 text-center max-w-md">
+          Great video quality! Keep recording in high definition for the best results.
+        </p>
+      )}
+      {resolution && !qualityInfo.isHighQuality && (
+        <p className="text-xs text-red-600 dark:text-red-400 text-center max-w-md">
+          For best results, record and export your videos in 1080p or higher resolution.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function VideoTimeline({ sessionId, frameCount, durationSeconds, resolution }: { sessionId: string; frameCount: number; durationSeconds: number | null; resolution: string | null }) {
   const [loadedFrames, setLoadedFrames] = useState<Set<number>>(new Set());
   const [failedFrames, setFailedFrames] = useState<Set<number>>(new Set());
@@ -1200,6 +1242,7 @@ export default function SessionPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <VideoQualityInfo resolution={session?.finalVideoResolution} durationSeconds={session?.durationSeconds} />
               <div className="grid gap-8 md:grid-cols-2">
                 <div className="flex flex-col items-center justify-center">
                   <ScoreCircle score={score.totalScore} />
