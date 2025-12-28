@@ -1239,7 +1239,7 @@ export default function SessionPage() {
                 <MessageSquare className="h-5 w-5" />
                 Transcript
               </CardTitle>
-              <CardDescription>Edit the transcript for more accurate scoring</CardDescription>
+              <CardDescription>Download or copy your transcript for future use</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <a href={`/api/sessions/${session.id}/transcript.txt`} download>
