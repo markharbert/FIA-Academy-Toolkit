@@ -107,6 +107,8 @@ interface AdminUser {
   lastLoginAt: string | null;
   providers: string[];
   totalVideos: number;
+  keywordsCreditsThisMonth: number;
+  keywordsCreditsTotalUsed: number;
 }
 
 interface UserAction {
@@ -1102,6 +1104,7 @@ export default function AdminPage() {
                           <TableHead>User</TableHead>
                           <TableHead>Role</TableHead>
                           <TableHead>Total Scores</TableHead>
+                          <TableHead>KW Credits</TableHead>
                           <TableHead>Sign-up Method</TableHead>
                           <TableHead>Consent</TableHead>
                           <TableHead>Status</TableHead>
@@ -1112,7 +1115,7 @@ export default function AdminPage() {
                       <TableBody>
                         {users.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                               No users found
                             </TableCell>
                           </TableRow>
@@ -1138,6 +1141,9 @@ export default function AdminPage() {
                               </TableCell>
                               <TableCell className="text-center font-medium">
                                 {u.totalVideos || 0}
+                              </TableCell>
+                              <TableCell className="text-center text-sm font-medium">
+                                {u.keywordsCreditsThisMonth || 0}/{u.keywordsCreditsTotalUsed || 0}
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-wrap gap-1">

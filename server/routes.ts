@@ -1007,10 +1007,13 @@ export async function registerRoutes(
         pageSize: pageSize ? parseInt(pageSize as string) : undefined,
       });
       
-      // Get identities for provider filter info
+      // Get identities and credits for provider filter info
       const usersWithProvider = await Promise.all(
         result.users.map(async (user) => {
-          const identities = await storage.getUserIdentitiesByUser(user.id);
+          const [identities, credits] = await Promise.all([
+            storage.getUserIdentitiesByUser(user.id),
+            storage.getVideoTrendsCredits(user.id),
+          ]);
           const providers = identities.map(i => i.provider);
           const hasLocalPassword = !!user.passwordHash;
           if (hasLocalPassword && !providers.includes("local")) {
@@ -1021,6 +1024,8 @@ export async function registerRoutes(
           return {
             ...safeUser,
             providers,
+            keywordsCreditsThisMonth: credits.creditsUsed,
+            keywordsCreditsTotalUsed: credits.totalCreditsUsed || 0,
           };
         })
       );

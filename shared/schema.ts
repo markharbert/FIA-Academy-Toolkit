@@ -764,6 +764,7 @@ export const videoTrendsCredits = pgTable("video_trends_credits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
   creditsUsed: integer("credits_used").default(0).notNull(),
+  totalCreditsUsed: integer("total_credits_used").default(0).notNull(),
   monthlyLimit: integer("monthly_limit").default(1000).notNull(),
   windowStartedAt: timestamp("window_started_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),

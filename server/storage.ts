@@ -1313,7 +1313,7 @@ export class DatabaseStorage implements IStorage {
   private readonly MONTHLY_CREDITS_LIMIT = 1000;
   private readonly CREDITS_WINDOW_DAYS = 30;
   
-  async getVideoTrendsCredits(userId: string): Promise<{ creditsUsed: number; monthlyLimit: number; windowStartedAt: Date; remaining: number; resetsAt: Date }> {
+  async getVideoTrendsCredits(userId: string): Promise<{ creditsUsed: number; totalCreditsUsed: number; monthlyLimit: number; windowStartedAt: Date; remaining: number; resetsAt: Date }> {
     const [record] = await db.select().from(videoTrendsCredits).where(eq(videoTrendsCredits.userId, userId));
     
     const now = new Date();
@@ -1323,6 +1323,7 @@ export class DatabaseStorage implements IStorage {
       const resetsAt = new Date(windowStartedAt.getTime() + this.CREDITS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
       return {
         creditsUsed: 0,
+        totalCreditsUsed: 0,
         monthlyLimit: this.MONTHLY_CREDITS_LIMIT,
         windowStartedAt,
         remaining: this.MONTHLY_CREDITS_LIMIT,
@@ -1339,6 +1340,7 @@ export class DatabaseStorage implements IStorage {
       const resetsAt = new Date(now.getTime() + this.CREDITS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
       return {
         creditsUsed: 0,
+        totalCreditsUsed: record.totalCreditsUsed || 0,
         monthlyLimit: record.monthlyLimit,
         windowStartedAt: now,
         remaining: record.monthlyLimit,
@@ -1348,6 +1350,7 @@ export class DatabaseStorage implements IStorage {
     
     return {
       creditsUsed: record.creditsUsed,
+      totalCreditsUsed: record.totalCreditsUsed || 0,
       monthlyLimit: record.monthlyLimit,
       windowStartedAt: record.windowStartedAt,
       remaining: Math.max(0, record.monthlyLimit - record.creditsUsed),
@@ -1371,12 +1374,17 @@ export class DatabaseStorage implements IStorage {
       await db.insert(videoTrendsCredits).values({
         userId,
         creditsUsed: amount,
+        totalCreditsUsed: amount,
         monthlyLimit: this.MONTHLY_CREDITS_LIMIT,
         windowStartedAt: now,
       });
     } else {
       await db.update(videoTrendsCredits)
-        .set({ creditsUsed: newCreditsUsed, updatedAt: now })
+        .set({ 
+          creditsUsed: newCreditsUsed, 
+          totalCreditsUsed: (existing.totalCreditsUsed || 0) + amount,
+          updatedAt: now 
+        })
         .where(eq(videoTrendsCredits.userId, userId));
     }
     
