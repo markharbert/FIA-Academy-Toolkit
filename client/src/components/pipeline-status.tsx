@@ -18,7 +18,7 @@ interface StageProps {
 
 function Stage({ label, status, icon: Icon, detail }: StageProps) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3 md:flex-col md:items-center md:text-center md:gap-2">
       <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
         status === "complete" 
           ? "bg-green-500/20 text-green-600 dark:text-green-400"
@@ -38,7 +38,7 @@ function Stage({ label, status, icon: Icon, detail }: StageProps) {
           <Icon className="h-4 w-4" />
         )}
       </div>
-      <div className="flex-1">
+      <div className="flex-1 md:flex-none">
         <div className={`text-sm font-medium ${
           status === "complete" 
             ? "text-green-600 dark:text-green-400"
@@ -157,7 +157,7 @@ export function PipelineStatus({
         <Progress value={processingProgress} className="h-1.5" />
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3 md:space-y-0 md:flex md:items-start md:justify-between md:gap-4">
         <Stage
           label="Upload & Extract Audio"
           status={getUploadStageStatus()}
