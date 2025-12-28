@@ -186,20 +186,10 @@ function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSes
     setIsEditing(false);
   };
 
-  const handleDragStart = (e: React.DragEvent) => {
-    const sessionIds = isSelected && selectedSessionIds.size > 0 
-      ? Array.from(selectedSessionIds) 
-      : [session.id];
-    e.dataTransfer.setData("application/json", JSON.stringify({ sessionIds }));
-    e.dataTransfer.effectAllowed = "move";
-  };
-
   return (
     <Card 
-      className={`transition-shadow hover:shadow-md cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-primary' : ''}`} 
+      className={`transition-shadow hover:shadow-md ${isSelected ? 'ring-2 ring-primary' : ''}`} 
       data-testid={`card-session-${session.id}`}
-      draggable
-      onDragStart={handleDragStart}
     >
       <CardContent className="p-3">
         <div className="flex items-center gap-3">
