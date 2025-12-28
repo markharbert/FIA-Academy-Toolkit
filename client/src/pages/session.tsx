@@ -346,15 +346,15 @@ function VideoTimeline({ sessionId, frameCount }: { sessionId: string; frameCoun
                         )}
                       </div>
                       {isFirstFrame && (
-                        <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1 whitespace-nowrap">
-                          <Play className="h-3 w-3 fill-primary" />
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full pr-3 text-sm font-extrabold text-green-600 dark:text-green-500 flex items-center gap-1.5 whitespace-nowrap">
+                          <Play className="h-4 w-4 fill-green-600 dark:fill-green-500" />
                           Start
                         </div>
                       )}
                       {isLastFrame && (
-                        <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs font-bold text-primary flex items-center gap-1 whitespace-nowrap">
-                          <Square className="h-3 w-3 fill-primary" />
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pl-3 text-sm font-extrabold text-red-600 dark:text-red-500 flex items-center gap-1.5 whitespace-nowrap">
                           End
+                          <Square className="h-4 w-4 fill-red-600 dark:fill-red-500" />
                         </div>
                       )}
                     </div>
