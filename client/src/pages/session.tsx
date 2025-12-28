@@ -216,20 +216,20 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function getVideoQualityLabel(resolution: string | null): { label: string; badge: string } {
-  if (!resolution) return { label: "Unknown", badge: "secondary" };
+function getVideoQualityLabel(resolution: string | null): { label: string; isHighQuality: boolean; height: number } {
+  if (!resolution) return { label: "Unknown", isHighQuality: false, height: 0 };
   
   const parts = resolution.split('x');
-  if (parts.length !== 2) return { label: resolution, badge: "secondary" };
+  if (parts.length !== 2) return { label: resolution, isHighQuality: false, height: 0 };
   
   const height = parseInt(parts[1], 10);
   
-  if (height >= 2160) return { label: "4K Ultra HD", badge: "default" };
-  if (height >= 1440) return { label: "2K QHD", badge: "default" };
-  if (height >= 1080) return { label: "1080p Full HD", badge: "default" };
-  if (height >= 720) return { label: "720p HD", badge: "secondary" };
-  if (height >= 480) return { label: "480p SD", badge: "outline" };
-  return { label: `${height}p`, badge: "outline" };
+  if (height >= 2160) return { label: "4K Ultra HD", isHighQuality: true, height };
+  if (height >= 1440) return { label: "2K QHD", isHighQuality: true, height };
+  if (height >= 1080) return { label: "1080p Full HD", isHighQuality: true, height };
+  if (height >= 720) return { label: "720p HD", isHighQuality: false, height };
+  if (height >= 480) return { label: "480p SD", isHighQuality: false, height };
+  return { label: `${height}p`, isHighQuality: false, height };
 }
 
 function VideoTimeline({ sessionId, frameCount, durationSeconds, resolution }: { sessionId: string; frameCount: number; durationSeconds: number | null; resolution: string | null }) {
@@ -316,20 +316,34 @@ function VideoTimeline({ sessionId, frameCount, durationSeconds, resolution }: {
 
   return (
     <div className="hidden md:block" data-testid="video-timeline">
-      <div className="flex items-center justify-center gap-6 mb-4">
-        {resolution && (
-          <div className="flex items-center gap-2">
-            <Film className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Quality:</span>
-            <Badge variant={qualityInfo.badge as "default" | "secondary" | "outline"}>{qualityInfo.label}</Badge>
-          </div>
-        )}
-        {durationSeconds && (
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Duration:</span>
-            <span className="text-sm font-semibold">{formatDuration(durationSeconds)}</span>
-          </div>
+      <div className="flex flex-col items-center gap-2 mb-4">
+        <div className="flex items-center justify-center gap-6">
+          {resolution && (
+            <div className="flex items-center gap-2">
+              <Film className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Quality:</span>
+              <Badge 
+                className={qualityInfo.isHighQuality 
+                  ? "bg-green-600 hover:bg-green-700 text-white" 
+                  : "bg-red-600 hover:bg-red-700 text-white"
+                }
+              >
+                {qualityInfo.label}
+              </Badge>
+            </div>
+          )}
+          {durationSeconds && (
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Duration:</span>
+              <span className="text-sm font-semibold">{formatDuration(durationSeconds)}</span>
+            </div>
+          )}
+        </div>
+        {resolution && !qualityInfo.isHighQuality && (
+          <p className="text-xs text-red-600 dark:text-red-400 text-center max-w-md">
+            For best results, record and export your videos in 1080p or higher resolution.
+          </p>
         )}
       </div>
       
