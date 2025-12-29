@@ -239,7 +239,7 @@ export class ObjectStorageService {
   }
 
   // Uploads a file buffer to the given object path.
-  async uploadFile(objectPath: string, content: Buffer): Promise<void> {
+  async uploadFile(objectPath: string, content: Buffer, contentType: string = "video/mp4"): Promise<void> {
     let entityDir = this.getPrivateObjectDir();
     if (!entityDir.endsWith("/")) {
       entityDir = `${entityDir}/`;
@@ -259,9 +259,40 @@ export class ObjectStorageService {
     const file = bucket.file(objectName);
     
     await file.save(content, {
-      contentType: "video/mp4",
+      contentType,
       resumable: false,
     });
+  }
+
+  // Uploads an image file to permanent storage and returns the object path.
+  async uploadImage(localFilePath: string, objectName: string): Promise<string> {
+    const fs = await import("fs");
+    const path = await import("path");
+    
+    if (!fs.existsSync(localFilePath)) {
+      throw new Error(`File not found: ${localFilePath}`);
+    }
+    
+    const content = fs.readFileSync(localFilePath);
+    const ext = path.extname(objectName).toLowerCase();
+    const contentType = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+    
+    let entityDir = this.getPrivateObjectDir();
+    if (!entityDir.endsWith("/")) {
+      entityDir = `${entityDir}/`;
+    }
+    
+    const fullPath = `${entityDir}thumbnails/${objectName}`;
+    const { bucketName, objectName: objName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objName);
+    
+    await file.save(content, {
+      contentType,
+      resumable: false,
+    });
+    
+    return `/objects/thumbnails/${objectName}`;
   }
 
   // Deletes an object from the given path.

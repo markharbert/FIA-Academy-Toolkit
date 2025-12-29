@@ -2077,33 +2077,43 @@ export async function registerRoutes(
         return res.status(404).json({ message: "No thumbnail available" });
       }
 
-      const thumbnailFullPath = path.join(UPLOADS_DIR, session.thumbnailPath);
-      
-      try {
-        if (!fs.existsSync(thumbnailFullPath)) {
-          console.warn(`[Thumbnail] File not found for session ${session.id}`);
+      if (session.thumbnailPath.startsWith('/objects/')) {
+        try {
+          const objectFile = await objectStorageService.getObjectEntityFile(session.thumbnailPath);
+          await objectStorageService.downloadObject(objectFile, res, 86400);
+        } catch (objErr) {
+          console.error(`[Thumbnail] Object storage error for session ${session.id}:`, objErr);
           return res.status(404).json({ message: "Thumbnail unavailable" });
         }
-
-        const stat = fs.statSync(thumbnailFullPath);
-        const ext = path.extname(session.thumbnailPath).toLowerCase();
-        const mimeType = ext === ".webp" ? "image/webp" : ext === ".png" ? "image/png" : "image/jpeg";
-
-        res.setHeader("Content-Type", mimeType);
-        res.setHeader("Content-Length", stat.size);
-        res.setHeader("Cache-Control", "public, max-age=86400");
+      } else {
+        const thumbnailFullPath = path.join(UPLOADS_DIR, session.thumbnailPath);
         
-        const readStream = fs.createReadStream(thumbnailFullPath);
-        readStream.on("error", (streamErr) => {
-          console.error(`[Thumbnail] Stream error for session ${session.id}:`, streamErr);
-          if (!res.headersSent) {
-            res.status(500).json({ message: "Failed to serve thumbnail" });
+        try {
+          if (!fs.existsSync(thumbnailFullPath)) {
+            console.warn(`[Thumbnail] File not found for session ${session.id}`);
+            return res.status(404).json({ message: "Thumbnail unavailable" });
           }
-        });
-        readStream.pipe(res);
-      } catch (fsErr) {
-        console.error(`[Thumbnail] Filesystem error for session ${session.id}:`, fsErr);
-        return res.status(404).json({ message: "Thumbnail unavailable" });
+
+          const stat = fs.statSync(thumbnailFullPath);
+          const ext = path.extname(session.thumbnailPath).toLowerCase();
+          const mimeType = ext === ".webp" ? "image/webp" : ext === ".png" ? "image/png" : "image/jpeg";
+
+          res.setHeader("Content-Type", mimeType);
+          res.setHeader("Content-Length", stat.size);
+          res.setHeader("Cache-Control", "public, max-age=86400");
+          
+          const readStream = fs.createReadStream(thumbnailFullPath);
+          readStream.on("error", (streamErr) => {
+            console.error(`[Thumbnail] Stream error for session ${session.id}:`, streamErr);
+            if (!res.headersSent) {
+              res.status(500).json({ message: "Failed to serve thumbnail" });
+            }
+          });
+          readStream.pipe(res);
+        } catch (fsErr) {
+          console.error(`[Thumbnail] Filesystem error for session ${session.id}:`, fsErr);
+          return res.status(404).json({ message: "Thumbnail unavailable" });
+        }
       }
     } catch (err) {
       console.error("[Thumbnail] Error:", err);
@@ -2127,32 +2137,42 @@ export async function registerRoutes(
         return res.status(404).json({ message: "No poster available" });
       }
 
-      const posterFullPath = path.join(UPLOADS_DIR, session.previewPosterPath);
-      
-      try {
-        if (!fs.existsSync(posterFullPath)) {
-          console.warn(`[Poster] File not found for session ${session.id}`);
+      if (session.previewPosterPath.startsWith('/objects/')) {
+        try {
+          const objectFile = await objectStorageService.getObjectEntityFile(session.previewPosterPath);
+          await objectStorageService.downloadObject(objectFile, res, 86400);
+        } catch (objErr) {
+          console.error(`[Poster] Object storage error for session ${session.id}:`, objErr);
           return res.status(404).json({ message: "Poster unavailable" });
         }
-
-        const stat = fs.statSync(posterFullPath);
-        const mimeType = session.previewPosterMimeType || "image/jpeg";
-
-        res.setHeader("Content-Type", mimeType);
-        res.setHeader("Content-Length", stat.size);
-        res.setHeader("Cache-Control", "public, max-age=86400");
+      } else {
+        const posterFullPath = path.join(UPLOADS_DIR, session.previewPosterPath);
         
-        const readStream = fs.createReadStream(posterFullPath);
-        readStream.on("error", (streamErr) => {
-          console.error(`[Poster] Stream error for session ${session.id}:`, streamErr);
-          if (!res.headersSent) {
-            res.status(500).json({ message: "Failed to serve poster" });
+        try {
+          if (!fs.existsSync(posterFullPath)) {
+            console.warn(`[Poster] File not found for session ${session.id}`);
+            return res.status(404).json({ message: "Poster unavailable" });
           }
-        });
-        readStream.pipe(res);
-      } catch (fsErr) {
-        console.error(`[Poster] Filesystem error for session ${session.id}:`, fsErr);
-        return res.status(404).json({ message: "Poster unavailable" });
+
+          const stat = fs.statSync(posterFullPath);
+          const mimeType = session.previewPosterMimeType || "image/jpeg";
+
+          res.setHeader("Content-Type", mimeType);
+          res.setHeader("Content-Length", stat.size);
+          res.setHeader("Cache-Control", "public, max-age=86400");
+          
+          const readStream = fs.createReadStream(posterFullPath);
+          readStream.on("error", (streamErr) => {
+            console.error(`[Poster] Stream error for session ${session.id}:`, streamErr);
+            if (!res.headersSent) {
+              res.status(500).json({ message: "Failed to serve poster" });
+            }
+          });
+          readStream.pipe(res);
+        } catch (fsErr) {
+          console.error(`[Poster] Filesystem error for session ${session.id}:`, fsErr);
+          return res.status(404).json({ message: "Poster unavailable" });
+        }
       }
     } catch (err) {
       console.error("[Poster] Error:", err);
@@ -2182,30 +2202,41 @@ export async function registerRoutes(
       }
 
       const framePath = session.timelineFrames[frameIndex];
-      const frameFullPath = path.join(UPLOADS_DIR, framePath);
       
-      try {
-        if (!fs.existsSync(frameFullPath)) {
-          console.warn(`[Timeline] Frame not found for session ${session.id}, index ${frameIndex}`);
+      if (framePath.startsWith('/objects/')) {
+        try {
+          const objectFile = await objectStorageService.getObjectEntityFile(framePath);
+          await objectStorageService.downloadObject(objectFile, res, 86400);
+        } catch (objErr) {
+          console.error(`[Timeline] Object storage error for session ${session.id}:`, objErr);
           return res.status(404).json({ message: "Frame unavailable" });
         }
-
-        const stat = fs.statSync(frameFullPath);
-        res.setHeader("Content-Type", "image/jpeg");
-        res.setHeader("Content-Length", stat.size);
-        res.setHeader("Cache-Control", "public, max-age=86400");
+      } else {
+        const frameFullPath = path.join(UPLOADS_DIR, framePath);
         
-        const readStream = fs.createReadStream(frameFullPath);
-        readStream.on("error", (streamErr) => {
-          console.error(`[Timeline] Stream error for session ${session.id}:`, streamErr);
-          if (!res.headersSent) {
-            res.status(500).json({ message: "Failed to serve frame" });
+        try {
+          if (!fs.existsSync(frameFullPath)) {
+            console.warn(`[Timeline] Frame not found for session ${session.id}, index ${frameIndex}`);
+            return res.status(404).json({ message: "Frame unavailable" });
           }
-        });
-        readStream.pipe(res);
-      } catch (fsErr) {
-        console.error(`[Timeline] Filesystem error for session ${session.id}:`, fsErr);
-        return res.status(404).json({ message: "Frame unavailable" });
+
+          const stat = fs.statSync(frameFullPath);
+          res.setHeader("Content-Type", "image/jpeg");
+          res.setHeader("Content-Length", stat.size);
+          res.setHeader("Cache-Control", "public, max-age=86400");
+          
+          const readStream = fs.createReadStream(frameFullPath);
+          readStream.on("error", (streamErr) => {
+            console.error(`[Timeline] Stream error for session ${session.id}:`, streamErr);
+            if (!res.headersSent) {
+              res.status(500).json({ message: "Failed to serve frame" });
+            }
+          });
+          readStream.pipe(res);
+        } catch (fsErr) {
+          console.error(`[Timeline] Filesystem error for session ${session.id}:`, fsErr);
+          return res.status(404).json({ message: "Frame unavailable" });
+        }
       }
     } catch (err) {
       console.error("[Timeline] Error:", err);

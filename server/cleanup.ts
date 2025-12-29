@@ -25,13 +25,15 @@ export async function cleanupExpiredVideos(): Promise<number> {
         }
       }
 
-      if (session.thumbnailPath) {
+      // Skip deleting thumbnails - they are stored permanently in object storage
+      // Legacy local thumbnails can be cleaned up manually if needed
+      if (session.thumbnailPath && !session.thumbnailPath.startsWith('/objects/')) {
         const thumbFullPath = path.join(UPLOADS_DIR, session.thumbnailPath);
         
         try {
           if (fs.existsSync(thumbFullPath)) {
             fs.unlinkSync(thumbFullPath);
-            console.log(`[Cleanup] Deleted thumbnail: ${session.thumbnailPath}`);
+            console.log(`[Cleanup] Deleted local thumbnail: ${session.thumbnailPath}`);
           }
         } catch (err) {
           console.error(`[Cleanup] Failed to delete thumbnail ${session.thumbnailPath}:`, err);
@@ -53,15 +55,16 @@ export async function cleanupExpiredVideos(): Promise<number> {
         }
       }
 
-      // Delete poster image
+      // Skip deleting poster image - they are stored permanently in object storage
+      // Legacy local posters can be cleaned up manually if needed
       const posterPath = (session as any).previewPosterPath;
-      if (posterPath) {
+      if (posterPath && !posterPath.startsWith('/objects/')) {
         const posterFullPath = path.join(UPLOADS_DIR, posterPath);
         
         try {
           if (fs.existsSync(posterFullPath)) {
             fs.unlinkSync(posterFullPath);
-            console.log(`[Cleanup] Deleted poster: ${posterPath}`);
+            console.log(`[Cleanup] Deleted local poster: ${posterPath}`);
           }
         } catch (err) {
           console.error(`[Cleanup] Failed to delete poster ${posterPath}:`, err);

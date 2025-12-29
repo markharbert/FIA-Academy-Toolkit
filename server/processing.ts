@@ -279,12 +279,30 @@ export async function processSession(sessionId: string, userId: string, preExtra
       try {
         const posterResult = await generatePoster(videoFullPath, UPLOADS_DIR, sessionId);
         if (posterResult.success && posterResult.posterPath) {
-          await storage.updateSession(sessionId, {
-            previewPosterPath: posterResult.posterPath,
-            previewPosterMimeType: "image/jpeg",
-            previewPosterGeneratedAt: new Date(),
-          });
-          console.log(`[Processing] Poster generated: ${posterResult.posterPath}`);
+          const localPosterPath = path.join(UPLOADS_DIR, posterResult.posterPath);
+          
+          try {
+            const objectPath = await objectStorageService.uploadImage(localPosterPath, posterResult.posterPath);
+            await storage.updateSession(sessionId, {
+              previewPosterPath: objectPath,
+              previewPosterMimeType: "image/jpeg",
+              previewPosterGeneratedAt: new Date(),
+            });
+            console.log(`[Processing] Poster uploaded to object storage: ${objectPath}`);
+            
+            try {
+              if (fs.existsSync(localPosterPath)) {
+                fs.unlinkSync(localPosterPath);
+              }
+            } catch {}
+          } catch (uploadErr) {
+            console.warn(`[Processing] Failed to upload poster to object storage, using local:`, uploadErr);
+            await storage.updateSession(sessionId, {
+              previewPosterPath: posterResult.posterPath,
+              previewPosterMimeType: "image/jpeg",
+              previewPosterGeneratedAt: new Date(),
+            });
+          }
         } else {
           console.warn(`[Processing] Poster generation failed: ${posterResult.error}`);
         }
@@ -297,11 +315,30 @@ export async function processSession(sessionId: string, userId: string, preExtra
         if (videoDuration > 0) {
           const timelineResult = await generateTimelineFrames(videoFullPath, UPLOADS_DIR, sessionId, videoDuration, 12);
           if (timelineResult.success && timelineResult.framePaths) {
+            const objectPaths: string[] = [];
+            
+            for (const framePath of timelineResult.framePaths) {
+              const localFramePath = path.join(UPLOADS_DIR, framePath);
+              try {
+                const objectPath = await objectStorageService.uploadImage(localFramePath, framePath);
+                objectPaths.push(objectPath);
+                
+                try {
+                  if (fs.existsSync(localFramePath)) {
+                    fs.unlinkSync(localFramePath);
+                  }
+                } catch {}
+              } catch (uploadErr) {
+                console.warn(`[Processing] Failed to upload frame ${framePath} to object storage:`, uploadErr);
+                objectPaths.push(framePath);
+              }
+            }
+            
             await storage.updateSession(sessionId, {
-              timelineFrames: timelineResult.framePaths,
+              timelineFrames: objectPaths,
               timelineFramesGeneratedAt: new Date(),
             });
-            console.log(`[Processing] Timeline frames generated: ${timelineResult.framePaths.length} frames`);
+            console.log(`[Processing] Timeline frames uploaded: ${objectPaths.length} frames`);
           } else {
             console.warn(`[Processing] Timeline frame generation failed: ${timelineResult.error}`);
           }
