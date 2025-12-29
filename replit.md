@@ -1,7 +1,7 @@
 # Fearless Video Coach
 
 ## Overview
-Fearless Video Coach is a web application designed for private practice in video marketing. It allows users to record short in-browser videos, receive automatic transcriptions, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA. The application prioritizes private practice, with no public sharing features, and includes a 30-day video retention policy with automatic cleanup.
+Fearless Video Coach is a web application designed for private practice in video marketing. It allows users to record short in-browser videos, receive automatic transcriptions, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA. The application prioritizes private practice with no public sharing features. Videos persist indefinitely unless explicitly deleted by users or admins.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -38,7 +38,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Key Design Decisions
 - **Shared Schema**: Ensures type safety across frontend and backend.
-- **Video Lifecycle**: Videos auto-delete after 30 days.
+- **Video Lifecycle**: Videos persist indefinitely (no auto-deletion based on time).
 - **Goal-Based Scoring**: AI feedback is tailored to user-selected goal types (sales, lead, education, recruit).
 - **Monorepo Structure**: `client/`, `server/`, `shared/` directories.
 - **Session Naming**: User-defined or AI-generated titles.
