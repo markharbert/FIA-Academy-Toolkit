@@ -2,7 +2,6 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { startCleanupJob } from "./cleanup";
 import { bootstrapSuperAdmins } from "./storage";
 
 const app = express();
@@ -104,9 +103,6 @@ app.use((req, res, next) => {
       
       // Bootstrap super admins from environment
       await bootstrapSuperAdmins();
-      
-      // Start cleanup job (runs every 24 hours)
-      startCleanupJob();
     },
   );
 })();

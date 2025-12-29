@@ -39,7 +39,6 @@ import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
-const VIDEO_RETENTION_DAYS = 30;
 const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_RETRANSCRIBES_PER_DAY = 3;
 
@@ -882,11 +881,11 @@ export async function registerRoutes(
       const { session, user } = result;
       
       // Determine if video is available
-      const isExpired = session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date());
-      const status = isExpired ? "expired" : "available";
+      const isDeleted = session.videoDeletedAt !== null;
+      const status = isDeleted ? "deleted" : "available";
       
       // Build video URL for admin (reuse existing video endpoint)
-      const videoUrl = !isExpired && session.videoPath ? `/api/admin/sessions/${sessionId}/video` : null;
+      const videoUrl = !isDeleted && session.videoPath ? `/api/admin/sessions/${sessionId}/video` : null;
       
       // Build thumbnail URL
       const thumbnailUrl = session.thumbnailPath ? `/api/sessions/${sessionId}/thumbnail` : null;
@@ -2252,16 +2251,13 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid goal type" });
       }
 
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + VIDEO_RETENTION_DAYS);
-
       const trimmedTitle = title?.trim().slice(0, 80) || null;
 
       const session = await storage.createSession({
         userId: req.session.userId!,
         goalType: goalType as GoalType,
         durationSeconds: durationSeconds || null,
-        expiresAt,
+        expiresAt: null,
         videoPath: null,
         videoMimeType: null,
         videoSizeBytes: null,
@@ -2335,16 +2331,13 @@ export async function registerRoutes(
         });
       }
       
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + VIDEO_RETENTION_DAYS);
-      
       const sessionTitle = sanitizedTitle || downloadResult.videoInfo?.title?.slice(0, 80) || null;
       
       const session = await storage.createSession({
         userId: req.session.userId!,
         goalType: goalType as GoalType,
         durationSeconds: downloadResult.videoInfo?.duration || null,
-        expiresAt,
+        expiresAt: null,
         videoPath: null,
         videoMimeType: null,
         videoSizeBytes: null,
@@ -3194,8 +3187,8 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Access denied" });
       }
 
-      if (session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date())) {
-        return res.status(410).json({ message: "Video has expired and cannot be retranscribed" });
+      if (session.videoDeletedAt) {
+        return res.status(410).json({ message: "Video has been deleted and cannot be retranscribed" });
       }
 
       if (!session.videoPath) {
@@ -3304,8 +3297,8 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Access denied", traceId });
       }
 
-      if (session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date())) {
-        return res.status(410).json({ message: "Video has expired and cannot be reprocessed", traceId });
+      if (session.videoDeletedAt) {
+        return res.status(410).json({ message: "Video has been deleted and cannot be reprocessed", traceId });
       }
 
       if (!session.videoPath) {
@@ -3358,8 +3351,8 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Access denied" });
       }
 
-      if (session.videoDeletedAt || (session.expiresAt && new Date(session.expiresAt) < new Date())) {
-        return res.status(410).json({ message: "Video has expired" });
+      if (session.videoDeletedAt) {
+        return res.status(410).json({ message: "Video has been deleted" });
       }
 
       const transcript = session.transcriptEditedText || session.transcriptText;

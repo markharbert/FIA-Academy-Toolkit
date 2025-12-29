@@ -72,8 +72,7 @@ export interface IStorage {
   updateSession(id: string, updates: Partial<Session>): Promise<Session | undefined>;
   deleteSession(id: string): Promise<void>;
   
-  // Cleanup
-  getExpiredSessions(): Promise<Session[]>;
+  // Legacy cleanup (not used)
   markVideoDeleted(id: string): Promise<void>;
   
   // System Settings (Keap)
@@ -322,16 +321,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(sessions).where(eq(sessions.id, id));
   }
 
-  // Cleanup
-  async getExpiredSessions(): Promise<Session[]> {
-    const now = new Date();
-    return db.select().from(sessions)
-      .where(and(
-        lt(sessions.expiresAt, now),
-        isNull(sessions.videoDeletedAt)
-      ));
-  }
-
+  // Legacy cleanup (not used)
   async markVideoDeleted(id: string): Promise<void> {
     await db.update(sessions)
       .set({ videoDeletedAt: new Date(), videoPath: null })
