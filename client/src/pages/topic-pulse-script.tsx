@@ -735,7 +735,7 @@ export default function TopicPulseScriptPage() {
         </Tabs>
 
         {showResearchPanel && (
-          <div className="hidden md:block w-[420px] border-l flex-shrink-0 overflow-hidden">
+          <div className="hidden md:block w-[525px] border-l flex-shrink-0 overflow-hidden">
             <YouTubeResearchPanel defaultKeyword={script.title} />
           </div>
         )}
