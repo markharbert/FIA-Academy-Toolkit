@@ -4136,5 +4136,67 @@ export async function registerRoutes(
     }
   });
 
+  // YouTube video details (statistics)
+  app.get("/api/youtube/video/:videoId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { videoId } = req.params;
+      if (!videoId) {
+        return res.status(400).json({ message: "Video ID required" });
+      }
+
+      const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+      if (!YOUTUBE_API_KEY) {
+        return res.status(503).json({ message: "YouTube API not configured" });
+      }
+
+      const url = `https://www.googleapis.com/youtube/v3/videos?key=${YOUTUBE_API_KEY}&id=${videoId}&part=snippet,statistics,contentDetails`;
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("[YouTube] API error:", data);
+        return res.status(500).json({ message: "YouTube API error" });
+      }
+
+      if (!data.items || data.items.length === 0) {
+        return res.status(404).json({ message: "Video not found" });
+      }
+
+      const item = data.items[0];
+      const stats = item.statistics || {};
+      const contentDetails = item.contentDetails || {};
+
+      // Parse ISO 8601 duration (PT1H2M3S) to readable format
+      const parseDuration = (iso: string) => {
+        if (!iso) return null;
+        const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (!match) return iso;
+        const hours = match[1] ? parseInt(match[1]) : 0;
+        const minutes = match[2] ? parseInt(match[2]) : 0;
+        const seconds = match[3] ? parseInt(match[3]) : 0;
+        if (hours > 0) {
+          return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      };
+
+      res.json({
+        videoId: item.id,
+        title: item.snippet.title,
+        description: item.snippet.description,
+        channelTitle: item.snippet.channelTitle,
+        publishedAt: item.snippet.publishedAt,
+        thumbnail: item.snippet.thumbnails?.maxres?.url || item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.medium?.url,
+        viewCount: stats.viewCount ? parseInt(stats.viewCount) : null,
+        likeCount: stats.likeCount ? parseInt(stats.likeCount) : null,
+        commentCount: stats.commentCount ? parseInt(stats.commentCount) : null,
+        duration: parseDuration(contentDetails.duration),
+      });
+    } catch (err) {
+      console.error("[YouTube] Video details error:", err);
+      res.status(500).json({ message: "Failed to fetch video details" });
+    }
+  });
+
   return httpServer;
 }

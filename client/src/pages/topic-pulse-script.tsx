@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson } from "@shared/schema";
@@ -22,13 +22,20 @@ interface YouTubeVideo {
   thumbnail: string;
 }
 
+interface YouTubeVideoDetails extends YouTubeVideo {
+  viewCount: number | null;
+  likeCount: number | null;
+  commentCount: number | null;
+  duration: string | null;
+}
+
 function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
   const [searchQuery, setSearchQuery] = useState(defaultKeyword || "");
   const [activeQuery, setActiveQuery] = useState(defaultKeyword || "");
-  const [selectedVideo, setSelectedVideo] = useState<YouTubeVideo | null>(null);
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const { data: videos, isLoading, refetch } = useQuery<YouTubeVideo[]>({
+  const { data: videos, isLoading } = useQuery<YouTubeVideo[]>({
     queryKey: ["/api/youtube/search", activeQuery],
     queryFn: async () => {
       if (!activeQuery) return [];
@@ -39,11 +46,28 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
     enabled: !!activeQuery,
   });
 
+  const { data: videoDetails, isLoading: isLoadingDetails } = useQuery<YouTubeVideoDetails>({
+    queryKey: ["/api/youtube/video", selectedVideoId],
+    queryFn: async () => {
+      const res = await fetch(`/api/youtube/video/${selectedVideoId}`);
+      if (!res.ok) throw new Error("Failed to load video details");
+      return res.json();
+    },
+    enabled: !!selectedVideoId,
+  });
+
+  const formatNumber = (num: number | null) => {
+    if (num === null) return "N/A";
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+    if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+    return num.toString();
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim().length >= 2) {
       setActiveQuery(searchQuery.trim());
-      setSelectedVideo(null);
+      setSelectedVideoId(null);
     } else {
       toast({ title: "Please enter at least 2 characters", variant: "destructive" });
     }
@@ -70,10 +94,10 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
         </form>
       </div>
 
-      {selectedVideo ? (
+      {selectedVideoId ? (
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-2 border-b bg-background flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedVideo(null)}>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedVideoId(null)}>
               <ChevronLeft className="h-4 w-4 mr-1" />
               Back
             </Button>
@@ -83,18 +107,56 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
               <iframe
                 width="100%"
                 height="100%"
-                src={`https://www.youtube.com/embed/${selectedVideo.videoId}`}
-                title={selectedVideo.title}
+                src={`https://www.youtube.com/embed/${selectedVideoId}`}
+                title="Video player"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
             </div>
-            <div className="p-3">
-              <h4 className="font-medium text-sm mb-1 line-clamp-2">{selectedVideo.title}</h4>
-              <p className="text-xs text-muted-foreground mb-2">{selectedVideo.channelTitle}</p>
-              <p className="text-xs text-muted-foreground line-clamp-3">{selectedVideo.description}</p>
-            </div>
+            {isLoadingDetails ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : videoDetails ? (
+              <div className="p-3 space-y-3">
+                <h4 className="font-medium text-sm line-clamp-2">{videoDetails.title}</h4>
+                <p className="text-xs text-muted-foreground">{videoDetails.channelTitle}</p>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Views</p>
+                      <p className="text-sm font-medium">{formatNumber(videoDetails.viewCount)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                    <ThumbsUp className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Likes</p>
+                      <p className="text-sm font-medium">{formatNumber(videoDetails.likeCount)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Comments</p>
+                      <p className="text-sm font-medium">{formatNumber(videoDetails.commentCount)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Duration</p>
+                      <p className="text-sm font-medium">{videoDetails.duration || "N/A"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground line-clamp-4">{videoDetails.description}</p>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : (
@@ -109,7 +171,7 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
                 <div
                   key={video.videoId}
                   className="flex gap-2 p-2 rounded-md hover-elevate cursor-pointer"
-                  onClick={() => setSelectedVideo(video)}
+                  onClick={() => setSelectedVideoId(video.videoId)}
                   data-testid={`video-item-${video.videoId}`}
                 >
                   <img
