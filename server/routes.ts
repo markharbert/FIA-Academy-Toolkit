@@ -4105,6 +4105,84 @@ export async function registerRoutes(
     }
   });
 
+  // Saved Offers (Call To Action)
+  app.get("/api/topic-pulse/offers", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const offers = await storage.getSavedOffersByUser(req.session.userId!);
+      res.json(offers);
+    } catch (err) {
+      console.error("[TopicPulse] Get offers error:", err);
+      res.status(500).json({ message: "Failed to get saved offers" });
+    }
+  });
+
+  app.post("/api/topic-pulse/offers", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!req.body.name || typeof req.body.name !== "string") {
+        return res.status(400).json({ message: "Offer name is required" });
+      }
+
+      const offer = await storage.createSavedOffer({
+        userId: req.session.userId!,
+        name: req.body.name,
+        description: req.body.description || null,
+        linkUrl: req.body.linkUrl || null,
+        linkLabel: req.body.linkLabel || null,
+        isDefault: req.body.isDefault || false,
+      });
+
+      res.json(offer);
+    } catch (err) {
+      console.error("[TopicPulse] Create offer error:", err);
+      res.status(500).json({ message: "Failed to create saved offer" });
+    }
+  });
+
+  app.patch("/api/topic-pulse/offers/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const updates: { name?: string; description?: string; linkUrl?: string; linkLabel?: string } = {};
+      if (typeof req.body.name === "string") updates.name = req.body.name;
+      if (typeof req.body.description === "string") updates.description = req.body.description;
+      if (typeof req.body.linkUrl === "string") updates.linkUrl = req.body.linkUrl;
+      if (typeof req.body.linkLabel === "string") updates.linkLabel = req.body.linkLabel;
+
+      const offer = await storage.updateSavedOffer(req.params.id, req.session.userId!, updates);
+      if (!offer) {
+        return res.status(404).json({ message: "Offer not found" });
+      }
+      res.json(offer);
+    } catch (err) {
+      console.error("[TopicPulse] Update offer error:", err);
+      res.status(500).json({ message: "Failed to update saved offer" });
+    }
+  });
+
+  app.delete("/api/topic-pulse/offers/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteSavedOffer(req.params.id, req.session.userId!);
+      if (!deleted) {
+        return res.status(404).json({ message: "Offer not found" });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[TopicPulse] Delete offer error:", err);
+      res.status(500).json({ message: "Failed to delete saved offer" });
+    }
+  });
+
+  app.post("/api/topic-pulse/offers/:id/set-default", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const offer = await storage.setDefaultOffer(req.params.id, req.session.userId!);
+      if (!offer) {
+        return res.status(404).json({ message: "Offer not found" });
+      }
+      res.json(offer);
+    } catch (err) {
+      console.error("[TopicPulse] Set default offer error:", err);
+      res.status(500).json({ message: "Failed to set default offer" });
+    }
+  });
+
   app.get("/api/youtube/search", requireAuth, async (req: Request, res: Response) => {
     try {
       const query = req.query.q as string;
