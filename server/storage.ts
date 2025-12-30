@@ -228,7 +228,7 @@ export interface IStorage {
   
   // Topic Pulse Finder: Scripts
   createScript(script: InsertScript): Promise<Script>;
-  getScript(id: string): Promise<Script | undefined>;
+  getScript(id: string): Promise<(Script & { topic?: Topic }) | undefined>;
   getScriptsByUser(userId: string): Promise<(Script & { topic?: Topic })[]>;
   updateScript(id: string, userId: string, updates: Partial<Script>): Promise<Script | undefined>;
   deleteScript(id: string, userId: string): Promise<boolean>;
@@ -1195,9 +1195,16 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
   
-  async getScript(id: string): Promise<Script | undefined> {
-    const [result] = await db.select().from(scripts).where(eq(scripts.id, id));
-    return result || undefined;
+  async getScript(id: string): Promise<(Script & { topic?: Topic }) | undefined> {
+    const results = await db.select()
+      .from(scripts)
+      .leftJoin(topics, eq(scripts.topicId, topics.id))
+      .where(eq(scripts.id, id));
+    if (!results.length) return undefined;
+    return {
+      ...results[0].scripts,
+      topic: results[0].topics || undefined
+    };
   }
   
   async getScriptsByUser(userId: string): Promise<(Script & { topic?: Topic })[]> {

@@ -8,11 +8,167 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Script, ScriptJson, SavedOffer } from "@shared/schema";
+import type { Script, ScriptJson, SavedOffer, Topic } from "@shared/schema";
 import { Gift, Star, RefreshCw } from "lucide-react";
+
+type TrendDataPoint = { year: number; month: string; value: number };
+
+function formatSearchVolume(volume: number | null | undefined): string {
+  if (volume === null || volume === undefined) return "N/A";
+  if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
+  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
+  return volume.toString();
+}
+
+function formatCPC(cpc: number | null | undefined): string {
+  if (cpc === null || cpc === undefined) return "N/A";
+  return `$${cpc.toFixed(2)}`;
+}
+
+function formatCompetition(competition: number | null | undefined): { label: string; color: string; value: string } {
+  if (competition === null || competition === undefined) {
+    return { label: "N/A", color: "text-muted-foreground", value: "" };
+  }
+  const percent = Math.round(competition * 100);
+  if (competition <= 0.33) return { label: "Low", color: "text-green-600 dark:text-green-400", value: `${percent}%` };
+  if (competition <= 0.66) return { label: "Medium", color: "text-yellow-600 dark:text-yellow-400", value: `${percent}%` };
+  return { label: "High", color: "text-red-600 dark:text-red-400", value: `${percent}%` };
+}
+
+function getTrendFromData(trend: TrendDataPoint[] | null | undefined): { direction: string; label: string } {
+  if (!trend || trend.length < 6) return { direction: "unknown", label: "Unknown" };
+  const recentMonths = trend.slice(-3);
+  const olderMonths = trend.slice(-6, -3);
+  const recentAvg = recentMonths.reduce((sum, t) => sum + t.value, 0) / recentMonths.length;
+  const olderAvg = olderMonths.reduce((sum, t) => sum + t.value, 0) / olderMonths.length;
+  if (olderAvg === 0) return { direction: "unknown", label: "Unknown" };
+  const growthRate = (recentAvg - olderAvg) / olderAvg;
+  const percentChange = Math.round(growthRate * 100);
+  if (growthRate > 0.1) return { direction: "rising", label: `+${percentChange}%` };
+  if (growthRate < -0.1) return { direction: "falling", label: `${percentChange}%` };
+  return { direction: "steady", label: "Steady" };
+}
+
+function getOpportunityLevel(score: number): { color: string; label: string } {
+  if (score >= 70) return { color: "text-green-600 dark:text-green-400", label: "Great opportunity" };
+  if (score >= 50) return { color: "text-yellow-600 dark:text-yellow-400", label: "Good potential" };
+  return { color: "text-red-600 dark:text-red-400", label: "Challenging" };
+}
+
+function TrendIcon({ direction }: { direction: string }) {
+  if (direction === "rising") return <TrendingUp className="h-4 w-4 text-green-500" />;
+  if (direction === "falling") return <TrendingDown className="h-4 w-4 text-red-500" />;
+  return <Minus className="h-4 w-4 text-muted-foreground" />;
+}
+
+function KeywordDataDisplay({ topic }: { topic: Topic }) {
+  const trend = getTrendFromData(topic.trendData as TrendDataPoint[] | null);
+  const competition = formatCompetition(topic.competition);
+  const opportunityLevel = getOpportunityLevel(topic.opportunityScore || 0);
+  
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
+      <div className="p-3 rounded-md bg-muted/50">
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-xs font-medium text-muted-foreground">Monthly Searches</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <p className="text-xs">Estimated monthly searches on Google (Keywords Everywhere)</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <p className="font-mono text-lg font-bold text-blue-600 dark:text-blue-400" data-testid="text-search-volume">
+          {formatSearchVolume(topic.monthlySearchVolume)}
+        </p>
+      </div>
+      
+      <div className="p-3 rounded-md bg-muted/50">
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-xs font-medium text-muted-foreground">Opportunity</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <p className="text-xs">Composite score based on volume, competition, CPC, and trend</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <p className={`font-mono text-lg font-bold ${opportunityLevel.color}`} data-testid="text-opportunity-score">
+          {topic.opportunityScore}/100
+        </p>
+      </div>
+      
+      <div className="p-3 rounded-md bg-muted/50">
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-xs font-medium text-muted-foreground">CPC</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <p className="text-xs">Cost-per-click in Google Ads. Higher = more commercial intent</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <p className="font-mono text-lg font-semibold" data-testid="text-cpc">
+          {formatCPC(topic.cpc)}
+        </p>
+      </div>
+      
+      <div className="p-3 rounded-md bg-muted/50">
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-xs font-medium text-muted-foreground">Competition</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <p className="text-xs">Ad competition level. Lower = easier to rank</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <p className={`font-mono text-lg font-semibold ${competition.color}`} data-testid="text-competition">
+          {competition.label}
+          {competition.value && <span className="text-sm font-normal ml-1">({competition.value})</span>}
+        </p>
+      </div>
+      
+      <div className="p-3 rounded-md bg-muted/50">
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-xs font-medium text-muted-foreground">Trend</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <p className="text-xs">Search interest trend over recent months</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <div className="flex items-center gap-1.5" data-testid="text-trend">
+          <TrendIcon direction={trend.direction} />
+          <span className={`font-mono text-lg font-semibold ${
+            trend.direction === "rising" 
+              ? "text-green-600 dark:text-green-400" 
+              : trend.direction === "falling" 
+                ? "text-red-600 dark:text-red-400" 
+                : "text-muted-foreground"
+          }`}>
+            {trend.label}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface YouTubeVideo {
   videoId: string;
@@ -980,7 +1136,7 @@ export default function TopicPulseScriptPage() {
   const [editedScriptJson, setEditedScriptJson] = useState<ScriptJson | null>(null);
   const [showResearchPanel, setShowResearchPanel] = useState(false);
 
-  const { data: script, isLoading } = useQuery<Script>({
+  const { data: script, isLoading } = useQuery<Script & { topic?: Topic }>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
     enabled: !!scriptId,
   });
@@ -1299,6 +1455,9 @@ export default function TopicPulseScriptPage() {
             {showResearchPanel ? "Hide" : "Show"} Video Research
           </Button>
         </div>
+        {script.topic && (
+          <KeywordDataDisplay topic={script.topic} />
+        )}
       </div>
 
       <div className="flex-1 overflow-hidden flex">
