@@ -1,6 +1,6 @@
 import { 
   users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
-  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult, type SystemSettings,
@@ -15,7 +15,8 @@ import {
   type SavedTopic, type InsertSavedTopic,
   type Script, type InsertScript,
   type LinkPlaceholder, type InsertLinkPlaceholder,
-  type UserApiKey, type InsertUserApiKey, type ApiKeyProvider
+  type UserApiKey, type InsertUserApiKey, type ApiKeyProvider,
+  type SavedOffer, type InsertSavedOffer
 } from "@shared/schema";
 import crypto from "crypto";
 import { db } from "./db";
@@ -248,6 +249,13 @@ export interface IStorage {
   getVideoTrendsCredits(userId: string): Promise<{ creditsUsed: number; totalCreditsUsed: number; monthlyLimit: number; windowStartedAt: Date; remaining: number; resetsAt: Date }>;
   useVideoTrendsCredits(userId: string, amount: number): Promise<{ success: boolean; remaining: number; error?: string }>;
   getAggregateVideoTrendsCredits(): Promise<{ totalCreditsUsedAllTime: number; totalCreditsUsedThisMonth: number; activeUsers: number; topUsers: Array<{ userId: string; email: string | null; displayName: string | null; creditsThisMonth: number; creditsTotal: number }> }>;
+  
+  // Saved Offers (Call To Action)
+  getSavedOffersByUser(userId: string): Promise<SavedOffer[]>;
+  createSavedOffer(offer: InsertSavedOffer): Promise<SavedOffer>;
+  updateSavedOffer(id: string, userId: string, updates: Partial<SavedOffer>): Promise<SavedOffer | undefined>;
+  deleteSavedOffer(id: string, userId: string): Promise<boolean>;
+  setDefaultOffer(id: string, userId: string): Promise<SavedOffer | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1440,6 +1448,47 @@ export class DatabaseStorage implements IStorage {
       activeUsers,
       topUsers,
     };
+  }
+  
+  // Saved Offers (Call To Action)
+  async getSavedOffersByUser(userId: string): Promise<SavedOffer[]> {
+    return db.select().from(savedOffers)
+      .where(eq(savedOffers.userId, userId))
+      .orderBy(desc(savedOffers.isDefault), desc(savedOffers.createdAt));
+  }
+  
+  async createSavedOffer(offer: InsertSavedOffer): Promise<SavedOffer> {
+    const [created] = await db.insert(savedOffers).values(offer).returning();
+    return created;
+  }
+  
+  async updateSavedOffer(id: string, userId: string, updates: Partial<SavedOffer>): Promise<SavedOffer | undefined> {
+    const [updated] = await db.update(savedOffers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(savedOffers.id, id), eq(savedOffers.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+  
+  async deleteSavedOffer(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(savedOffers)
+      .where(and(eq(savedOffers.id, id), eq(savedOffers.userId, userId)))
+      .returning();
+    return result.length > 0;
+  }
+  
+  async setDefaultOffer(id: string, userId: string): Promise<SavedOffer | undefined> {
+    // First clear all defaults for this user
+    await db.update(savedOffers)
+      .set({ isDefault: false, updatedAt: new Date() })
+      .where(eq(savedOffers.userId, userId));
+    
+    // Then set the new default
+    const [updated] = await db.update(savedOffers)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(and(eq(savedOffers.id, id), eq(savedOffers.userId, userId)))
+      .returning();
+    return updated || undefined;
   }
 }
 
