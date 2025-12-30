@@ -668,47 +668,77 @@ export default function TopicPulseScriptPage() {
     if (!editedScriptJson?.fullScript) return "";
     const fs = editedScriptJson.fullScript;
     
-    const sections: string[] = [
-      `## 1. HOOK`,
-      fs.hook.text,
-      fs.hook.duration ? `[Duration: ${fs.hook.duration}]` : "",
-      "",
-      `## 2. SET THE HOOK`,
-      fs.setHook.text,
-      fs.setHook.duration ? `[Duration: ${fs.setHook.duration}]` : "",
-      "",
-      `## 3. FIRST CALL TO ACTION`,
-      fs.firstCTA.text,
-      fs.firstCTA.duration ? `[Duration: ${fs.firstCTA.duration}]` : "",
-      "",
-      `## 4. CONTENT`,
-      fs.content.text,
-    ];
+    const sections: string[] = [];
+    
+    // Hook
+    sections.push("");
+    sections.push("═══════════════════════════════════════");
+    sections.push("1. HOOK");
+    sections.push("═══════════════════════════════════════");
+    sections.push("");
+    sections.push(fs.hook.text);
+    if (fs.hook.duration) sections.push(`\n[Duration: ${fs.hook.duration}]`);
+    
+    // Set the Hook
+    sections.push("");
+    sections.push("");
+    sections.push("═══════════════════════════════════════");
+    sections.push("2. SET THE HOOK");
+    sections.push("═══════════════════════════════════════");
+    sections.push("");
+    sections.push(fs.setHook.text);
+    if (fs.setHook.duration) sections.push(`\n[Duration: ${fs.setHook.duration}]`);
+    
+    // First CTA
+    sections.push("");
+    sections.push("");
+    sections.push("═══════════════════════════════════════");
+    sections.push("3. FIRST CALL TO ACTION");
+    sections.push("═══════════════════════════════════════");
+    sections.push("");
+    sections.push(fs.firstCTA.text);
+    if (fs.firstCTA.duration) sections.push(`\n[Duration: ${fs.firstCTA.duration}]`);
+    
+    // Content
+    sections.push("");
+    sections.push("");
+    sections.push("═══════════════════════════════════════");
+    sections.push("4. CONTENT");
+    sections.push("═══════════════════════════════════════");
+    sections.push("");
+    sections.push(fs.content.text);
 
     // Add content sections
     if (fs.content.sections && fs.content.sections.length > 0) {
-      sections.push("");
       fs.content.sections.forEach((section, i) => {
-        sections.push(`### Section ${i + 1}: ${section.title}${section.timestamp ? ` [${section.timestamp}]` : ""}`);
+        sections.push("");
+        sections.push("");
+        sections.push("───────────────────────────────────────");
+        sections.push(`SECTION ${i + 1}: ${section.title.toUpperCase()}${section.timestamp ? ` [${section.timestamp}]` : ""}`);
+        sections.push("───────────────────────────────────────");
+        sections.push("");
         sections.push(section.content);
         if (section.brollIdeas && section.brollIdeas.length > 0) {
-          sections.push(`B-Roll Ideas: ${section.brollIdeas.join(", ")}`);
+          sections.push(`\nB-Roll Ideas: ${section.brollIdeas.join(", ")}`);
         }
-        sections.push("");
       });
     }
 
-    sections.push(
-      `## 5. FINAL CALL TO ACTION`,
-      fs.finalCTA.text,
-      fs.finalCTA.duration ? `[Duration: ${fs.finalCTA.duration}]` : "",
-    );
+    // Final CTA
+    sections.push("");
+    sections.push("");
+    sections.push("═══════════════════════════════════════");
+    sections.push("5. FINAL CALL TO ACTION");
+    sections.push("═══════════════════════════════════════");
+    sections.push("");
+    sections.push(fs.finalCTA.text);
+    if (fs.finalCTA.duration) sections.push(`\n[Duration: ${fs.finalCTA.duration}]`);
 
     if (fs.finalCTA.nextVideoSuggestion) {
-      sections.push(`Next Video Suggestion: ${fs.finalCTA.nextVideoSuggestion}`);
+      sections.push(`\nNext Video Suggestion: ${fs.finalCTA.nextVideoSuggestion}`);
     }
 
-    return sections.filter(s => s !== "").join("\n");
+    return sections.join("\n");
   };
 
   return (
