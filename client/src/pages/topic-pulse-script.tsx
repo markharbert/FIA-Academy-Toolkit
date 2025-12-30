@@ -665,14 +665,50 @@ export default function TopicPulseScriptPage() {
   const fullScript = editedScriptJson?.fullScript;
 
   const getFullScriptText = () => {
-    if (!fullScript) return "";
-    return [
-      `## HOOK\n${fullScript.hook.text}`,
-      `## SET THE HOOK\n${fullScript.setHook.text}`,
-      `## FIRST CALL TO ACTION\n${fullScript.firstCTA.text}`,
-      `## CONTENT\n${fullScript.content.text}`,
-      `## FINAL CALL TO ACTION\n${fullScript.finalCTA.text}`,
-    ].join("\n\n");
+    if (!editedScriptJson?.fullScript) return "";
+    const fs = editedScriptJson.fullScript;
+    
+    const sections: string[] = [
+      `## 1. HOOK`,
+      fs.hook.text,
+      fs.hook.duration ? `[Duration: ${fs.hook.duration}]` : "",
+      "",
+      `## 2. SET THE HOOK`,
+      fs.setHook.text,
+      fs.setHook.duration ? `[Duration: ${fs.setHook.duration}]` : "",
+      "",
+      `## 3. FIRST CALL TO ACTION`,
+      fs.firstCTA.text,
+      fs.firstCTA.duration ? `[Duration: ${fs.firstCTA.duration}]` : "",
+      "",
+      `## 4. CONTENT`,
+      fs.content.text,
+    ];
+
+    // Add content sections
+    if (fs.content.sections && fs.content.sections.length > 0) {
+      sections.push("");
+      fs.content.sections.forEach((section, i) => {
+        sections.push(`### Section ${i + 1}: ${section.title}${section.timestamp ? ` [${section.timestamp}]` : ""}`);
+        sections.push(section.content);
+        if (section.brollIdeas && section.brollIdeas.length > 0) {
+          sections.push(`B-Roll Ideas: ${section.brollIdeas.join(", ")}`);
+        }
+        sections.push("");
+      });
+    }
+
+    sections.push(
+      `## 5. FINAL CALL TO ACTION`,
+      fs.finalCTA.text,
+      fs.finalCTA.duration ? `[Duration: ${fs.finalCTA.duration}]` : "",
+    );
+
+    if (fs.finalCTA.nextVideoSuggestion) {
+      sections.push(`Next Video Suggestion: ${fs.finalCTA.nextVideoSuggestion}`);
+    }
+
+    return sections.filter(s => s !== "").join("\n");
   };
 
   return (
