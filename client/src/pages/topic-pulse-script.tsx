@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, ArrowLeft, Copy, Check, ChevronDown, Clock, FileText, MessageSquare, AlignLeft, Tags } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson } from "@shared/schema";
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -34,18 +35,41 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-function ScriptSection({ title, content, duration, onScreenText, isOpen = true }: { 
+function EditableScriptSection({ 
+  title, 
+  content, 
+  duration, 
+  onScreenText,
+  onChange,
+  sectionKey,
+}: { 
   title: string; 
   content: string; 
   duration?: string;
   onScreenText?: string[];
-  isOpen?: boolean;
+  onChange: (value: string) => void;
+  sectionKey: string;
 }) {
-  const [open, setOpen] = useState(isOpen);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(content);
+
+  useEffect(() => {
+    setEditValue(content);
+  }, [content]);
+
+  const handleSave = () => {
+    onChange(editValue);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditValue(content);
+    setIsEditing(false);
+  };
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full p-4 hover-elevate rounded-md">
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <span className="font-semibold">{title}</span>
           {duration && (
@@ -55,36 +79,146 @@ function ScriptSection({ title, content, duration, onScreenText, isOpen = true }
             </Badge>
           )}
         </div>
-        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="px-4 pb-4">
+        {!isEditing && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setIsEditing(true)}
+            data-testid={`button-edit-${sectionKey}`}
+          >
+            <Pencil className="h-4 w-4 mr-1" />
+            Edit
+          </Button>
+        )}
+      </div>
+      
+      {isEditing ? (
+        <div className="space-y-3">
+          <Textarea
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            className="min-h-[150px] font-mono text-sm"
+            data-testid={`textarea-${sectionKey}`}
+          />
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSave} data-testid={`button-save-${sectionKey}`}>
+              <Check className="h-4 w-4 mr-1" />
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : (
         <div className="prose prose-sm dark:prose-invert max-w-none">
           <p className="whitespace-pre-wrap">{content}</p>
         </div>
-        {onScreenText && onScreenText.length > 0 && (
-          <div className="mt-3 p-3 bg-muted/50 rounded-md">
-            <p className="text-xs font-medium text-muted-foreground mb-2">On-Screen Text:</p>
-            <ul className="text-sm space-y-1">
-              {onScreenText.map((text, i) => (
-                <li key={i} className="text-muted-foreground">• {text}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+      )}
+      
+      {onScreenText && onScreenText.length > 0 && !isEditing && (
+        <div className="mt-3 p-3 bg-muted/50 rounded-md">
+          <p className="text-xs font-medium text-muted-foreground mb-2">On-Screen Text:</p>
+          <ul className="text-sm space-y-1">
+            {onScreenText.map((text, i) => (
+              <li key={i} className="text-muted-foreground">{text}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
+}
+
+function hasScriptChanged(original: ScriptJson | null, edited: ScriptJson | null): boolean {
+  if (!original || !edited) return false;
+  
+  if (original.shortsScript !== edited.shortsScript) return true;
+  if (original.pinnedComment !== edited.pinnedComment) return true;
+  
+  const origFull = original.fullScript;
+  const editFull = edited.fullScript;
+  if (!origFull || !editFull) return origFull !== editFull;
+  
+  if (origFull.hook.text !== editFull.hook.text) return true;
+  if (origFull.setHook.text !== editFull.setHook.text) return true;
+  if (origFull.firstCTA.text !== editFull.firstCTA.text) return true;
+  if (origFull.content.text !== editFull.content.text) return true;
+  if (origFull.finalCTA.text !== editFull.finalCTA.text) return true;
+  
+  return false;
 }
 
 export default function TopicPulseScriptPage() {
   const { scriptId } = useParams<{ scriptId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const [editedScriptJson, setEditedScriptJson] = useState<ScriptJson | null>(null);
 
   const { data: script, isLoading } = useQuery<Script>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
     enabled: !!scriptId,
   });
+
+  const originalScriptJson = script?.scriptJson as ScriptJson | null;
+  const hasChanges = hasScriptChanged(originalScriptJson, editedScriptJson);
+
+  useEffect(() => {
+    if (script?.scriptJson) {
+      setEditedScriptJson(script.scriptJson as ScriptJson);
+    }
+  }, [script]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (scriptJson: ScriptJson) => {
+      const res = await apiRequest("PATCH", `/api/topic-pulse/scripts/${scriptId}`, { scriptJson });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Script saved!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/scripts", scriptId] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save script", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSectionChange = (section: keyof NonNullable<ScriptJson["fullScript"]>, value: string) => {
+    if (!editedScriptJson?.fullScript) return;
+    
+    setEditedScriptJson({
+      ...editedScriptJson,
+      fullScript: {
+        ...editedScriptJson.fullScript,
+        [section]: {
+          ...editedScriptJson.fullScript[section],
+          text: value,
+        },
+      },
+    });
+  };
+
+  const handleShortsChange = (value: string) => {
+    if (!editedScriptJson) return;
+    setEditedScriptJson({
+      ...editedScriptJson,
+      shortsScript: value,
+    });
+  };
+
+  const handleCommentChange = (value: string) => {
+    if (!editedScriptJson) return;
+    setEditedScriptJson({
+      ...editedScriptJson,
+      pinnedComment: value,
+    });
+  };
+
+  const handleSave = () => {
+    if (editedScriptJson) {
+      saveMutation.mutate(editedScriptJson);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -102,8 +236,7 @@ export default function TopicPulseScriptPage() {
     );
   }
 
-  const scriptJson = script.scriptJson as ScriptJson | null;
-  const fullScript = scriptJson?.fullScript;
+  const fullScript = editedScriptJson?.fullScript;
 
   const getFullScriptText = () => {
     if (!fullScript) return "";
@@ -129,6 +262,20 @@ export default function TopicPulseScriptPage() {
               Created {new Date(script.createdAt).toLocaleDateString()}
             </p>
           </div>
+          {hasChanges && (
+            <Button 
+              onClick={handleSave} 
+              disabled={saveMutation.isPending}
+              data-testid="button-save-script"
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Save Changes
+            </Button>
+          )}
         </div>
       </div>
 
@@ -165,26 +312,34 @@ export default function TopicPulseScriptPage() {
                 {fullScript && (
                   <Card>
                     <CardContent className="p-0 divide-y">
-                      <ScriptSection 
+                      <EditableScriptSection 
                         title="1. Hook" 
                         content={fullScript.hook.text} 
                         duration={fullScript.hook.duration}
                         onScreenText={fullScript.hook.onScreenText}
+                        onChange={(v) => handleSectionChange("hook", v)}
+                        sectionKey="hook"
                       />
-                      <ScriptSection 
+                      <EditableScriptSection 
                         title="2. Set the Hook" 
                         content={fullScript.setHook.text} 
                         duration={fullScript.setHook.duration}
                         onScreenText={fullScript.setHook.onScreenText}
+                        onChange={(v) => handleSectionChange("setHook", v)}
+                        sectionKey="set-hook"
                       />
-                      <ScriptSection 
+                      <EditableScriptSection 
                         title="3. First CTA" 
                         content={fullScript.firstCTA.text} 
                         duration={fullScript.firstCTA.duration}
+                        onChange={(v) => handleSectionChange("firstCTA", v)}
+                        sectionKey="first-cta"
                       />
-                      <ScriptSection 
+                      <EditableScriptSection 
                         title="4. Content" 
-                        content={fullScript.content.text} 
+                        content={fullScript.content.text}
+                        onChange={(v) => handleSectionChange("content", v)}
+                        sectionKey="content"
                       />
                       {fullScript.content.sections?.map((section, i) => (
                         <div key={i} className="p-4 bg-muted/30">
@@ -200,10 +355,12 @@ export default function TopicPulseScriptPage() {
                           )}
                         </div>
                       ))}
-                      <ScriptSection 
+                      <EditableScriptSection 
                         title="5. Final CTA" 
                         content={fullScript.finalCTA.text} 
                         duration={fullScript.finalCTA.duration}
+                        onChange={(v) => handleSectionChange("finalCTA", v)}
+                        sectionKey="final-cta"
                       />
                       {fullScript.finalCTA.nextVideoSuggestion && (
                         <div className="p-4 bg-primary/5">
@@ -223,14 +380,20 @@ export default function TopicPulseScriptPage() {
             <ScrollArea className="h-full">
               <div className="p-4 max-w-3xl mx-auto">
                 <div className="flex justify-end mb-4">
-                  <CopyButton text={scriptJson?.shortsScript || ""} label="Copy Shorts Script" />
+                  <CopyButton text={editedScriptJson?.shortsScript || ""} label="Copy Shorts Script" />
                 </div>
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">YouTube Shorts Script</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="whitespace-pre-wrap">{scriptJson?.shortsScript || "No shorts script available"}</p>
+                    <Textarea
+                      value={editedScriptJson?.shortsScript || ""}
+                      onChange={(e) => handleShortsChange(e.target.value)}
+                      className="min-h-[200px] font-mono text-sm"
+                      placeholder="No shorts script available"
+                      data-testid="textarea-shorts"
+                    />
                   </CardContent>
                 </Card>
               </div>
@@ -241,14 +404,20 @@ export default function TopicPulseScriptPage() {
             <ScrollArea className="h-full">
               <div className="p-4 max-w-3xl mx-auto">
                 <div className="flex justify-end mb-4">
-                  <CopyButton text={scriptJson?.pinnedComment || ""} label="Copy Comment" />
+                  <CopyButton text={editedScriptJson?.pinnedComment || ""} label="Copy Comment" />
                 </div>
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Pinned Comment</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="whitespace-pre-wrap">{scriptJson?.pinnedComment || "No pinned comment available"}</p>
+                    <Textarea
+                      value={editedScriptJson?.pinnedComment || ""}
+                      onChange={(e) => handleCommentChange(e.target.value)}
+                      className="min-h-[150px] font-mono text-sm"
+                      placeholder="No pinned comment available"
+                      data-testid="textarea-comment"
+                    />
                   </CardContent>
                 </Card>
               </div>
@@ -258,11 +427,11 @@ export default function TopicPulseScriptPage() {
           <TabsContent value="description" className="flex-1 overflow-hidden m-0">
             <ScrollArea className="h-full">
               <div className="p-4 max-w-3xl mx-auto">
-                {scriptJson?.description && (
+                {editedScriptJson?.description && (
                   <>
                     <div className="flex justify-end mb-4">
                       <CopyButton 
-                        text={`${scriptJson.description.summary}\n\n${scriptJson.description.affiliateDisclosure}\n\n${scriptJson.description.linkSection}\n\nTags: ${scriptJson.description.tags?.join(", ")}`} 
+                        text={`${editedScriptJson.description.summary}\n\n${editedScriptJson.description.affiliateDisclosure}\n\n${editedScriptJson.description.linkSection}\n\nTags: ${editedScriptJson.description.tags?.join(", ")}`} 
                         label="Copy Description" 
                       />
                     </div>
@@ -272,7 +441,7 @@ export default function TopicPulseScriptPage() {
                           <CardTitle className="text-lg">Summary</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p>{scriptJson.description.summary}</p>
+                          <p>{editedScriptJson.description.summary}</p>
                         </CardContent>
                       </Card>
 
@@ -281,7 +450,7 @@ export default function TopicPulseScriptPage() {
                           <CardTitle className="text-lg">Affiliate Disclosure</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p>{scriptJson.description.affiliateDisclosure}</p>
+                          <p>{editedScriptJson.description.affiliateDisclosure}</p>
                         </CardContent>
                       </Card>
 
@@ -290,7 +459,7 @@ export default function TopicPulseScriptPage() {
                           <CardTitle className="text-lg">Link Section</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p>{scriptJson.description.linkSection}</p>
+                          <p>{editedScriptJson.description.linkSection}</p>
                         </CardContent>
                       </Card>
 
@@ -300,7 +469,7 @@ export default function TopicPulseScriptPage() {
                         </CardHeader>
                         <CardContent>
                           <div className="flex flex-wrap gap-2">
-                            {scriptJson.description.tags?.map((tag, i) => (
+                            {editedScriptJson.description.tags?.map((tag, i) => (
                               <Badge key={i} variant="secondary">{tag}</Badge>
                             ))}
                           </div>

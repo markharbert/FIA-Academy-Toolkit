@@ -6,11 +6,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Loader2, ArrowLeft, Trash2, FileText, Bookmark, 
@@ -20,7 +15,7 @@ import {
 import { SiPinterest } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { SavedTopic, Topic, TopicIntent, DemandSignals, VideoLengthTarget, TonePreference, TrendDataPoint } from "@shared/schema";
+import type { SavedTopic, Topic, TopicIntent, DemandSignals, TrendDataPoint } from "@shared/schema";
 
 function IntentAnalysisSection({ topicId, existingAnalysis }: { topicId: string; existingAnalysis?: string | null }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -229,13 +224,6 @@ export default function TopicPulseSavedPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
-  const [scriptDialogOpen, setScriptDialogOpen] = useState(false);
-  const [scriptForm, setScriptForm] = useState({
-    videoLengthTarget: "6-10" as VideoLengthTarget,
-    affiliateOffer: "",
-    affiliateLinkLabel: "",
-    tonePreference: "conversational" as TonePreference,
-  });
 
   const { data: savedTopics, isLoading } = useQuery<(SavedTopic & { topic: Topic })[]>({
     queryKey: ["/api/topic-pulse/saved-topics"],
@@ -316,12 +304,15 @@ export default function TopicPulseSavedPage() {
   });
 
   const scriptMutation = useMutation({
-    mutationFn: async (input: { topicId: string; videoLengthTarget: VideoLengthTarget; affiliateOffer?: string; affiliateLinkLabel?: string; tonePreference: TonePreference }) => {
-      const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", input);
+    mutationFn: async (topicId: string) => {
+      const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", {
+        topicId,
+        videoLengthTarget: "6-10",
+        tonePreference: "friendly",
+      });
       return res.json();
     },
     onSuccess: (data) => {
-      setScriptDialogOpen(false);
       toast({ title: "Script generated!" });
       navigate(`/topic-pulse/scripts/${data.id}`);
     },
@@ -353,13 +344,6 @@ export default function TopicPulseSavedPage() {
     },
   });
 
-  const handleGenerateScript = () => {
-    if (!selectedTopic) return;
-    scriptMutation.mutate({
-      topicId: selectedTopic.id,
-      ...scriptForm,
-    });
-  };
 
   const getSavedEntryForTopic = (topicId: string) => {
     return savedTopics?.find(s => s.topic.id === topicId);
@@ -501,10 +485,15 @@ export default function TopicPulseSavedPage() {
                     return (
                       <div className="flex gap-2 mb-4 flex-wrap">
                         <Button 
-                          onClick={() => setScriptDialogOpen(true)}
+                          onClick={() => scriptMutation.mutate(selectedTopic.id)}
+                          disabled={scriptMutation.isPending}
                           data-testid="button-generate-script"
                         >
-                          <FileText className="h-4 w-4 mr-2" />
+                          {scriptMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4 mr-2" />
+                          )}
                           Generate Script
                         </Button>
                         {isCompleted ? (
@@ -767,82 +756,6 @@ export default function TopicPulseSavedPage() {
         )}
       </div>
 
-      <Dialog open={scriptDialogOpen} onOpenChange={setScriptDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Generate Video Script</DialogTitle>
-            <DialogDescription>
-              Create a script using Mark's 5-part formula for "{selectedTopic?.topicTitle}"
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Video Length</Label>
-              <Select 
-                value={scriptForm.videoLengthTarget} 
-                onValueChange={(v) => setScriptForm(f => ({ ...f, videoLengthTarget: v as VideoLengthTarget }))}
-              >
-                <SelectTrigger data-testid="select-video-length">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="under-3">Under 3 minutes (Short)</SelectItem>
-                  <SelectItem value="3-5">3-5 minutes</SelectItem>
-                  <SelectItem value="6-10">6-10 minutes (Recommended)</SelectItem>
-                  <SelectItem value="10-15">10-15 minutes</SelectItem>
-                  <SelectItem value="15+">15+ minutes (Long form)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Tone</Label>
-              <Select 
-                value={scriptForm.tonePreference} 
-                onValueChange={(v) => setScriptForm(f => ({ ...f, tonePreference: v as TonePreference }))}
-              >
-                <SelectTrigger data-testid="select-tone">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="conversational">Conversational</SelectItem>
-                  <SelectItem value="professional">Professional</SelectItem>
-                  <SelectItem value="enthusiastic">Enthusiastic</SelectItem>
-                  <SelectItem value="educational">Educational</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Affiliate Offer (optional)</Label>
-              <Input
-                placeholder="e.g., ClickFunnels, AWeber, etc."
-                value={scriptForm.affiliateOffer}
-                onChange={(e) => setScriptForm(f => ({ ...f, affiliateOffer: e.target.value }))}
-                data-testid="input-affiliate-offer"
-              />
-            </div>
-            <div>
-              <Label>Affiliate Link Label (optional)</Label>
-              <Input
-                placeholder="e.g., 'link in description'"
-                value={scriptForm.affiliateLinkLabel}
-                onChange={(e) => setScriptForm(f => ({ ...f, affiliateLinkLabel: e.target.value }))}
-                data-testid="input-affiliate-label"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setScriptDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={handleGenerateScript} 
-              disabled={scriptMutation.isPending}
-              data-testid="button-confirm-generate"
-            >
-              {scriptMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Generate Script
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

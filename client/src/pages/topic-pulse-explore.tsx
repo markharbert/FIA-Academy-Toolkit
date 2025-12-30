@@ -2,27 +2,23 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Minus, Bookmark, 
-  FileText, Sparkles, CheckCircle2, AlertCircle, Lightbulb, HelpCircle,
+  FileText, Sparkles, Lightbulb, HelpCircle, CheckCircle2, AlertCircle,
   ArrowUpDown, ArrowDown, ArrowUp, X, Search, Brain, ChevronDown
 } from "lucide-react";
 import { SiPinterest } from "react-icons/si";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Topic, TopicRun, DemandSignals, TopicIntent, VideoLengthTarget, TonePreference, TrendDataPoint } from "@shared/schema";
+import type { Topic, TopicRun, TopicIntent, TrendDataPoint, DemandSignals } from "@shared/schema";
 
 function IntentAnalysisSection({ topicId, existingAnalysis }: { topicId: string; existingAnalysis?: string | null }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -246,15 +242,6 @@ export default function TopicPulseExplorePage() {
   const [minScore, setMinScore] = useState(0);
   const [sortBy, setSortBy] = useState<"score" | "volume" | "competition">("score");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
-  const [scriptDialogOpen, setScriptDialogOpen] = useState(false);
-  const [scriptForm, setScriptForm] = useState({
-    videoLengthTarget: "6-10" as VideoLengthTarget,
-    affiliateOffer: "",
-    affiliateLinkLabel: "",
-    primaryPromise: "",
-    personalAngle: "",
-    tonePreference: "friendly" as TonePreference,
-  });
 
   const { data: run, isLoading: runLoading } = useQuery<TopicRun>({
     queryKey: ["/api/topic-pulse/runs", runId],
@@ -303,12 +290,15 @@ export default function TopicPulseExplorePage() {
   });
 
   const scriptMutation = useMutation({
-    mutationFn: async (input: any) => {
-      const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", input);
+    mutationFn: async (topicId: string) => {
+      const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", {
+        topicId,
+        videoLengthTarget: "6-10",
+        tonePreference: "friendly",
+      });
       return res.json();
     },
     onSuccess: (data) => {
-      setScriptDialogOpen(false);
       toast({ title: "Script generated!" });
       navigate(`/topic-pulse/scripts/${data.id}`);
     },
@@ -368,13 +358,6 @@ export default function TopicPulseExplorePage() {
     }
   };
 
-  const handleGenerateScript = () => {
-    if (!selectedTopic) return;
-    scriptMutation.mutate({
-      topicId: selectedTopic.id,
-      ...scriptForm,
-    });
-  };
 
   if (runLoading || topicsLoading) {
     return (
@@ -523,10 +506,15 @@ export default function TopicPulseExplorePage() {
                   
                   <div className="flex gap-2 mb-4 flex-wrap">
                     <Button 
-                      onClick={() => setScriptDialogOpen(true)}
+                      onClick={() => scriptMutation.mutate(selectedTopic.id)}
+                      disabled={scriptMutation.isPending}
                       data-testid="button-generate-script"
                     >
-                      <FileText className="h-4 w-4 mr-2" />
+                      {scriptMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <FileText className="h-4 w-4 mr-2" />
+                      )}
                       Generate Script
                     </Button>
                     <Button 
@@ -760,104 +748,6 @@ export default function TopicPulseExplorePage() {
         )}
       </div>
 
-      <Dialog open={scriptDialogOpen} onOpenChange={setScriptDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Generate Script</DialogTitle>
-            <DialogDescription>
-              Configure your script for "{selectedTopic?.topicTitle}"
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div>
-              <Label>Video Length</Label>
-              <Select 
-                value={scriptForm.videoLengthTarget} 
-                onValueChange={(v) => setScriptForm(f => ({ ...f, videoLengthTarget: v as VideoLengthTarget }))}
-              >
-                <SelectTrigger data-testid="select-video-length">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="3-5">3-5 minutes</SelectItem>
-                  <SelectItem value="6-10">6-10 minutes</SelectItem>
-                  <SelectItem value="10-15">10-15 minutes</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Affiliate Offer Name</Label>
-              <Input
-                placeholder="e.g., ClickFunnels, Jasper AI"
-                value={scriptForm.affiliateOffer}
-                onChange={(e) => setScriptForm(f => ({ ...f, affiliateOffer: e.target.value }))}
-                data-testid="input-affiliate-offer"
-              />
-            </div>
-
-            <div>
-              <Label>Link Label</Label>
-              <Input
-                placeholder="e.g., My ClickFunnels Link"
-                value={scriptForm.affiliateLinkLabel}
-                onChange={(e) => setScriptForm(f => ({ ...f, affiliateLinkLabel: e.target.value }))}
-                data-testid="input-link-label"
-              />
-            </div>
-
-            <div>
-              <Label>Primary Promise (what will viewers learn/get?)</Label>
-              <Textarea
-                placeholder="e.g., By the end of this video, you'll know exactly how to set up your first sales funnel in under 30 minutes"
-                value={scriptForm.primaryPromise}
-                onChange={(e) => setScriptForm(f => ({ ...f, primaryPromise: e.target.value }))}
-                data-testid="textarea-primary-promise"
-              />
-            </div>
-
-            <div>
-              <Label>Personal Angle (optional)</Label>
-              <Textarea
-                placeholder="Share a quick story or your experience with this topic"
-                value={scriptForm.personalAngle}
-                onChange={(e) => setScriptForm(f => ({ ...f, personalAngle: e.target.value }))}
-                data-testid="textarea-personal-angle"
-              />
-            </div>
-
-            <div>
-              <Label>Tone</Label>
-              <Select 
-                value={scriptForm.tonePreference} 
-                onValueChange={(v) => setScriptForm(f => ({ ...f, tonePreference: v as TonePreference }))}
-              >
-                <SelectTrigger data-testid="select-tone">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="friendly">Friendly</SelectItem>
-                  <SelectItem value="direct">Direct</SelectItem>
-                  <SelectItem value="coach">Coach Style</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setScriptDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={handleGenerateScript}
-              disabled={scriptMutation.isPending || !scriptForm.affiliateOffer || !scriptForm.affiliateLinkLabel || !scriptForm.primaryPromise}
-              data-testid="button-confirm-generate"
-            >
-              {scriptMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Generate Script
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
