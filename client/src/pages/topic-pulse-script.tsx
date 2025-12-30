@@ -518,14 +518,13 @@ export default function TopicPulseScriptPage() {
             </Button>
           )}
           <Button 
-            variant="outline" 
             size="sm"
             onClick={() => setShowResearchPanel(!showResearchPanel)}
-            className="hidden md:flex"
+            className="hidden md:flex bg-red-600 hover:bg-red-700 text-white border-red-600"
             data-testid="button-toggle-research"
           >
             <Youtube className="h-4 w-4 mr-2" />
-            {showResearchPanel ? "Hide" : "Show"} Research
+            {showResearchPanel ? "Hide" : "Show"} Video Research
           </Button>
         </div>
       </div>
