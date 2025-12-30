@@ -437,14 +437,18 @@ export async function generateScript(input: ScriptGenerationInput, topic: Topic)
   
   const durations = durationGuide[input.videoLengthTarget];
   
+  const affiliateOffer = input.affiliateOffer || "your recommended resource";
+  const affiliateLinkLabel = input.affiliateLinkLabel || "link in description";
+  const primaryPromise = input.primaryPromise || `helping viewers understand ${topic.topicTitle}`;
+  
   const prompt = `You are Mark Harbert, a YouTube marketing coach. Create a complete video script using the 5-part video formula.
 
 TOPIC: ${topic.topicTitle}
 KEYWORD: ${topic.keywordQuery}
 INTENTS: ${topic.intents?.join(", ") || "general"}
-AFFILIATE OFFER: ${input.affiliateOffer}
-LINK LABEL: ${input.affiliateLinkLabel}
-PRIMARY PROMISE: ${input.primaryPromise}
+AFFILIATE OFFER: ${affiliateOffer}
+LINK LABEL: ${affiliateLinkLabel}
+PRIMARY PROMISE: ${primaryPromise}
 ${input.personalAngle ? `PERSONAL ANGLE: ${input.personalAngle}` : ""}
 TONE: ${input.tonePreference || "friendly"}
 TARGET LENGTH: ${input.videoLengthTarget} minutes

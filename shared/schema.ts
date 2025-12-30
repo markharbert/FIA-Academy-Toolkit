@@ -750,9 +750,9 @@ export type TopicSearchInput = z.infer<typeof topicSearchInputSchema>;
 export const scriptGenerationInputSchema = z.object({
   topicId: z.string(),
   videoLengthTarget: z.enum(videoLengthTargets),
-  affiliateOffer: z.string().min(1, "Please enter the affiliate offer name"),
-  affiliateLinkLabel: z.string().min(1, "Please enter a link label"),
-  primaryPromise: z.string().min(10, "Please describe the main promise of your video"),
+  affiliateOffer: z.string().optional(),
+  affiliateLinkLabel: z.string().optional(),
+  primaryPromise: z.string().optional(),
   personalAngle: z.string().optional(),
   tonePreference: z.enum(tonePreferences).optional(),
 });
