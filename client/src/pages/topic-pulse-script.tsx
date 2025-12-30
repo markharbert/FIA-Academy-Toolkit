@@ -39,6 +39,7 @@ interface YouTubeVideoDetails extends YouTubeVideo {
   likeCount: number | null;
   commentCount: number | null;
   duration: string | null;
+  tags: string[];
   comments: YouTubeComment[];
   commentSummary: string | null;
 }
@@ -169,6 +170,22 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
                 </div>
 
                 <p className="text-xs text-muted-foreground line-clamp-4">{videoDetails.description}</p>
+
+                {videoDetails.tags && videoDetails.tags.length > 0 && (
+                  <div className="pt-3 border-t">
+                    <h5 className="text-xs font-medium mb-2 flex items-center gap-1">
+                      <Tags className="h-3 w-3" />
+                      Video Tags ({videoDetails.tags.length})
+                    </h5>
+                    <div className="flex flex-wrap gap-1">
+                      {videoDetails.tags.map((tag, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {videoDetails.commentSummary && (
                   <div className="pt-3 border-t">

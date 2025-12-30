@@ -4271,6 +4271,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         likeCount: stats.likeCount ? parseInt(stats.likeCount) : null,
         commentCount: stats.commentCount ? parseInt(stats.commentCount) : null,
         duration: parseDuration(contentDetails.duration),
+        tags: item.snippet.tags || [],
         comments,
         commentSummary,
       });
