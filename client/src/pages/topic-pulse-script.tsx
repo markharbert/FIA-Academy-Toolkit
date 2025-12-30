@@ -903,19 +903,19 @@ export default function TopicPulseScriptPage() {
             <TabsList className="h-12">
               <TabsTrigger value="full" className="flex items-center gap-2" data-testid="tab-full-script">
                 <FileText className="h-4 w-4" />
-                Full Script
+                Long Form Script
               </TabsTrigger>
               <TabsTrigger value="shorts" className="flex items-center gap-2" data-testid="tab-shorts">
                 <AlignLeft className="h-4 w-4" />
-                Shorts
-              </TabsTrigger>
-              <TabsTrigger value="comment" className="flex items-center gap-2" data-testid="tab-comment">
-                <MessageSquare className="h-4 w-4" />
-                Pinned Comment
+                Shorts Script
               </TabsTrigger>
               <TabsTrigger value="description" className="flex items-center gap-2" data-testid="tab-description">
                 <Tags className="h-4 w-4" />
                 Description
+              </TabsTrigger>
+              <TabsTrigger value="comment" className="flex items-center gap-2" data-testid="tab-comment">
+                <MessageSquare className="h-4 w-4" />
+                Pinned Comment
               </TabsTrigger>
             </TabsList>
           </div>
