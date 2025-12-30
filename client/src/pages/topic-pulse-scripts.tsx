@@ -4,10 +4,90 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, ArrowLeft, Trash2, FileText, Zap } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Loader2, ArrowLeft, Trash2, FileText, Zap, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Script, Topic } from "@shared/schema";
+
+type TrendDataPoint = { year: number; month: string; value: number };
+
+function formatSearchVolume(volume: number | null | undefined): string {
+  if (volume === null || volume === undefined) return "N/A";
+  if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
+  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
+  return volume.toString();
+}
+
+function getTrendFromData(trend: TrendDataPoint[] | null | undefined): { direction: string; label: string } {
+  if (!trend || trend.length < 6) return { direction: "unknown", label: "Unknown" };
+  const recentMonths = trend.slice(-3);
+  const olderMonths = trend.slice(-6, -3);
+  const recentAvg = recentMonths.reduce((sum, t) => sum + t.value, 0) / recentMonths.length;
+  const olderAvg = olderMonths.reduce((sum, t) => sum + t.value, 0) / olderMonths.length;
+  if (olderAvg === 0) return { direction: "unknown", label: "Unknown" };
+  const growthRate = (recentAvg - olderAvg) / olderAvg;
+  const percentChange = Math.round(growthRate * 100);
+  if (growthRate > 0.1) return { direction: "rising", label: `+${percentChange}%` };
+  if (growthRate < -0.1) return { direction: "falling", label: `${percentChange}%` };
+  return { direction: "steady", label: "Steady" };
+}
+
+function getOpportunityLevel(score: number): { color: string; label: string; bgClass: string } {
+  if (score >= 70) return { color: "text-green-600 dark:text-green-400", label: "Great opportunity", bgClass: "bg-green-500/10" };
+  if (score >= 50) return { color: "text-yellow-600 dark:text-yellow-400", label: "Good potential", bgClass: "bg-yellow-500/10" };
+  return { color: "text-red-600 dark:text-red-400", label: "Challenging", bgClass: "bg-red-500/10" };
+}
+
+function TrendIcon({ direction }: { direction: string }) {
+  if (direction === "rising") return <TrendingUp className="h-4 w-4 text-green-500" />;
+  if (direction === "falling") return <TrendingDown className="h-4 w-4 text-red-500" />;
+  return <Minus className="h-4 w-4 text-muted-foreground" />;
+}
+
+function SearchVolumeBadge({ volume }: { volume: number | null | undefined }) {
+  const formatted = formatSearchVolume(volume);
+  const hasData = volume !== null && volume !== undefined;
+  
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge 
+          variant="outline" 
+          className={`font-mono cursor-help ${hasData ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}
+        >
+          {formatted}/mo
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <p className="font-medium">Monthly Search Volume</p>
+        <p className="text-xs text-muted-foreground">
+          Estimated monthly searches on Google (via Keywords Everywhere)
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function OpportunityBadge({ score }: { score: number }) {
+  const { color, label, bgClass } = getOpportunityLevel(score);
+  
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="outline" className={`font-mono cursor-help ${bgClass} ${color} border-0`}>
+          {score}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        <p className="font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">
+          Based on search demand, competition, and trend direction
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default function TopicPulseScriptsPage() {
   const [, navigate] = useLocation();
@@ -79,6 +159,13 @@ export default function TopicPulseScriptsPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        {script.topic && (
+                          <>
+                            <SearchVolumeBadge volume={script.topic.monthlySearchVolume} />
+                            <TrendIcon direction={getTrendFromData(script.topic.trendData as TrendDataPoint[] | null).direction} />
+                            <OpportunityBadge score={script.topic.opportunityScore || 0} />
+                          </>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
