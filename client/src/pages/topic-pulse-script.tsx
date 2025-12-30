@@ -22,11 +22,21 @@ interface YouTubeVideo {
   thumbnail: string;
 }
 
+interface YouTubeComment {
+  id: string;
+  authorName: string;
+  authorProfileImage: string;
+  text: string;
+  likeCount: number;
+  publishedAt: string;
+}
+
 interface YouTubeVideoDetails extends YouTubeVideo {
   viewCount: number | null;
   likeCount: number | null;
   commentCount: number | null;
   duration: string | null;
+  comments: YouTubeComment[];
 }
 
 function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
@@ -155,6 +165,36 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
                 </div>
 
                 <p className="text-xs text-muted-foreground line-clamp-4">{videoDetails.description}</p>
+
+                {videoDetails.comments && videoDetails.comments.length > 0 && (
+                  <div className="pt-3 border-t">
+                    <h5 className="text-xs font-medium mb-2 flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      Top Comments
+                    </h5>
+                    <div className="space-y-3">
+                      {videoDetails.comments.map((comment) => (
+                        <div key={comment.id} className="text-xs">
+                          <div className="flex items-center gap-2 mb-1">
+                            <img 
+                              src={comment.authorProfileImage} 
+                              alt="" 
+                              className="w-5 h-5 rounded-full"
+                            />
+                            <span className="font-medium truncate">{comment.authorName}</span>
+                            {comment.likeCount > 0 && (
+                              <span className="text-muted-foreground flex items-center gap-0.5">
+                                <ThumbsUp className="h-3 w-3" />
+                                {comment.likeCount}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-muted-foreground line-clamp-3 pl-7">{comment.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>

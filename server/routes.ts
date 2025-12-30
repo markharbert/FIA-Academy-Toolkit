@@ -4180,6 +4180,27 @@ export async function registerRoutes(
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
       };
 
+      // Fetch top comments
+      let comments: any[] = [];
+      try {
+        const commentsUrl = `https://www.googleapis.com/youtube/v3/commentThreads?key=${YOUTUBE_API_KEY}&videoId=${videoId}&part=snippet&maxResults=10&order=relevance&textFormat=plainText`;
+        const commentsResponse = await fetch(commentsUrl);
+        const commentsData = await commentsResponse.json();
+        
+        if (commentsResponse.ok && commentsData.items) {
+          comments = commentsData.items.map((c: any) => ({
+            id: c.id,
+            authorName: c.snippet.topLevelComment.snippet.authorDisplayName,
+            authorProfileImage: c.snippet.topLevelComment.snippet.authorProfileImageUrl,
+            text: c.snippet.topLevelComment.snippet.textOriginal || c.snippet.topLevelComment.snippet.textDisplay,
+            likeCount: c.snippet.topLevelComment.snippet.likeCount || 0,
+            publishedAt: c.snippet.topLevelComment.snippet.publishedAt,
+          }));
+        }
+      } catch (commentsErr) {
+        console.error("[YouTube] Comments fetch error:", commentsErr);
+      }
+
       res.json({
         videoId: item.id,
         title: item.snippet.title,
@@ -4191,6 +4212,7 @@ export async function registerRoutes(
         likeCount: stats.likeCount ? parseInt(stats.likeCount) : null,
         commentCount: stats.commentCount ? parseInt(stats.commentCount) : null,
         duration: parseDuration(contentDetails.duration),
+        comments,
       });
     } catch (err) {
       console.error("[YouTube] Video details error:", err);
