@@ -24,7 +24,7 @@ interface YouTubeVideo {
 
 function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
   const [searchQuery, setSearchQuery] = useState(defaultKeyword || "");
-  const [activeQuery, setActiveQuery] = useState("");
+  const [activeQuery, setActiveQuery] = useState(defaultKeyword || "");
   const [selectedVideo, setSelectedVideo] = useState<YouTubeVideo | null>(null);
   const { toast } = useToast();
 
