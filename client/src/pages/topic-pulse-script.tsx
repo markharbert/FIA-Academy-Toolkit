@@ -223,18 +223,18 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
               videos.map((video) => (
                 <div
                   key={video.videoId}
-                  className="flex gap-2 p-2 rounded-md hover-elevate cursor-pointer"
+                  className="flex gap-3 p-2 rounded-md hover-elevate cursor-pointer"
                   onClick={() => setSelectedVideoId(video.videoId)}
                   data-testid={`video-item-${video.videoId}`}
                 >
                   <img
                     src={video.thumbnail}
                     alt={video.title}
-                    className="w-24 h-16 object-cover rounded flex-shrink-0"
+                    className="w-48 h-32 object-cover rounded flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-medium line-clamp-2">{video.title}</h4>
-                    <p className="text-xs text-muted-foreground mt-1 truncate">{video.channelTitle}</p>
+                    <h4 className="text-sm font-semibold line-clamp-3">{video.title}</h4>
+                    <p className="text-xs text-muted-foreground mt-2 truncate">{video.channelTitle}</p>
                   </div>
                 </div>
               ))
