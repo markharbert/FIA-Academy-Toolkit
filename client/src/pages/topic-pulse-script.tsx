@@ -252,13 +252,24 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
   );
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
+function CopyButton({ text, label, html }: { text: string; label: string; html?: string }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      if (html) {
+        const blob = new Blob([html], { type: "text/html" });
+        const textBlob = new Blob([text], { type: "text/plain" });
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": blob,
+            "text/plain": textBlob,
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
       setCopied(true);
       toast({ title: `${label} copied!` });
       setTimeout(() => setCopied(false), 2000);
@@ -738,6 +749,66 @@ export default function TopicPulseScriptPage() {
     return sections.join("\n");
   };
 
+  const getFullScriptHtml = () => {
+    if (!editedScriptJson?.fullScript) return "";
+    const fs = editedScriptJson.fullScript;
+    
+    const escapeHtml = (text: string) => text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\n/g, "<br>");
+    
+    let html = `<div style="font-family: Arial, sans-serif; line-height: 1.6;">`;
+    
+    // Hook
+    html += `<p><strong style="font-size: 16px;">1. HOOK</strong></p>`;
+    html += `<p>${escapeHtml(fs.hook.text)}</p>`;
+    if (fs.hook.duration) html += `<p><em>[Duration: ${fs.hook.duration}]</em></p>`;
+    html += `<br>`;
+    
+    // Set the Hook
+    html += `<p><strong style="font-size: 16px;">2. SET THE HOOK</strong></p>`;
+    html += `<p>${escapeHtml(fs.setHook.text)}</p>`;
+    if (fs.setHook.duration) html += `<p><em>[Duration: ${fs.setHook.duration}]</em></p>`;
+    html += `<br>`;
+    
+    // First CTA
+    html += `<p><strong style="font-size: 16px;">3. FIRST CALL TO ACTION</strong></p>`;
+    html += `<p>${escapeHtml(fs.firstCTA.text)}</p>`;
+    if (fs.firstCTA.duration) html += `<p><em>[Duration: ${fs.firstCTA.duration}]</em></p>`;
+    html += `<br>`;
+    
+    // Content
+    html += `<p><strong style="font-size: 16px;">4. CONTENT</strong></p>`;
+    html += `<p>${escapeHtml(fs.content.text)}</p>`;
+
+    // Add content sections
+    if (fs.content.sections && fs.content.sections.length > 0) {
+      fs.content.sections.forEach((section, i) => {
+        html += `<br>`;
+        html += `<p style="margin-left: 20px;"><strong style="color: #DC2626;">→ Section ${i + 1}: ${escapeHtml(section.title)}${section.timestamp ? ` [${section.timestamp}]` : ""}</strong></p>`;
+        html += `<p style="margin-left: 20px;">${escapeHtml(section.content)}</p>`;
+        if (section.brollIdeas && section.brollIdeas.length > 0) {
+          html += `<p style="margin-left: 20px;"><em>B-Roll Ideas: ${escapeHtml(section.brollIdeas.join(", "))}</em></p>`;
+        }
+      });
+    }
+    html += `<br>`;
+
+    // Final CTA
+    html += `<p><strong style="font-size: 16px;">5. FINAL CALL TO ACTION</strong></p>`;
+    html += `<p>${escapeHtml(fs.finalCTA.text)}</p>`;
+    if (fs.finalCTA.duration) html += `<p><em>[Duration: ${fs.finalCTA.duration}]</em></p>`;
+
+    if (fs.finalCTA.nextVideoSuggestion) {
+      html += `<p><em>Next Video Suggestion: ${escapeHtml(fs.finalCTA.nextVideoSuggestion)}</em></p>`;
+    }
+
+    html += `</div>`;
+    return html;
+  };
+
   return (
     <div className="min-h-full flex flex-col">
       <div className="border-b p-4">
@@ -804,7 +875,7 @@ export default function TopicPulseScriptPage() {
             <ScrollArea className="h-full">
               <div className="p-4 max-w-3xl mx-auto">
                 <div className="flex justify-end mb-4 gap-2">
-                  <CopyButton text={getFullScriptText()} label="Copy Full Script" />
+                  <CopyButton text={getFullScriptText()} label="Copy Full Script" html={getFullScriptHtml()} />
                 </div>
 
                 {fullScript && (
