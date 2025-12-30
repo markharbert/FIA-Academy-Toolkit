@@ -279,6 +279,7 @@ export default function TopicPulseScriptPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [editedScriptJson, setEditedScriptJson] = useState<ScriptJson | null>(null);
+  const [showResearchPanel, setShowResearchPanel] = useState(false);
 
   const { data: script, isLoading } = useQuery<Script>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
@@ -373,8 +374,6 @@ export default function TopicPulseScriptPage() {
       `## FINAL CALL TO ACTION\n${fullScript.finalCTA.text}`,
     ].join("\n\n");
   };
-
-  const [showResearchPanel, setShowResearchPanel] = useState(false);
 
   return (
     <div className="min-h-full flex flex-col">
