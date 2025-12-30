@@ -20,6 +20,9 @@ interface YouTubeVideo {
   channelTitle: string;
   publishedAt: string;
   thumbnail: string;
+  viewCount: number | null;
+  likeCount: number | null;
+  commentCount: number | null;
 }
 
 interface YouTubeComment {
@@ -235,6 +238,34 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
                   <div className="flex-1 min-w-0">
                     <h4 className="text-sm font-semibold line-clamp-2">{video.title}</h4>
                     <p className="text-xs text-muted-foreground mt-1 truncate">{video.channelTitle}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      {video.viewCount !== null && (
+                        <span className="flex items-center gap-1">
+                          <Eye className="h-3 w-3" />
+                          {video.viewCount >= 1000000 
+                            ? `${(video.viewCount / 1000000).toFixed(1)}M` 
+                            : video.viewCount >= 1000 
+                              ? `${(video.viewCount / 1000).toFixed(0)}K` 
+                              : video.viewCount}
+                        </span>
+                      )}
+                      {video.likeCount !== null && (
+                        <span className="flex items-center gap-1">
+                          <ThumbsUp className="h-3 w-3" />
+                          {video.likeCount >= 1000 
+                            ? `${(video.likeCount / 1000).toFixed(0)}K` 
+                            : video.likeCount}
+                        </span>
+                      )}
+                      {video.commentCount !== null && (
+                        <span className="flex items-center gap-1">
+                          <MessageSquare className="h-3 w-3" />
+                          {video.commentCount >= 1000 
+                            ? `${(video.commentCount / 1000).toFixed(0)}K` 
+                            : video.commentCount}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{video.description}</p>
                   </div>
                 </div>

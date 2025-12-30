@@ -4117,23 +4117,42 @@ export async function registerRoutes(
         return res.status(503).json({ message: "YouTube API not configured" });
       }
 
-      const url = `https://www.googleapis.com/youtube/v3/search?key=${YOUTUBE_API_KEY}&type=video&part=snippet&q=${encodeURIComponent(query)}&maxResults=10`;
-      const response = await fetch(url);
-      const data = await response.json();
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?key=${YOUTUBE_API_KEY}&type=video&part=snippet&q=${encodeURIComponent(query)}&maxResults=10`;
+      const searchResponse = await fetch(searchUrl);
+      const searchData = await searchResponse.json();
 
-      if (!response.ok) {
-        console.error("[YouTube] API error:", data);
+      if (!searchResponse.ok) {
+        console.error("[YouTube] API error:", searchData);
         return res.status(500).json({ message: "YouTube API error" });
       }
 
-      const videos = data.items.map((item: any) => ({
-        videoId: item.id.videoId,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        channelTitle: item.snippet.channelTitle,
-        publishedAt: item.snippet.publishedAt,
-        thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
-      }));
+      const videoIds = searchData.items.map((item: any) => item.id.videoId).join(",");
+      
+      const statsUrl = `https://www.googleapis.com/youtube/v3/videos?key=${YOUTUBE_API_KEY}&id=${videoIds}&part=statistics`;
+      const statsResponse = await fetch(statsUrl);
+      const statsData = await statsResponse.json();
+      
+      const statsMap: Record<string, any> = {};
+      if (statsResponse.ok && statsData.items) {
+        statsData.items.forEach((item: any) => {
+          statsMap[item.id] = item.statistics || {};
+        });
+      }
+
+      const videos = searchData.items.map((item: any) => {
+        const stats = statsMap[item.id.videoId] || {};
+        return {
+          videoId: item.id.videoId,
+          title: item.snippet.title,
+          description: item.snippet.description,
+          channelTitle: item.snippet.channelTitle,
+          publishedAt: item.snippet.publishedAt,
+          thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+          viewCount: stats.viewCount ? parseInt(stats.viewCount) : null,
+          likeCount: stats.likeCount ? parseInt(stats.likeCount) : null,
+          commentCount: stats.commentCount ? parseInt(stats.commentCount) : null,
+        };
+      });
 
       res.json(videos);
     } catch (err) {
