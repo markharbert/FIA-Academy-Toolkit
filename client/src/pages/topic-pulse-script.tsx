@@ -976,12 +976,26 @@ export default function TopicPulseScriptPage() {
     enabled: !!scriptId,
   });
 
-  const originalScriptJson = script?.scriptJson as ScriptJson | null;
+  // Handle double-nested structure from previous bug for comparison
+  const getUnnestedScriptJson = (json: any): ScriptJson | null => {
+    if (!json) return null;
+    if (json.scriptJson && json.scriptJson.fullScript) {
+      return json.scriptJson as ScriptJson;
+    }
+    return json as ScriptJson;
+  };
+  const originalScriptJson = getUnnestedScriptJson(script?.scriptJson);
   const hasChanges = hasScriptChanged(originalScriptJson, editedScriptJson);
 
   useEffect(() => {
     if (script?.scriptJson) {
-      setEditedScriptJson(script.scriptJson as ScriptJson);
+      // Handle double-nested structure from previous bug
+      const json = script.scriptJson as any;
+      if (json.scriptJson && json.scriptJson.fullScript) {
+        setEditedScriptJson(json.scriptJson as ScriptJson);
+      } else {
+        setEditedScriptJson(json as ScriptJson);
+      }
     }
   }, [script]);
 
