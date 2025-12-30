@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Script, ScriptJson } from "@shared/schema";
+import type { Script, ScriptJson, SavedOffer } from "@shared/schema";
+import { Gift, Star, RefreshCw } from "lucide-react";
 
 interface YouTubeVideo {
   videoId: string;
@@ -332,6 +333,386 @@ function CopyButton({ text, label, html }: { text: string; label: string; html?:
       {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
       {label}
     </Button>
+  );
+}
+
+function CallToActionTab({ 
+  scriptId, 
+  editedScriptJson, 
+  setEditedScriptJson,
+  updateScriptMutation,
+}: { 
+  scriptId: string;
+  editedScriptJson: ScriptJson | null;
+  setEditedScriptJson: (json: ScriptJson | null) => void;
+  updateScriptMutation: any;
+}) {
+  const { toast } = useToast();
+  const [newOfferName, setNewOfferName] = useState("");
+  const [newOfferDescription, setNewOfferDescription] = useState("");
+  const [newOfferLinkUrl, setNewOfferLinkUrl] = useState("");
+  const [newOfferLinkLabel, setNewOfferLinkLabel] = useState("");
+  const [isAddingOffer, setIsAddingOffer] = useState(false);
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editLinkUrl, setEditLinkUrl] = useState("");
+  const [editLinkLabel, setEditLinkLabel] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const { data: offers, isLoading } = useQuery<SavedOffer[]>({
+    queryKey: ["/api/topic-pulse/offers"],
+  });
+
+  const createOfferMutation = useMutation({
+    mutationFn: async (data: { name: string; description: string; linkUrl: string; linkLabel: string }) => {
+      const res = await apiRequest("POST", "/api/topic-pulse/offers", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/offers"] });
+      setNewOfferName("");
+      setNewOfferDescription("");
+      setNewOfferLinkUrl("");
+      setNewOfferLinkLabel("");
+      setIsAddingOffer(false);
+      toast({ title: "Offer saved!" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save offer", variant: "destructive" });
+    },
+  });
+
+  const updateOfferMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<SavedOffer> }) => {
+      const res = await apiRequest("PATCH", `/api/topic-pulse/offers/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/offers"] });
+      setEditingOfferId(null);
+      toast({ title: "Offer updated!" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update offer", variant: "destructive" });
+    },
+  });
+
+  const deleteOfferMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/topic-pulse/offers/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/offers"] });
+      toast({ title: "Offer deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete offer", variant: "destructive" });
+    },
+  });
+
+  const setDefaultMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/topic-pulse/offers/${id}/set-default`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/offers"] });
+      toast({ title: "Default offer set!" });
+    },
+    onError: () => {
+      toast({ title: "Failed to set default", variant: "destructive" });
+    },
+  });
+
+  const handleRefreshFinalCTA = async () => {
+    const defaultOffer = offers?.find(o => o.isDefault);
+    if (!defaultOffer) {
+      toast({ title: "Please set a default offer first", variant: "destructive" });
+      return;
+    }
+
+    if (!editedScriptJson?.fullScript?.finalCTA) {
+      toast({ title: "No script to update", variant: "destructive" });
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      const offerText = defaultOffer.description 
+        ? `${defaultOffer.name}: ${defaultOffer.description}` 
+        : defaultOffer.name;
+      const linkText = defaultOffer.linkLabel && defaultOffer.linkUrl 
+        ? `Click the ${defaultOffer.linkLabel} link in the description` 
+        : defaultOffer.linkUrl 
+          ? `Check out the link in the description` 
+          : "";
+
+      const newFinalCTAText = `Now here's the thing - if you're ready to take action on what we just covered, I want to share something that's been a game-changer for me and my students. ${offerText}. ${linkText}. I'll also leave a link to my next video where we go even deeper on this topic. Make sure you hit that subscribe button if you haven't already, and I'll see you in the next one!`;
+
+      const updatedScriptJson = {
+        ...editedScriptJson,
+        fullScript: {
+          ...editedScriptJson.fullScript,
+          finalCTA: {
+            ...editedScriptJson.fullScript.finalCTA,
+            text: newFinalCTAText,
+          },
+        },
+      };
+
+      setEditedScriptJson(updatedScriptJson);
+      
+      await updateScriptMutation.mutateAsync({
+        scriptJson: updatedScriptJson,
+      });
+
+      toast({ title: "Final CTA updated with your offer!" });
+    } catch {
+      toast({ title: "Failed to refresh Final CTA", variant: "destructive" });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const startEditing = (offer: SavedOffer) => {
+    setEditingOfferId(offer.id);
+    setEditName(offer.name);
+    setEditDescription(offer.description || "");
+    setEditLinkUrl(offer.linkUrl || "");
+    setEditLinkLabel(offer.linkLabel || "");
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingOfferId) return;
+    updateOfferMutation.mutate({
+      id: editingOfferId,
+      data: {
+        name: editName,
+        description: editDescription,
+        linkUrl: editLinkUrl,
+        linkLabel: editLinkLabel,
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Gift className="h-5 w-5" />
+            Your Saved Offers
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : offers && offers.length > 0 ? (
+            <div className="space-y-3">
+              {offers.map((offer) => (
+                <div 
+                  key={offer.id} 
+                  className={`p-4 rounded-md border ${offer.isDefault ? "border-primary bg-primary/5" : "bg-muted/30"}`}
+                >
+                  {editingOfferId === offer.id ? (
+                    <div className="space-y-3">
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Offer name"
+                        data-testid="input-edit-offer-name"
+                      />
+                      <Textarea
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        placeholder="Description (what is this offer?)"
+                        className="min-h-[60px]"
+                        data-testid="textarea-edit-offer-description"
+                      />
+                      <Input
+                        value={editLinkUrl}
+                        onChange={(e) => setEditLinkUrl(e.target.value)}
+                        placeholder="Link URL"
+                        data-testid="input-edit-offer-url"
+                      />
+                      <Input
+                        value={editLinkLabel}
+                        onChange={(e) => setEditLinkLabel(e.target.value)}
+                        placeholder="Link label (e.g., 'first link')"
+                        data-testid="input-edit-offer-label"
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleSaveEdit} disabled={updateOfferMutation.isPending} data-testid="button-save-offer-edit">
+                          {updateOfferMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingOfferId(null)} data-testid="button-cancel-offer-edit">
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium">{offer.name}</h4>
+                          {offer.isDefault && (
+                            <Badge variant="default" className="text-xs">
+                              <Star className="h-3 w-3 mr-1" />
+                              Default
+                            </Badge>
+                          )}
+                        </div>
+                        {offer.description && (
+                          <p className="text-sm text-muted-foreground mt-1">{offer.description}</p>
+                        )}
+                        {offer.linkUrl && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {offer.linkLabel || "Link"}: {offer.linkUrl}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {!offer.isDefault && (
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            onClick={() => setDefaultMutation.mutate(offer.id)}
+                            disabled={setDefaultMutation.isPending}
+                            title="Set as default"
+                            data-testid={`button-set-default-${offer.id}`}
+                          >
+                            <Star className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button 
+                          size="icon" 
+                          variant="ghost"
+                          onClick={() => startEditing(offer)}
+                          data-testid={`button-edit-offer-${offer.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="icon" 
+                          variant="ghost"
+                          onClick={() => deleteOfferMutation.mutate(offer.id)}
+                          disabled={deleteOfferMutation.isPending}
+                          data-testid={`button-delete-offer-${offer.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No saved offers yet. Add your first offer below!
+            </p>
+          )}
+
+          {isAddingOffer ? (
+            <div className="mt-4 p-4 border rounded-md space-y-3">
+              <Input
+                value={newOfferName}
+                onChange={(e) => setNewOfferName(e.target.value)}
+                placeholder="Offer name (e.g., 'Free Marketing Course')"
+                data-testid="input-new-offer-name"
+              />
+              <Textarea
+                value={newOfferDescription}
+                onChange={(e) => setNewOfferDescription(e.target.value)}
+                placeholder="Description (e.g., 'My free 5-day email course on video marketing')"
+                className="min-h-[60px]"
+                data-testid="textarea-new-offer-description"
+              />
+              <Input
+                value={newOfferLinkUrl}
+                onChange={(e) => setNewOfferLinkUrl(e.target.value)}
+                placeholder="Link URL (e.g., 'https://yoursite.com/free-course')"
+                data-testid="input-new-offer-url"
+              />
+              <Input
+                value={newOfferLinkLabel}
+                onChange={(e) => setNewOfferLinkLabel(e.target.value)}
+                placeholder="Link label (e.g., 'first link in the description')"
+                data-testid="input-new-offer-label"
+              />
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  onClick={() => createOfferMutation.mutate({
+                    name: newOfferName,
+                    description: newOfferDescription,
+                    linkUrl: newOfferLinkUrl,
+                    linkLabel: newOfferLinkLabel,
+                  })}
+                  disabled={!newOfferName.trim() || createOfferMutation.isPending}
+                  data-testid="button-save-new-offer"
+                >
+                  {createOfferMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Offer"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setIsAddingOffer(false)} data-testid="button-cancel-new-offer">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button 
+              variant="outline" 
+              className="w-full mt-4" 
+              onClick={() => setIsAddingOffer(true)}
+              data-testid="button-add-offer"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Offer
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <RefreshCw className="h-5 w-5" />
+            Refresh Final CTA
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            Click the button below to update your script's Final CTA section with your default offer. 
+            This will replace only the Final CTA text - all other sections remain unchanged.
+          </p>
+          <Button 
+            onClick={handleRefreshFinalCTA}
+            disabled={isRefreshing || !offers?.some(o => o.isDefault)}
+            data-testid="button-refresh-final-cta"
+          >
+            {isRefreshing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh Final CTA with Default Offer
+              </>
+            )}
+          </Button>
+          {!offers?.some(o => o.isDefault) && offers && offers.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Set one of your offers as default to enable this feature
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -917,6 +1298,10 @@ export default function TopicPulseScriptPage() {
                 <MessageSquare className="h-4 w-4" />
                 Pinned Comment
               </TabsTrigger>
+              <TabsTrigger value="cta" className="flex items-center gap-2" data-testid="tab-cta">
+                <Gift className="h-4 w-4" />
+                Call To Action
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -1103,6 +1488,19 @@ export default function TopicPulseScriptPage() {
                     </div>
                   </>
                 )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="cta" className="flex-1 overflow-hidden m-0">
+            <ScrollArea className="h-full">
+              <div className="p-4 max-w-3xl mx-auto">
+                <CallToActionTab 
+                  scriptId={script.id}
+                  editedScriptJson={editedScriptJson}
+                  setEditedScriptJson={setEditedScriptJson}
+                  updateScriptMutation={saveMutation}
+                />
               </div>
             </ScrollArea>
           </TabsContent>
