@@ -712,14 +712,11 @@ export default function TopicPulseScriptPage() {
     if (fs.content.sections && fs.content.sections.length > 0) {
       fs.content.sections.forEach((section, i) => {
         sections.push("");
-        sections.push("");
-        sections.push("───────────────────────────────────────");
-        sections.push(`SECTION ${i + 1}: ${section.title.toUpperCase()}${section.timestamp ? ` [${section.timestamp}]` : ""}`);
-        sections.push("───────────────────────────────────────");
+        sections.push(`   → Section ${i + 1}: ${section.title}${section.timestamp ? ` [${section.timestamp}]` : ""}`);
         sections.push("");
         sections.push(section.content);
         if (section.brollIdeas && section.brollIdeas.length > 0) {
-          sections.push(`\nB-Roll Ideas: ${section.brollIdeas.join(", ")}`);
+          sections.push(`\n   B-Roll Ideas: ${section.brollIdeas.join(", ")}`);
         }
       });
     }
