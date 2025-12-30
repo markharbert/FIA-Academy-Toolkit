@@ -233,8 +233,9 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
                     className="w-48 h-32 object-cover rounded flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold line-clamp-3">{video.title}</h4>
-                    <p className="text-xs text-muted-foreground mt-2 truncate">{video.channelTitle}</p>
+                    <h4 className="text-sm font-semibold line-clamp-2">{video.title}</h4>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">{video.channelTitle}</p>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{video.description}</p>
                   </div>
                 </div>
               ))
