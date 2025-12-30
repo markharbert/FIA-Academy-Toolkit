@@ -3964,9 +3964,9 @@ export async function registerRoutes(
         title: topic.topicTitle,
         inputsJson: {
           videoLengthTarget: parsed.data.videoLengthTarget,
-          affiliateOffer: parsed.data.affiliateOffer,
-          affiliateLinkLabel: parsed.data.affiliateLinkLabel,
-          primaryPromise: parsed.data.primaryPromise,
+          affiliateOffer: parsed.data.affiliateOffer || "",
+          affiliateLinkLabel: parsed.data.affiliateLinkLabel || "",
+          primaryPromise: parsed.data.primaryPromise || "",
           personalAngle: parsed.data.personalAngle,
           tonePreference: parsed.data.tonePreference,
         },
@@ -4096,6 +4096,43 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[TopicPulse] Delete link error:", err);
       res.status(500).json({ message: "Failed to delete link placeholder" });
+    }
+  });
+
+  app.get("/api/youtube/search", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const query = req.query.q as string;
+      if (!query || query.length < 2) {
+        return res.status(400).json({ message: "Query must be at least 2 characters" });
+      }
+
+      const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+      if (!YOUTUBE_API_KEY) {
+        return res.status(503).json({ message: "YouTube API not configured" });
+      }
+
+      const url = `https://www.googleapis.com/youtube/v3/search?key=${YOUTUBE_API_KEY}&type=video&part=snippet&q=${encodeURIComponent(query)}&maxResults=10`;
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("[YouTube] API error:", data);
+        return res.status(500).json({ message: "YouTube API error" });
+      }
+
+      const videos = data.items.map((item: any) => ({
+        videoId: item.id.videoId,
+        title: item.snippet.title,
+        description: item.snippet.description,
+        channelTitle: item.snippet.channelTitle,
+        publishedAt: item.snippet.publishedAt,
+        thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+      }));
+
+      res.json(videos);
+    } catch (err) {
+      console.error("[YouTube] Search error:", err);
+      res.status(500).json({ message: "Failed to search YouTube" });
     }
   });
 

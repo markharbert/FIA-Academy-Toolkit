@@ -7,10 +7,135 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson } from "@shared/schema";
+
+interface YouTubeVideo {
+  videoId: string;
+  title: string;
+  description: string;
+  channelTitle: string;
+  publishedAt: string;
+  thumbnail: string;
+}
+
+function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
+  const [searchQuery, setSearchQuery] = useState(defaultKeyword || "");
+  const [activeQuery, setActiveQuery] = useState("");
+  const [selectedVideo, setSelectedVideo] = useState<YouTubeVideo | null>(null);
+  const { toast } = useToast();
+
+  const { data: videos, isLoading, refetch } = useQuery<YouTubeVideo[]>({
+    queryKey: ["/api/youtube/search", activeQuery],
+    queryFn: async () => {
+      if (!activeQuery) return [];
+      const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(activeQuery)}`);
+      if (!res.ok) throw new Error("Search failed");
+      return res.json();
+    },
+    enabled: !!activeQuery,
+  });
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim().length >= 2) {
+      setActiveQuery(searchQuery.trim());
+      setSelectedVideo(null);
+    } else {
+      toast({ title: "Please enter at least 2 characters", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-muted/30">
+      <div className="p-3 border-b bg-background">
+        <div className="flex items-center gap-2 mb-2">
+          <Youtube className="h-4 w-4 text-red-500" />
+          <h3 className="font-medium text-sm">Video Research</h3>
+        </div>
+        <form onSubmit={handleSearch} className="flex gap-2">
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search YouTube..."
+            className="flex-1"
+            data-testid="input-youtube-search"
+          />
+          <Button type="submit" size="icon" disabled={isLoading} data-testid="button-youtube-search">
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          </Button>
+        </form>
+      </div>
+
+      {selectedVideo ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-2 border-b bg-background flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedVideo(null)}>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Back
+            </Button>
+          </div>
+          <div className="flex-1 overflow-auto">
+            <div className="aspect-video bg-black">
+              <iframe
+                width="100%"
+                height="100%"
+                src={`https://www.youtube.com/embed/${selectedVideo.videoId}`}
+                title={selectedVideo.title}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+            <div className="p-3">
+              <h4 className="font-medium text-sm mb-1 line-clamp-2">{selectedVideo.title}</h4>
+              <p className="text-xs text-muted-foreground mb-2">{selectedVideo.channelTitle}</p>
+              <p className="text-xs text-muted-foreground line-clamp-3">{selectedVideo.description}</p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <ScrollArea className="flex-1">
+          <div className="p-2 space-y-2">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : videos && videos.length > 0 ? (
+              videos.map((video) => (
+                <div
+                  key={video.videoId}
+                  className="flex gap-2 p-2 rounded-md hover-elevate cursor-pointer"
+                  onClick={() => setSelectedVideo(video)}
+                  data-testid={`video-item-${video.videoId}`}
+                >
+                  <img
+                    src={video.thumbnail}
+                    alt={video.title}
+                    className="w-24 h-16 object-cover rounded flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs font-medium line-clamp-2">{video.title}</h4>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">{video.channelTitle}</p>
+                  </div>
+                </div>
+              ))
+            ) : activeQuery ? (
+              <p className="text-center text-sm text-muted-foreground py-8">No videos found</p>
+            ) : (
+              <p className="text-center text-sm text-muted-foreground py-8">
+                Search for videos to research ideas
+              </p>
+            )}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+}
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -249,6 +374,8 @@ export default function TopicPulseScriptPage() {
     ].join("\n\n");
   };
 
+  const [showResearchPanel, setShowResearchPanel] = useState(false);
+
   return (
     <div className="min-h-full flex flex-col">
       <div className="border-b p-4">
@@ -276,11 +403,21 @@ export default function TopicPulseScriptPage() {
               Save Changes
             </Button>
           )}
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowResearchPanel(!showResearchPanel)}
+            className="hidden md:flex"
+            data-testid="button-toggle-research"
+          >
+            <Youtube className="h-4 w-4 mr-2" />
+            {showResearchPanel ? "Hide" : "Show"} Research
+          </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <Tabs defaultValue="full" className="h-full flex flex-col">
+      <div className="flex-1 overflow-hidden flex">
+        <Tabs defaultValue="full" className="flex-1 h-full flex flex-col overflow-hidden">
           <div className="border-b px-4">
             <TabsList className="h-12">
               <TabsTrigger value="full" className="flex items-center gap-2" data-testid="tab-full-script">
@@ -482,6 +619,12 @@ export default function TopicPulseScriptPage() {
             </ScrollArea>
           </TabsContent>
         </Tabs>
+
+        {showResearchPanel && (
+          <div className="hidden md:block w-80 border-l flex-shrink-0 overflow-hidden">
+            <YouTubeResearchPanel defaultKeyword={script.title} />
+          </div>
+        )}
       </div>
     </div>
   );
