@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson } from "@shared/schema";
@@ -37,6 +37,7 @@ interface YouTubeVideoDetails extends YouTubeVideo {
   commentCount: number | null;
   duration: string | null;
   comments: YouTubeComment[];
+  commentSummary: string | null;
 }
 
 function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
@@ -166,11 +167,23 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
 
                 <p className="text-xs text-muted-foreground line-clamp-4">{videoDetails.description}</p>
 
+                {videoDetails.commentSummary && (
+                  <div className="pt-3 border-t">
+                    <h5 className="text-xs font-medium mb-2 flex items-center gap-1 text-primary">
+                      <Sparkles className="h-3 w-3" />
+                      AI Comment Summary
+                    </h5>
+                    <p className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
+                      {videoDetails.commentSummary}
+                    </p>
+                  </div>
+                )}
+
                 {videoDetails.comments && videoDetails.comments.length > 0 && (
                   <div className="pt-3 border-t">
                     <h5 className="text-xs font-medium mb-2 flex items-center gap-1">
                       <MessageSquare className="h-3 w-3" />
-                      Top Comments
+                      Top Comments ({videoDetails.comments.length})
                     </h5>
                     <div className="space-y-3">
                       {videoDetails.comments.map((comment) => (

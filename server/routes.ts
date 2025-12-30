@@ -37,6 +37,12 @@ import { processSession, subscribeToSession } from "./processing";
 import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+});
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
@@ -4204,6 +4210,37 @@ export async function registerRoutes(
         console.error("[YouTube] Comments fetch error:", commentsErr);
       }
 
+      // Generate AI comment summary
+      let commentSummary: string | null = null;
+      if (comments.length >= 3) {
+        try {
+          const commentTexts = comments.slice(0, 20).map(c => c.text).join("\n---\n");
+          const summaryResponse = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert at analyzing YouTube video comments. Provide a brief, insightful summary of the comments. Include:
+1. Overall sentiment (positive, negative, mixed)
+2. Main themes or topics people are discussing
+3. 2-3 key points or insights that stood out
+
+Keep it concise (3-4 sentences max). Be specific about what commenters are saying.`
+              },
+              {
+                role: "user",
+                content: `Analyze these YouTube comments and provide a summary:\n\n${commentTexts}`
+              }
+            ],
+            max_tokens: 300,
+            temperature: 0.7,
+          });
+          commentSummary = summaryResponse.choices[0]?.message?.content || null;
+        } catch (aiErr) {
+          console.error("[YouTube] AI summary error:", aiErr);
+        }
+      }
+
       res.json({
         videoId: item.id,
         title: item.snippet.title,
@@ -4216,6 +4253,7 @@ export async function registerRoutes(
         commentCount: stats.commentCount ? parseInt(stats.commentCount) : null,
         duration: parseDuration(contentDetails.duration),
         comments,
+        commentSummary,
       });
     } catch (err) {
       console.error("[YouTube] Video details error:", err);
