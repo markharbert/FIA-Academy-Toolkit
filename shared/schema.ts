@@ -777,3 +777,25 @@ export const insertVideoTrendsCreditsSchema = createInsertSchema(videoTrendsCred
 
 export type InsertVideoTrendsCredits = z.infer<typeof insertVideoTrendsCreditsSchema>;
 export type VideoTrendsCredits = typeof videoTrendsCredits.$inferSelect;
+
+// Saved offers for Call To Action tab
+export const savedOffers = pgTable("saved_offers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  linkUrl: text("link_url"),
+  linkLabel: text("link_label"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSavedOfferSchema = createInsertSchema(savedOffers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSavedOffer = z.infer<typeof insertSavedOfferSchema>;
+export type SavedOffer = typeof savedOffers.$inferSelect;
