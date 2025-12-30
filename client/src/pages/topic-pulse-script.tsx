@@ -425,7 +425,7 @@ function CallToActionTab({
     },
   });
 
-  const handleRefreshFinalCTA = async () => {
+  const handleRefreshScripts = async () => {
     const defaultOffer = offers?.find(o => o.isDefault);
     if (!defaultOffer) {
       toast({ title: "Please set a default offer first", variant: "destructive" });
@@ -447,11 +447,22 @@ function CallToActionTab({
         : defaultOffer.linkUrl 
           ? `Check out the link in the description` 
           : "";
+      const linkInDescription = defaultOffer.linkUrl 
+        ? `${defaultOffer.linkLabel || "Link"} in the description` 
+        : "";
 
       const newFinalCTAText = `Now here's the thing - if you're ready to take action on what we just covered, I want to share something that's been a game-changer for me and my students. ${offerText}. ${linkText}. I'll also leave a link to my next video where we go even deeper on this topic. Make sure you hit that subscribe button if you haven't already, and I'll see you in the next one!`;
 
+      const newShortsScript = editedScriptJson.shortsScript 
+        ? `${editedScriptJson.shortsScript.replace(/Want to dive deeper\?.*$|Check out.*in the description.*$|Link in.*$/gi, '').trim()} Want to dive deeper? Watch my full video and grab ${defaultOffer.name}${linkInDescription ? ` - ${linkInDescription}` : ''}!`
+        : `Want to dive deeper? Grab ${defaultOffer.name}${linkInDescription ? ` - ${linkInDescription}` : ''}!`;
+
+      const newPinnedComment = `Ready to take action? Grab ${defaultOffer.name}${defaultOffer.description ? ` - ${defaultOffer.description}` : ''}${linkInDescription ? ` ${linkInDescription}` : ''}. Let me know your biggest takeaway in the comments below!`;
+
       const updatedScriptJson = {
         ...editedScriptJson,
+        shortsScript: newShortsScript,
+        pinnedComment: newPinnedComment,
         fullScript: {
           ...editedScriptJson.fullScript,
           finalCTA: {
@@ -463,13 +474,11 @@ function CallToActionTab({
 
       setEditedScriptJson(updatedScriptJson);
       
-      await updateScriptMutation.mutateAsync({
-        scriptJson: updatedScriptJson,
-      });
+      await updateScriptMutation.mutateAsync(updatedScriptJson);
 
-      toast({ title: "Final CTA updated with your offer!" });
+      toast({ title: "Scripts updated with your offer!" });
     } catch {
-      toast({ title: "Failed to refresh Final CTA", variant: "destructive" });
+      toast({ title: "Failed to refresh scripts", variant: "destructive" });
     } finally {
       setIsRefreshing(false);
     }
@@ -680,18 +689,18 @@ function CallToActionTab({
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <RefreshCw className="h-5 w-5" />
-            Refresh Final CTA
+            Refresh Scripts with Offer
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-4">
-            Click the button below to update your script's Final CTA section with your default offer. 
-            This will replace only the Final CTA text - all other sections remain unchanged.
+            Click the button below to update your Final CTA, Shorts Script, and Pinned Comment with your default offer. 
+            The Hook, Set the Hook, First CTA, and Content sections remain unchanged.
           </p>
           <Button 
-            onClick={handleRefreshFinalCTA}
+            onClick={handleRefreshScripts}
             disabled={isRefreshing || !offers?.some(o => o.isDefault)}
-            data-testid="button-refresh-final-cta"
+            data-testid="button-refresh-scripts"
           >
             {isRefreshing ? (
               <>
@@ -701,7 +710,7 @@ function CallToActionTab({
             ) : (
               <>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh Final CTA with Default Offer
+                Refresh Scripts with Default Offer
               </>
             )}
           </Button>
