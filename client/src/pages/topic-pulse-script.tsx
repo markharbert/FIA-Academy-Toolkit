@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson } from "@shared/schema";
@@ -370,6 +370,130 @@ function EditableScriptSection({
   );
 }
 
+interface ContentSection {
+  title: string;
+  content: string;
+  timestamp?: string;
+  brollIdeas?: string[];
+  onScreenText?: string[];
+}
+
+function EditableContentSubSection({
+  section,
+  index,
+  onUpdate,
+  onDelete,
+}: {
+  section: ContentSection;
+  index: number;
+  onUpdate: (index: number, section: ContentSection) => void;
+  onDelete: (index: number) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(section.title);
+  const [editContent, setEditContent] = useState(section.content);
+  const [editTimestamp, setEditTimestamp] = useState(section.timestamp || "");
+
+  useEffect(() => {
+    setEditTitle(section.title);
+    setEditContent(section.content);
+    setEditTimestamp(section.timestamp || "");
+  }, [section]);
+
+  const handleSave = () => {
+    onUpdate(index, {
+      ...section,
+      title: editTitle,
+      content: editContent,
+      timestamp: editTimestamp || undefined,
+    });
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditTitle(section.title);
+    setEditContent(section.content);
+    setEditTimestamp(section.timestamp || "");
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="p-4 bg-muted/30">
+      {isEditing ? (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              value={editTimestamp}
+              onChange={(e) => setEditTimestamp(e.target.value)}
+              placeholder="Timestamp (e.g., 2:30)"
+              className="w-24"
+              data-testid={`input-timestamp-${index}`}
+            />
+            <Input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Section title"
+              className="flex-1"
+              data-testid={`input-title-${index}`}
+            />
+          </div>
+          <Textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            className="min-h-[120px] font-mono text-sm"
+            placeholder="Section content..."
+            data-testid={`textarea-content-section-${index}`}
+          />
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSave} data-testid={`button-save-content-section-${index}`}>
+              <Check className="h-4 w-4 mr-1" />
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{section.timestamp || `Section ${index + 1}`}</Badge>
+              <span className="font-medium">{section.title}</span>
+            </div>
+            <div className="flex gap-1">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setIsEditing(true)}
+                data-testid={`button-edit-content-section-${index}`}
+              >
+                <Pencil className="h-4 w-4 mr-1" />
+                Edit
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => onDelete(index)}
+                className="text-destructive hover:text-destructive"
+                data-testid={`button-delete-content-section-${index}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <p className="text-sm whitespace-pre-wrap">{section.content}</p>
+          {section.brollIdeas && section.brollIdeas.length > 0 && (
+            <div className="mt-2 text-xs text-muted-foreground">
+              <strong>B-Roll:</strong> {section.brollIdeas.join(", ")}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function hasScriptChanged(original: ScriptJson | null, edited: ScriptJson | null): boolean {
   if (!original || !edited) return false;
   
@@ -385,6 +509,16 @@ function hasScriptChanged(original: ScriptJson | null, edited: ScriptJson | null
   if (origFull.firstCTA.text !== editFull.firstCTA.text) return true;
   if (origFull.content.text !== editFull.content.text) return true;
   if (origFull.finalCTA.text !== editFull.finalCTA.text) return true;
+  
+  // Check content sections
+  const origSections = origFull.content.sections || [];
+  const editSections = editFull.content.sections || [];
+  if (origSections.length !== editSections.length) return true;
+  for (let i = 0; i < origSections.length; i++) {
+    if (origSections[i].title !== editSections[i].title) return true;
+    if (origSections[i].content !== editSections[i].content) return true;
+    if (origSections[i].timestamp !== editSections[i].timestamp) return true;
+  }
   
   return false;
 }
@@ -452,6 +586,57 @@ export default function TopicPulseScriptPage() {
     setEditedScriptJson({
       ...editedScriptJson,
       pinnedComment: value,
+    });
+  };
+
+  const handleContentSectionUpdate = (index: number, updatedSection: ContentSection) => {
+    if (!editedScriptJson?.fullScript?.content.sections) return;
+    const newSections = [...editedScriptJson.fullScript.content.sections];
+    newSections[index] = updatedSection;
+    setEditedScriptJson({
+      ...editedScriptJson,
+      fullScript: {
+        ...editedScriptJson.fullScript,
+        content: {
+          ...editedScriptJson.fullScript.content,
+          sections: newSections,
+        },
+      },
+    });
+  };
+
+  const handleContentSectionDelete = (index: number) => {
+    if (!editedScriptJson?.fullScript?.content.sections) return;
+    const newSections = editedScriptJson.fullScript.content.sections.filter((_, i) => i !== index);
+    setEditedScriptJson({
+      ...editedScriptJson,
+      fullScript: {
+        ...editedScriptJson.fullScript,
+        content: {
+          ...editedScriptJson.fullScript.content,
+          sections: newSections,
+        },
+      },
+    });
+  };
+
+  const handleAddContentSection = () => {
+    if (!editedScriptJson?.fullScript) return;
+    const currentSections = editedScriptJson.fullScript.content.sections || [];
+    const newSection: ContentSection = {
+      title: `New Section ${currentSections.length + 1}`,
+      content: "Add your content here...",
+      timestamp: "",
+    };
+    setEditedScriptJson({
+      ...editedScriptJson,
+      fullScript: {
+        ...editedScriptJson.fullScript,
+        content: {
+          ...editedScriptJson.fullScript.content,
+          sections: [...currentSections, newSection],
+        },
+      },
     });
   };
 
@@ -591,20 +776,27 @@ export default function TopicPulseScriptPage() {
                         onChange={(v) => handleSectionChange("content", v)}
                         sectionKey="content"
                       />
-                      {fullScript.content.sections?.map((section, i) => (
-                        <div key={i} className="p-4 bg-muted/30">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="outline">{section.timestamp || `Section ${i + 1}`}</Badge>
-                            <span className="font-medium">{section.title}</span>
-                          </div>
-                          <p className="text-sm whitespace-pre-wrap">{section.content}</p>
-                          {section.brollIdeas && section.brollIdeas.length > 0 && (
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              <strong>B-Roll:</strong> {section.brollIdeas.join(", ")}
-                            </div>
-                          )}
-                        </div>
+                      {editedScriptJson?.fullScript?.content.sections?.map((section, i) => (
+                        <EditableContentSubSection
+                          key={i}
+                          section={section}
+                          index={i}
+                          onUpdate={handleContentSectionUpdate}
+                          onDelete={handleContentSectionDelete}
+                        />
                       ))}
+                      <div className="p-4 border-t border-dashed">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleAddContentSection}
+                          className="w-full"
+                          data-testid="button-add-content-section"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Content Section
+                        </Button>
+                      </div>
                       <EditableScriptSection 
                         title="5. Final CTA" 
                         content={fullScript.finalCTA.text} 
