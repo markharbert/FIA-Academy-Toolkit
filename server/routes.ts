@@ -9,8 +9,6 @@ import crypto from "crypto";
 import multer from "multer";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { Strategy as FacebookStrategy } from "passport-facebook";
-import AppleStrategy from "passport-apple";
 import { sendPasswordResetEmail } from "./email";
 import path from "path";
 import fs from "fs";
@@ -215,7 +213,7 @@ export async function registerRoutes(
 
       // Check if user has a password (might be OAuth-only user)
       if (!user.passwordHash) {
-        return res.status(401).json({ message: "This account uses social login. Please sign in with Google or Facebook." });
+        return res.status(401).json({ message: "This account uses social login. Please sign in with Google." });
       }
 
       const valid = await bcrypt.compare(password, user.passwordHash);
@@ -565,231 +563,6 @@ export async function registerRoutes(
     });
   }
 
-  // Facebook OAuth Strategy
-  if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
-    passport.use(new FacebookStrategy({
-      clientID: process.env.FACEBOOK_APP_ID,
-      clientSecret: process.env.FACEBOOK_APP_SECRET,
-      callbackURL: process.env.FACEBOOK_REDIRECT_URI || `${APP_BASE_URL}/api/auth/oauth/facebook/callback`,
-      profileFields: ["id", "emails", "name", "displayName"],
-      enableProof: true,
-      state: true,
-    } as any, async (accessToken: string, refreshToken: string, profile: any, done: any) => {
-      try {
-        const email = profile.emails?.[0]?.value?.toLowerCase();
-        const providerUserId = profile.id;
-        const firstName = profile.name?.givenName;
-        const lastName = profile.name?.familyName;
-        const displayName = profile.displayName;
-
-        // Check if identity already exists for this provider
-        let identity = await storage.getUserIdentityByProvider("facebook", providerUserId);
-        let user;
-
-        if (identity) {
-          // User already linked, just return them
-          user = await storage.getUser(identity.userId);
-        } else if (email) {
-          // Check if a user with this email already exists
-          user = await storage.getUserByEmail(email);
-
-          if (user) {
-            // Link the OAuth identity to existing user (don't modify their password)
-            await storage.createUserIdentity({
-              userId: user.id,
-              provider: "facebook",
-              providerUserId,
-              emailFromProvider: email,
-              emailVerifiedByProvider: false,
-              nameFromProvider: displayName,
-            });
-          } else {
-            // Create new user without password (OAuth-only user)
-            user = await storage.createUser({
-              email,
-              passwordHash: null as any,
-              firstName: firstName || null,
-              lastName: lastName || null,
-              displayName: displayName || null,
-            });
-
-            await storage.createUserIdentity({
-              userId: user.id,
-              provider: "facebook",
-              providerUserId,
-              emailFromProvider: email,
-              emailVerifiedByProvider: false,
-              nameFromProvider: displayName,
-            });
-          }
-        } else {
-          // No email from provider - create user without email
-          user = await storage.createUser({
-            email: null as any,
-            passwordHash: null as any,
-            firstName: firstName || null,
-            lastName: lastName || null,
-            displayName: displayName || null,
-          });
-
-          await storage.createUserIdentity({
-            userId: user.id,
-            provider: "facebook",
-            providerUserId,
-            emailFromProvider: null,
-            emailVerifiedByProvider: false,
-            nameFromProvider: displayName,
-          });
-        }
-
-        done(null, user);
-      } catch (err) {
-        done(err);
-      }
-    }));
-
-    app.get("/api/auth/oauth/facebook", passport.authenticate("facebook" as any, {
-      scope: ["email"],
-    }));
-
-    app.get("/api/auth/oauth/facebook/callback",
-      passport.authenticate("facebook", { failureRedirect: "/login?error=oauth_failed" }),
-      (req: Request, res: Response) => {
-        req.session.userId = (req.user as any).id;
-        res.redirect("/dashboard");
-      }
-    );
-  } else {
-    // Fallback routes when Facebook OAuth is not configured
-    app.get("/api/auth/oauth/facebook", (req: Request, res: Response) => {
-      console.log("[OAuth] Facebook OAuth not configured - missing FACEBOOK_APP_ID or FACEBOOK_APP_SECRET");
-      res.redirect("/login?error=oauth_not_configured");
-    });
-    app.get("/api/auth/oauth/facebook/callback", (req: Request, res: Response) => {
-      res.redirect("/login?error=oauth_not_configured");
-    });
-  }
-
-  // Apple OAuth Strategy
-  if (process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY) {
-    passport.use(new AppleStrategy({
-      clientID: process.env.APPLE_CLIENT_ID,
-      teamID: process.env.APPLE_TEAM_ID,
-      keyID: process.env.APPLE_KEY_ID,
-      privateKeyString: process.env.APPLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-      callbackURL: process.env.APPLE_REDIRECT_URI || `${APP_BASE_URL}/api/auth/oauth/apple/callback`,
-      passReqToCallback: true,
-    } as any, async (req: any, accessToken: any, refreshToken: any, idToken: any, profile: any, done: any) => {
-      try {
-        // Apple provides email only on first authorization
-        // The profile might have the email in different places
-        const email = profile?.email?.toLowerCase() || idToken?.email?.toLowerCase();
-        const providerUserId = profile?.id || idToken?.sub;
-        const firstName = profile?.name?.firstName || req.body?.user?.name?.firstName;
-        const lastName = profile?.name?.lastName || req.body?.user?.name?.lastName;
-        const displayName = firstName && lastName ? `${firstName} ${lastName}` : firstName || null;
-
-        if (!providerUserId) {
-          return done(null, false, { message: "No user ID from Apple" });
-        }
-
-        // Check if identity already exists for this provider
-        let identity = await storage.getUserIdentityByProvider("apple", providerUserId);
-        let user;
-
-        if (identity) {
-          // User already linked, just return them
-          user = await storage.getUser(identity.userId);
-        } else if (email) {
-          // Check if a user with this email already exists
-          user = await storage.getUserByEmail(email);
-
-          if (user) {
-            // Link the OAuth identity to existing user (don't modify their password)
-            await storage.createUserIdentity({
-              userId: user.id,
-              provider: "apple",
-              providerUserId,
-              emailFromProvider: email,
-              emailVerifiedByProvider: true, // Apple verifies emails
-              nameFromProvider: displayName,
-            });
-          } else {
-            // Create new user without password (OAuth-only user)
-            user = await storage.createUser({
-              email,
-              passwordHash: null as any,
-              firstName: firstName || null,
-              lastName: lastName || null,
-              displayName: displayName || null,
-            });
-
-            await storage.createUserIdentity({
-              userId: user.id,
-              provider: "apple",
-              providerUserId,
-              emailFromProvider: email,
-              emailVerifiedByProvider: true,
-              nameFromProvider: displayName,
-            });
-          }
-        } else {
-          // No email from provider - create user without email
-          user = await storage.createUser({
-            email: null as any,
-            passwordHash: null as any,
-            firstName: firstName || null,
-            lastName: lastName || null,
-            displayName: displayName || null,
-          });
-
-          await storage.createUserIdentity({
-            userId: user.id,
-            provider: "apple",
-            providerUserId,
-            emailFromProvider: null,
-            emailVerifiedByProvider: false,
-            nameFromProvider: displayName,
-          });
-        }
-
-        done(null, user);
-      } catch (err) {
-        done(err);
-      }
-    }));
-
-    app.get("/api/auth/oauth/apple", passport.authenticate("apple" as any, {
-      scope: ["name", "email"],
-    }));
-
-    // Apple uses POST for callback
-    app.post("/api/auth/oauth/apple/callback",
-      passport.authenticate("apple" as any, { failureRedirect: "/login?error=oauth_failed" }),
-      (req: Request, res: Response) => {
-        req.session.userId = (req.user as any).id;
-        res.redirect("/dashboard");
-      }
-    );
-    
-    // Apple connect route for account linking
-    app.get("/api/account/connect/apple", requireAuth, (req: Request, res: Response, next: NextFunction) => {
-      (req.session as any).connectingUserId = req.session.userId;
-      passport.authenticate("apple" as any, { scope: ["name", "email"] })(req, res, next);
-    });
-  } else {
-    // Fallback routes when Apple OAuth is not configured
-    app.get("/api/auth/oauth/apple", (req: Request, res: Response) => {
-      console.log("[OAuth] Apple OAuth not configured - missing required env vars");
-      res.redirect("/login?error=oauth_not_configured");
-    });
-    app.post("/api/auth/oauth/apple/callback", (req: Request, res: Response) => {
-      res.redirect("/login?error=oauth_not_configured");
-    });
-    app.get("/api/account/connect/apple", requireAuth, (req: Request, res: Response) => {
-      res.redirect("/account?error=oauth_not_configured");
-    });
-  }
 
   // ===================
   // ADMIN ROUTES - USER MANAGEMENT
@@ -1724,7 +1497,7 @@ export async function registerRoutes(
   app.delete("/api/account/identities/:provider", requireAuth, async (req: Request, res: Response) => {
     try {
       const provider = req.params.provider as AuthProvider;
-      if (!["google", "facebook", "apple"].includes(provider)) {
+      if (!["google"].includes(provider)) {
         return res.status(400).json({ message: "Invalid provider" });
       }
 
@@ -1763,10 +1536,6 @@ export async function registerRoutes(
     passport.authenticate("google", { scope: ["profile", "email"] })(req, res, next);
   });
 
-  app.get("/api/account/connect/facebook", requireAuth, (req: Request, res: Response, next: NextFunction) => {
-    (req.session as any).connectingUserId = req.session.userId;
-    passport.authenticate("facebook" as any, { scope: ["email"] })(req, res, next);
-  });
 
   // Update consent for email
   app.post("/api/account/consent", requireAuth, async (req: Request, res: Response) => {

@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, User, Mail, Lock, Link as LinkIcon, RefreshCw, ExternalLink, Check, X } from "lucide-react";
-import { SiGoogle, SiFacebook, SiApple } from "react-icons/si";
+import { SiGoogle } from "react-icons/si";
 
 interface AccountData {
   id: string;
@@ -184,8 +184,6 @@ export default function AccountPage() {
 
   const providers = [
     { id: "google", name: "Google", icon: SiGoogle },
-    { id: "facebook", name: "Facebook", icon: SiFacebook },
-    { id: "apple", name: "Apple", icon: SiApple },
   ];
 
   const canDisconnect = (provider: string) => {

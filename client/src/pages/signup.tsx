@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
-import { SiGoogle, SiFacebook, SiApple } from "react-icons/si";
+import { SiGoogle } from "react-icons/si";
 import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
 
 const signupFormSchema = z.object({
@@ -36,7 +36,7 @@ export default function SignupPage() {
   const searchString = useSearch();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | "apple" | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<"google" | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -113,40 +113,6 @@ export default function SignupPage() {
                 <SiGoogle className="mr-2 h-4 w-4" />
               )}
               Continue with Google
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                setOauthLoading("facebook");
-                window.location.href = "/api/auth/oauth/facebook";
-              }}
-              disabled={oauthLoading !== null}
-              data-testid="button-oauth-facebook"
-            >
-              {oauthLoading === "facebook" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <SiFacebook className="mr-2 h-4 w-4" />
-              )}
-              Continue with Facebook
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                setOauthLoading("apple");
-                window.location.href = "/api/auth/oauth/apple";
-              }}
-              disabled={oauthLoading !== null}
-              data-testid="button-oauth-apple"
-            >
-              {oauthLoading === "apple" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <SiApple className="mr-2 h-4 w-4" />
-              )}
-              Continue with Apple
             </Button>
           </div>
 

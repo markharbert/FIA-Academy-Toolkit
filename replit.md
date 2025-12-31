@@ -72,5 +72,5 @@ Preferred communication style: Simple, everyday language.
 - **Settings**: SMTP host, port, user, password, from address, and app base URL.
 
 ### OAuth Login
-- **Providers**: Google, Facebook, Apple.
+- **Providers**: Google only.
 - **Mechanism**: Standard OAuth flows for user authentication and account linking.

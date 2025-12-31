@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Video, FileText, TrendingUp, CheckCircle, Sparkles, Target, Loader2 } from "lucide-react";
-import { SiGoogle, SiFacebook, SiApple } from "react-icons/si";
+import { SiGoogle } from "react-icons/si";
 
 const steps = [
   {
@@ -42,7 +42,7 @@ const features = [
 ];
 
 export default function LandingPage() {
-  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | "apple" | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<"google" | null>(null);
 
   return (
     <div className="flex flex-col">
@@ -78,42 +78,6 @@ export default function LandingPage() {
                 <SiGoogle className="mr-2 h-4 w-4" />
               )}
               Continue with Google
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full h-12"
-              onClick={() => {
-                setOauthLoading("facebook");
-                window.location.href = "/api/auth/oauth/facebook";
-              }}
-              disabled={oauthLoading !== null}
-              data-testid="button-hero-facebook"
-            >
-              {oauthLoading === "facebook" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <SiFacebook className="mr-2 h-4 w-4" />
-              )}
-              Continue with Facebook
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full h-12"
-              onClick={() => {
-                setOauthLoading("apple");
-                window.location.href = "/api/auth/oauth/apple";
-              }}
-              disabled={oauthLoading !== null}
-              data-testid="button-hero-apple"
-            >
-              {oauthLoading === "apple" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <SiApple className="mr-2 h-4 w-4" />
-              )}
-              Continue with Apple
             </Button>
             <p className="text-sm text-muted-foreground pt-2">
               Or{" "}
