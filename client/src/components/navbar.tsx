@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
+import logoImage from "@assets/video_creators_toolkit_logo_1767189257881.png";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -26,9 +26,9 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full bg-brand-dark shadow-md">
       <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4 md:px-6">
-        <a href="https://markharbert.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2" data-testid="link-logo">
-          <img src={logoImage} alt="Mark Harbert" className="h-8" />
-        </a>
+        <Link href="/dashboard" className="flex items-center gap-2" data-testid="link-logo">
+          <img src={logoImage} alt="Video Creators Toolkit" className="h-10" />
+        </Link>
 
         <div className="hidden md:flex items-center gap-4">
           {user ? (
