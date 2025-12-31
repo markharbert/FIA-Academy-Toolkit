@@ -70,7 +70,7 @@ export default function DashboardPage() {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome to Fearless Video Coach</p>
+          <p className="text-muted-foreground">Welcome to Video Creators Toolkit</p>
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">

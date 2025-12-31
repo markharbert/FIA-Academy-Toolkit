@@ -1,7 +1,7 @@
-# Fearless Video Coach
+# Video Creators Toolkit
 
 ## Overview
-Fearless Video Coach is a web application designed for private practice in video marketing. It allows users to record short in-browser videos, receive automatic transcriptions, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA. The application prioritizes private practice with no public sharing features. Videos persist indefinitely unless explicitly deleted by users or admins.
+Video Creators Toolkit is a web application designed for private practice in video marketing. It allows users to record short in-browser videos, receive automatic transcriptions, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA. The application prioritizes private practice with no public sharing features. Videos persist indefinitely unless explicitly deleted by users or admins.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -21,7 +21,7 @@ Preferred communication style: Simple, everyday language.
 - **Runtime**: Node.js with Express
 - **Language**: TypeScript (ESM)
 - **API**: RESTful JSON API (`/api/*`)
-- **Session Management**: Express sessions with PostgreSQL store (3-hour rolling inactivity timeout)
+- **Session Management**: Express sessions with PostgreSQL store (24-hour rolling inactivity timeout)
 - **Authentication**: Custom session-based auth, bcrypt password hashing
 - **File Uploads**: Multer (local `uploads/` directory, structured for future S3 migration)
 

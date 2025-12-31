@@ -4,8 +4,8 @@ const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587", 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || "noreply@fearlessvideocoach.com";
-const APP_BASE_URL = process.env.APP_BASE_URL || "https://fearlessvideocoach.com";
+const SMTP_FROM = process.env.SMTP_FROM || "noreply@videocreatorstoolkit.com";
+const APP_BASE_URL = process.env.APP_BASE_URL || "https://videocreatorstoolkit.com";
 
 let transporter: nodemailer.Transporter | null = null;
 
@@ -53,12 +53,12 @@ export async function sendPasswordResetEmail(
     </head>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #06092a; margin-bottom: 10px;">Fearless Video Coach</h1>
+        <h1 style="color: #06092a; margin-bottom: 10px;">Video Creators Toolkit</h1>
       </div>
       
       <h2 style="color: #06092a;">Reset Your Password</h2>
       
-      <p>We received a request to reset your password for your Fearless Video Coach account.</p>
+      <p>We received a request to reset your password for your Video Creators Toolkit account.</p>
       
       <p>Click the button below to set a new password:</p>
       
@@ -85,16 +85,16 @@ export async function sendPasswordResetEmail(
       <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
       
       <p style="color: #999; font-size: 12px; text-align: center;">
-        Fearless Video Coach - Practice Your Video Marketing Skills
+        Video Creators Toolkit - Create Videos That Convert
       </p>
     </body>
     </html>
   `;
 
   const textContent = `
-Reset Your Fearless Video Coach Password
+Reset Your Video Creators Toolkit Password
 
-We received a request to reset your password for your Fearless Video Coach account.
+We received a request to reset your password for your Video Creators Toolkit account.
 
 Click the link below to set a new password:
 ${resetLink}
@@ -104,14 +104,14 @@ This link will expire in 60 minutes.
 If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.
 
 ---
-Fearless Video Coach - Practice Your Video Marketing Skills
+Video Creators Toolkit - Create Videos That Convert
   `;
 
   try {
     await transport.sendMail({
       from: SMTP_FROM,
       to: email,
-      subject: "Reset your Fearless Video Coach password",
+      subject: "Reset your Video Creators Toolkit password",
       text: textContent,
       html: htmlContent,
     });

@@ -477,7 +477,7 @@ export async function createOrUpdateContact(
     
     const contactData: Record<string, unknown> = {
       email_addresses: [{ email, field: "EMAIL1" }],
-      opt_in_reason: "Signed up for Fearless Video Coach app",
+      opt_in_reason: "Signed up for Video Creators Toolkit app",
     };
     
     if (firstName) contactData.given_name = firstName;

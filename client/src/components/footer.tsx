@@ -27,7 +27,7 @@ export function Footer() {
             <Shield className="h-4 w-4" />
             <span>Your content stays private and secure</span>
           </div>
-          <p className="text-sm text-white/60">&copy; {new Date().getFullYear()} Fearless Video Coach. All rights reserved.</p>
+          <p className="text-sm text-white/60">&copy; {new Date().getFullYear()} Video Creators Toolkit. All rights reserved.</p>
         </div>
       </div>
     </footer>
