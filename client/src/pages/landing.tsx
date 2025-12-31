@@ -9,17 +9,17 @@ const steps = [
   {
     icon: Search,
     title: "Discover",
-    description: "Find trending topics your audience is searching for. See real search data and untapped opportunities.",
+    description: "Uncover trending topics your audience actively searches for with real keyword data.",
   },
   {
     icon: PenTool,
     title: "Create",
-    description: "Generate scroll-stopping scripts in seconds using our proven 5-part formula. Edit and refine until perfect.",
+    description: "Generate scroll-stopping scripts using our proven formula, then edit until perfect.",
   },
   {
     icon: Video,
     title: "Practice",
-    description: "Record your video, get instant AI feedback, and polish your delivery before going live.",
+    description: "Record your video, get instant AI feedback, and polish before you post.",
   },
 ];
 
@@ -27,32 +27,32 @@ const features = [
   {
     icon: Zap,
     title: "Topic Pulse Research",
-    description: "Stop guessing what to post. Discover what your audience is actively searching for with real keyword data.",
+    description: "Stop guessing what to post next. See exactly what your audience searches for.",
   },
   {
     icon: Sparkles,
     title: "AI Script Generator",
-    description: "Turn any topic into a complete video script with hooks, CTAs, and content that converts.",
+    description: "Turn any topic into a complete script with hooks, CTAs, and high-converting content.",
   },
   {
     icon: Target,
     title: "Smart Video Scoring",
-    description: "Get scored on all 5 parts of the formula with specific fixes to make every video stronger.",
+    description: "Get scored on all 5 formula parts with specific fixes to strengthen every video.",
   },
   {
     icon: TrendingUp,
     title: "YouTube Research",
-    description: "Analyze top-performing videos, study winning comments, and learn what makes content go viral.",
+    description: "Study top-performing videos and winning comments to learn what drives views.",
   },
   {
     icon: CheckCircle,
     title: "Proven Formula",
-    description: "Master the 5-part structure used by top creators: Hook, Set the Hook, First CTA, Content, Final CTA.",
+    description: "Master the 5-part structure top creators use: Hook, Set Hook, CTA, Content, Final CTA.",
   },
   {
     icon: FileText,
     title: "Complete Content System",
-    description: "From topic research to final script, everything you need to create videos that get results.",
+    description: "From topic research to final script, everything you need to create winning videos.",
   },
 ];
 
@@ -65,13 +65,12 @@ export default function LandingPage() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(45%_40%_at_50%_60%,hsl(var(--brand-light)/0.08),transparent)]" />
         <div className="container mx-auto px-4 text-center">
           <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-brand-dark md:text-5xl lg:text-6xl" data-testid="text-hero-title">
-            Stop Struggling with Video Ideas.
+            Stop Guessing What to Post.
             <br />
-            <span className="text-brand-red">Start Creating Content That Converts.</span>
+            <span className="text-brand-red">Start Creating Videos That Convert.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl" data-testid="text-hero-subtitle">
-            Find trending topics, generate scroll-stopping scripts, and practice your delivery with AI coaching. 
-            Everything you need to create videos that actually get results.
+            Discover trending topics, generate high-converting scripts, and practice your delivery with AI coaching before you hit record.
           </p>
           
           <div className="mx-auto mt-10 max-w-sm space-y-3">
@@ -115,7 +114,7 @@ export default function LandingPage() {
       <section className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="mb-12 text-center text-3xl font-bold md:text-4xl" data-testid="text-steps-title">
-            From Blank Page to Ready-to-Post in Minutes
+            Go From Blank Page to Ready-to-Post
           </h2>
           <div className="grid gap-8 md:grid-cols-3">
             {steps.map((step, index) => (
@@ -139,19 +138,18 @@ export default function LandingPage() {
       <section className="bg-muted/30 py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl" data-testid="text-formula-title">
-            The Secret Formula Behind Viral Videos
+            The Formula Behind Every Viral Video
           </h2>
           <p className="mx-auto mb-12 max-w-2xl text-center text-muted-foreground">
-            Top creators don't wing it. They follow this proven 5-part structure. 
-            Our AI writes scripts using this formula and scores your delivery on every element.
+            Top creators follow this proven 5-part structure. Our AI writes scripts using this formula and scores your delivery on each element.
           </p>
           <div className="mx-auto max-w-3xl space-y-4">
             {[
-              { num: 1, title: "Hook", desc: "Stop the scroll in 1-3 seconds. A sharp question, bold claim, or unexpected statement that demands attention." },
-              { num: 2, title: "Set the Hook", desc: "Build irresistible curiosity. Tease what's coming so they can't look away." },
-              { num: 3, title: "First Call to Action", desc: "Lock in engagement early: \"Comment if...\" or \"Follow for the rest...\" This boosts your algorithm ranking." },
-              { num: 4, title: "Content", desc: "Deliver the goods. Clear, valuable, easy to follow. No fluff, just results." },
-              { num: 5, title: "Final Call to Action", desc: "Tell them exactly what to do next. One clear action that moves them closer to working with you." },
+              { num: 1, title: "Hook", desc: "Stop the scroll in the first 3 seconds with a bold question or unexpected statement." },
+              { num: 2, title: "Set the Hook", desc: "Build curiosity so strong they have to keep watching to find out more." },
+              { num: 3, title: "First Call to Action", desc: "Lock in engagement early with a comment prompt or follow request." },
+              { num: 4, title: "Content", desc: "Deliver clear value fast. No fluff, no filler, just actionable insights." },
+              { num: 5, title: "Final Call to Action", desc: "Give them one clear next step that moves them closer to you." },
             ].map((item) => (
               <Card key={item.num} className="border bg-background" data-testid={`card-formula-${item.num}`}>
                 <CardContent className="flex items-start gap-4 p-4">
@@ -172,11 +170,10 @@ export default function LandingPage() {
       <section className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl" data-testid="text-features-title">
-            Your Complete Video Content System
+            Everything You Need to Create With Confidence
           </h2>
           <p className="mx-auto mb-12 max-w-2xl text-center text-muted-foreground">
-            No more staring at a blank screen. No more wondering if your video is good enough. 
-            Get the tools and feedback you need to create with confidence.
+            No more blank screen paralysis. No more second-guessing your content. Get the research tools and AI feedback that make every video stronger.
           </p>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {features.map((feature, index) => (
@@ -197,10 +194,10 @@ export default function LandingPage() {
       <section className="bg-brand-dark py-16 md:py-20">
         <div className="container mx-auto px-4 text-center">
           <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl" data-testid="text-cta-title">
-            Your Next Viral Video Starts Here
+            Ready to Create Videos That Actually Work?
           </h2>
           <p className="mx-auto mb-8 max-w-xl text-white/80">
-            Join creators who stopped guessing and started growing. Find your next topic, generate your script, and nail your delivery.
+            Join creators who stopped guessing and started growing. Research, script, practice, post.
           </p>
           <Link href="/signup">
             <Button size="lg" className="h-12 px-8 text-base font-bold" data-testid="button-cta-signup">
