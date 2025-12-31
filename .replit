@@ -45,5 +45,5 @@ integrations = ["javascript_database:1.0.0", "javascript_gemini_ai_integrations:
 [userenv]
 
 [userenv.shared]
-APP_BASE_URL = "https://fearlessvideocoach.com"
+APP_BASE_URL = "https://videocreatorstoolkit.com"
 SUPER_ADMIN_EMAILS = "mh@markharbert.com"
