@@ -2,42 +2,57 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Video, FileText, TrendingUp, CheckCircle, Sparkles, Target, Loader2 } from "lucide-react";
+import { Video, FileText, TrendingUp, CheckCircle, Sparkles, Target, Loader2, Search, Zap, PenTool } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 
 const steps = [
   {
+    icon: Search,
+    title: "Discover",
+    description: "Find trending topics your audience is searching for. See real search data and untapped opportunities.",
+  },
+  {
+    icon: PenTool,
+    title: "Create",
+    description: "Generate scroll-stopping scripts in seconds using our proven 5-part formula. Edit and refine until perfect.",
+  },
+  {
     icon: Video,
-    title: "Record",
-    description: "Practice your video marketing message using your webcam. Record as many takes as you need.",
-  },
-  {
-    icon: FileText,
-    title: "Transcribe",
-    description: "Get an automatic transcript of your recording. Edit it if needed for more accurate scoring.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Get Scored",
-    description: "Receive detailed feedback on all 5 parts of the video formula with specific improvement suggestions.",
+    title: "Practice",
+    description: "Record your video, get instant AI feedback, and polish your delivery before going live.",
   },
 ];
 
 const features = [
   {
-    icon: CheckCircle,
-    title: "5-Part Video Formula",
-    description: "Master the proven structure: Hook, Set the Hook, First CTA, Content, and Final CTA.",
+    icon: Zap,
+    title: "Topic Pulse Research",
+    description: "Stop guessing what to post. Discover what your audience is actively searching for with real keyword data.",
   },
   {
     icon: Sparkles,
-    title: "AI-Powered Feedback",
-    description: "Get specific, actionable suggestions for each part of your video, not generic advice.",
+    title: "AI Script Generator",
+    description: "Turn any topic into a complete video script with hooks, CTAs, and content that converts.",
   },
   {
     icon: Target,
-    title: "Goal-Specific Coaching",
-    description: "Tailor your feedback to your goal: Sales, Lead Capture, Education, or Recruitment.",
+    title: "Smart Video Scoring",
+    description: "Get scored on all 5 parts of the formula with specific fixes to make every video stronger.",
+  },
+  {
+    icon: TrendingUp,
+    title: "YouTube Research",
+    description: "Analyze top-performing videos, study winning comments, and learn what makes content go viral.",
+  },
+  {
+    icon: CheckCircle,
+    title: "Proven Formula",
+    description: "Master the 5-part structure used by top creators: Hook, Set the Hook, First CTA, Content, Final CTA.",
+  },
+  {
+    icon: FileText,
+    title: "Complete Content System",
+    description: "From topic research to final script, everything you need to create videos that get results.",
   },
 ];
 
@@ -50,13 +65,13 @@ export default function LandingPage() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(45%_40%_at_50%_60%,hsl(var(--brand-light)/0.08),transparent)]" />
         <div className="container mx-auto px-4 text-center">
           <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-brand-dark md:text-5xl lg:text-6xl" data-testid="text-hero-title">
-            Practice Video Marketing,
+            Stop Struggling with Video Ideas.
             <br />
-            <span className="text-brand-red">Get Feedback, Build Confidence</span>
+            <span className="text-brand-red">Start Creating Content That Converts.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl" data-testid="text-hero-subtitle">
-            Record practice videos, get AI-powered scoring on the 5-part video creation formula, 
-            and receive specific suggestions to improve your delivery.
+            Find trending topics, generate scroll-stopping scripts, and practice your delivery with AI coaching. 
+            Everything you need to create videos that actually get results.
           </p>
           
           <div className="mx-auto mt-10 max-w-sm space-y-3">
@@ -100,7 +115,7 @@ export default function LandingPage() {
       <section className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="mb-12 text-center text-3xl font-bold md:text-4xl" data-testid="text-steps-title">
-            How It Works
+            From Blank Page to Ready-to-Post in Minutes
           </h2>
           <div className="grid gap-8 md:grid-cols-3">
             {steps.map((step, index) => (
@@ -124,19 +139,19 @@ export default function LandingPage() {
       <section className="bg-muted/30 py-16 md:py-24">
         <div className="container mx-auto px-4">
           <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl" data-testid="text-formula-title">
-            The 5-Part Video Creation Formula
+            The Secret Formula Behind Viral Videos
           </h2>
           <p className="mx-auto mb-12 max-w-2xl text-center text-muted-foreground">
-            Every great marketing video follows this proven structure. Our AI analyzes each part 
-            and gives you specific feedback.
+            Top creators don't wing it. They follow this proven 5-part structure. 
+            Our AI writes scripts using this formula and scores your delivery on every element.
           </p>
           <div className="mx-auto max-w-3xl space-y-4">
             {[
-              { num: 1, title: "Hook", desc: "Grab attention in the first 1-3 seconds with a sharp question, bold promise, or audience callout." },
-              { num: 2, title: "Set the Hook", desc: "Create curiosity that makes viewers want to keep watching. Tease what's coming or set up a story." },
-              { num: 3, title: "First Call to Action", desc: "Ask for an early micro-action: \"Comment the word...\", \"Follow for more...\", or \"Stick with me...\"" },
-              { num: 4, title: "Content", desc: "Deliver your value clearly with 1-3 key points, clear steps, or a simple explanation." },
-              { num: 5, title: "Final Call to Action", desc: "End with a clear next step: \"Click the link...\", \"Download the guide...\", or \"Send me a message...\"" },
+              { num: 1, title: "Hook", desc: "Stop the scroll in 1-3 seconds. A sharp question, bold claim, or unexpected statement that demands attention." },
+              { num: 2, title: "Set the Hook", desc: "Build irresistible curiosity. Tease what's coming so they can't look away." },
+              { num: 3, title: "First Call to Action", desc: "Lock in engagement early: \"Comment if...\" or \"Follow for the rest...\" This boosts your algorithm ranking." },
+              { num: 4, title: "Content", desc: "Deliver the goods. Clear, valuable, easy to follow. No fluff, just results." },
+              { num: 5, title: "Final Call to Action", desc: "Tell them exactly what to do next. One clear action that moves them closer to working with you." },
             ].map((item) => (
               <Card key={item.num} className="border bg-background" data-testid={`card-formula-${item.num}`}>
                 <CardContent className="flex items-start gap-4 p-4">
@@ -156,10 +171,14 @@ export default function LandingPage() {
 
       <section className="py-16 md:py-24">
         <div className="container mx-auto px-4">
-          <h2 className="mb-12 text-center text-3xl font-bold md:text-4xl" data-testid="text-features-title">
-            Why Fearless Video Coach?
+          <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl" data-testid="text-features-title">
+            Your Complete Video Content System
           </h2>
-          <div className="grid gap-8 md:grid-cols-3">
+          <p className="mx-auto mb-12 max-w-2xl text-center text-muted-foreground">
+            No more staring at a blank screen. No more wondering if your video is good enough. 
+            Get the tools and feedback you need to create with confidence.
+          </p>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {features.map((feature, index) => (
               <Card key={feature.title} className="border-0 bg-card shadow-none" data-testid={`card-feature-${index + 1}`}>
                 <CardContent className="flex flex-col items-center p-6 text-center">
@@ -178,14 +197,14 @@ export default function LandingPage() {
       <section className="bg-brand-dark py-16 md:py-20">
         <div className="container mx-auto px-4 text-center">
           <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl" data-testid="text-cta-title">
-            Ready to Build Your Video Confidence?
+            Your Next Viral Video Starts Here
           </h2>
           <p className="mx-auto mb-8 max-w-xl text-white/80">
-            Start practicing today. Record, get feedback, improve, and watch your confidence grow.
+            Join creators who stopped guessing and started growing. Find your next topic, generate your script, and nail your delivery.
           </p>
           <Link href="/signup">
             <Button size="lg" className="h-12 px-8 text-base font-bold" data-testid="button-cta-signup">
-              Start Practicing Now
+              Get Started Free
             </Button>
           </Link>
         </div>
