@@ -67,19 +67,19 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="flex items-center justify-center">
+      <SidebarHeader className="flex items-center justify-start">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
               onClick={() => setLocation("/dashboard")}
               data-testid="link-logo"
-              className="flex items-center justify-center"
+              className="flex items-center justify-start"
             >
               <img 
                 src={logoImage} 
                 alt="Video Creators Toolkit" 
-                className={state === "collapsed" ? "h-6 w-auto" : "h-8 w-auto"} 
+                className={state === "collapsed" ? "h-12 w-auto" : "h-16 w-auto"} 
               />
             </SidebarMenuButton>
           </SidebarMenuItem>
