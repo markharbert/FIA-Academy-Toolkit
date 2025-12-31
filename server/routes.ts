@@ -113,9 +113,9 @@ export async function registerRoutes(
   // Setup session middleware
   const PgSession = connectPgSimple(session);
   
-  // Session timeout: 3 hours of inactivity
+  // Session timeout: 24 hours of inactivity
   // Rolling sessions extend the timeout on each request
-  const SESSION_INACTIVITY_TIMEOUT = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+  const SESSION_INACTIVITY_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
   
   // Determine if we're in production (deployed)
   const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
