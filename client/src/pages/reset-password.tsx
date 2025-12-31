@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Lock, CheckCircle, AlertCircle } from "lucide-react";
-import logoPath from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
+import logoPath from "@assets/video_creators_toolkit_logo_1767189257881.png";
 
 const resetPasswordSchema = z.object({
   newPassword: z.string().min(8, "Password must be at least 8 characters"),
@@ -122,7 +122,7 @@ export default function ResetPassword() {
       <Card className="w-full max-w-md" data-testid="card-reset-password">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src={logoPath} alt="Mark Harbert Logo" className="h-12" data-testid="img-logo" />
+            <img src={logoPath} alt="Video Creators Toolkit" className="h-12" data-testid="img-logo" />
           </div>
           <CardTitle data-testid="text-page-title">Set New Password</CardTitle>
           <CardDescription data-testid="text-page-description">

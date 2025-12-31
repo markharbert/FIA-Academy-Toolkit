@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Mail, CheckCircle } from "lucide-react";
-import logoPath from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
+import logoPath from "@assets/video_creators_toolkit_logo_1767189257881.png";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -85,7 +85,7 @@ export default function ForgotPassword() {
       <Card className="w-full max-w-md" data-testid="card-forgot-password">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src={logoPath} alt="Mark Harbert Logo" className="h-12" data-testid="img-logo" />
+            <img src={logoPath} alt="Video Creators Toolkit" className="h-12" data-testid="img-logo" />
           </div>
           <CardTitle data-testid="text-page-title">Forgot Password</CardTitle>
           <CardDescription data-testid="text-page-description">

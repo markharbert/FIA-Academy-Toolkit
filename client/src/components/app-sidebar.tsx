@@ -32,8 +32,7 @@ import {
   ChevronUp,
   Shield,
 } from "lucide-react";
-import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
-import faviconImage from "@assets/markharbert-favicon_1766871449750.png";
+import logoImage from "@assets/video_creators_toolkit_logo_1767189257881.png";
 
 const navItems = [
   {
@@ -81,15 +80,15 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              onClick={() => window.open("https://markharbert.com", "_blank")}
+              onClick={() => setLocation("/dashboard")}
               data-testid="link-logo"
               className="flex items-center justify-center"
             >
-              {state === "collapsed" ? (
-                <img src={faviconImage} alt="Mark Harbert" className="size-5 shrink-0 object-contain" />
-              ) : (
-                <img src={logoImage} alt="Mark Harbert" className="h-8 w-auto" />
-              )}
+              <img 
+                src={logoImage} 
+                alt="Video Creators Toolkit" 
+                className={state === "collapsed" ? "h-6 w-auto" : "h-8 w-auto"} 
+              />
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

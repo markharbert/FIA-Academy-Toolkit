@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Mail } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
-import logoImage from "@assets/Mark_Harbert_Logo_(2)_1766503621615.png";
+import logoImage from "@assets/video_creators_toolkit_logo_1767189257881.png";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -60,7 +60,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-            <img src={logoImage} alt="Mark Harbert" className="h-10 mx-auto" />
+            <img src={logoImage} alt="Video Creators Toolkit" className="h-10 mx-auto" />
           </div>
           <CardTitle className="text-2xl" data-testid="text-login-title">Welcome back</CardTitle>
           <CardDescription>
