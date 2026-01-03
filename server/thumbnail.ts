@@ -7,6 +7,7 @@ import path from "path";
 import fs from "fs";
 import OpenAI from "openai";
 import { GoogleGenAI, Modality } from "@google/genai";
+import Replicate from "replicate";
 
 const uploadsDir = path.join(process.cwd(), "uploads", "profile-photos");
 if (!fs.existsSync(uploadsDir)) {
@@ -45,6 +46,10 @@ const gemini = new GoogleGenAI({
     apiVersion: "",
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
+});
+
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
 });
 
 const stylePrompts: Record<ThumbnailStyle, string> = {
@@ -104,6 +109,78 @@ async function generateWithGemini(prompt: string): Promise<{ b64_json: string; m
   return {
     b64_json: imagePart.inlineData.data,
     mimeType: imagePart.inlineData.mimeType || "image/png",
+  };
+}
+
+function buildInstantIdPrompt(title: string, style?: ThumbnailStyle): string {
+  const styleDescriptions: Record<ThumbnailStyle, string> = {
+    reaction: "expressive reaction face, surprised expression, dramatic lighting, bold vibrant colors",
+    before_after: "professional portrait, split screen style, clean composition",
+    list_style: "professional headshot, clean background, modern style",
+    bold_text: "portrait with dramatic lighting, high contrast, professional",
+    minimal: "elegant portrait, soft lighting, clean minimalist background",
+    dramatic: "cinematic portrait, dramatic movie-poster lighting, intense colors",
+  };
+
+  const styleGuide = style ? styleDescriptions[style] : "professional YouTube thumbnail style, eye-catching, vibrant colors";
+  
+  return `Professional YouTube thumbnail portrait for video "${title}". ${styleGuide}. High quality, sharp focus, professional photography style.`;
+}
+
+async function generateWithInstantId(
+  prompt: string, 
+  faceImageBase64: string,
+  imageMimeType: string
+): Promise<{ b64_json: string; mimeType: string }> {
+  if (!process.env.REPLICATE_API_TOKEN) {
+    throw new Error("Replicate API token not configured");
+  }
+
+  const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
+
+  const output = await replicate.run(
+    "zsxkib/instant-id:6af8583c541261472e92155d87bba80d5ad98461665802c9d7c5873d91674a4f",
+    {
+      input: {
+        image: dataUrl,
+        prompt: prompt,
+        width: 1280,
+        height: 720,
+        negative_prompt: "blurry, low quality, distorted face, bad anatomy, ugly, deformed",
+        num_outputs: 1,
+        guidance_scale: 7.5,
+        num_inference_steps: 30,
+        ip_adapter_scale: 0.8,
+        controlnet_conditioning_scale: 0.8,
+      }
+    }
+  ) as string[];
+
+  if (!output || output.length === 0) {
+    throw new Error("No image received from InstantID");
+  }
+
+  const imageUrl = output[0];
+  
+  const https = await import("https");
+  const http = await import("http");
+  
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const protocol = imageUrl.startsWith("https") ? https : http;
+    protocol.get(imageUrl, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("end", () => {
+        const buffer = Buffer.concat(chunks);
+        resolve(buffer.toString("base64"));
+      });
+      response.on("error", reject);
+    }).on("error", reject);
+  });
+
+  return {
+    b64_json: base64,
+    mimeType: "image/png",
   };
 }
 
@@ -209,19 +286,57 @@ export function registerThumbnailRoutes(app: Express): void {
         return res.status(401).json({ error: "Not authenticated" });
       }
 
-      const { title, style, provider, includePerson, customPrompt } = req.body;
+      const { title, style, provider, includePerson, customPrompt, userPhotoId } = req.body;
 
       if (!title) {
         return res.status(400).json({ error: "Title is required" });
       }
 
-      if (!provider || !["dalle", "gemini"].includes(provider)) {
-        return res.status(400).json({ error: "Valid provider (dalle or gemini) is required" });
+      if (!provider || !["dalle", "gemini", "instantid"].includes(provider)) {
+        return res.status(400).json({ error: "Valid provider (dalle, gemini, or instantid) is required" });
+      }
+
+      let imageResult: { b64_json: string; mimeType: string };
+
+      if (provider === "instantid") {
+        if (!userPhotoId) {
+          return res.status(400).json({ error: "Photo selection required for InstantID" });
+        }
+
+        const [photo] = await db.select().from(userProfilePhotos)
+          .where(eq(userProfilePhotos.id, userPhotoId));
+
+        if (!photo || photo.userId !== req.session.userId) {
+          return res.status(404).json({ error: "Photo not found" });
+        }
+
+        if (!fs.existsSync(photo.storagePath)) {
+          return res.status(404).json({ error: "Photo file not found" });
+        }
+
+        const photoBuffer = fs.readFileSync(photo.storagePath);
+        const photoBase64 = photoBuffer.toString("base64");
+        
+        const prompt = customPrompt || buildInstantIdPrompt(title, style);
+        imageResult = await generateWithInstantId(prompt, photoBase64, photo.mimeType);
+
+        const [thumbnail] = await db.insert(generatedThumbnails).values({
+          userId: req.session.userId,
+          title,
+          prompt,
+          style: style || null,
+          provider,
+          base64Data: imageResult.b64_json,
+          userPhotoId: userPhotoId,
+        }).returning();
+
+        return res.json({
+          ...thumbnail,
+          imageData: `data:${imageResult.mimeType};base64,${imageResult.b64_json}`,
+        });
       }
 
       const prompt = customPrompt || buildPrompt(title, style, !!includePerson);
-      
-      let imageResult: { b64_json: string; mimeType: string };
 
       if (provider === "dalle") {
         imageResult = await generateWithDalle(prompt);
