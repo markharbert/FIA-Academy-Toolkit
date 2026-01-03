@@ -154,23 +154,22 @@ async function generateWithInstantId(
   }
   console.log("Adjusted dimensions:", adjustedWidth, "x", adjustedHeight);
 
-  // Use InstantID MultiControlNet - supports custom dimensions and follows prompts better
-  // Lower guidance_scale (4-5) gives better prompt adherence with face identity
+  // Use zsxkib/instant-id - working model for face identity preservation
+  // ip_adapter_scale controls identity strength, guidance_scale controls prompt adherence
   const output = await replicate.run(
-    "tgohblio/instant-id-multicontrolnet",
+    "zsxkib/instant-id:c98b2e7a196828d00955767813b81fc05c5c9b294c670c6d147d545fed4ceecf",
     {
       input: {
-        face_image_path: dataUrl,
+        image: dataUrl,
         prompt: prompt,
-        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, blurry, deformed face, distorted face, watermark, logo",
+        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, blurry, deformed face, distorted face, watermark, logo, ugly, disfigured",
         width: adjustedWidth,
         height: adjustedHeight,
-        num_steps: 30,
-        guidance_scale: 4,
-        adapter_strength_ratio: 0.8,
-        identitynet_strength_ratio: 0.8,
-        pose: false,
-        safety_checker: true,
+        num_inference_steps: 30,
+        guidance_scale: 5,
+        ip_adapter_scale: 0.8,
+        controlnet_conditioning_scale: 0.8,
+        sdxl_weights: "protovision-xl-high-fidel",
       }
     }
   );
