@@ -52,6 +52,37 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
 
+async function runWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 7000
+): Promise<T> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      
+      const is429 = error?.response?.status === 429 || 
+                    error?.message?.includes('429') ||
+                    error?.message?.includes('Too Many Requests');
+      
+      if (is429 && attempt < maxRetries - 1) {
+        const delay = initialDelay * (attempt + 1);
+        console.log(`Rate limited, waiting ${delay/1000}s before retry ${attempt + 1}/${maxRetries}...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      throw error;
+    }
+  }
+  
+  throw lastError || new Error("Max retries exceeded");
+}
+
 const stylePrompts: Record<ThumbnailStyle, string> = {
   reaction: "A YouTube thumbnail with an expressive reaction face, dramatic lighting, bold colors, and a surprised or excited expression",
   before_after: "A split-screen YouTube thumbnail showing a dramatic before and after transformation, with clear visual contrast",
@@ -254,14 +285,14 @@ async function removeBackground(imageBase64: string, mimeType: string): Promise<
   
   const dataUrl = `data:${mimeType};base64,${imageBase64}`;
   
-  const output = await replicate.run(
+  const output = await runWithRetry(() => replicate.run(
     "cjwbw/rembg:fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
     {
       input: {
         image: dataUrl,
       }
     }
-  );
+  ));
   
   const imageData = await extractReplicateImage(output);
   console.log("Background removed, got", imageData.length, "bytes");
@@ -305,7 +336,7 @@ async function generateCompositeThumbnail(
   
   const aspectRatio = width > height ? "16:9" : "1:1";
   
-  const output = await replicate.run(
+  const output = await runWithRetry(() => replicate.run(
     "ideogram-ai/ideogram-character",
     {
       input: {
@@ -317,7 +348,7 @@ async function generateCompositeThumbnail(
         character_reference_image: cutoutDataUrl,
       }
     }
-  );
+  ));
 
   const imageData = await extractReplicateImage(output);
   console.log("Composite thumbnail generated, got", imageData.length, "bytes");
