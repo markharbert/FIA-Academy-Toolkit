@@ -130,22 +130,37 @@ export default function TopicPulsePage() {
             Find in-demand YouTube video topics and generate scripts using Mark's 5-part formula
           </p>
           {creditsData && (
-            <div className="mt-4 flex flex-col items-center gap-1" data-testid="credits-display">
+            <div 
+              className={`mt-4 inline-flex flex-col items-center gap-1 px-4 py-2 rounded-md border-2 ${
+                creditsExhausted 
+                  ? "border-red-500 bg-red-500/10 dark:border-red-600 dark:bg-red-600/10" 
+                  : creditsRemaining < 100 
+                    ? "border-red-500 bg-red-500/10 dark:border-red-600 dark:bg-red-600/10"
+                    : creditsRemaining < 200 
+                      ? "border-yellow-500 bg-yellow-500/10 dark:border-yellow-600 dark:bg-yellow-600/10"
+                      : "border-green-500 bg-green-500/10 dark:border-green-600 dark:bg-green-600/10"
+              }`}
+              data-testid="credits-display"
+            >
               {creditsExhausted ? (
-                <Badge variant="destructive" className="text-sm py-1 px-3">
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">
                   Credits exhausted
-                </Badge>
+                </p>
               ) : creditsRemaining < 100 ? (
-                <Badge className="text-sm py-1 px-3 bg-yellow-500 dark:bg-yellow-600 text-black border-yellow-600 dark:border-yellow-700">
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">
                   {creditsRemaining} / {creditsData.monthlyLimit} credits remaining
-                </Badge>
+                </p>
+              ) : creditsRemaining < 200 ? (
+                <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                  {creditsRemaining} / {creditsData.monthlyLimit} credits remaining
+                </p>
               ) : (
-                <Badge variant="secondary" className="text-sm py-1 px-3">
+                <p className="text-sm font-medium text-green-600 dark:text-green-400">
                   {creditsRemaining} / {creditsData.monthlyLimit} credits this month
-                </Badge>
+                </p>
               )}
               <p className="text-xs text-muted-foreground" data-testid="text-credits-reset">
-                Credits replenish on {new Date(creditsData.resetsAt).toLocaleDateString()}
+                Replenishes on {new Date(creditsData.resetsAt).toLocaleDateString()}
               </p>
             </div>
           )}
