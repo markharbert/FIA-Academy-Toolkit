@@ -423,11 +423,14 @@ export default function ThumbnailGenerator() {
                           alt={thumbnail.title}
                           className="w-full aspect-video object-cover rounded-md"
                         />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-md flex items-center justify-center gap-2">
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity rounded-md flex items-center justify-center gap-2 z-10">
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={() => handleDownload(thumbnail)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(thumbnail);
+                            }}
                             data-testid={`button-download-${thumbnail.id}`}
                           >
                             <Download className="h-4 w-4 mr-1" />
@@ -436,7 +439,10 @@ export default function ThumbnailGenerator() {
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => deleteThumbnailMutation.mutate(thumbnail.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteThumbnailMutation.mutate(thumbnail.id);
+                            }}
                             disabled={deleteThumbnailMutation.isPending}
                             data-testid={`button-delete-thumbnail-${thumbnail.id}`}
                           >
