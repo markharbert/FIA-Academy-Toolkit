@@ -801,7 +801,7 @@ export type InsertSavedOffer = z.infer<typeof insertSavedOfferSchema>;
 export type SavedOffer = typeof savedOffers.$inferSelect;
 
 // AI provider types for thumbnail generation
-export const aiProviders = ["dalle", "gemini", "instantid"] as const;
+export const aiProviders = ["dalle", "gemini", "instantid", "ideogram"] as const;
 export type AIProvider = typeof aiProviders[number];
 
 // Thumbnail style presets

@@ -127,58 +127,15 @@ function buildInstantIdPrompt(title: string, style?: ThumbnailStyle): string {
   return `Professional YouTube thumbnail portrait for video "${title}". ${styleGuide}. High quality, sharp focus, professional photography style.`;
 }
 
-async function generateWithInstantId(
-  prompt: string, 
-  faceImageBase64: string,
-  imageMimeType: string,
-  width: number = 1280,
-  height: number = 720
-): Promise<{ b64_json: string; mimeType: string }> {
-  if (!process.env.REPLICATE_API_TOKEN) {
-    throw new Error("Replicate API token not configured");
-  }
-
-  const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
-  console.log("Using FLUX PuLID for high-quality face generation");
-  console.log("Prompt:", prompt);
-  console.log("Dimensions:", width, "x", height);
-
-  // FLUX PuLID: Best identity fidelity with high quality output
-  // Uses contrastive learning for superior face feature extraction
-  const output = await replicate.run(
-    "black-forest-labs/flux-pulid",
-    {
-      input: {
-        main_face_image: dataUrl,
-        prompt: prompt,
-        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, worst quality, low quality, blurry, deformed face, distorted face, watermark, logo, ugly, disfigured, cartoon, anime, illustration, painting",
-        width: width,
-        height: height,
-        num_steps: 28,
-        guidance: 4,
-        id_weight: 1.0,
-        true_cfg: 1.0,
-        max_sequence_length: 128,
-        output_format: "png",
-        output_quality: 100,
-      }
-    }
-  );
-
-  console.log("Replicate output type:", typeof output, Array.isArray(output) ? "array" : "");
-  
+async function extractReplicateImage(output: unknown): Promise<Buffer> {
   let imageData: Buffer | undefined;
   
   if (Array.isArray(output) && output.length > 0) {
     const firstOutput = output[0];
-    console.log("First output type:", typeof firstOutput, firstOutput?.constructor?.name);
     
-    // Handle FileOutput objects from newer Replicate SDK - they are ReadableStreams
     if (firstOutput && typeof firstOutput === "object") {
-      // Check if it's a ReadableStream (Web Streams API)
       if (firstOutput instanceof ReadableStream || 
           (firstOutput.constructor && firstOutput.constructor.name === "ReadableStream")) {
-        console.log("Reading from ReadableStream...");
         const reader = (firstOutput as ReadableStream<Uint8Array>).getReader();
         const chunks: Uint8Array[] = [];
         
@@ -188,7 +145,6 @@ async function generateWithInstantId(
           if (value) chunks.push(value);
         }
         
-        // Combine all chunks
         const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
         const combined = new Uint8Array(totalLength);
         let offset = 0;
@@ -197,46 +153,139 @@ async function generateWithInstantId(
           offset += chunk.length;
         }
         imageData = Buffer.from(combined);
-        console.log("Read", imageData.length, "bytes from stream");
       }
-      // Check if it has a blob() or arrayBuffer() method
       else if (typeof (firstOutput as any).blob === "function") {
-        console.log("Reading via blob()...");
         const blob = await (firstOutput as any).blob();
         const arrayBuffer = await blob.arrayBuffer();
         imageData = Buffer.from(arrayBuffer);
       }
-      // Check if it has a url property or method
       else if ("url" in firstOutput) {
         const url = typeof (firstOutput as any).url === "function" 
           ? (firstOutput as any).url() 
           : (firstOutput as any).url;
         if (url && typeof url === "string") {
-          console.log("Fetching from URL:", url);
           const response = await fetch(url);
           const arrayBuffer = await response.arrayBuffer();
           imageData = Buffer.from(arrayBuffer);
         }
       }
     }
-    // Handle plain string URL
     else if (typeof firstOutput === "string" && firstOutput.startsWith("http")) {
-      console.log("Fetching from URL string:", firstOutput);
       const response = await fetch(firstOutput);
       const arrayBuffer = await response.arrayBuffer();
       imageData = Buffer.from(arrayBuffer);
     }
   }
+  // Handle single string URL output (some models return string directly)
+  else if (typeof output === "string" && output.startsWith("http")) {
+    const response = await fetch(output);
+    const arrayBuffer = await response.arrayBuffer();
+    imageData = Buffer.from(arrayBuffer);
+  }
 
   if (!imageData || imageData.length === 0) {
-    console.error("Could not extract image data from output");
-    throw new Error("No image data received from FLUX PuLID");
+    throw new Error("Could not extract image data from Replicate output");
   }
+
+  return imageData;
+}
+
+async function removeBackground(imageBase64: string, mimeType: string): Promise<Buffer> {
+  console.log("Removing background from user photo...");
+  
+  const dataUrl = `data:${mimeType};base64,${imageBase64}`;
+  
+  const output = await replicate.run(
+    "cjwbw/rembg:fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
+    {
+      input: {
+        image: dataUrl,
+      }
+    }
+  );
+  
+  const imageData = await extractReplicateImage(output);
+  console.log("Background removed, got", imageData.length, "bytes");
+  return imageData;
+}
+
+function buildThumbnailPrompt(userPrompt: string, width: number, height: number): string {
+  const aspectRatio = width > height ? "landscape 16:9" : "square 1:1";
+  
+  return `Professional YouTube thumbnail design, ${aspectRatio} format.
+${userPrompt}
+
+IMPORTANT DESIGN REQUIREMENTS:
+- Person cutout with white stroke outline on the right side of the image
+- Bold, large readable text with drop shadows and outlines
+- Vibrant gradient background with tech/modern feel
+- Professional YouTube thumbnail style
+- Eye-catching, high contrast colors
+- Include relevant icons and graphics that match the topic
+- Text should be readable at small sizes
+- Clean, professional composition`;
+}
+
+async function generateCompositeThumbnail(
+  userPrompt: string,
+  cutoutImageBase64: string,
+  width: number = 1280,
+  height: number = 720
+): Promise<{ b64_json: string; mimeType: string }> {
+  if (!process.env.REPLICATE_API_TOKEN) {
+    throw new Error("Replicate API token not configured");
+  }
+
+  console.log("Generating composite thumbnail with Ideogram Character...");
+  console.log("User prompt:", userPrompt);
+  console.log("Dimensions:", width, "x", height);
+
+  const cutoutDataUrl = `data:image/png;base64,${cutoutImageBase64}`;
+  
+  const thumbnailPrompt = buildThumbnailPrompt(userPrompt, width, height);
+  
+  const aspectRatio = width > height ? "16:9" : "1:1";
+  
+  const output = await replicate.run(
+    "ideogram-ai/ideogram-character",
+    {
+      input: {
+        prompt: thumbnailPrompt,
+        aspect_ratio: aspectRatio,
+        rendering_speed: "Default",
+        style_type: "Realistic",
+        magic_prompt_option: "On",
+        character_reference_image: cutoutDataUrl,
+      }
+    }
+  );
+
+  const imageData = await extractReplicateImage(output);
+  console.log("Composite thumbnail generated, got", imageData.length, "bytes");
 
   return {
     b64_json: imageData.toString("base64"),
     mimeType: "image/png",
   };
+}
+
+async function generateThumbnailPipeline(
+  userPrompt: string,
+  userPhotoBase64: string,
+  userPhotoMimeType: string,
+  width: number = 1280,
+  height: number = 720
+): Promise<{ b64_json: string; mimeType: string }> {
+  
+  console.log("=== Starting Thumbnail Generation Pipeline ===");
+  
+  const cutoutBuffer = await removeBackground(userPhotoBase64, userPhotoMimeType);
+  const cutoutBase64 = cutoutBuffer.toString("base64");
+  
+  const result = await generateCompositeThumbnail(userPrompt, cutoutBase64, width, height);
+  
+  console.log("=== Thumbnail Pipeline Complete ===");
+  return result;
 }
 
 export function registerThumbnailRoutes(app: Express): void {
@@ -373,9 +422,9 @@ export function registerThumbnailRoutes(app: Express): void {
       const photoBuffer = fs.readFileSync(photo.storagePath);
       const photoBase64 = photoBuffer.toString("base64");
       
-      // Use the user's custom prompt directly
+      // Use the new compositing pipeline: background removal + Ideogram
       const prompt = customPrompt.trim();
-      const imageResult = await generateWithInstantId(prompt, photoBase64, photo.mimeType, width, height);
+      const imageResult = await generateThumbnailPipeline(prompt, photoBase64, photo.mimeType, width, height);
 
       const [thumbnail] = await db.insert(generatedThumbnails).values({
         userId: req.session.userId,
@@ -384,7 +433,7 @@ export function registerThumbnailRoutes(app: Express): void {
         imageType,
         width,
         height,
-        provider: "instantid",
+        provider: "ideogram",
         base64Data: imageResult.b64_json,
         userPhotoId: userPhotoId,
       }).returning();

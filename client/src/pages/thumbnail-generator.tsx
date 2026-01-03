@@ -169,7 +169,7 @@ export default function ThumbnailGenerator() {
               <CardHeader>
                 <CardTitle>Create New Thumbnail</CardTitle>
                 <CardDescription>
-                  Generate eye-catching thumbnails that feature your uploaded photo. Your face is preserved in the final image.
+                  Upload your photo and describe your complete thumbnail - text, graphics, background, everything. The AI creates it all automatically.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -185,17 +185,21 @@ export default function ThumbnailGenerator() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="prompt">Thumbnail Description <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="prompt">Describe Your Thumbnail <span className="text-destructive">*</span></Label>
                   <Textarea
                     id="prompt"
-                    placeholder="Keep it simple! e.g., 'excited expression, holding cash, bright yellow background' or 'professional headshot, arms crossed, blue gradient background'"
+                    placeholder="Describe the complete thumbnail you want, including:
+- Text to display (e.g., '3 CHATGPT HACKS' in bold yellow)
+- Your expression (excited, surprised, thumbs up)
+- Background style (purple gradient, tech pattern)
+- Icons/graphics (chat bubbles, arrows, phones)"
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
-                    className="min-h-[100px]"
+                    className="min-h-[120px]"
                     data-testid="input-prompt"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Describe the scene, expression, and background. Keep prompts simple and focused for best results.
+                    The AI will create a complete thumbnail with your photo, the text you specify, graphics, and a professional background. Just describe what you want!
                   </p>
                 </div>
 
@@ -443,7 +447,7 @@ export default function ThumbnailGenerator() {
                           <p className="text-white text-sm font-medium truncate">{thumbnail.title}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <Badge variant="secondary" className="text-xs">
-                              FLUX PuLID
+                              AI Generated
                             </Badge>
                             {thumbnail.imageType && imageTypes[thumbnail.imageType] && (
                               <Badge variant="outline" className="text-xs text-white border-white/50">
