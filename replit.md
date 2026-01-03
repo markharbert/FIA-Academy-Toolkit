@@ -53,6 +53,7 @@ Preferred communication style: Simple, everyday language.
 - **Video Poster Generation**: Generates and serves a poster thumbnail for improved perceived performance.
 - **Preview Video Persistence**: Detailed tracking of preview video status and metadata.
 - **Video Trends**: YouTube topic research and script generation based on Mark's 5-part formula, using YouTube autocomplete and OpenAI.
+- **Authenticated Redirect**: Logged-in users visiting unknown routes are automatically redirected to dashboard instead of seeing 404.
 
 ## External Dependencies
 

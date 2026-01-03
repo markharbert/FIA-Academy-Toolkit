@@ -87,6 +87,24 @@ function PublicOnlyRoute({ component: Component }: { component: React.ComponentT
   return <Component />;
 }
 
+function AuthenticatedCatchAll() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Redirect to="/dashboard" />;
+  }
+
+  return <NotFound />;
+}
+
 function ProtectedRoutes() {
   return (
     <Switch>
@@ -132,7 +150,7 @@ function ProtectedRoutes() {
       <Route path="/thumbnails">
         {() => <ProtectedRoute component={ThumbnailGeneratorPage} />}
       </Route>
-      <Route component={NotFound} />
+      <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>
   );
 }
@@ -169,6 +187,7 @@ function PublicRoutes() {
       <Route path="/reset-password">
         {() => <PublicOnlyRoute component={ResetPasswordPage} />}
       </Route>
+      <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>
   );
 }
