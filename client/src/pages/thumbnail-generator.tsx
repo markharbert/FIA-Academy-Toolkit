@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Image as ImageIcon, Trash2, Download, Sparkles, User, Upload } from "lucide-react";
+import { Loader2, Image as ImageIcon, Trash2, Download, Sparkles, User, Upload, Pencil } from "lucide-react";
 import type { GeneratedThumbnail, UserProfilePhoto } from "@shared/schema";
+import { ThumbnailEditor } from "@/components/thumbnail-editor";
 
 const imageTypes: Record<string, { label: string; width: number; height: number }> = {
   youtube_thumbnail: { label: "YouTube Thumbnail (1280 x 720)", width: 1280, height: 720 },
@@ -27,6 +28,7 @@ export default function ThumbnailGenerator() {
   const [provider, setProvider] = useState<string>("instantid");
   const [selectedPhotoId, setSelectedPhotoId] = useState<string>("");
   const [activeTab, setActiveTab] = useState("generate");
+  const [editingThumbnail, setEditingThumbnail] = useState<(GeneratedThumbnail & { imageData: string }) | null>(null);
 
   const { data: photos = [], isLoading: photosLoading } = useQuery<UserProfilePhoto[]>({
     queryKey: ["/api/thumbnails/photos"],
@@ -70,7 +72,7 @@ export default function ThumbnailGenerator() {
   });
 
   const generateThumbnailMutation = useMutation({
-    mutationFn: async (data: { title: string; customPrompt?: string; style?: string; provider: string; userPhotoId?: string; includePerson?: boolean }) => {
+    mutationFn: async (data: { title: string; customPrompt?: string; style?: string; provider: string; userPhotoId?: string; includePerson?: boolean; imageType?: string; width?: number; height?: number }) => {
       const response = await apiRequest("POST", "/api/thumbnails/generate", data);
       return response.json();
     },
@@ -154,13 +156,17 @@ export default function ThumbnailGenerator() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="generate" data-testid="tab-generate">Generate</TabsTrigger>
             <TabsTrigger value="photos" data-testid="tab-photos">
               My Photos {photos.length > 0 && <Badge variant="secondary" className="ml-2">{photos.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="gallery" data-testid="tab-gallery">
               Gallery {thumbnails.length > 0 && <Badge variant="secondary" className="ml-2">{thumbnails.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="editor" data-testid="tab-editor" disabled={!editingThumbnail}>
+              <Pencil className="h-4 w-4 mr-1" />
+              Editor
             </TabsTrigger>
           </TabsList>
 
@@ -421,6 +427,18 @@ export default function ThumbnailGenerator() {
                         />
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-md flex items-center justify-center gap-2">
                           <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              setEditingThumbnail(thumbnail);
+                              setActiveTab("editor");
+                            }}
+                            data-testid={`button-edit-${thumbnail.id}`}
+                          >
+                            <Pencil className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
                             variant="secondary"
                             size="sm"
                             onClick={() => handleDownload(thumbnail)}
@@ -458,6 +476,45 @@ export default function ThumbnailGenerator() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="editor" className="space-y-6">
+            {editingThumbnail ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Edit Thumbnail: {editingThumbnail.title}</CardTitle>
+                  <CardDescription>
+                    Add text overlays, change backgrounds, and customize your thumbnail
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ThumbnailEditor
+                    baseImage={editingThumbnail.imageData}
+                    width={editingThumbnail.width || 1280}
+                    height={editingThumbnail.height || 720}
+                    onSave={(dataUrl) => {
+                      const link = document.createElement("a");
+                      link.download = `edited-${editingThumbnail.title.replace(/\s+/g, "-").toLowerCase()}.png`;
+                      link.href = dataUrl;
+                      link.click();
+                      toast({ title: "Thumbnail downloaded!", description: "Your edited thumbnail has been saved" });
+                    }}
+                    onClose={() => {
+                      setEditingThumbnail(null);
+                      setActiveTab("gallery");
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No thumbnail selected for editing</p>
+                  <p className="text-sm">Go to Gallery and click Edit on a thumbnail</p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>
