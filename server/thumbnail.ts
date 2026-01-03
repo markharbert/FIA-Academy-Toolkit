@@ -139,7 +139,7 @@ async function generateWithInstantId(
   const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
 
   const output = await replicate.run(
-    "zsxkib/instant-id:6af8583c541261472e92155d87bba80d5ad98461665802c9d7c5873d91674a4f",
+    "zsxkib/instant-id:c98b2e7a196828d00955767813b81fc05c5c9b294c670c6d147d545fed4ceecf",
     {
       input: {
         image: dataUrl,
