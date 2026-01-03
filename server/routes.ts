@@ -3639,6 +3639,32 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/topic-pulse/topics/:id/platform-data", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const topic = await storage.getTopic(req.params.id);
+      if (!topic) {
+        return res.status(404).json({ message: "Topic not found" });
+      }
+
+      const run = await storage.getTopicRun(topic.runId);
+      if (!run || run.userId !== req.session.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const { fetchPlatformDataForTopic } = await import("./topic-pulse");
+      const result = await fetchPlatformDataForTopic(topic.id, req.session.userId!);
+      
+      if (!result) {
+        return res.status(404).json({ message: "Topic not found" });
+      }
+
+      res.json(result);
+    } catch (err) {
+      console.error("[TopicPulse] Platform data fetch error:", err);
+      res.status(500).json({ message: "Failed to fetch platform data" });
+    }
+  });
+
   app.post("/api/topic-pulse/topics/:id/save", requireAuth, async (req: Request, res: Response) => {
     try {
       const topic = await storage.getTopic(req.params.id);
