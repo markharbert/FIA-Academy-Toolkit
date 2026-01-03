@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Image as ImageIcon, Trash2, Download, Sparkles, User, Upload } from "lucide-react";
 import type { GeneratedThumbnail, UserProfilePhoto } from "@shared/schema";
 
@@ -31,6 +32,7 @@ const providerLabels: Record<string, { label: string; description: string }> = {
 export default function ThumbnailGenerator() {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
+  const [customPrompt, setCustomPrompt] = useState("");
   const [style, setStyle] = useState<string>("");
   const [provider, setProvider] = useState<string>("dalle");
   const [selectedPhotoId, setSelectedPhotoId] = useState<string>("");
@@ -79,7 +81,7 @@ export default function ThumbnailGenerator() {
   });
 
   const generateThumbnailMutation = useMutation({
-    mutationFn: async (data: { title: string; style?: string; provider: string; userPhotoId?: string; includePerson?: boolean }) => {
+    mutationFn: async (data: { title: string; customPrompt?: string; style?: string; provider: string; userPhotoId?: string; includePerson?: boolean }) => {
       const response = await apiRequest("POST", "/api/thumbnails/generate", data);
       return response.json();
     },
@@ -123,6 +125,7 @@ export default function ThumbnailGenerator() {
 
     generateThumbnailMutation.mutate({
       title: title.trim(),
+      customPrompt: customPrompt.trim() || undefined,
       style: style || undefined,
       provider,
       userPhotoId: provider === "instantid" ? selectedPhotoId : undefined,
@@ -180,6 +183,21 @@ export default function ThumbnailGenerator() {
                     onChange={(e) => setTitle(e.target.value)}
                     data-testid="input-title"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="prompt">Custom Prompt (optional)</Label>
+                  <Textarea
+                    id="prompt"
+                    placeholder="Describe exactly what you want in your thumbnail. e.g., A dramatic YouTube thumbnail showing a person holding a plate of colorful keto snacks, with an excited expression, bright studio lighting, bold text saying 'GAME CHANGER' in the corner..."
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    className="min-h-[100px]"
+                    data-testid="input-prompt"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to auto-generate a prompt from your title and style selection
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
