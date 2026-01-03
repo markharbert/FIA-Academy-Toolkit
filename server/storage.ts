@@ -219,6 +219,16 @@ export interface IStorage {
   createTopics(topics: InsertTopic[]): Promise<Topic[]>;
   getTopic(id: string): Promise<Topic | undefined>;
   getTopicsByRun(runId: string): Promise<Topic[]>;
+  updateTopicPlatformData(id: string, data: {
+    pinterestVolume?: number | null;
+    pinterestCpc?: number | null;
+    pinterestCompetition?: number | null;
+    pinterestTrendData?: any;
+    youtubeVolume?: number | null;
+    youtubeCpc?: number | null;
+    youtubeCompetition?: number | null;
+    youtubeTrendData?: any;
+  }): Promise<Topic | undefined>;
   
   // Topic Pulse Finder: Saved Topics
   saveTopicForUser(savedTopic: InsertSavedTopic): Promise<SavedTopic>;
@@ -1137,6 +1147,32 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(topics)
       .where(eq(topics.runId, runId))
       .orderBy(desc(topics.opportunityScore));
+  }
+
+  async updateTopicPlatformData(id: string, data: {
+    pinterestVolume?: number | null;
+    pinterestCpc?: number | null;
+    pinterestCompetition?: number | null;
+    pinterestTrendData?: any;
+    youtubeVolume?: number | null;
+    youtubeCpc?: number | null;
+    youtubeCompetition?: number | null;
+    youtubeTrendData?: any;
+  }): Promise<Topic | undefined> {
+    const [result] = await db.update(topics)
+      .set({
+        pinterestVolume: data.pinterestVolume,
+        pinterestCpc: data.pinterestCpc,
+        pinterestCompetition: data.pinterestCompetition,
+        pinterestTrendData: data.pinterestTrendData,
+        youtubeVolume: data.youtubeVolume,
+        youtubeCpc: data.youtubeCpc,
+        youtubeCompetition: data.youtubeCompetition,
+        youtubeTrendData: data.youtubeTrendData,
+      })
+      .where(eq(topics.id, id))
+      .returning();
+    return result;
   }
   
   // Topic Pulse Finder: Saved Topics

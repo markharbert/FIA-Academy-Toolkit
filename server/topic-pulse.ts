@@ -151,6 +151,71 @@ async function getYouTubeAutocomplete(query: string): Promise<string[]> {
   }
 }
 
+type DataSource = "gkp" | "youtube" | "pinterest";
+
+const platformDataCache = new Map<string, { data: KeywordData; timestamp: number }>();
+
+async function getPlatformKeywordData(
+  keyword: string, 
+  dataSource: DataSource, 
+  userId?: string
+): Promise<KeywordData> {
+  const defaultData: KeywordData = { volume: null, cpc: null, competition: null, trend: null };
+  
+  const apiKey = await getEffectiveKeywordsEverywhereApiKey(userId);
+  if (!apiKey) {
+    return defaultData;
+  }
+  
+  const cacheKey = `${dataSource}:${keyword.toLowerCase()}`;
+  const cached = platformDataCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+  
+  try {
+    const formData = new URLSearchParams();
+    formData.append("dataSource", dataSource);
+    formData.append("country", "us");
+    formData.append("currency", "USD");
+    formData.append("kw[]", keyword);
+    
+    const response = await fetch("https://api.keywordseverywhere.com/v1/get_keyword_data", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Accept": "application/json",
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      console.error(`[KeywordsEverywhere] ${dataSource} API error:`, response.status, await response.text());
+      return defaultData;
+    }
+    
+    const data = await response.json();
+    
+    if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+      const item = data.data[0] as KeywordsEverywhereResult;
+      const keywordData: KeywordData = {
+        volume: item.vol || 0,
+        cpc: item.cpc?.value ?? null,
+        competition: item.competition ?? null,
+        trend: item.trend || null,
+      };
+      platformDataCache.set(cacheKey, { data: keywordData, timestamp: Date.now() });
+      console.log(`[KeywordsEverywhere] Fetched ${dataSource} data for "${keyword}": vol=${keywordData.volume}`);
+      return keywordData;
+    }
+    
+    return defaultData;
+  } catch (err) {
+    console.error(`[KeywordsEverywhere] Error fetching ${dataSource} data:`, err);
+    return defaultData;
+  }
+}
+
 function generateKeywordVariations(seed: string): string[] {
   const variations: string[] = [seed];
   const prefixes = ["best", "top", "how to", "what is", "why"];
@@ -588,4 +653,56 @@ export async function getKeywordsEverywhereCredits(userId?: string): Promise<{ c
     console.error("[KeywordsEverywhere] Credits fetch error:", err);
     return { credits: null, error: "Failed to fetch credits" };
   }
+}
+
+interface PlatformData {
+  google: KeywordData;
+  youtube: KeywordData;
+  pinterest: KeywordData;
+}
+
+export async function fetchPlatformDataForTopic(
+  topicId: string, 
+  userId?: string
+): Promise<{ topic: Topic; platformData: PlatformData } | null> {
+  const topic = await storage.getTopic(topicId);
+  if (!topic) {
+    return null;
+  }
+  
+  const keyword = topic.keywordQuery;
+  
+  const [youtubeData, pinterestData] = await Promise.all([
+    getPlatformKeywordData(keyword, "youtube", userId),
+    getPlatformKeywordData(keyword, "pinterest", userId),
+  ]);
+  
+  const googleData: KeywordData = {
+    volume: topic.monthlySearchVolume ?? null,
+    cpc: topic.cpc ?? null,
+    competition: topic.competition ?? null,
+    trend: topic.trendData ?? null,
+  };
+  
+  await storage.updateTopicPlatformData(topicId, {
+    pinterestVolume: pinterestData.volume,
+    pinterestCpc: pinterestData.cpc,
+    pinterestCompetition: pinterestData.competition,
+    pinterestTrendData: pinterestData.trend,
+    youtubeVolume: youtubeData.volume,
+    youtubeCpc: youtubeData.cpc,
+    youtubeCompetition: youtubeData.competition,
+    youtubeTrendData: youtubeData.trend,
+  });
+  
+  const updatedTopic = await storage.getTopic(topicId);
+  
+  return {
+    topic: updatedTopic!,
+    platformData: {
+      google: googleData,
+      youtube: youtubeData,
+      pinterest: pinterestData,
+    }
+  };
 }
