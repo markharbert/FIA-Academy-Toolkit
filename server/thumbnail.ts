@@ -136,13 +136,41 @@ async function generateWithInstantId(
     throw new Error("Replicate API token not configured");
   }
 
-  const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
+  // Convert base64 to buffer and upload to Replicate's file hosting
+  const imageBuffer = Buffer.from(faceImageBase64, "base64");
+  const extension = imageMimeType.split("/")[1] || "png";
+  
+  // Upload file to Replicate
+  const uploadResponse = await fetch("https://api.replicate.com/v1/files", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.REPLICATE_API_TOKEN}`,
+      "Content-Type": imageMimeType,
+    },
+    body: imageBuffer,
+  });
+  
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    console.error("Replicate file upload failed:", errorText);
+    throw new Error(`Failed to upload image to Replicate: ${uploadResponse.status}`);
+  }
+  
+  const uploadResult = await uploadResponse.json() as { urls?: { get?: string } };
+  const fileUrl = uploadResult.urls?.get;
+  
+  if (!fileUrl) {
+    console.error("No file URL in upload response:", uploadResult);
+    throw new Error("Failed to get file URL from Replicate");
+  }
+  
+  console.log("Uploaded image to Replicate:", fileUrl);
 
   const output = await replicate.run(
     "lucataco/ip-adapter-faceid:fb81ef963e74776af72e6f380949013533d46dd5c6228a9e586c57db6303d7cd",
     {
       input: {
-        face_image: dataUrl,
+        face_image: fileUrl,
         prompt: prompt,
         negative_prompt: "monochrome, lowres, bad anatomy, worst quality, low quality, blurry, multiple people, watermark, text",
         width: 1280,
@@ -157,21 +185,41 @@ async function generateWithInstantId(
 
   console.log("Replicate output:", JSON.stringify(output, null, 2));
 
-  let imageUrl: string;
+  let imageUrl: string | undefined;
   
   if (Array.isArray(output) && output.length > 0) {
-    imageUrl = output[0];
+    // Handle FileOutput objects from newer Replicate SDK
+    const firstOutput = output[0];
+    if (typeof firstOutput === "string") {
+      imageUrl = firstOutput;
+    } else if (firstOutput && typeof firstOutput === "object") {
+      // FileOutput has url() method or direct URL property
+      if ("url" in firstOutput && typeof (firstOutput as any).url === "function") {
+        imageUrl = (firstOutput as any).url();
+      } else if ("url" in firstOutput) {
+        imageUrl = (firstOutput as any).url;
+      } else if ("href" in firstOutput) {
+        imageUrl = (firstOutput as any).href;
+      }
+    }
   } else if (typeof output === "string") {
     imageUrl = output;
   } else if (output && typeof output === "object" && "output" in output) {
     const innerOutput = (output as any).output;
     imageUrl = Array.isArray(innerOutput) ? innerOutput[0] : innerOutput;
-  } else {
-    console.error("Unexpected output format:", output);
-    throw new Error("Unexpected response format from InstantID");
+  }
+  
+  // If still no URL, try to stringify and extract
+  if (!imageUrl) {
+    const outputStr = JSON.stringify(output);
+    const urlMatch = outputStr.match(/https:\/\/[^"'\s]+\.(png|jpg|jpeg|webp)/i);
+    if (urlMatch) {
+      imageUrl = urlMatch[0];
+    }
   }
 
   if (!imageUrl || typeof imageUrl !== "string") {
+    console.error("Could not extract image URL from output:", output);
     throw new Error("No image URL received from InstantID");
   }
   
