@@ -610,6 +610,14 @@ export const topics = pgTable("topics", {
   suggestedThumbnailText: jsonb("suggested_thumbnail_text").$type<string[]>(),
   commonQuestions: jsonb("common_questions").$type<string[]>(),
   intentAnalysis: text("intent_analysis"),
+  pinterestVolume: integer("pinterest_volume"),
+  pinterestCpc: real("pinterest_cpc"),
+  pinterestCompetition: real("pinterest_competition"),
+  pinterestTrendData: jsonb("pinterest_trend_data").$type<TrendDataPoint[]>(),
+  youtubeVolume: integer("youtube_volume"),
+  youtubeCpc: real("youtube_cpc"),
+  youtubeCompetition: real("youtube_competition"),
+  youtubeTrendData: jsonb("youtube_trend_data").$type<TrendDataPoint[]>(),
 });
 
 export const insertTopicSchema = createInsertSchema(topics).omit({
