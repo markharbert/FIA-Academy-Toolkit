@@ -138,38 +138,29 @@ async function generateWithInstantId(
     throw new Error("Replicate API token not configured");
   }
 
-  // Use data URL format which Replicate accepts
   const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
-  console.log("Using data URL, length:", dataUrl.length);
+  console.log("Using FLUX PuLID for high-quality face generation");
   console.log("Prompt:", prompt);
   console.log("Dimensions:", width, "x", height);
 
-  // Round dimensions to nearest multiple of 64 (required by SDXL-based models)
-  // Avoid exact 1024x1024 as it can cause watermarks
-  let adjustedWidth = Math.round(width / 64) * 64;
-  let adjustedHeight = Math.round(height / 64) * 64;
-  if (adjustedWidth === 1024 && adjustedHeight === 1024) {
-    adjustedWidth = 1016;
-    adjustedHeight = 1016;
-  }
-  console.log("Adjusted dimensions:", adjustedWidth, "x", adjustedHeight);
-
-  // Use zsxkib/instant-id - working model for face identity preservation
-  // ip_adapter_scale controls identity strength, guidance_scale controls prompt adherence
+  // FLUX PuLID: Best identity fidelity with high quality output
+  // Uses contrastive learning for superior face feature extraction
   const output = await replicate.run(
-    "zsxkib/instant-id:c98b2e7a196828d00955767813b81fc05c5c9b294c670c6d147d545fed4ceecf",
+    "black-forest-labs/flux-pulid",
     {
       input: {
-        image: dataUrl,
+        main_face_image: dataUrl,
         prompt: prompt,
-        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, blurry, deformed face, distorted face, watermark, logo, ugly, disfigured",
-        width: adjustedWidth,
-        height: adjustedHeight,
-        num_inference_steps: 30,
-        guidance_scale: 5,
-        ip_adapter_scale: 0.8,
-        controlnet_conditioning_scale: 0.8,
-        sdxl_weights: "protovision-xl-high-fidel",
+        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, worst quality, low quality, blurry, deformed face, distorted face, watermark, logo, ugly, disfigured, cartoon, anime, illustration, painting",
+        width: width,
+        height: height,
+        num_steps: 28,
+        guidance: 4,
+        id_weight: 1.0,
+        true_cfg: 1.0,
+        max_sequence_length: 128,
+        output_format: "png",
+        output_quality: 100,
       }
     }
   );
@@ -239,7 +230,7 @@ async function generateWithInstantId(
 
   if (!imageData || imageData.length === 0) {
     console.error("Could not extract image data from output");
-    throw new Error("No image data received from PhotoMaker");
+    throw new Error("No image data received from FLUX PuLID");
   }
 
   return {

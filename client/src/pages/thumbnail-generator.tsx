@@ -443,7 +443,7 @@ export default function ThumbnailGenerator() {
                           <p className="text-white text-sm font-medium truncate">{thumbnail.title}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <Badge variant="secondary" className="text-xs">
-                              InstantID
+                              FLUX PuLID
                             </Badge>
                             {thumbnail.imageType && imageTypes[thumbnail.imageType] && (
                               <Badge variant="outline" className="text-xs text-white border-white/50">
