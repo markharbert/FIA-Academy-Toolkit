@@ -139,17 +139,18 @@ async function generateWithInstantId(
   const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
 
   const output = await replicate.run(
-    "lucataco/ip-adapter-faceid:7071ee5404076d1ad1a29d5f8112e33104411e0e8f5f01f9a4a743c91206f72c",
+    "lucataco/ip-adapter-faceid:fb81ef963e74776af72e6f380949013533d46dd5c6228a9e586c57db6303d7cd",
     {
       input: {
-        image: dataUrl,
+        face_image: dataUrl,
         prompt: prompt,
-        negative_prompt: "blurry, low quality, distorted face, bad anatomy, ugly, deformed, watermark, text",
+        negative_prompt: "monochrome, lowres, bad anatomy, worst quality, low quality, blurry, multiple people, watermark, text",
+        width: 1280,
+        height: 720,
         num_outputs: 1,
-        guidance_scale: 7.5,
         num_inference_steps: 30,
-        s_scale: 1.0,
-        shortcut: false,
+        seed: Math.floor(Math.random() * 1000000000),
+        agree_to_research_only: true,
       }
     }
   );
