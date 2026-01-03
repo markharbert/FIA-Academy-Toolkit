@@ -14,7 +14,8 @@ import {
   FileText, Sparkles, Lightbulb, HelpCircle, CheckCircle2, AlertCircle,
   ArrowUpDown, ArrowDown, ArrowUp, X, Search, Brain, ChevronDown
 } from "lucide-react";
-import { SiPinterest } from "react-icons/si";
+import { SiPinterest, SiYoutube, SiGoogle } from "react-icons/si";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -112,6 +113,306 @@ function IntentAnalysisSection({ topicId, existingAnalysis }: { topicId: string;
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+interface PlatformData {
+  volume: number | null;
+  cpc: number | null;
+  competition: number | null;
+  trend: TrendDataPoint[] | null;
+}
+
+interface PlatformDataResponse {
+  topic: Topic;
+  platformData: {
+    google: PlatformData;
+    youtube: PlatformData;
+    pinterest: PlatformData;
+  };
+}
+
+function PlatformMetricCard({ 
+  label, 
+  value, 
+  helpText, 
+  colorClass = "text-foreground",
+  testId 
+}: { 
+  label: string; 
+  value: string; 
+  helpText: string;
+  colorClass?: string;
+  testId?: string;
+}) {
+  return (
+    <div className="p-2 rounded-md bg-muted/30">
+      <div className="flex items-center gap-1 mb-0.5">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            <p className="text-xs">{helpText}</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      <p className={`font-mono text-sm font-semibold ${colorClass}`} data-testid={testId}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function PlatformSection({ 
+  platform, 
+  data, 
+  icon, 
+  color 
+}: { 
+  platform: string; 
+  data: PlatformData | null;
+  icon: JSX.Element;
+  color: string;
+}) {
+  const trendInfo = getTrendFromData(data?.trend);
+  const competitionInfo = data?.competition !== null && data?.competition !== undefined
+    ? formatCompetition(data.competition)
+    : { label: "N/A", color: "text-muted-foreground", value: "" };
+  
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className={color}>{icon}</span>
+        <span className="text-sm font-medium">{platform}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <PlatformMetricCard
+          label="Volume"
+          value={formatSearchVolume(data?.volume)}
+          helpText={`Estimated monthly searches on ${platform}`}
+          colorClass={data?.volume ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}
+          testId={`text-${platform.toLowerCase()}-volume`}
+        />
+        <PlatformMetricCard
+          label="CPC"
+          value={formatCPC(data?.cpc)}
+          helpText={`Cost per click on ${platform}. Higher = more commercial value.`}
+          testId={`text-${platform.toLowerCase()}-cpc`}
+        />
+        <PlatformMetricCard
+          label="Competition"
+          value={competitionInfo.value ? `${competitionInfo.label} (${competitionInfo.value})` : competitionInfo.label}
+          helpText={`Ad competition on ${platform} (0-1 scale)`}
+          colorClass={competitionInfo.color}
+          testId={`text-${platform.toLowerCase()}-competition`}
+        />
+        <div className="p-2 rounded-md bg-muted/30">
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="text-xs text-muted-foreground">Trend</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                <p className="text-xs">Search interest trend over recent months</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <div className="flex items-center gap-1" data-testid={`text-${platform.toLowerCase()}-trend`}>
+            <TrendIcon direction={trendInfo.direction} />
+            <span className={`font-mono text-sm font-semibold ${
+              trendInfo.direction === "rising" 
+                ? "text-green-600 dark:text-green-400" 
+                : trendInfo.direction === "falling" 
+                  ? "text-red-600 dark:text-red-400" 
+                  : "text-muted-foreground"
+            }`}>
+              {trendInfo.label}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlatformKeywordDataSection({ 
+  topic 
+}: { 
+  topic: Topic;
+}) {
+  const [platformData, setPlatformData] = useState<PlatformDataResponse["platformData"] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+  
+  useEffect(() => {
+    setPlatformData(null);
+    setHasFetched(false);
+    setIsLoading(false);
+    setError(false);
+  }, [topic.id]);
+
+  const googleData: PlatformData = {
+    volume: topic.monthlySearchVolume ?? null,
+    cpc: topic.cpc ?? null,
+    competition: topic.competition ?? null,
+    trend: topic.trendData as TrendDataPoint[] ?? null,
+  };
+
+  const youtubeData: PlatformData | null = platformData?.youtube ?? (topic.youtubeVolume !== null && topic.youtubeVolume !== undefined ? {
+    volume: topic.youtubeVolume ?? null,
+    cpc: topic.youtubeCpc ?? null,
+    competition: topic.youtubeCompetition ?? null,
+    trend: topic.youtubeTrendData as TrendDataPoint[] ?? null,
+  } : null);
+
+  const pinterestData: PlatformData | null = platformData?.pinterest ?? (topic.pinterestVolume !== null && topic.pinterestVolume !== undefined ? {
+    volume: topic.pinterestVolume ?? null,
+    cpc: topic.pinterestCpc ?? null,
+    competition: topic.pinterestCompetition ?? null,
+    trend: topic.pinterestTrendData as TrendDataPoint[] ?? null,
+  } : null);
+
+  const fetchPlatformData = async () => {
+    if (isLoading || hasFetched) return;
+    setIsLoading(true);
+    setError(false);
+    setHasFetched(true);
+    try {
+      const res = await fetch(`/api/topic-pulse/topics/${topic.id}/platform-data`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch platform data");
+      const data: PlatformDataResponse = await res.json();
+      setPlatformData(data.platformData);
+    } catch {
+      setError(true);
+      setHasFetched(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const needsFetch = !youtubeData || !pinterestData;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-medium">Keyword Data by Platform</h3>
+        {needsFetch && !isLoading && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={fetchPlatformData}
+            disabled={isLoading}
+            data-testid="button-fetch-platform-data"
+          >
+            <Search className="h-3 w-3 mr-1.5" />
+            Load All Platforms
+          </Button>
+        )}
+        {isLoading && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading...
+          </div>
+        )}
+      </div>
+
+      <Tabs defaultValue="google" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="google" className="gap-1.5" data-testid="tab-google">
+            <SiGoogle className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Google</span>
+          </TabsTrigger>
+          <TabsTrigger value="youtube" className="gap-1.5" data-testid="tab-youtube">
+            <SiYoutube className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">YouTube</span>
+          </TabsTrigger>
+          <TabsTrigger value="pinterest" className="gap-1.5" data-testid="tab-pinterest">
+            <SiPinterest className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Pinterest</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="google" className="mt-3" data-testid="section-google-data">
+          <PlatformSection 
+            platform="Google" 
+            data={googleData} 
+            icon={<SiGoogle className="h-4 w-4" />}
+            color="text-blue-500"
+          />
+        </TabsContent>
+
+        <TabsContent value="youtube" className="mt-3" data-testid="section-youtube-data">
+          {youtubeData ? (
+            <PlatformSection 
+              platform="YouTube" 
+              data={youtubeData} 
+              icon={<SiYoutube className="h-4 w-4" />}
+              color="text-red-500"
+            />
+          ) : (
+            <div className="p-4 rounded-md bg-muted/30 text-center">
+              <p className="text-sm text-muted-foreground mb-2">YouTube data not loaded yet</p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={fetchPlatformData}
+                disabled={isLoading}
+                data-testid="button-load-youtube"
+              >
+                {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <SiYoutube className="h-3 w-3 mr-1.5" />}
+                Load YouTube Data
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="pinterest" className="mt-3" data-testid="section-pinterest-data">
+          {pinterestData ? (
+            <PlatformSection 
+              platform="Pinterest" 
+              data={pinterestData} 
+              icon={<SiPinterest className="h-4 w-4" />}
+              color="text-[#E60023]"
+            />
+          ) : (
+            <div className="p-4 rounded-md bg-muted/30 text-center">
+              <p className="text-sm text-muted-foreground mb-2">Pinterest data not loaded yet</p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={fetchPlatformData}
+                disabled={isLoading}
+                data-testid="button-load-pinterest"
+              >
+                {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <SiPinterest className="h-3 w-3 mr-1.5" />}
+                Load Pinterest Data
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {error && (
+        <div className="text-sm text-destructive">
+          Failed to load platform data. 
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="p-0 h-auto ml-1 underline"
+            onClick={() => { setHasFetched(false); fetchPlatformData(); }}
+          >
+            Try again
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -542,108 +843,31 @@ export default function TopicPulseExplorePage() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 rounded-md bg-muted/50">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-xs font-medium text-muted-foreground">Monthly Searches</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="text-xs">Estimated monthly searches on Google</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <p className="font-mono text-xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-search-volume">
-                        {formatSearchVolume(selectedTopic.monthlySearchVolume)}
-                      </p>
+                <div className="p-3 rounded-md bg-muted/50">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium">Opportunity Score</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-xs">Composite score based on volume, competition, CPC value, and trend</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
-                    <div className="p-3 rounded-md bg-muted/50">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-xs font-medium text-muted-foreground">Opportunity</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="text-xs">Composite score based on volume, competition, CPC value, and trend</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <p className={`font-mono text-xl font-bold ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`} data-testid="text-opportunity-score">
+                    <div className="flex items-center gap-2">
+                      <p className={`font-mono text-2xl font-bold ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`} data-testid="text-opportunity-score">
                         {selectedTopic.opportunityScore}/100
                       </p>
-                      <p className={`text-xs ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`}>
+                      <Badge variant="outline" className={`${getOpportunityLevel(selectedTopic.opportunityScore || 0).bgClass} ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color} border-0`}>
                         {getOpportunityLevel(selectedTopic.opportunityScore || 0).label}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="p-3 rounded-md bg-muted/50">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-xs font-medium text-muted-foreground">CPC</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="text-xs">Cost-per-click in Google Ads. Higher CPC = more commercial intent</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <p className="font-mono text-lg font-semibold" data-testid="text-cpc">
-                        {formatCPC(selectedTopic.cpc)}
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-md bg-muted/50">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-xs font-medium text-muted-foreground">Competition</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="text-xs">Ad competition level (0-1 scale). Lower = easier to rank</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <p className={`font-mono text-lg font-semibold ${formatCompetition(selectedTopic.competition).color}`} data-testid="text-competition">
-                        {formatCompetition(selectedTopic.competition).label}
-                        {formatCompetition(selectedTopic.competition).value && (
-                          <span className="text-sm font-normal ml-1">({formatCompetition(selectedTopic.competition).value})</span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-md bg-muted/50">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-xs font-medium text-muted-foreground">Trend</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="text-xs">Search interest trend over recent months</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <div className="flex items-center gap-1.5" data-testid="text-trend">
-                        <TrendIcon direction={getTrendFromData(selectedTopic.trendData as TrendDataPoint[] | null).direction} />
-                        <span className={`font-mono text-lg font-semibold ${
-                          getTrendFromData(selectedTopic.trendData as TrendDataPoint[] | null).direction === "rising" 
-                            ? "text-green-600 dark:text-green-400" 
-                            : getTrendFromData(selectedTopic.trendData as TrendDataPoint[] | null).direction === "falling" 
-                              ? "text-red-600 dark:text-red-400" 
-                              : "text-muted-foreground"
-                        }`}>
-                          {getTrendFromData(selectedTopic.trendData as TrendDataPoint[] | null).label}
-                        </span>
-                      </div>
+                      </Badge>
                     </div>
                   </div>
                 </div>
+
+                <PlatformKeywordDataSection topic={selectedTopic} />
 
                 {selectedTopic.demandSignalsJson && (
                   <div>
