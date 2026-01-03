@@ -130,10 +130,10 @@ export default function TopicPulsePage() {
             Find in-demand YouTube video topics and generate scripts using Mark's 5-part formula
           </p>
           {creditsData && (
-            <div className="mt-4 flex items-center justify-center gap-2" data-testid="credits-display">
+            <div className="mt-4 flex flex-col items-center gap-1" data-testid="credits-display">
               {creditsExhausted ? (
                 <Badge variant="destructive" className="text-sm py-1 px-3">
-                  Credits exhausted - Resets {new Date(creditsData.resetsAt).toLocaleDateString()}
+                  Credits exhausted
                 </Badge>
               ) : creditsRemaining < 100 ? (
                 <Badge className="text-sm py-1 px-3 bg-yellow-500 dark:bg-yellow-600 text-black border-yellow-600 dark:border-yellow-700">
@@ -144,6 +144,9 @@ export default function TopicPulsePage() {
                   {creditsRemaining} / {creditsData.monthlyLimit} credits this month
                 </Badge>
               )}
+              <p className="text-xs text-muted-foreground" data-testid="text-credits-reset">
+                Credits replenish on {new Date(creditsData.resetsAt).toLocaleDateString()}
+              </p>
             </div>
           )}
         </div>
