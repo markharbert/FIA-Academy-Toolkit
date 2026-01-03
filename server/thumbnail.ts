@@ -136,49 +136,25 @@ async function generateWithInstantId(
     throw new Error("Replicate API token not configured");
   }
 
-  // Convert base64 to buffer and upload to Replicate's file hosting
-  const imageBuffer = Buffer.from(faceImageBase64, "base64");
-  const extension = imageMimeType.split("/")[1] || "png";
-  
-  // Upload file to Replicate
-  const uploadResponse = await fetch("https://api.replicate.com/v1/files", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.REPLICATE_API_TOKEN}`,
-      "Content-Type": imageMimeType,
-    },
-    body: imageBuffer,
-  });
-  
-  if (!uploadResponse.ok) {
-    const errorText = await uploadResponse.text();
-    console.error("Replicate file upload failed:", errorText);
-    throw new Error(`Failed to upload image to Replicate: ${uploadResponse.status}`);
-  }
-  
-  const uploadResult = await uploadResponse.json() as { urls?: { get?: string } };
-  const fileUrl = uploadResult.urls?.get;
-  
-  if (!fileUrl) {
-    console.error("No file URL in upload response:", uploadResult);
-    throw new Error("Failed to get file URL from Replicate");
-  }
-  
-  console.log("Uploaded image to Replicate:", fileUrl);
+  // Use data URL format which Replicate accepts
+  const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
+  console.log("Using data URL, length:", dataUrl.length);
+  console.log("Prompt:", prompt);
 
+  // Use PhotoMaker model - reliable for face-based image generation
   const output = await replicate.run(
-    "lucataco/ip-adapter-faceid:fb81ef963e74776af72e6f380949013533d46dd5c6228a9e586c57db6303d7cd",
+    "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
     {
       input: {
-        face_image: fileUrl,
-        prompt: prompt,
-        negative_prompt: "monochrome, lowres, bad anatomy, worst quality, low quality, blurry, multiple people, watermark, text",
-        width: 1280,
-        height: 720,
+        input_image: dataUrl,
+        prompt: `A photo of a person img, ${prompt}`,
+        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+        style_name: "Photographic (Default)",
+        num_steps: 30,
+        style_strength_ratio: 20,
+        guidance_scale: 5,
         num_outputs: 1,
-        num_inference_steps: 30,
-        seed: Math.floor(Math.random() * 1000000000),
-        agree_to_research_only: true,
+        seed: Math.floor(Math.random() * 2147483647),
       }
     }
   );
