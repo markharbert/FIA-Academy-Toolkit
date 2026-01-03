@@ -137,7 +137,9 @@ async function extractReplicateImage(output: unknown): Promise<Buffer> {
   
   // Handle FileOutput object (has url() method and read() method)
   if (output && typeof output === "object" && typeof (output as any).url === "function") {
-    const url = (output as any).url();
+    const urlResult = (output as any).url();
+    // urlResult might be a URL object or a string
+    const url = typeof urlResult === "string" ? urlResult : urlResult?.href || urlResult?.toString();
     console.log("Got URL from FileOutput:", url);
     if (url && typeof url === "string") {
       const response = await fetch(url);
