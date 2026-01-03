@@ -159,64 +159,76 @@ async function generateWithInstantId(
     }
   );
 
-  console.log("Replicate output:", JSON.stringify(output, null, 2));
-
-  let imageUrl: string | undefined;
+  console.log("Replicate output type:", typeof output, Array.isArray(output) ? "array" : "");
+  
+  let imageData: Buffer | undefined;
   
   if (Array.isArray(output) && output.length > 0) {
-    // Handle FileOutput objects from newer Replicate SDK
     const firstOutput = output[0];
-    if (typeof firstOutput === "string") {
-      imageUrl = firstOutput;
-    } else if (firstOutput && typeof firstOutput === "object") {
-      // FileOutput has url() method or direct URL property
-      if ("url" in firstOutput && typeof (firstOutput as any).url === "function") {
-        imageUrl = (firstOutput as any).url();
-      } else if ("url" in firstOutput) {
-        imageUrl = (firstOutput as any).url;
-      } else if ("href" in firstOutput) {
-        imageUrl = (firstOutput as any).href;
+    console.log("First output type:", typeof firstOutput, firstOutput?.constructor?.name);
+    
+    // Handle FileOutput objects from newer Replicate SDK - they are ReadableStreams
+    if (firstOutput && typeof firstOutput === "object") {
+      // Check if it's a ReadableStream (Web Streams API)
+      if (firstOutput instanceof ReadableStream || 
+          (firstOutput.constructor && firstOutput.constructor.name === "ReadableStream")) {
+        console.log("Reading from ReadableStream...");
+        const reader = (firstOutput as ReadableStream<Uint8Array>).getReader();
+        const chunks: Uint8Array[] = [];
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) chunks.push(value);
+        }
+        
+        // Combine all chunks
+        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+        const combined = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+          combined.set(chunk, offset);
+          offset += chunk.length;
+        }
+        imageData = Buffer.from(combined);
+        console.log("Read", imageData.length, "bytes from stream");
+      }
+      // Check if it has a blob() or arrayBuffer() method
+      else if (typeof (firstOutput as any).blob === "function") {
+        console.log("Reading via blob()...");
+        const blob = await (firstOutput as any).blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        imageData = Buffer.from(arrayBuffer);
+      }
+      // Check if it has a url property or method
+      else if ("url" in firstOutput) {
+        const url = typeof (firstOutput as any).url === "function" 
+          ? (firstOutput as any).url() 
+          : (firstOutput as any).url;
+        if (url && typeof url === "string") {
+          console.log("Fetching from URL:", url);
+          const response = await fetch(url);
+          const arrayBuffer = await response.arrayBuffer();
+          imageData = Buffer.from(arrayBuffer);
+        }
       }
     }
-  } else if (typeof output === "string") {
-    imageUrl = output;
-  } else if (output && typeof output === "object" && "output" in output) {
-    const innerOutput = (output as any).output;
-    imageUrl = Array.isArray(innerOutput) ? innerOutput[0] : innerOutput;
-  }
-  
-  // If still no URL, try to stringify and extract
-  if (!imageUrl) {
-    const outputStr = JSON.stringify(output);
-    const urlMatch = outputStr.match(/https:\/\/[^"'\s]+\.(png|jpg|jpeg|webp)/i);
-    if (urlMatch) {
-      imageUrl = urlMatch[0];
+    // Handle plain string URL
+    else if (typeof firstOutput === "string" && firstOutput.startsWith("http")) {
+      console.log("Fetching from URL string:", firstOutput);
+      const response = await fetch(firstOutput);
+      const arrayBuffer = await response.arrayBuffer();
+      imageData = Buffer.from(arrayBuffer);
     }
   }
 
-  if (!imageUrl || typeof imageUrl !== "string") {
-    console.error("Could not extract image URL from output:", output);
-    throw new Error("No image URL received from InstantID");
+  if (!imageData || imageData.length === 0) {
+    console.error("Could not extract image data from output");
+    throw new Error("No image data received from PhotoMaker");
   }
-  
-  const https = await import("https");
-  const http = await import("http");
-  
-  const base64 = await new Promise<string>((resolve, reject) => {
-    const protocol = imageUrl.startsWith("https") ? https : http;
-    protocol.get(imageUrl, (response) => {
-      const chunks: Buffer[] = [];
-      response.on("data", (chunk: Buffer) => chunks.push(chunk));
-      response.on("end", () => {
-        const buffer = Buffer.concat(chunks);
-        resolve(buffer.toString("base64"));
-      });
-      response.on("error", reject);
-    }).on("error", reject);
-  });
 
   return {
-    b64_json: base64,
+    b64_json: imageData.toString("base64"),
     mimeType: "image/png",
   };
 }
