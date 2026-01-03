@@ -59,7 +59,7 @@ export default function TopicPulsePage() {
     onSuccess: (data: { runId: string; topics: Topic[] }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
-      navigate(`/topic-pulse/explore/${data.runId}`);
+      navigate(`/video-trends/explore/${data.runId}`);
     },
     onError: (err: Error) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
@@ -197,7 +197,7 @@ export default function TopicPulsePage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Card 
             className="cursor-pointer hover-elevate"
-            onClick={() => navigate("/topic-pulse/saved")}
+            onClick={() => navigate("/video-trends/saved")}
             data-testid="card-saved-topics"
           >
             <CardHeader className="pb-2">
@@ -214,7 +214,7 @@ export default function TopicPulsePage() {
 
           <Card 
             className="cursor-pointer hover-elevate"
-            onClick={() => navigate("/topic-pulse/scripts")}
+            onClick={() => navigate("/video-trends/scripts")}
             data-testid="card-scripts"
           >
             <CardHeader className="pb-2">
@@ -231,7 +231,7 @@ export default function TopicPulsePage() {
 
           <Card 
             className="cursor-pointer hover-elevate"
-            onClick={() => navigate("/topic-pulse/settings")}
+            onClick={() => navigate("/video-trends/settings")}
             data-testid="card-settings"
           >
             <CardHeader className="pb-2">
@@ -276,7 +276,7 @@ export default function TopicPulsePage() {
                 <Card 
                   key={run.id} 
                   className="cursor-pointer hover-elevate"
-                  onClick={() => navigate(`/topic-pulse/explore/${run.id}`)}
+                  onClick={() => navigate(`/video-trends/explore/${run.id}`)}
                   data-testid={`card-run-${run.id}`}
                 >
                   <CardContent className="py-4">

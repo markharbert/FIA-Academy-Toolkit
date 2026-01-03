@@ -41,13 +41,13 @@ const navItems = [
   },
   {
     title: "Video Trends",
-    url: "/topic-pulse",
+    url: "/video-trends",
     icon: TrendingUp,
     testId: "nav-video-trends",
   },
   {
     title: "Scripts",
-    url: "/topic-pulse/scripts",
+    url: "/video-trends/scripts",
     icon: FileText,
     testId: "nav-scripts",
   },

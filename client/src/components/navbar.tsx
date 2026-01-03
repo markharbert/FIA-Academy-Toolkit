@@ -53,7 +53,7 @@ export function Navbar() {
                   Video Score
                 </Button>
               </Link>
-              <Link href="/topic-pulse">
+              <Link href="/video-trends">
                 <Button
                   variant="ghost"
                   className="text-white font-medium hover:bg-white/10"
@@ -185,7 +185,7 @@ export function Navbar() {
                 variant="ghost"
                 className="w-full justify-start text-white font-medium hover:bg-white/10"
                 onClick={() => {
-                  setLocation("/topic-pulse");
+                  setLocation("/video-trends");
                   setMobileMenuOpen(false);
                 }}
                 data-testid="mobile-link-topic-pulse"

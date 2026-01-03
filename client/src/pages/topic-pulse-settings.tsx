@@ -76,7 +76,7 @@ export default function TopicPulseSettingsPage() {
     <div className="min-h-full">
       <div className="border-b p-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/topic-pulse")} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/video-trends")} data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

@@ -46,14 +46,14 @@ export default function DashboardPage() {
       title: "Video Trends",
       description: "Research trending topics and keywords for your video content with YouTube autocomplete and metrics.",
       icon: <Search className="h-6 w-6" />,
-      href: "/topic-pulse",
+      href: "/video-trends",
       testId: "card-video-trends",
     },
     {
       title: "Scripts",
       description: "View and manage your AI-generated video scripts based on researched topics.",
       icon: <FileText className="h-6 w-6" />,
-      href: "/topic-pulse/scripts",
+      href: "/video-trends/scripts",
       testId: "card-scripts",
     },
     {
@@ -98,7 +98,7 @@ export default function DashboardPage() {
                   Score New Video
                 </Button>
               </Link>
-              <Link href="/topic-pulse">
+              <Link href="/video-trends">
                 <Button variant="outline" data-testid="button-research-topics">
                   <Search className="mr-2 h-4 w-4" />
                   Research Topics

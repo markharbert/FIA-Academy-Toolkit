@@ -119,7 +119,7 @@ export default function TopicPulseScriptsPage() {
     <div className="min-h-full flex flex-col">
       <div className="border-b p-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/topic-pulse")} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/video-trends")} data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -143,7 +143,7 @@ export default function TopicPulseScriptsPage() {
                 <Card 
                   key={script.id} 
                   className="cursor-pointer hover-elevate"
-                  onClick={() => navigate(`/topic-pulse/scripts/${script.id}`)}
+                  onClick={() => navigate(`/video-trends/scripts/${script.id}`)}
                   data-testid={`card-script-${script.id}`}
                 >
                   <CardContent className="py-4">

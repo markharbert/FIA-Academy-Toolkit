@@ -314,7 +314,7 @@ export default function TopicPulseSavedPage() {
     },
     onSuccess: (data) => {
       toast({ title: "Script generated!" });
-      navigate(`/topic-pulse/scripts/${data.id}`);
+      navigate(`/video-trends/scripts/${data.id}`);
     },
     onError: (err: Error) => {
       toast({
@@ -333,7 +333,7 @@ export default function TopicPulseSavedPage() {
     onSuccess: (data: { runId: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
       toast({ title: "New search started!" });
-      navigate(`/topic-pulse/explore/${data.runId}`);
+      navigate(`/video-trends/explore/${data.runId}`);
     },
     onError: (err: Error) => {
       toast({
@@ -387,7 +387,7 @@ export default function TopicPulseSavedPage() {
     <div className="min-h-full flex flex-col">
       <div className="border-b p-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/topic-pulse")} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/video-trends")} data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

@@ -110,22 +110,22 @@ function ProtectedRoutes() {
       <Route path="/account">
         {() => <ProtectedRoute component={AccountPage} />}
       </Route>
-      <Route path="/topic-pulse">
+      <Route path="/video-trends">
         {() => <ProtectedRoute component={TopicPulsePage} />}
       </Route>
-      <Route path="/topic-pulse/explore/:runId">
+      <Route path="/video-trends/explore/:runId">
         {() => <ProtectedRoute component={TopicPulseExplorePage} />}
       </Route>
-      <Route path="/topic-pulse/scripts/:scriptId">
+      <Route path="/video-trends/scripts/:scriptId">
         {() => <ProtectedRoute component={TopicPulseScriptPage} />}
       </Route>
-      <Route path="/topic-pulse/scripts">
+      <Route path="/video-trends/scripts">
         {() => <ProtectedRoute component={TopicPulseScriptsPage} />}
       </Route>
-      <Route path="/topic-pulse/saved">
+      <Route path="/video-trends/saved">
         {() => <ProtectedRoute component={TopicPulseSavedPage} />}
       </Route>
-      <Route path="/topic-pulse/settings">
+      <Route path="/video-trends/settings">
         {() => <ProtectedRoute component={TopicPulseSettingsPage} />}
       </Route>
       <Route component={NotFound} />

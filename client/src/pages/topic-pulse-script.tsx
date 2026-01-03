@@ -1422,7 +1422,7 @@ export default function TopicPulseScriptPage() {
     <div className="min-h-full flex flex-col">
       <div className="border-b p-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/topic-pulse/scripts")} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/video-trends/scripts")} data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">
