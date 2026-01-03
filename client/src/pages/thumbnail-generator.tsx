@@ -13,13 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Image as ImageIcon, Trash2, Download, Sparkles, User, Upload } from "lucide-react";
 import type { GeneratedThumbnail, UserProfilePhoto } from "@shared/schema";
 
-const styleLabels: Record<string, { label: string; description: string }> = {
-  reaction: { label: "Reaction", description: "Expressive face with dramatic lighting" },
-  before_after: { label: "Before/After", description: "Split-screen transformation" },
-  list_style: { label: "List Style", description: "Bold numbers and typography" },
-  bold_text: { label: "Bold Text", description: "Large text as main focus" },
-  minimal: { label: "Minimal", description: "Clean and elegant" },
-  dramatic: { label: "Dramatic", description: "Cinematic, movie-poster style" },
+const imageTypes: Record<string, { label: string; width: number; height: number }> = {
+  youtube_thumbnail: { label: "YouTube Thumbnail (1280 x 720)", width: 1280, height: 720 },
+  instagram_square: { label: "Instagram Square (1080 x 1080)", width: 1080, height: 1080 },
 };
 
 
@@ -27,7 +23,7 @@ export default function ThumbnailGenerator() {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
-  const [style, setStyle] = useState<string>("");
+  const [imageType, setImageType] = useState<string>("");
   const [provider, setProvider] = useState<string>("instantid");
   const [selectedPhotoId, setSelectedPhotoId] = useState<string>("");
   const [activeTab, setActiveTab] = useState("generate");
@@ -116,15 +112,23 @@ export default function ThumbnailGenerator() {
       return;
     }
     
+    if (!imageType) {
+      toast({ title: "Image type required", description: "Please select an image type", variant: "destructive" });
+      return;
+    }
+    
     if (!selectedPhotoId) {
       toast({ title: "Photo required", description: "Please upload or select a photo of yourself", variant: "destructive" });
       return;
     }
 
+    const dimensions = imageTypes[imageType];
     generateThumbnailMutation.mutate({
       title: title.trim(),
       customPrompt: customPrompt.trim(),
-      style: style || undefined,
+      imageType,
+      width: dimensions.width,
+      height: dimensions.height,
       provider,
       userPhotoId: selectedPhotoId,
     });
@@ -138,8 +142,6 @@ export default function ThumbnailGenerator() {
     link.click();
     document.body.removeChild(link);
   };
-
-  const needsPhoto = provider === "instantid";
 
   return (
     <div className="min-h-full p-6 space-y-6">
@@ -198,18 +200,15 @@ export default function ThumbnailGenerator() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Thumbnail Style (Optional)</Label>
-                  <Select value={style} onValueChange={setStyle}>
-                    <SelectTrigger data-testid="select-style">
-                      <SelectValue placeholder="Choose a style" />
+                  <Label>Image Type <span className="text-destructive">*</span></Label>
+                  <Select value={imageType} onValueChange={setImageType}>
+                    <SelectTrigger data-testid="select-image-type">
+                      <SelectValue placeholder="Select image dimensions" />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(styleLabels).map(([key, { label, description }]) => (
+                      {Object.entries(imageTypes).map(([key, { label }]) => (
                         <SelectItem key={key} value={key}>
-                          <div className="flex flex-col">
-                            <span>{label}</span>
-                            <span className="text-xs text-muted-foreground">{description}</span>
-                          </div>
+                          {label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -304,7 +303,7 @@ export default function ThumbnailGenerator() {
 
                 <Button
                   onClick={handleGenerate}
-                  disabled={generateThumbnailMutation.isPending || !title.trim() || !customPrompt.trim() || !selectedPhotoId}
+                  disabled={generateThumbnailMutation.isPending || !title.trim() || !customPrompt.trim() || !imageType || !selectedPhotoId}
                   className="w-full"
                   data-testid="button-generate"
                 >
@@ -446,9 +445,9 @@ export default function ThumbnailGenerator() {
                             <Badge variant="secondary" className="text-xs">
                               PhotoMaker
                             </Badge>
-                            {thumbnail.style && (
+                            {thumbnail.imageType && imageTypes[thumbnail.imageType] && (
                               <Badge variant="outline" className="text-xs text-white border-white/50">
-                                {styleLabels[thumbnail.style]?.label || thumbnail.style}
+                                {imageTypes[thumbnail.imageType].label}
                               </Badge>
                             )}
                           </div>

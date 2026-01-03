@@ -130,7 +130,9 @@ function buildInstantIdPrompt(title: string, style?: ThumbnailStyle): string {
 async function generateWithInstantId(
   prompt: string, 
   faceImageBase64: string,
-  imageMimeType: string
+  imageMimeType: string,
+  width: number = 1280,
+  height: number = 720
 ): Promise<{ b64_json: string; mimeType: string }> {
   if (!process.env.REPLICATE_API_TOKEN) {
     throw new Error("Replicate API token not configured");
@@ -140,6 +142,7 @@ async function generateWithInstantId(
   const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
   console.log("Using data URL, length:", dataUrl.length);
   console.log("Prompt:", prompt);
+  console.log("Dimensions:", width, "x", height);
 
   // Use PhotoMaker model - reliable for face-based image generation
   // PhotoMaker uses "img" as trigger word to reference the uploaded photo
@@ -159,6 +162,8 @@ async function generateWithInstantId(
         style_strength_ratio: 15,
         guidance_scale: 7.5,
         num_outputs: 1,
+        width: width,
+        height: height,
         seed: Math.floor(Math.random() * 2147483647),
       }
     }
@@ -340,7 +345,7 @@ export function registerThumbnailRoutes(app: Express): void {
         return res.status(401).json({ error: "Not authenticated" });
       }
 
-      const { title, style, customPrompt, userPhotoId } = req.body;
+      const { title, customPrompt, imageType, width, height, userPhotoId } = req.body;
 
       if (!title) {
         return res.status(400).json({ error: "Title is required" });
@@ -348,6 +353,10 @@ export function registerThumbnailRoutes(app: Express): void {
 
       if (!customPrompt || typeof customPrompt !== "string" || !customPrompt.trim()) {
         return res.status(400).json({ error: "Thumbnail description is required" });
+      }
+
+      if (!imageType || !width || !height) {
+        return res.status(400).json({ error: "Image type and dimensions are required" });
       }
 
       if (!userPhotoId) {
@@ -370,13 +379,15 @@ export function registerThumbnailRoutes(app: Express): void {
       
       // Use the user's custom prompt directly
       const prompt = customPrompt.trim();
-      const imageResult = await generateWithInstantId(prompt, photoBase64, photo.mimeType);
+      const imageResult = await generateWithInstantId(prompt, photoBase64, photo.mimeType, width, height);
 
       const [thumbnail] = await db.insert(generatedThumbnails).values({
         userId: req.session.userId,
         title,
         prompt,
-        style: style || null,
+        imageType,
+        width,
+        height,
         provider: "instantid",
         base64Data: imageResult.b64_json,
         userPhotoId: userPhotoId,

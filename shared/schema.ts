@@ -841,6 +841,9 @@ export const generatedThumbnails = pgTable("generated_thumbnails", {
   title: text("title").notNull(),
   prompt: text("prompt").notNull(),
   style: text("style").$type<ThumbnailStyle>(),
+  imageType: text("image_type"),
+  width: integer("width"),
+  height: integer("height"),
   provider: text("provider").notNull().$type<AIProvider>(),
   storagePath: text("storage_path"),
   base64Data: text("base64_data"),
@@ -859,8 +862,10 @@ export type GeneratedThumbnail = typeof generatedThumbnails.$inferSelect;
 // Thumbnail generation input schema
 export const thumbnailGenerationInputSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  style: z.enum(thumbnailStyles).optional(),
+  imageType: z.string().min(1, "Image type is required"),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
   provider: z.enum(aiProviders),
   userPhotoId: z.string().optional(),
-  customPrompt: z.string().optional(),
+  customPrompt: z.string().min(1, "Description is required"),
 });
