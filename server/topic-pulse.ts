@@ -40,14 +40,19 @@ interface KeywordsEverywhereResult {
   trend?: Array<{ month: string; year: number; value: number }>;
 }
 
-async function getKeywordData(keywords: string[], userId?: string): Promise<Map<string, KeywordData>> {
+interface KeywordDataResult {
+  data: Map<string, KeywordData>;
+  creditsUsed: number;
+}
+
+async function getKeywordData(keywords: string[], userId?: string): Promise<KeywordDataResult> {
   const results = new Map<string, KeywordData>();
   const defaultData: KeywordData = { volume: null, cpc: null, competition: null, trend: null };
   
   const apiKey = await getEffectiveKeywordsEverywhereApiKey(userId);
   if (!apiKey || keywords.length === 0) {
     keywords.forEach(kw => results.set(kw.toLowerCase(), defaultData));
-    return results;
+    return { data: results, creditsUsed: 0 };
   }
   
   const uncachedKeywords: string[] = [];
@@ -61,7 +66,7 @@ async function getKeywordData(keywords: string[], userId?: string): Promise<Map<
   }
   
   if (uncachedKeywords.length === 0) {
-    return results;
+    return { data: results, creditsUsed: 0 };
   }
   
   try {
@@ -124,7 +129,8 @@ async function getKeywordData(keywords: string[], userId?: string): Promise<Map<
     });
   }
   
-  return results;
+  console.log(`[KeywordsEverywhere] Total KE credits used: ${uncachedKeywords.length} (${keywords.length - uncachedKeywords.length} cached)`);
+  return { data: results, creditsUsed: uncachedKeywords.length };
 }
 
 async function getYouTubeAutocomplete(query: string): Promise<string[]> {
@@ -311,12 +317,17 @@ function createTopicTitle(query: string): string {
     .join(" ");
 }
 
-export async function generateTopics(input: TopicSearchInput, runId: string, userId?: string): Promise<InsertTopic[]> {
+export interface GenerateTopicsResult {
+  topics: InsertTopic[];
+  creditsUsed: number;
+}
+
+export async function generateTopics(input: TopicSearchInput, runId: string, userId?: string): Promise<GenerateTopicsResult> {
   const cacheKey = `${input.seedQuery}:${input.region || "global"}`;
   const cached = topicCache.get(cacheKey);
   
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return cached.topics.map(t => ({ ...t, runId }));
+    return { topics: cached.topics.map(t => ({ ...t, runId })), creditsUsed: 0 };
   }
   
   const autocompleteSuggestions = await getYouTubeAutocomplete(input.seedQuery);
@@ -324,7 +335,9 @@ export async function generateTopics(input: TopicSearchInput, runId: string, use
   
   const allQueries = Array.from(new Set([...autocompleteSuggestions, ...variations]));
   
-  const keywordDataMap = await getKeywordData(allQueries, userId);
+  const keywordResult = await getKeywordData(allQueries, userId);
+  const keywordDataMap = keywordResult.data;
+  const creditsUsed = keywordResult.creditsUsed;
   
   const topics: InsertTopic[] = [];
   
@@ -377,7 +390,7 @@ export async function generateTopics(input: TopicSearchInput, runId: string, use
   
   topicCache.set(cacheKey, { topics: limitedTopics, timestamp: Date.now() });
   
-  return limitedTopics;
+  return { topics: limitedTopics, creditsUsed };
 }
 
 export async function enrichTopicDetails(topic: Topic): Promise<Partial<Topic>> {

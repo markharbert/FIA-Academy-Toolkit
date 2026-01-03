@@ -3460,10 +3460,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
 
-      const CREDITS_PER_SEARCH = 1;
       const credits = await storage.getVideoTrendsCredits(req.session.userId!);
       
-      if (credits.remaining < CREDITS_PER_SEARCH) {
+      if (credits.remaining < 1) {
         const resetsAt = new Date(credits.resetsAt);
         const daysRemaining = Math.ceil((resetsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
         return res.status(403).json({ 
@@ -3489,10 +3488,13 @@ export async function registerRoutes(
         status: "processing",
       });
 
-      const topicsData = await generateTopics(parsed.data, run.id, req.session.userId);
-      const createdTopics = await storage.createTopics(topicsData);
+      const result = await generateTopics(parsed.data, run.id, req.session.userId);
+      const createdTopics = await storage.createTopics(result.topics);
 
-      await storage.useVideoTrendsCredits(req.session.userId!, CREDITS_PER_SEARCH);
+      if (result.creditsUsed > 0) {
+        await storage.useVideoTrendsCredits(req.session.userId!, result.creditsUsed);
+        console.log(`[TopicPulse] Deducted ${result.creditsUsed} credits for user ${req.session.userId}`);
+      }
 
       const runtimeMs = Date.now() - startTime;
       await storage.updateTopicRun(run.id, {
@@ -3505,6 +3507,7 @@ export async function registerRoutes(
         runId: run.id,
         topics: createdTopics,
         runtimeMs,
+        creditsUsed: result.creditsUsed,
       });
     } catch (err) {
       console.error("[TopicPulse] Search error:", err);
