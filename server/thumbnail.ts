@@ -144,27 +144,33 @@ async function generateWithInstantId(
   console.log("Prompt:", prompt);
   console.log("Dimensions:", width, "x", height);
 
-  // Use PhotoMaker model - reliable for face-based image generation
-  // PhotoMaker uses "img" as trigger word to reference the uploaded photo
-  // Keep prompt simple and focused for best results
-  const photoMakerPrompt = `A photo of a person img, ${prompt}`;
-  console.log("PhotoMaker prompt:", photoMakerPrompt);
-  
+  // Round dimensions to nearest multiple of 64 (required by SDXL-based models)
+  // Avoid exact 1024x1024 as it can cause watermarks
+  let adjustedWidth = Math.round(width / 64) * 64;
+  let adjustedHeight = Math.round(height / 64) * 64;
+  if (adjustedWidth === 1024 && adjustedHeight === 1024) {
+    adjustedWidth = 1016;
+    adjustedHeight = 1016;
+  }
+  console.log("Adjusted dimensions:", adjustedWidth, "x", adjustedHeight);
+
+  // Use InstantID MultiControlNet - supports custom dimensions and follows prompts better
+  // Lower guidance_scale (4-5) gives better prompt adherence with face identity
   const output = await replicate.run(
-    "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+    "tgohblio/instant-id-multicontrolnet",
     {
       input: {
-        input_image: dataUrl,
-        prompt: photoMakerPrompt,
-        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, deformed face, distorted face",
-        style_name: "Photographic (Default)",
-        num_steps: 50,
-        style_strength_ratio: 15,
-        guidance_scale: 7.5,
-        num_outputs: 1,
-        width: width,
-        height: height,
-        seed: Math.floor(Math.random() * 2147483647),
+        face_image_path: dataUrl,
+        prompt: prompt,
+        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, blurry, deformed face, distorted face, watermark, logo",
+        width: adjustedWidth,
+        height: adjustedHeight,
+        num_steps: 30,
+        guidance_scale: 4,
+        adapter_strength_ratio: 0.8,
+        identitynet_strength_ratio: 0.8,
+        pose: false,
+        safety_checker: true,
       }
     }
   );
