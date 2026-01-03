@@ -36,6 +36,7 @@ import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import OpenAI from "openai";
+import { registerThumbnailRoutes } from "./thumbnail";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -4130,6 +4131,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.status(500).json({ message: "Failed to fetch video details" });
     }
   });
+
+  // Register thumbnail generation routes
+  registerThumbnailRoutes(app);
 
   return httpServer;
 }
