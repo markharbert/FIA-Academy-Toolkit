@@ -139,25 +139,17 @@ async function generateWithInstantId(
   const dataUrl = `data:${imageMimeType};base64,${faceImageBase64}`;
 
   const output = await replicate.run(
-    "zsxkib/instant-id",
+    "lucataco/ip-adapter-faceid:7071ee5404076d1ad1a29d5f8112e33104411e0e8f5f01f9a4a743c91206f72c",
     {
       input: {
         image: dataUrl,
         prompt: prompt,
-        negative_prompt: "(lowres, low quality, worst quality:1.2), (text:1.2), watermark, painting, drawing, illustration, glitch, deformed, mutated, cross-eyed, ugly, disfigured",
-        sdxl_weights: "protovision-xl-high-fidel",
-        face_style: "default",
-        scheduler: "EulerDiscreteScheduler",
-        enable_LCM: false,
-        pose_strength: 0.4,
-        canny_strength: 0.3,
-        depth_strength: 0.5,
-        controlnet_conditioning_scale: 0.8,
-        ip_adapter_scale: 0.8,
+        negative_prompt: "blurry, low quality, distorted face, bad anatomy, ugly, deformed, watermark, text",
+        num_outputs: 1,
+        guidance_scale: 7.5,
         num_inference_steps: 30,
-        guidance_scale: 5,
-        enhance_nonface_region: true,
-        seed: Math.floor(Math.random() * 1000000),
+        s_scale: 1.0,
+        shortcut: false,
       }
     }
   );
