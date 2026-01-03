@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Image as ImageIcon, Trash2, Download, Sparkles, User, Upload } from "lucide-react";
 import type { GeneratedThumbnail, UserProfilePhoto } from "@shared/schema";
@@ -23,20 +22,14 @@ const styleLabels: Record<string, { label: string; description: string }> = {
   dramatic: { label: "Dramatic", description: "Cinematic, movie-poster style" },
 };
 
-const providerLabels: Record<string, { label: string; description: string }> = {
-  instantid: { label: "InstantID (Your Photo)", description: "Uses your uploaded photo - best for personal branding" },
-  dalle: { label: "DALL-E 3", description: "AI-generated scenes, no photo needed" },
-  gemini: { label: "Gemini", description: "Fast stylized images, no photo needed" },
-};
 
 export default function ThumbnailGenerator() {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [style, setStyle] = useState<string>("");
-  const [provider, setProvider] = useState<string>("dalle");
+  const [provider, setProvider] = useState<string>("instantid");
   const [selectedPhotoId, setSelectedPhotoId] = useState<string>("");
-  const [includePerson, setIncludePerson] = useState(false);
   const [activeTab, setActiveTab] = useState("generate");
 
   const { data: photos = [], isLoading: photosLoading } = useQuery<UserProfilePhoto[]>({
@@ -118,18 +111,22 @@ export default function ThumbnailGenerator() {
       return;
     }
     
-    if (provider === "instantid" && !selectedPhotoId) {
-      toast({ title: "Photo required", description: "Please upload or select a photo to use InstantID", variant: "destructive" });
+    if (!customPrompt.trim()) {
+      toast({ title: "Prompt required", description: "Please describe what you want in your thumbnail", variant: "destructive" });
+      return;
+    }
+    
+    if (!selectedPhotoId) {
+      toast({ title: "Photo required", description: "Please upload or select a photo of yourself", variant: "destructive" });
       return;
     }
 
     generateThumbnailMutation.mutate({
       title: title.trim(),
-      customPrompt: customPrompt.trim() || undefined,
+      customPrompt: customPrompt.trim(),
       style: style || undefined,
       provider,
-      userPhotoId: provider === "instantid" ? selectedPhotoId : undefined,
-      includePerson: provider !== "instantid" ? includePerson : undefined,
+      userPhotoId: selectedPhotoId,
     });
   };
 
@@ -170,7 +167,7 @@ export default function ThumbnailGenerator() {
               <CardHeader>
                 <CardTitle>Create New Thumbnail</CardTitle>
                 <CardDescription>
-                  Use InstantID to incorporate your actual photo, or generate AI-only thumbnails with DALL-E/Gemini.
+                  Generate eye-catching thumbnails that feature your uploaded photo. Your face is preserved in the final image.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -186,187 +183,143 @@ export default function ThumbnailGenerator() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="prompt">Custom Prompt (optional)</Label>
+                  <Label htmlFor="prompt">Thumbnail Description <span className="text-destructive">*</span></Label>
                   <Textarea
                     id="prompt"
-                    placeholder="Describe exactly what you want in your thumbnail. e.g., A dramatic YouTube thumbnail showing a person holding a plate of colorful keto snacks, with an excited expression, bright studio lighting, bold text saying 'GAME CHANGER' in the corner..."
+                    placeholder="Keep it simple! e.g., 'excited expression, holding cash, bright yellow background' or 'professional headshot, arms crossed, blue gradient background'"
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
                     className="min-h-[100px]"
                     data-testid="input-prompt"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Leave blank to auto-generate a prompt from your title and style selection
+                    Describe the scene, expression, and background. Keep prompts simple and focused for best results.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>AI Provider</Label>
-                    <Select value={provider} onValueChange={setProvider}>
-                      <SelectTrigger data-testid="select-provider">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(providerLabels).map(([key, { label, description }]) => (
-                          <SelectItem key={key} value={key}>
-                            <div className="flex flex-col">
-                              <span>{label}</span>
-                              <span className="text-xs text-muted-foreground">{description}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Thumbnail Style</Label>
-                    <Select value={style} onValueChange={setStyle}>
-                      <SelectTrigger data-testid="select-style">
-                        <SelectValue placeholder="Choose a style (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(styleLabels).map(([key, { label, description }]) => (
-                          <SelectItem key={key} value={key}>
-                            <div className="flex flex-col">
-                              <span>{label}</span>
-                              <span className="text-xs text-muted-foreground">{description}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Thumbnail Style (Optional)</Label>
+                  <Select value={style} onValueChange={setStyle}>
+                    <SelectTrigger data-testid="select-style">
+                      <SelectValue placeholder="Choose a style" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(styleLabels).map(([key, { label, description }]) => (
+                        <SelectItem key={key} value={key}>
+                          <div className="flex flex-col">
+                            <span>{label}</span>
+                            <span className="text-xs text-muted-foreground">{description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {needsPhoto && (
-                  <div className="space-y-3 p-4 border rounded-md bg-muted/30">
-                    <Label className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      Select Your Photo
-                    </Label>
-                    
-                    {photosLoading ? (
-                      <div className="flex justify-center py-4">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      </div>
-                    ) : photos.length === 0 ? (
-                      <div className="text-center py-4">
-                        <p className="text-sm text-muted-foreground mb-3">
-                          Upload a photo to use your likeness in thumbnails
-                        </p>
+                <div className="space-y-3 p-4 border rounded-md bg-muted/30">
+                  <Label className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Your Photo <span className="text-destructive">*</span>
+                  </Label>
+                  
+                  {photosLoading ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  ) : photos.length === 0 ? (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Upload a photo to use in your thumbnails
+                      </p>
+                      <Label
+                        htmlFor="quick-photo-upload"
+                        className="inline-flex items-center gap-2 cursor-pointer px-4 py-2 border rounded-md hover:bg-accent transition-colors"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload Photo
+                      </Label>
+                      <input
+                        id="quick-photo-upload"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={handlePhotoUpload}
+                        className="hidden"
+                        data-testid="input-quick-photo-upload"
+                      />
+                      {uploadPhotoMutation.isPending && (
+                        <div className="mt-2">
+                          <Loader2 className="h-4 w-4 animate-spin inline" />
+                          <span className="ml-2 text-sm">Uploading...</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        {photos.map((photo) => (
+                          <button
+                            key={photo.id}
+                            onClick={() => setSelectedPhotoId(photo.id)}
+                            className={`relative w-16 h-16 rounded-md overflow-hidden border-2 transition-colors ${
+                              selectedPhotoId === photo.id 
+                                ? "border-primary" 
+                                : "border-transparent hover:border-muted-foreground/50"
+                            }`}
+                            data-testid={`button-select-photo-${photo.id}`}
+                          >
+                            <img
+                              src={`/api/thumbnails/photo-file/${photo.id}`}
+                              alt={photo.filename}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
                         <Label
-                          htmlFor="quick-photo-upload"
-                          className="inline-flex items-center gap-2 cursor-pointer px-4 py-2 border rounded-md hover:bg-accent transition-colors"
+                          htmlFor="inline-photo-upload"
+                          className="w-16 h-16 flex items-center justify-center border-2 border-dashed rounded-md cursor-pointer hover:border-primary transition-colors"
                         >
-                          <Upload className="h-4 w-4" />
-                          Upload Photo
+                          {uploadPhotoMutation.isPending ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <Upload className="h-5 w-5 text-muted-foreground" />
+                          )}
                         </Label>
                         <input
-                          id="quick-photo-upload"
+                          id="inline-photo-upload"
                           type="file"
                           accept="image/jpeg,image/png,image/webp"
                           onChange={handlePhotoUpload}
                           className="hidden"
-                          data-testid="input-quick-photo-upload"
+                          data-testid="input-inline-photo-upload"
                         />
-                        {uploadPhotoMutation.isPending && (
-                          <div className="mt-2">
-                            <Loader2 className="h-4 w-4 animate-spin inline" />
-                            <span className="ml-2 text-sm">Uploading...</span>
-                          </div>
-                        )}
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap gap-2">
-                          {photos.map((photo) => (
-                            <button
-                              key={photo.id}
-                              onClick={() => setSelectedPhotoId(photo.id)}
-                              className={`relative w-16 h-16 rounded-md overflow-hidden border-2 transition-colors ${
-                                selectedPhotoId === photo.id 
-                                  ? "border-primary" 
-                                  : "border-transparent hover:border-muted-foreground/50"
-                              }`}
-                              data-testid={`button-select-photo-${photo.id}`}
-                            >
-                              <img
-                                src={`/api/thumbnails/photo-file/${photo.id}`}
-                                alt={photo.filename}
-                                className="w-full h-full object-cover"
-                              />
-                            </button>
-                          ))}
-                          <Label
-                            htmlFor="inline-photo-upload"
-                            className="w-16 h-16 flex items-center justify-center border-2 border-dashed rounded-md cursor-pointer hover:border-primary transition-colors"
-                          >
-                            {uploadPhotoMutation.isPending ? (
-                              <Loader2 className="h-5 w-5 animate-spin" />
-                            ) : (
-                              <Upload className="h-5 w-5 text-muted-foreground" />
-                            )}
-                          </Label>
-                          <input
-                            id="inline-photo-upload"
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            onChange={handlePhotoUpload}
-                            className="hidden"
-                            data-testid="input-inline-photo-upload"
-                          />
-                        </div>
-                        {!selectedPhotoId && (
-                          <p className="text-sm text-amber-600 dark:text-amber-400">
-                            Please select a photo above
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {!needsPhoto && (
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="includePerson"
-                      checked={includePerson}
-                      onCheckedChange={(checked) => setIncludePerson(checked === true)}
-                      data-testid="checkbox-include-person"
-                    />
-                    <Label htmlFor="includePerson" className="cursor-pointer flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      Include a person in the thumbnail (AI-generated)
-                    </Label>
-                  </div>
-                )}
+                      {!selectedPhotoId && (
+                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                          Click a photo above to select it
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <Button
                   onClick={handleGenerate}
-                  disabled={generateThumbnailMutation.isPending || !title.trim() || (needsPhoto && !selectedPhotoId)}
+                  disabled={generateThumbnailMutation.isPending || !title.trim() || !customPrompt.trim() || !selectedPhotoId}
                   className="w-full"
                   data-testid="button-generate"
                 >
                   {generateThumbnailMutation.isPending ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Generating (this may take 15-30 seconds)...
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
                     </>
                   ) : (
                     <>
-                      <Sparkles className="h-4 w-4 mr-2" />
+                      <Sparkles className="mr-2 h-4 w-4" />
                       Generate Thumbnail
                     </>
                   )}
                 </Button>
-
-                {provider === "instantid" && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    InstantID uses Replicate AI (~$0.02 per generation) to create thumbnails featuring your actual likeness.
-                  </p>
-                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -491,7 +444,7 @@ export default function ThumbnailGenerator() {
                           <p className="text-white text-sm font-medium truncate">{thumbnail.title}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <Badge variant="secondary" className="text-xs">
-                              {providerLabels[thumbnail.provider]?.label || thumbnail.provider}
+                              PhotoMaker
                             </Badge>
                             {thumbnail.style && (
                               <Badge variant="outline" className="text-xs text-white border-white/50">

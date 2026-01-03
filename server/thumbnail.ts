@@ -142,17 +142,22 @@ async function generateWithInstantId(
   console.log("Prompt:", prompt);
 
   // Use PhotoMaker model - reliable for face-based image generation
+  // PhotoMaker uses "img" as trigger word to reference the uploaded photo
+  // Keep prompt simple and focused for best results
+  const photoMakerPrompt = `A photo of a person img, ${prompt}`;
+  console.log("PhotoMaker prompt:", photoMakerPrompt);
+  
   const output = await replicate.run(
     "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
     {
       input: {
         input_image: dataUrl,
-        prompt: `A photo of a person img, ${prompt}`,
-        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+        prompt: photoMakerPrompt,
+        negative_prompt: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, deformed face, distorted face",
         style_name: "Photographic (Default)",
-        num_steps: 30,
-        style_strength_ratio: 20,
-        guidance_scale: 5,
+        num_steps: 50,
+        style_strength_ratio: 15,
+        guidance_scale: 7.5,
         num_outputs: 1,
         seed: Math.floor(Math.random() * 2147483647),
       }
@@ -335,72 +340,46 @@ export function registerThumbnailRoutes(app: Express): void {
         return res.status(401).json({ error: "Not authenticated" });
       }
 
-      const { title, style, provider, includePerson, customPrompt, userPhotoId } = req.body;
+      const { title, style, customPrompt, userPhotoId } = req.body;
 
       if (!title) {
         return res.status(400).json({ error: "Title is required" });
       }
 
-      if (!provider || !["dalle", "gemini", "instantid"].includes(provider)) {
-        return res.status(400).json({ error: "Valid provider (dalle, gemini, or instantid) is required" });
+      if (!customPrompt || typeof customPrompt !== "string" || !customPrompt.trim()) {
+        return res.status(400).json({ error: "Thumbnail description is required" });
       }
 
-      let imageResult: { b64_json: string; mimeType: string };
-
-      if (provider === "instantid") {
-        if (!userPhotoId) {
-          return res.status(400).json({ error: "Photo selection required for InstantID" });
-        }
-
-        const [photo] = await db.select().from(userProfilePhotos)
-          .where(eq(userProfilePhotos.id, userPhotoId));
-
-        if (!photo || photo.userId !== req.session.userId) {
-          return res.status(404).json({ error: "Photo not found" });
-        }
-
-        if (!fs.existsSync(photo.storagePath)) {
-          return res.status(404).json({ error: "Photo file not found" });
-        }
-
-        const photoBuffer = fs.readFileSync(photo.storagePath);
-        const photoBase64 = photoBuffer.toString("base64");
-        
-        const prompt = customPrompt || buildInstantIdPrompt(title, style);
-        imageResult = await generateWithInstantId(prompt, photoBase64, photo.mimeType);
-
-        const [thumbnail] = await db.insert(generatedThumbnails).values({
-          userId: req.session.userId,
-          title,
-          prompt,
-          style: style || null,
-          provider,
-          base64Data: imageResult.b64_json,
-          userPhotoId: userPhotoId,
-        }).returning();
-
-        return res.json({
-          ...thumbnail,
-          imageData: `data:${imageResult.mimeType};base64,${imageResult.b64_json}`,
-        });
+      if (!userPhotoId) {
+        return res.status(400).json({ error: "Photo selection required" });
       }
 
-      const prompt = customPrompt || buildPrompt(title, style, !!includePerson);
+      const [photo] = await db.select().from(userProfilePhotos)
+        .where(eq(userProfilePhotos.id, userPhotoId));
 
-      if (provider === "dalle") {
-        imageResult = await generateWithDalle(prompt);
-      } else {
-        imageResult = await generateWithGemini(prompt);
+      if (!photo || photo.userId !== req.session.userId) {
+        return res.status(404).json({ error: "Photo not found" });
       }
+
+      if (!fs.existsSync(photo.storagePath)) {
+        return res.status(404).json({ error: "Photo file not found" });
+      }
+
+      const photoBuffer = fs.readFileSync(photo.storagePath);
+      const photoBase64 = photoBuffer.toString("base64");
+      
+      // Use the user's custom prompt directly
+      const prompt = customPrompt.trim();
+      const imageResult = await generateWithInstantId(prompt, photoBase64, photo.mimeType);
 
       const [thumbnail] = await db.insert(generatedThumbnails).values({
         userId: req.session.userId,
         title,
         prompt,
         style: style || null,
-        provider,
+        provider: "instantid",
         base64Data: imageResult.b64_json,
-        userPhotoId: null,
+        userPhotoId: userPhotoId,
       }).returning();
 
       res.json({
