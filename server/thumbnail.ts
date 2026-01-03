@@ -154,13 +154,27 @@ async function generateWithInstantId(
         controlnet_conditioning_scale: 0.8,
       }
     }
-  ) as string[];
+  );
 
-  if (!output || output.length === 0) {
-    throw new Error("No image received from InstantID");
+  console.log("Replicate output:", JSON.stringify(output, null, 2));
+
+  let imageUrl: string;
+  
+  if (Array.isArray(output) && output.length > 0) {
+    imageUrl = output[0];
+  } else if (typeof output === "string") {
+    imageUrl = output;
+  } else if (output && typeof output === "object" && "output" in output) {
+    const innerOutput = (output as any).output;
+    imageUrl = Array.isArray(innerOutput) ? innerOutput[0] : innerOutput;
+  } else {
+    console.error("Unexpected output format:", output);
+    throw new Error("Unexpected response format from InstantID");
   }
 
-  const imageUrl = output[0];
+  if (!imageUrl || typeof imageUrl !== "string") {
+    throw new Error("No image URL received from InstantID");
+  }
   
   const https = await import("https");
   const http = await import("http");
