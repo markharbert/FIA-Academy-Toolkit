@@ -130,11 +130,66 @@ function buildInstantIdPrompt(title: string, style?: ThumbnailStyle): string {
 async function extractReplicateImage(output: unknown): Promise<Buffer> {
   let imageData: Buffer | undefined;
   
-  if (Array.isArray(output) && output.length > 0) {
+  console.log("Extracting image from Replicate output type:", typeof output);
+  if (output && typeof output === "object") {
+    console.log("Output constructor:", (output as any).constructor?.name);
+  }
+  
+  // Handle FileOutput object (has url() method and read() method)
+  if (output && typeof output === "object" && typeof (output as any).url === "function") {
+    const url = (output as any).url();
+    console.log("Got URL from FileOutput:", url);
+    if (url && typeof url === "string") {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      imageData = Buffer.from(arrayBuffer);
+    }
+  }
+  // Handle ReadableStream directly
+  else if (output && typeof output === "object" && 
+           ((output as any) instanceof ReadableStream || 
+            (output as any).constructor?.name === "ReadableStream")) {
+    console.log("Handling ReadableStream output");
+    const reader = (output as ReadableStream<Uint8Array>).getReader();
+    const chunks: Uint8Array[] = [];
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    
+    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
+    imageData = Buffer.from(combined);
+  }
+  // Handle object with blob() method
+  else if (output && typeof output === "object" && typeof (output as any).blob === "function") {
+    console.log("Handling blob output");
+    const blob = await (output as any).blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    imageData = Buffer.from(arrayBuffer);
+  }
+  // Handle array output
+  else if (Array.isArray(output) && output.length > 0) {
+    console.log("Handling array output with", output.length, "items");
     const firstOutput = output[0];
     
     if (firstOutput && typeof firstOutput === "object") {
-      if (firstOutput instanceof ReadableStream || 
+      if (typeof (firstOutput as any).url === "function") {
+        const url = (firstOutput as any).url();
+        if (url && typeof url === "string") {
+          const response = await fetch(url);
+          const arrayBuffer = await response.arrayBuffer();
+          imageData = Buffer.from(arrayBuffer);
+        }
+      }
+      else if (firstOutput instanceof ReadableStream || 
           (firstOutput.constructor && firstOutput.constructor.name === "ReadableStream")) {
         const reader = (firstOutput as ReadableStream<Uint8Array>).getReader();
         const chunks: Uint8Array[] = [];
@@ -178,12 +233,14 @@ async function extractReplicateImage(output: unknown): Promise<Buffer> {
   }
   // Handle single string URL output (some models return string directly)
   else if (typeof output === "string" && output.startsWith("http")) {
+    console.log("Handling string URL output");
     const response = await fetch(output);
     const arrayBuffer = await response.arrayBuffer();
     imageData = Buffer.from(arrayBuffer);
   }
 
   if (!imageData || imageData.length === 0) {
+    console.log("Failed to extract image. Output was:", JSON.stringify(output, null, 2)?.substring(0, 500));
     throw new Error("Could not extract image data from Replicate output");
   }
 
