@@ -15,7 +15,7 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const SYSTEM_KEYWORDS_EVERYWHERE_API_KEY = process.env.KEYWORDS_EVERYWHERE_API_KEY;
 const topicCache = new Map<string, { topics: InsertTopic[]; timestamp: number }>();
 const keywordDataCache = new Map<string, { data: KeywordData; timestamp: number }>();
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 async function getEffectiveKeywordsEverywhereApiKey(userId?: string): Promise<string | null> {
   if (userId) {
