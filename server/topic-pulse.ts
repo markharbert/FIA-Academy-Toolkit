@@ -170,8 +170,11 @@ async function getPlatformKeywordData(
   const cacheKey = `${dataSource}:${keyword.toLowerCase()}`;
   const cached = platformDataCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    console.log(`[KeywordsEverywhere] Using CACHED ${dataSource.toUpperCase()} data for "${keyword}"`);
     return cached.data;
   }
+  
+  console.log(`[KeywordsEverywhere] Making FRESH API call for ${dataSource.toUpperCase()} "${keyword}"`)
   
   try {
     const formData = new URLSearchParams();
@@ -196,6 +199,9 @@ async function getPlatformKeywordData(
     
     const data = await response.json();
     
+    // Log raw API response for debugging
+    console.log(`[KeywordsEverywhere] RAW ${dataSource.toUpperCase()} response for "${keyword}":`, JSON.stringify(data.data?.[0] || null));
+    
     if (data.data && Array.isArray(data.data) && data.data.length > 0) {
       const item = data.data[0] as KeywordsEverywhereResult;
       const keywordData: KeywordData = {
@@ -205,10 +211,11 @@ async function getPlatformKeywordData(
         trend: item.trend || null,
       };
       platformDataCache.set(cacheKey, { data: keywordData, timestamp: Date.now() });
-      console.log(`[KeywordsEverywhere] Fetched ${dataSource} data for "${keyword}": vol=${keywordData.volume}`);
+      console.log(`[KeywordsEverywhere] Fetched ${dataSource.toUpperCase()} data for "${keyword}": vol=${keywordData.volume}, cpc=${keywordData.cpc}, competition=${keywordData.competition}`);
       return keywordData;
     }
     
+    console.log(`[KeywordsEverywhere] No data returned for ${dataSource.toUpperCase()} "${keyword}"`);
     return defaultData;
   } catch (err) {
     console.error(`[KeywordsEverywhere] Error fetching ${dataSource} data:`, err);
