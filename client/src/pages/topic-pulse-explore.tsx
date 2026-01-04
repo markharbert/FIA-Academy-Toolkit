@@ -169,12 +169,14 @@ function PlatformSection({
   platform, 
   data, 
   icon, 
-  color 
+  color,
+  platformDescription
 }: { 
   platform: string; 
   data: PlatformData | null;
   icon: JSX.Element;
   color: string;
+  platformDescription: string;
 }) {
   const trendInfo = getTrendFromData(data?.trend);
   const competitionInfo = data?.competition !== null && data?.competition !== undefined
@@ -182,27 +184,30 @@ function PlatformSection({
     : { label: "N/A", color: "text-muted-foreground", value: "" };
   
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
         <span className={color}>{icon}</span>
-        <span className="text-sm font-medium">{platform}</span>
+        <div>
+          <span className="text-sm font-semibold">{platform} Search Data</span>
+          <p className="text-xs text-muted-foreground">{platformDescription}</p>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <PlatformMetricCard
-          label="Volume"
+          label={`${platform} Volume`}
           value={formatSearchVolume(data?.volume)}
           helpText={`Estimated monthly searches on ${platform}`}
           colorClass={data?.volume ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}
           testId={`text-${platform.toLowerCase()}-volume`}
         />
         <PlatformMetricCard
-          label="CPC"
+          label={`${platform} CPC`}
           value={formatCPC(data?.cpc)}
           helpText={`Cost per click on ${platform}. Higher = more commercial value.`}
           testId={`text-${platform.toLowerCase()}-cpc`}
         />
         <PlatformMetricCard
-          label="Competition"
+          label={`${platform} Competition`}
           value={competitionInfo.value ? `${competitionInfo.label} (${competitionInfo.value})` : competitionInfo.label}
           helpText={`Ad competition on ${platform} (0-1 scale)`}
           colorClass={competitionInfo.color}
@@ -210,13 +215,13 @@ function PlatformSection({
         />
         <div className="p-2 rounded-md bg-muted/30">
           <div className="flex items-center gap-1 mb-0.5">
-            <span className="text-xs text-muted-foreground">Trend</span>
+            <span className="text-xs text-muted-foreground">{platform} Trend</span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
-                <p className="text-xs">Search interest trend over recent months</p>
+                <p className="text-xs">Search interest trend on {platform} over recent months</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -345,6 +350,7 @@ function PlatformKeywordDataSection({
             data={googleData} 
             icon={<SiGoogle className="h-4 w-4" />}
             color="text-blue-500"
+            platformDescription="Google Search keyword metrics"
           />
         </TabsContent>
 
@@ -355,6 +361,7 @@ function PlatformKeywordDataSection({
               data={youtubeData} 
               icon={<SiYoutube className="h-4 w-4" />}
               color="text-red-500"
+              platformDescription="YouTube search and video keyword metrics"
             />
           ) : (
             <div className="p-4 rounded-md bg-muted/30 text-center">
@@ -380,6 +387,7 @@ function PlatformKeywordDataSection({
               data={pinterestData} 
               icon={<SiPinterest className="h-4 w-4" />}
               color="text-[#E60023]"
+              platformDescription="Pinterest search and pin keyword metrics"
             />
           ) : (
             <div className="p-4 rounded-md bg-muted/30 text-center">
