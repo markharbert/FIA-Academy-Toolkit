@@ -151,7 +151,7 @@ async function getYouTubeAutocomplete(query: string): Promise<string[]> {
   }
 }
 
-type DataSource = "gkp" | "youtube" | "pinterest";
+type DataSource = "gkp" | "youtube" | "pinterest" | "tiktok";
 
 const platformDataCache = new Map<string, { data: KeywordData; timestamp: number }>();
 
@@ -666,6 +666,7 @@ interface PlatformData {
   google: KeywordData;
   youtube: KeywordData;
   pinterest: KeywordData;
+  tiktok: KeywordData;
 }
 
 export async function fetchPlatformDataForTopic(
@@ -679,9 +680,10 @@ export async function fetchPlatformDataForTopic(
   
   const keyword = topic.keywordQuery;
   
-  const [youtubeData, pinterestData] = await Promise.all([
+  const [youtubeData, pinterestData, tiktokData] = await Promise.all([
     getPlatformKeywordData(keyword, "youtube", userId),
     getPlatformKeywordData(keyword, "pinterest", userId),
+    getPlatformKeywordData(keyword, "tiktok", userId),
   ]);
   
   const googleData: KeywordData = {
@@ -700,6 +702,10 @@ export async function fetchPlatformDataForTopic(
     youtubeCpc: youtubeData.cpc,
     youtubeCompetition: youtubeData.competition,
     youtubeTrendData: youtubeData.trend,
+    tiktokVolume: tiktokData.volume,
+    tiktokCpc: tiktokData.cpc,
+    tiktokCompetition: tiktokData.competition,
+    tiktokTrendData: tiktokData.trend,
   });
   
   const updatedTopic = await storage.getTopic(topicId);
@@ -710,6 +716,7 @@ export async function fetchPlatformDataForTopic(
       google: googleData,
       youtube: youtubeData,
       pinterest: pinterestData,
+      tiktok: tiktokData,
     }
   };
 }

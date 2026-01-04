@@ -618,6 +618,10 @@ export const topics = pgTable("topics", {
   youtubeCpc: real("youtube_cpc"),
   youtubeCompetition: real("youtube_competition"),
   youtubeTrendData: jsonb("youtube_trend_data").$type<TrendDataPoint[]>(),
+  tiktokVolume: integer("tiktok_volume"),
+  tiktokCpc: real("tiktok_cpc"),
+  tiktokCompetition: real("tiktok_competition"),
+  tiktokTrendData: jsonb("tiktok_trend_data").$type<TrendDataPoint[]>(),
 });
 
 export const insertTopicSchema = createInsertSchema(topics).omit({

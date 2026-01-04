@@ -14,7 +14,7 @@ import {
   FileText, Sparkles, Lightbulb, HelpCircle, CheckCircle2, AlertCircle,
   ArrowUpDown, ArrowDown, ArrowUp, X, Search, Brain, ChevronDown
 } from "lucide-react";
-import { SiPinterest, SiYoutube, SiGoogle } from "react-icons/si";
+import { SiPinterest, SiYoutube, SiGoogle, SiTiktok } from "react-icons/si";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -129,6 +129,7 @@ interface PlatformDataResponse {
     google: PlatformData;
     youtube: PlatformData;
     pinterest: PlatformData;
+    tiktok: PlatformData;
   };
 }
 
@@ -281,6 +282,13 @@ function PlatformKeywordDataSection({
     trend: topic.pinterestTrendData as TrendDataPoint[] ?? null,
   } : null);
 
+  const tiktokData: PlatformData | null = platformData?.tiktok ?? (topic.tiktokVolume !== null && topic.tiktokVolume !== undefined ? {
+    volume: topic.tiktokVolume ?? null,
+    cpc: topic.tiktokCpc ?? null,
+    competition: topic.tiktokCompetition ?? null,
+    trend: topic.tiktokTrendData as TrendDataPoint[] ?? null,
+  } : null);
+
   const fetchPlatformData = async () => {
     if (isLoading || hasFetched) return;
     setIsLoading(true);
@@ -302,7 +310,7 @@ function PlatformKeywordDataSection({
     }
   };
 
-  const needsFetch = !youtubeData || !pinterestData;
+  const needsFetch = !youtubeData || !pinterestData || !tiktokData;
 
   return (
     <div className="space-y-4">
@@ -329,7 +337,7 @@ function PlatformKeywordDataSection({
       </div>
 
       <Tabs defaultValue="google" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="google" className="gap-1.5" data-testid="tab-google">
             <SiGoogle className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Google</span>
@@ -341,6 +349,10 @@ function PlatformKeywordDataSection({
           <TabsTrigger value="pinterest" className="gap-1.5" data-testid="tab-pinterest">
             <SiPinterest className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Pinterest</span>
+          </TabsTrigger>
+          <TabsTrigger value="tiktok" className="gap-1.5" data-testid="tab-tiktok">
+            <SiTiktok className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">TikTok</span>
           </TabsTrigger>
         </TabsList>
 
@@ -401,6 +413,32 @@ function PlatformKeywordDataSection({
               >
                 {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <SiPinterest className="h-3 w-3 mr-1.5" />}
                 Load Pinterest Data
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="tiktok" className="mt-3" data-testid="section-tiktok-data">
+          {tiktokData ? (
+            <PlatformSection 
+              platform="TikTok" 
+              data={tiktokData} 
+              icon={<SiTiktok className="h-4 w-4" />}
+              color="text-foreground"
+              platformDescription="TikTok search and video keyword metrics"
+            />
+          ) : (
+            <div className="p-4 rounded-md bg-muted/30 text-center">
+              <p className="text-sm text-muted-foreground mb-2">TikTok data not loaded yet</p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={fetchPlatformData}
+                disabled={isLoading}
+                data-testid="button-load-tiktok"
+              >
+                {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <SiTiktok className="h-3 w-3 mr-1.5" />}
+                Load TikTok Data
               </Button>
             </div>
           )}

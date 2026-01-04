@@ -228,6 +228,10 @@ export interface IStorage {
     youtubeCpc?: number | null;
     youtubeCompetition?: number | null;
     youtubeTrendData?: any;
+    tiktokVolume?: number | null;
+    tiktokCpc?: number | null;
+    tiktokCompetition?: number | null;
+    tiktokTrendData?: any;
   }): Promise<Topic | undefined>;
   
   // Topic Pulse Finder: Saved Topics
@@ -1158,6 +1162,10 @@ export class DatabaseStorage implements IStorage {
     youtubeCpc?: number | null;
     youtubeCompetition?: number | null;
     youtubeTrendData?: any;
+    tiktokVolume?: number | null;
+    tiktokCpc?: number | null;
+    tiktokCompetition?: number | null;
+    tiktokTrendData?: any;
   }): Promise<Topic | undefined> {
     const [result] = await db.update(topics)
       .set({
@@ -1169,6 +1177,10 @@ export class DatabaseStorage implements IStorage {
         youtubeCpc: data.youtubeCpc,
         youtubeCompetition: data.youtubeCompetition,
         youtubeTrendData: data.youtubeTrendData,
+        tiktokVolume: data.tiktokVolume,
+        tiktokCpc: data.tiktokCpc,
+        tiktokCompetition: data.tiktokCompetition,
+        tiktokTrendData: data.tiktokTrendData,
       })
       .where(eq(topics.id, id))
       .returning();
