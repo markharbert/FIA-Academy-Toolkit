@@ -456,25 +456,33 @@ function getOpportunityLevel(score: number): { color: string; label: string; bgC
   return { color: "text-red-600 dark:text-red-400", label: "Challenging", bgClass: "bg-red-500/10" };
 }
 
-function formatSearchVolume(volume: number | null | undefined): string {
+function formatSearchVolume(volume: number | string | null | undefined): string {
   if (volume === null || volume === undefined) return "N/A";
-  if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
-  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
-  return volume.toString();
+  const numVolume = typeof volume === 'string' ? parseFloat(volume) : volume;
+  if (isNaN(numVolume)) return "N/A";
+  if (numVolume >= 1000000) return `${(numVolume / 1000000).toFixed(1)}M`;
+  if (numVolume >= 1000) return `${(numVolume / 1000).toFixed(1)}K`;
+  return numVolume.toString();
 }
 
-function formatCPC(cpc: number | null | undefined): string {
+function formatCPC(cpc: number | string | null | undefined): string {
   if (cpc === null || cpc === undefined) return "N/A";
-  return `$${cpc.toFixed(2)}`;
+  const numCpc = typeof cpc === 'string' ? parseFloat(cpc) : cpc;
+  if (isNaN(numCpc)) return "N/A";
+  return `$${numCpc.toFixed(2)}`;
 }
 
-function formatCompetition(competition: number | null | undefined): { label: string; color: string; value: string } {
+function formatCompetition(competition: number | string | null | undefined): { label: string; color: string; value: string } {
   if (competition === null || competition === undefined) {
     return { label: "N/A", color: "text-muted-foreground", value: "" };
   }
-  const percent = Math.round(competition * 100);
-  if (competition <= 0.33) return { label: "Low", color: "text-green-600 dark:text-green-400", value: `${percent}%` };
-  if (competition <= 0.66) return { label: "Medium", color: "text-yellow-600 dark:text-yellow-400", value: `${percent}%` };
+  const numComp = typeof competition === 'string' ? parseFloat(competition) : competition;
+  if (isNaN(numComp)) {
+    return { label: "N/A", color: "text-muted-foreground", value: "" };
+  }
+  const percent = Math.round(numComp * 100);
+  if (numComp <= 0.33) return { label: "Low", color: "text-green-600 dark:text-green-400", value: `${percent}%` };
+  if (numComp <= 0.66) return { label: "Medium", color: "text-yellow-600 dark:text-yellow-400", value: `${percent}%` };
   return { label: "High", color: "text-red-600 dark:text-red-400", value: `${percent}%` };
 }
 
