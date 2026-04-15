@@ -39,23 +39,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { 
-  Settings, Link2, Unlink, Loader2, CheckCircle, XCircle, AlertCircle,
+  Loader2, CheckCircle, AlertCircle,
   Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
-  CheckCircle2, LogOut, RefreshCw, Tag, Check, ChevronsUpDown, Search, Mail, Eye, Info, Clock
+  CheckCircle2, LogOut, RefreshCw, Search, Mail, Eye, Info, Clock
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -65,9 +52,6 @@ interface AdminStats {
   newUsersLast7Days: number;
   totalSessions: number;
   sessionsLast7Days: number;
-  keapStatus: string;
-  keapTokenExpiresAt: string | null;
-  keapLastError: string | null;
 }
 
 interface OverviewStats {
@@ -102,8 +86,6 @@ interface AdminUser {
   disabledAt: string | null;
   disabledReason: string | null;
   emailConsentAt: string | null;
-  keapSyncStatus: string | null;
-  keapContactId: string | null;
   lastLoginAt: string | null;
   providers: string[];
   totalVideos: number;
@@ -145,15 +127,6 @@ interface UserDetails {
   providers: string[];
 }
 
-interface KeapStatus {
-  connected: boolean;
-  connectedAt: string | null;
-  lastError: string | null;
-  tokenExpiresAt: string | null;
-  defaultTag: { id: number; name: string } | null;
-  lastTagSyncAt: string | null;
-}
-
 interface KeywordsEverywhereStatus {
   apiConfigured: boolean;
   accountCredits: number | null;
@@ -168,19 +141,6 @@ interface KeywordsEverywhereStatus {
     creditsThisMonth: number;
     creditsTotal: number;
   }>;
-}
-
-interface KeapTag {
-  id: number;
-  name: string;
-  description?: string;
-}
-
-interface TagCacheInfo {
-  source: "cache" | "keap";
-  cachedAt: string | null;
-  expiresAt: string | null;
-  warning?: string;
 }
 
 interface SessionDetail {
@@ -249,14 +209,10 @@ export default function AdminPage() {
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityNextCursor, setActivityNextCursor] = useState<string | null>(null);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
-  const [keapStatus, setKeapStatus] = useState<KeapStatus | null>(null);
   const [keStatus, setKeStatus] = useState<KeywordsEverywhereStatus | null>(null);
   const [keStatusLoading, setKeStatusLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [keapTags, setKeapTags] = useState<KeapTag[]>([]);
-  const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
-  
   // User management state
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -285,13 +241,6 @@ export default function AdminPage() {
     action: () => Promise<void>;
   } | null>(null);
 
-  // Tag cache info
-  const [tagCacheInfo, setTagCacheInfo] = useState<TagCacheInfo | null>(null);
-  
-  // Tag combobox state
-  const [tagComboOpen, setTagComboOpen] = useState(false);
-  const [tagSearchValue, setTagSearchValue] = useState("");
-  
   // Session detail drawer
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
@@ -306,34 +255,6 @@ export default function AdminPage() {
   const [actionsLoadingMore, setActionsLoadingMore] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const keapSuccess = params.get("keap_success");
-    const keapError = params.get("keap_error");
-    
-    if (keapSuccess === "connected") {
-      toast({
-        title: "Keap Connected",
-        description: "Your Keap account has been successfully connected.",
-      });
-      window.history.replaceState({}, "", "/admin");
-      fetchStats();
-      fetchKeapStatus();
-    } else if (keapError) {
-      const errorMessages: Record<string, string> = {
-        oauth_denied: "You denied access to Keap. Please try again.",
-        no_code: "No authorization code received from Keap.",
-        token_exchange: "Failed to complete Keap connection. Please try again.",
-      };
-      toast({
-        title: "Connection Failed",
-        description: errorMessages[keapError] || "An error occurred connecting to Keap.",
-        variant: "destructive",
-      });
-      window.history.replaceState({}, "", "/admin");
-    }
-  }, [toast]);
-
-  useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {
       setLocation("/dashboard");
       return;
@@ -341,36 +262,11 @@ export default function AdminPage() {
     
     if (user?.isAdmin) {
       fetchStats();
-      fetchKeapStatus();
       fetchKeStatus();
       fetchOverviewStats();
       fetchActivityFeed();
     }
   }, [user, authLoading, setLocation]);
-
-  // Auto-load tags when Keap is connected
-  useEffect(() => {
-    if (keapStatus?.connected && keapTags.length === 0) {
-      // Silently load tags from cache when page loads
-      (async () => {
-        try {
-          const res = await fetch("/api/admin/keap/tags", { credentials: "include" });
-          if (res.ok) {
-            const data = await res.json();
-            setKeapTags(data.tags || []);
-            setTagCacheInfo({
-              source: data.source,
-              cachedAt: data.cachedAt,
-              expiresAt: data.expiresAt,
-              warning: data.warning,
-            });
-          }
-        } catch (err) {
-          console.error("Failed to auto-load tags:", err);
-        }
-      })();
-    }
-  }, [keapStatus?.connected]);
 
   const fetchStats = async () => {
     try {
@@ -487,18 +383,6 @@ export default function AdminPage() {
     }
   }, [selectedSessionId]);
 
-  const fetchKeapStatus = async () => {
-    try {
-      const res = await fetch("/api/admin/keap/status", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setKeapStatus(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch Keap status:", err);
-    }
-  };
-
   const fetchKeStatus = async () => {
     try {
       setKeStatusLoading(true);
@@ -601,153 +485,6 @@ export default function AdminPage() {
     setActionsUserId(user.id);
     setActionsUser(user);
     fetchUserActions(user.id);
-  };
-
-  const handleConnect = async () => {
-    try {
-      setActionLoading("connect");
-      const res = await fetch("/api/admin/keap/auth-url", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        // Use window.open for external OAuth - works better in iframes/webviews
-        const authWindow = window.open(data.authUrl, "_blank");
-        if (!authWindow) {
-          // Fallback if popup was blocked
-          window.location.href = data.authUrl;
-        }
-      } else {
-        const error = await res.json();
-        toast({
-          title: "Error",
-          description: error.message || "Failed to get Keap auth URL",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to connect to Keap",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    try {
-      setActionLoading("disconnect");
-      const res = await fetch("/api/admin/keap/disconnect", {
-        method: "POST",
-        credentials: "include",
-      });
-      if (res.ok) {
-        toast({
-          title: "Disconnected",
-          description: "Keap has been disconnected.",
-        });
-        setKeapStatus({ connected: false, connectedAt: null, lastError: null, tokenExpiresAt: null, defaultTag: null, lastTagSyncAt: null });
-        setKeapTags([]);
-        fetchStats();
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to disconnect Keap",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleRefreshTags = async () => {
-    try {
-      setActionLoading("refresh-tags");
-      const res = await fetch("/api/admin/keap/tags/refresh", { 
-        method: "POST",
-        credentials: "include" 
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        setKeapTags(data.tags || []);
-        setTagCacheInfo({
-          source: data.source,
-          cachedAt: data.cachedAt,
-          expiresAt: data.expiresAt,
-          warning: data.warning,
-        });
-        
-        toast({
-          title: "Tags Refreshed",
-          description: `Loaded ${data.tags?.length || 0} tags from Keap.`,
-        });
-        fetchKeapStatus();
-      } else {
-        const error = await res.json();
-        toast({
-          title: "Error",
-          description: error.message || "Failed to refresh tags",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to refresh tags from Keap",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleSetDefaultTag = async () => {
-    if (!selectedTagId) {
-      toast({
-        title: "Error",
-        description: "Please select a tag first",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    const tag = keapTags.find(t => t.id === selectedTagId);
-    if (!tag) return;
-    
-    try {
-      setActionLoading("set-tag");
-      const res = await fetch("/api/admin/keap/default-tag", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagId: tag.id, tagName: tag.name }),
-        credentials: "include",
-      });
-      
-      if (res.ok) {
-        toast({
-          title: "Default Tag Set",
-          description: `"${tag.name}" will be applied to new signups.`,
-        });
-        fetchKeapStatus();
-      } else {
-        const error = await res.json();
-        toast({
-          title: "Error",
-          description: error.message || "Failed to set default tag",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to set default tag",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(null);
-    }
   };
 
   const handleUpdateUserRole = async (userId: string, newRole: "user" | "admin") => {
@@ -858,41 +595,6 @@ export default function AdminPage() {
     }
   };
 
-  const handleKeapSync = async (userId: string) => {
-    try {
-      setActionLoading(`keap-${userId}`);
-      const res = await fetch(`/api/admin/users/${userId}/keap-sync`, {
-        method: "POST",
-        credentials: "include",
-      });
-      
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast({
-          title: "Synced to Keap",
-          description: `Contact ID: ${data.contactId}`,
-        });
-        if (selectedUserId === userId) {
-          fetchUserDetails(userId);
-        }
-      } else {
-        toast({
-          title: "Sync Failed",
-          description: data.message || "Failed to sync to Keap",
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: "Failed to sync user to Keap",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const getUserDisplayName = (u: AdminUser) => {
     if (u.displayName) return u.displayName;
     if (u.firstName || u.lastName) return `${u.firstName || ""} ${u.lastName || ""}`.trim();
@@ -932,7 +634,6 @@ export default function AdminPage() {
         <TabsList>
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
-          <TabsTrigger value="keap" data-testid="tab-keap">Keap Integration</TabsTrigger>
           <TabsTrigger value="keywords" data-testid="tab-keywords">Keywords Everywhere</TabsTrigger>
         </TabsList>
 
@@ -1263,222 +964,6 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="keap">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${keapStatus?.connected ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"}`}>
-                  <Settings className={`h-5 w-5 ${keapStatus?.connected ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"}`} />
-                </div>
-                <div>
-                  <CardTitle>Keap Integration</CardTitle>
-                  <CardDescription>
-                    Connect to Keap to automatically add new users to your email list
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="flex items-center gap-3">
-                  <span className="font-medium">Connection Status:</span>
-                  {keapStatus?.connected ? (
-                    <Badge className="gap-1 bg-green-600 text-white dark:bg-green-600">
-                      <CheckCircle className="h-3 w-3" />
-                      Connected
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="gap-1">
-                      <XCircle className="h-3 w-3" />
-                      Not Connected
-                    </Badge>
-                  )}
-                </div>
-                {keapStatus?.connectedAt && (
-                  <span className="text-sm text-muted-foreground">
-                    Connected {format(new Date(keapStatus.connectedAt), "MMM d, yyyy")}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                {!keapStatus?.connected ? (
-                  <Button
-                    onClick={handleConnect}
-                    disabled={actionLoading === "connect"}
-                    data-testid="button-connect-keap"
-                  >
-                    {actionLoading === "connect" ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Link2 className="mr-2 h-4 w-4" />
-                    )}
-                    Connect Keap
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    onClick={handleDisconnect}
-                    disabled={!!actionLoading}
-                    data-testid="button-disconnect-keap"
-                  >
-                    {actionLoading === "disconnect" ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Unlink className="mr-2 h-4 w-4" />
-                    )}
-                    Disconnect Keap
-                  </Button>
-                )}
-              </div>
-
-              {keapStatus?.lastError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/50">
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-5 w-5 shrink-0 text-red-600 dark:text-red-500" />
-                    <div className="text-sm">
-                      <p className="font-medium text-red-800 dark:text-red-200">Last Error</p>
-                      <p className="mt-1 text-red-700 dark:text-red-300">{keapStatus.lastError}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {keapStatus?.connected && (
-                <div className="space-y-4 border-t pt-4">
-                  <h4 className="font-medium">Default Tag for New Signups</h4>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Popover open={tagComboOpen} onOpenChange={(open) => {
-                      setTagComboOpen(open);
-                      if (!open) setTagSearchValue("");
-                    }}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={tagComboOpen}
-                          className="w-72 justify-between"
-                          data-testid="select-keap-tag"
-                          disabled={keapTags.length === 0}
-                        >
-                          {selectedTagId || keapStatus.defaultTag?.id
-                            ? keapTags.find((tag) => tag.id === (selectedTagId || keapStatus.defaultTag?.id))?.name || "Select a tag..."
-                            : "Select a tag..."}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-72 p-0" align="start">
-                        <Command shouldFilter={false}>
-                          <CommandInput 
-                            placeholder="Search tags..." 
-                            value={tagSearchValue}
-                            onValueChange={setTagSearchValue}
-                            data-testid="input-tag-search"
-                          />
-                          <CommandList>
-                            <CommandEmpty>No tags found.</CommandEmpty>
-                            <CommandGroup>
-                              {keapTags
-                                .filter((tag) => 
-                                  tag.name.toLowerCase().includes(tagSearchValue.toLowerCase())
-                                )
-                                .sort((a, b) => a.name.localeCompare(b.name))
-                                .map((tag) => (
-                                  <CommandItem
-                                    key={tag.id}
-                                    value={tag.id.toString()}
-                                    onSelect={() => {
-                                      setSelectedTagId(tag.id);
-                                      setTagComboOpen(false);
-                                      setTagSearchValue("");
-                                    }}
-                                    data-testid={`tag-option-${tag.id}`}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        (selectedTagId || keapStatus.defaultTag?.id) === tag.id 
-                                          ? "opacity-100" 
-                                          : "opacity-0"
-                                      )}
-                                    />
-                                    {tag.name}
-                                  </CommandItem>
-                                ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                    <Button
-                      variant="outline"
-                      onClick={handleRefreshTags}
-                      disabled={!!actionLoading}
-                      data-testid="button-refresh-tags"
-                    >
-                      {actionLoading === "refresh-tags" ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                      )}
-                      Refresh from Keap
-                    </Button>
-                    <Button
-                      onClick={handleSetDefaultTag}
-                      disabled={!!actionLoading || !selectedTagId}
-                      data-testid="button-set-default-tag"
-                    >
-                      {actionLoading === "set-tag" ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Tag className="mr-2 h-4 w-4" />
-                      )}
-                      Set Default Tag
-                    </Button>
-                  </div>
-                  {keapStatus.defaultTag && (
-                    <p className="text-sm text-muted-foreground">
-                      Current default: <span className="font-medium">{keapStatus.defaultTag.name}</span>
-                    </p>
-                  )}
-                  {tagCacheInfo && (
-                    <div className="text-sm text-muted-foreground space-y-1">
-                      <p>
-                        Tags loaded from: <span className="font-medium">{tagCacheInfo.source === "cache" ? "cached data" : "Keap API"}</span>
-                        {tagCacheInfo.cachedAt && ` (cached ${format(new Date(tagCacheInfo.cachedAt), "MMM d, yyyy 'at' h:mm a")})`}
-                      </p>
-                      {tagCacheInfo.warning && (
-                        <p className="text-amber-600 dark:text-amber-400">{tagCacheInfo.warning}</p>
-                      )}
-                    </div>
-                  )}
-                  {!tagCacheInfo && keapStatus.lastTagSyncAt && (
-                    <p className="text-sm text-muted-foreground">
-                      Tags last synced: {format(new Date(keapStatus.lastTagSyncAt), "MMM d, yyyy 'at' h:mm a")}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {!keapStatus?.connected && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/50">
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
-                    <div className="text-sm">
-                      <p className="font-medium text-amber-800 dark:text-amber-200">Setup Requirements</p>
-                      <ul className="mt-2 list-inside list-disc space-y-1 text-amber-700 dark:text-amber-300">
-                        <li>Set KEAP_CLIENT_ID and KEAP_CLIENT_SECRET in environment</li>
-                        <li>Set KEAP_REDIRECT_URI to your callback URL</li>
-                        <li>After connecting, set a default tag for new signups</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
               )}
             </CardContent>
           </Card>
@@ -1920,14 +1405,7 @@ export default function AdminPage() {
                     <span className="text-muted-foreground">Email Consent:</span>
                     <span>{userDetails.user.emailConsentAt ? format(new Date(userDetails.user.emailConsentAt), "MMM d, yyyy") : "No"}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Keap Contact ID:</span>
-                    <span>{userDetails.user.keapContactId || "-"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Keap Sync Status:</span>
-                    <span>{userDetails.user.keapSyncStatus || "-"}</span>
-                  </div>
+
                 </div>
               </div>
 
@@ -2049,27 +1527,7 @@ export default function AdminPage() {
                     Force Logout
                   </Button>
                   
-                  {userDetails.user.email && userDetails.user.emailConsentAt && keapStatus?.connected && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setConfirmDialog({
-                        open: true,
-                        title: "Sync to Keap",
-                        description: "This will create or update this user's contact in Keap.",
-                        action: () => handleKeapSync(userDetails.user.id),
-                      })}
-                      disabled={actionLoading?.startsWith("keap")}
-                      data-testid="button-keap-sync"
-                    >
-                      {actionLoading === `keap-${userDetails.user.id}` ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                      )}
-                      Sync to Keap
-                    </Button>
-                  )}
+
                 </div>
               </div>
             </div>

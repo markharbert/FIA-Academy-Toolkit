@@ -26,10 +26,6 @@ export const users = pgTable("users", {
   emailVerifiedAt: timestamp("email_verified_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-  keapContactId: text("keap_contact_id"),
-  keapLastSyncAt: timestamp("keap_last_sync_at"),
-  keapSyncStatus: text("keap_sync_status").$type<"synced" | "pending" | "failed">(),
-  keapSyncError: text("keap_sync_error"),
   emailConsentAt: timestamp("email_consent_at"),
   emailConsentIp: text("email_consent_ip"),
   isAdmin: boolean("is_admin").default(false),
@@ -63,24 +59,6 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   requestIp: text("request_ip"),
   userAgent: text("user_agent"),
-});
-
-// System settings table for Keap OAuth tokens
-export const systemSettings = pgTable("system_settings", {
-  id: varchar("id").primaryKey().default(sql`'keap_integration'`),
-  keapAccessToken: text("keap_access_token"),
-  keapRefreshToken: text("keap_refresh_token"),
-  keapTokenExpiresAt: timestamp("keap_token_expires_at"),
-  keapConnectedAt: timestamp("keap_connected_at"),
-  keapLastRefreshAt: timestamp("keap_last_refresh_at"),
-  keapLastError: text("keap_last_error"),
-  keapDefaultTagId: integer("keap_default_tag_id"),
-  keapDefaultTagName: text("keap_default_tag_name"),
-  keapLastTagSyncAt: timestamp("keap_last_tag_sync_at"),
-  keapTagsCacheJson: text("keap_tags_cache_json"),
-  keapTagsCachedAt: timestamp("keap_tags_cached_at"),
-  keapTagsCacheExpiresAt: timestamp("keap_tags_cache_expires_at"),
-  keapLastTagFetchError: text("keap_last_tag_fetch_error"),
 });
 
 // Admin audit log table for tracking admin actions
@@ -125,9 +103,6 @@ export const userActionTypes = [
   "login_success",
   "logout",
   "account_updated",
-  "keap_sync_attempted",
-  "keap_sync_succeeded",
-  "keap_sync_failed",
   "video_uploaded",
   "upload_failed",
   "processing_started",
@@ -435,9 +410,6 @@ export const loginSchema = z.object({
 
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
-
-// System settings types
-export type SystemSettings = typeof systemSettings.$inferSelect;
 
 // User identity types
 export type UserIdentity = typeof userIdentities.$inferSelect;

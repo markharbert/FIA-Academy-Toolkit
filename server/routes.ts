@@ -15,21 +15,6 @@ import fs from "fs";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
-import {
-  getKeapAuthUrl,
-  generateOAuthState,
-  validateOAuthState,
-  exchangeCodeForTokens,
-  isKeapConnected,
-  disconnectKeap,
-  createOrUpdateContact,
-  fetchKeapTags,
-  getKeapTagsWithCache,
-  setDefaultTag,
-  getDefaultTag,
-  syncUserToKeap,
-  applyTagToUser,
-} from "./keap";
 import { logUserAction, ActionLabels } from "./userActionLog";
 import { processSession, subscribeToSession } from "./processing";
 import { generateSessionPdfBuffer } from "./pdf";
@@ -174,22 +159,6 @@ export async function registerRoutes(
       });
 
       req.session.userId = user.id;
-
-      if (emailConsent) {
-        const keapConnected = await isKeapConnected();
-        if (keapConnected) {
-          createOrUpdateContact(email, firstName, lastName)
-            .then(async (contactId) => {
-              if (contactId) {
-                await storage.updateUser(user.id, { keapContactId: String(contactId) });
-                console.log(`Synced user ${email} to Keap with contact ID: ${contactId}`);
-              }
-            })
-            .catch((err) => {
-              console.error(`Failed to sync user ${email} to Keap:`, err);
-            });
-        }
-      }
 
       res.status(201).json({ user: { id: user.id, email: user.email } });
     } catch (err) {
@@ -573,29 +542,7 @@ export async function registerRoutes(
   app.get("/api/admin/stats", requireAdmin, async (req: Request, res: Response) => {
     try {
       const stats = await storage.getAdminStats();
-      const keapSettings = await storage.getSystemSettings();
-      
-      let keapStatus = "not_connected";
-      if (keapSettings?.keapAccessToken) {
-        const expiresAt = keapSettings.keapTokenExpiresAt;
-        if (expiresAt) {
-          const hoursUntilExpiry = (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60);
-          if (hoursUntilExpiry < 24) {
-            keapStatus = "token_expiring_soon";
-          } else {
-            keapStatus = "connected";
-          }
-        } else {
-          keapStatus = "connected";
-        }
-      }
-      
-      res.json({
-        ...stats,
-        keapStatus,
-        keapTokenExpiresAt: keapSettings?.keapTokenExpiresAt || null,
-        keapLastError: keapSettings?.keapLastError || null,
-      });
+      res.json(stats);
     } catch (err) {
       console.error("Admin stats error:", err);
       res.status(500).json({ message: "Failed to get admin stats" });
@@ -772,7 +719,7 @@ export async function registerRoutes(
   // List users with search, filter, sort, pagination
   app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { search, role, status, provider, consent, keapStatus, sort, page, pageSize } = req.query;
+      const { search, role, status, provider, consent, sort, page, pageSize } = req.query;
       
       const result = await storage.getAllUsers({
         search: search as string,
@@ -780,7 +727,6 @@ export async function registerRoutes(
         status: status as string,
         provider: provider as string,
         consent: consent as string,
-        keapStatus: keapStatus as string,
         sort: sort as string,
         page: page ? parseInt(page as string) : undefined,
         pageSize: pageSize ? parseInt(pageSize as string) : undefined,
@@ -999,270 +945,6 @@ export async function registerRoutes(
     }
   });
 
-  // Trigger Keap sync for a specific user
-  app.post("/api/admin/users/:id/keap-sync", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { id } = req.params;
-      const adminUser = (req as any).adminUser;
-      
-      const targetUser = await storage.getUser(id);
-      if (!targetUser) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      if (!targetUser.email) {
-        return res.status(400).json({ message: "User has no email address" });
-      }
-      
-      // Log attempt
-      logUserAction({
-        userId: id,
-        actionType: "keap_sync_attempted",
-        actionLabel: ActionLabels.keap_sync_attempted,
-        entityType: "keap",
-        metadata: { triggeredBy: "admin", adminUserId: adminUser.id },
-        req,
-      });
-      
-      // Check if Keap is connected
-      const keapConnected = await isKeapConnected();
-      if (!keapConnected) {
-        return res.status(400).json({ message: "Keap is not connected" });
-      }
-      
-      // Create or update contact
-      const contactId = await createOrUpdateContact(
-        targetUser.email!,
-        targetUser.firstName || undefined,
-        targetUser.lastName || undefined
-      );
-      
-      if (!contactId) {
-        // Log failure
-        logUserAction({
-          userId: id,
-          actionType: "keap_sync_failed",
-          actionLabel: ActionLabels.keap_sync_failed,
-          entityType: "keap",
-          metadata: { reason: "No contact ID returned" },
-          req,
-        });
-        
-        await storage.updateUser(id, {
-          keapSyncStatus: "failed",
-          keapLastSyncAt: new Date(),
-          keapSyncError: "Failed to create or update contact",
-        });
-        
-        return res.status(500).json({ message: "Failed to sync user to Keap" });
-      }
-      
-      // Determine if created or updated
-      const wasCreated = !targetUser.keapContactId || targetUser.keapContactId !== String(contactId);
-      
-      // Apply default tag if set
-      let tagApplied = false;
-      const defaultTag = await getDefaultTag();
-      if (defaultTag && defaultTag.id) {
-        try {
-          const tagResult = await applyTagToUser(String(contactId), defaultTag.id);
-          tagApplied = tagResult;
-        } catch (tagErr) {
-          console.error(`Failed to apply tag to contact ${contactId}:`, tagErr);
-        }
-      }
-      
-      // Update user's keap sync status
-      await storage.updateUser(id, {
-        keapContactId: String(contactId),
-        keapSyncStatus: "synced",
-        keapLastSyncAt: new Date(),
-        keapSyncError: null,
-      });
-      
-      // Log success
-      logUserAction({
-        userId: id,
-        actionType: "keap_sync_succeeded",
-        actionLabel: ActionLabels.keap_sync_succeeded,
-        entityType: "keap",
-        metadata: { contactId, wasCreated, tagApplied, tagId: defaultTag?.id },
-        req,
-      });
-      
-      const result = { 
-        success: true, 
-        created: wasCreated,
-        updated: !wasCreated,
-        contactId: String(contactId),
-        tagApplied,
-      };
-      
-      // Create admin audit log
-      await storage.createAuditLog({
-        adminUserId: adminUser.id,
-        action: "keap_sync",
-        targetUserId: id,
-        metadataJson: { result },
-        ip: req.ip || null,
-        userAgent: req.get("user-agent") || null,
-      });
-      
-      res.json(result);
-    } catch (err: any) {
-      console.error("Admin keap sync error:", err);
-      const userId = req.params.id;
-      
-      // Log failure
-      logUserAction({
-        userId,
-        actionType: "keap_sync_failed",
-        actionLabel: ActionLabels.keap_sync_failed,
-        entityType: "keap",
-        metadata: { error: err.message },
-        req,
-      });
-      
-      await storage.updateUser(userId, {
-        keapSyncStatus: "failed",
-        keapLastSyncAt: new Date(),
-        keapSyncError: err.message,
-      });
-      
-      res.status(500).json({ message: err.message || "Failed to sync user to Keap" });
-    }
-  });
-
-  // ===================
-  // ADMIN ROUTES - KEAP INTEGRATION
-  // ===================
-
-  app.get("/api/admin/keap/status", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const connected = await isKeapConnected();
-      const settings = await storage.getSystemSettings();
-      const defaultTag = await getDefaultTag();
-      
-      res.json({
-        connected,
-        connectedAt: settings?.keapConnectedAt || null,
-        lastError: settings?.keapLastError || null,
-        tokenExpiresAt: settings?.keapTokenExpiresAt || null,
-        defaultTag: defaultTag,
-        lastTagSyncAt: settings?.keapLastTagSyncAt || null,
-      });
-    } catch (err) {
-      console.error("Keap status error:", err);
-      res.status(500).json({ message: "Failed to get Keap status" });
-    }
-  });
-
-  app.get("/api/admin/keap/auth-url", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const state = generateOAuthState();
-      const authUrl = getKeapAuthUrl(state);
-      res.json({ authUrl });
-    } catch (err) {
-      console.error("Keap auth URL error:", err);
-      res.status(500).json({ message: "Failed to generate Keap auth URL. Check KEAP_CLIENT_ID and KEAP_REDIRECT_URI." });
-    }
-  });
-
-  app.get("/api/admin/keap/callback", async (req: Request, res: Response) => {
-    try {
-      const { code, error, error_description, state } = req.query;
-      
-      console.log("[Keap Callback] Received callback");
-      console.log("[Keap Callback] Query params:", { 
-        hasCode: !!code, 
-        hasError: !!error, 
-        hasState: !!state,
-        error: error || null,
-        error_description: error_description || null 
-      });
-      
-      if (error) {
-        console.error("[Keap Callback] OAuth error from Keap:", error, error_description);
-        const errorMsg = encodeURIComponent(String(error_description || error));
-        return res.redirect(`/admin?keap_error=${errorMsg}`);
-      }
-      
-      if (!code || typeof code !== "string") {
-        console.error("[Keap Callback] No authorization code received");
-        return res.redirect("/admin?keap_error=no_code");
-      }
-      
-      // Validate state - REQUIRED for CSRF protection
-      if (!state || typeof state !== "string") {
-        console.error("[Keap Callback] Missing OAuth state parameter");
-        return res.redirect("/admin?keap_error=missing_state");
-      }
-      
-      if (!validateOAuthState(state)) {
-        console.error("[Keap Callback] Invalid or expired OAuth state");
-        return res.redirect("/admin?keap_error=invalid_state");
-      }
-      
-      await exchangeCodeForTokens(code);
-      console.log("[Keap Callback] Token exchange successful");
-      res.redirect("/admin?keap_success=connected");
-    } catch (err) {
-      console.error("[Keap Callback] Error:", err);
-      const errorMsg = err instanceof Error ? encodeURIComponent(err.message) : "token_exchange";
-      res.redirect(`/admin?keap_error=${errorMsg}`);
-    }
-  });
-
-  app.post("/api/admin/keap/disconnect", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      await disconnectKeap();
-      res.json({ message: "Keap disconnected successfully" });
-    } catch (err) {
-      console.error("Keap disconnect error:", err);
-      res.status(500).json({ message: "Failed to disconnect Keap" });
-    }
-  });
-
-  // Fetch tags from Keap (with caching)
-  app.get("/api/admin/keap/tags", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const force = req.query.force === "true";
-      const result = await getKeapTagsWithCache(force);
-      res.json(result);
-    } catch (err) {
-      console.error("Keap fetch tags error:", err);
-      res.status(500).json({ message: "Failed to fetch tags from Keap" });
-    }
-  });
-
-  // Force refresh tags from Keap
-  app.post("/api/admin/keap/tags/refresh", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const result = await getKeapTagsWithCache(true);
-      res.json(result);
-    } catch (err) {
-      console.error("Keap refresh tags error:", err);
-      res.status(500).json({ message: "Failed to refresh tags from Keap" });
-    }
-  });
-
-  // Set default tag for new signups
-  app.post("/api/admin/keap/default-tag", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { tagId, tagName } = req.body;
-      
-      if (!tagId || !tagName) {
-        return res.status(400).json({ message: "Tag ID and name are required" });
-      }
-      
-      await setDefaultTag(Number(tagId), String(tagName));
-      res.json({ message: "Default tag set successfully" });
-    } catch (err) {
-      console.error("Set default tag error:", err);
-      res.status(500).json({ message: "Failed to set default tag" });
-    }
-  });
-
   // Keywords Everywhere Admin Status
   app.get("/api/admin/keywords-everywhere/status", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -1286,28 +968,6 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Keywords Everywhere status error:", err);
       res.status(500).json({ message: "Failed to get Keywords Everywhere status" });
-    }
-  });
-
-  // Apply tag to a specific user
-  app.post("/api/admin/users/:id/apply-tag", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { tagId } = req.body;
-      
-      if (!tagId) {
-        return res.status(400).json({ message: "Tag ID is required" });
-      }
-      
-      const success = await applyTagToUser(req.params.id, Number(tagId));
-      
-      if (success) {
-        res.json({ message: "Tag applied successfully" });
-      } else {
-        res.status(400).json({ message: "Failed to apply tag. User may not have a Keap contact." });
-      }
-    } catch (err) {
-      console.error("Apply tag error:", err);
-      res.status(500).json({ message: "Failed to apply tag" });
     }
   });
 
@@ -1555,23 +1215,6 @@ export async function registerRoutes(
           emailConsentIp: clientIp,
           updatedAt: new Date(),
         });
-
-        // Sync to Keap if email exists
-        if (user.email) {
-          const keapConnected = await isKeapConnected();
-          if (keapConnected) {
-            createOrUpdateContact(user.email, user.firstName || undefined, user.lastName || undefined)
-              .then(async (contactId) => {
-                if (contactId) {
-                  await storage.updateUser(user.id, { keapContactId: String(contactId) });
-                  console.log(`Synced OAuth user ${user.email} to Keap with contact ID: ${contactId}`);
-                }
-              })
-              .catch((err) => {
-                console.error(`Failed to sync OAuth user ${user.email} to Keap:`, err);
-              });
-          }
-        }
 
         res.json({ message: "Consent recorded" });
       } else {

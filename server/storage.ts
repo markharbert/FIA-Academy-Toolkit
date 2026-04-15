@@ -1,9 +1,9 @@
 import { 
-  users, sessions, systemSettings, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
+  users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers,
   type User, type InsertUser, 
   type Session, type InsertSession,
-  type ScoreResult, type SystemSettings,
+  type ScoreResult,
   type PasswordResetToken, type InsertPasswordResetToken,
   type UserIdentity, type InsertUserIdentity, type AuthProvider,
   type AdminAuditLog, type InsertAdminAuditLog,
@@ -76,10 +76,6 @@ export interface IStorage {
   // Legacy cleanup (not used)
   markVideoDeleted(id: string): Promise<void>;
   
-  // System Settings (Keap)
-  getSystemSettings(): Promise<SystemSettings | undefined>;
-  upsertSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings>;
-  
   // Password Reset Tokens
   createPasswordResetToken(token: InsertPasswordResetToken): Promise<PasswordResetToken>;
   getPasswordResetTokenByHash(tokenHash: string): Promise<PasswordResetToken | undefined>;
@@ -100,7 +96,6 @@ export interface IStorage {
     status?: string;
     provider?: string;
     consent?: string;
-    keapStatus?: string;
     sort?: string;
     page?: number;
     pageSize?: number;
@@ -350,29 +345,6 @@ export class DatabaseStorage implements IStorage {
       .where(eq(sessions.id, id));
   }
 
-  // System Settings
-  async getSystemSettings(): Promise<SystemSettings | undefined> {
-    const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, "keap_integration"));
-    return settings || undefined;
-  }
-
-  async upsertSystemSettings(updates: Partial<SystemSettings>): Promise<SystemSettings> {
-    const existing = await this.getSystemSettings();
-    
-    if (existing) {
-      const [settings] = await db.update(systemSettings)
-        .set(updates)
-        .where(eq(systemSettings.id, "keap_integration"))
-        .returning();
-      return settings;
-    } else {
-      const [settings] = await db.insert(systemSettings)
-        .values({ id: "keap_integration", ...updates })
-        .returning();
-      return settings;
-    }
-  }
-
   // Password Reset Tokens
   async createPasswordResetToken(token: InsertPasswordResetToken): Promise<PasswordResetToken> {
     const [resetToken] = await db.insert(passwordResetTokens).values(token as any).returning();
@@ -446,12 +418,11 @@ export class DatabaseStorage implements IStorage {
     status?: string;
     provider?: string;
     consent?: string;
-    keapStatus?: string;
     sort?: string;
     page?: number;
     pageSize?: number;
   }): Promise<{ users: (User & { totalVideos: number })[]; total: number }> {
-    const { search, role, status, provider, consent, keapStatus, sort = "newest", page = 1, pageSize = 25 } = options;
+    const { search, role, status, provider, consent, sort = "newest", page = 1, pageSize = 25 } = options;
     
     const conditions: any[] = [];
     
@@ -484,10 +455,6 @@ export class DatabaseStorage implements IStorage {
       conditions.push(isNull(users.emailConsentAt));
     }
     
-    if (keapStatus && keapStatus !== "all") {
-      conditions.push(eq(users.keapSyncStatus, keapStatus as "synced" | "pending" | "failed"));
-    }
-
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     
     // Get total count
@@ -824,7 +791,6 @@ export class DatabaseStorage implements IStorage {
         if (!primary.firstName && duplicate.firstName) updates.firstName = duplicate.firstName;
         if (!primary.lastName && duplicate.lastName) updates.lastName = duplicate.lastName;
         if (!primary.displayName && duplicate.displayName) updates.displayName = duplicate.displayName;
-        if (!primary.keapContactId && duplicate.keapContactId) updates.keapContactId = duplicate.keapContactId;
         if (!primary.emailConsentAt && duplicate.emailConsentAt) {
           updates.emailConsentAt = duplicate.emailConsentAt;
           updates.emailConsentIp = duplicate.emailConsentIp;
