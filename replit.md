@@ -54,6 +54,7 @@ Preferred communication style: Simple, everyday language.
 - **Preview Video Persistence**: Detailed tracking of preview video status and metadata.
 - **Video Trends**: YouTube topic research and script generation based on Mark's 5-part formula, using YouTube autocomplete and OpenAI.
 - **Authenticated Redirect**: Logged-in users visiting unknown routes are automatically redirected to dashboard instead of seeing 404.
+- **Login Returns Full Profile**: Login and signup endpoints return the complete user object (including isAdmin) so admin features appear immediately without a page refresh.
 
 ## External Dependencies
 
@@ -63,10 +64,6 @@ Preferred communication style: Simple, everyday language.
 
 ### Database
 - **PostgreSQL**: Primary data store for users, sessions, and session store.
-
-### Keap Integration
-- **Purpose**: Sync new signups to Keap email list.
-- **Mechanism**: OAuth 2.0, token storage, auto-refresh, rate limiting, and tag management for new signups.
 
 ### Email Configuration
 - **Purpose**: Password reset emails.

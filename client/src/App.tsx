@@ -26,7 +26,6 @@ import TopicPulseScriptPage from "@/pages/topic-pulse-script";
 import TopicPulseScriptsPage from "@/pages/topic-pulse-scripts";
 import TopicPulseSavedPage from "@/pages/topic-pulse-saved";
 import TopicPulseSettingsPage from "@/pages/topic-pulse-settings";
-import ThumbnailGeneratorPage from "@/pages/thumbnail-generator";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -146,9 +145,6 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/video-trends/settings">
         {() => <ProtectedRoute component={TopicPulseSettingsPage} />}
-      </Route>
-      <Route path="/thumbnails">
-        {() => <ProtectedRoute component={ThumbnailGeneratorPage} />}
       </Route>
       <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>

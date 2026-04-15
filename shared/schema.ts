@@ -579,7 +579,7 @@ export const topics = pgTable("topics", {
   suggestedAngles: jsonb("suggested_angles").$type<string[]>(),
   suggestedHooks: jsonb("suggested_hooks").$type<string[]>(),
   suggestedTitles: jsonb("suggested_titles").$type<string[]>(),
-  suggestedThumbnailText: jsonb("suggested_thumbnail_text").$type<string[]>(),
+
   commonQuestions: jsonb("common_questions").$type<string[]>(),
   intentAnalysis: text("intent_analysis"),
   pinterestVolume: integer("pinterest_volume"),
@@ -784,72 +784,3 @@ export const insertSavedOfferSchema = createInsertSchema(savedOffers).omit({
 export type InsertSavedOffer = z.infer<typeof insertSavedOfferSchema>;
 export type SavedOffer = typeof savedOffers.$inferSelect;
 
-// AI provider types for thumbnail generation
-export const aiProviders = ["dalle", "gemini", "instantid", "ideogram"] as const;
-export type AIProvider = typeof aiProviders[number];
-
-// Thumbnail style presets
-export const thumbnailStyles = [
-  "reaction",
-  "before_after",
-  "list_style",
-  "bold_text",
-  "minimal",
-  "dramatic",
-] as const;
-export type ThumbnailStyle = typeof thumbnailStyles[number];
-
-// User profile photos for thumbnails
-export const userProfilePhotos = pgTable("user_profile_photos", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  filename: text("filename").notNull(),
-  storagePath: text("storage_path").notNull(),
-  mimeType: text("mime_type").notNull(),
-  isDefault: boolean("is_default").default(false),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
-
-export const insertUserProfilePhotoSchema = createInsertSchema(userProfilePhotos).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertUserProfilePhoto = z.infer<typeof insertUserProfilePhotoSchema>;
-export type UserProfilePhoto = typeof userProfilePhotos.$inferSelect;
-
-// Generated thumbnails
-export const generatedThumbnails = pgTable("generated_thumbnails", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  prompt: text("prompt").notNull(),
-  style: text("style").$type<ThumbnailStyle>(),
-  imageType: text("image_type"),
-  width: integer("width"),
-  height: integer("height"),
-  provider: text("provider").notNull().$type<AIProvider>(),
-  storagePath: text("storage_path"),
-  base64Data: text("base64_data"),
-  userPhotoId: varchar("user_photo_id").references(() => userProfilePhotos.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
-
-export const insertGeneratedThumbnailSchema = createInsertSchema(generatedThumbnails).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertGeneratedThumbnail = z.infer<typeof insertGeneratedThumbnailSchema>;
-export type GeneratedThumbnail = typeof generatedThumbnails.$inferSelect;
-
-// Thumbnail generation input schema
-export const thumbnailGenerationInputSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  imageType: z.string().min(1, "Image type is required"),
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
-  provider: z.enum(aiProviders),
-  userPhotoId: z.string().optional(),
-  customPrompt: z.string().min(1, "Description is required"),
-});

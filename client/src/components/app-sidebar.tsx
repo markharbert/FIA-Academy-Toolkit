@@ -23,7 +23,6 @@ import {
   User,
   LogOut,
   Shield,
-  Image,
 } from "lucide-react";
 import logoImage from "@assets/video_creators_toolkit_logo_1767189257881.png";
 
@@ -51,12 +50,6 @@ const navItems = [
     url: "/video-trends/scripts",
     icon: FileText,
     testId: "nav-scripts",
-  },
-  {
-    title: "Thumbnails",
-    url: "/thumbnails",
-    icon: Image,
-    testId: "nav-thumbnails",
   },
 ];
 
