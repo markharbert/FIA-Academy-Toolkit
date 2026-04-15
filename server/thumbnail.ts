@@ -123,7 +123,7 @@ async function generateWithDalle(prompt: string): Promise<{ b64_json: string; mi
 
 async function generateWithGemini(prompt: string): Promise<{ b64_json: string; mimeType: string }> {
   const response = await gemini.models.generateContent({
-    model: "gemini-2.5-flash-image",
+    model: "gemini-3-pro-image-preview",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       responseModalities: [Modality.TEXT, Modality.IMAGE],
