@@ -119,7 +119,6 @@ export async function handleCfEnrollmentEvent(
 
   const isRevokeEvent = [
     "courses/enrollment.suspended",
-    "courses/enrollment.revoked",
     "courses/enrollment.deleted",
     "subscription.cancelled",
     "subscription.churned",
