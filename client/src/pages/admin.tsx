@@ -272,6 +272,7 @@ function CfIntegrationTab({
     { event: "courses/enrollment.created", action: "Grants access", icon: <UserCheck className="h-4 w-4 text-green-500" /> },
     { event: "courses/enrollment.suspended", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
     { event: "courses/enrollment.revoked", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+    { event: "courses/enrollment.deleted", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
     { event: "subscription.cancelled", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
     { event: "subscription.payment_declined", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
   ];
