@@ -44,7 +44,7 @@ import {
   Loader2, CheckCircle, AlertCircle,
   Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
   CheckCircle2, LogOut, RefreshCw, Search, Mail, Eye, Info, Clock,
-  Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter
+  Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -236,6 +236,10 @@ function CfIntegrationTab({
 }) {
   const { toast } = useToast();
   const [cfUserFilter, setCfUserFilter] = useState<string>("all");
+  const [testEmail, setTestEmail] = useState("");
+  const [testEvent, setTestEvent] = useState("courses/enrollment.created");
+  const [testResult, setTestResult] = useState<{ action: string; email: string | null } | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
 
   const { data: cfStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery<CfStatus>({
     queryKey: ["/api/admin/cf/status"],
@@ -259,6 +263,32 @@ function CfIntegrationTab({
     await onToggleCfAccess(userId, grant);
     refetchUsers();
     refetchStatus();
+  };
+
+  const handleTestWebhook = async () => {
+    if (!testEmail.trim()) {
+      toast({ title: "Enter an email address first", variant: "destructive" });
+      return;
+    }
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/admin/cf/test-webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: testEmail.trim(), eventType: testEvent }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed");
+      setTestResult({ action: data.action, email: data.email });
+      refetchUsers();
+      refetchStatus();
+    } catch (err: any) {
+      toast({ title: "Test failed", description: err.message, variant: "destructive" });
+    } finally {
+      setTestLoading(false);
+    }
   };
 
   const configItems = [
@@ -451,6 +481,70 @@ function CfIntegrationTab({
           </CardContent>
         </Card>
       </div>
+
+      {/* Webhook Tester */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Webhook Tester
+          </CardTitle>
+          <CardDescription>
+            Simulate a ClickFunnels event to verify your integration is working correctly.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="email"
+              placeholder="user@example.com"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
+              data-testid="input-test-webhook-email"
+            />
+            <select
+              value={testEvent}
+              onChange={(e) => setTestEvent(e.target.value)}
+              className="text-sm border rounded-md px-3 py-2 bg-background"
+              data-testid="select-test-webhook-event"
+            >
+              <option value="courses/enrollment.created">courses/enrollment.created</option>
+              <option value="courses/enrollment.suspended">courses/enrollment.suspended</option>
+              <option value="courses/enrollment.deleted">courses/enrollment.deleted</option>
+              <option value="subscription.cancelled">subscription.cancelled</option>
+              <option value="subscription.churned">subscription.churned</option>
+            </select>
+            <Button
+              onClick={handleTestWebhook}
+              disabled={testLoading}
+              size="sm"
+              data-testid="button-run-test-webhook"
+            >
+              {testLoading ? "Running..." : "Run Test"}
+            </Button>
+          </div>
+
+          {testResult && (
+            <div className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm ${
+              testResult.action === "granted" ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" :
+              testResult.action === "revoked" ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400" :
+              "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+            }`} data-testid="text-test-webhook-result">
+              {testResult.action === "granted" && <UserCheck className="h-4 w-4 flex-shrink-0" />}
+              {testResult.action === "revoked" && <UserX className="h-4 w-4 flex-shrink-0" />}
+              {!["granted", "revoked"].includes(testResult.action) && <AlertCircle className="h-4 w-4 flex-shrink-0" />}
+              <div>
+                <span className="font-medium capitalize">{testResult.action.replace(/_/g, " ")}</span>
+                {testResult.email && <span className="ml-2 opacity-70">for {testResult.email}</span>}
+                {testResult.action === "no_local_user" && (
+                  <p className="text-xs mt-0.5 opacity-70">No account found with that email in this app.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Enrolled Users Table */}
       <Card>

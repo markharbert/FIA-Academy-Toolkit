@@ -703,6 +703,41 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: simulate a CF webhook event for testing
+  app.post("/api/admin/cf/test-webhook", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { email, eventType } = req.body as { email: string; eventType: string };
+      if (!email || !eventType) {
+        return res.status(400).json({ message: "email and eventType are required" });
+      }
+
+      const validEvents = [
+        "courses/enrollment.created",
+        "courses/enrollment.suspended",
+        "courses/enrollment.deleted",
+        "subscription.cancelled",
+        "subscription.churned",
+      ];
+      if (!validEvents.includes(eventType)) {
+        return res.status(400).json({ message: "Invalid event type" });
+      }
+
+      const event = {
+        eventType,
+        contactEmail: email.trim().toLowerCase(),
+        contactId: null,
+        courseId: process.env.CF_COURSE_ID || null,
+      };
+
+      const result = await handleCfEnrollmentEvent(event);
+      console.log(`[CF Test Webhook] event=${eventType} email=${email} action=${result.action}`);
+      res.json({ ok: true, action: result.action, email: result.email });
+    } catch (err) {
+      console.error("[CF Test Webhook] Error:", err);
+      res.status(500).json({ message: "Test webhook failed" });
+    }
+  });
+
   // Admin: manually grant CF access to a user
   app.post("/api/admin/users/:id/cf-access", requireAdmin, async (req: Request, res: Response) => {
     try {
