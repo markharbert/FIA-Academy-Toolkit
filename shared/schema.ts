@@ -35,6 +35,10 @@ export const users = pgTable("users", {
   disabledReason: text("disabled_reason"),
   lastLoginAt: timestamp("last_login_at"),
   themePreference: text("theme_preference").default("system").$type<ThemePreference>(),
+  cfEnrolled: boolean("cf_enrolled").default(false),
+  cfContactId: text("cf_contact_id"),
+  cfEnrolledAt: timestamp("cf_enrolled_at"),
+  cfRevokedAt: timestamp("cf_revoked_at"),
 });
 
 // User identities table for OAuth providers (supports multiple providers per user)

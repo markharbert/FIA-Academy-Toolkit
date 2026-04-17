@@ -21,7 +21,13 @@ import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import OpenAI from "openai";
-
+import {
+  verifyCfWebhookSignature,
+  generateCfSsoUrl,
+  parseCfWebhookEvent,
+  handleCfEnrollmentEvent,
+  CF_WORKSPACE_DOMAIN,
+} from "./clickfunnels";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -179,6 +185,9 @@ export async function registerRoutes(
           role: user.role || (user.isAdmin ? "admin" : "user"),
           isDisabled: user.isDisabled,
           gravatarUrl,
+          cfEnrolled: user.cfEnrolled,
+          cfEnrolledAt: user.cfEnrolledAt,
+          cfRevokedAt: user.cfRevokedAt,
         }
       });
     } catch (err) {
@@ -245,6 +254,9 @@ export async function registerRoutes(
           role: user.role || (user.isAdmin ? "admin" : "user"),
           isDisabled: user.isDisabled,
           gravatarUrl,
+          cfEnrolled: user.cfEnrolled,
+          cfEnrolledAt: user.cfEnrolledAt,
+          cfRevokedAt: user.cfRevokedAt,
         }
       });
     } catch (err) {
@@ -309,6 +321,9 @@ export async function registerRoutes(
         role: user.role || (user.isAdmin ? "admin" : "user"),
         isDisabled: user.isDisabled,
         gravatarUrl,
+        cfEnrolled: user.cfEnrolled,
+        cfEnrolledAt: user.cfEnrolledAt,
+        cfRevokedAt: user.cfRevokedAt,
       } 
     });
   });
@@ -573,6 +588,99 @@ export async function registerRoutes(
     });
   }
 
+
+  // ===================
+  // CLICKFUNNELS INTEGRATION
+  // ===================
+
+  // Webhook endpoint – ClickFunnels sends events here (enrollment created/revoked, subscription cancelled)
+  // Must be raw body to verify HMAC signature
+  app.post(
+    "/api/webhooks/clickfunnels",
+    (req: Request, res: Response, next: NextFunction) => {
+      // Collect raw body before JSON parsing
+      let rawBody = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk) => { rawBody += chunk; });
+      req.on("end", () => {
+        (req as any).rawBody = rawBody;
+        try {
+          (req as any).parsedBody = JSON.parse(rawBody);
+        } catch {
+          (req as any).parsedBody = {};
+        }
+        next();
+      });
+    },
+    async (req: Request, res: Response) => {
+      try {
+        const signature = req.headers["x-cf-signature"] as string | undefined
+          || req.headers["x-clickfunnels-signature"] as string | undefined;
+
+        const rawBody = (req as any).rawBody || "";
+        const body = (req as any).parsedBody || {};
+
+        // Verify signature when secret is configured
+        if (process.env.CF_WEBHOOK_SECRET) {
+          if (!verifyCfWebhookSignature(rawBody, signature)) {
+            console.warn("[CF Webhook] Invalid signature");
+            return res.status(401).json({ message: "Invalid signature" });
+          }
+        }
+
+        const event = parseCfWebhookEvent(body);
+        console.log("[CF Webhook] Received:", event.eventType, "| email:", event.contactEmail, "| course:", event.courseId);
+
+        const result = await handleCfEnrollmentEvent(event);
+        console.log("[CF Webhook] Action:", result.action, "| email:", result.email);
+
+        res.json({ ok: true, action: result.action });
+      } catch (err) {
+        console.error("[CF Webhook] Error:", err);
+        res.status(500).json({ message: "Webhook processing failed" });
+      }
+    }
+  );
+
+  // Generate a CF SSO magic link for the currently logged-in user
+  app.get("/api/clickfunnels/sso-url", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!CF_WORKSPACE_DOMAIN) {
+        return res.status(503).json({ message: "ClickFunnels not configured" });
+      }
+      const user = await storage.getUser(req.session.userId!);
+      if (!user?.email) {
+        return res.status(400).json({ message: "No email on account" });
+      }
+      const redirectTo = (req.query.redirect as string) || undefined;
+      const url = generateCfSsoUrl(user.email, redirectTo);
+      res.json({ url });
+    } catch (err) {
+      console.error("[CF SSO] Error:", err);
+      res.status(500).json({ message: "Failed to generate SSO link" });
+    }
+  });
+
+  // Admin: manually grant CF access to a user
+  app.post("/api/admin/users/:id/cf-access", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { grant } = req.body as { grant: boolean };
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      await storage.updateUser(id, {
+        cfEnrolled: grant,
+        cfEnrolledAt: grant ? new Date() : user.cfEnrolledAt,
+        cfRevokedAt: grant ? null : new Date(),
+      });
+
+      res.json({ ok: true, cfEnrolled: grant });
+    } catch (err) {
+      console.error("[CF Admin] Error:", err);
+      res.status(500).json({ message: "Failed to update CF access" });
+    }
+  });
 
   // ===================
   // ADMIN ROUTES - USER MANAGEMENT

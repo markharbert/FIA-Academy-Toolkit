@@ -91,6 +91,9 @@ interface AdminUser {
   totalVideos: number;
   keywordsCreditsThisMonth: number;
   keywordsCreditsTotalUsed: number;
+  cfEnrolled: boolean | null;
+  cfEnrolledAt: string | null;
+  cfRevokedAt: string | null;
 }
 
 interface UserAction {
@@ -520,6 +523,35 @@ export default function AdminPage() {
         description: "Failed to update user role",
         variant: "destructive",
       });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleCfAccess = async (userId: string, grant: boolean) => {
+    try {
+      setActionLoading(`cf-${userId}`);
+      const res = await fetch(`/api/admin/users/${userId}/cf-access`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grant }),
+        credentials: "include",
+      });
+      if (res.ok) {
+        toast({
+          title: grant ? "CF Access Granted" : "CF Access Revoked",
+          description: grant
+            ? "User now has ClickFunnels enrollment access."
+            : "ClickFunnels access has been revoked.",
+        });
+        fetchUsers();
+        if (selectedUserId === userId) fetchUserDetails(userId);
+      } else {
+        const error = await res.json();
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to update CF access", variant: "destructive" });
     } finally {
       setActionLoading(null);
     }
@@ -1511,6 +1543,40 @@ export default function AdminPage() {
                     </Button>
                   )}
                   
+                  {userDetails.user.cfEnrolled ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConfirmDialog({
+                        open: true,
+                        title: "Revoke CF Access",
+                        description: "This will revoke the user's ClickFunnels enrollment access. They will still be able to log in but won't be counted as enrolled.",
+                        action: () => handleToggleCfAccess(userDetails.user.id, false),
+                      })}
+                      disabled={actionLoading?.startsWith("cf")}
+                      data-testid="button-revoke-cf-access"
+                    >
+                      <ShieldOff className="mr-2 h-4 w-4" />
+                      Revoke CF Access
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConfirmDialog({
+                        open: true,
+                        title: "Grant CF Access",
+                        description: "Manually grant this user ClickFunnels enrollment access.",
+                        action: () => handleToggleCfAccess(userDetails.user.id, true),
+                      })}
+                      disabled={actionLoading?.startsWith("cf")}
+                      data-testid="button-grant-cf-access"
+                    >
+                      <Shield className="mr-2 h-4 w-4" />
+                      Grant CF Access
+                    </Button>
+                  )}
+
                   <Button
                     variant="outline"
                     size="sm"

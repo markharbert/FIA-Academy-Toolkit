@@ -23,6 +23,7 @@ import {
   User,
   LogOut,
   Shield,
+  ExternalLink,
 } from "lucide-react";
 import logoImage from "@assets/video_creators_toolkit_logo_1767189257881.png";
 
@@ -61,6 +62,19 @@ export function AppSidebar() {
   const handleLogout = async () => {
     await logout();
     setLocation("/");
+  };
+
+  const handleGoToClickFunnels = async () => {
+    try {
+      const res = await fetch("/api/clickfunnels/sso-url", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch {
+      // If CF not configured just open the workspace domain directly
+      const domain = window.location.hostname;
+      window.open(`https://${domain}`, "_blank", "noopener,noreferrer");
+    }
   };
 
   if (!user) return null;
@@ -104,6 +118,25 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+        <SidebarGroup>
+          <SidebarGroupLabel>My Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip="Go to ClickFunnels"
+                  onClick={handleGoToClickFunnels}
+                  data-testid="nav-clickfunnels"
+                >
+                  <ExternalLink />
+                  <span>Go to ClickFunnels</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

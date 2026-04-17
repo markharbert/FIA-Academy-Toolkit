@@ -11,6 +11,9 @@ interface AuthUser {
   role?: "user" | "admin" | "super_admin";
   isDisabled?: boolean;
   gravatarUrl?: string | null;
+  cfEnrolled?: boolean;
+  cfEnrolledAt?: string | null;
+  cfRevokedAt?: string | null;
 }
 
 interface AuthContextType {
