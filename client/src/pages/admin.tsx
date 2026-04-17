@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Loader2, CheckCircle, AlertCircle,
   Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
-  CheckCircle2, LogOut, RefreshCw, Search, Mail, Eye, Info, Clock
+  CheckCircle2, LogOut, RefreshCw, Search, Mail, Eye, Info, Clock,
+  Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -198,6 +200,385 @@ interface SessionDetail {
     firstName: string | null;
     lastName: string | null;
   };
+}
+
+// ==================== CLICKFUNNELS INTEGRATION TAB ====================
+
+interface CfStatus {
+  configured: { apiToken: boolean; workspaceDomain: boolean; courseId: boolean; webhookSecret: boolean };
+  allConfigured: boolean;
+  workspaceDomain: string;
+  courseId: string;
+  enrolledCount: number;
+  revokedCount: number;
+}
+
+interface CfUser {
+  id: string;
+  email: string | null;
+  displayName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  cfEnrolled: boolean | null;
+  cfEnrolledAt: string | null;
+  cfRevokedAt: string | null;
+  cfContactId: string | null;
+}
+
+function CfIntegrationTab({
+  onToggleCfAccess,
+  actionLoading,
+  setConfirmDialog,
+}: {
+  onToggleCfAccess: (userId: string, grant: boolean) => Promise<void>;
+  actionLoading: string | null;
+  setConfirmDialog: (d: any) => void;
+}) {
+  const { toast } = useToast();
+  const [cfUserFilter, setCfUserFilter] = useState<string>("all");
+
+  const { data: cfStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery<CfStatus>({
+    queryKey: ["/api/admin/cf/status"],
+  });
+
+  const { data: cfUsersData, isLoading: usersLoading, refetch: refetchUsers } = useQuery<{ users: CfUser[] }>({
+    queryKey: ["/api/admin/cf/users", cfUserFilter],
+    queryFn: () =>
+      fetch(`/api/admin/cf/users?filter=${cfUserFilter}`, { credentials: "include" }).then(r => r.json()),
+  });
+
+  const webhookUrl = `${window.location.protocol}//${window.location.host}/api/webhooks/clickfunnels`;
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast({ title: `${label} copied!` });
+    });
+  };
+
+  const handleToggleAndRefresh = async (userId: string, grant: boolean) => {
+    await onToggleCfAccess(userId, grant);
+    refetchUsers();
+    refetchStatus();
+  };
+
+  const configItems = [
+    { key: "apiToken", label: "CF API Token", desc: "Secret: CF_API_TOKEN" },
+    { key: "workspaceDomain", label: "Workspace Domain", desc: "Secret: CF_WORKSPACE_DOMAIN" },
+    { key: "courseId", label: "Course ID", desc: "Secret: CF_COURSE_ID" },
+    { key: "webhookSecret", label: "Webhook Secret", desc: "Secret: CF_WEBHOOK_SECRET" },
+  ] as const;
+
+  const webhookEvents = [
+    { event: "courses/enrollment.created", action: "Grants access", icon: <UserCheck className="h-4 w-4 text-green-500" /> },
+    { event: "courses/enrollment.suspended", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+    { event: "courses/enrollment.revoked", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+    { event: "subscription.cancelled", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+    { event: "subscription.payment_declined", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+  ];
+
+  const cfUsers = cfUsersData?.users || [];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-xl font-semibold">ClickFunnels Integration</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Manage membership access synced with your ClickFunnels course enrollment.
+        </p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Integration Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statusLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : cfStatus?.allConfigured ? (
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+                <span className="font-semibold text-green-600 dark:text-green-400">Configured</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                <span className="font-semibold text-amber-600 dark:text-amber-400">Incomplete Setup</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Enrolled Members</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {statusLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : cfStatus?.enrolledCount ?? 0}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Active CF access</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Revoked / Cancelled</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {statusLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : cfStatus?.revokedCount ?? 0}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Access removed</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Configuration Health */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Configuration Secrets</CardTitle>
+            <CardDescription>
+              These secrets must be set in the Replit Secrets panel for the integration to work.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {configItems.map(({ key, label, desc }) => {
+              const isSet = cfStatus?.configured[key] ?? false;
+              return (
+                <div key={key} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{desc}</p>
+                  </div>
+                  {statusLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : isSet ? (
+                    <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400">
+                      <CheckCircle className="h-3 w-3 mr-1" /> Set
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-red-600 border-red-300 dark:text-red-400">
+                      <AlertCircle className="h-3 w-3 mr-1" /> Missing
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
+            {cfStatus?.workspaceDomain && (
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground">Workspace</p>
+                <p className="text-sm font-mono">{cfStatus.workspaceDomain}</p>
+              </div>
+            )}
+            {cfStatus?.courseId && (
+              <div>
+                <p className="text-xs text-muted-foreground">Course ID</p>
+                <p className="text-sm font-mono">{cfStatus.courseId}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Webhook Setup */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Webhook className="h-4 w-4" />
+              Webhook Setup
+            </CardTitle>
+            <CardDescription>
+              Add this endpoint in ClickFunnels to sync enrollment events automatically.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1">Webhook URL</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">
+                  {webhookUrl}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(webhookUrl, "Webhook URL")}
+                  data-testid="button-copy-webhook-url"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Subscribe to these events</p>
+              <div className="space-y-2">
+                {webhookEvents.map(({ event, action, icon }) => (
+                  <div key={event} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      {icon}
+                      <code className="text-xs font-mono">{event}</code>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{action}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
+              <p className="font-medium">How to set it up in ClickFunnels:</p>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                <li>Go to <strong>Workspace Settings → Webhooks</strong></li>
+                <li>Click <strong>Add New Endpoint</strong></li>
+                <li>Paste the webhook URL above</li>
+                <li>Select all 5 events listed above</li>
+                <li>Set the signing secret to your <code className="font-mono">CF_WEBHOOK_SECRET</code> value</li>
+              </ol>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => window.open("https://app.myclickfunnels.com/settings/webhooks", "_blank")}
+              data-testid="button-open-cf-webhooks"
+            >
+              <ExternalLink className="h-3.5 w-3.5 mr-2" />
+              Open ClickFunnels Webhooks
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Enrolled Users Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Member Access</CardTitle>
+              <CardDescription>View and manually manage ClickFunnels enrollment access per user.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <select
+                className="text-sm border rounded px-2 py-1 bg-background"
+                value={cfUserFilter}
+                onChange={e => setCfUserFilter(e.target.value)}
+                data-testid="select-cf-filter"
+              >
+                <option value="all">All users</option>
+                <option value="enrolled">Enrolled only</option>
+                <option value="revoked">Revoked only</option>
+                <option value="never">Never enrolled</option>
+              </select>
+              <Button variant="ghost" size="sm" onClick={() => refetchUsers()}>
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {usersLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : cfUsers.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              No users match this filter.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>CF Status</TableHead>
+                  <TableHead>Enrolled At</TableHead>
+                  <TableHead>Revoked At</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cfUsers.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell>
+                      <div>
+                        <p className="text-sm font-medium">{u.displayName || `${u.firstName || ""} ${u.lastName || ""}`.trim() || "—"}</p>
+                        <p className="text-xs text-muted-foreground">{u.email}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {u.cfEnrolled ? (
+                        <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400">
+                          <UserCheck className="h-3 w-3 mr-1" /> Enrolled
+                        </Badge>
+                      ) : u.cfRevokedAt ? (
+                        <Badge variant="outline" className="text-red-600 border-red-300 dark:text-red-400">
+                          <UserX className="h-3 w-3 mr-1" /> Revoked
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          <UserMinus className="h-3 w-3 mr-1" /> Never
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {u.cfEnrolledAt ? format(new Date(u.cfEnrolledAt), "MMM d, yyyy") : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {u.cfRevokedAt ? format(new Date(u.cfRevokedAt), "MMM d, yyyy") : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {u.cfEnrolled ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfirmDialog({
+                            open: true,
+                            title: "Revoke CF Access",
+                            description: `Remove ClickFunnels access for ${u.email}?`,
+                            action: () => handleToggleAndRefresh(u.id, false),
+                          })}
+                          disabled={actionLoading === `cf-${u.id}`}
+                          data-testid={`button-revoke-cf-${u.id}`}
+                        >
+                          {actionLoading === `cf-${u.id}` ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <><ShieldOff className="h-3.5 w-3.5 mr-1" /> Revoke</>
+                          )}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfirmDialog({
+                            open: true,
+                            title: "Grant CF Access",
+                            description: `Grant ClickFunnels enrollment access to ${u.email}?`,
+                            action: () => handleToggleAndRefresh(u.id, true),
+                          })}
+                          disabled={actionLoading === `cf-${u.id}`}
+                          data-testid={`button-grant-cf-${u.id}`}
+                        >
+                          {actionLoading === `cf-${u.id}` ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <><Shield className="h-3.5 w-3.5 mr-1" /> Grant</>
+                          )}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 export default function AdminPage() {
@@ -667,6 +1048,7 @@ export default function AdminPage() {
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="keywords" data-testid="tab-keywords">Keywords Everywhere</TabsTrigger>
+          <TabsTrigger value="clickfunnels" data-testid="tab-clickfunnels">ClickFunnels</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -1126,6 +1508,11 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ==================== CLICKFUNNELS TAB ==================== */}
+        <TabsContent value="clickfunnels" className="space-y-6">
+          <CfIntegrationTab onToggleCfAccess={handleToggleCfAccess} actionLoading={actionLoading} setConfirmDialog={setConfirmDialog} />
         </TabsContent>
       </Tabs>
 

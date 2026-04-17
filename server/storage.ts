@@ -107,7 +107,11 @@ export interface IStorage {
     sessions: Session[];
     sessionCount: number;
   } | undefined>;
-  
+
+  // ClickFunnels
+  getCfEnrolledUsers(): Promise<{ enrolledCount: number; revokedCount: number }>;
+  getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId'>>>;
+
   // Admin: Audit Log
   createAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
   
@@ -538,6 +542,42 @@ export class DatabaseStorage implements IStorage {
       sessions: userSessions,
       sessionCount: Number(sessionCount),
     };
+  }
+
+  // ClickFunnels
+  async getCfEnrolledUsers(): Promise<{ enrolledCount: number; revokedCount: number }> {
+    const [enrolledRow] = await db.select({ count: count() }).from(users).where(eq(users.cfEnrolled, true));
+    const [revokedRow] = await db.select({ count: count() }).from(users).where(
+      and(eq(users.cfEnrolled, false), sql`${users.cfRevokedAt} IS NOT NULL`)
+    );
+    return {
+      enrolledCount: Number(enrolledRow?.count || 0),
+      revokedCount: Number(revokedRow?.count || 0),
+    };
+  }
+
+  async getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId'>>> {
+    let query = db.select({
+      id: users.id,
+      email: users.email,
+      displayName: users.displayName,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      cfEnrolled: users.cfEnrolled,
+      cfEnrolledAt: users.cfEnrolledAt,
+      cfRevokedAt: users.cfRevokedAt,
+      cfContactId: users.cfContactId,
+    }).from(users).$dynamic();
+
+    if (filter === 'enrolled') {
+      query = query.where(eq(users.cfEnrolled, true));
+    } else if (filter === 'revoked') {
+      query = query.where(and(eq(users.cfEnrolled, false), sql`${users.cfRevokedAt} IS NOT NULL`));
+    } else if (filter === 'never') {
+      query = query.where(sql`${users.cfEnrolledAt} IS NULL`);
+    }
+
+    return query.orderBy(desc(users.cfEnrolledAt));
   }
 
   // Admin: Audit Log

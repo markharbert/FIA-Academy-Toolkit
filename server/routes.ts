@@ -661,6 +661,48 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: CF integration status & config
+  app.get("/api/admin/cf/status", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const configured = {
+        apiToken: !!process.env.CF_API_TOKEN,
+        workspaceDomain: !!process.env.CF_WORKSPACE_DOMAIN,
+        courseId: !!process.env.CF_COURSE_ID,
+        webhookSecret: !!process.env.CF_WEBHOOK_SECRET,
+      };
+      const workspaceDomain = process.env.CF_WORKSPACE_DOMAIN || "";
+      const courseId = process.env.CF_COURSE_ID || "";
+      const allConfigured = Object.values(configured).every(Boolean);
+
+      // Get enrollment stats
+      const enrolledResult = await storage.getCfEnrolledUsers();
+
+      res.json({
+        configured,
+        allConfigured,
+        workspaceDomain,
+        courseId,
+        enrolledCount: enrolledResult.enrolledCount,
+        revokedCount: enrolledResult.revokedCount,
+      });
+    } catch (err) {
+      console.error("[CF Admin] Status error:", err);
+      res.status(500).json({ message: "Failed to get CF status" });
+    }
+  });
+
+  // Admin: list users with CF enrollment info
+  app.get("/api/admin/cf/users", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { filter } = req.query;
+      const users = await storage.getCfUsers(filter as string);
+      res.json({ users });
+    } catch (err) {
+      console.error("[CF Admin] Users error:", err);
+      res.status(500).json({ message: "Failed to get CF users" });
+    }
+  });
+
   // Admin: manually grant CF access to a user
   app.post("/api/admin/users/:id/cf-access", requireAdmin, async (req: Request, res: Response) => {
     try {
