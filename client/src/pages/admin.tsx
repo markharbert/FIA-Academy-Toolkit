@@ -273,8 +273,10 @@ function CfIntegrationTab({
     { event: "courses/enrollment.suspended", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
     { event: "courses/enrollment.revoked", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
     { event: "courses/enrollment.deleted", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
-    { event: "subscription.cancelled", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
-    { event: "subscription.payment_declined", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+    { event: "subscription-order.canceled", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+    { event: "subscription-order.churned", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+    { event: "orders/invoice.payment_declined", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
+    { event: "orders/invoice.abandoned", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
   ];
 
   const cfUsers = cfUsersData?.users || [];

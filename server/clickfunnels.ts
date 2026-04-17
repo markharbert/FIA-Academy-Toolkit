@@ -121,8 +121,10 @@ export async function handleCfEnrollmentEvent(
     "courses/enrollment.suspended",
     "courses/enrollment.revoked",
     "courses/enrollment.deleted",
-    "subscription.cancelled",
-    "subscription.payment_declined",
+    "subscription-order.canceled",
+    "subscription-order.churned",
+    "orders/invoice.payment_declined",
+    "orders/invoice.abandoned",
   ].includes(eventType);
 
   if (isGrantEvent && courseMatches) {
