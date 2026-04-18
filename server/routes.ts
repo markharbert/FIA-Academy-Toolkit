@@ -1196,6 +1196,32 @@ export async function registerRoutes(
     }
   });
 
+  // Get monthly credits limit
+  app.get("/api/admin/ke/monthly-limit", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = await storage.getMonthlyCreditsLimit();
+      res.json({ limit });
+    } catch (err) {
+      console.error("KE monthly limit get error:", err);
+      res.status(500).json({ message: "Failed to get monthly credits limit" });
+    }
+  });
+
+  // Set monthly credits limit
+  app.put("/api/admin/ke/monthly-limit", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { limit } = req.body as { limit: number };
+      if (!limit || typeof limit !== "number" || limit < 1 || limit > 1000000) {
+        return res.status(400).json({ message: "limit must be a number between 1 and 1,000,000" });
+      }
+      await storage.setMonthlyCreditsLimit(Math.floor(limit));
+      res.json({ ok: true, limit: Math.floor(limit) });
+    } catch (err) {
+      console.error("KE monthly limit set error:", err);
+      res.status(500).json({ message: "Failed to set monthly credits limit" });
+    }
+  });
+
   // Detect duplicate email accounts
   app.get("/api/admin/users/duplicates", requireAdmin, async (req: Request, res: Response) => {
     try {

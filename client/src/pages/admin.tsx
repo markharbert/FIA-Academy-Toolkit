@@ -689,6 +689,8 @@ export default function AdminPage() {
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [keStatus, setKeStatus] = useState<KeywordsEverywhereStatus | null>(null);
   const [keStatusLoading, setKeStatusLoading] = useState(true);
+  const [creditLimitInput, setCreditLimitInput] = useState<string>("");
+  const [creditLimitSaving, setCreditLimitSaving] = useState(false);
   const [statsLoading, setStatsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   // User management state
@@ -864,15 +866,48 @@ export default function AdminPage() {
   const fetchKeStatus = async () => {
     try {
       setKeStatusLoading(true);
-      const res = await fetch("/api/admin/keywords-everywhere/status", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
+      const [statusRes, limitRes] = await Promise.all([
+        fetch("/api/admin/keywords-everywhere/status", { credentials: "include" }),
+        fetch("/api/admin/ke/monthly-limit", { credentials: "include" }),
+      ]);
+      if (statusRes.ok) {
+        const data = await statusRes.json();
         setKeStatus(data);
+      }
+      if (limitRes.ok) {
+        const { limit } = await limitRes.json();
+        setCreditLimitInput(String(limit));
       }
     } catch (err) {
       console.error("Failed to fetch Keywords Everywhere status:", err);
     } finally {
       setKeStatusLoading(false);
+    }
+  };
+
+  const handleSaveCreditLimit = async () => {
+    const parsed = parseInt(creditLimitInput, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      toast({ title: "Enter a valid number greater than 0", variant: "destructive" });
+      return;
+    }
+    setCreditLimitSaving(true);
+    try {
+      const res = await fetch("/api/admin/ke/monthly-limit", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ limit: parsed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed");
+      setCreditLimitInput(String(data.limit));
+      toast({ title: `Monthly credits limit updated to ${data.limit.toLocaleString()}` });
+      fetchKeStatus();
+    } catch (err: any) {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+    } finally {
+      setCreditLimitSaving(false);
     }
   };
 
@@ -1493,6 +1528,37 @@ export default function AdminPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Monthly Credit Limit Setting */}
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Monthly Credits Per User</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      How many Keywords Everywhere credits each user gets per 30-day window. Applies immediately to all users.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000000}
+                      value={creditLimitInput}
+                      onChange={(e) => setCreditLimitInput(e.target.value)}
+                      className="w-28 text-sm border rounded-md px-3 py-1.5 bg-background text-right font-mono"
+                      data-testid="input-credit-limit"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleSaveCreditLimit}
+                      disabled={creditLimitSaving}
+                      data-testid="button-save-credit-limit"
+                    >
+                      {creditLimitSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
               {keStatusLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

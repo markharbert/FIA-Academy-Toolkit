@@ -767,6 +767,13 @@ export type InsertVideoTrendsCredits = z.infer<typeof insertVideoTrendsCreditsSc
 export type VideoTrendsCredits = typeof videoTrendsCredits.$inferSelect;
 
 // Saved offers for Call To Action tab
+// App-wide settings key-value store
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const savedOffers = pgTable("saved_offers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

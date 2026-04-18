@@ -1,6 +1,6 @@
 import { 
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
-  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -269,6 +269,10 @@ export interface IStorage {
   updateSavedOffer(id: string, userId: string, updates: Partial<SavedOffer>): Promise<SavedOffer | undefined>;
   deleteSavedOffer(id: string, userId: string): Promise<boolean>;
   setDefaultOffer(id: string, userId: string): Promise<SavedOffer | undefined>;
+
+  // App Settings
+  getMonthlyCreditsLimit(): Promise<number>;
+  setMonthlyCreditsLimit(limit: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1381,12 +1385,13 @@ export class DatabaseStorage implements IStorage {
     if (!record) {
       const windowStartedAt = now;
       const resetsAt = new Date(windowStartedAt.getTime() + this.CREDITS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      const limit = await this.getMonthlyCreditsLimit();
       return {
         creditsUsed: 0,
         totalCreditsUsed: 0,
-        monthlyLimit: this.MONTHLY_CREDITS_LIMIT,
+        monthlyLimit: limit,
         windowStartedAt,
-        remaining: this.MONTHLY_CREDITS_LIMIT,
+        remaining: limit,
         resetsAt,
       };
     }
@@ -1431,11 +1436,12 @@ export class DatabaseStorage implements IStorage {
     const [existing] = await db.select().from(videoTrendsCredits).where(eq(videoTrendsCredits.userId, userId));
     
     if (!existing) {
+      const limit = await this.getMonthlyCreditsLimit();
       await db.insert(videoTrendsCredits).values({
         userId,
         creditsUsed: amount,
         totalCreditsUsed: amount,
-        monthlyLimit: this.MONTHLY_CREDITS_LIMIT,
+        monthlyLimit: limit,
         windowStartedAt: now,
       });
     } else {
@@ -1550,6 +1556,25 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(savedOffers.id, id), eq(savedOffers.userId, userId)))
       .returning();
     return updated || undefined;
+  }
+
+  // App Settings
+  async getMonthlyCreditsLimit(): Promise<number> {
+    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, "monthly_credits_limit"));
+    if (row) {
+      const parsed = parseInt(row.value, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return this.MONTHLY_CREDITS_LIMIT;
+  }
+
+  async setMonthlyCreditsLimit(limit: number): Promise<void> {
+    const now = new Date();
+    await db.insert(appSettings)
+      .values({ key: "monthly_credits_limit", value: String(limit), updatedAt: now })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value: String(limit), updatedAt: now } });
+    // Update all existing users to the new limit
+    await db.update(videoTrendsCredits).set({ monthlyLimit: limit, updatedAt: now });
   }
 }
 

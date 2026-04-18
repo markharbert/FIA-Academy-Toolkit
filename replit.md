@@ -53,7 +53,8 @@ Preferred communication style: Simple, everyday language.
 - **Video Poster Generation**: Generates and serves a poster thumbnail for improved perceived performance.
 - **Preview Video Persistence**: Detailed tracking of preview video status and metadata.
 - **Video Trends**: YouTube topic research and script generation based on Mark's 5-part formula, using YouTube autocomplete and OpenAI.
-- **ClickFunnels Integration**: Webhook endpoint grants/revokes app access based on CF enrollment events (courses/enrollment.created, courses/enrollment.suspended, courses/enrollment.revoked, subscription.cancelled). Users get a one-click SSO button in the sidebar to jump into ClickFunnels without a second login (signed JWT). Admins can manually grant/revoke CF access per user.
+- **ClickFunnels Integration**: Webhook endpoint grants/revokes app access based on CF enrollment events (courses/enrollment.created, courses/enrollment.suspended, courses/enrollment.deleted, subscription.cancelled, subscription.churned). Users get a one-click SSO button in the sidebar to jump into ClickFunnels without a second login (signed JWT). Admins can manually grant/revoke CF access per user. Admin tab includes a webhook tester to simulate CF events.
+- **App Settings**: `app_settings` table stores global configuration (key-value). Currently used for `monthly_credits_limit` (Keywords Everywhere credits per user per 30-day window). Admins can update this from the Keywords Everywhere tab — applies immediately to all users.
 - **Authenticated Redirect**: Logged-in users visiting unknown routes are automatically redirected to dashboard instead of seeing 404.
 - **Login Returns Full Profile**: Login and signup endpoints return the complete user object (including isAdmin) so admin features appear immediately without a page refresh.
 
