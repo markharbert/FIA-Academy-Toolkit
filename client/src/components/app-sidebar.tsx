@@ -93,7 +93,7 @@ export function AppSidebar() {
               <img 
                 src={logoImage} 
                 alt="Academy Toolkit" 
-                className={state === "collapsed" ? "h-8 w-auto" : "h-10 w-auto"} 
+                className={state === "collapsed" ? "h-10 w-auto" : "h-12 w-auto"} 
               />
             </SidebarMenuButton>
           </SidebarMenuItem>

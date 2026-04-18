@@ -27,7 +27,7 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full bg-brand-dark shadow-md">
       <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4 md:px-6">
         <Link href="/dashboard" className="flex items-center gap-2" data-testid="link-logo">
-          <img src={logoImage} alt="Academy Toolkit" className="h-9 w-auto" />
+          <img src={logoImage} alt="Academy Toolkit" className="h-12 w-auto" />
         </Link>
 
         <div className="hidden md:flex items-center gap-4">
