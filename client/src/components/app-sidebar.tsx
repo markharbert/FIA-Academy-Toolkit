@@ -25,7 +25,7 @@ import {
   Shield,
   ExternalLink,
 } from "lucide-react";
-import logoImage from "@assets/video_creators_toolkit_logo_1767189257881.png";
+import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
 const navItems = [
   {
@@ -92,7 +92,7 @@ export function AppSidebar() {
             >
               <img 
                 src={logoImage} 
-                alt="Video Creators Toolkit" 
+                alt="Academy Toolkit" 
                 className={state === "collapsed" ? "h-12 w-auto" : "h-16 w-auto"} 
               />
             </SidebarMenuButton>

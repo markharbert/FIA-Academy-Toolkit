@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import logoImage from "@assets/video_creators_toolkit_logo_1767189257881.png";
+import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -27,7 +27,7 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full bg-brand-dark shadow-md">
       <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4 md:px-6">
         <Link href="/dashboard" className="flex items-center gap-2" data-testid="link-logo">
-          <img src={logoImage} alt="Video Creators Toolkit" className="h-10" />
+          <img src={logoImage} alt="Academy Toolkit" className="h-10" />
         </Link>
 
         <div className="hidden md:flex items-center gap-4">

@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Mail } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
-import logoImage from "@assets/video_creators_toolkit_logo_1767189257881.png";
+import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
 const signupFormSchema = z.object({
   firstName: z.string().optional(),
@@ -85,7 +85,7 @@ export default function SignupPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-            <img src={logoImage} alt="Video Creators Toolkit" className="h-10 mx-auto" />
+            <img src={logoImage} alt="Academy Toolkit" className="h-10 mx-auto" />
           </div>
           <CardTitle className="text-2xl" data-testid="text-signup-title">Create your account</CardTitle>
           <CardDescription>

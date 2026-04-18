@@ -53,12 +53,12 @@ export async function sendPasswordResetEmail(
     </head>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #06092a; margin-bottom: 10px;">Video Creators Toolkit</h1>
+        <h1 style="color: #06092a; margin-bottom: 10px;">Academy Toolkit</h1>
       </div>
       
       <h2 style="color: #06092a;">Reset Your Password</h2>
       
-      <p>We received a request to reset your password for your Video Creators Toolkit account.</p>
+      <p>We received a request to reset your password for your Academy Toolkit account.</p>
       
       <p>Click the button below to set a new password:</p>
       
@@ -85,16 +85,16 @@ export async function sendPasswordResetEmail(
       <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
       
       <p style="color: #999; font-size: 12px; text-align: center;">
-        Video Creators Toolkit - Create Videos That Convert
+        Academy Toolkit - Create Videos That Convert
       </p>
     </body>
     </html>
   `;
 
   const textContent = `
-Reset Your Video Creators Toolkit Password
+Reset Your Academy Toolkit Password
 
-We received a request to reset your password for your Video Creators Toolkit account.
+We received a request to reset your password for your Academy Toolkit account.
 
 Click the link below to set a new password:
 ${resetLink}
@@ -104,14 +104,14 @@ This link will expire in 60 minutes.
 If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.
 
 ---
-Video Creators Toolkit - Create Videos That Convert
+Academy Toolkit - Create Videos That Convert
   `;
 
   try {
     await transport.sendMail({
       from: SMTP_FROM,
       to: email,
-      subject: "Reset your Video Creators Toolkit password",
+      subject: "Reset your Academy Toolkit password",
       text: textContent,
       html: htmlContent,
     });
