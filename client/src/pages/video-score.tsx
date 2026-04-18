@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,6 +18,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
+import {
   Plus,
   Video,
   Eye,
@@ -28,6 +38,7 @@ import {
   Check,
   ArrowLeft,
   AlertCircle,
+  TrendingUp,
 } from "lucide-react";
 import type { Session } from "@shared/schema";
 import { format } from "date-fns";
@@ -402,6 +413,145 @@ function BulkActionsBar({
 const INITIAL_VISIBLE_COUNT = 8;
 const LOAD_MORE_COUNT = 4;
 
+const PART_LINES = [
+  { key: "hook",     label: "Hook",         color: "#f97316" },
+  { key: "setHook",  label: "Set the Hook", color: "#a855f7" },
+  { key: "firstCTA", label: "First CTA",    color: "#eab308" },
+  { key: "content",  label: "Content",      color: "#22c55e" },
+  { key: "finalCTA", label: "Final CTA",    color: "#ec4899" },
+] as const;
+
+function ScoreProgressChart({ sessions }: { sessions: Session[] }) {
+  const [visibleParts, setVisibleParts] = useState<Set<string>>(new Set());
+
+  const chartData = sessions
+    .filter(s => s.scoreJson?.totalScore != null)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .map((s, i) => {
+      const parts = (s.scoreJson as any)?.partScores ?? {};
+      return {
+        label: `#${i + 1}`,
+        title: s.title || `Practice Session`,
+        date: format(new Date(s.createdAt), "MMM d"),
+        total: (s.scoreJson as any).totalScore as number,
+        hook:     parts.hook     != null ? Math.round(parts.hook * 5)     : null,
+        setHook:  parts.setHook  != null ? Math.round(parts.setHook * 5)  : null,
+        firstCTA: parts.firstCTA != null ? Math.round(parts.firstCTA * 5) : null,
+        content:  parts.content  != null ? Math.round(parts.content * 5)  : null,
+        finalCTA: parts.finalCTA != null ? Math.round(parts.finalCTA * 5) : null,
+      };
+    });
+
+  if (chartData.length < 2) return null;
+
+  const latest = chartData[chartData.length - 1].total;
+  const first  = chartData[0].total;
+  const delta  = latest - first;
+
+  const togglePart = (key: string) => {
+    setVisibleParts(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const entry = chartData.find(d => d.label === label);
+    return (
+      <div className="rounded-lg border bg-background shadow-md px-3 py-2 text-sm space-y-1">
+        <p className="font-semibold">{entry?.title}</p>
+        <p className="text-xs text-muted-foreground">{entry?.date}</p>
+        {payload.map((p: any) => (
+          <div key={p.dataKey} className="flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
+            <span className="text-muted-foreground">{p.name}:</span>
+            <span className="font-medium">{p.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <Card className="mb-8" data-testid="card-score-progress">
+      <CardHeader className="pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            <CardTitle className="text-base">Score Progress</CardTitle>
+            <Badge
+              variant="outline"
+              className={delta >= 0 ? "border-green-500 text-green-600 dark:text-green-400" : "border-red-500 text-red-600 dark:text-red-400"}
+              data-testid="text-score-delta"
+            >
+              {delta >= 0 ? "+" : ""}{delta} from first
+            </Badge>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {PART_LINES.map(({ key, label, color }) => (
+              <button
+                key={key}
+                onClick={() => togglePart(key)}
+                className={`px-2 py-0.5 rounded-full text-xs border transition-all ${
+                  visibleParts.has(key)
+                    ? "text-white border-transparent"
+                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
+                }`}
+                style={visibleParts.has(key) ? { background: color, borderColor: color } : {}}
+                data-testid={`toggle-part-${key}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={chartData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey="label" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} className="text-muted-foreground" />
+            <Tooltip content={<CustomTooltip />} />
+            <ReferenceLine y={70} stroke="#22c55e" strokeDasharray="4 4" strokeOpacity={0.6} />
+            <ReferenceLine y={40} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.6} />
+            <Line
+              type="monotone"
+              dataKey="total"
+              name="Overall"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2.5}
+              dot={{ r: 4, fill: "hsl(var(--primary))" }}
+              activeDot={{ r: 6 }}
+              connectNulls
+            />
+            {PART_LINES.map(({ key, label, color }) =>
+              visibleParts.has(key) ? (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  name={label}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  dot={{ r: 3, fill: color }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+              ) : null
+            )}
+          </LineChart>
+        </ResponsiveContainer>
+        <p className="mt-1 text-center text-xs text-muted-foreground">
+          Dashed lines: 40 (needs work) · 70 (good) · Part scores scaled to 100
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function VideoScorePage() {
   const { toast } = useToast();
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
@@ -508,6 +658,10 @@ export default function VideoScorePage() {
             </Link>
           </div>
         </div>
+
+        {sessions && sessions.length >= 2 && (
+          <ScoreProgressChart sessions={sessions} />
+        )}
 
         {selectionMode && (
           <BulkActionsBar
