@@ -129,12 +129,12 @@ export function AppSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  tooltip="Go to ClickFunnels"
-                  onClick={handleGoToClickFunnels}
+                  tooltip="Back to Dashboard"
+                  onClick={() => window.open("https://www.fearlessmarketinglab.com/courses/fearless-influencer-academy", "_blank", "noopener,noreferrer")}
                   data-testid="nav-clickfunnels"
                 >
                   <ExternalLink />
-                  <span>Go to ClickFunnels</span>
+                  <span>Back to Dashboard</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
