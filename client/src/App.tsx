@@ -175,7 +175,7 @@ function PublicRoutes() {
         {() => <PublicOnlyRoute component={LoginPage} />}
       </Route>
       <Route path="/signup">
-        {() => <PublicOnlyRoute component={SignupPage} />}
+        {() => <Redirect to="/" />}
       </Route>
       <Route path="/forgot-password">
         {() => <PublicOnlyRoute component={ForgotPasswordPage} />}
@@ -219,11 +219,9 @@ function AppLayout() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Navbar />
       <main className="flex-1">
         <PublicRoutes />
       </main>
-      <Footer />
     </div>
   );
 }
