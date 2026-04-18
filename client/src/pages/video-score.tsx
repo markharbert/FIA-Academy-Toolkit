@@ -427,6 +427,7 @@ function ScoreProgressChart({ sessions }: { sessions: Session[] }) {
   const chartData = sessions
     .filter(s => s.scoreJson?.totalScore != null)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-30)
     .map((s, i) => {
       const parts = (s.scoreJson as any)?.partScores ?? {};
       return {
