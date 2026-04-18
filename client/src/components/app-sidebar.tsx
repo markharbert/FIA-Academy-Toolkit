@@ -88,12 +88,12 @@ export function AppSidebar() {
               size="lg"
               onClick={() => setLocation("/dashboard")}
               data-testid="link-logo"
-              className="flex items-center justify-start"
+              className="flex items-center justify-start overflow-visible"
             >
               <img 
                 src={logoImage} 
                 alt="Academy Toolkit" 
-                className={state === "collapsed" ? "h-12 w-auto" : "h-16 w-auto"} 
+                className={state === "collapsed" ? "h-8 w-auto" : "h-10 w-auto"} 
               />
             </SidebarMenuButton>
           </SidebarMenuItem>
