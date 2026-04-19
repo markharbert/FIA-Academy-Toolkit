@@ -4134,7 +4134,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/accountability/checkin/current", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req.user as any).id;
+      const userId = req.session.userId!;
       const { week, year } = getISOWeek(new Date());
       const checkin = await getCheckinByWeek(userId, week, year);
       res.json({ checkin, week, year });
@@ -4145,7 +4145,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/accountability/checkin", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req.user as any).id;
+      const userId = req.session.userId!;
       const { week, year } = getISOWeek(new Date());
       const data = req.body;
       const checkin = await upsertCheckin(userId, week, year, {
@@ -4170,7 +4170,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/accountability/checkins", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req.user as any).id;
+      const userId = req.session.userId!;
       const checkins = await getAllCheckins(userId);
       res.json(checkins);
     } catch (err) {
@@ -4180,7 +4180,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/accountability/badges", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req.user as any).id;
+      const userId = req.session.userId!;
       const badges = await getUserBadges(userId);
       res.json(badges);
     } catch (err) {
@@ -4188,10 +4188,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  app.get("/api/accountability/admin/stats", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/accountability/admin/stats", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const user = req.user as any;
-      if (!user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const stats = await getAccountabilityAdminStats();
       res.json(stats);
     } catch (err) {
