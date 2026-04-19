@@ -4146,6 +4146,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.post("/api/accountability/checkin", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
+      console.log("[Accountability] POST /checkin userId:", userId, "body keys:", Object.keys(req.body));
       const { week, year } = getISOWeek(new Date());
       const data = req.body;
       const checkin = await upsertCheckin(userId, week, year, {
