@@ -26,6 +26,7 @@ import TopicPulseScriptPage from "@/pages/topic-pulse-script";
 import TopicPulseScriptsPage from "@/pages/topic-pulse-scripts";
 import TopicPulseSavedPage from "@/pages/topic-pulse-saved";
 import TopicPulseSettingsPage from "@/pages/topic-pulse-settings";
+import AccountabilityPage from "@/pages/accountability";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -145,6 +146,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/video-trends/settings">
         {() => <ProtectedRoute component={TopicPulseSettingsPage} />}
+      </Route>
+      <Route path="/accountability">
+        {() => <ProtectedRoute component={AccountabilityPage} />}
       </Route>
       <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>

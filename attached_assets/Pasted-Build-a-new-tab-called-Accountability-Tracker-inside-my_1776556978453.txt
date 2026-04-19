@@ -1,0 +1,125 @@
+Build a new tab called Accountability Tracker inside my existing Academy Toolkit app. This tab needs to function as a persistent weekly check-in and performance tracking system for members. All data must be stored permanently using the app's database so nothing is ever lost. Every member's full history should be retained indefinitely.
+
+DATA STORAGE REQUIREMENTS
+Use a persistent database (PostgreSQL or SQLite) to store all check-in records. Each record must be tied to a user ID and a week identifier (ISO week number + year). No data is ever deleted or overwritten. New check-ins append to the history. The database schema should include:
+
+user_id
+week_number
+year
+date_submitted
+videos_published (integer)
+video_platforms (array or comma-separated -- YouTube, Facebook, Instagram, TikTok)
+total_views (integer)
+new_leads (integer)
+email_list_size (integer)
+revenue_this_week (decimal)
+hours_worked (decimal)
+weekly_win (text)
+weekly_struggle (text)
+next_week_goal (text)
+
+
+WEEKLY CHECK-IN FORM
+Build a clean, simple form members fill out once per week. Include:
+
+Number of videos published this week (number input)
+Which platforms (multi-select checkboxes: YouTube, Facebook, Instagram, TikTok, Other)
+Total views across all platforms (number input)
+New leads or opt-ins generated (number input)
+Current email list size (number input)
+Revenue generated this week in dollars (number input)
+Hours worked on the business (number input)
+One win to celebrate this week (text area)
+One struggle or challenge this week (text area)
+Main focus goal for next week (text area)
+
+If a member already submitted a check-in for the current week, show their existing entry and allow them to edit it. Prevent duplicate submissions for the same week.
+
+PERSONAL DASHBOARD
+After at least 2 weeks of data exists, show a personal performance dashboard with:
+
+Line graphs showing week over week trends for: videos published, total views, new leads, email list size, and revenue
+A running monthly total and yearly total for videos, leads, and revenue
+Their single best week ever for revenue and for leads (highlighted as a personal record)
+A content consistency streak counter showing how many consecutive weeks they have submitted a check-in
+A revenue per video metric calculated automatically from their data (total revenue divided by total videos published)
+A simple 4-week rolling average for videos published, leads, and revenue so they can see if they are trending up or down
+
+
+MILESTONE BADGES
+Track and display milestone badges that unlock automatically based on their cumulative data. Badges should persist once earned and display on their profile. Include these milestones:
+
+First check-in submitted
+First video published
+10 videos published total
+25 videos published total
+50 videos published total
+100 videos published total
+First lead generated
+50 leads generated total
+100 leads generated total
+500 leads generated total
+First dollar earned online
+First $500 week
+First $1,000 week
+First $1,000 month
+First $5,000 month
+First $10,000 month
+4 week check-in streak
+8 week check-in streak
+12 week check-in streak
+6 month check-in streak
+1 year check-in streak
+
+When a new badge is earned on submission, show a congratulations popup before returning to the dashboard.
+
+WEEKLY INSIGHTS SUMMARY
+After each check-in submission generate an automatic insights summary showing:
+
+Whether their video output this week is above or below their 4-week average
+Whether their leads this week are above or below their 4-week average
+Whether their revenue this week is above or below their 4-week average
+Their current consistency score out of 10 based on how many of the last 10 weeks they submitted a check-in
+A short automatically generated encouraging message based on their trend direction (improving, holding steady, or declining)
+
+
+HISTORY LOG
+Include a full history tab within the Accountability Tracker that shows every past check-in in a table format with all fields visible. Allow sorting by date, revenue, leads, and videos published. Allow them to click any past week to view the full details of that check-in including their written win, struggle, and goal entries.
+
+COACHING BRIEF EXPORT
+Include a button labeled "Generate Coaching Brief" that compiles their last 4 weeks of data into a clean one-page summary showing:
+
+Their 4-week totals for videos, leads, and revenue
+Their trend direction for each metric
+Their stated wins, struggles, and goals from each week
+Their currently earned badges
+Their consistency score
+
+This brief should be exportable as a PDF or printable view so they can share it before a coaching call.
+
+ADMIN VIEW
+Build a separate admin-only view accessible to the app owner that shows:
+
+Total number of members who have submitted at least one check-in
+Aggregate weekly totals across all members for videos published, leads generated, and revenue
+A list of members sorted by current streak length
+A list of members who have not submitted a check-in in the last 2 weeks (at-risk members)
+The most commonly reported struggle topics (simple keyword frequency from the struggle text field)
+
+
+DESIGN REQUIREMENTS
+
+Match the existing visual style of the Academy Toolkit app
+Mobile friendly and responsive
+Dashboard graphs should be clean and minimal using Chart.js or a similar lightweight library
+Milestone badges should be visually distinct -- use icons or emoji with a gold/earned color state vs a gray/locked state
+All data loads fast -- use indexed database queries for historical data
+
+
+CRITICAL REQUIREMENTS
+
+All data is stored in a persistent database, never in local storage or session storage
+Data must survive server restarts, deployments, and updates without any loss
+Every check-in is permanently retained with no expiration
+The system must support multiple members with completely separate data histories
+Week identification must be consistent (use ISO week standard) so the streak counter and duplicate prevention work correctly across time zones

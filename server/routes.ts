@@ -1,6 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, getCheckinByWeek, upsertCheckin, getAllCheckins, getUserBadges, awardBadge, getAccountabilityAdminStats } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema } from "@shared/schema";
@@ -4049,6 +4049,153 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     } catch (err) {
       console.error("[YouTube] Video details error:", err);
       res.status(500).json({ message: "Failed to fetch video details" });
+    }
+  });
+
+  // ─── Accountability Tracker ──────────────────────────────────────────────────
+
+  // Helper: compute ISO week number
+  function getISOWeek(date: Date): { week: number; year: number } {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return { week, year: d.getUTCFullYear() };
+  }
+
+  // Badge evaluation — returns list of newly earned badge IDs
+  async function evaluateBadges(userId: string): Promise<string[]> {
+    const checkins = await getAllCheckins(userId);
+    const existing = await getUserBadges(userId);
+    const earned = new Set(existing.map(b => b.badgeId));
+    const newlyEarned: string[] = [];
+
+    const totalVideos = checkins.reduce((s, c) => s + c.videosPublished, 0);
+    const totalLeads = checkins.reduce((s, c) => s + c.newLeads, 0);
+    const totalRevenue = checkins.reduce((s, c) => s + c.revenueThisWeek, 0);
+    const weekCount = checkins.length;
+
+    // Compute streak
+    const sorted = [...checkins].sort((a, b) => b.year !== a.year ? b.year - a.year : b.weekNumber - a.weekNumber);
+    let streak = 1;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      const prevDate = new Date(prev.year, 0, 1 + (prev.weekNumber - 1) * 7);
+      const currDate = new Date(curr.year, 0, 1 + (curr.weekNumber - 1) * 7);
+      const diffDays = (prevDate.getTime() - currDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (diffDays >= 5 && diffDays <= 9) streak++;
+      else break;
+    }
+
+    // Compute monthly revenue
+    const now = new Date();
+    const thisMonth = checkins.filter(c => {
+      const d = new Date(c.dateSubmitted);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
+    const monthRevenue = thisMonth.reduce((s, c) => s + c.revenueThisWeek, 0);
+    const bestWeekRevenue = checkins.length > 0 ? Math.max(...checkins.map(c => c.revenueThisWeek)) : 0;
+    const bestWeekLeads = checkins.length > 0 ? Math.max(...checkins.map(c => c.newLeads)) : 0;
+
+    const checks: [string, boolean][] = [
+      ['first_checkin', weekCount >= 1],
+      ['first_video', totalVideos >= 1],
+      ['videos_10', totalVideos >= 10],
+      ['videos_25', totalVideos >= 25],
+      ['videos_50', totalVideos >= 50],
+      ['videos_100', totalVideos >= 100],
+      ['first_lead', totalLeads >= 1],
+      ['leads_50', totalLeads >= 50],
+      ['leads_100', totalLeads >= 100],
+      ['leads_500', totalLeads >= 500],
+      ['first_dollar', totalRevenue >= 1],
+      ['week_500', bestWeekRevenue >= 500],
+      ['week_1000', bestWeekRevenue >= 1000],
+      ['month_1000', monthRevenue >= 1000],
+      ['month_5000', monthRevenue >= 5000],
+      ['month_10000', monthRevenue >= 10000],
+      ['streak_4', streak >= 4],
+      ['streak_8', streak >= 8],
+      ['streak_12', streak >= 12],
+      ['streak_26', streak >= 26],
+      ['streak_52', streak >= 52],
+    ];
+
+    for (const [badgeId, condition] of checks) {
+      if (condition && !earned.has(badgeId)) {
+        const result = await awardBadge(userId, badgeId);
+        if (result) newlyEarned.push(badgeId);
+      }
+    }
+    return newlyEarned;
+  }
+
+  app.get("/api/accountability/checkin/current", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const { week, year } = getISOWeek(new Date());
+      const checkin = await getCheckinByWeek(userId, week, year);
+      res.json({ checkin, week, year });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch current checkin" });
+    }
+  });
+
+  app.post("/api/accountability/checkin", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const { week, year } = getISOWeek(new Date());
+      const data = req.body;
+      const checkin = await upsertCheckin(userId, week, year, {
+        videosPublished: data.videosPublished ?? 0,
+        videoPlatforms: data.videoPlatforms ?? [],
+        totalViews: data.totalViews ?? 0,
+        newLeads: data.newLeads ?? 0,
+        emailListSize: data.emailListSize ?? 0,
+        revenueThisWeek: data.revenueThisWeek ?? 0,
+        hoursWorked: data.hoursWorked ?? 0,
+        weeklyWin: data.weeklyWin ?? '',
+        weeklyStruggle: data.weeklyStruggle ?? '',
+        nextWeekGoal: data.nextWeekGoal ?? '',
+      });
+      const newBadges = await evaluateBadges(userId);
+      res.json({ checkin, newBadges });
+    } catch (err) {
+      console.error("[Accountability] Submit error:", err);
+      res.status(500).json({ message: "Failed to save checkin" });
+    }
+  });
+
+  app.get("/api/accountability/checkins", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const checkins = await getAllCheckins(userId);
+      res.json(checkins);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch checkins" });
+    }
+  });
+
+  app.get("/api/accountability/badges", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const badges = await getUserBadges(userId);
+      res.json(badges);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch badges" });
+    }
+  });
+
+  app.get("/api/accountability/admin/stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = req.user as any;
+      if (!user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const stats = await getAccountabilityAdminStats();
+      res.json(stats);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch admin stats" });
     }
   });
 
