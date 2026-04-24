@@ -664,27 +664,16 @@ export async function getKeywordsEverywhereCredits(userId?: string): Promise<{ c
 
 interface PlatformData {
   google: KeywordData;
-  youtube: KeywordData;
-  pinterest: KeywordData;
-  tiktok: KeywordData;
 }
 
 export async function fetchPlatformDataForTopic(
   topicId: string, 
-  userId?: string
+  _userId?: string
 ): Promise<{ topic: Topic; platformData: PlatformData } | null> {
   const topic = await storage.getTopic(topicId);
   if (!topic) {
     return null;
   }
-  
-  const keyword = topic.keywordQuery;
-  
-  const [youtubeData, pinterestData, tiktokData] = await Promise.all([
-    getPlatformKeywordData(keyword, "youtube", userId),
-    getPlatformKeywordData(keyword, "pinterest", userId),
-    getPlatformKeywordData(keyword, "tiktok", userId),
-  ]);
   
   const googleData: KeywordData = {
     volume: topic.monthlySearchVolume ?? null,
@@ -693,30 +682,10 @@ export async function fetchPlatformDataForTopic(
     trend: topic.trendData ?? null,
   };
   
-  await storage.updateTopicPlatformData(topicId, {
-    pinterestVolume: pinterestData.volume,
-    pinterestCpc: pinterestData.cpc,
-    pinterestCompetition: pinterestData.competition,
-    pinterestTrendData: pinterestData.trend,
-    youtubeVolume: youtubeData.volume,
-    youtubeCpc: youtubeData.cpc,
-    youtubeCompetition: youtubeData.competition,
-    youtubeTrendData: youtubeData.trend,
-    tiktokVolume: tiktokData.volume,
-    tiktokCpc: tiktokData.cpc,
-    tiktokCompetition: tiktokData.competition,
-    tiktokTrendData: tiktokData.trend,
-  });
-  
-  const updatedTopic = await storage.getTopic(topicId);
-  
   return {
-    topic: updatedTopic!,
+    topic,
     platformData: {
       google: googleData,
-      youtube: youtubeData,
-      pinterest: pinterestData,
-      tiktok: tiktokData,
     }
   };
 }

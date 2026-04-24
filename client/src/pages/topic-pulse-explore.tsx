@@ -14,8 +14,7 @@ import {
   FileText, Sparkles, Lightbulb, HelpCircle, CheckCircle2, AlertCircle,
   ArrowUpDown, ArrowDown, ArrowUp, X, Search, Brain, ChevronDown
 } from "lucide-react";
-import { SiPinterest, SiYoutube, SiGoogle, SiTiktok } from "react-icons/si";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SiGoogle, SiPinterest } from "react-icons/si";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -123,15 +122,6 @@ interface PlatformData {
   trend: TrendDataPoint[] | null;
 }
 
-interface PlatformDataResponse {
-  topic: Topic;
-  platformData: {
-    google: PlatformData;
-    youtube: PlatformData;
-    pinterest: PlatformData;
-    tiktok: PlatformData;
-  };
-}
 
 function PlatformMetricCard({ 
   label, 
@@ -249,18 +239,6 @@ function PlatformKeywordDataSection({
 }: { 
   topic: Topic;
 }) {
-  const [platformData, setPlatformData] = useState<PlatformDataResponse["platformData"] | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const [hasFetched, setHasFetched] = useState(false);
-  
-  useEffect(() => {
-    setPlatformData(null);
-    setHasFetched(false);
-    setIsLoading(false);
-    setError(false);
-  }, [topic.id]);
-
   const googleData: PlatformData = {
     volume: topic.monthlySearchVolume ?? null,
     cpc: topic.cpc ?? null,
@@ -268,199 +246,23 @@ function PlatformKeywordDataSection({
     trend: topic.trendData as TrendDataPoint[] ?? null,
   };
 
-  const youtubeData: PlatformData | null = platformData?.youtube ?? (topic.youtubeVolume !== null && topic.youtubeVolume !== undefined ? {
-    volume: topic.youtubeVolume ?? null,
-    cpc: topic.youtubeCpc ?? null,
-    competition: topic.youtubeCompetition ?? null,
-    trend: topic.youtubeTrendData as TrendDataPoint[] ?? null,
-  } : null);
-
-  const pinterestData: PlatformData | null = platformData?.pinterest ?? (topic.pinterestVolume !== null && topic.pinterestVolume !== undefined ? {
-    volume: topic.pinterestVolume ?? null,
-    cpc: topic.pinterestCpc ?? null,
-    competition: topic.pinterestCompetition ?? null,
-    trend: topic.pinterestTrendData as TrendDataPoint[] ?? null,
-  } : null);
-
-  const tiktokData: PlatformData | null = platformData?.tiktok ?? (topic.tiktokVolume !== null && topic.tiktokVolume !== undefined ? {
-    volume: topic.tiktokVolume ?? null,
-    cpc: topic.tiktokCpc ?? null,
-    competition: topic.tiktokCompetition ?? null,
-    trend: topic.tiktokTrendData as TrendDataPoint[] ?? null,
-  } : null);
-
-  const fetchPlatformData = async () => {
-    if (isLoading || hasFetched) return;
-    setIsLoading(true);
-    setError(false);
-    setHasFetched(true);
-    try {
-      const res = await fetch(`/api/topic-pulse/topics/${topic.id}/platform-data`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch platform data");
-      const data: PlatformDataResponse = await res.json();
-      setPlatformData(data.platformData);
-    } catch {
-      setError(true);
-      setHasFetched(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const needsFetch = !youtubeData || !pinterestData || !tiktokData;
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="font-medium">Keyword Data by Platform</h3>
-        {needsFetch && !isLoading && (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={fetchPlatformData}
-            disabled={isLoading}
-            data-testid="button-fetch-platform-data"
-          >
-            <Search className="h-3 w-3 mr-1.5" />
-            Load All Platforms
-          </Button>
-        )}
-        {isLoading && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading...
-          </div>
-        )}
+      <div className="flex items-center gap-2">
+        <SiGoogle className="h-4 w-4 text-blue-500" />
+        <h3 className="font-medium">Google Keyword Data</h3>
       </div>
-
-      <Tabs defaultValue="google" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="google" className="gap-1.5" data-testid="tab-google">
-            <SiGoogle className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Google</span>
-          </TabsTrigger>
-          <TabsTrigger value="youtube" className="gap-1.5" data-testid="tab-youtube">
-            <SiYoutube className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">YouTube</span>
-          </TabsTrigger>
-          <TabsTrigger value="pinterest" className="gap-1.5" data-testid="tab-pinterest">
-            <SiPinterest className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Pinterest</span>
-          </TabsTrigger>
-          <TabsTrigger value="tiktok" className="gap-1.5" data-testid="tab-tiktok">
-            <SiTiktok className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">TikTok</span>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="google" className="mt-3" data-testid="section-google-data">
-          <PlatformSection 
-            platform="Google" 
-            data={googleData} 
-            icon={<SiGoogle className="h-4 w-4" />}
-            color="text-blue-500"
-            platformDescription="Google Search keyword metrics"
-          />
-        </TabsContent>
-
-        <TabsContent value="youtube" className="mt-3" data-testid="section-youtube-data">
-          {youtubeData ? (
-            <PlatformSection 
-              platform="YouTube" 
-              data={youtubeData} 
-              icon={<SiYoutube className="h-4 w-4" />}
-              color="text-red-500"
-              platformDescription="YouTube search and video keyword metrics"
-            />
-          ) : (
-            <div className="p-4 rounded-md bg-muted/30 text-center">
-              <p className="text-sm text-muted-foreground mb-2">YouTube data not loaded yet</p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={fetchPlatformData}
-                disabled={isLoading}
-                data-testid="button-load-youtube"
-              >
-                {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <SiYoutube className="h-3 w-3 mr-1.5" />}
-                Load YouTube Data
-              </Button>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="pinterest" className="mt-3" data-testid="section-pinterest-data">
-          {pinterestData ? (
-            <PlatformSection 
-              platform="Pinterest" 
-              data={pinterestData} 
-              icon={<SiPinterest className="h-4 w-4" />}
-              color="text-[#E60023]"
-              platformDescription="Pinterest search and pin keyword metrics"
-            />
-          ) : (
-            <div className="p-4 rounded-md bg-muted/30 text-center">
-              <p className="text-sm text-muted-foreground mb-2">Pinterest data not loaded yet</p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={fetchPlatformData}
-                disabled={isLoading}
-                data-testid="button-load-pinterest"
-              >
-                {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <SiPinterest className="h-3 w-3 mr-1.5" />}
-                Load Pinterest Data
-              </Button>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="tiktok" className="mt-3" data-testid="section-tiktok-data">
-          {tiktokData ? (
-            <PlatformSection 
-              platform="TikTok" 
-              data={tiktokData} 
-              icon={<SiTiktok className="h-4 w-4" />}
-              color="text-foreground"
-              platformDescription="TikTok search and video keyword metrics"
-            />
-          ) : (
-            <div className="p-4 rounded-md bg-muted/30 text-center">
-              <p className="text-sm text-muted-foreground mb-2">TikTok data not loaded yet</p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={fetchPlatformData}
-                disabled={isLoading}
-                data-testid="button-load-tiktok"
-              >
-                {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <SiTiktok className="h-3 w-3 mr-1.5" />}
-                Load TikTok Data
-              </Button>
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
-
-      {error && (
-        <div className="text-sm text-destructive">
-          Failed to load platform data. 
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="p-0 h-auto ml-1 underline"
-            onClick={() => { setHasFetched(false); fetchPlatformData(); }}
-          >
-            Try again
-          </Button>
-        </div>
-      )}
+      <PlatformSection 
+        platform="Google" 
+        data={googleData} 
+        icon={<SiGoogle className="h-4 w-4" />}
+        color="text-blue-500"
+        platformDescription="Google Search keyword metrics"
+      />
     </div>
   );
 }
+
 
 const intentLabels: Record<TopicIntent, string> = {
   "review": "Review",
