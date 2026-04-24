@@ -717,10 +717,12 @@ export default function TopicPulseExplorePage() {
                   </div>
                 </div>
 
-                <PlatformKeywordDataSection topic={selectedTopic} />
+                <div className="rounded-lg border border-border/50 p-3">
+                  <PlatformKeywordDataSection topic={selectedTopic} />
+                </div>
 
                 {selectedTopic.demandSignalsJson && (
-                  <div>
+                  <div className="rounded-lg border border-border/50 p-3">
                     <h3 className="font-medium mb-2">Additional Signals</h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center justify-between">
