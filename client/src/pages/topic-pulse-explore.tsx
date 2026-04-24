@@ -14,7 +14,7 @@ import {
   FileText, Sparkles, Lightbulb, HelpCircle, CheckCircle2, AlertCircle,
   ArrowUpDown, ArrowDown, ArrowUp, X, Search, Brain, ChevronDown
 } from "lucide-react";
-import { SiGoogle, SiPinterest } from "react-icons/si";
+import { SiGoogle } from "react-icons/si";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -641,19 +641,6 @@ export default function TopicPulseExplorePage() {
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-6">
                 <div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <p className="text-sm text-muted-foreground">{selectedTopic.keywordQuery}</p>
-                    <a
-                      href={`https://trends.pinterest.com/?q=${encodeURIComponent(selectedTopic.keywordQuery)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#E60023] hover:opacity-80 transition-opacity"
-                      title="View on Pinterest Trends"
-                      data-testid="link-pinterest-trends"
-                    >
-                      <SiPinterest className="h-4 w-4" />
-                    </a>
-                  </div>
                   
                   <div className="flex gap-2 mb-4 flex-wrap">
                     <Button 
