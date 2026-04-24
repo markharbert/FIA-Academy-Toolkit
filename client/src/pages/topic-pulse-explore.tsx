@@ -247,19 +247,13 @@ function PlatformKeywordDataSection({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <SiGoogle className="h-4 w-4 text-blue-500" />
-        <h3 className="font-medium">Google Keyword Data</h3>
-      </div>
-      <PlatformSection 
-        platform="Google" 
-        data={googleData} 
-        icon={<SiGoogle className="h-4 w-4" />}
-        color="text-blue-500"
-        platformDescription="Google Search keyword metrics"
-      />
-    </div>
+    <PlatformSection 
+      platform="Google" 
+      data={googleData} 
+      icon={<SiGoogle className="h-4 w-4" />}
+      color="text-blue-500"
+      platformDescription="Google Search keyword metrics"
+    />
   );
 }
 
