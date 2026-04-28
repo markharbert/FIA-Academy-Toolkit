@@ -3,8 +3,7 @@ import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -42,69 +41,61 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const PART_COLORS: Record<string, string> = {
+  hook:     "#f97316",
+  setHook:  "#a855f7",
+  firstCTA: "#eab308",
+  content:  "#22c55e",
+  finalCTA: "#ec4899",
+};
+
 function ScoreCircle({ score, size = "lg" }: { score: number; size?: "sm" | "lg" }) {
   const radius = size === "lg" ? 54 : 36;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (score / 100) * circumference;
-  const color = score >= 70 ? "text-green-500" : score >= 40 ? "text-yellow-500" : "text-red-500";
+  const stroke = score >= 70 ? "#10b981" : score >= 40 ? "#f59e0b" : "#f43f5e";
+  const textColor = score >= 70 ? "text-emerald-500" : score >= 40 ? "text-amber-500" : "text-rose-500";
   const sizeClass = size === "lg" ? "h-32 w-32" : "h-20 w-20";
   const textSize = size === "lg" ? "text-3xl" : "text-lg";
+  const viewBox = size === "lg" ? "0 0 128 128" : "0 0 80 80";
   const cx = size === "lg" ? 64 : 40;
   const cy = size === "lg" ? 64 : 40;
 
   return (
     <div className={`relative ${sizeClass}`}>
-      <svg className={`${sizeClass} -rotate-90`}>
-        <circle
-          className="text-muted"
-          strokeWidth="8"
-          stroke="currentColor"
-          fill="transparent"
-          r={radius}
-          cx={cx}
-          cy={cy}
-        />
-        <circle
-          className={color}
-          strokeWidth="8"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          stroke="currentColor"
-          fill="transparent"
-          r={radius}
-          cx={cx}
-          cy={cy}
-        />
+      <svg className={`${sizeClass} -rotate-90`} viewBox={viewBox}>
+        <circle strokeWidth="8" stroke="currentColor" fill="transparent" r={radius} cx={cx} cy={cy} className="text-muted" />
+        <circle strokeWidth="8" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" stroke={stroke} fill="transparent" r={radius} cx={cx} cy={cy} />
       </svg>
-      <span className={`absolute inset-0 flex items-center justify-center ${textSize} font-bold`}>
+      <span className={`absolute inset-0 flex items-center justify-center ${textSize} font-bold ${textColor}`}>
         {score}
       </span>
     </div>
   );
 }
 
-function getScoreLevel(score: number): { color: string; label: string; textColor: string } {
-  if (score >= 15) return { color: "bg-green-500", label: "Excellent", textColor: "text-green-600 dark:text-green-400" };
-  if (score >= 10) return { color: "bg-yellow-500", label: "Good", textColor: "text-yellow-600 dark:text-yellow-400" };
-  return { color: "bg-red-500", label: "Needs work", textColor: "text-red-600 dark:text-red-400" };
+function getScoreLevel(score: number): { label: string; textColor: string } {
+  if (score >= 15) return { label: "Excellent", textColor: "text-emerald-600 dark:text-emerald-400" };
+  if (score >= 10) return { label: "Good", textColor: "text-amber-600 dark:text-amber-400" };
+  return { label: "Needs work", textColor: "text-rose-600 dark:text-rose-400" };
 }
 
-function PartScoreBar({ label, score }: { label: string; score: number }) {
+function PartScoreBar({ label, score, partKey }: { label: string; score: number; partKey?: string }) {
   const percentage = (score / 20) * 100;
-  const { color, label: levelLabel, textColor } = getScoreLevel(score);
+  const { label: levelLabel, textColor } = getScoreLevel(score);
+  const barColor = partKey ? PART_COLORS[partKey] : undefined;
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div className="flex justify-between text-sm">
-        <span>{label}</span>
+        <span className="font-medium">{label}</span>
         <div className="flex items-center gap-2">
-          <span className={`text-xs ${textColor}`}>{levelLabel}</span>
-          <span className="font-medium">{score}/20</span>
+          <span className={`text-xs font-semibold ${textColor}`}>{levelLabel}</span>
+          <span className="text-xs font-bold tabular-nums">{score}/20</span>
         </div>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div className={`h-full ${color} transition-all`} style={{ width: `${percentage}%` }} />
+        <div className="h-full rounded-full transition-all" style={{ width: `${percentage}%`, background: barColor || "#6366f1" }} />
       </div>
     </div>
   );
@@ -144,88 +135,84 @@ function DetailedPartFeedback({
   score: number; 
   data: { whatWorked: string[]; whatMissing: string[]; suggestions: string[]; exampleLines: string[] };
 }) {
-  const { color, textColor } = getScoreLevel(score);
-  const badgeClass = score >= 15 
-    ? "bg-green-500 hover:bg-green-500 text-white" 
-    : score >= 10 
-      ? "bg-yellow-500 hover:bg-yellow-500 text-white" 
-      : "bg-red-500 hover:bg-red-500 text-white";
-  
+  const { label: levelLabel } = getScoreLevel(score);
+  const partColor = PART_COLORS[partKey] || "#6366f1";
   const definition = partDefinitions[partKey];
   
   return (
-    <AccordionItem value={partKey}>
-      <AccordionTrigger className="hover:no-underline">
+    <AccordionItem value={partKey} className="border-b-0 mb-2 last:mb-0">
+      <AccordionTrigger className="hover:no-underline rounded-xl border bg-card px-4 py-3 hover:bg-muted/40 transition-colors data-[state=open]:rounded-b-none data-[state=open]:border-b-0" style={{ borderLeftWidth: 4, borderLeftColor: partColor }}>
         <div className="flex items-center gap-3">
-          <Badge className={`text-xs ${badgeClass}`}>
+          <span
+            className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
+            style={{ background: partColor }}
+          >
             {score}/20
-          </Badge>
+          </span>
           <span className="font-semibold">{title}</span>
+          <span className="text-xs text-muted-foreground font-normal">{levelLabel}</span>
         </div>
       </AccordionTrigger>
-      <AccordionContent className="space-y-4 pt-4">
+      <AccordionContent className="border border-t-0 rounded-b-xl px-4 pb-4 pt-3 space-y-4" style={{ borderLeftWidth: 4, borderLeftColor: partColor }}>
         {definition && (
-          <div className="rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 p-3 mb-2">
-            <div className="flex items-start gap-3">
-              <Lightbulb className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 p-3">
+            <div className="flex items-start gap-2.5">
+              <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-1">{definition.question}</p>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300/80">{definition.definition}</p>
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">{definition.question}</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300/80 leading-relaxed">{definition.definition}</p>
               </div>
             </div>
           </div>
         )}
         {data.whatWorked.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
-              <Check className="h-4 w-4" />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+              <Check className="h-3.5 w-3.5" />
               What Worked
             </div>
-            <ul className="space-y-1 pl-6">
+            <ul className="space-y-1 pl-5">
               {data.whatWorked.map((item, i) => (
                 <li key={i} className="text-sm text-muted-foreground list-disc">{item}</li>
               ))}
             </ul>
           </div>
         )}
-
         {data.whatMissing.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="h-4 w-4" />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+              <AlertTriangle className="h-3.5 w-3.5" />
               What's Missing
             </div>
-            <ul className="space-y-1 pl-6">
+            <ul className="space-y-1 pl-5">
               {data.whatMissing.map((item, i) => (
                 <li key={i} className="text-sm text-muted-foreground list-disc">{item}</li>
               ))}
             </ul>
           </div>
         )}
-
         {data.suggestions.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400">
-              <Lightbulb className="h-4 w-4" />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+              <Lightbulb className="h-3.5 w-3.5" />
               Suggestions
             </div>
-            <ul className="space-y-1 pl-6">
+            <ul className="space-y-1 pl-5">
               {data.suggestions.map((item, i) => (
                 <li key={i} className="text-sm text-muted-foreground list-disc">{item}</li>
               ))}
             </ul>
           </div>
         )}
-
         {data.exampleLines.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Quote className="h-4 w-4" />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <Quote className="h-3.5 w-3.5" />
               Example Lines
             </div>
-            <div className="space-y-2 pl-6">
+            <div className="space-y-2 pl-4">
               {data.exampleLines.map((line, i) => (
-                <blockquote key={i} className="border-l-2 border-primary pl-3 text-sm italic text-muted-foreground">
+                <blockquote key={i} className="border-l-2 pl-3 text-sm italic text-muted-foreground" style={{ borderColor: partColor }}>
                   "{line}"
                 </blockquote>
               ))}
@@ -272,38 +259,28 @@ function VideoQualityInfo({ resolution, durationSeconds }: { resolution: string 
   const qualityInfo = getVideoQualityLabel(resolution ?? null);
   
   return (
-    <div className="flex flex-col items-center gap-2 mb-6 pb-6 border-b">
-      <div className="flex items-center justify-center gap-6 flex-wrap">
-        {resolution && (
-          <div className="flex items-center gap-2">
-            <Film className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Quality:</span>
-            <Badge 
-              className={qualityInfo.isHighQuality 
-                ? "bg-green-600 hover:bg-green-700 text-white" 
-                : "bg-red-600 hover:bg-red-700 text-white"
-              }
-            >
-              {qualityInfo.label}
-            </Badge>
-          </div>
-        )}
-        {durationSeconds && (
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Video Length:</span>
-            <span className="text-sm font-semibold">{formatDuration(durationSeconds)}</span>
-          </div>
-        )}
-      </div>
-      {resolution && qualityInfo.isHighQuality && (
-        <p className="text-xs text-green-600 dark:text-green-400 text-center max-w-md">
-          Great video quality! Keep recording in high definition for the best results.
-        </p>
+    <div className="flex flex-wrap items-center justify-center gap-4 mb-6 pb-6 border-b">
+      {resolution && (
+        <div className="flex items-center gap-2">
+          <Film className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Quality:</span>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${qualityInfo.isHighQuality ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-500"}`}>
+            {qualityInfo.label}
+          </span>
+        </div>
       )}
-      {resolution && !qualityInfo.isHighQuality && (
-        <p className="text-xs text-red-600 dark:text-red-400 text-center max-w-md">
-          For best results, record and export your videos in 1080p or higher resolution.
+      {durationSeconds && (
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Video Length:</span>
+          <span className="text-sm font-semibold">{formatDuration(durationSeconds)}</span>
+        </div>
+      )}
+      {resolution && (
+        <p className={`w-full text-center text-xs ${qualityInfo.isHighQuality ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+          {qualityInfo.isHighQuality
+            ? "Great video quality! Keep recording in high definition for the best results."
+            : "For best results, record and export your videos in 1080p or higher resolution."}
         </p>
       )}
     </div>
@@ -394,38 +371,28 @@ function VideoTimeline({ sessionId, frameCount, durationSeconds, resolution }: {
 
   return (
     <div className="hidden md:block" data-testid="video-timeline">
-      <div className="flex flex-col items-center gap-2 mb-4">
-        <div className="flex items-center justify-center gap-6">
-          {resolution && (
-            <div className="flex items-center gap-2">
-              <Film className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Quality:</span>
-              <Badge 
-                className={qualityInfo.isHighQuality 
-                  ? "bg-green-600 hover:bg-green-700 text-white" 
-                  : "bg-red-600 hover:bg-red-700 text-white"
-                }
-              >
-                {qualityInfo.label}
-              </Badge>
-            </div>
-          )}
-          {durationSeconds && (
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Duration:</span>
-              <span className="text-sm font-semibold">{formatDuration(durationSeconds)}</span>
-            </div>
-          )}
-        </div>
-        {resolution && qualityInfo.isHighQuality && (
-          <p className="text-xs text-green-600 dark:text-green-400 text-center max-w-md">
-            Great video quality! Keep recording in high definition for the best results.
-          </p>
+      <div className="flex flex-wrap items-center justify-center gap-4 mb-4">
+        {resolution && (
+          <div className="flex items-center gap-2">
+            <Film className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Quality:</span>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${qualityInfo.isHighQuality ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-500"}`}>
+              {qualityInfo.label}
+            </span>
+          </div>
         )}
-        {resolution && !qualityInfo.isHighQuality && (
-          <p className="text-xs text-red-600 dark:text-red-400 text-center max-w-md">
-            For best results, record and export your videos in 1080p or higher resolution.
+        {durationSeconds && (
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Duration:</span>
+            <span className="text-sm font-semibold">{formatDuration(durationSeconds)}</span>
+          </div>
+        )}
+        {resolution && (
+          <p className={`w-full text-center text-xs ${qualityInfo.isHighQuality ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+            {qualityInfo.isHighQuality
+              ? "Great video quality! Keep recording in high definition for the best results."
+              : "For best results, record and export your videos in 1080p or higher resolution."}
           </p>
         )}
       </div>
@@ -1010,93 +977,80 @@ export default function SessionPage() {
   const showUploadComplete = uploadStep === "done" && !session;
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8 space-y-8">
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard">
-          <Button variant="ghost" size="icon" data-testid="button-back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          {isEditingTitle ? (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                maxLength={80}
-                className="text-xl font-bold"
-                data-testid="input-edit-title"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSaveTitle();
-                  if (e.key === "Escape") handleCancelEditTitle();
-                }}
-              />
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                onClick={handleSaveTitle}
-                disabled={updateTitleMutation.isPending}
-                data-testid="button-save-title"
-              >
-                {updateTitleMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Check className="h-4 w-4" />
-                )}
-              </Button>
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                onClick={handleCancelEditTitle}
-                data-testid="button-cancel-title"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold" data-testid="text-session-title">{displayTitle}</h1>
-              {session && (
-                <>
-                  <Button 
-                    size="icon" 
-                    variant="ghost" 
-                    onClick={handleStartEditTitle}
-                    data-testid="button-edit-title"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  {session.transcriptText && (
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      onClick={() => generateTitleMutation.mutate()}
-                      disabled={generateTitleMutation.isPending}
-                      data-testid="button-generate-title"
-                    >
-                      {generateTitleMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="mr-2 h-4 w-4" />
-                      )}
-                      Generate Title
+    <div className="min-h-full flex flex-col">
+      {/* ── Dark hero header ── */}
+      <div className="bg-sidebar text-sidebar-foreground px-6 py-5 shrink-0">
+        <div className="max-w-5xl mx-auto flex items-center gap-4">
+          <Link href="/video-score">
+            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors shrink-0" data-testid="button-back">
+              <ArrowLeft className="h-4 w-4" />
+              All Videos
+            </button>
+          </Link>
+          <div className="flex-1 min-w-0">
+            {isEditingTitle ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  maxLength={80}
+                  className="text-base font-bold bg-white/10 border-white/20 text-white placeholder:text-white/40"
+                  data-testid="input-edit-title"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveTitle();
+                    if (e.key === "Escape") handleCancelEditTitle();
+                  }}
+                />
+                <Button size="icon" variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 shrink-0" onClick={handleSaveTitle} disabled={updateTitleMutation.isPending} data-testid="button-save-title">
+                  {updateTitleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                </Button>
+                <Button size="icon" variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 shrink-0" onClick={handleCancelEditTitle} data-testid="button-cancel-title">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 min-w-0">
+                <h1 className="text-base font-bold text-white truncate" data-testid="text-session-title">{displayTitle}</h1>
+                {session && (
+                  <>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-white/40 hover:text-white hover:bg-white/10 shrink-0" onClick={handleStartEditTitle} data-testid="button-edit-title">
+                      <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                  )}
-                </>
-              )}
+                    {session.transcriptText && (
+                      <Button size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10 h-7 text-xs shrink-0" onClick={() => generateTitleMutation.mutate()} disabled={generateTitleMutation.isPending} data-testid="button-generate-title">
+                        {generateTitleMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1 h-3 w-3" />}
+                        Generate Title
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {session?.createdAt && (
+              <p className="text-xs text-white/40 mt-0.5">
+                {format(new Date(session.createdAt), "MMMM d, yyyy 'at' h:mm a")}
+              </p>
+            )}
+          </div>
+          {score && (
+            <div className="shrink-0 flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <div className={`text-2xl font-bold ${score.totalScore >= 70 ? "text-emerald-400" : score.totalScore >= 40 ? "text-amber-400" : "text-rose-400"}`}>{score.totalScore}</div>
+                <div className="text-xs text-white/40">out of 100</div>
+              </div>
             </div>
-          )}
-          {session?.createdAt && (
-            <p className="text-sm text-muted-foreground">
-              {format(new Date(session.createdAt), "MMMM d, yyyy 'at' h:mm a")}
-            </p>
           )}
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-6">
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-auto">
+      <div className="container mx-auto max-w-5xl px-4 py-6 space-y-6">
+
+      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-violet-500 via-blue-500 to-emerald-500" />
+        <div className="p-6">
           <div className="mx-auto max-w-3xl">
             {showUploadComplete ? (
               <div className="flex aspect-[3/2] items-center justify-center rounded-lg bg-muted" data-testid="processing-indicator">
@@ -1228,33 +1182,32 @@ export default function SessionPage() {
               />
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {session?.transcriptText && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Transcript
-              </CardTitle>
-              <CardDescription>Download or copy your transcript for future use</CardDescription>
-            </div>
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-blue-500 to-violet-500" />
+          <div className="px-5 py-4 flex items-center justify-between gap-4 border-b">
             <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-blue-500" />
+              <span className="font-semibold text-sm">Transcript</span>
+              <span className="text-xs text-muted-foreground">Download or copy for future use</span>
+            </div>
+            <div className="flex items-center gap-1">
               <a href={`/api/sessions/${session.id}/transcript.txt`} download>
-                <Button variant="ghost" size="sm" data-testid="button-download-transcript">
-                  <Download className="mr-2 h-4 w-4" />
+                <Button variant="ghost" size="sm" className="h-8 text-xs" data-testid="button-download-transcript">
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
                   Download
                 </Button>
               </a>
-              <Button variant="ghost" size="sm" onClick={copyTranscript} data-testid="button-copy-transcript">
-                {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={copyTranscript} data-testid="button-copy-transcript">
+                {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
                 {copied ? "Copied!" : "Copy"}
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+          <div className="p-5 space-y-3">
             <Textarea
               value={transcript}
               onChange={(e) => setEditedTranscript(e.target.value)}
@@ -1263,69 +1216,60 @@ export default function SessionPage() {
               data-testid="textarea-transcript"
             />
             {editedTranscript && editedTranscript !== (session?.transcriptEditedText ?? session?.transcriptText) && (
-              <Button 
-                onClick={handleRescore} 
-                disabled={rescoreMutation.isPending}
-                data-testid="button-rescore"
-              >
-                {rescoreMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
+              <Button onClick={handleRescore} disabled={rescoreMutation.isPending} data-testid="button-rescore">
+                {rescoreMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                 Re-score with Edited Transcript
               </Button>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {score && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Score Summary
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          {/* Score Summary */}
+          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+            <div className="px-5 py-4 border-b flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+              <span className="font-semibold text-sm">Score Summary</span>
+            </div>
+            <div className="p-5">
               <div className="grid gap-8 md:grid-cols-2">
-                <div className="flex flex-col items-center justify-center">
+                <div className="flex flex-col items-center justify-center gap-1">
                   <ScoreCircle score={score.totalScore} />
-                  <p className="mt-2 text-lg font-semibold">Total Score</p>
-                  <p className="text-sm text-muted-foreground">out of 100</p>
+                  <p className="mt-1 text-base font-semibold">Total Score</p>
+                  <p className="text-xs text-muted-foreground">out of 100</p>
                 </div>
-                <div className="space-y-3">
-                  <PartScoreBar label="Hook" score={score.partScores.hook} />
-                  <PartScoreBar label="Set the Hook" score={score.partScores.setHook} />
-                  <PartScoreBar label="First CTA" score={score.partScores.firstCTA} />
-                  <PartScoreBar label="Content" score={score.partScores.content} />
-                  <PartScoreBar label="Final CTA" score={score.partScores.finalCTA} />
+                <div className="space-y-3.5">
+                  <PartScoreBar label="Hook"             score={score.partScores.hook}     partKey="hook" />
+                  <PartScoreBar label="Set the Hook"     score={score.partScores.setHook}  partKey="setHook" />
+                  <PartScoreBar label="First CTA"        score={score.partScores.firstCTA} partKey="firstCTA" />
+                  <PartScoreBar label="Content"          score={score.partScores.content}  partKey="content" />
+                  <PartScoreBar label="Final CTA"        score={score.partScores.finalCTA} partKey="finalCTA" />
                 </div>
               </div>
-
               <div className="mt-8 grid gap-6 md:grid-cols-2">
                 <div className="space-y-2">
-                  <h4 className="flex items-center gap-2 font-semibold text-green-600 dark:text-green-400">
-                    <Check className="h-4 w-4" />
+                  <h4 className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                    <Check className="h-3.5 w-3.5" />
                     What You Did Well
                   </h4>
-                  <ul className="space-y-1">
+                  <ul className="space-y-1.5">
                     {score.summary.strengths.map((s, i) => (
                       <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                        <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-green-500" />
+                        <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         {s}
                       </li>
                     ))}
                   </ul>
                 </div>
                 <div className="space-y-2">
-                  <h4 className="flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
-                    <Lightbulb className="h-4 w-4" />
+                  <h4 className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                    <Lightbulb className="h-3.5 w-3.5" />
                     Top 3 Improvements
                   </h4>
-                  <ul className="space-y-1">
+                  <ul className="space-y-1.5">
                     {score.summary.topImprovements.map((s, i) => (
                       <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
                         <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
@@ -1335,74 +1279,58 @@ export default function SessionPage() {
                   </ul>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+          {/* Detailed Feedback */}
+          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-orange-500 via-violet-500 to-pink-500" />
+            <div className="px-5 py-4 border-b flex items-center justify-between gap-4">
               <div>
-                <CardTitle>Detailed Feedback by Part</CardTitle>
-                <CardDescription>Click each section to see specific feedback and suggestions</CardDescription>
+                <span className="font-semibold text-sm">Detailed Feedback by Part</span>
+                <p className="text-xs text-muted-foreground mt-0.5">Click each section to see specific feedback and suggestions</p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={toggleAllSections}
-                data-testid="button-toggle-all-sections"
-              >
+              <Button variant="outline" size="sm" className="h-8 text-xs shrink-0" onClick={toggleAllSections} data-testid="button-toggle-all-sections">
                 {allSectionsOpen ? "Collapse All" : "Expand All"}
               </Button>
-            </CardHeader>
-            <CardContent>
-              <Accordion 
-                type="multiple" 
-                className="w-full" 
-                value={openFeedbackSections}
-                onValueChange={setOpenFeedbackSections}
-                data-testid="accordion-feedback"
-              >
+            </div>
+            <div className="p-5">
+              <Accordion type="multiple" className="w-full space-y-0" value={openFeedbackSections} onValueChange={setOpenFeedbackSections} data-testid="accordion-feedback">
                 {(["hook", "setHook", "firstCTA", "content", "finalCTA"] as const).map((key) => (
-                  <DetailedPartFeedback
-                    key={key}
-                    partKey={key}
-                    title={partTitles[key]}
-                    score={score.partScores[key]}
-                    data={score.parts[key]}
-                  />
+                  <DetailedPartFeedback key={key} partKey={key} title={partTitles[key]} score={score.partScores[key]} data={score.parts[key]} />
                 ))}
               </Accordion>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
+          {/* AI Coach Summary */}
           {score.summary.overallSummary && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  AI Coach Summary
-                </CardTitle>
-                <CardDescription>Personalized feedback to help you improve</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+            <div className="rounded-xl border bg-card shadow-sm overflow-hidden" style={{ borderColor: "hsl(var(--primary) / 0.2)" }}>
+              <div className="h-1 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500" />
+              <div className="px-5 py-4 border-b">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-violet-500" />
+                  <span className="font-semibold text-sm">AI Coach Summary</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Personalized feedback to help you improve</p>
+              </div>
+              <div className="p-5 space-y-5">
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   {score.summary.overallSummary.split('\n\n').map((paragraph, i) => (
-                    <p key={i} className="text-muted-foreground leading-relaxed mb-4 last:mb-0">
-                      {paragraph}
-                    </p>
+                    <p key={i} className="text-muted-foreground leading-relaxed mb-4 last:mb-0">{paragraph}</p>
                   ))}
                 </div>
-                
                 {score.summary.actionChecklist && score.summary.actionChecklist.length > 0 && (
-                  <div className="border-t pt-6">
-                    <h4 className="flex items-center gap-2 font-semibold mb-4">
-                      <Check className="h-5 w-5 text-primary" />
+                  <div className="border-t pt-5">
+                    <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                      <Check className="h-3.5 w-3.5 text-primary" />
                       Your Action Checklist
                     </h4>
                     <ul className="space-y-2">
                       {score.summary.actionChecklist.map((item, i) => (
                         <li key={i} className="flex items-start gap-3">
-                          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 border-primary/50 mt-0.5">
-                            <span className="text-xs font-medium text-primary">{i + 1}</span>
+                          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 border border-primary/30 mt-0.5">
+                            <span className="text-xs font-bold text-primary">{i + 1}</span>
                           </div>
                           <span className="text-sm text-muted-foreground">{item}</span>
                         </li>
@@ -1410,37 +1338,43 @@ export default function SessionPage() {
                     </ul>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Gauge className="h-5 w-5" />
-                Delivery Metrics
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-6 sm:grid-cols-3">
-                <div className="rounded-lg bg-muted/50 p-4 text-center">
-                  <Timer className="mx-auto h-8 w-8 text-primary mb-2" />
-                  <p className="text-3xl font-bold">{score.delivery.wordsPerMinute}</p>
-                  <p className="text-sm text-muted-foreground">Words per minute</p>
+          {/* Delivery Metrics */}
+          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500" />
+            <div className="px-5 py-4 border-b flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-cyan-500" />
+              <span className="font-semibold text-sm">Delivery Metrics</span>
+            </div>
+            <div className="p-5">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-xl bg-violet-500/5 border border-violet-500/10 p-4 text-center">
+                  <div className="mx-auto mb-2 w-10 h-10 flex items-center justify-center rounded-full bg-violet-500/10">
+                    <Timer className="h-5 w-5 text-violet-500" />
+                  </div>
+                  <p className="text-3xl font-bold text-violet-600 dark:text-violet-400">{score.delivery.wordsPerMinute}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Words per minute</p>
                 </div>
-                <div className="rounded-lg bg-muted/50 p-4 text-center">
-                  <MessageSquare className="mx-auto h-8 w-8 text-primary mb-2" />
-                  <p className="text-3xl font-bold">{score.delivery.fillerWords.count}</p>
-                  <p className="text-sm text-muted-foreground">Filler words</p>
+                <div className="rounded-xl bg-amber-500/5 border border-amber-500/10 p-4 text-center">
+                  <div className="mx-auto mb-2 w-10 h-10 flex items-center justify-center rounded-full bg-amber-500/10">
+                    <MessageSquare className="h-5 w-5 text-amber-500" />
+                  </div>
+                  <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{score.delivery.fillerWords.count}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Filler words</p>
                   {score.delivery.fillerWords.examples.length > 0 && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       ({score.delivery.fillerWords.examples.slice(0, 3).join(", ")})
                     </p>
                   )}
                 </div>
-                <div className="rounded-lg bg-muted/50 p-4 text-center">
-                  <TrendingUp className="mx-auto h-8 w-8 text-primary mb-2" />
-                  <p className="text-lg font-semibold">Clarity Notes</p>
+                <div className="rounded-xl bg-teal-500/5 border border-teal-500/10 p-4 text-center">
+                  <div className="mx-auto mb-2 w-10 h-10 flex items-center justify-center rounded-full bg-teal-500/10">
+                    <TrendingUp className="h-5 w-5 text-teal-500" />
+                  </div>
+                  <p className="text-sm font-semibold text-teal-600 dark:text-teal-400">Clarity Notes</p>
                   <ul className="mt-2 text-xs text-muted-foreground space-y-1">
                     {score.delivery.clarityNotes.slice(0, 2).map((note, i) => (
                       <li key={i}>{note}</li>
@@ -1448,22 +1382,22 @@ export default function SessionPage() {
                   </ul>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </>
       )}
 
       {!score && session?.transcriptText && session?.processingStatus === "ready" && (
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
-          <CardContent className="flex items-center gap-3 py-4">
-            <AlertCircle className="h-5 w-5 text-amber-600" />
-            <div>
-              <p className="font-medium">Scoring in progress or failed</p>
-              <p className="text-sm text-muted-foreground">The AI scoring may still be processing or encountered an error.</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold">Scoring in progress or failed</p>
+            <p className="text-xs text-muted-foreground">The AI scoring may still be processing or encountered an error.</p>
+          </div>
+        </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }
