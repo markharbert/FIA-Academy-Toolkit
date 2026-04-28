@@ -808,7 +808,29 @@ export default function DmoTrackerPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 pb-8 space-y-4">
+
+        {/* ── Streak banner ── */}
+        {(streak?.current ?? 0) > 0 && nextMilestone && (
+          <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+            <span className="text-2xl">🔥</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                {streak?.current}-day streak!
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                {nextMilestone.days - (streak?.current ?? 0)} more days → {nextMilestone.icon} {nextMilestone.label}
+              </p>
+            </div>
+            {earnedMilestones.length > 0 && (
+              <div className="flex gap-1">
+                {earnedMilestones.slice(-3).map(m => (
+                  <span key={m.days} className="text-xl" title={m.label}>{m.icon}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Full-width points history chart ── */}
         <Card className="border border-border">
@@ -858,28 +880,7 @@ export default function DmoTrackerPage() {
         <div className="grid xl:grid-cols-[1fr_360px] gap-8">
 
           {/* ── Left column: activities ── */}
-          <div className="space-y-5">
-            {/* Streak milestone callout */}
-            {(streak?.current ?? 0) > 0 && nextMilestone && (
-              <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-                <span className="text-2xl">🔥</span>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                    {streak?.current}-day streak!
-                  </p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
-                    {nextMilestone.days - (streak?.current ?? 0)} more days → {nextMilestone.icon} {nextMilestone.label}
-                  </p>
-                </div>
-                {earnedMilestones.length > 0 && (
-                  <div className="flex gap-1">
-                    {earnedMilestones.slice(-3).map(m => (
-                      <span key={m.days} className="text-xl" title={m.label}>{m.icon}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="space-y-4">
 
             {/* Activity cards */}
             {todayLoading ? (
