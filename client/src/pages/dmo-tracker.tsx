@@ -212,6 +212,87 @@ function PointDots({
   );
 }
 
+// ─── Start overlay ────────────────────────────────────────────────────────────
+
+function StartOverlay({
+  activity,
+  onBegin,
+  onDismiss,
+}: {
+  activity: typeof DMO_ACTIVITIES[number];
+  onBegin: () => void;
+  onDismiss: () => void;
+}) {
+  const Icon = activity.icon;
+
+  // Escape key dismisses
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onDismiss(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onDismiss]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      onClick={onDismiss}
+    >
+      {/* Translucent gradient backdrop */}
+      <div className={`absolute inset-0 bg-gradient-to-br ${activity.gradient}`} style={{ opacity: 0.92 }} />
+      {/* Subtle noise/depth layer */}
+      <div className="absolute inset-0 bg-black/20" />
+
+      {/* Content — stop click propagation so clicking card doesn't dismiss */}
+      <div
+        className="relative z-10 dmo-overlay-enter flex flex-col items-center text-center px-8 max-w-lg"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Icon */}
+        <div className="mb-6 w-24 h-24 rounded-3xl bg-white/20 flex items-center justify-center shadow-2xl backdrop-blur-sm">
+          <Icon className="h-12 w-12 text-white drop-shadow-lg" />
+        </div>
+
+        {/* Activity name */}
+        <h2 className="text-4xl font-extrabold text-white tracking-tight mb-3 drop-shadow-lg">
+          {activity.label}
+        </h2>
+
+        {/* Tagline */}
+        <p className="text-white/90 text-xl font-medium mb-4 leading-snug drop-shadow">
+          {activity.tagline}
+        </p>
+
+        {/* Description */}
+        <p className="text-white/70 text-base leading-relaxed mb-10 max-w-sm">
+          {activity.description}
+        </p>
+
+        {/* Goal chip */}
+        <div className="mb-10 inline-flex items-center gap-2 bg-white/20 rounded-full px-5 py-2 text-white text-sm font-semibold backdrop-blur-sm">
+          <span>🎯</span>
+          <span>Goal: {activity.target} min — up to 5 pts</span>
+        </div>
+
+        {/* CTA */}
+        <button
+          onClick={onBegin}
+          className="px-12 py-4 rounded-2xl bg-white text-base font-bold shadow-2xl hover:scale-105 active:scale-95 transition-transform"
+          style={{ color: "transparent", backgroundClip: "text", WebkitBackgroundClip: "text" }}
+          data-testid={`button-dmo-begin-${activity.key}`}
+        >
+          <span
+            className={`bg-gradient-to-br ${activity.gradient} bg-clip-text text-transparent font-extrabold text-lg`}
+          >
+            Let's Go →
+          </span>
+        </button>
+
+        <p className="mt-4 text-white/40 text-xs">Press Esc or tap outside to cancel</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Activity Card ────────────────────────────────────────────────────────────
 
 interface ActivityCardProps {
@@ -225,6 +306,7 @@ interface ActivityCardProps {
 
 function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave, isSaving }: ActivityCardProps) {
   const Icon = activity.icon;
+  const [showOverlay, setShowOverlay] = useState(false);
   const [timer, setTimer] = useState<TimerState>(() => {
     if (savedChecked || savedMinutes > 0) {
       return { status: "done", elapsed: savedMinutes * 60, startedAt: null };
@@ -262,7 +344,13 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
     return () => clearInterval(id);
   }, [timer.status, timer.startedAt, timer.elapsed, onAutoSave]);
 
+  // Show overlay first, then actually start on confirm
   const handleStart = useCallback(() => {
+    setShowOverlay(true);
+  }, []);
+
+  const handleBegin = useCallback(() => {
+    setShowOverlay(false);
     setTimer(prev => ({ ...prev, status: "running", startedAt: Date.now() }));
   }, []);
 
@@ -303,7 +391,17 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
   const isFull = pointsEarned >= 5;
 
   return (
-    // Outer wrapper — thick animated gradient ring when running
+    <>
+    {/* Full-page focus overlay — shown when Start is clicked */}
+    {showOverlay && (
+      <StartOverlay
+        activity={activity}
+        onBegin={handleBegin}
+        onDismiss={() => setShowOverlay(false)}
+      />
+    )}
+
+    {/* Outer wrapper — thick animated gradient ring when running */}
     <div className={`relative rounded-2xl transition-all duration-300 ${
       isRunning
         ? `p-[4px] bg-gradient-to-br ${activity.gradient} shadow-2xl ${activity.glowColor}`
@@ -512,6 +610,7 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
       </div>
     </div>
     </div>
+    </>
   );
 }
 
