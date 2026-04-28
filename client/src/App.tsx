@@ -26,6 +26,7 @@ import TopicPulseScriptPage from "@/pages/topic-pulse-script";
 import TopicPulseScriptsPage from "@/pages/topic-pulse-scripts";
 import TopicPulseSavedPage from "@/pages/topic-pulse-saved";
 import TopicPulseSettingsPage from "@/pages/topic-pulse-settings";
+import VideoToolsPage from "@/pages/video-tools";
 import DmoTrackerPage from "@/pages/dmo-tracker";
 import NotFound from "@/pages/not-found";
 
@@ -146,6 +147,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/video-trends/settings">
         {() => <ProtectedRoute component={TopicPulseSettingsPage} />}
+      </Route>
+      <Route path="/video-tools">
+        {() => <ProtectedRoute component={VideoToolsPage} />}
       </Route>
       <Route path="/dmo-tracker">
         {() => <ProtectedRoute component={DmoTrackerPage} />}

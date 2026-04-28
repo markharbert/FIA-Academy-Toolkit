@@ -17,9 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   LayoutDashboard,
-  Video,
-  TrendingUp,
-  FileText,
+  Wrench,
   User,
   LogOut,
   Shield,
@@ -27,6 +25,8 @@ import {
   Target,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+
+const VIDEO_TOOL_PATHS = ["/video-score", "/video-trends", "/video-trends/scripts", "/video-trends/explore", "/video-trends/saved", "/video-trends/settings"];
 
 const navItems = [
   {
@@ -36,22 +36,11 @@ const navItems = [
     testId: "nav-dashboard",
   },
   {
-    title: "Video Score",
-    url: "/video-score",
-    icon: Video,
-    testId: "nav-video-score",
-  },
-  {
-    title: "Video Trends",
-    url: "/video-trends",
-    icon: TrendingUp,
-    testId: "nav-video-trends",
-  },
-  {
-    title: "Scripts",
-    url: "/video-trends/scripts",
-    icon: FileText,
-    testId: "nav-scripts",
+    title: "Video Tools",
+    url: "/video-tools",
+    icon: Wrench,
+    testId: "nav-video-tools",
+    matchPaths: VIDEO_TOOL_PATHS,
   },
   {
     title: "DMO Tracker",
@@ -112,19 +101,24 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton
-                    isActive={location === item.url || (item.url !== "/dashboard" && location.startsWith(item.url))}
-                    tooltip={item.title}
-                    onClick={() => setLocation(item.url)}
-                    data-testid={item.testId}
-                  >
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {navItems.map((item) => {
+                const isActive = location === item.url
+                  || (item.url !== "/dashboard" && !item.matchPaths && location.startsWith(item.url))
+                  || (item.matchPaths?.some(p => location === p || location.startsWith(p + "/")) ?? false);
+                return (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      tooltip={item.title}
+                      onClick={() => setLocation(item.url)}
+                      data-testid={item.testId}
+                    >
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
