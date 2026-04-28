@@ -99,12 +99,12 @@ export default function TopicPulseScriptsPage() {
       <div className="bg-sidebar text-sidebar-foreground px-6 py-6 shrink-0">
         <div className="max-w-4xl mx-auto flex items-center gap-3">
           <button
-            onClick={() => navigate("/video-trends")}
+            onClick={() => navigate("/video-tools")}
             className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors shrink-0"
             data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4" />
-            Video Trends
+            Video Tools
           </button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">
