@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Settings, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Settings, Sparkles, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun } from "@shared/schema";
@@ -136,8 +136,15 @@ export default function TopicPulsePage() {
     <div className="min-h-full flex flex-col">
 
       {/* ── Hero / Search ── */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 pt-8 pb-7 shrink-0">
-        <div className="max-w-2xl mx-auto text-center">
+      <div className="bg-sidebar text-sidebar-foreground px-6 pt-6 pb-7 shrink-0">
+        <div className="max-w-2xl mx-auto">
+          <Link href="/video-tools">
+            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors mb-4" data-testid="button-back-video-tools">
+              <ArrowLeft className="h-4 w-4" />
+              Video Tools
+            </button>
+          </Link>
+          <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Sparkles className="h-5 w-5 text-violet-400" />
             <h1 className="text-2xl font-bold text-white" data-testid="text-page-title">Video Trends</h1>
@@ -215,6 +222,7 @@ export default function TopicPulsePage() {
                 </button>
               );
             })}
+          </div>
           </div>
         </div>
       </div>
