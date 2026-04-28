@@ -576,10 +576,10 @@ export default function VideoScorePage() {
       {/* ── Hero header ── */}
       <div className="bg-sidebar text-sidebar-foreground px-6 py-6 shrink-0">
         <div className="max-w-4xl mx-auto flex items-center gap-4">
-          <Link href="/dashboard">
-            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors" data-testid="button-back-dashboard">
+          <Link href="/video-tools">
+            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors" data-testid="button-back-video-tools">
               <ArrowLeft className="h-4 w-4" />
-              Dashboard
+              Video Tools
             </button>
           </Link>
           <div className="flex-1">
