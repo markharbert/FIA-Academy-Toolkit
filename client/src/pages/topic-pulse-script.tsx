@@ -1124,7 +1124,7 @@ export default function TopicPulseScriptPage() {
   const { toast } = useToast();
   const [editedScriptJson, setEditedScriptJson] = useState<ScriptJson | null>(null);
   const [showResearchPanel, setShowResearchPanel] = useState(false);
-  const [autoSavedVisible, setAutoSavedVisible] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<"manual" | "auto" | null>(null);
 
   const { data: script, isLoading } = useQuery<Script & { topic?: Topic }>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
@@ -1163,7 +1163,8 @@ export default function TopicPulseScriptPage() {
     },
     onSuccess: () => {
       if (!isAutoSaveRef.current) {
-        toast({ title: "Script saved!" });
+        setSavedNotice("manual");
+        setTimeout(() => setSavedNotice(null), 5000);
       }
       isAutoSaveRef.current = false;
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/scripts", scriptId] });
@@ -1182,8 +1183,8 @@ export default function TopicPulseScriptPage() {
         isAutoSaveRef.current = true;
         saveMutation.mutate(editedScriptJson, {
           onSuccess: () => {
-            setAutoSavedVisible(true);
-            setTimeout(() => setAutoSavedVisible(false), 5000);
+            setSavedNotice("auto");
+            setTimeout(() => setSavedNotice(null), 5000);
           },
         });
       }
@@ -1622,10 +1623,10 @@ export default function TopicPulseScriptPage() {
                         : <Save className="h-4 w-4 mr-1.5" />}
                       Save Script
                     </Button>
-                    {autoSavedVisible && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1 animate-in fade-in duration-300" data-testid="text-auto-saved">
+                    {savedNotice && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1 animate-in fade-in duration-300" data-testid="text-saved-notice">
                         <Check className="h-3.5 w-3.5 text-green-500" />
-                        Script auto-saved
+                        {savedNotice === "auto" ? "Script auto-saved" : "Script saved"}
                       </span>
                     )}
                   </div>
