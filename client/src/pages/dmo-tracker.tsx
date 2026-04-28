@@ -303,18 +303,25 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
   const isFull = pointsEarned >= 5;
 
   return (
-    // Outer wrapper — animated gradient ring when running
+    // Outer wrapper — thick animated gradient ring when running
     <div className={`relative rounded-2xl transition-all duration-300 ${
       isRunning
-        ? `p-[3px] bg-gradient-to-br ${activity.gradient}`
+        ? `p-[4px] bg-gradient-to-br ${activity.gradient} shadow-2xl ${activity.glowColor}`
         : ""
     }`}>
-      {/* Pulsing outer glow — only the halo, not the fill */}
       {isRunning && (
-        <div
-          className={`absolute -inset-1 rounded-3xl bg-gradient-to-br ${activity.gradient} animate-pulse -z-10`}
-          style={{ opacity: 0.25 }}
-        />
+        <>
+          {/* Inner ring — close, bright, fast pulse */}
+          <div
+            className={`absolute -inset-2 rounded-3xl bg-gradient-to-br ${activity.gradient} animate-pulse -z-10`}
+            style={{ opacity: 0.55, animationDuration: "1.4s" }}
+          />
+          {/* Outer halo — wider spread, slower, offset pulse */}
+          <div
+            className={`absolute -inset-6 rounded-[32px] bg-gradient-to-br ${activity.gradient} animate-pulse -z-10`}
+            style={{ opacity: 0.25, animationDuration: "2.2s", animationDelay: "0.7s" }}
+          />
+        </>
       )}
     <div
       className={`relative rounded-2xl border-2 transition-all duration-500 overflow-hidden ${
