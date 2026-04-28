@@ -675,120 +675,6 @@ function CfIntegrationTab({
   );
 }
 
-// ─── Accountability Admin Tab ─────────────────────────────────────────────────
-function AccountabilityAdminTab() {
-  const { data, isLoading, error } = useQuery<{
-    totalMembers: number;
-    weeklyTotals: { weekNumber: number; year: number; videos: number; leads: number; revenue: number }[];
-    streakLeaders: { userId: string; email: string | null; displayName: string | null; streak: number }[];
-    atRisk: { userId: string; email: string | null; displayName: string | null; lastCheckin: Date | null }[];
-    topStruggles: { word: string; count: number }[];
-  }>({ queryKey: ["/api/accountability/admin/stats"] });
-
-  if (isLoading) return <div className="flex items-center justify-center py-12 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mr-2" />Loading…</div>;
-  if (error || !data) return <div className="text-destructive py-8 text-center">Failed to load accountability stats.</div>;
-
-  const fmt$ = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-
-  return (
-    <div className="space-y-6">
-      {/* Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Members Tracking</p>
-            <p className="text-3xl font-bold">{data.totalMembers}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">At-Risk Members</p>
-            <p className="text-3xl font-bold text-destructive">{data.atRisk.length}</p>
-            <p className="text-xs text-muted-foreground">No check-in in 2+ weeks</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Top Streak</p>
-            <p className="text-3xl font-bold">{data.streakLeaders[0]?.streak ?? 0} wks</p>
-            <p className="text-xs text-muted-foreground">{data.streakLeaders[0]?.email ?? "—"}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Weekly aggregate totals */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Recent Weekly Aggregates (All Members)</CardTitle></CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b"><th className="text-left py-1">Week</th><th className="text-right py-1">Videos</th><th className="text-right py-1">Leads</th><th className="text-right py-1">Revenue</th></tr></thead>
-            <tbody>
-              {data.weeklyTotals.map(w => (
-                <tr key={`${w.year}-${w.weekNumber}`} className="border-b last:border-0">
-                  <td className="py-1">W{w.weekNumber}, {w.year}</td>
-                  <td className="text-right">{w.videos}</td>
-                  <td className="text-right">{w.leads}</td>
-                  <td className="text-right">{fmt$(w.revenue)}</td>
-                </tr>
-              ))}
-              {data.weeklyTotals.length === 0 && <tr><td colSpan={4} className="text-center text-muted-foreground py-4">No data yet</td></tr>}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-
-      {/* Streak leaders */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Streak Leaders</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {data.streakLeaders.map((u, i) => (
-              <div key={u.userId} className="flex items-center justify-between py-1 border-b last:border-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground w-6">{i + 1}.</span>
-                  <span className="text-sm font-medium">{u.displayName || u.email || u.userId}</span>
-                </div>
-                <Badge variant="secondary">🔥 {u.streak} wks</Badge>
-              </div>
-            ))}
-            {data.streakLeaders.length === 0 && <p className="text-muted-foreground text-sm text-center py-4">No data yet</p>}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* At-risk members */}
-      {data.atRisk.length > 0 && (
-        <Card className="border-destructive/40">
-          <CardHeader><CardTitle className="text-base text-destructive">At-Risk Members (No Check-In in 2+ Weeks)</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {data.atRisk.map(u => (
-                <div key={u.userId} className="flex items-center justify-between py-1 border-b last:border-0">
-                  <span className="text-sm">{u.email || u.userId}</span>
-                  <span className="text-xs text-muted-foreground">Last: {u.lastCheckin ? format(new Date(u.lastCheckin), "MMM d") : "never"}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Top struggles */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Top Struggle Keywords</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {data.topStruggles.map(({ word, count }) => (
-              <Badge key={word} variant="outline" className="text-sm">{word} <span className="ml-1 text-muted-foreground">×{count}</span></Badge>
-            ))}
-            {data.topStruggles.length === 0 && <p className="text-muted-foreground text-sm">No data yet</p>}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -1292,7 +1178,6 @@ export default function AdminPage() {
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="keywords" data-testid="tab-keywords">Keywords Everywhere</TabsTrigger>
           <TabsTrigger value="clickfunnels" data-testid="tab-clickfunnels">ClickFunnels</TabsTrigger>
-          <TabsTrigger value="accountability" data-testid="tab-accountability">Accountability</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -1790,10 +1675,6 @@ export default function AdminPage() {
           <CfIntegrationTab onToggleCfAccess={handleToggleCfAccess} actionLoading={actionLoading} setConfirmDialog={setConfirmDialog} />
         </TabsContent>
 
-        {/* ==================== ACCOUNTABILITY ADMIN TAB ==================== */}
-        <TabsContent value="accountability" className="space-y-6">
-          <AccountabilityAdminTab />
-        </TabsContent>
       </Tabs>
 
       {/* Session Detail Sheet */}

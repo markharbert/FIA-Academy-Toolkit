@@ -1,7 +1,6 @@
 import { 
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
-  accountabilityCheckins, accountabilityBadges,
   dmoEntries,
   type User, type InsertUser, 
   type Session, type InsertSession,
@@ -19,8 +18,6 @@ import {
   type LinkPlaceholder, type InsertLinkPlaceholder,
   type UserApiKey, type InsertUserApiKey, type ApiKeyProvider,
   type SavedOffer, type InsertSavedOffer,
-  type AccountabilityCheckin, type InsertAccountabilityCheckin,
-  type AccountabilityBadge,
   type DmoEntry, type InsertDmoEntry,
 } from "@shared/schema";
 import crypto from "crypto";
@@ -1701,161 +1698,6 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// ─── Accountability Storage ────────────────────────────────────────────────────
-
-export async function getCheckinByWeek(userId: string, weekNumber: number, year: number): Promise<AccountabilityCheckin | null> {
-  const rows = await db.select().from(accountabilityCheckins)
-    .where(and(
-      eq(accountabilityCheckins.userId, userId),
-      eq(accountabilityCheckins.weekNumber, weekNumber),
-      eq(accountabilityCheckins.year, year),
-    )).limit(1);
-  return rows[0] ?? null;
-}
-
-export async function upsertCheckin(userId: string, weekNumber: number, year: number, data: Partial<InsertAccountabilityCheckin>): Promise<AccountabilityCheckin> {
-  const existing = await getCheckinByWeek(userId, weekNumber, year);
-  if (existing) {
-    const rows = await db.update(accountabilityCheckins)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(accountabilityCheckins.id, existing.id))
-      .returning();
-    return rows[0];
-  }
-  const rows = await db.insert(accountabilityCheckins)
-    .values({ userId, weekNumber, year, ...data } as InsertAccountabilityCheckin)
-    .returning();
-  return rows[0];
-}
-
-export async function getAllCheckins(userId: string): Promise<AccountabilityCheckin[]> {
-  return db.select().from(accountabilityCheckins)
-    .where(eq(accountabilityCheckins.userId, userId))
-    .orderBy(asc(accountabilityCheckins.year), asc(accountabilityCheckins.weekNumber));
-}
-
-export async function getUserBadges(userId: string): Promise<AccountabilityBadge[]> {
-  return db.select().from(accountabilityBadges)
-    .where(eq(accountabilityBadges.userId, userId))
-    .orderBy(asc(accountabilityBadges.earnedAt));
-}
-
-export async function awardBadge(userId: string, badgeId: string): Promise<AccountabilityBadge | null> {
-  try {
-    const rows = await db.insert(accountabilityBadges)
-      .values({ userId, badgeId })
-      .onConflictDoNothing()
-      .returning();
-    return rows[0] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export async function getAccountabilityAdminStats(): Promise<{
-  totalMembers: number;
-  weeklyTotals: { weekNumber: number; year: number; videos: number; leads: number; revenue: number }[];
-  streakLeaders: { userId: string; email: string | null; displayName: string | null; streak: number }[];
-  atRisk: { userId: string; email: string | null; displayName: string | null; lastCheckin: Date | null }[];
-  topStruggles: { word: string; count: number }[];
-}> {
-  // Total members with at least one checkin
-  const memberRows = await db.select({ userId: accountabilityCheckins.userId })
-    .from(accountabilityCheckins)
-    .groupBy(accountabilityCheckins.userId);
-  const totalMembers = memberRows.length;
-
-  // Weekly aggregates (last 12 weeks)
-  const weeklyRows = await db.select({
-    weekNumber: accountabilityCheckins.weekNumber,
-    year: accountabilityCheckins.year,
-    videos: sql<number>`SUM(${accountabilityCheckins.videosPublished})::int`,
-    leads: sql<number>`SUM(${accountabilityCheckins.newLeads})::int`,
-    revenue: sql<number>`SUM(${accountabilityCheckins.revenueThisWeek})`,
-  })
-    .from(accountabilityCheckins)
-    .groupBy(accountabilityCheckins.year, accountabilityCheckins.weekNumber)
-    .orderBy(desc(accountabilityCheckins.year), desc(accountabilityCheckins.weekNumber))
-    .limit(12);
-  const weeklyTotals = weeklyRows.map(r => ({ weekNumber: r.weekNumber, year: r.year, videos: r.videos ?? 0, leads: r.leads ?? 0, revenue: r.revenue ?? 0 }));
-
-  // Streak leaders — compute in JS
-  const allCheckins = await db.select({
-    userId: accountabilityCheckins.userId,
-    weekNumber: accountabilityCheckins.weekNumber,
-    year: accountabilityCheckins.year,
-  }).from(accountabilityCheckins).orderBy(asc(accountabilityCheckins.year), asc(accountabilityCheckins.weekNumber));
-
-  const streakMap: Record<string, number> = {};
-  const userWeeks: Record<string, { week: number; year: number }[]> = {};
-  for (const row of allCheckins) {
-    if (!userWeeks[row.userId]) userWeeks[row.userId] = [];
-    userWeeks[row.userId].push({ week: row.weekNumber, year: row.year });
-  }
-  for (const [uid, weeks] of Object.entries(userWeeks)) {
-    // sort desc, compute streak from most recent
-    const sorted = weeks.sort((a, b) => b.year !== a.year ? b.year - a.year : b.week - a.week);
-    let streak = 1;
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = sorted[i - 1];
-      const curr = sorted[i];
-      const prevDate = new Date(prev.year, 0, 1 + (prev.week - 1) * 7);
-      const currDate = new Date(curr.year, 0, 1 + (curr.week - 1) * 7);
-      const diffMs = prevDate.getTime() - currDate.getTime();
-      const diffDays = diffMs / (1000 * 60 * 60 * 24);
-      if (diffDays >= 5 && diffDays <= 9) streak++;
-      else break;
-    }
-    streakMap[uid] = streak;
-  }
-
-  const streakEntries = Object.entries(streakMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const streakUserIds = streakEntries.map(([uid]) => uid);
-  const streakUsers = streakUserIds.length > 0
-    ? await db.select({ id: users.id, email: users.email, displayName: users.displayName }).from(users).where(inArray(users.id, streakUserIds))
-    : [];
-  const streakLeaders = streakEntries.map(([uid, streak]) => {
-    const u = streakUsers.find(x => x.id === uid);
-    return { userId: uid, email: u?.email ?? null, displayName: u?.displayName ?? null, streak };
-  });
-
-  // At-risk: no checkin in last 2 weeks
-  const twoWeeksAgo = new Date();
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-  const activeUserIds = await db.select({ userId: accountabilityCheckins.userId })
-    .from(accountabilityCheckins)
-    .where(gt(accountabilityCheckins.dateSubmitted, twoWeeksAgo))
-    .groupBy(accountabilityCheckins.userId);
-  const activeIds = new Set(activeUserIds.map(r => r.userId));
-  const allMemberIds = memberRows.map(r => r.userId).filter(uid => !activeIds.has(uid));
-
-  let atRisk: { userId: string; email: string | null; displayName: string | null; lastCheckin: Date | null }[] = [];
-  if (allMemberIds.length > 0) {
-    const atRiskUsers = await db.select({ id: users.id, email: users.email, displayName: users.displayName }).from(users).where(inArray(users.id, allMemberIds));
-    const lastCheckins = await db.select({ userId: accountabilityCheckins.userId, last: sql<Date>`MAX(${accountabilityCheckins.dateSubmitted})` })
-      .from(accountabilityCheckins)
-      .where(inArray(accountabilityCheckins.userId, allMemberIds))
-      .groupBy(accountabilityCheckins.userId);
-    atRisk = atRiskUsers.map(u => {
-      const lc = lastCheckins.find(x => x.userId === u.id);
-      return { userId: u.id, email: u.email, displayName: u.displayName, lastCheckin: lc?.last ?? null };
-    });
-  }
-
-  // Top struggles — keyword frequency
-  const struggles = await db.select({ text: accountabilityCheckins.weeklyStruggle }).from(accountabilityCheckins);
-  const wordCounts: Record<string, number> = {};
-  const stopWords = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','is','it','i','my','this','that','was','are','be','have','had','not','so','do','can','t','ve','re']);
-  for (const { text } of struggles) {
-    const words = (text ?? '').toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w));
-    for (const word of words) {
-      wordCounts[word] = (wordCounts[word] ?? 0) + 1;
-    }
-  }
-  const topStruggles = Object.entries(wordCounts).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([word, count]) => ({ word, count }));
-
-  return { totalMembers, weeklyTotals, streakLeaders, atRisk, topStruggles };
-}
 
 export const storage = new DatabaseStorage();
 

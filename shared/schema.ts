@@ -795,47 +795,6 @@ export const insertSavedOfferSchema = createInsertSchema(savedOffers).omit({
 export type InsertSavedOffer = z.infer<typeof insertSavedOfferSchema>;
 export type SavedOffer = typeof savedOffers.$inferSelect;
 
-// ─── Accountability Tracker ──────────────────────────────────────────────────
-
-export const accountabilityCheckins = pgTable("accountability_checkins", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  weekNumber: integer("week_number").notNull(),
-  year: integer("year").notNull(),
-  dateSubmitted: timestamp("date_submitted").default(sql`CURRENT_TIMESTAMP`).notNull(),
-  videosPublished: integer("videos_published").default(0).notNull(),
-  videoPlatforms: text("video_platforms").array().default(sql`'{}'`).notNull(),
-  totalViews: integer("total_views").default(0).notNull(),
-  newLeads: integer("new_leads").default(0).notNull(),
-  emailListSize: integer("email_list_size").default(0).notNull(),
-  revenueThisWeek: real("revenue_this_week").default(0).notNull(),
-  hoursWorked: real("hours_worked").default(0).notNull(),
-  weeklyWin: text("weekly_win").default("").notNull(),
-  weeklyStruggle: text("weekly_struggle").default("").notNull(),
-  nextWeekGoal: text("next_week_goal").default("").notNull(),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
-
-export const insertAccountabilityCheckinSchema = createInsertSchema(accountabilityCheckins).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  dateSubmitted: true,
-});
-
-export type InsertAccountabilityCheckin = z.infer<typeof insertAccountabilityCheckinSchema>;
-export type AccountabilityCheckin = typeof accountabilityCheckins.$inferSelect;
-
-export const accountabilityBadges = pgTable("accountability_badges", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  badgeId: text("badge_id").notNull(),
-  earnedAt: timestamp("earned_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
-
-export type AccountabilityBadge = typeof accountabilityBadges.$inferSelect;
-
 // ─── DMO Tracker ─────────────────────────────────────────────────────────────
 
 export const dmoEntries = pgTable("dmo_entries", {

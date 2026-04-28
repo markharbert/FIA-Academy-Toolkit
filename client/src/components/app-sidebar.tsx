@@ -24,7 +24,6 @@ import {
   LogOut,
   Shield,
   ExternalLink,
-  Trophy,
   Target,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
@@ -53,12 +52,6 @@ const navItems = [
     url: "/video-trends/scripts",
     icon: FileText,
     testId: "nav-scripts",
-  },
-  {
-    title: "Accountability",
-    url: "/accountability",
-    icon: Trophy,
-    testId: "nav-accountability",
   },
   {
     title: "DMO Tracker",
