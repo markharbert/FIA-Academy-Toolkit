@@ -168,16 +168,13 @@ export default function TopicPulseScriptsPage() {
                           )}
                         </div>
 
-                        {/* Topic keyword */}
+                        {/* Topic keyword + stat chips inline */}
                         {script.topic && (
-                          <p className="text-xs text-muted-foreground mt-1 truncate">
-                            <span className="font-medium text-foreground/70">Topic:</span> {script.topic.keyword}
-                          </p>
-                        )}
-
-                        {/* Stat chips */}
-                        {script.topic && (
-                          <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+                            <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                              <span className="font-medium text-foreground/70">Topic:</span> {script.topic.keyword}
+                            </span>
+                            <span className="text-muted-foreground/40 text-xs">·</span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/20 cursor-help font-mono">
@@ -186,9 +183,7 @@ export default function TopicPulseScriptsPage() {
                               </TooltipTrigger>
                               <TooltipContent side="top"><p className="text-xs">Monthly Search Volume</p></TooltipContent>
                             </Tooltip>
-
                             <TrendChip direction={trend.direction} label={trend.label} />
-
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ring-1 cursor-help font-mono ${opp?.chipClass}`}>
