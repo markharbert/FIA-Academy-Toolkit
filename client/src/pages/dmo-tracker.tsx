@@ -140,14 +140,25 @@ function calcPoints(minutes: number, target: number): number {
   return Math.min(5, Math.floor(minutes / (target / 5)));
 }
 
-function getBarColor(count: number): string {
-  if (count === 0) return "#1e293b";
-  if (count === 1) return "#4c1d95";
-  if (count === 2) return "#1d4ed8";
-  if (count === 3) return "#0d9488";
-  if (count === 4) return "#d97706";
-  return "#dc2626";
+/** Color for a bar based on total pts (0–25). */
+function getBarColor(pts: number): string {
+  if (pts === 0)  return "#1e293b"; // none
+  if (pts <= 5)   return "#4c1d95"; // 1–5 pts (violet)
+  if (pts <= 10)  return "#1d4ed8"; // 6–10 pts (blue)
+  if (pts <= 15)  return "#0d9488"; // 11–15 pts (teal)
+  if (pts <= 20)  return "#d97706"; // 16–20 pts (amber)
+  if (pts <= 24)  return "#ea580c"; // 21–24 pts (orange)
+  return "#16a34a";                 // 25 pts — perfect day (green)
 }
+
+const BAR_LEGEND = [
+  { label: "1–5",  pts:  1 },
+  { label: "6–10", pts:  6 },
+  { label: "11–15", pts: 11 },
+  { label: "16–20", pts: 16 },
+  { label: "21–24", pts: 21 },
+  { label: "25 🎉", pts: 25 },
+];
 
 function getTodayString(): string {
   return new Date().toISOString().split("T")[0];
@@ -491,7 +502,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
     return (
       <div className="bg-sidebar text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-sidebar-border">
         <p className="font-medium">{label}</p>
-        <p className="text-white/70">{payload[0].value} of 5 activities</p>
+        <p className="text-white/70">{payload[0].value} / 25 pts</p>
+        {payload[0].value === 25 && <p className="text-green-400 font-semibold">🎉 Perfect Day!</p>}
       </div>
     );
   }
@@ -554,7 +566,6 @@ export default function DmoTrackerPage() {
   };
 
   const entry = todayData?.entry;
-  const completedToday = DMO_ACTIVITIES.filter(a => entry?.[a.key]).length;
 
   // Point-based scoring: each activity worth 5 pts, 25 pts max
   const totalPoints = DMO_ACTIVITIES.reduce((sum, a) => {
@@ -564,7 +575,7 @@ export default function DmoTrackerPage() {
   const isPerfectDay = totalPoints >= 25;
   const completionPct = Math.round((totalPoints / 25) * 100);
 
-  // Build 30-day chart data
+  // Build 30-day chart data — each bar = total pts earned that day (0–25)
   const chartData = (() => {
     const map = new Map<string, DmoEntry>();
     (history ?? []).forEach(e => map.set(e.date, e));
@@ -572,10 +583,10 @@ export default function DmoTrackerPage() {
       const d = new Date(Date.now() - (29 - i) * 86400000);
       const dateStr = d.toISOString().split("T")[0];
       const e = map.get(dateStr);
-      const count = e
-        ? [e.visionMeditation, e.personalDevelopment, e.expandSkills, e.execution, e.connecting].filter(Boolean).length
+      const pts = e
+        ? DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints(e[a.minutesKey] ?? 0, a.target), 0)
         : 0;
-      return { date: formatDisplayDate(dateStr), fullDate: dateStr, count };
+      return { date: formatDisplayDate(dateStr), fullDate: dateStr, pts };
     });
   })();
 
@@ -756,26 +767,26 @@ export default function DmoTrackerPage() {
             {/* 30-day chart */}
             <Card className="border border-border">
               <CardHeader className="pb-1 pt-4 px-4">
-                <CardTitle className="text-sm font-semibold text-foreground">30-Day Activity</CardTitle>
+                <CardTitle className="text-sm font-semibold text-foreground">30-Day Points History</CardTitle>
               </CardHeader>
               <CardContent className="px-2 pb-4">
                 <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={chartData} barSize={6} margin={{ left: -22, right: 4 }}>
+                  <BarChart data={chartData} barSize={6} margin={{ left: -10, right: 4 }}>
                     <XAxis dataKey="date" tick={{ fontSize: 8 }} tickLine={false} axisLine={false} interval={5} />
-                    <YAxis domain={[0, 5]} tick={{ fontSize: 8 }} tickLine={false} axisLine={false} ticks={[0, 1, 2, 3, 4, 5]} />
+                    <YAxis domain={[0, 25]} tick={{ fontSize: 8 }} tickLine={false} axisLine={false} ticks={[0, 5, 10, 15, 20, 25]} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                    <Bar dataKey="pts" radius={[3, 3, 0, 0]}>
                       {chartData.map((e, i) => (
-                        <Cell key={i} fill={getBarColor(e.count)} opacity={e.fullDate === today ? 1 : 0.8} />
+                        <Cell key={i} fill={getBarColor(e.pts)} opacity={e.fullDate === today ? 1 : 0.8} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-                <div className="flex justify-center gap-3 mt-1">
-                  {[1, 2, 3, 4, 5].map(n => (
-                    <span key={n} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <span className="inline-block w-2 h-2 rounded-sm" style={{ background: getBarColor(n) }} />
-                      {n}
+                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-2">
+                  {BAR_LEGEND.map(({ label, pts }) => (
+                    <span key={label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span className="inline-block w-2 h-2 rounded-sm" style={{ background: getBarColor(pts) }} />
+                      {label}
                     </span>
                   ))}
                 </div>
