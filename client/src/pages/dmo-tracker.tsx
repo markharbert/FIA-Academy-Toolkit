@@ -219,10 +219,11 @@ interface ActivityCardProps {
   savedMinutes: number;
   savedChecked: boolean;
   onSave: (minutes: number) => Promise<void>;
+  onAutoSave: (minutes: number) => void; // silent — no toast
   isSaving: boolean;
 }
 
-function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }: ActivityCardProps) {
+function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave, isSaving }: ActivityCardProps) {
   const Icon = activity.icon;
   const [timer, setTimer] = useState<TimerState>(() => {
     if (savedChecked || savedMinutes > 0) {
@@ -247,6 +248,19 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [timer.status, timer.startedAt]);
+
+  // Auto-save every 30 s while running — crash/refresh protection
+  useEffect(() => {
+    if (timer.status !== "running" || !timer.startedAt) return;
+    const capturedElapsed = timer.elapsed;
+    const capturedStart = timer.startedAt;
+    const id = setInterval(() => {
+      const added = Math.floor((Date.now() - capturedStart) / 1000);
+      const totalMinutes = Math.round((capturedElapsed + added) / 60);
+      if (totalMinutes > 0) onAutoSave(totalMinutes);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [timer.status, timer.startedAt, timer.elapsed, onAutoSave]);
 
   const handleStart = useCallback(() => {
     setTimer(prev => ({ ...prev, status: "running", startedAt: Date.now() }));
@@ -289,12 +303,17 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
   const isFull = pointsEarned >= 5;
 
   return (
-    // Outer wrapper — pulsing gradient ring when running
-    <div className={`relative rounded-2xl ${isRunning ? "p-[3px]" : ""}`}>
+    // Outer wrapper — animated gradient ring when running
+    <div className={`relative rounded-2xl transition-all duration-300 ${
+      isRunning
+        ? `p-[3px] bg-gradient-to-br ${activity.gradient}`
+        : ""
+    }`}>
+      {/* Pulsing outer glow — only the halo, not the fill */}
       {isRunning && (
         <div
-          className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${activity.gradient} animate-pulse`}
-          style={{ opacity: 0.7 }}
+          className={`absolute -inset-1 rounded-3xl bg-gradient-to-br ${activity.gradient} animate-pulse -z-10`}
+          style={{ opacity: 0.25 }}
         />
       )}
     <div
@@ -304,7 +323,7 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
           : isDone && !isFull
           ? `${activity.borderActive} ${activity.bgActive}`
           : isRunning
-          ? `border-transparent ${activity.bgActive}`
+          ? "border-transparent bg-card dark:bg-card"
           : isPaused
           ? `${activity.borderActive} ${activity.bgActive} opacity-90`
           : "border-border bg-card hover:border-border/80"
@@ -559,6 +578,19 @@ export default function DmoTrackerPage() {
     });
   }, [saveMutation, toast]);
 
+  // Silent auto-save — no toast, just persist to DB
+  const handleAutoSave = useCallback(async (
+    key: typeof DMO_ACTIVITIES[number]["key"],
+    minutesKey: typeof DMO_ACTIVITIES[number]["minutesKey"],
+    minutes: number
+  ) => {
+    try {
+      await saveMutation.mutateAsync({ [key]: true, [minutesKey]: minutes });
+    } catch {
+      // Silently ignore — will retry in 30 s
+    }
+  }, [saveMutation]);
+
   const handleSaveNotes = () => {
     saveMutation.mutate({ notes });
     setNotesDirty(false);
@@ -680,6 +712,7 @@ export default function DmoTrackerPage() {
                     savedMinutes={entry?.[activity.minutesKey] ?? 0}
                     savedChecked={entry?.[activity.key] ?? false}
                     onSave={(minutes) => handleActivitySave(activity.key, activity.minutesKey, minutes)}
+                    onAutoSave={(minutes) => handleAutoSave(activity.key, activity.minutesKey, minutes)}
                     isSaving={saveMutation.isPending}
                   />
                 ))}
