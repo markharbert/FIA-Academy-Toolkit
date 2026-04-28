@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation, useSearch } from "wouter";
+import { useState } from "react";
+import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginInput } from "@shared/schema";
@@ -8,31 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Separator } from "@/components/ui/separator";
-import { Loader2, Mail } from "lucide-react";
-import { SiGoogle } from "react-icons/si";
+import { Loader2 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
 export default function LoginPage() {
   const { login } = useAuth();
   const [, setLocation] = useLocation();
-  const searchString = useSearch();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<"google" | null>(null);
-  const [showEmailLogin, setShowEmailLogin] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(searchString);
-    const errorType = params.get("error");
-    if (errorType === "oauth_failed") {
-      setError("Login failed. Please try again or use email/password.");
-      setShowEmailLogin(true);
-    } else if (errorType === "oauth_not_configured") {
-      setError("This login method is not available. Please use email/password.");
-      setShowEmailLogin(true);
-    }
-  }, [searchString]);
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -62,133 +45,82 @@ export default function LoginPage() {
           <div className="mx-auto mb-4">
             <img src={logoImage} alt="Academy Toolkit" className="h-10 mx-auto" />
           </div>
-          <CardTitle className="text-2xl" data-testid="text-login-title">Welcome back</CardTitle>
+          <CardTitle className="text-2xl" data-testid="text-login-title">Admin Login</CardTitle>
           <CardDescription>
-            Log in to continue creating amazing video content
+            Members access this app through the Fearless Influencer Academy portal.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           {error && (
             <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" data-testid="text-login-error">
               {error}
             </div>
           )}
 
-          <Button
-            variant="default"
-            size="lg"
-            className="w-full h-12"
-            onClick={() => {
-              setOauthLoading("google");
-              window.location.href = "/api/auth/oauth/google";
-            }}
-            disabled={oauthLoading !== null}
-            data-testid="button-oauth-google"
-          >
-            {oauthLoading === "google" ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            ) : (
-              <SiGoogle className="mr-2 h-5 w-5" />
-            )}
-            Continue with Google
-          </Button>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                        data-testid="input-email"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {!showEmailLogin ? (
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => setShowEmailLogin(true)}
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                data-testid="button-show-email-login"
-              >
-                <Mail className="h-4 w-4" />
-                Log in with email instead
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <Separator className="w-full" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">or use email</span>
-                </div>
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        data-testid="input-password"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex items-center justify-end">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                  data-testid="link-forgot-password"
+                >
+                  Forgot password?
+                </Link>
               </div>
 
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="you@example.com"
-                            autoComplete="email"
-                            data-testid="input-email"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="password"
-                            placeholder="Enter your password"
-                            autoComplete="current-password"
-                            data-testid="input-password"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex items-center justify-between">
-                    <Link 
-                      href="/forgot-password" 
-                      className="text-sm text-muted-foreground hover:text-foreground"
-                      data-testid="link-forgot-password"
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-login-submit">
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Logging in...
-                      </>
-                    ) : (
-                      "Log in"
-                    )}
-                  </Button>
-                </form>
-              </Form>
-            </>
-          )}
-
-          <div className="text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
-            <Link href="/signup" className="font-medium text-brand-light hover:underline" data-testid="link-signup">
-              Sign up
-            </Link>
-          </div>
+              <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-login-submit">
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Logging in...
+                  </>
+                ) : (
+                  "Log in"
+                )}
+              </Button>
+            </form>
+          </Form>
         </CardContent>
       </Card>
     </div>
