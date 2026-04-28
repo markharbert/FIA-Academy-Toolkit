@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson, SavedOffer, Topic } from "@shared/schema";
@@ -854,6 +854,51 @@ const SECTION_STYLES: Record<string, { border: string; badge: string; glow: stri
   "final-cta":{ border: "border-l-rose-500",  badge: "bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-rose-500/20",       glow: "bg-rose-500/5" },
 };
 
+const SECTION_ACCENT_COLORS: Record<string, string> = {
+  hook:        "#7c3aed",
+  "set-hook":  "#2563eb",
+  "first-cta": "#d97706",
+  content:     "#0d9488",
+  "final-cta": "#e11d48",
+};
+
+function AutoTextarea({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onBlur?: () => void;
+  placeholder?: string;
+  testId?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const ta = ref.current;
+    if (ta) {
+      ta.style.height = "auto";
+      ta.style.height = ta.scrollHeight + "px";
+    }
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      placeholder={placeholder}
+      data-testid={testId}
+      className="w-full resize-none bg-transparent border-0 outline-none focus:ring-0 text-[15px] leading-[1.85] text-foreground/90 p-0 placeholder:text-muted-foreground/40"
+      style={{ minHeight: "88px", fontFamily: 'Georgia, "Times New Roman", serif', overflow: "hidden" }}
+    />
+  );
+}
+
 function EditableScriptSection({ 
   title, 
   content, 
@@ -869,72 +914,39 @@ function EditableScriptSection({
   onChange: (value: string) => void;
   sectionKey: string;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(content);
+  const [localValue, setLocalValue] = useState(content);
   const style = SECTION_STYLES[sectionKey] ?? { border: "border-l-muted-foreground/30", badge: "bg-muted text-muted-foreground ring-muted", glow: "" };
 
   useEffect(() => {
-    setEditValue(content);
+    setLocalValue(content);
   }, [content]);
 
-  const handleSave = () => {
-    onChange(editValue);
-    setIsEditing(false);
-  };
-
-  const handleCancel = () => {
-    setEditValue(content);
-    setIsEditing(false);
-  };
+  const handleBlur = useCallback(() => {
+    if (localValue !== content) onChange(localValue);
+  }, [localValue, content, onChange]);
 
   return (
-    <div className={`border-l-4 ${style.border} ${isEditing ? "" : style.glow}`}>
-      <div className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5">
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ring-1 ${style.badge}`}>{title}</span>
-            {duration && (
-              <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                <Clock className="h-3 w-3" />
-                {duration}
-              </Badge>
-            )}
-          </div>
-          {!isEditing && (
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className="h-7 px-2 text-muted-foreground hover:text-foreground"
-              onClick={() => setIsEditing(true)}
-              data-testid={`button-edit-${sectionKey}`}
-            >
-              <Pencil className="h-3.5 w-3.5 mr-1" />
-              Edit
-            </Button>
+    <div className={`border-l-4 ${style.border}`}>
+      <div className="px-5 pt-4 pb-5">
+        <div className="flex items-center gap-2.5 mb-3">
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ring-1 ${style.badge}`}>{title}</span>
+          {duration && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              {duration}
+            </span>
           )}
         </div>
-        
-        {isEditing ? (
-          <div className="space-y-3">
-            <Textarea
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              className="min-h-[150px] font-mono text-sm"
-              data-testid={`textarea-${sectionKey}`}
-            />
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={handleCancel}>Cancel</Button>
-              <Button size="sm" onClick={handleSave} data-testid={`button-save-${sectionKey}`}>
-                <Check className="h-4 w-4 mr-1" />
-                Done
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">{content}</p>
-        )}
-        
-        {onScreenText && onScreenText.length > 0 && !isEditing && (
+
+        <AutoTextarea
+          value={localValue}
+          onChange={setLocalValue}
+          onBlur={handleBlur}
+          placeholder={`Enter ${title.toLowerCase()} content…`}
+          testId={`textarea-${sectionKey}`}
+        />
+
+        {onScreenText && onScreenText.length > 0 && (
           <div className="mt-3 p-3 bg-muted/40 rounded-lg border border-border/50">
             <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">On-Screen Text</p>
             <ul className="text-sm space-y-1">
@@ -1242,6 +1254,91 @@ export default function TopicPulseScriptPage() {
     }
   };
 
+  const handleDownloadPdf = () => {
+    if (!editedScriptJson?.fullScript || !script) return;
+    const fs = editedScriptJson.fullScript;
+
+    const esc = (text: string) =>
+      text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+
+    const buildSection = (
+      label: string,
+      color: string,
+      text: string,
+      duration?: string,
+      onScreenText?: string[],
+      extra?: string
+    ) => `
+      <div class="section" style="border-left:4px solid ${color}; padding-left:18px; margin-bottom:32px; page-break-inside:avoid;">
+        <div class="section-label" style="color:${color};">${label}</div>
+        ${duration ? `<div class="duration">⏱ ${duration}</div>` : ""}
+        <div class="section-text">${esc(text)}</div>
+        ${onScreenText && onScreenText.length > 0 ? `
+          <div class="on-screen">
+            <div class="on-screen-label">On-Screen Text</div>
+            ${onScreenText.map((t) => `<div>› ${esc(t)}</div>`).join("")}
+          </div>` : ""}
+        ${extra ?? ""}
+      </div>`;
+
+    let contentSubSections = "";
+    (fs.content.sections ?? []).forEach((sec, i) => {
+      contentSubSections += `
+        <div class="sub-section">
+          <div class="sub-title">Section ${i + 1}: ${esc(sec.title)}${sec.timestamp ? ` <span class="ts">[${sec.timestamp}]</span>` : ""}</div>
+          <div class="sub-text">${esc(sec.content)}</div>
+          ${sec.brollIdeas?.length ? `<div class="broll">B-Roll: ${esc(sec.brollIdeas.join(", "))}</div>` : ""}
+        </div>`;
+    });
+
+    const nextVideoHtml = fs.finalCTA.nextVideoSuggestion
+      ? `<div class="next-video"><strong>Next Video Suggestion:</strong> ${esc(fs.finalCTA.nextVideoSuggestion)}</div>`
+      : "";
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${esc(script.title)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Georgia,"Times New Roman",serif;color:#111;background:#fff}
+    .page{max-width:720px;margin:0 auto;padding:52px 44px}
+    .title{font-size:26px;font-weight:bold;margin-bottom:6px;line-height:1.3}
+    .meta{font-size:12px;color:#888;margin-bottom:44px;font-family:Arial,sans-serif}
+    .section-label{font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+    .duration{font-family:Arial,sans-serif;font-size:11px;color:#888;margin-bottom:8px}
+    .section-text{font-size:15px;line-height:1.9;white-space:pre-wrap}
+    .on-screen{margin-top:14px;padding:10px 14px;background:#f5f5f5;border-radius:4px}
+    .on-screen-label{font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:6px}
+    .on-screen div{font-family:Arial,sans-serif;font-size:12px;color:#555;margin:2px 0}
+    .sub-section{margin:16px 0;padding:12px 16px;background:#f8f8f8;border-radius:6px}
+    .sub-title{font-family:Arial,sans-serif;font-size:13px;font-weight:600;margin-bottom:8px;color:#333}
+    .ts{color:#888;font-weight:normal}
+    .sub-text{font-size:14px;line-height:1.8;white-space:pre-wrap}
+    .broll{font-family:Arial,sans-serif;font-size:12px;color:#888;margin-top:8px;font-style:italic}
+    .next-video{margin-top:14px;padding:10px 14px;background:#fffbf0;border-radius:4px;font-family:Arial,sans-serif;font-size:13px;color:#666}
+    @media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.page{padding:20px}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1 class="title">${esc(script.title)}</h1>
+    <p class="meta">Generated ${new Date(script.createdAt).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})}</p>
+    ${buildSection("1. Hook", "#7c3aed", fs.hook.text, fs.hook.duration, fs.hook.onScreenText)}
+    ${buildSection("2. Set the Hook", "#2563eb", fs.setHook.text, fs.setHook.duration, (fs.setHook as any).onScreenText)}
+    ${buildSection("3. First Call to Action", "#d97706", fs.firstCTA.text, fs.firstCTA.duration)}
+    ${buildSection("4. Content", "#0d9488", fs.content.text, undefined, undefined, contentSubSections)}
+    ${buildSection("5. Final Call to Action", "#e11d48", fs.finalCTA.text, fs.finalCTA.duration, undefined, nextVideoHtml)}
+  </div>
+  <script>window.onload=function(){window.print()}<\/script>
+</body>
+</html>`;
+
+    const pw = window.open("", "_blank");
+    if (pw) { pw.document.write(html); pw.document.close(); }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-full flex items-center justify-center">
@@ -1430,6 +1527,16 @@ export default function TopicPulseScriptPage() {
                   Save
                 </Button>
               )}
+              <Button
+                size="sm"
+                onClick={handleDownloadPdf}
+                disabled={!editedScriptJson?.fullScript}
+                className="bg-white/10 hover:bg-white/20 text-white border-0 font-semibold"
+                data-testid="button-download-pdf"
+              >
+                <FileDown className="h-4 w-4 mr-1.5" />
+                Download PDF
+              </Button>
               <Button
                 size="sm"
                 onClick={() => setShowResearchPanel(!showResearchPanel)}
