@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson, SavedOffer, Topic } from "@shared/schema";
 import { Gift, Star, RefreshCw } from "lucide-react";
-import academyLogoPath from "@assets/academy_toolkit_logo_1776551500119.png";
+import academyLogoPath from "@assets/Media_&_Images_—_Kiss_Cut_Fearless_Influencer_Logo_—_2024-04_1777420277879.png";
 
 type TrendDataPoint = { year: number; month: string; value: number };
 
@@ -1329,43 +1329,64 @@ export default function TopicPulseScriptPage() {
   <meta charset="utf-8">
   <title>${esc(script.title)}</title>
   <style>
+    @page{size:letter;margin:0}
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Georgia,"Times New Roman",serif;color:#111;background:#fff}
-    .page{max-width:720px;margin:0 auto;padding:48px 44px 32px}
-    .header{display:flex;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:2px solid #0b1437;margin-bottom:36px}
-    .header img{height:48px;width:auto}
-    .header-date{font-family:Arial,sans-serif;font-size:11px;color:#888;text-align:right;line-height:1.5}
-    .title{font-size:24px;font-weight:bold;margin-bottom:4px;line-height:1.3}
-    .meta{font-size:12px;color:#888;margin-bottom:40px;font-family:Arial,sans-serif}
-    .section-label{font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
-    .duration{font-family:Arial,sans-serif;font-size:11px;color:#888;margin-bottom:8px}
-    .section-text{font-size:15px;line-height:1.9;white-space:pre-wrap}
-    .on-screen{margin-top:14px;padding:10px 14px;background:#f5f5f5;border-radius:4px}
-    .on-screen-label{font-family:Arial,sans-serif;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:6px}
-    .on-screen div{font-family:Arial,sans-serif;font-size:12px;color:#555;margin:2px 0}
-    .sub-section{margin:16px 0;padding:12px 16px;background:#f8f8f8;border-radius:6px}
-    .sub-title{font-family:Arial,sans-serif;font-size:13px;font-weight:600;margin-bottom:8px;color:#333}
-    .ts{color:#888;font-weight:normal}
-    .sub-text{font-size:14px;line-height:1.8;white-space:pre-wrap}
-    .broll{font-family:Arial,sans-serif;font-size:12px;color:#888;margin-top:8px;font-style:italic}
-    .next-video{margin-top:14px;padding:10px 14px;background:#fffbf0;border-radius:4px;font-family:Arial,sans-serif;font-size:13px;color:#666}
-    .footer{margin-top:52px;padding-top:18px;border-top:1px solid #e5e7eb;text-align:center;font-family:Arial,sans-serif;font-size:11px;color:#999;line-height:1.7}
-    .footer a{color:#999;text-decoration:none}
-    @media print{
-      body{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-      .page{padding:20px 24px 16px}
+    body{
+      font-family:Georgia,"Times New Roman",serif;
+      color:#111;background:#fff;
+      print-color-adjust:exact;-webkit-print-color-adjust:exact;
+      padding-top:80px;padding-bottom:48px;
     }
+    /* ── Fixed header: repeats on every page ── */
+    .hdr{
+      position:fixed;top:0;left:0;right:0;height:68px;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:0 48px;background:#fff;
+      border-bottom:2px solid #0b1437;z-index:100;
+    }
+    .hdr img{height:44px;width:auto}
+    .hdr-date{font-family:Arial,sans-serif;font-size:10px;color:#888;text-align:right;line-height:1.6}
+    /* ── Fixed footer: repeats on every page ── */
+    .ftr{
+      position:fixed;bottom:0;left:0;right:0;height:36px;
+      display:flex;align-items:center;justify-content:center;
+      padding:0 48px;background:#fff;
+      border-top:1px solid #e5e7eb;z-index:100;
+      font-family:Arial,sans-serif;font-size:10px;color:#aaa;
+    }
+    .ftr a{color:#aaa;text-decoration:none}
+    /* ── Content ── */
+    .page{padding:20px 48px 16px}
+    .title{font-size:22px;font-weight:bold;margin-bottom:3px;line-height:1.3}
+    .meta{font-size:11px;color:#888;margin-bottom:28px;font-family:Arial,sans-serif}
+    .section{margin-bottom:20px;padding:14px 16px;border-left:4px solid #ccc;page-break-inside:avoid}
+    .section-label{font-family:Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
+    .duration{font-family:Arial,sans-serif;font-size:10px;color:#888;margin-bottom:6px}
+    .section-text{font-size:14px;line-height:1.8;white-space:pre-wrap}
+    .on-screen{margin-top:10px;padding:8px 12px;background:#f5f5f5;border-radius:4px}
+    .on-screen-label{font-family:Arial,sans-serif;font-size:9px;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:4px}
+    .on-screen div{font-family:Arial,sans-serif;font-size:11px;color:#555;margin:2px 0}
+    .sub-section{margin:12px 0;padding:10px 14px;background:#f8f8f8;border-radius:6px;page-break-inside:avoid}
+    .sub-title{font-family:Arial,sans-serif;font-size:12px;font-weight:600;margin-bottom:6px;color:#333}
+    .ts{color:#888;font-weight:normal}
+    .sub-text{font-size:13px;line-height:1.7;white-space:pre-wrap}
+    .broll{font-family:Arial,sans-serif;font-size:11px;color:#888;margin-top:6px;font-style:italic}
+    .next-video{margin-top:10px;padding:8px 12px;background:#fffbf0;border-radius:4px;font-family:Arial,sans-serif;font-size:12px;color:#666}
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="header">
-      <img src="${logoUrl}" alt="Fearless Influencer Academy Toolkit" />
-      <div class="header-date">
-        Script generated<br>
-        ${new Date(script.createdAt).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})}
-      </div>
+  <div class="hdr">
+    <img src="${logoUrl}" alt="Fearless Influencer" />
+    <div class="hdr-date">
+      Script generated<br>
+      ${new Date(script.createdAt).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})}
     </div>
+  </div>
+  <div class="ftr">
+    Created with the Fearless Influencer Academy Toolkit &nbsp;·&nbsp;
+    <a href="https://fearlessinfluencer.com">fearlessinfluencer.com</a>
+  </div>
+  <div class="page">
     <h1 class="title">${esc(script.title)}</h1>
     <p class="meta">Video script · 5-Part Formula</p>
     ${buildSection("1. Hook", "#7c3aed", fs.hook.text, fs.hook.duration, fs.hook.onScreenText)}
@@ -1373,10 +1394,6 @@ export default function TopicPulseScriptPage() {
     ${buildSection("3. First Call to Action", "#d97706", fs.firstCTA.text, fs.firstCTA.duration)}
     ${buildSection("4. Content", "#0d9488", fs.content.text, undefined, undefined, contentSubSections)}
     ${buildSection("5. Final Call to Action", "#e11d48", fs.finalCTA.text, fs.finalCTA.duration, undefined, nextVideoHtml)}
-    <div class="footer">
-      Created with the Fearless Influencer Academy Toolkit &nbsp;·&nbsp;
-      <a href="https://fearlessinfluencer.com" target="_blank">fearlessinfluencer.com</a>
-    </div>
   </div>
   <script>window.onload=function(){window.print()}<\/script>
 </body>
