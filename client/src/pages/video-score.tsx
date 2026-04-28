@@ -2,8 +2,6 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -69,36 +67,28 @@ function getVideoQualityLabel(resolution: string | null): { label: string; isHig
 }
 
 function ScoreCircle({ score }: { score: number }) {
-  const circumference = 2 * Math.PI * 28;
+  const circumference = 2 * Math.PI * 30;
   const strokeDashoffset = circumference - (score / 100) * circumference;
-  const color = score >= 70 ? "text-green-500" : score >= 40 ? "text-yellow-500" : "text-red-500";
+  const stroke = score >= 70 ? "#10b981" : score >= 40 ? "#f59e0b" : "#f43f5e";
+  const textColor = score >= 70 ? "text-emerald-500" : score >= 40 ? "text-amber-500" : "text-rose-500";
 
   return (
-    <div className="relative h-16 w-16">
-      <svg className="h-16 w-16 -rotate-90">
+    <div className="relative h-[68px] w-[68px] shrink-0">
+      <svg className="h-[68px] w-[68px] -rotate-90" viewBox="0 0 68 68">
+        <circle strokeWidth="5" stroke="currentColor" fill="transparent" r="30" cx="34" cy="34" className="text-muted" />
         <circle
-          className="text-muted"
-          strokeWidth="5"
-          stroke="currentColor"
-          fill="transparent"
-          r="28"
-          cx="32"
-          cy="32"
-        />
-        <circle
-          className={color}
           strokeWidth="5"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
-          stroke="currentColor"
+          stroke={stroke}
           fill="transparent"
-          r="28"
-          cx="32"
-          cy="32"
+          r="30"
+          cx="34"
+          cy="34"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-base font-bold">
+      <span className={`absolute inset-0 flex items-center justify-center text-sm font-bold ${textColor}`}>
         {score}
       </span>
     </div>
@@ -158,6 +148,13 @@ function getQuickSummary(session: Session): string | null {
   return null;
 }
 
+function getScoreAccent(score: number | null) {
+  if (score === null) return "border-l-muted-foreground/20";
+  if (score >= 70) return "border-l-emerald-500";
+  if (score >= 40) return "border-l-amber-500";
+  return "border-l-rose-500";
+}
+
 function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSessionIds, onDelete }: SessionCardProps) {
   const { toast } = useToast();
   const score = session.scoreJson?.totalScore ?? null;
@@ -185,11 +182,10 @@ function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSes
   });
 
   const displayTitle = session.title || `Practice Session`;
-  const dateStr = format(new Date(session.createdAt), "MMM d");
+  const dateStr = format(new Date(session.createdAt), "MMM d, yyyy");
 
   const handleSaveTitle = () => {
-    const trimmed = editTitle.trim();
-    updateTitleMutation.mutate(trimmed);
+    updateTitleMutation.mutate(editTitle.trim());
   };
 
   const handleCancelEdit = () => {
@@ -198,175 +194,141 @@ function SessionCard({ session, isSelected, onSelect, selectionMode, selectedSes
   };
 
   return (
-    <Card 
-      className={`transition-shadow hover:shadow-md ${isSelected ? 'ring-2 ring-primary' : ''}`} 
+    <div
+      className={`group rounded-xl border bg-card shadow-sm border-l-4 ${getScoreAccent(score)} transition-all hover:shadow-md ${isSelected ? "ring-2 ring-primary" : ""}`}
       data-testid={`card-session-${session.id}`}
     >
-      <CardContent className="p-3">
-        <div className="flex items-center gap-3">
-          {selectionMode && (
-            <div onClick={(e) => e.stopPropagation()}>
-              <Checkbox
-                checked={isSelected}
-                onCheckedChange={(checked) => onSelect(session.id, !!checked)}
-                data-testid={`checkbox-session-${session.id}`}
-              />
-            </div>
-          )}
-          
-          <VideoThumbnail session={session} />
-          
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              {isEditing ? (
-                <div className="flex items-center gap-1 flex-1">
-                  <Input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    maxLength={80}
-                    className="h-7 text-sm"
-                    data-testid={`input-rename-session-${session.id}`}
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSaveTitle();
-                      if (e.key === "Escape") handleCancelEdit();
-                    }}
-                  />
-                  <Button 
-                    size="icon" 
-                    variant="ghost" 
-                    className="h-7 w-7 shrink-0"
-                    onClick={handleSaveTitle}
-                    disabled={updateTitleMutation.isPending}
-                    data-testid={`button-save-rename-${session.id}`}
-                  >
-                    {updateTitleMutation.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Check className="h-3 w-3" />
-                    )}
-                  </Button>
-                  <Button 
-                    size="icon" 
-                    variant="ghost"
-                    className="h-7 w-7 shrink-0"
-                    onClick={handleCancelEdit}
-                    data-testid={`button-cancel-rename-${session.id}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <p className="font-medium text-sm truncate" data-testid={`text-session-title-${session.id}`}>
-                    {displayTitle}
-                  </p>
-                  <Button 
-                    size="icon" 
-                    variant="ghost"
-                    className="h-6 w-6 shrink-0 opacity-60 hover:opacity-100"
-                    onClick={() => setIsEditing(true)}
-                    data-testid={`button-rename-session-${session.id}`}
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                </>
-              )}
-            </div>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <span className="text-xs text-muted-foreground">{dateStr}</span>
-              <span className="text-xs text-muted-foreground">·</span>
-              <span className="text-xs text-muted-foreground">Video Length: {formatDuration(session.durationSeconds)}</span>
-              {session.finalVideoResolution && (() => {
-                const qualityInfo = getVideoQualityLabel(session.finalVideoResolution);
-                return (
-                  <>
-                    <span className="text-xs text-muted-foreground">·</span>
-                    <Badge 
-                      className={`text-[10px] px-1.5 py-0 ${qualityInfo.isHighQuality 
-                        ? "bg-green-600 hover:bg-green-700 text-white" 
-                        : "bg-red-600 hover:bg-red-700 text-white"
-                      }`}
-                    >
-                      {qualityInfo.label}
-                    </Badge>
-                  </>
-                );
-              })()}
-            </div>
-            {quickSummary && (
-              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                {quickSummary}
-              </p>
+      <div className="px-4 py-3.5 flex items-center gap-4">
+        {selectionMode && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => onSelect(session.id, !!checked)}
+              data-testid={`checkbox-session-${session.id}`}
+            />
+          </div>
+        )}
+
+        <VideoThumbnail session={session} />
+
+        <div className="flex-1 min-w-0">
+          {/* Title row */}
+          <div className="flex items-center gap-1.5">
+            {isEditing ? (
+              <div className="flex items-center gap-1 flex-1">
+                <Input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  maxLength={80}
+                  className="h-7 text-sm"
+                  data-testid={`input-rename-session-${session.id}`}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveTitle();
+                    if (e.key === "Escape") handleCancelEdit();
+                  }}
+                />
+                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={handleSaveTitle} disabled={updateTitleMutation.isPending} data-testid={`button-save-rename-${session.id}`}>
+                  {updateTitleMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={handleCancelEdit} data-testid={`button-cancel-rename-${session.id}`}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <p className="font-semibold text-sm truncate" data-testid={`text-session-title-${session.id}`}>{displayTitle}</p>
+                <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity" onClick={() => setIsEditing(true)} data-testid={`button-rename-session-${session.id}`}>
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              </>
             )}
           </div>
-          
-          {score !== null && (
-            <div className="shrink-0">
-              <ScoreCircle score={score} />
-            </div>
-          )}
-          
-          <div className="flex items-center gap-1 shrink-0">
-            <Link href={`/video-score-upload/${session.id}`}>
-              <Button variant="outline" size="sm" data-testid={`button-view-session-${session.id}`}>
-                <Eye className="mr-1.5 h-3.5 w-3.5" />
-                View Detailed Report
-              </Button>
-            </Link>
-            <Button 
-              size="icon" 
-              variant="ghost"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              onClick={() => onDelete(session.id)}
-              data-testid={`button-delete-session-${session.id}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+
+          {/* Meta chips row */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+            <span className="text-xs text-muted-foreground">{dateStr}</span>
+            <span className="text-muted-foreground/40 text-xs">·</span>
+            <span className="text-xs text-muted-foreground">{formatDuration(session.durationSeconds)}</span>
+            {session.finalVideoResolution && (() => {
+              const q = getVideoQualityLabel(session.finalVideoResolution);
+              return (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${q.isHighQuality ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-500"}`}>
+                  {q.label}
+                </span>
+              );
+            })()}
+            {score !== null && (
+              <span className={`text-xs font-semibold ${score >= 70 ? "text-emerald-600 dark:text-emerald-400" : score >= 40 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}`}>
+                {score >= 70 ? "Great" : score >= 40 ? "Good" : "Needs work"}
+              </span>
+            )}
           </div>
+
+          {quickSummary && (
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-1 italic">{quickSummary}</p>
+          )}
         </div>
-      </CardContent>
-    </Card>
+
+        {/* Score circle */}
+        {score !== null && <ScoreCircle score={score} />}
+
+        {/* Actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <Link href={`/video-score-upload/${session.id}`}>
+            <Button variant="outline" size="sm" className="h-8 text-xs" data-testid={`button-view-session-${session.id}`}>
+              <Eye className="mr-1.5 h-3.5 w-3.5" />
+              View Report
+            </Button>
+          </Link>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+            onClick={() => onDelete(session.id)}
+            data-testid={`button-delete-session-${session.id}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function SessionCardSkeleton() {
   return (
-    <Card>
-      <CardContent className="p-3">
-        <div className="flex items-center gap-3">
-          <Skeleton className="w-20 h-14 sm:w-24 sm:h-16 rounded-md shrink-0" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-20" />
-          </div>
-          <Skeleton className="h-12 w-12 rounded-full shrink-0" />
-          <Skeleton className="h-8 w-32 shrink-0" />
+    <div className="rounded-xl border bg-card shadow-sm border-l-4 border-l-muted">
+      <div className="px-4 py-3.5 flex items-center gap-4">
+        <Skeleton className="w-24 h-16 rounded-md shrink-0" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-3 w-24" />
         </div>
-      </CardContent>
-    </Card>
+        <Skeleton className="h-[68px] w-[68px] rounded-full shrink-0" />
+        <Skeleton className="h-8 w-28 shrink-0" />
+      </div>
+    </div>
   );
 }
 
 function EmptyState() {
   return (
-    <Card className="py-12">
-      <CardContent className="flex flex-col items-center justify-center text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-          <Video className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h3 className="mb-2 text-lg font-semibold">No practice sessions yet</h3>
-        <p className="mb-6 max-w-sm text-sm text-muted-foreground">
-          Record your first practice video to get AI-powered feedback on your delivery.
-        </p>
-        <Link href="/video-score-upload">
-          <Button data-testid="button-empty-new-session">
-            <Plus className="mr-2 h-4 w-4" />
-            Score New Video
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
+    <div className="rounded-xl border bg-card py-16 flex flex-col items-center text-center">
+      <div className="p-4 rounded-2xl bg-muted/50 mb-4">
+        <Video className="h-10 w-10 text-muted-foreground/60" />
+      </div>
+      <h3 className="text-lg font-semibold text-foreground/80 mb-2">No practice sessions yet</h3>
+      <p className="max-w-sm text-sm text-muted-foreground mb-6">
+        Record your first practice video to get AI-powered feedback on your delivery.
+      </p>
+      <Link href="/video-score-upload">
+        <Button data-testid="button-empty-new-session">
+          <Plus className="mr-2 h-4 w-4" />
+          Score New Video
+        </Button>
+      </Link>
+    </div>
   );
 }
 
@@ -476,31 +438,35 @@ function ScoreProgressChart({ sessions }: { sessions: Session[] }) {
   };
 
   return (
-    <Card className="mb-8" data-testid="card-score-progress">
-      <CardHeader className="pb-2">
+    <div className="rounded-xl border bg-card shadow-sm overflow-hidden mb-6" data-testid="card-score-progress">
+      <div className="h-1 bg-gradient-to-r from-violet-500 via-blue-500 to-emerald-500" />
+      <div className="px-5 pt-4 pb-2">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            <CardTitle className="text-base">Score Progress</CardTitle>
-            <Badge
-              variant="outline"
-              className={delta >= 0 ? "border-green-500 text-green-600 dark:text-green-400" : "border-red-500 text-red-600 dark:text-red-400"}
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-violet-500/10">
+              <TrendingUp className="h-4 w-4 text-violet-500" />
+            </div>
+            <span className="font-semibold text-sm">Score Progress</span>
+            <span
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ring-1 ${
+                delta >= 0
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20"
+                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-rose-500/20"
+              }`}
               data-testid="text-score-delta"
             >
               {delta >= 0 ? "+" : ""}{delta} from first
-            </Badge>
+            </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {PART_LINES.map(({ key, label, color }) => (
               <button
                 key={key}
                 onClick={() => togglePart(key)}
-                className={`px-2 py-0.5 rounded-full text-xs border transition-all ${
-                  visibleParts.has(key)
-                    ? "text-white border-transparent"
-                    : "bg-transparent text-muted-foreground border-border hover:border-foreground/40"
+                className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 transition-all ${
+                  visibleParts.has(key) ? "text-white ring-transparent" : "bg-transparent text-muted-foreground ring-border hover:ring-foreground/30"
                 }`}
-                style={visibleParts.has(key) ? { background: color, borderColor: color } : {}}
+                style={visibleParts.has(key) ? { background: color } : {}}
                 data-testid={`toggle-part-${key}`}
               >
                 {label}
@@ -508,48 +474,29 @@ function ScoreProgressChart({ sessions }: { sessions: Session[] }) {
             ))}
           </div>
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <div className="px-2 pb-4">
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
             <XAxis dataKey="label" tick={{ fontSize: 12 }} className="text-muted-foreground" />
             <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} className="text-muted-foreground" />
             <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine y={70} stroke="#22c55e" strokeDasharray="4 4" strokeOpacity={0.6} />
-            <ReferenceLine y={40} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.6} />
-            <Line
-              type="monotone"
-              dataKey="total"
-              name="Overall"
-              stroke="hsl(var(--primary))"
-              strokeWidth={2.5}
-              dot={{ r: 4, fill: "hsl(var(--primary))" }}
-              activeDot={{ r: 6 }}
-              connectNulls
-            />
+            <ReferenceLine y={70} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.5} />
+            <ReferenceLine y={40} stroke="#f43f5e" strokeDasharray="4 4" strokeOpacity={0.5} />
+            <Line type="monotone" dataKey="total" name="Overall" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} connectNulls />
             {PART_LINES.map(({ key, label, color }) =>
               visibleParts.has(key) ? (
-                <Line
-                  key={key}
-                  type="monotone"
-                  dataKey={key}
-                  name={label}
-                  stroke={color}
-                  strokeWidth={1.5}
-                  dot={{ r: 3, fill: color }}
-                  activeDot={{ r: 5 }}
-                  connectNulls
-                />
+                <Line key={key} type="monotone" dataKey={key} name={label} stroke={color} strokeWidth={1.5} dot={{ r: 3, fill: color }} activeDot={{ r: 5 }} connectNulls />
               ) : null
             )}
           </LineChart>
         </ResponsiveContainer>
-        <p className="mt-1 text-center text-xs text-muted-foreground">
+        <p className="text-center text-xs text-muted-foreground">
           Dashed lines: 40 (needs work) · 70 (good) · Part scores scaled to 100
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -625,26 +572,26 @@ export default function VideoScorePage() {
   const selectionMode = selectedSessionIds.size > 0;
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-4">
+    <div className="min-h-full flex flex-col">
+      {/* ── Hero header ── */}
+      <div className="bg-sidebar text-sidebar-foreground px-6 py-6 shrink-0">
+        <div className="max-w-4xl mx-auto flex items-center gap-4">
           <Link href="/dashboard">
-            <Button variant="ghost" size="sm" data-testid="button-back-dashboard">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Dashboard
-            </Button>
+            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors" data-testid="button-back-dashboard">
+              <ArrowLeft className="h-4 w-4" />
+              Dashboard
+            </button>
           </Link>
-        </div>
-
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="text-video-score-title">Video Score</h1>
-            <p className="text-muted-foreground">Score your video with AI Feedback</p>
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-white" data-testid="text-video-score-title">Video Score</h1>
+            <p className="text-white/40 text-xs mt-0.5">AI-powered feedback on your video delivery</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {sessions && sessions.length > 0 && (
               <Button
-                variant="outline"
+                variant="ghost"
+                size="sm"
+                className="text-white/60 hover:text-white hover:bg-white/10 border-0"
                 onClick={handleSelectAll}
                 data-testid="button-select-all"
               >
@@ -652,70 +599,70 @@ export default function VideoScorePage() {
               </Button>
             )}
             <Link href="/video-score-upload">
-              <Button size="lg" data-testid="button-new-session">
-                <Plus className="mr-2 h-5 w-5" />
+              <Button size="sm" className="bg-white text-sidebar hover:bg-white/90 font-semibold" data-testid="button-new-session">
+                <Plus className="mr-1.5 h-4 w-4" />
                 Score New Video
               </Button>
             </Link>
           </div>
         </div>
+      </div>
 
-        {sessions && sessions.length >= 2 && (
-          <ScoreProgressChart sessions={sessions} />
-        )}
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-4xl mx-auto px-5 py-6">
 
-        {selectionMode && (
-          <BulkActionsBar
-            selectedCount={selectedSessionIds.size}
-            onDelete={() => setDeleteDialogOpen(true)}
-            onClearSelection={() => setSelectedSessionIds(new Set())}
-            isDeleting={deleteSessionsMutation.isPending}
-          />
-        )}
+          {sessions && sessions.length >= 2 && (
+            <ScoreProgressChart sessions={sessions} />
+          )}
 
-        {sessionsError && (
-          <Card className="mb-6 border-destructive">
-            <CardContent className="flex items-center gap-3 py-4">
-              <AlertCircle className="h-5 w-5 text-destructive" />
+          {selectionMode && (
+            <BulkActionsBar
+              selectedCount={selectedSessionIds.size}
+              onDelete={() => setDeleteDialogOpen(true)}
+              onClearSelection={() => setSelectedSessionIds(new Set())}
+              isDeleting={deleteSessionsMutation.isPending}
+            />
+          )}
+
+          {sessionsError && (
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-destructive/50 bg-destructive/5 px-4 py-3">
+              <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
               <p className="text-sm text-destructive">Failed to load sessions. Please try again.</p>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          )}
 
-        {sessionsLoading ? (
-          <div className="space-y-3">
-            <SessionCardSkeleton />
-            <SessionCardSkeleton />
-            <SessionCardSkeleton />
-          </div>
-        ) : sessions && sessions.length > 0 ? (
-          <div className="space-y-3">
-            {sessions.slice(0, visibleCount).map((session) => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                isSelected={selectedSessionIds.has(session.id)}
-                onSelect={handleSelectSession}
-                selectionMode={selectionMode}
-                selectedSessionIds={selectedSessionIds}
-                onDelete={handleSingleDelete}
-              />
-            ))}
-            {sessions.length > visibleCount && (
-              <div className="flex justify-center pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setVisibleCount(prev => prev + LOAD_MORE_COUNT)}
-                  data-testid="button-show-more"
-                >
-                  Show More ({sessions.length - visibleCount} remaining)
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <EmptyState />
-        )}
+          {sessionsLoading ? (
+            <div className="space-y-3">
+              <SessionCardSkeleton />
+              <SessionCardSkeleton />
+              <SessionCardSkeleton />
+            </div>
+          ) : sessions && sessions.length > 0 ? (
+            <div className="space-y-3">
+              {sessions.slice(0, visibleCount).map((session) => (
+                <SessionCard
+                  key={session.id}
+                  session={session}
+                  isSelected={selectedSessionIds.has(session.id)}
+                  onSelect={handleSelectSession}
+                  selectionMode={selectionMode}
+                  selectedSessionIds={selectedSessionIds}
+                  onDelete={handleSingleDelete}
+                />
+              ))}
+              {sessions.length > visibleCount && (
+                <div className="flex justify-center pt-4">
+                  <Button variant="outline" onClick={() => setVisibleCount(prev => prev + LOAD_MORE_COUNT)} data-testid="button-show-more">
+                    Show More ({sessions.length - visibleCount} remaining)
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <EmptyState />
+          )}
+        </div>
       </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
