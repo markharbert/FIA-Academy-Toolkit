@@ -213,8 +213,8 @@ function AppLayout() {
         <div className="flex h-screen w-full">
           <AppSidebar />
           <SidebarInset>
-            <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-              <SidebarTrigger className="-ml-1" data-testid="button-sidebar-toggle" />
+            <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 bg-[hsl(230,45%,14%)] border-[hsl(230,45%,19%)]">
+              <SidebarTrigger className="-ml-1 text-white hover:bg-white/10 hover:text-white" data-testid="button-sidebar-toggle" />
             </header>
             <main className="flex-1 overflow-auto">
               <ProtectedRoutes />
