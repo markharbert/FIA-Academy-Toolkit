@@ -303,3 +303,69 @@ ${transcript.slice(0, 2000)}`,
 
   return title;
 }
+
+// ─── DMO Summary Generation ───────────────────────────────────────────────────
+
+interface DmoEntryForSummary {
+  date: string;
+  totalPoints: number;
+  activitiesCompleted: string[];
+  notes: string | null;
+}
+
+export async function generateDmoSummary(
+  entries: DmoEntryForSummary[],
+  periodType: "weekly" | "monthly",
+  periodLabel: string
+): Promise<{ summary: string; tips: string[]; moodScore: number; performanceScore: number }> {
+  const entryLines = entries.map(e => {
+    const parts: string[] = [
+      `Date: ${e.date}`,
+      `Score: ${e.totalPoints}/25 pts`,
+      `Activities: ${e.activitiesCompleted.join(", ") || "none"}`,
+    ];
+    if (e.notes?.trim()) parts.push(`Notes: "${e.notes.trim()}"`);
+    return parts.join(" | ");
+  }).join("\n");
+
+  const avgScore = entries.length > 0
+    ? Math.round(entries.reduce((s, e) => s + e.totalPoints, 0) / entries.length)
+    : 0;
+
+  const prompt = `You are a warm, encouraging life coach reviewing a member's Daily Method of Operation (DMO) journal for their ${periodType} summary (${periodLabel}).
+
+The member tracked 5 daily activities: Vision & Meditation, Personal Development, Expand Skills, Execution, and Connect with People. Each is worth up to 5 pts, for 25 pts max per day.
+
+Here are their entries:
+${entryLines}
+
+Average daily score: ${avgScore}/25 pts over ${entries.length} days logged.
+
+Write a ${periodType} summary in JSON with these exact keys:
+{
+  "summary": "A warm, personal 3-4 sentence narrative. Acknowledge their effort honestly. Mention emotional patterns from their notes if present. Celebrate wins. Be specific, not generic.",
+  "tips": ["Specific actionable tip 1", "Specific actionable tip 2", "Specific actionable tip 3"],
+  "moodScore": <float 1-10 based on tone of notes and consistency>,
+  "performanceScore": <float 1-10 based on average points and days logged>
+}
+
+Be conversational and human. Reference specific things they wrote in their notes if they shared any. Keep tips concrete and doable, not vague platitudes.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    response_format: { type: "json_object" },
+    max_completion_tokens: 1024,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("No summary generated");
+
+  const parsed = JSON.parse(content) as { summary: string; tips: string[]; moodScore: number; performanceScore: number };
+  return {
+    summary: parsed.summary || "",
+    tips: Array.isArray(parsed.tips) ? parsed.tips.slice(0, 5) : [],
+    moodScore: Math.min(10, Math.max(1, Number(parsed.moodScore) || 5)),
+    performanceScore: Math.min(10, Math.max(1, Number(parsed.performanceScore) || 5)),
+  };
+}

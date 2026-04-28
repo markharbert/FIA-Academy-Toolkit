@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage, getCheckinByWeek, upsertCheckin, getAllCheckins, getUserBadges, awardBadge, getAccountabilityAdminStats } from "./storage";
-import { transcribeAudio, scoreTranscript, generateTitle } from "./ai";
+import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
@@ -4242,6 +4242,79 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.json(streak);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch streak" });
+    }
+  });
+
+  // DMO Journal Summary — get cached AI summary for a period
+  app.get("/api/dmo/summary/:period", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { period } = req.params;
+      const cached = await storage.getDmoSummary(userId, period);
+      if (cached) return res.json(cached);
+      res.json(null);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch summary" });
+    }
+  });
+
+  // DMO Journal Summary — generate AI summary for a period
+  app.post("/api/dmo/summary/generate", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { period, periodType, startDate, endDate } = req.body as {
+        period: string;
+        periodType: "weekly" | "monthly";
+        startDate: string;
+        endDate: string;
+      };
+      if (!period || !periodType || !startDate || !endDate) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // Fetch all entries for this period from DB
+      const allEntries = await storage.getDmoEntries(userId, 365);
+      const periodEntries = allEntries.filter(e => e.date >= startDate && e.date <= endDate);
+
+      if (periodEntries.length === 0) {
+        return res.status(400).json({ message: "No entries found for this period" });
+      }
+
+      // Build summary-friendly entry objects with calculated points
+      const DMO_KEYS = [
+        { key: "visionMeditation" as const, minsKey: "visionMinutes" as const, label: "Vision & Meditation", target: 30 },
+        { key: "personalDevelopment" as const, minsKey: "personalMinutes" as const, label: "Personal Development", target: 30 },
+        { key: "expandSkills" as const, minsKey: "expandMinutes" as const, label: "Expand Skills", target: 60 },
+        { key: "execution" as const, minsKey: "executionMinutes" as const, label: "Execution", target: 60 },
+        { key: "connecting" as const, minsKey: "connectingMinutes" as const, label: "Connecting", target: 60 },
+      ];
+
+      const calcPts = (mins: number, target: number) => Math.min(5, Math.floor(mins / (target / 5)));
+
+      const entryData = periodEntries.map(e => {
+        const activitiesCompleted: string[] = [];
+        let totalPoints = 0;
+        for (const a of DMO_KEYS) {
+          const mins = (e[a.minsKey] as number) ?? 0;
+          const pts = calcPts(mins, a.target);
+          totalPoints += pts;
+          if (pts > 0) activitiesCompleted.push(a.label);
+        }
+        return { date: e.date, totalPoints, activitiesCompleted, notes: e.notes || null };
+      });
+
+      // Format period label
+      const periodLabel = periodType === "weekly"
+        ? `Week of ${new Date(startDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`
+        : `${new Date(startDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}`;
+
+      const result = await generateDmoSummary(entryData, periodType, periodLabel);
+      await storage.upsertDmoSummary(userId, period, periodType, result.summary, result.tips, result.moodScore, result.performanceScore);
+
+      res.json({ ...result, generatedAt: new Date() });
+    } catch (err) {
+      console.error("[DMO summary generate]", err);
+      res.status(500).json({ message: "Failed to generate summary" });
     }
   });
 

@@ -29,6 +29,11 @@ import {
   Square,
   CheckCircle2,
   Star,
+  Sparkles,
+  ChevronDown,
+  ChevronRight,
+  BookText,
+  RefreshCw,
 } from "lucide-react";
 import type { DmoEntry } from "@shared/schema";
 
@@ -660,6 +665,354 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   return null;
 }
 
+// ─── Journal helpers ─────────────────────────────────────────────────────────
+
+function getISOWeek(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00");
+  const day = d.getDay() || 7;
+  const thu = new Date(d);
+  thu.setDate(d.getDate() + 4 - day);
+  const yearStart = new Date(thu.getFullYear(), 0, 1);
+  const week = Math.ceil(((thu.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${thu.getFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+function getWeekBounds(isoWeek: string): { start: string; end: string; label: string } {
+  const [yr, wk] = isoWeek.split("-W").map(Number);
+  const jan4 = new Date(yr, 0, 4);
+  const mon = new Date(jan4);
+  mon.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (wk - 1) * 7);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const start = mon.toISOString().split("T")[0];
+  const end = sun.toISOString().split("T")[0];
+  return { start, end, label: `${fmt(mon)} – ${sun.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` };
+}
+
+function getMonthPeriod(dateStr: string): string { return dateStr.slice(0, 7); }
+
+function getMonthBounds(month: string): { start: string; end: string; label: string } {
+  const [yr, mo] = month.split("-").map(Number);
+  const start = `${yr}-${String(mo).padStart(2, "0")}-01`;
+  const lastDay = new Date(yr, mo, 0).getDate();
+  const end = `${yr}-${String(mo).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  const label = new Date(yr, mo - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return { start, end, label };
+}
+
+function calcEntryPts(entry: DmoEntry): number {
+  return DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints((entry[a.minutesKey] as number) ?? 0, a.target), 0);
+}
+
+// ─── Journal entry card ────────────────────────────────────────────────────────
+
+function JournalEntryCard({ entry }: { entry: DmoEntry }) {
+  const pts = calcEntryPts(entry);
+  const dateObj = new Date(entry.date + "T12:00:00");
+  const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+  const dateDisplay = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const isFull = pts >= 25;
+
+  return (
+    <div className="flex gap-4 py-3 px-4 border-b border-border last:border-0">
+      <div className="w-14 shrink-0 text-right pt-0.5">
+        <p className="text-xs font-bold text-foreground uppercase tracking-wide">{dayName}</p>
+        <p className="text-xs text-muted-foreground">{dateDisplay}</p>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+          <div className="flex gap-1" title="Activities completed">
+            {DMO_ACTIVITIES.map(a => {
+              const p = calcPoints((entry[a.minutesKey] as number) ?? 0, a.target);
+              return (
+                <div key={a.key} className={`h-2.5 w-2.5 rounded-full transition-all ${p > 0 ? `bg-gradient-to-br ${a.gradient}` : "bg-muted"}`} title={`${a.label}: ${p}/5 pts`} />
+              );
+            })}
+          </div>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isFull ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : pts > 0 ? "bg-muted text-muted-foreground" : "text-muted-foreground/40"}`}>
+            {pts}/25 pts
+          </span>
+          {isFull && <span className="text-xs">🎉</span>}
+        </div>
+        {entry.notes?.trim() ? (
+          <p className="text-sm text-foreground/80 leading-relaxed">{entry.notes.trim()}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground/40 italic">No notes for this day</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── AI Summary card ───────────────────────────────────────────────────────────
+
+interface SummaryData {
+  summary: string;
+  tips: string[];
+  moodScore: number | null;
+  performanceScore: number | null;
+  generatedAt?: Date;
+}
+
+function SummaryCard({
+  period, periodType, startDate, endDate, periodLabel,
+}: {
+  period: string; periodType: "weekly" | "monthly";
+  startDate: string; endDate: string; periodLabel: string;
+}) {
+  const { data: cached, isLoading: fetching } = useQuery<SummaryData | null>({
+    queryKey: ["/api/dmo/summary", period],
+    queryFn: () => fetch(`/api/dmo/summary/${encodeURIComponent(period)}`, { credentials: "include" }).then(r => r.json()),
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/dmo/summary/generate", { period, periodType, startDate, endDate }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/dmo/summary", period] }),
+  });
+
+  const data = generateMutation.data as SummaryData | undefined ?? (cached ?? undefined);
+
+  if (fetching) {
+    return <div className="h-24 rounded-xl bg-muted animate-pulse mb-3" />;
+  }
+
+  if (!data) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-4 mb-3 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Sparkles className="h-4 w-4 text-muted-foreground shrink-0" />
+          <p className="text-sm text-muted-foreground">No AI summary yet for this {periodType === "weekly" ? "week" : "month"}.</p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => generateMutation.mutate()}
+          disabled={generateMutation.isPending}
+          className="shrink-0"
+          data-testid={`button-generate-summary-${period}`}
+        >
+          {generateMutation.isPending ? (
+            <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />Generating…</>
+          ) : (
+            <><Sparkles className="h-3.5 w-3.5 mr-1.5" />Generate Summary</>
+          )}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/20 p-4 mb-4">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400 shrink-0" />
+          <span className="text-xs font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wide">
+            AI {periodType === "weekly" ? "Weekly" : "Monthly"} Summary
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {data.moodScore !== null && (
+            <span className="text-xs bg-white/70 dark:bg-black/30 rounded-full px-2 py-0.5 text-violet-700 dark:text-violet-300 font-medium">
+              Mood {data.moodScore?.toFixed(1)}/10
+            </span>
+          )}
+          {data.performanceScore !== null && (
+            <span className="text-xs bg-white/70 dark:bg-black/30 rounded-full px-2 py-0.5 text-indigo-700 dark:text-indigo-300 font-medium">
+              Performance {data.performanceScore?.toFixed(1)}/10
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40"
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending}
+            title="Regenerate"
+          >
+            <RefreshCw className={`h-3 w-3 ${generateMutation.isPending ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+      </div>
+      <p className="text-sm text-foreground/90 leading-relaxed mb-3">{data.summary}</p>
+      {data.tips && data.tips.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-violet-700 dark:text-violet-400 mb-2 uppercase tracking-wide">Tips for Next {periodType === "weekly" ? "Week" : "Month"}</p>
+          <ul className="space-y-1">
+            {data.tips.map((tip, i) => (
+              <li key={i} className="flex gap-2 text-sm text-foreground/80">
+                <span className="text-violet-500 font-bold shrink-0">{i + 1}.</span>
+                <span>{tip}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Week section ─────────────────────────────────────────────────────────────
+
+function WeekSection({ weekKey, entries }: { weekKey: string; entries: DmoEntry[] }) {
+  const bounds = getWeekBounds(weekKey);
+  const [open, setOpen] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const avgPts = Math.round(entries.reduce((s, e) => s + calcEntryPts(e), 0) / entries.length);
+
+  return (
+    <div className="mb-4">
+      <button
+        className="w-full flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded-lg transition-colors group"
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-3">
+          {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          <span className="text-sm font-semibold text-foreground">{bounds.label}</span>
+          <span className="text-xs text-muted-foreground">{entries.length} day{entries.length !== 1 ? "s" : ""} · avg {avgPts}/25</span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-3 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={e => { e.stopPropagation(); setShowSummary(s => !s); setOpen(true); }}
+          data-testid={`button-ai-summary-${weekKey}`}
+        >
+          <Sparkles className="h-3 w-3 mr-1" />
+          AI Summary
+        </Button>
+      </button>
+
+      {open && (
+        <div className="pl-7 mt-1">
+          {showSummary && (
+            <SummaryCard
+              period={weekKey}
+              periodType="weekly"
+              startDate={bounds.start}
+              endDate={bounds.end}
+              periodLabel={bounds.label}
+            />
+          )}
+          <Card className="border border-border overflow-hidden">
+            <CardContent className="p-0">
+              {[...entries].sort((a, b) => b.date.localeCompare(a.date)).map(e => (
+                <JournalEntryCard key={e.date} entry={e} />
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Month section ────────────────────────────────────────────────────────────
+
+function MonthSection({ monthKey, entries }: { monthKey: string; entries: DmoEntry[] }) {
+  const bounds = getMonthBounds(monthKey);
+  const [showSummary, setShowSummary] = useState(false);
+  const totalPts = entries.reduce((s, e) => s + calcEntryPts(e), 0);
+  const perfectDays = entries.filter(e => calcEntryPts(e) >= 25).length;
+
+  // Group into weeks (descending by week start)
+  const weekMap = new Map<string, DmoEntry[]>();
+  for (const e of entries) {
+    const wk = getISOWeek(e.date);
+    if (!weekMap.has(wk)) weekMap.set(wk, []);
+    weekMap.get(wk)!.push(e);
+  }
+  const weeks = Array.from(weekMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+
+  return (
+    <div className="mb-10">
+      <div className="flex items-center justify-between mb-2 pb-2 border-b border-border">
+        <div>
+          <h3 className="text-base font-bold text-foreground">{bounds.label}</h3>
+          <p className="text-xs text-muted-foreground">
+            {entries.length} days · {totalPts} total pts{perfectDays > 0 ? ` · ${perfectDays} perfect day${perfectDays !== 1 ? "s" : ""}` : ""}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => setShowSummary(s => !s)}
+          data-testid={`button-monthly-summary-${monthKey}`}
+        >
+          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+          {showSummary ? "Hide" : "Monthly"} Summary
+        </Button>
+      </div>
+
+      {showSummary && (
+        <SummaryCard
+          period={monthKey}
+          periodType="monthly"
+          startDate={bounds.start}
+          endDate={bounds.end}
+          periodLabel={bounds.label}
+        />
+      )}
+
+      {weeks.map(([wk, wkEntries]) => (
+        <WeekSection key={wk} weekKey={wk} entries={wkEntries} />
+      ))}
+    </div>
+  );
+}
+
+// ─── Journal tab ──────────────────────────────────────────────────────────────
+
+function JournalTab({ entries }: { entries: DmoEntry[] }) {
+  const [notesOnly, setNotesOnly] = useState(false);
+  const filtered = notesOnly ? entries.filter(e => e.notes?.trim()) : entries;
+
+  // Group by month (descending)
+  const monthMap = new Map<string, DmoEntry[]>();
+  for (const e of filtered) {
+    const m = getMonthPeriod(e.date);
+    if (!monthMap.has(m)) monthMap.set(m, []);
+    monthMap.get(m)!.push(e);
+  }
+  const months = Array.from(monthMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center py-20 text-center">
+        <BookText className="h-12 w-12 text-muted-foreground/30 mb-4" />
+        <p className="text-muted-foreground font-medium">No entries yet</p>
+        <p className="text-sm text-muted-foreground/60 mt-1">Start your DMO today and come back here to review your progress.</p>
+      </div>
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <div className="flex flex-col items-center py-16 text-center">
+        <p className="text-muted-foreground">No entries with notes found.</p>
+        <button className="text-sm text-primary mt-2 underline" onClick={() => setNotesOnly(false)}>Show all entries</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-sm text-muted-foreground">{filtered.length} of {entries.length} entries</p>
+        <button
+          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${notesOnly ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground/30"}`}
+          onClick={() => setNotesOnly(n => !n)}
+        >
+          {notesOnly ? "✓ Notes only" : "Notes only"}
+        </button>
+      </div>
+      {months.map(([mk, mes]) => (
+        <MonthSection key={mk} monthKey={mk} entries={mes} />
+      ))}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DmoTrackerPage() {
@@ -667,6 +1020,7 @@ export default function DmoTrackerPage() {
   const today = getTodayString();
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
+  const [activeTab, setActiveTab] = useState<"today" | "journal">("today");
 
   const { data: todayData, isLoading: todayLoading } = useQuery<{ entry: DmoEntry | null; date: string }>({
     queryKey: ["/api/dmo/today"],
@@ -681,6 +1035,13 @@ export default function DmoTrackerPage() {
   const { data: history } = useQuery<DmoEntry[]>({
     queryKey: ["/api/dmo/history", chartDays],
     queryFn: () => fetch(`/api/dmo/history?limit=${chartDays}`, { credentials: "include" }).then(r => r.json()),
+  });
+
+  // Separate full history for journal (always 365 days)
+  const { data: journalEntries } = useQuery<DmoEntry[]>({
+    queryKey: ["/api/dmo/history", 365],
+    queryFn: () => fetch("/api/dmo/history?limit=365", { credentials: "include" }).then(r => r.json()),
+    enabled: activeTab === "journal",
   });
 
   useEffect(() => {
@@ -774,6 +1135,24 @@ export default function DmoTrackerPage() {
             <p className="text-white/50 text-sm mt-1">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
             </p>
+            {/* Tab switcher */}
+            <div className="flex gap-1 mt-4 bg-white/10 rounded-xl p-1 w-fit">
+              <button
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${activeTab === "today" ? "bg-white text-sidebar shadow-sm" : "text-white/70 hover:text-white"}`}
+                onClick={() => setActiveTab("today")}
+                data-testid="tab-dmo-today"
+              >
+                Today
+              </button>
+              <button
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${activeTab === "journal" ? "bg-white text-sidebar shadow-sm" : "text-white/70 hover:text-white"}`}
+                onClick={() => setActiveTab("journal")}
+                data-testid="tab-dmo-journal"
+              >
+                <BookText className="h-3.5 w-3.5" />
+                Journal
+              </button>
+            </div>
           </div>
 
           {/* Points ring */}
@@ -808,6 +1187,15 @@ export default function DmoTrackerPage() {
         </div>
       </div>
 
+      {/* ── Journal tab ── */}
+      {activeTab === "journal" && (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-12">
+          <JournalTab entries={journalEntries ?? []} />
+        </div>
+      )}
+
+      {/* ── Today tab ── */}
+      {activeTab === "today" && (
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 pb-8 space-y-4">
 
         {/* ── Streak banner ── */}
@@ -1037,6 +1425,7 @@ export default function DmoTrackerPage() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

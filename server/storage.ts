@@ -24,7 +24,7 @@ import {
   type DmoEntry, type InsertDmoEntry,
 } from "@shared/schema";
 import crypto from "crypto";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
 
 // Email normalization helper - centralizes email handling to prevent duplicates
@@ -284,6 +284,8 @@ export interface IStorage {
   upsertDmoEntry(userId: string, date: string, data: Partial<InsertDmoEntry>): Promise<DmoEntry>;
   getDmoEntries(userId: string, limit?: number): Promise<DmoEntry[]>;
   getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }>;
+  getDmoSummary(userId: string, period: string): Promise<{ summary: string; tips: string[]; moodScore: number | null; performanceScore: number | null; generatedAt: Date } | null>;
+  upsertDmoSummary(userId: string, period: string, periodType: string, summary: string, tips: string[], moodScore: number | null, performanceScore: number | null): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1665,6 +1667,37 @@ export class DatabaseStorage implements IStorage {
     best = Math.max(best, current, 1);
 
     return { current, best, totalDays };
+  }
+
+  async getDmoSummary(userId: string, period: string) {
+    const result = await pool.query(
+      `SELECT summary, tips, mood_score, performance_score, generated_at
+       FROM dmo_summaries WHERE user_id = $1 AND period = $2 LIMIT 1`,
+      [userId, period]
+    );
+    if (!result.rows.length) return null;
+    const row = result.rows[0] as { summary: string; tips: string[]; mood_score: string | null; performance_score: string | null; generated_at: Date };
+    return {
+      summary: row.summary,
+      tips: row.tips || [],
+      moodScore: row.mood_score ? parseFloat(row.mood_score) : null,
+      performanceScore: row.performance_score ? parseFloat(row.performance_score) : null,
+      generatedAt: row.generated_at,
+    };
+  }
+
+  async upsertDmoSummary(userId: string, period: string, periodType: string, summary: string, tips: string[], moodScore: number | null, performanceScore: number | null) {
+    await pool.query(
+      `INSERT INTO dmo_summaries (user_id, period, period_type, summary, tips, mood_score, performance_score, generated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       ON CONFLICT (user_id, period) DO UPDATE SET
+         summary = EXCLUDED.summary,
+         tips = EXCLUDED.tips,
+         mood_score = EXCLUDED.mood_score,
+         performance_score = EXCLUDED.performance_score,
+         generated_at = NOW()`,
+      [userId, period, periodType, summary, tips, moodScore, performanceScore]
+    );
   }
 }
 
