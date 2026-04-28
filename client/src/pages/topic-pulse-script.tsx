@@ -1153,19 +1153,37 @@ export default function TopicPulseScriptPage() {
     }
   }, [script]);
 
+  const isAutoSaveRef = useRef(false);
+
   const saveMutation = useMutation({
     mutationFn: async (scriptJson: ScriptJson) => {
       const res = await apiRequest("PATCH", `/api/topic-pulse/scripts/${scriptId}`, { scriptJson });
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Script saved!" });
+      if (!isAutoSaveRef.current) {
+        toast({ title: "Script saved!" });
+      }
+      isAutoSaveRef.current = false;
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/scripts", scriptId] });
     },
     onError: (err: Error) => {
+      isAutoSaveRef.current = false;
       toast({ title: "Failed to save script", description: err.message, variant: "destructive" });
     },
   });
+
+  // Auto-save: silently persist changes 5 seconds after the last edit
+  useEffect(() => {
+    if (!hasChanges || saveMutation.isPending) return;
+    const timer = setTimeout(() => {
+      if (editedScriptJson) {
+        isAutoSaveRef.current = true;
+        saveMutation.mutate(editedScriptJson);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [editedScriptJson, hasChanges]);
 
   const handleSectionChange = (section: keyof NonNullable<ScriptJson["fullScript"]>, value: string) => {
     if (!editedScriptJson?.fullScript) return;
@@ -1551,16 +1569,6 @@ export default function TopicPulseScriptPage() {
               )}
               <Button
                 size="sm"
-                onClick={handleDownloadPdf}
-                disabled={!editedScriptJson?.fullScript}
-                className="bg-white/10 hover:bg-white/20 text-white border-0 font-semibold"
-                data-testid="button-download-pdf"
-              >
-                <FileDown className="h-4 w-4 mr-1.5" />
-                Download PDF
-              </Button>
-              <Button
-                size="sm"
                 onClick={() => setShowResearchPanel(!showResearchPanel)}
                 className="hidden md:flex bg-red-600 hover:bg-red-700 text-white border-0"
                 data-testid="button-toggle-research"
@@ -1608,6 +1616,16 @@ export default function TopicPulseScriptPage() {
               <div className="p-4 max-w-3xl mx-auto">
                 <div className="flex justify-end mb-4 gap-2">
                   <CopyButton text={getFullScriptText()} label="Copy Full Script" html={getFullScriptHtml()} />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDownloadPdf}
+                    disabled={!editedScriptJson?.fullScript}
+                    data-testid="button-download-pdf"
+                  >
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </Button>
                 </div>
 
                 {fullScript && (
