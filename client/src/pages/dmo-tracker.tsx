@@ -134,6 +134,12 @@ function formatTimer(seconds: number): string {
   return `${m}:${s}`;
 }
 
+/** Returns 0–5 points earned based on minutes done vs target. */
+function calcPoints(minutes: number, target: number): number {
+  if (target <= 0) return 0;
+  return Math.min(5, Math.floor(minutes / (target / 5)));
+}
+
 function getBarColor(count: number): string {
   if (count === 0) return "#1e293b";
   if (count === 1) return "#4c1d95";
@@ -160,6 +166,39 @@ interface TimerState {
   status: TimerStatus;
   elapsed: number;       // total seconds accumulated (including previously saved)
   startedAt: number | null; // Date.now() when current run started
+}
+
+// ─── Point dots ──────────────────────────────────────────────────────────────
+
+function PointDots({
+  earned,
+  isFull,
+  gradient,
+  timerColor,
+}: {
+  earned: number;
+  isFull: boolean;
+  gradient: string;
+  timerColor: string;
+}) {
+  return (
+    <div className="flex gap-1.5 items-center" data-testid="point-dots">
+      {Array.from({ length: 5 }, (_, i) => (
+        <div
+          key={i}
+          className={`h-3 w-3 rounded-full transition-all duration-500 ${
+            i < earned
+              ? isFull
+                ? "bg-white shadow-sm shadow-white/50"
+                : `bg-gradient-to-br ${gradient} shadow-sm`
+              : isFull
+              ? "bg-white/20"
+              : "bg-muted-foreground/20"
+          }`}
+        />
+      ))}
+    </div>
+  );
 }
 
 // ─── Activity Card ────────────────────────────────────────────────────────────
@@ -233,6 +272,11 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
 
   const targetPct = Math.min(100, Math.round((liveSeconds / (activity.target * 60)) * 100));
 
+  // Points: 0–5 based on live time vs target
+  const liveMinutes = liveSeconds / 60;
+  const pointsEarned = calcPoints(liveMinutes, activity.target);
+  const isFull = pointsEarned >= 5;
+
   return (
     // Outer wrapper — pulsing gradient ring when running
     <div className={`relative rounded-2xl ${isRunning ? "p-[3px]" : ""}`}>
@@ -244,8 +288,10 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
       )}
     <div
       className={`relative rounded-2xl border-2 transition-all duration-500 overflow-hidden ${
-        isDone
+        isDone && isFull
           ? `border-transparent bg-gradient-to-br ${activity.gradient} shadow-xl ${activity.glowColor} shadow-lg`
+          : isDone && !isFull
+          ? `${activity.borderActive} ${activity.bgActive}`
           : isRunning
           ? `border-transparent ${activity.bgActive}`
           : isPaused
@@ -277,21 +323,21 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className={`font-bold text-base ${isDone ? "text-white" : "text-foreground"}`}>
+                <h3 className={`font-bold text-base ${isDone && isFull ? "text-white" : "text-foreground"}`}>
                   {activity.label}
                 </h3>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    isDone ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+                    isDone && isFull ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
                   }`}
                 >
                   Goal: {activity.target} min
                 </span>
               </div>
-              <p className={`text-sm mt-0.5 font-medium ${isDone ? "text-white/90" : "text-muted-foreground"}`}>
+              <p className={`text-sm mt-0.5 font-medium ${isDone && isFull ? "text-white/90" : "text-muted-foreground"}`}>
                 {activity.tagline}
               </p>
-              <p className={`text-xs mt-1 leading-relaxed ${isDone ? "text-white/70" : "text-muted-foreground/70"}`}>
+              <p className={`text-xs mt-1 leading-relaxed ${isDone && isFull ? "text-white/70" : "text-muted-foreground/70"}`}>
                 {activity.description}
               </p>
             </div>
@@ -302,8 +348,10 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
             {/* Timer display */}
             <div
               className={`text-3xl font-mono font-bold tabular-nums transition-all ${
-                isDone
+                isDone && isFull
                   ? "text-white"
+                  : isDone && !isFull
+                  ? activity.timerColor
                   : isRunning
                   ? activity.timerColor
                   : "text-foreground/40"
@@ -315,22 +363,40 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
                 : formatTimer(liveSeconds)}
             </div>
 
+            {/* Point dots — shown whenever any time has been logged */}
+            {(isDone || isRunning || isPaused) && (
+              <PointDots
+                earned={pointsEarned}
+                isFull={isFull}
+                gradient={activity.gradient}
+                timerColor={activity.timerColor}
+              />
+            )}
+
             {/* Controls */}
             <div className="flex items-center gap-2">
               {isDone ? (
                 <>
                   <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-white" />
-                    <span className="text-sm text-white font-semibold">Done!</span>
+                    {isFull ? (
+                      <CheckCircle2 className="h-4 w-4 text-white" />
+                    ) : null}
+                    <span className={`text-sm font-bold ${isFull ? "text-white" : activity.timerColor}`}>
+                      {pointsEarned}/5 pts
+                    </span>
                   </div>
                   <Button
                     size="sm"
                     onClick={handleAddMore}
-                    className="h-8 px-3 text-xs bg-white/20 hover:bg-white/30 text-white border border-white/30"
+                    className={`h-8 px-3 text-xs border ${
+                      isFull
+                        ? "bg-white/20 hover:bg-white/30 text-white border-white/30"
+                        : `${activity.startBg} text-white border-transparent`
+                    }`}
                     data-testid={`button-dmo-addmore-${activity.key}`}
                   >
                     <Play className="h-3 w-3 mr-1 fill-white" />
-                    Add More
+                    {isFull ? "Add More" : "Keep Going"}
                   </Button>
                 </>
               ) : isIdle ? (
@@ -383,7 +449,7 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
         {/* Quote — visible only when idle/done */}
         {(isIdle || isDone) && (
           <p className={`mt-4 text-xs italic border-t pt-3 ${
-            isDone
+            isDone && isFull
               ? "text-white/50 border-white/20"
               : "text-muted-foreground/50 border-border"
           }`}>
@@ -489,7 +555,14 @@ export default function DmoTrackerPage() {
 
   const entry = todayData?.entry;
   const completedToday = DMO_ACTIVITIES.filter(a => entry?.[a.key]).length;
-  const completionPct = Math.round((completedToday / 5) * 100);
+
+  // Point-based scoring: each activity worth 5 pts, 25 pts max
+  const totalPoints = DMO_ACTIVITIES.reduce((sum, a) => {
+    const mins = entry?.[a.minutesKey] ?? 0;
+    return sum + calcPoints(mins, a.target);
+  }, 0);
+  const isPerfectDay = totalPoints >= 25;
+  const completionPct = Math.round((totalPoints / 25) * 100);
 
   // Build 30-day chart data
   const chartData = (() => {
@@ -521,27 +594,33 @@ export default function DmoTrackerPage() {
             </p>
           </div>
 
-          {/* Completion ring */}
-          <div className="flex items-center gap-4 bg-white/10 rounded-2xl px-5 py-3">
+          {/* Points ring */}
+          <div className={`flex items-center gap-4 rounded-2xl px-5 py-3 transition-all duration-500 ${
+            isPerfectDay ? "bg-green-500/20 ring-1 ring-green-400/40" : "bg-white/10"
+          }`}>
             <div className="relative h-14 w-14">
               <svg className="h-14 w-14 -rotate-90" viewBox="0 0 36 36">
                 <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3" />
                 <circle
                   cx="18" cy="18" r="15.9" fill="none"
-                  stroke={completionPct === 100 ? "#4ade80" : "#dc2626"}
+                  stroke={isPerfectDay ? "#4ade80" : "#dc2626"}
                   strokeWidth="3"
                   strokeDasharray={`${completionPct} ${100 - completionPct}`}
                   strokeLinecap="round"
                   className="transition-all duration-700"
                 />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">
+              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
                 {completionPct}%
               </span>
             </div>
             <div>
-              <p className="text-white font-bold text-lg">{completedToday}/5</p>
-              <p className="text-white/50 text-xs">completed today</p>
+              <p className={`font-bold text-xl leading-tight ${isPerfectDay ? "text-green-300" : "text-white"}`} data-testid="text-dmo-total-points">
+                {totalPoints}<span className="text-sm font-medium opacity-60">/25</span>
+              </p>
+              <p className="text-white/50 text-xs">
+                {isPerfectDay ? "🎉 Perfect Day!" : "pts earned today"}
+              </p>
             </div>
           </div>
         </div>
@@ -658,14 +737,18 @@ export default function DmoTrackerPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-0 bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-lg">
+              <Card className={`border-0 text-white shadow-lg transition-all duration-500 ${
+                isPerfectDay
+                  ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                  : "bg-gradient-to-br from-blue-600 to-cyan-600"
+              }`}>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-1.5 mb-1">
                     <Star className="h-3.5 w-3.5" />
                     <span className="text-xs font-medium opacity-85">Today</span>
                   </div>
-                  <p className="text-3xl font-bold">{completedToday}/5</p>
-                  <p className="text-xs opacity-60">done</p>
+                  <p className="text-3xl font-bold" data-testid="text-dmo-today-points">{totalPoints}<span className="text-base opacity-60">/25</span></p>
+                  <p className="text-xs opacity-60">{isPerfectDay ? "perfect day! 🎉" : "pts"}</p>
                 </CardContent>
               </Card>
             </div>
