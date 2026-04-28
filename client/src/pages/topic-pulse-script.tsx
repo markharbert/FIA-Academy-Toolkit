@@ -69,103 +69,68 @@ function KeywordDataDisplay({ topic }: { topic: Topic }) {
   const trend = getTrendFromData(topic.trendData as TrendDataPoint[] | null);
   const competition = formatCompetition(topic.competition);
   const opportunityLevel = getOpportunityLevel(topic.opportunityScore || 0);
-  
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
-      <div className="p-3 rounded-md bg-muted/50">
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-xs font-medium text-muted-foreground">Monthly Searches</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              <p className="text-xs">Estimated monthly searches on Google (Keywords Everywhere)</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <p className="font-mono text-lg font-bold text-blue-600 dark:text-blue-400" data-testid="text-search-volume">
-          {formatSearchVolume(topic.monthlySearchVolume)}
-        </p>
-      </div>
-      
-      <div className="p-3 rounded-md bg-muted/50">
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-xs font-medium text-muted-foreground">Opportunity</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              <p className="text-xs">Composite score based on volume, competition, CPC, and trend</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <p className={`font-mono text-lg font-bold ${opportunityLevel.color}`} data-testid="text-opportunity-score">
-          {topic.opportunityScore}/100
-        </p>
-      </div>
-      
-      <div className="p-3 rounded-md bg-muted/50">
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-xs font-medium text-muted-foreground">CPC</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              <p className="text-xs">Cost-per-click in Google Ads. Higher = more commercial intent</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <p className="font-mono text-lg font-semibold" data-testid="text-cpc">
-          {formatCPC(topic.cpc)}
-        </p>
-      </div>
-      
-      <div className="p-3 rounded-md bg-muted/50">
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-xs font-medium text-muted-foreground">Competition</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              <p className="text-xs">Ad competition level. Lower = easier to rank</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <p className={`font-mono text-lg font-semibold ${competition.color}`} data-testid="text-competition">
+
+  const stats = [
+    {
+      label: "Monthly Searches",
+      value: <span className="font-mono text-base font-bold text-blue-400" data-testid="text-search-volume">{formatSearchVolume(topic.monthlySearchVolume)}</span>,
+      tip: "Estimated monthly searches on Google (Keywords Everywhere)",
+      accent: "border-blue-500/40",
+    },
+    {
+      label: "Opportunity",
+      value: <span className={`font-mono text-base font-bold ${opportunityLevel.color}`} data-testid="text-opportunity-score">{topic.opportunityScore}/100</span>,
+      tip: "Composite score based on volume, competition, CPC, and trend",
+      accent: "border-emerald-500/40",
+    },
+    {
+      label: "CPC",
+      value: <span className="font-mono text-base font-semibold" data-testid="text-cpc">{formatCPC(topic.cpc)}</span>,
+      tip: "Cost-per-click in Google Ads. Higher = more commercial intent",
+      accent: "border-violet-500/40",
+    },
+    {
+      label: "Competition",
+      value: (
+        <span className={`font-mono text-base font-semibold ${competition.color}`} data-testid="text-competition">
           {competition.label}
-          {competition.value && <span className="text-sm font-normal ml-1">({competition.value})</span>}
-        </p>
-      </div>
-      
-      <div className="p-3 rounded-md bg-muted/50">
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-xs font-medium text-muted-foreground">Trend</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              <p className="text-xs">Search interest trend over recent months</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+          {competition.value && <span className="text-sm font-normal opacity-70 ml-1">({competition.value})</span>}
+        </span>
+      ),
+      tip: "Ad competition level. Lower = easier to rank",
+      accent: "border-amber-500/40",
+    },
+    {
+      label: "Trend",
+      value: (
         <div className="flex items-center gap-1.5" data-testid="text-trend">
           <TrendIcon direction={trend.direction} />
-          <span className={`font-mono text-lg font-semibold ${
-            trend.direction === "rising" 
-              ? "text-green-600 dark:text-green-400" 
-              : trend.direction === "falling" 
-                ? "text-red-600 dark:text-red-400" 
-                : "text-muted-foreground"
-          }`}>
-            {trend.label}
-          </span>
+          <span className={`font-mono text-base font-semibold ${
+            trend.direction === "rising" ? "text-green-400" : trend.direction === "falling" ? "text-red-400" : "text-muted-foreground"
+          }`}>{trend.label}</span>
         </div>
-      </div>
+      ),
+      tip: "Search interest trend over recent months",
+      accent: "border-teal-500/40",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-4">
+      {stats.map((s) => (
+        <div key={s.label} className={`flex flex-col gap-1 px-3 py-2.5 rounded-xl bg-white/5 border ${s.accent}`}>
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-white/50">{s.label}</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3 w-3 text-white/30 cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs"><p className="text-xs">{s.tip}</p></TooltipContent>
+            </Tooltip>
+          </div>
+          {s.value}
+        </div>
+      ))}
     </div>
   );
 }
@@ -881,6 +846,14 @@ function CallToActionTab({
   );
 }
 
+const SECTION_STYLES: Record<string, { border: string; badge: string; glow: string }> = {
+  hook:      { border: "border-l-violet-500", badge: "bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/20", glow: "bg-violet-500/5" },
+  "set-hook":{ border: "border-l-blue-500",   badge: "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/20",       glow: "bg-blue-500/5" },
+  "first-cta":{ border: "border-l-amber-500", badge: "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/20",   glow: "bg-amber-500/5" },
+  content:   { border: "border-l-teal-500",   badge: "bg-teal-500/10 text-teal-600 dark:text-teal-400 ring-teal-500/20",       glow: "bg-teal-500/5" },
+  "final-cta":{ border: "border-l-rose-500",  badge: "bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-rose-500/20",       glow: "bg-rose-500/5" },
+};
+
 function EditableScriptSection({ 
   title, 
   content, 
@@ -898,6 +871,7 @@ function EditableScriptSection({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(content);
+  const style = SECTION_STYLES[sectionKey] ?? { border: "border-l-muted-foreground/30", badge: "bg-muted text-muted-foreground ring-muted", glow: "" };
 
   useEffect(() => {
     setEditValue(content);
@@ -914,64 +888,66 @@ function EditableScriptSection({
   };
 
   return (
-    <div className="p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold">{title}</span>
-          {duration && (
-            <Badge variant="outline" className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {duration}
-            </Badge>
+    <div className={`border-l-4 ${style.border} ${isEditing ? "" : style.glow}`}>
+      <div className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ring-1 ${style.badge}`}>{title}</span>
+            {duration && (
+              <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                <Clock className="h-3 w-3" />
+                {duration}
+              </Badge>
+            )}
+          </div>
+          {!isEditing && (
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="h-7 px-2 text-muted-foreground hover:text-foreground"
+              onClick={() => setIsEditing(true)}
+              data-testid={`button-edit-${sectionKey}`}
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1" />
+              Edit
+            </Button>
           )}
         </div>
-        {!isEditing && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setIsEditing(true)}
-            data-testid={`button-edit-${sectionKey}`}
-          >
-            <Pencil className="h-4 w-4 mr-1" />
-            Edit
-          </Button>
+        
+        {isEditing ? (
+          <div className="space-y-3">
+            <Textarea
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="min-h-[150px] font-mono text-sm"
+              data-testid={`textarea-${sectionKey}`}
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={handleCancel}>Cancel</Button>
+              <Button size="sm" onClick={handleSave} data-testid={`button-save-${sectionKey}`}>
+                <Check className="h-4 w-4 mr-1" />
+                Done
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">{content}</p>
+        )}
+        
+        {onScreenText && onScreenText.length > 0 && !isEditing && (
+          <div className="mt-3 p-3 bg-muted/40 rounded-lg border border-border/50">
+            <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">On-Screen Text</p>
+            <ul className="text-sm space-y-1">
+              {onScreenText.map((text, i) => (
+                <li key={i} className="text-muted-foreground flex items-start gap-1.5">
+                  <span className="opacity-40 mt-0.5">›</span>
+                  {text}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
-      
-      {isEditing ? (
-        <div className="space-y-3">
-          <Textarea
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            className="min-h-[150px] font-mono text-sm"
-            data-testid={`textarea-${sectionKey}`}
-          />
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleSave} data-testid={`button-save-${sectionKey}`}>
-              <Check className="h-4 w-4 mr-1" />
-              Done
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="prose prose-sm dark:prose-invert max-w-none">
-          <p className="whitespace-pre-wrap">{content}</p>
-        </div>
-      )}
-      
-      {onScreenText && onScreenText.length > 0 && !isEditing && (
-        <div className="mt-3 p-3 bg-muted/50 rounded-md">
-          <p className="text-xs font-medium text-muted-foreground mb-2">On-Screen Text:</p>
-          <ul className="text-sm space-y-1">
-            {onScreenText.map((text, i) => (
-              <li key={i} className="text-muted-foreground">{text}</li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
@@ -1420,68 +1396,79 @@ export default function TopicPulseScriptPage() {
 
   return (
     <div className="min-h-full flex flex-col">
-      <div className="border-b p-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/video-trends/scripts")} data-testid="button-back">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold" data-testid="text-script-title">{script.title}</h1>
-            <p className="text-sm text-muted-foreground">
-              Created {new Date(script.createdAt).toLocaleDateString()}
-            </p>
-          </div>
-          {hasChanges && (
-            <Button 
-              onClick={handleSave} 
-              disabled={saveMutation.isPending}
-              data-testid="button-save-script"
+      {/* ── Hero header ── */}
+      <div className="bg-sidebar text-sidebar-foreground px-6 py-6 shrink-0">
+        <div className="max-w-5xl mx-auto">
+          {/* Top row: back + title + actions */}
+          <div className="flex items-start gap-3">
+            <button
+              onClick={() => navigate("/video-trends/scripts")}
+              className="mt-0.5 flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors"
+              data-testid="button-back"
             >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
+              <ArrowLeft className="h-4 w-4" />
+              Scripts
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl font-bold text-white leading-tight truncate" data-testid="text-script-title">
+                {script.title}
+              </h1>
+              <p className="text-white/40 text-xs mt-0.5">
+                Created {new Date(script.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {hasChanges && (
+                <Button
+                  onClick={handleSave}
+                  disabled={saveMutation.isPending}
+                  size="sm"
+                  className="bg-white text-sidebar hover:bg-white/90 font-semibold"
+                  data-testid="button-save-script"
+                >
+                  {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}
+                  Save
+                </Button>
               )}
-              Save Changes
-            </Button>
-          )}
-          <Button 
-            size="sm"
-            onClick={() => setShowResearchPanel(!showResearchPanel)}
-            className="hidden md:flex bg-red-600 hover:bg-red-700 text-white border-red-600"
-            data-testid="button-toggle-research"
-          >
-            <Youtube className="h-4 w-4 mr-2" />
-            {showResearchPanel ? "Hide" : "Show"} Video Research
-          </Button>
+              <Button
+                size="sm"
+                onClick={() => setShowResearchPanel(!showResearchPanel)}
+                className="hidden md:flex bg-red-600 hover:bg-red-700 text-white border-0"
+                data-testid="button-toggle-research"
+              >
+                <Youtube className="h-4 w-4 mr-1.5" />
+                {showResearchPanel ? "Hide" : "Research"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Keyword stats */}
+          {script.topic && <KeywordDataDisplay topic={script.topic} />}
         </div>
-        {script.topic && (
-          <KeywordDataDisplay topic={script.topic} />
-        )}
       </div>
 
       <div className="flex-1 overflow-hidden flex">
         <Tabs defaultValue="full" className="flex-1 h-full flex flex-col overflow-hidden">
-          <div className="border-b px-4">
-            <TabsList className="h-12">
-              <TabsTrigger value="full" className="flex items-center gap-2" data-testid="tab-full-script">
-                <FileText className="h-4 w-4" />
-                Long Form Script
+          <div className="border-b bg-background px-4 shrink-0">
+            <TabsList className="h-11 bg-transparent gap-1 p-0">
+              <TabsTrigger value="full" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-full-script">
+                <FileText className="h-3.5 w-3.5" />
+                Long Form
               </TabsTrigger>
-              <TabsTrigger value="shorts" className="flex items-center gap-2" data-testid="tab-shorts">
-                <AlignLeft className="h-4 w-4" />
-                Shorts Script
+              <TabsTrigger value="shorts" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-shorts">
+                <AlignLeft className="h-3.5 w-3.5" />
+                Shorts
               </TabsTrigger>
-              <TabsTrigger value="description" className="flex items-center gap-2" data-testid="tab-description">
-                <Tags className="h-4 w-4" />
+              <TabsTrigger value="description" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-description">
+                <Tags className="h-3.5 w-3.5" />
                 Description
               </TabsTrigger>
-              <TabsTrigger value="comment" className="flex items-center gap-2" data-testid="tab-comment">
-                <MessageSquare className="h-4 w-4" />
+              <TabsTrigger value="comment" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-comment">
+                <MessageSquare className="h-3.5 w-3.5" />
                 Pinned Comment
               </TabsTrigger>
-              <TabsTrigger value="cta" className="flex items-center gap-2" data-testid="tab-cta">
-                <Gift className="h-4 w-4" />
+              <TabsTrigger value="cta" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-cta">
+                <Gift className="h-3.5 w-3.5" />
                 Call To Action
               </TabsTrigger>
             </TabsList>
@@ -1495,74 +1482,73 @@ export default function TopicPulseScriptPage() {
                 </div>
 
                 {fullScript && (
-                  <Card>
-                    <CardContent className="p-0 divide-y">
-                      <EditableScriptSection 
-                        title="1. Hook" 
-                        content={fullScript.hook.text} 
-                        duration={fullScript.hook.duration}
-                        onScreenText={fullScript.hook.onScreenText}
-                        onChange={(v) => handleSectionChange("hook", v)}
-                        sectionKey="hook"
+                  <div className="rounded-xl border bg-card shadow-sm overflow-hidden space-y-px">
+                    <EditableScriptSection 
+                      title="1. Hook" 
+                      content={fullScript.hook.text} 
+                      duration={fullScript.hook.duration}
+                      onScreenText={fullScript.hook.onScreenText}
+                      onChange={(v) => handleSectionChange("hook", v)}
+                      sectionKey="hook"
+                    />
+                    <EditableScriptSection 
+                      title="2. Set the Hook" 
+                      content={fullScript.setHook.text} 
+                      duration={fullScript.setHook.duration}
+                      onScreenText={fullScript.setHook.onScreenText}
+                      onChange={(v) => handleSectionChange("setHook", v)}
+                      sectionKey="set-hook"
+                    />
+                    <EditableScriptSection 
+                      title="3. First CTA" 
+                      content={fullScript.firstCTA.text} 
+                      duration={fullScript.firstCTA.duration}
+                      onChange={(v) => handleSectionChange("firstCTA", v)}
+                      sectionKey="first-cta"
+                    />
+                    <EditableScriptSection 
+                      title="4. Content" 
+                      content={fullScript.content.text}
+                      onChange={(v) => handleSectionChange("content", v)}
+                      sectionKey="content"
+                    />
+                    {editedScriptJson?.fullScript?.content.sections?.map((section, i) => (
+                      <EditableContentSubSection
+                        key={i}
+                        section={section}
+                        index={i}
+                        onUpdate={handleContentSectionUpdate}
+                        onDelete={handleContentSectionDelete}
                       />
-                      <EditableScriptSection 
-                        title="2. Set the Hook" 
-                        content={fullScript.setHook.text} 
-                        duration={fullScript.setHook.duration}
-                        onScreenText={fullScript.setHook.onScreenText}
-                        onChange={(v) => handleSectionChange("setHook", v)}
-                        sectionKey="set-hook"
-                      />
-                      <EditableScriptSection 
-                        title="3. First CTA" 
-                        content={fullScript.firstCTA.text} 
-                        duration={fullScript.firstCTA.duration}
-                        onChange={(v) => handleSectionChange("firstCTA", v)}
-                        sectionKey="first-cta"
-                      />
-                      <EditableScriptSection 
-                        title="4. Content" 
-                        content={fullScript.content.text}
-                        onChange={(v) => handleSectionChange("content", v)}
-                        sectionKey="content"
-                      />
-                      {editedScriptJson?.fullScript?.content.sections?.map((section, i) => (
-                        <EditableContentSubSection
-                          key={i}
-                          section={section}
-                          index={i}
-                          onUpdate={handleContentSectionUpdate}
-                          onDelete={handleContentSectionDelete}
-                        />
-                      ))}
-                      <div className="p-4 border-t border-dashed">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={handleAddContentSection}
-                          className="w-full"
-                          data-testid="button-add-content-section"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Content Section
-                        </Button>
+                    ))}
+                    <div className="px-5 py-3 bg-muted/30">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleAddContentSection}
+                        className="w-full border-dashed"
+                        data-testid="button-add-content-section"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Content Section
+                      </Button>
+                    </div>
+                    <EditableScriptSection 
+                      title="5. Final CTA" 
+                      content={fullScript.finalCTA.text} 
+                      duration={fullScript.finalCTA.duration}
+                      onChange={(v) => handleSectionChange("finalCTA", v)}
+                      sectionKey="final-cta"
+                    />
+                    {fullScript.finalCTA.nextVideoSuggestion && (
+                      <div className="px-5 py-4 bg-primary/5 border-t">
+                        <p className="text-sm">
+                          <strong className="text-primary">Next Video Suggestion:</strong>{" "}
+                          {fullScript.finalCTA.nextVideoSuggestion}
+                        </p>
                       </div>
-                      <EditableScriptSection 
-                        title="5. Final CTA" 
-                        content={fullScript.finalCTA.text} 
-                        duration={fullScript.finalCTA.duration}
-                        onChange={(v) => handleSectionChange("finalCTA", v)}
-                        sectionKey="final-cta"
-                      />
-                      {fullScript.finalCTA.nextVideoSuggestion && (
-                        <div className="p-4 bg-primary/5">
-                          <p className="text-sm">
-                            <strong>Next Video Suggestion:</strong> {fullScript.finalCTA.nextVideoSuggestion}
-                          </p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                    )}
+                  </div>
                 )}
               </div>
             </ScrollArea>
