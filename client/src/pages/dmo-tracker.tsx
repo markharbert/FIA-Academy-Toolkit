@@ -47,7 +47,7 @@ const DMO_ACTIVITIES = [
     glowColor: "shadow-violet-500/40",
     borderActive: "border-violet-400",
     bgActive: "bg-violet-950/20",
-    timerColor: "text-violet-300",
+    timerColor: "text-violet-700 dark:text-violet-300",
     startBg: "bg-violet-600 hover:bg-violet-500",
     quote: "It is the set of the sails, not the direction of the wind that determines which way we will go. — Jim Rohn",
   },
@@ -63,7 +63,7 @@ const DMO_ACTIVITIES = [
     glowColor: "shadow-blue-500/40",
     borderActive: "border-blue-400",
     bgActive: "bg-blue-950/20",
-    timerColor: "text-blue-300",
+    timerColor: "text-blue-700 dark:text-blue-300",
     startBg: "bg-blue-600 hover:bg-blue-500",
     quote: "Personal development is a major time-saver. The better you become, the less time it takes to achieve your goals. — Brian Tracy",
   },
@@ -79,7 +79,7 @@ const DMO_ACTIVITIES = [
     glowColor: "shadow-teal-500/40",
     borderActive: "border-teal-400",
     bgActive: "bg-teal-950/20",
-    timerColor: "text-teal-300",
+    timerColor: "text-teal-700 dark:text-teal-300",
     startBg: "bg-teal-600 hover:bg-teal-500",
     quote: "Formal education will make you a living; self-education will make you a fortune. — Jim Rohn",
   },
@@ -95,7 +95,7 @@ const DMO_ACTIVITIES = [
     glowColor: "shadow-amber-500/40",
     borderActive: "border-amber-400",
     bgActive: "bg-amber-950/20",
-    timerColor: "text-amber-300",
+    timerColor: "text-amber-700 dark:text-amber-300",
     startBg: "bg-amber-500 hover:bg-amber-400",
     quote: "You don't get paid for the hour. You get paid for the value you bring to the hour. — Jim Rohn",
   },
@@ -111,7 +111,7 @@ const DMO_ACTIVITIES = [
     glowColor: "shadow-red-500/40",
     borderActive: "border-red-400",
     bgActive: "bg-red-950/20",
-    timerColor: "text-red-300",
+    timerColor: "text-red-700 dark:text-red-300",
     startBg: "bg-red-600 hover:bg-red-500",
     quote: "To be interesting, be interested. — Dale Carnegie",
   },
@@ -620,14 +620,14 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
         {/* Running pulse indicator */}
         {isRunning && (
           <div className="mt-4 flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+            <span className="relative flex h-2.5 w-2.5">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-gradient-to-br ${activity.gradient} opacity-75`} />
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-br ${activity.gradient}`} />
             </span>
-            <span className={`text-xs font-medium ${activity.timerColor}`}>
+            <span className={`text-xs font-semibold ${activity.timerColor}`}>
               Timer running — stay focused!
             </span>
-            <span className={`ml-auto text-xs ${activity.timerColor} opacity-60`}>
+            <span className={`ml-auto text-xs font-medium ${activity.timerColor} opacity-70`}>
               {targetPct}% of goal
             </span>
           </div>
