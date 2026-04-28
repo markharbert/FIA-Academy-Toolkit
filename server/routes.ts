@@ -4198,5 +4198,52 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── DMO Tracker ─────────────────────────────────────────────────────────────
+
+  app.get("/api/dmo/today", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const today = new Date().toISOString().split("T")[0];
+      const entry = await storage.getDmoEntry(userId, today);
+      res.json({ entry: entry ?? null, date: today });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch today's DMO entry" });
+    }
+  });
+
+  app.post("/api/dmo/entry", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const today = new Date().toISOString().split("T")[0];
+      const { date = today, ...data } = req.body;
+      const entry = await storage.upsertDmoEntry(userId, date, data);
+      const streak = await storage.getDmoStreak(userId);
+      res.json({ entry, streak });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save DMO entry" });
+    }
+  });
+
+  app.get("/api/dmo/history", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const limit = Math.min(parseInt(req.query.limit as string || "60"), 120);
+      const entries = await storage.getDmoEntries(userId, limit);
+      res.json(entries);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch DMO history" });
+    }
+  });
+
+  app.get("/api/dmo/streak", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const streak = await storage.getDmoStreak(userId);
+      res.json(streak);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch streak" });
+    }
+  });
+
   return httpServer;
 }

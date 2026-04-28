@@ -2,6 +2,7 @@ import {
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
   accountabilityCheckins, accountabilityBadges,
+  dmoEntries,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -20,6 +21,7 @@ import {
   type SavedOffer, type InsertSavedOffer,
   type AccountabilityCheckin, type InsertAccountabilityCheckin,
   type AccountabilityBadge,
+  type DmoEntry, type InsertDmoEntry,
 } from "@shared/schema";
 import crypto from "crypto";
 import { db } from "./db";
@@ -276,6 +278,12 @@ export interface IStorage {
   // App Settings
   getMonthlyCreditsLimit(): Promise<number>;
   setMonthlyCreditsLimit(limit: number): Promise<void>;
+
+  // DMO Tracker
+  getDmoEntry(userId: string, date: string): Promise<DmoEntry | undefined>;
+  upsertDmoEntry(userId: string, date: string, data: Partial<InsertDmoEntry>): Promise<DmoEntry>;
+  getDmoEntries(userId: string, limit?: number): Promise<DmoEntry[]>;
+  getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1578,6 +1586,85 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: appSettings.key, set: { value: String(limit), updatedAt: now } });
     // Update all existing users to the new limit
     await db.update(videoTrendsCredits).set({ monthlyLimit: limit, updatedAt: now });
+  }
+
+  // DMO Tracker
+  async getDmoEntry(userId: string, date: string): Promise<DmoEntry | undefined> {
+    const [row] = await db.select().from(dmoEntries)
+      .where(and(eq(dmoEntries.userId, userId), eq(dmoEntries.date, date)));
+    return row || undefined;
+  }
+
+  async upsertDmoEntry(userId: string, date: string, data: Partial<InsertDmoEntry>): Promise<DmoEntry> {
+    const now = new Date();
+    const existing = await this.getDmoEntry(userId, date);
+    if (existing) {
+      const [updated] = await db.update(dmoEntries)
+        .set({ ...data, updatedAt: now })
+        .where(and(eq(dmoEntries.userId, userId), eq(dmoEntries.date, date)))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(dmoEntries)
+        .values({ userId, date, ...data, createdAt: now, updatedAt: now })
+        .returning();
+      return created;
+    }
+  }
+
+  async getDmoEntries(userId: string, limit: number = 60): Promise<DmoEntry[]> {
+    return db.select().from(dmoEntries)
+      .where(eq(dmoEntries.userId, userId))
+      .orderBy(desc(dmoEntries.date))
+      .limit(limit);
+  }
+
+  async getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }> {
+    const entries = await db.select({ date: dmoEntries.date })
+      .from(dmoEntries)
+      .where(and(
+        eq(dmoEntries.userId, userId),
+        sql`(${dmoEntries.visionMeditation} OR ${dmoEntries.personalDevelopment} OR ${dmoEntries.expandSkills} OR ${dmoEntries.execution} OR ${dmoEntries.connecting})`
+      ))
+      .orderBy(desc(dmoEntries.date));
+
+    if (entries.length === 0) return { current: 0, best: 0, totalDays: 0 };
+
+    const dates = entries.map(e => e.date).sort().reverse();
+    const totalDays = dates.length;
+
+    // Calculate current streak
+    let current = 0;
+    const today = new Date().toISOString().split("T")[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+    let checkDate = dates[0] === today || dates[0] === yesterday ? dates[0] : null;
+
+    if (checkDate) {
+      const dateSet = new Set(dates);
+      let d = new Date(checkDate);
+      while (dateSet.has(d.toISOString().split("T")[0])) {
+        current++;
+        d = new Date(d.getTime() - 86400000);
+      }
+    }
+
+    // Calculate best streak
+    let best = 0;
+    let streak = 1;
+    for (let i = 1; i < dates.length; i++) {
+      const prev = new Date(dates[i - 1]);
+      const curr = new Date(dates[i]);
+      const diff = (prev.getTime() - curr.getTime()) / 86400000;
+      if (Math.round(diff) === 1) {
+        streak++;
+        best = Math.max(best, streak);
+      } else {
+        streak = 1;
+      }
+    }
+    best = Math.max(best, current, 1);
+
+    return { current, best, totalDays };
   }
 }
 

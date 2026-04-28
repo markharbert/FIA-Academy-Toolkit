@@ -835,3 +835,34 @@ export const accountabilityBadges = pgTable("accountability_badges", {
 });
 
 export type AccountabilityBadge = typeof accountabilityBadges.$inferSelect;
+
+// ─── DMO Tracker ─────────────────────────────────────────────────────────────
+
+export const dmoEntries = pgTable("dmo_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  // The 5 core DMO activities
+  visionMeditation: boolean("vision_meditation").default(false).notNull(),
+  visionMinutes: integer("vision_minutes").default(0).notNull(),
+  personalDevelopment: boolean("personal_development").default(false).notNull(),
+  personalMinutes: integer("personal_minutes").default(0).notNull(),
+  expandSkills: boolean("expand_skills").default(false).notNull(),
+  expandMinutes: integer("expand_minutes").default(0).notNull(),
+  execution: boolean("execution").default(false).notNull(),
+  executionMinutes: integer("execution_minutes").default(0).notNull(),
+  connecting: boolean("connecting").default(false).notNull(),
+  connectingMinutes: integer("connecting_minutes").default(0).notNull(),
+  notes: text("notes").default(""),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertDmoEntrySchema = createInsertSchema(dmoEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertDmoEntry = z.infer<typeof insertDmoEntrySchema>;
+export type DmoEntry = typeof dmoEntries.$inferSelect;
