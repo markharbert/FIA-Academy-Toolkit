@@ -3340,8 +3340,14 @@ export async function registerRoutes(
 
   app.get("/api/topic-pulse/runs", requireAuth, async (req: Request, res: Response) => {
     try {
-      const runs = await storage.getTopicRunsByUser(req.session.userId!, 20);
-      res.json(runs);
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 15));
+      const offset = (page - 1) * limit;
+      const [runs, total] = await Promise.all([
+        storage.getTopicRunsByUser(req.session.userId!, limit, offset),
+        storage.countTopicRunsByUser(req.session.userId!),
+      ]);
+      res.json({ runs, total, page, limit, totalPages: Math.ceil(total / limit) });
     } catch (err) {
       console.error("[TopicPulse] Get runs error:", err);
       res.status(500).json({ message: "Failed to get topic runs" });

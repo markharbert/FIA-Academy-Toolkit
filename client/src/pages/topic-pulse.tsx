@@ -3,10 +3,18 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Settings, Sparkles } from "lucide-react";
+import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Settings, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun } from "@shared/schema";
+
+interface RunsPage {
+  runs: TopicRun[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
 interface CreditsData {
   creditsUsed: number;
@@ -37,9 +45,16 @@ export default function TopicPulsePage() {
   const { toast } = useToast();
   const [seedQuery, setSeedQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string | undefined>();
+  const [runsPage, setRunsPage] = useState(1);
+  const PAGE_SIZE = 15;
 
-  const { data: recentRuns, isLoading: runsLoading } = useQuery<TopicRun[]>({
-    queryKey: ["/api/topic-pulse/runs"],
+  const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
+    queryKey: ["/api/topic-pulse/runs", runsPage],
+    queryFn: async () => {
+      const res = await fetch(`/api/topic-pulse/runs?page=${runsPage}&limit=${PAGE_SIZE}`);
+      if (!res.ok) throw new Error("Failed to load runs");
+      return res.json();
+    },
   });
 
   const { data: savedTopics } = useQuery<any[]>({
@@ -67,6 +82,7 @@ export default function TopicPulsePage() {
       return res.json();
     },
     onSuccess: (data: { runId: string }) => {
+      setRunsPage(1);
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
       navigate(`/video-trends/explore/${data.runId}`);
@@ -95,6 +111,7 @@ export default function TopicPulsePage() {
       await apiRequest("DELETE", "/api/topic-pulse/runs");
     },
     onSuccess: () => {
+      setRunsPage(1);
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
       toast({ title: "All searches cleared" });
     },
@@ -266,8 +283,15 @@ export default function TopicPulsePage() {
           {/* Recent searches */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold">Recent Searches</h2>
-              {recentRuns && recentRuns.length > 0 && (
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold">Recent Searches</h2>
+                {runsData && runsData.total > 0 && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    {runsData.total}
+                  </span>
+                )}
+              </div>
+              {runsData && runsData.total > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -290,61 +314,99 @@ export default function TopicPulsePage() {
               <div className="flex justify-center py-10">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : recentRuns && recentRuns.length > 0 ? (
-              <div className="space-y-2">
-                {recentRuns.map((run, index) => (
-                  <div
-                    key={run.id}
-                    className={`group relative rounded-xl border bg-card shadow-sm border-l-4 ${RUN_ACCENTS[index % RUN_ACCENTS.length]} cursor-pointer transition-all hover:shadow-md hover:-translate-y-px`}
-                    onClick={() => navigate(`/video-trends/explore/${run.id}`)}
-                    data-testid={`card-run-${run.id}`}
-                  >
-                    <div className="px-5 py-3.5 flex items-center gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm group-hover:text-primary transition-colors truncate">
-                          {run.seedQuery}
-                        </p>
-                        <div className="flex items-center gap-3 mt-0.5">
-                          <span className="text-xs text-muted-foreground">
-                            {run.topicCount} topics found
-                            {run.runtimeMs && ` · ${(run.runtimeMs / 1000).toFixed(1)}s`}
-                          </span>
+            ) : runsData && runsData.runs.length > 0 ? (
+              <>
+                <div className="space-y-2">
+                  {runsData.runs.map((run, index) => {
+                    const globalIndex = (runsPage - 1) * PAGE_SIZE + index;
+                    return (
+                      <div
+                        key={run.id}
+                        className={`group relative rounded-xl border bg-card shadow-sm border-l-4 ${RUN_ACCENTS[globalIndex % RUN_ACCENTS.length]} cursor-pointer transition-all hover:shadow-md hover:-translate-y-px`}
+                        onClick={() => navigate(`/video-trends/explore/${run.id}`)}
+                        data-testid={`card-run-${run.id}`}
+                      >
+                        <div className="px-5 py-3.5 flex items-center gap-4">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm group-hover:text-primary transition-colors truncate">
+                              {run.seedQuery}
+                            </p>
+                            <div className="flex items-center gap-3 mt-0.5">
+                              <span className="text-xs text-muted-foreground">
+                                {run.topicCount} topics found
+                                {run.runtimeMs && ` · ${(run.runtimeMs / 1000).toFixed(1)}s`}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`text-xs font-semibold px-2 py-0.5 rounded-full ring-1 ${
+                                run.status === "complete"
+                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20"
+                                  : "bg-muted text-muted-foreground ring-border"
+                              }`}
+                            >
+                              {run.status}
+                            </span>
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              {new Date(run.createdAt).toLocaleDateString()}
+                            </span>
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteRunMutation.mutate(run.id);
+                                }}
+                                disabled={deleteRunMutation.isPending}
+                                data-testid={`button-delete-run-${run.id}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span
-                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ring-1 ${
-                            run.status === "complete"
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20"
-                              : "bg-muted text-muted-foreground ring-border"
-                          }`}
-                        >
-                          {run.status}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {new Date(run.createdAt).toLocaleDateString()}
-                        </span>
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteRunMutation.mutate(run.id);
-                            }}
-                            disabled={deleteRunMutation.isPending}
-                            data-testid={`button-delete-run-${run.id}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Pagination controls */}
+                {runsData.totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <span className="text-xs text-muted-foreground">
+                      Page {runsData.page} of {runsData.totalPages} &mdash; {runsData.total} searches total
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => setRunsPage((p) => Math.max(1, p - 1))}
+                        disabled={runsPage <= 1 || runsLoading}
+                        data-testid="button-prev-page"
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => setRunsPage((p) => Math.min(runsData.totalPages, p + 1))}
+                        disabled={runsPage >= runsData.totalPages || runsLoading}
+                        data-testid="button-next-page"
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             ) : (
               <div className="rounded-xl border bg-card py-12 flex flex-col items-center text-center">
                 <div className="p-4 rounded-2xl bg-muted/50 mb-3">

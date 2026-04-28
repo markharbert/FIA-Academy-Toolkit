@@ -210,7 +210,8 @@ export interface IStorage {
   // Topic Pulse Finder: Topic Runs
   createTopicRun(run: InsertTopicRun): Promise<TopicRun>;
   getTopicRun(id: string): Promise<TopicRun | undefined>;
-  getTopicRunsByUser(userId: string, limit?: number): Promise<TopicRun[]>;
+  getTopicRunsByUser(userId: string, limit?: number, offset?: number): Promise<TopicRun[]>;
+  countTopicRunsByUser(userId: string): Promise<number>;
   updateTopicRun(id: string, updates: Partial<TopicRun>): Promise<TopicRun | undefined>;
   deleteTopicRun(id: string, userId: string): Promise<boolean>;
   deleteAllTopicRuns(userId: string): Promise<number>;
@@ -1099,11 +1100,18 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
   
-  async getTopicRunsByUser(userId: string, limit = 20): Promise<TopicRun[]> {
+  async getTopicRunsByUser(userId: string, limit = 20, offset = 0): Promise<TopicRun[]> {
     return db.select().from(topicRuns)
       .where(eq(topicRuns.userId, userId))
       .orderBy(desc(topicRuns.createdAt))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async countTopicRunsByUser(userId: string): Promise<number> {
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(topicRuns)
+      .where(eq(topicRuns.userId, userId));
+    return row?.count ?? 0;
   }
   
   async updateTopicRun(id: string, updates: Partial<TopicRun>): Promise<TopicRun | undefined> {
