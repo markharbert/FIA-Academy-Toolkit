@@ -3,12 +3,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2 } from "lucide-react";
+import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Settings, Sparkles } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { TopicRun, Topic } from "@shared/schema";
+import type { TopicRun } from "@shared/schema";
 
 interface CreditsData {
   creditsUsed: number;
@@ -18,11 +16,20 @@ interface CreditsData {
   resetsAt: string;
 }
 
-const presets = [
-  { label: "Review", icon: ShoppingBag, type: "review" as const },
-  { label: "Comparison", icon: ListChecks, type: "vs" as const },
-  { label: "How-To", icon: BookOpen, type: "tutorial" as const },
-  { label: "Problem Fix", icon: HelpCircle, type: "problem-fix" as const },
+const PRESETS = [
+  { label: "Review",      icon: ShoppingBag, type: "review",       color: "bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/30 hover:bg-violet-500/20",       activeColor: "bg-violet-500 text-white ring-violet-500" },
+  { label: "Comparison",  icon: ListChecks,  type: "vs",           color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30 hover:bg-blue-500/20",                 activeColor: "bg-blue-500 text-white ring-blue-500" },
+  { label: "How-To",      icon: BookOpen,    type: "tutorial",     color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 ring-teal-500/30 hover:bg-teal-500/20",                 activeColor: "bg-teal-500 text-white ring-teal-500" },
+  { label: "Problem Fix", icon: HelpCircle,  type: "problem-fix",  color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/30 hover:bg-amber-500/20",            activeColor: "bg-amber-500 text-white ring-amber-500" },
+];
+
+const RUN_ACCENTS = [
+  "border-l-violet-500",
+  "border-l-blue-500",
+  "border-l-teal-500",
+  "border-l-rose-500",
+  "border-l-amber-500",
+  "border-l-indigo-500",
 ];
 
 export default function TopicPulsePage() {
@@ -59,18 +66,14 @@ export default function TopicPulsePage() {
       const res = await apiRequest("POST", "/api/topic-pulse/search", input);
       return res.json();
     },
-    onSuccess: (data: { runId: string; topics: Topic[] }) => {
+    onSuccess: (data: { runId: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
       navigate(`/video-trends/explore/${data.runId}`);
     },
     onError: (err: Error) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
-      toast({
-        title: "Search failed",
-        description: err.message,
-        variant: "destructive",
-      });
+      toast({ title: "Search failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -83,11 +86,7 @@ export default function TopicPulsePage() {
       toast({ title: "Search deleted" });
     },
     onError: (err: Error) => {
-      toast({
-        title: "Delete failed",
-        description: err.message,
-        variant: "destructive",
-      });
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -100,21 +99,13 @@ export default function TopicPulsePage() {
       toast({ title: "All searches cleared" });
     },
     onError: (err: Error) => {
-      toast({
-        title: "Clear failed",
-        description: err.message,
-        variant: "destructive",
-      });
+      toast({ title: "Clear failed", description: err.message, variant: "destructive" });
     },
   });
 
   const handleSearch = () => {
     if (!seedQuery.trim()) {
-      toast({
-        title: "Enter a topic",
-        description: "Please enter a niche or keyword to search",
-        variant: "destructive",
-      });
+      toast({ title: "Enter a topic", description: "Please enter a niche or keyword to search", variant: "destructive" });
       return;
     }
     searchMutation.mutate({ seedQuery: seedQuery.trim(), videoType: selectedType });
@@ -125,221 +116,247 @@ export default function TopicPulsePage() {
   };
 
   return (
-    <div className="min-h-full p-6 space-y-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">Video Trends</h1>
-          <p className="text-muted-foreground">
-            Find in-demand YouTube video topics and generate scripts using Mark's 5-part formula
+    <div className="min-h-full flex flex-col">
+
+      {/* ── Hero / Search ── */}
+      <div className="bg-sidebar text-sidebar-foreground px-6 pt-8 pb-7 shrink-0">
+        <div className="max-w-2xl mx-auto text-center">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Sparkles className="h-5 w-5 text-violet-400" />
+            <h1 className="text-2xl font-bold text-white" data-testid="text-page-title">Video Trends</h1>
+          </div>
+          <p className="text-white/50 text-sm mb-6">
+            Find in-demand YouTube topics and generate scripts with Mark's 5-part formula
           </p>
+
+          {/* Credits badge */}
           {creditsData && (
-            <div 
-              className={`mt-4 inline-flex flex-col items-center gap-1 px-4 py-2 rounded-md border-2 ${
+            <div
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-5 ring-1 ${
                 creditsExhausted || creditsLow
-                  ? "border-red-500 bg-red-500/10 dark:border-red-600 dark:bg-red-600/10" 
+                  ? "bg-red-500/15 text-red-400 ring-red-500/30"
                   : creditsMedium
-                      ? "border-yellow-500 bg-yellow-500/10 dark:border-yellow-600 dark:bg-yellow-600/10"
-                      : "border-green-500 bg-green-500/10 dark:border-green-600 dark:bg-green-600/10"
+                  ? "bg-amber-500/15 text-amber-400 ring-amber-500/30"
+                  : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
               }`}
               data-testid="credits-display"
             >
-              {creditsExhausted ? (
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">
-                  Credits exhausted
-                </p>
-              ) : creditsLow ? (
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">
-                  {creditsRemaining.toLocaleString()} / {creditLimit.toLocaleString()} credits remaining
-                </p>
-              ) : creditsMedium ? (
-                <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
-                  {creditsRemaining.toLocaleString()} / {creditLimit.toLocaleString()} credits remaining
-                </p>
-              ) : (
-                <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                  {creditsRemaining.toLocaleString()} / {creditLimit.toLocaleString()} credits this month
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground" data-testid="text-credits-reset">
-                Replenishes on {new Date(creditsData.resetsAt).toLocaleDateString()}
-              </p>
+              <span className={`h-1.5 w-1.5 rounded-full ${creditsExhausted || creditsLow ? "bg-red-400" : creditsMedium ? "bg-amber-400" : "bg-emerald-400"}`} />
+              {creditsExhausted
+                ? "Credits exhausted"
+                : `${creditsRemaining.toLocaleString()} / ${creditLimit.toLocaleString()} credits remaining`}
+              <span className="text-white/30">·</span>
+              <span className="font-normal text-white/40" data-testid="text-credits-reset">
+                Resets {new Date(creditsData.resetsAt).toLocaleDateString()}
+              </span>
             </div>
           )}
-        </div>
 
-        <Card className="mb-8">
-          <CardContent className="pt-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter a niche or keyword (e.g., 'keto snacks', 'email marketing')"
-                  value={seedQuery}
-                  onChange={(e) => setSeedQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  disabled={searchMutation.isPending}
-                  className="flex-1"
-                  data-testid="input-seed-query"
-                />
-                <Button 
-                  onClick={handleSearch} 
-                  disabled={searchMutation.isPending || !seedQuery.trim() || creditsExhausted}
-                  data-testid="button-search"
-                >
-                  {searchMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Search className="h-4 w-4 mr-2" />
-                  )}
-                  {creditsExhausted ? "No Credits" : "Find Topics"}
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <span className="text-sm text-muted-foreground self-center mr-2">Quick presets:</span>
-                {presets.map((preset) => (
-                  <Badge
-                    key={preset.type}
-                    variant={selectedType === preset.type ? "default" : "outline"}
-                    className="cursor-pointer"
-                    onClick={() => handlePresetClick(preset.type)}
-                    data-testid={`badge-preset-${preset.type}`}
-                  >
-                    <preset.icon className="h-3 w-3 mr-1" />
-                    {preset.label}
-                  </Badge>
-                ))}
-              </div>
+          {/* Search bar */}
+          <div className="flex gap-2 mb-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+              <Input
+                placeholder="Enter a niche or keyword (e.g. 'keto snacks')"
+                value={seedQuery}
+                onChange={(e) => setSeedQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                disabled={searchMutation.isPending}
+                className="pl-9 bg-white/10 border-white/15 text-white placeholder:text-white/30 focus-visible:ring-white/20 focus-visible:border-white/30"
+                data-testid="input-seed-query"
+              />
             </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <Card 
-            className="cursor-pointer hover-elevate"
-            onClick={() => navigate("/video-trends/saved")}
-            data-testid="card-saved-topics"
-          >
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Saved Topics
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{savedTopics?.length || 0}</div>
-              <p className="text-sm text-muted-foreground">Topics saved for later</p>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className="cursor-pointer hover-elevate"
-            onClick={() => navigate("/video-trends/scripts")}
-            data-testid="card-scripts"
-          >
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Zap className="h-5 w-5 text-primary" />
-                Scripts
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{scripts?.length || 0}</div>
-              <p className="text-sm text-muted-foreground">Generated scripts</p>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className="cursor-pointer hover-elevate"
-            onClick={() => navigate("/video-trends/settings")}
-            data-testid="card-settings"
-          >
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-primary" />
-                Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">API keys & preferences</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="text-xl font-semibold">Recent Searches</h2>
-            {recentRuns && recentRuns.length > 0 && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => deleteAllRunsMutation.mutate()}
-                disabled={deleteAllRunsMutation.isPending}
-                data-testid="button-clear-all-searches"
-              >
-                {deleteAllRunsMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Trash2 className="h-4 w-4 mr-2" />
-                )}
-                Clear All
-              </Button>
-            )}
+            <Button
+              onClick={handleSearch}
+              disabled={searchMutation.isPending || !seedQuery.trim() || creditsExhausted}
+              className="bg-violet-500 hover:bg-violet-600 text-white border-0 font-semibold px-5"
+              data-testid="button-search"
+            >
+              {searchMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Search className="h-4 w-4 mr-2" />
+              )}
+              {creditsExhausted ? "No Credits" : "Find Topics"}
+            </Button>
           </div>
-          {runsLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : recentRuns && recentRuns.length > 0 ? (
-            <div className="space-y-2">
-              {recentRuns.map((run) => (
-                <Card 
-                  key={run.id} 
-                  className="cursor-pointer hover-elevate"
-                  onClick={() => navigate(`/video-trends/explore/${run.id}`)}
-                  data-testid={`card-run-${run.id}`}
+
+          {/* Preset pills */}
+          <div className="flex flex-wrap justify-center gap-2">
+            <span className="text-xs text-white/30 self-center">Quick filter:</span>
+            {PRESETS.map((preset) => {
+              const active = selectedType === preset.type;
+              return (
+                <button
+                  key={preset.type}
+                  onClick={() => handlePresetClick(preset.type)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ring-1 transition-all ${active ? preset.activeColor : preset.color}`}
+                  data-testid={`badge-preset-${preset.type}`}
                 >
-                  <CardContent className="py-4">
-                    <div className="flex items-center justify-between gap-4">
+                  <preset.icon className="h-3 w-3" />
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-4xl mx-auto px-5 py-6 space-y-8">
+
+          {/* Stat cards */}
+          <div className="grid grid-cols-3 gap-4">
+            <div
+              className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
+              onClick={() => navigate("/video-trends/saved")}
+              data-testid="card-saved-topics"
+            >
+              <div className="h-1 bg-gradient-to-r from-teal-500 to-emerald-400" />
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg bg-teal-500/10">
+                    <TrendingUp className="h-4 w-4 text-teal-500" />
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">Saved Topics</span>
+                </div>
+                <div className="text-3xl font-bold text-teal-600 dark:text-teal-400">{savedTopics?.length ?? 0}</div>
+                <p className="text-xs text-muted-foreground mt-0.5">saved for later</p>
+              </div>
+            </div>
+
+            <div
+              className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
+              onClick={() => navigate("/video-trends/scripts")}
+              data-testid="card-scripts"
+            >
+              <div className="h-1 bg-gradient-to-r from-violet-500 to-blue-400" />
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg bg-violet-500/10">
+                    <Zap className="h-4 w-4 text-violet-500" />
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">Scripts</span>
+                </div>
+                <div className="text-3xl font-bold text-violet-600 dark:text-violet-400">{scripts?.length ?? 0}</div>
+                <p className="text-xs text-muted-foreground mt-0.5">generated scripts</p>
+              </div>
+            </div>
+
+            <div
+              className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
+              onClick={() => navigate("/video-trends/settings")}
+              data-testid="card-settings"
+            >
+              <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" />
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/10">
+                    <Settings className="h-4 w-4 text-amber-500" />
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">Settings</span>
+                </div>
+                <div className="text-sm font-semibold text-foreground/70 mt-1">API keys &</div>
+                <p className="text-xs text-muted-foreground">preferences</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent searches */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold">Recent Searches</h2>
+              {recentRuns && recentRuns.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => deleteAllRunsMutation.mutate()}
+                  disabled={deleteAllRunsMutation.isPending}
+                  data-testid="button-clear-all-searches"
+                >
+                  {deleteAllRunsMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  Clear All
+                </Button>
+              )}
+            </div>
+
+            {runsLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : recentRuns && recentRuns.length > 0 ? (
+              <div className="space-y-2">
+                {recentRuns.map((run, index) => (
+                  <div
+                    key={run.id}
+                    className={`group relative rounded-xl border bg-card shadow-sm border-l-4 ${RUN_ACCENTS[index % RUN_ACCENTS.length]} cursor-pointer transition-all hover:shadow-md hover:-translate-y-px`}
+                    onClick={() => navigate(`/video-trends/explore/${run.id}`)}
+                    data-testid={`card-run-${run.id}`}
+                  >
+                    <div className="px-5 py-3.5 flex items-center gap-4">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{run.seedQuery}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {run.topicCount} topics found
-                          {run.runtimeMs && ` in ${(run.runtimeMs / 1000).toFixed(1)}s`}
+                        <p className="font-semibold text-sm group-hover:text-primary transition-colors truncate">
+                          {run.seedQuery}
                         </p>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-xs text-muted-foreground">
+                            {run.topicCount} topics found
+                            {run.runtimeMs && ` · ${(run.runtimeMs / 1000).toFixed(1)}s`}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={run.status === "complete" ? "default" : "secondary"}>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span
+                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ring-1 ${
+                            run.status === "complete"
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20"
+                              : "bg-muted text-muted-foreground ring-border"
+                          }`}
+                        >
                           {run.status}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
                           {new Date(run.createdAt).toLocaleDateString()}
                         </span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteRunMutation.mutate(run.id);
-                          }}
-                          disabled={deleteRunMutation.isPending}
-                          data-testid={`button-delete-run-${run.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteRunMutation.mutate(run.id);
+                            }}
+                            disabled={deleteRunMutation.isPending}
+                            data-testid={`button-delete-run-${run.id}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <Search className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No searches yet. Enter a topic above to get started!</p>
-              </CardContent>
-            </Card>
-          )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border bg-card py-12 flex flex-col items-center text-center">
+                <div className="p-4 rounded-2xl bg-muted/50 mb-3">
+                  <Search className="h-8 w-8 text-muted-foreground/50" />
+                </div>
+                <p className="font-medium text-foreground/70">No searches yet</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+                  Enter a niche or keyword above to discover trending video topics.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
