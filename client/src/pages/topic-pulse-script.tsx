@@ -1124,6 +1124,7 @@ export default function TopicPulseScriptPage() {
   const { toast } = useToast();
   const [editedScriptJson, setEditedScriptJson] = useState<ScriptJson | null>(null);
   const [showResearchPanel, setShowResearchPanel] = useState(false);
+  const [autoSavedVisible, setAutoSavedVisible] = useState(false);
 
   const { data: script, isLoading } = useQuery<Script & { topic?: Topic }>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
@@ -1179,7 +1180,12 @@ export default function TopicPulseScriptPage() {
     const timer = setTimeout(() => {
       if (editedScriptJson) {
         isAutoSaveRef.current = true;
-        saveMutation.mutate(editedScriptJson);
+        saveMutation.mutate(editedScriptJson, {
+          onSuccess: () => {
+            setAutoSavedVisible(true);
+            setTimeout(() => setAutoSavedVisible(false), 5000);
+          },
+        });
       }
     }, 5000);
     return () => clearTimeout(timer);
@@ -1555,18 +1561,6 @@ export default function TopicPulseScriptPage() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {hasChanges && (
-                <Button
-                  onClick={handleSave}
-                  disabled={saveMutation.isPending}
-                  size="sm"
-                  className="bg-white text-sidebar hover:bg-white/90 font-semibold"
-                  data-testid="button-save-script"
-                >
-                  {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}
-                  Save
-                </Button>
-              )}
               <Button
                 size="sm"
                 onClick={() => setShowResearchPanel(!showResearchPanel)}
@@ -1614,18 +1608,40 @@ export default function TopicPulseScriptPage() {
           <TabsContent value="full" className="flex-1 overflow-hidden m-0">
             <ScrollArea className="h-full">
               <div className="p-4 max-w-3xl mx-auto">
-                <div className="flex justify-end mb-4 gap-2">
-                  <CopyButton text={getFullScriptText()} label="Copy Full Script" html={getFullScriptHtml()} />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownloadPdf}
-                    disabled={!editedScriptJson?.fullScript}
-                    data-testid="button-download-pdf"
-                  >
-                    <FileDown className="h-4 w-4 mr-2" />
-                    Download PDF
-                  </Button>
+                <div className="flex items-center justify-between mb-4 gap-2">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      size="sm"
+                      onClick={handleSave}
+                      disabled={saveMutation.isPending || !hasChanges}
+                      className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+                      data-testid="button-save-script"
+                    >
+                      {saveMutation.isPending && isAutoSaveRef.current === false
+                        ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                        : <Save className="h-4 w-4 mr-1.5" />}
+                      Save Script
+                    </Button>
+                    {autoSavedVisible && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1 animate-in fade-in duration-300" data-testid="text-auto-saved">
+                        <Check className="h-3.5 w-3.5 text-green-500" />
+                        Script auto-saved
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CopyButton text={getFullScriptText()} label="Copy Full Script" html={getFullScriptHtml()} />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadPdf}
+                      disabled={!editedScriptJson?.fullScript}
+                      data-testid="button-download-pdf"
+                    >
+                      <FileDown className="h-4 w-4 mr-2" />
+                      Download PDF
+                    </Button>
+                  </div>
                 </div>
 
                 {fullScript && (
