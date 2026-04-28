@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson, SavedOffer, Topic } from "@shared/schema";
@@ -1118,6 +1118,195 @@ function hasScriptChanged(original: ScriptJson | null, edited: ScriptJson | null
   return false;
 }
 
+// ─── Teleprompter Overlay ────────────────────────────────────────────────────
+const SPEEDS = [
+  { label: "Slow",   value: 18 },
+  { label: "Med",    value: 38 },
+  { label: "Fast",   value: 65 },
+];
+
+function TeleprompterOverlay({ scriptJson, title, onClose }: {
+  scriptJson: ScriptJson;
+  title: string;
+  onClose: () => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rafRef    = useRef<number>();
+  const lastTimeRef = useRef<number>();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speedIdx, setSpeedIdx]   = useState(0);
+  const speed = SPEEDS[speedIdx].value;
+
+  // smooth scroll loop
+  useEffect(() => {
+    if (!isPlaying) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      lastTimeRef.current = undefined;
+      return;
+    }
+    const tick = (now: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      if (lastTimeRef.current !== undefined) {
+        el.scrollTop += (speed * (now - lastTimeRef.current)) / 1000;
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4) {
+          setIsPlaying(false);
+          return;
+        }
+      }
+      lastTimeRef.current = now;
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [isPlaying, speed]);
+
+  // keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === " ") { e.preventDefault(); setIsPlaying(p => !p); }
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowUp")   setSpeedIdx(i => Math.max(0, i - 1));
+      if (e.key === "ArrowDown") setSpeedIdx(i => Math.min(SPEEDS.length - 1, i + 1));
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const resetScroll = () => {
+    setIsPlaying(false);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  };
+
+  const fs = scriptJson.fullScript;
+  if (!fs) return null;
+
+  const SECTION_COLORS: Record<string, string> = {
+    "HOOK": "#f97316",
+    "SET THE HOOK": "#a855f7",
+    "FIRST CALL TO ACTION": "#eab308",
+    "CONTENT": "#22c55e",
+    "FINAL CALL TO ACTION": "#ec4899",
+  };
+
+  type TeleSection = { label: string; color: string; text: string };
+  const sections: TeleSection[] = [
+    { label: "HOOK",                 color: SECTION_COLORS["HOOK"],                 text: fs.hook.text ?? "" },
+    { label: "SET THE HOOK",         color: SECTION_COLORS["SET THE HOOK"],         text: fs.setHook.text ?? "" },
+    { label: "FIRST CALL TO ACTION", color: SECTION_COLORS["FIRST CALL TO ACTION"], text: fs.firstCTA.text ?? "" },
+    { label: "CONTENT",              color: SECTION_COLORS["CONTENT"],              text: fs.content.text ?? "" },
+    ...(fs.content.sections ?? []).map(s => ({
+      label: s.title.toUpperCase(),
+      color: SECTION_COLORS["CONTENT"],
+      text: s.content ?? "",
+    })),
+    { label: "FINAL CALL TO ACTION", color: SECTION_COLORS["FINAL CALL TO ACTION"], text: fs.finalCTA.text ?? "" },
+  ].filter(s => s.text.trim());
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black"
+      data-testid="teleprompter-overlay"
+    >
+      {/* ── Controls bar ── */}
+      <div className="flex items-center justify-between px-6 py-3 bg-gray-950 border-b border-white/10 shrink-0">
+        <span className="text-white/40 text-sm truncate max-w-xs font-mono hidden sm:block">
+          {title}
+        </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Speed pills */}
+          {SPEEDS.map((s, i) => (
+            <button
+              key={s.value}
+              onClick={() => setSpeedIdx(i)}
+              className={`text-xs px-3 py-1.5 rounded-full font-mono transition-colors ${
+                speedIdx === i
+                  ? "bg-white text-black font-bold"
+                  : "bg-white/10 text-white/60 hover:bg-white/20"
+              }`}
+              data-testid={`teleprompter-speed-${s.label.toLowerCase()}`}
+            >
+              {s.label}
+            </button>
+          ))}
+          {/* Slower / Faster nudge */}
+          <button
+            onClick={() => setSpeedIdx(i => Math.max(0, i - 1))}
+            className="text-white/50 hover:text-white p-1.5 rounded transition"
+            title="Slower (↑)"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setSpeedIdx(i => Math.min(SPEEDS.length - 1, i + 1))}
+            className="text-white/50 hover:text-white p-1.5 rounded transition"
+            title="Faster (↓)"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
+          {/* Reset */}
+          <button
+            onClick={resetScroll}
+            className="text-white/50 hover:text-white p-1.5 rounded transition"
+            title="Reset to top"
+            data-testid="teleprompter-reset"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
+          {/* Play / Pause */}
+          <button
+            onClick={() => setIsPlaying(p => !p)}
+            className="flex items-center gap-2 bg-white text-black px-5 py-2 rounded-full text-sm font-bold hover:bg-white/90 transition ml-1"
+            data-testid="teleprompter-play-pause"
+          >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            {isPlaying ? "Pause" : "Play"}
+          </button>
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="text-white/40 hover:text-white p-1.5 rounded transition ml-1"
+            title="Close (Esc)"
+            data-testid="teleprompter-close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Scrolling script ── */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        <div className="max-w-3xl mx-auto px-8 py-20 space-y-20">
+          {sections.map((sec, i) => (
+            <div key={i}>
+              <div
+                className="text-xs font-bold tracking-[0.2em] font-mono mb-6 uppercase"
+                style={{ color: sec.color }}
+              >
+                {sec.label}
+              </div>
+              <p className="text-white text-3xl leading-[1.85] font-serif whitespace-pre-wrap">
+                {sec.text}
+              </p>
+            </div>
+          ))}
+          {/* extra bottom space so last line scrolls comfortably past center */}
+          <div className="h-[60vh]" />
+        </div>
+      </div>
+
+      {/* ── Keyboard hint ── */}
+      <div className="shrink-0 py-2 text-center text-white/20 text-xs font-mono">
+        Space = play/pause &nbsp;·&nbsp; ↑↓ = speed &nbsp;·&nbsp; Esc = close
+      </div>
+    </div>
+  );
+}
+
 export default function TopicPulseScriptPage() {
   const { scriptId } = useParams<{ scriptId: string }>();
   const [, navigate] = useLocation();
@@ -1125,6 +1314,7 @@ export default function TopicPulseScriptPage() {
   const [editedScriptJson, setEditedScriptJson] = useState<ScriptJson | null>(null);
   const [showResearchPanel, setShowResearchPanel] = useState(false);
   const [savedNotice, setSavedNotice] = useState<"manual" | "auto" | null>(null);
+  const [showTeleprompter, setShowTeleprompter] = useState(false);
 
   const { data: script, isLoading } = useQuery<Script & { topic?: Topic }>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
@@ -1557,6 +1747,14 @@ export default function TopicPulseScriptPage() {
 
   return (
     <div className="min-h-full flex flex-col">
+      {/* ── Teleprompter overlay (portal-style, full-screen) ── */}
+      {showTeleprompter && editedScriptJson && (
+        <TeleprompterOverlay
+          scriptJson={editedScriptJson}
+          title={script.title}
+          onClose={() => setShowTeleprompter(false)}
+        />
+      )}
       {/* ── Hero header ── */}
       <div className="bg-sidebar text-sidebar-foreground px-6 py-6 shrink-0">
         <div className="max-w-5xl mx-auto">
@@ -1579,6 +1777,17 @@ export default function TopicPulseScriptPage() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {editedScriptJson?.fullScript && (
+                <Button
+                  size="sm"
+                  onClick={() => setShowTeleprompter(true)}
+                  className="bg-white/10 hover:bg-white/20 text-white border-0"
+                  data-testid="button-teleprompter"
+                >
+                  <MonitorPlay className="h-4 w-4 mr-1.5" />
+                  Teleprompter
+                </Button>
+              )}
               <Button
                 size="sm"
                 onClick={() => setShowResearchPanel(!showResearchPanel)}
