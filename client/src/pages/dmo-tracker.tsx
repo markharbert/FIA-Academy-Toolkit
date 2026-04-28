@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BarChart,
   Bar,
@@ -675,8 +676,11 @@ export default function DmoTrackerPage() {
     queryKey: ["/api/dmo/streak"],
   });
 
+  const [chartDays, setChartDays] = useState(30);
+
   const { data: history } = useQuery<DmoEntry[]>({
-    queryKey: ["/api/dmo/history"],
+    queryKey: ["/api/dmo/history", chartDays],
+    queryFn: () => fetch(`/api/dmo/history?limit=${chartDays}`, { credentials: "include" }).then(r => r.json()),
   });
 
   useEffect(() => {
@@ -691,7 +695,7 @@ export default function DmoTrackerPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/dmo/today"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dmo/streak"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dmo/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/history", chartDays] });
     },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
@@ -737,12 +741,12 @@ export default function DmoTrackerPage() {
   const isPerfectDay = totalPoints >= 25;
   const completionPct = Math.round((totalPoints / 25) * 100);
 
-  // Build 30-day chart data — each bar = total pts earned that day (0–25)
+  // Build chart data for the selected range — each bar = total pts earned that day (0–25)
   const chartData = (() => {
     const map = new Map<string, DmoEntry>();
     (history ?? []).forEach(e => map.set(e.date, e));
-    return Array.from({ length: 30 }, (_, i) => {
-      const d = new Date(Date.now() - (29 - i) * 86400000);
+    return Array.from({ length: chartDays }, (_, i) => {
+      const d = new Date(Date.now() - (chartDays - 1 - i) * 86400000);
       const dateStr = d.toISOString().split("T")[0];
       const e = map.get(dateStr);
       const pts = e
@@ -751,6 +755,11 @@ export default function DmoTrackerPage() {
       return { date: formatDisplayDate(dateStr), fullDate: dateStr, pts };
     });
   })();
+
+  // Chart rendering settings — scale to fit the selected range
+  const chartBarSize = chartDays <= 30 ? 10 : chartDays <= 60 ? 6 : chartDays <= 90 ? 4 : 3;
+  const chartInterval = chartDays <= 30 ? 4 : chartDays <= 60 ? 9 : chartDays <= 90 ? 14 : 29;
+  const chartHeight = 200;
 
   const nextMilestone = STREAK_MILESTONES.find(m => m.days > (streak?.current ?? 0));
   const earnedMilestones = STREAK_MILESTONES.filter(m => m.days <= (streak?.current ?? 0));
@@ -799,7 +808,53 @@ export default function DmoTrackerPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+
+        {/* ── Full-width points history chart ── */}
+        <Card className="border border-border">
+          <CardHeader className="pb-1 pt-4 px-5">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <CardTitle className="text-base font-semibold text-foreground">Points History</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Daily score out of 25 pts</p>
+              </div>
+              <Select value={String(chartDays)} onValueChange={v => setChartDays(Number(v))}>
+                <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-chart-range">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                  <SelectItem value="60">Last 60 days</SelectItem>
+                  <SelectItem value="90">Last 90 days</SelectItem>
+                  <SelectItem value="180">Last 180 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent className="px-3 pb-4">
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <BarChart data={chartData} barSize={chartBarSize} margin={{ left: -10, right: 4 }}>
+                <XAxis dataKey="date" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} interval={chartInterval} />
+                <YAxis domain={[0, 25]} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} ticks={[0, 5, 10, 15, 20, 25]} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="pts" radius={[3, 3, 0, 0]}>
+                  {chartData.map((e, i) => (
+                    <Cell key={i} fill={getBarColor(e.pts)} opacity={e.fullDate === today ? 1 : 0.8} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2">
+              {BAR_LEGEND.map(({ label, pts }) => (
+                <span key={label} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: getBarColor(pts) }} />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid xl:grid-cols-[1fr_360px] gap-8">
 
           {/* ── Left column: activities ── */}
@@ -926,35 +981,6 @@ export default function DmoTrackerPage() {
                 </CardContent>
               </Card>
             </div>
-
-            {/* 30-day chart */}
-            <Card className="border border-border">
-              <CardHeader className="pb-1 pt-4 px-4">
-                <CardTitle className="text-sm font-semibold text-foreground">30-Day Points History</CardTitle>
-              </CardHeader>
-              <CardContent className="px-2 pb-4">
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={chartData} barSize={6} margin={{ left: -10, right: 4 }}>
-                    <XAxis dataKey="date" tick={{ fontSize: 8 }} tickLine={false} axisLine={false} interval={5} />
-                    <YAxis domain={[0, 25]} tick={{ fontSize: 8 }} tickLine={false} axisLine={false} ticks={[0, 5, 10, 15, 20, 25]} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="pts" radius={[3, 3, 0, 0]}>
-                      {chartData.map((e, i) => (
-                        <Cell key={i} fill={getBarColor(e.pts)} opacity={e.fullDate === today ? 1 : 0.8} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-2">
-                  {BAR_LEGEND.map(({ label, pts }) => (
-                    <span key={label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <span className="inline-block w-2 h-2 rounded-sm" style={{ background: getBarColor(pts) }} />
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Milestones */}
             <Card className="border border-border">
