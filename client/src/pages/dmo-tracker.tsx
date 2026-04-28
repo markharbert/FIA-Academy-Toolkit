@@ -27,7 +27,6 @@ import {
   Pause,
   Square,
   CheckCircle2,
-  RotateCcw,
   Star,
 } from "lucide-react";
 import type { DmoEntry } from "@shared/schema";
@@ -159,15 +158,9 @@ type TimerStatus = "idle" | "running" | "paused" | "done";
 
 interface TimerState {
   status: TimerStatus;
-  elapsed: number;       // seconds accumulated before current run
+  elapsed: number;       // total seconds accumulated (including previously saved)
   startedAt: number | null; // Date.now() when current run started
 }
-
-const defaultTimerState = (): TimerState => ({
-  status: "idle",
-  elapsed: 0,
-  startedAt: null,
-});
 
 // ─── Activity Card ────────────────────────────────────────────────────────────
 
@@ -182,14 +175,14 @@ interface ActivityCardProps {
 function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }: ActivityCardProps) {
   const Icon = activity.icon;
   const [timer, setTimer] = useState<TimerState>(() => {
-    if (savedChecked && savedMinutes > 0) {
+    if (savedChecked || savedMinutes > 0) {
       return { status: "done", elapsed: savedMinutes * 60, startedAt: null };
     }
-    return defaultTimerState();
+    return { status: "idle", elapsed: 0, startedAt: null };
   });
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Live elapsed seconds = accumulated + current run
+  // Live elapsed = accumulated + whatever's ticking right now
   const liveSeconds =
     timer.status === "running" && timer.startedAt
       ? timer.elapsed + Math.floor((Date.now() - timer.startedAt) / 1000)
@@ -199,74 +192,76 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
   useEffect(() => {
     if (timer.status === "running") {
       intervalRef.current = setInterval(() => {
-        // Force re-render for the live display
-        setTimer(t => ({ ...t }));
+        setTimer(t => ({ ...t })); // trigger re-render
       }, 1000);
     }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [timer.status, timer.startedAt]);
 
   const handleStart = useCallback(() => {
-    setTimer(prev => ({
-      ...prev,
-      status: "running",
-      startedAt: Date.now(),
-    }));
+    setTimer(prev => ({ ...prev, status: "running", startedAt: Date.now() }));
   }, []);
 
   const handlePause = useCallback(() => {
     setTimer(prev => {
-      const addedSeconds =
-        prev.startedAt ? Math.floor((Date.now() - prev.startedAt) / 1000) : 0;
-      return {
-        status: "paused",
-        elapsed: prev.elapsed + addedSeconds,
-        startedAt: null,
-      };
+      const added = prev.startedAt ? Math.floor((Date.now() - prev.startedAt) / 1000) : 0;
+      return { status: "paused", elapsed: prev.elapsed + added, startedAt: null };
     });
   }, []);
 
-  const handleDone = useCallback(async () => {
-    const addedSeconds =
-      timer.startedAt ? Math.floor((Date.now() - timer.startedAt) / 1000) : 0;
-    const totalSeconds = timer.elapsed + addedSeconds;
-    const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
+  // "Add More Time" — resume from where we left off (including already-saved minutes)
+  const handleAddMore = useCallback(() => {
+    setTimer({
+      status: "running",
+      elapsed: savedMinutes * 60, // anchor to what's already saved
+      startedAt: Date.now(),
+    });
+  }, [savedMinutes]);
 
+  const handleDone = useCallback(async () => {
+    const added = timer.startedAt ? Math.floor((Date.now() - timer.startedAt) / 1000) : 0;
+    const totalSeconds = timer.elapsed + added;
+    const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
     setTimer({ status: "done", elapsed: totalSeconds, startedAt: null });
     await onSave(totalMinutes);
   }, [timer, onSave]);
 
-  const handleReset = useCallback(() => {
-    setTimer(defaultTimerState());
-  }, []);
-
-  const isDone = timer.status === "done" || savedChecked;
+  const isDone = timer.status === "done";
   const isRunning = timer.status === "running";
   const isPaused = timer.status === "paused";
-  const isIdle = timer.status === "idle" && !savedChecked;
+  const isIdle = timer.status === "idle";
 
   const targetPct = Math.min(100, Math.round((liveSeconds / (activity.target * 60)) * 100));
 
   return (
+    // Outer wrapper — pulsing gradient ring when running
+    <div className={`relative rounded-2xl ${isRunning ? "p-[3px]" : ""}`}>
+      {isRunning && (
+        <div
+          className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${activity.gradient} animate-pulse`}
+          style={{ opacity: 0.7 }}
+        />
+      )}
     <div
       className={`relative rounded-2xl border-2 transition-all duration-500 overflow-hidden ${
         isDone
           ? `border-transparent bg-gradient-to-br ${activity.gradient} shadow-xl ${activity.glowColor} shadow-lg`
           : isRunning
-          ? `${activity.borderActive} ${activity.bgActive} shadow-lg ${activity.glowColor} shadow-md`
+          ? `border-transparent ${activity.bgActive}`
           : isPaused
           ? `${activity.borderActive} ${activity.bgActive} opacity-90`
           : "border-border bg-card hover:border-border/80"
       }`}
     >
-      {/* Progress bar at top */}
+      {/* Animated top progress bar */}
       {(isRunning || isPaused || isDone) && (
-        <div className="absolute top-0 left-0 right-0 h-1 bg-white/10">
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-white/10">
           <div
-            className="h-full bg-white/60 transition-all duration-1000"
-            style={{ width: `${isDone ? 100 : targetPct}%` }}
+            className={`h-full transition-all duration-1000 ${isRunning ? "animate-pulse" : ""}`}
+            style={{
+              width: `${isDone ? 100 : targetPct}%`,
+              background: isDone ? "rgba(255,255,255,0.6)" : `hsl(var(--primary))`,
+            }}
           />
         </div>
       )}
@@ -328,14 +323,15 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
                     <CheckCircle2 className="h-4 w-4 text-white" />
                     <span className="text-sm text-white font-semibold">Done!</span>
                   </div>
-                  <button
-                    onClick={handleReset}
-                    className="text-white/60 hover:text-white transition-colors"
-                    title="Reset timer"
-                    data-testid={`button-dmo-reset-${activity.key}`}
+                  <Button
+                    size="sm"
+                    onClick={handleAddMore}
+                    className="h-8 px-3 text-xs bg-white/20 hover:bg-white/30 text-white border border-white/30"
+                    data-testid={`button-dmo-addmore-${activity.key}`}
                   >
-                    <RotateCcw className="h-4 w-4" />
-                  </button>
+                    <Play className="h-3 w-3 mr-1 fill-white" />
+                    Add More
+                  </Button>
                 </>
               ) : isIdle ? (
                 <Button
@@ -411,6 +407,7 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, isSaving }
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }
