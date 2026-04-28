@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Script, ScriptJson, SavedOffer, Topic } from "@shared/schema";
 import { Gift, Star, RefreshCw } from "lucide-react";
+import academyLogoPath from "@assets/academy_toolkit_logo_1776551500119.png";
 
 type TrendDataPoint = { year: number; month: string; value: number };
 
@@ -1295,6 +1296,8 @@ export default function TopicPulseScriptPage() {
       ? `<div class="next-video"><strong>Next Video Suggestion:</strong> ${esc(fs.finalCTA.nextVideoSuggestion)}</div>`
       : "";
 
+    const logoUrl = `${window.location.origin}${academyLogoPath}`;
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -1303,9 +1306,12 @@ export default function TopicPulseScriptPage() {
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Georgia,"Times New Roman",serif;color:#111;background:#fff}
-    .page{max-width:720px;margin:0 auto;padding:52px 44px}
-    .title{font-size:26px;font-weight:bold;margin-bottom:6px;line-height:1.3}
-    .meta{font-size:12px;color:#888;margin-bottom:44px;font-family:Arial,sans-serif}
+    .page{max-width:720px;margin:0 auto;padding:48px 44px 32px}
+    .header{display:flex;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:2px solid #0b1437;margin-bottom:36px}
+    .header img{height:48px;width:auto}
+    .header-date{font-family:Arial,sans-serif;font-size:11px;color:#888;text-align:right;line-height:1.5}
+    .title{font-size:24px;font-weight:bold;margin-bottom:4px;line-height:1.3}
+    .meta{font-size:12px;color:#888;margin-bottom:40px;font-family:Arial,sans-serif}
     .section-label{font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
     .duration{font-family:Arial,sans-serif;font-size:11px;color:#888;margin-bottom:8px}
     .section-text{font-size:15px;line-height:1.9;white-space:pre-wrap}
@@ -1318,18 +1324,34 @@ export default function TopicPulseScriptPage() {
     .sub-text{font-size:14px;line-height:1.8;white-space:pre-wrap}
     .broll{font-family:Arial,sans-serif;font-size:12px;color:#888;margin-top:8px;font-style:italic}
     .next-video{margin-top:14px;padding:10px 14px;background:#fffbf0;border-radius:4px;font-family:Arial,sans-serif;font-size:13px;color:#666}
-    @media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.page{padding:20px}}
+    .footer{margin-top:52px;padding-top:18px;border-top:1px solid #e5e7eb;text-align:center;font-family:Arial,sans-serif;font-size:11px;color:#999;line-height:1.7}
+    .footer a{color:#999;text-decoration:none}
+    @media print{
+      body{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+      .page{padding:20px 24px 16px}
+    }
   </style>
 </head>
 <body>
   <div class="page">
+    <div class="header">
+      <img src="${logoUrl}" alt="Fearless Influencer Academy Toolkit" />
+      <div class="header-date">
+        Script generated<br>
+        ${new Date(script.createdAt).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})}
+      </div>
+    </div>
     <h1 class="title">${esc(script.title)}</h1>
-    <p class="meta">Generated ${new Date(script.createdAt).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})}</p>
+    <p class="meta">Video script · 5-Part Formula</p>
     ${buildSection("1. Hook", "#7c3aed", fs.hook.text, fs.hook.duration, fs.hook.onScreenText)}
     ${buildSection("2. Set the Hook", "#2563eb", fs.setHook.text, fs.setHook.duration, (fs.setHook as any).onScreenText)}
     ${buildSection("3. First Call to Action", "#d97706", fs.firstCTA.text, fs.firstCTA.duration)}
     ${buildSection("4. Content", "#0d9488", fs.content.text, undefined, undefined, contentSubSections)}
     ${buildSection("5. Final Call to Action", "#e11d48", fs.finalCTA.text, fs.finalCTA.duration, undefined, nextVideoHtml)}
+    <div class="footer">
+      Created with the Fearless Influencer Academy Toolkit &nbsp;·&nbsp;
+      <a href="https://fearlessinfluencer.com" target="_blank">fearlessinfluencer.com</a>
+    </div>
   </div>
   <script>window.onload=function(){window.print()}<\/script>
 </body>
