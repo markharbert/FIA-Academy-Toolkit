@@ -40,11 +40,10 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12 bg-sidebar">
-      <Card className="w-full max-w-md">
+      <div className="flex flex-col items-center gap-6 w-full max-w-md">
+        <img src={logoImage} alt="Academy Toolkit" className="h-14" />
+      <Card className="w-full">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4">
-            <img src={logoImage} alt="Academy Toolkit" className="h-10 mx-auto" />
-          </div>
           <CardTitle className="text-2xl" data-testid="text-login-title">Admin Login</CardTitle>
           <CardDescription>
             Members access this app through the Fearless Influencer Academy portal.
@@ -123,6 +122,7 @@ export default function LoginPage() {
           </Form>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
