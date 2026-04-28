@@ -293,3 +293,15 @@
     inset: -1px;
   }
 }
+
+/* ─── DMO Timer ring pulse animations ──────────────────────────────────────── */
+/* Inner ring: dark trough → vivid peak, fast */
+@keyframes dmo-ring-inner {
+  0%, 100% { opacity: 0.9; }
+  50%       { opacity: 0.04; }
+}
+/* Outer halo: same sweep, slightly slower */
+@keyframes dmo-ring-outer {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 0.02; }
+}

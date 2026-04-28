@@ -311,15 +311,15 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
     }`}>
       {isRunning && (
         <>
-          {/* Inner ring — close, bright, fast pulse */}
+          {/* Inner ring — fast dark→vivid heartbeat */}
           <div
-            className={`absolute -inset-2 rounded-3xl bg-gradient-to-br ${activity.gradient} animate-pulse -z-10`}
-            style={{ opacity: 0.55, animationDuration: "1.4s" }}
+            className={`absolute -inset-2 rounded-3xl bg-gradient-to-br ${activity.gradient} -z-10`}
+            style={{ animation: "dmo-ring-inner 0.85s ease-in-out infinite" }}
           />
-          {/* Outer halo — wider spread, slower, offset pulse */}
+          {/* Outer halo — wider, slightly slower, offset so they never peak at same time */}
           <div
-            className={`absolute -inset-6 rounded-[32px] bg-gradient-to-br ${activity.gradient} animate-pulse -z-10`}
-            style={{ opacity: 0.25, animationDuration: "2.2s", animationDelay: "0.7s" }}
+            className={`absolute -inset-6 rounded-[32px] bg-gradient-to-br ${activity.gradient} -z-10`}
+            style={{ animation: "dmo-ring-outer 1.15s ease-in-out infinite", animationDelay: "0.4s" }}
           />
         </>
       )}
