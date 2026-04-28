@@ -16,8 +16,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  LineChart,
-  Line,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -384,8 +385,6 @@ const PART_LINES = [
 ] as const;
 
 function ScoreProgressChart({ sessions }: { sessions: Session[] }) {
-  const [visibleParts, setVisibleParts] = useState<Set<string>>(new Set());
-
   const chartData = sessions
     .filter(s => s.scoreJson?.totalScore != null)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
@@ -411,28 +410,37 @@ function ScoreProgressChart({ sessions }: { sessions: Session[] }) {
   const first  = chartData[0].total;
   const delta  = latest - first;
 
-  const togglePart = (key: string) => {
-    setVisibleParts(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+  const getBarColor = (score: number) => {
+    if (score >= 70) return "#22c55e";
+    if (score >= 40) return "#f59e0b";
+    return "#f43f5e";
   };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     const entry = chartData.find(d => d.label === label);
+    if (!entry) return null;
+    const barColor = getBarColor(entry.total);
     return (
-      <div className="rounded-lg border bg-background shadow-md px-3 py-2 text-sm space-y-1">
-        <p className="font-semibold">{entry?.title}</p>
-        <p className="text-xs text-muted-foreground">{entry?.date}</p>
-        {payload.map((p: any) => (
-          <div key={p.dataKey} className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
-            <span className="text-muted-foreground">{p.name}:</span>
-            <span className="font-medium">{p.value}</span>
-          </div>
-        ))}
+      <div className="rounded-xl border bg-background shadow-lg px-3.5 py-3 text-sm min-w-[190px]">
+        <p className="font-semibold truncate max-w-[200px] mb-0.5">{entry.title}</p>
+        <p className="text-xs text-muted-foreground mb-2">{entry.date}</p>
+        <div className="flex items-center justify-between gap-4 mb-2 pb-2 border-b">
+          <span className="text-xs text-muted-foreground">Overall Score</span>
+          <span className="text-sm font-bold tabular-nums" style={{ color: barColor }}>{entry.total}</span>
+        </div>
+        <div className="space-y-1.5">
+          {PART_LINES.map(({ key, label: partLabel, color }) => {
+            const val = entry[key as keyof typeof entry] as number | null;
+            return (
+              <div key={key} className="flex items-center gap-2">
+                <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ background: color }} />
+                <span className="text-xs text-muted-foreground flex-1">{partLabel}</span>
+                <span className="text-xs font-semibold tabular-nums">{val ?? "—"}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -458,42 +466,34 @@ function ScoreProgressChart({ sessions }: { sessions: Session[] }) {
               {delta >= 0 ? "+" : ""}{delta} from first
             </span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 items-center">
             {PART_LINES.map(({ key, label, color }) => (
-              <button
-                key={key}
-                onClick={() => togglePart(key)}
-                className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 transition-all ${
-                  visibleParts.has(key) ? "text-white ring-transparent" : "bg-transparent text-muted-foreground ring-border hover:ring-foreground/30"
-                }`}
-                style={visibleParts.has(key) ? { background: color } : {}}
-                data-testid={`toggle-part-${key}`}
-              >
+              <div key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ background: color }} />
                 {label}
-              </button>
+              </div>
             ))}
           </div>
         </div>
       </div>
       <div className="px-2 pb-4">
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={chartData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+          <BarChart data={chartData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }} barCategoryGap="35%">
+            <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
             <XAxis dataKey="label" tick={{ fontSize: 12 }} className="text-muted-foreground" />
             <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} className="text-muted-foreground" />
-            <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine y={70} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.5} />
-            <ReferenceLine y={40} stroke="#f43f5e" strokeDasharray="4 4" strokeOpacity={0.5} />
-            <Line type="monotone" dataKey="total" name="Overall" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} connectNulls />
-            {PART_LINES.map(({ key, label, color }) =>
-              visibleParts.has(key) ? (
-                <Line key={key} type="monotone" dataKey={key} name={label} stroke={color} strokeWidth={1.5} dot={{ r: 3, fill: color }} activeDot={{ r: 5 }} connectNulls />
-              ) : null
-            )}
-          </LineChart>
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(148,163,184,0.07)" }} />
+            <ReferenceLine y={70} stroke="#22c55e" strokeDasharray="4 4" strokeOpacity={0.45} />
+            <ReferenceLine y={40} stroke="#f43f5e" strokeDasharray="4 4" strokeOpacity={0.45} />
+            <Bar dataKey="total" name="Overall" radius={[5, 5, 0, 0]} maxBarSize={44}>
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={getBarColor(entry.total)} fillOpacity={0.82} />
+              ))}
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
         <p className="text-center text-xs text-muted-foreground">
-          Dashed lines: 40 (needs work) · 70 (good) · Part scores scaled to 100
+          Dashed lines: 40 (needs work) · 70 (good) · Hover a bar to see part-by-part scores
         </p>
       </div>
     </div>
