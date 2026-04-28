@@ -36,17 +36,17 @@ const navItems = [
     testId: "nav-dashboard",
   },
   {
+    title: "DMO Tracker",
+    url: "/dmo-tracker",
+    icon: Target,
+    testId: "nav-dmo-tracker",
+  },
+  {
     title: "Video Tools",
     url: "/video-tools",
     icon: Wrench,
     testId: "nav-video-tools",
     matchPaths: VIDEO_TOOL_PATHS,
-  },
-  {
-    title: "DMO Tracker",
-    url: "/dmo-tracker",
-    icon: Target,
-    testId: "nav-dmo-tracker",
   },
 ];
 
