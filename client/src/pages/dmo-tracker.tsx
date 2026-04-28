@@ -304,13 +304,26 @@ interface ActivityCardProps {
   isSaving: boolean;
 }
 
+const LS_KEY = (key: string) => `dmo-draft-${key}`;
+
 function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave, isSaving }: ActivityCardProps) {
   const Icon = activity.icon;
   const [showOverlay, setShowOverlay] = useState(false);
   const [timer, setTimer] = useState<TimerState>(() => {
+    // If already saved/checked, start from that
     if (savedChecked || savedMinutes > 0) {
       return { status: "done", elapsed: savedMinutes * 60, startedAt: null };
     }
+    // Check localStorage for a mid-session draft (crash/refresh recovery)
+    try {
+      const raw = localStorage.getItem(LS_KEY(activity.key));
+      if (raw) {
+        const draft = JSON.parse(raw) as { elapsed: number; startedAt: number };
+        // Treat restored timer as paused so the user can resume or stop
+        const recovered = draft.elapsed + Math.floor((Date.now() - draft.startedAt) / 1000);
+        return { status: "paused", elapsed: recovered, startedAt: null };
+      }
+    } catch { /* ignore */ }
     return { status: "idle", elapsed: 0, startedAt: null };
   });
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -321,17 +334,26 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
       ? timer.elapsed + Math.floor((Date.now() - timer.startedAt) / 1000)
       : timer.elapsed;
 
-  // Tick every second while running
+  // Tick every second while running — also writes crash-recovery draft to localStorage
   useEffect(() => {
-    if (timer.status === "running") {
+    if (timer.status === "running" && timer.startedAt) {
+      const capturedStart = timer.startedAt;
+      const capturedElapsed = timer.elapsed;
       intervalRef.current = setInterval(() => {
+        // Keep localStorage up-to-date every second (zero network cost)
+        try {
+          localStorage.setItem(LS_KEY(activity.key), JSON.stringify({
+            elapsed: capturedElapsed,
+            startedAt: capturedStart,
+          }));
+        } catch { /* ignore */ }
         setTimer(t => ({ ...t })); // trigger re-render
       }, 1000);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [timer.status, timer.startedAt]);
+  }, [timer.status, timer.startedAt, timer.elapsed, activity.key]);
 
-  // Auto-save every 30 s while running — crash/refresh protection
+  // Auto-save to server every 5 s while running — keeps the DB current
   useEffect(() => {
     if (timer.status !== "running" || !timer.startedAt) return;
     const capturedElapsed = timer.elapsed;
@@ -340,7 +362,7 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
       const added = Math.floor((Date.now() - capturedStart) / 1000);
       const totalMinutes = Math.round((capturedElapsed + added) / 60);
       if (totalMinutes > 0) onAutoSave(totalMinutes);
-    }, 30_000);
+    }, 5_000);
     return () => clearInterval(id);
   }, [timer.status, timer.startedAt, timer.elapsed, onAutoSave]);
 
@@ -375,8 +397,10 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
     const totalSeconds = timer.elapsed + added;
     const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
     setTimer({ status: "done", elapsed: totalSeconds, startedAt: null });
+    // Clear crash-recovery draft — session is now committed
+    try { localStorage.removeItem(LS_KEY(activity.key)); } catch { /* ignore */ }
     await onSave(totalMinutes);
-  }, [timer, onSave]);
+  }, [timer, onSave, activity.key]);
 
   const isDone = timer.status === "done";
   const isRunning = timer.status === "running";
