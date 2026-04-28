@@ -1030,7 +1030,7 @@ export default function DmoTrackerPage() {
     queryKey: ["/api/dmo/streak"],
   });
 
-  const [chartDays, setChartDays] = useState(30);
+  const [chartDays, setChartDays] = useState(7);
 
   const { data: history } = useQuery<DmoEntry[]>({
     queryKey: ["/api/dmo/history", chartDays],
@@ -1118,8 +1118,8 @@ export default function DmoTrackerPage() {
   })();
 
   // Chart rendering settings — scale to fit the selected range
-  const chartBarSize = chartDays <= 30 ? 10 : chartDays <= 60 ? 6 : chartDays <= 90 ? 4 : 3;
-  const chartInterval = chartDays <= 30 ? 4 : chartDays <= 60 ? 9 : chartDays <= 90 ? 14 : 29;
+  const chartBarSize = chartDays <= 7 ? 28 : chartDays <= 30 ? 14 : chartDays <= 60 ? 6 : chartDays <= 90 ? 4 : 3;
+  const chartInterval = chartDays <= 7 ? 0 : chartDays <= 30 ? 4 : chartDays <= 60 ? 9 : chartDays <= 90 ? 14 : 29;
   const chartHeight = 200;
 
   const nextMilestone = STREAK_MILESTONES.find(m => m.days > (streak?.current ?? 0));
@@ -1233,6 +1233,7 @@ export default function DmoTrackerPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="7">Last 7 days</SelectItem>
                   <SelectItem value="30">Last 30 days</SelectItem>
                   <SelectItem value="60">Last 60 days</SelectItem>
                   <SelectItem value="90">Last 90 days</SelectItem>
