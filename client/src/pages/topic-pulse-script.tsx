@@ -1485,9 +1485,9 @@ export default function TopicPulseScriptPage() {
 <body>
   <div id="controls">
     <span class="title">${esc(script?.title ?? "Script")}</span>
-    <button class="speed-btn active" data-speed="18" onclick="setSpeed(this)">Slow</button>
-    <button class="speed-btn"        data-speed="38" onclick="setSpeed(this)">Med</button>
-    <button class="speed-btn"        data-speed="65" onclick="setSpeed(this)">Fast</button>
+    <button class="speed-btn active" data-speed="40"  onclick="setSpeed(this)">Slow</button>
+    <button class="speed-btn"        data-speed="80"  onclick="setSpeed(this)">Med</button>
+    <button class="speed-btn"        data-speed="140" onclick="setSpeed(this)">Fast</button>
     <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
     <button id="playBtn"  onclick="togglePlay()">▶ Play</button>
   </div>
@@ -1498,9 +1498,10 @@ export default function TopicPulseScriptPage() {
   <div id="hint">Space = play/pause &nbsp;·&nbsp; S/M/F = speed</div>
   <script>
     var playing = false;
-    var speed = 18;
+    var speed = 40;
     var lastTime = null;
     var raf = null;
+    var scrollAccum = 0;
     var scroller = document.getElementById('scroller');
     var playBtn  = document.getElementById('playBtn');
 
@@ -1513,19 +1514,25 @@ export default function TopicPulseScriptPage() {
       playing = false;
       if (raf) { cancelAnimationFrame(raf); raf = null; }
       lastTime = null;
+      scrollAccum = 0;
       scroller.scrollTop = 0;
       playBtn.textContent = '▶ Play';
     }
     function togglePlay() {
       playing = !playing;
       playBtn.textContent = playing ? '⏸ Pause' : '▶ Play';
-      if (playing) { lastTime = null; raf = requestAnimationFrame(tick); }
+      if (playing) { lastTime = null; scrollAccum = 0; raf = requestAnimationFrame(tick); }
       else { if (raf) { cancelAnimationFrame(raf); raf = null; } }
     }
     function tick(now) {
       if (!playing) return;
       if (lastTime !== null) {
-        scroller.scrollTop += speed * (now - lastTime) / 1000;
+        scrollAccum += speed * (now - lastTime) / 1000;
+        var pixels = Math.floor(scrollAccum);
+        if (pixels >= 1) {
+          scroller.scrollTop += pixels;
+          scrollAccum -= pixels;
+        }
         if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4) {
           playing = false;
           playBtn.textContent = '▶ Play';
@@ -1537,9 +1544,9 @@ export default function TopicPulseScriptPage() {
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-      if (e.key === 's' || e.key === 'S') setSpeed(document.querySelector('[data-speed="18"]'));
-      if (e.key === 'm' || e.key === 'M') setSpeed(document.querySelector('[data-speed="38"]'));
-      if (e.key === 'f' || e.key === 'F') setSpeed(document.querySelector('[data-speed="65"]'));
+      if (e.key === 's' || e.key === 'S') setSpeed(document.querySelector('[data-speed="40"]'));
+      if (e.key === 'm' || e.key === 'M') setSpeed(document.querySelector('[data-speed="80"]'));
+      if (e.key === 'f' || e.key === 'F') setSpeed(document.querySelector('[data-speed="140"]'));
       if (e.key === 'r' || e.key === 'R') resetScroll();
     });
   <\/script>
