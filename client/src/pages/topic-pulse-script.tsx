@@ -1561,7 +1561,10 @@ export default function TopicPulseScriptPage() {
 </body>
 </html>`;
 
-    const tw = window.open("", "_blank", "width=960,height=520,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no");
+    const twWidth = 960, twHeight = 520;
+    const twLeft = Math.round((screen.width - twWidth) / 2);
+    const twTop  = Math.round((screen.height - twHeight) / 2);
+    const tw = window.open("", "_blank", `width=${twWidth},height=${twHeight},left=${twLeft},top=${twTop},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no`);
     if (tw) { tw.document.write(html); tw.document.close(); }
   };
 
