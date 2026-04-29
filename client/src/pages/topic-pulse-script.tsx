@@ -1492,9 +1492,9 @@ export default function TopicPulseScriptPage() {
 <body>
   <div id="controls">
     <span class="title">${esc(script?.title ?? "Script")}</span>
-    <button class="speed-btn active" data-speed="28"  onclick="setSpeed(this)">Slow</button>
-    <button class="speed-btn"        data-speed="80"  onclick="setSpeed(this)">Med</button>
-    <button class="speed-btn"        data-speed="140" onclick="setSpeed(this)">Fast</button>
+    <button class="speed-btn active" data-speed="28" onclick="setSpeed(this)">Slow</button>
+    <button class="speed-btn"        data-speed="45" onclick="setSpeed(this)">Med</button>
+    <button class="speed-btn"        data-speed="65" onclick="setSpeed(this)">Fast</button>
     <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
     <button id="playBtn"  onclick="togglePlay()">▶ Play</button>
     <span id="countdown">Scrolling begins in <span id="cd-num">3</span></span>
@@ -1585,8 +1585,8 @@ export default function TopicPulseScriptPage() {
     document.addEventListener('keydown', function(e) {
       if (e.key === ' ') { e.preventDefault(); togglePlay(); }
       if (e.key === 's' || e.key === 'S') setSpeed(document.querySelector('[data-speed="28"]'));
-      if (e.key === 'm' || e.key === 'M') setSpeed(document.querySelector('[data-speed="80"]'));
-      if (e.key === 'f' || e.key === 'F') setSpeed(document.querySelector('[data-speed="140"]'));
+      if (e.key === 'm' || e.key === 'M') setSpeed(document.querySelector('[data-speed="45"]'));
+      if (e.key === 'f' || e.key === 'F') setSpeed(document.querySelector('[data-speed="65"]'));
       if (e.key === 'r' || e.key === 'R') resetScroll();
     });
   <\/script>
