@@ -32,6 +32,10 @@ const CF_ERROR_MESSAGES: Record<string, { type: "error" | "info"; message: strin
     type: "error",
     message: "We couldn't verify your membership right now. Please log in manually below or try the button again in a moment.",
   },
+  rate_limited: {
+    type: "error",
+    message: "Too many login attempts from your location. Please wait a few minutes and try again.",
+  },
   session_error: {
     type: "error",
     message: "A session error occurred. Please try again.",
