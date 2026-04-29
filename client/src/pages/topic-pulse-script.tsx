@@ -1497,7 +1497,7 @@ export default function TopicPulseScriptPage() {
     <button class="speed-btn"        data-speed="65" onclick="setSpeed(this)">Fast</button>
     <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
     <button id="playBtn"  onclick="togglePlay()">▶ Play</button>
-    <span id="countdown">Scrolling begins in <span id="cd-num">3</span></span>
+    <span id="countdown">Scrolling begins in <span id="cd-num">5</span></span>
   </div>
   <div id="scroller">
     ${sectionsHtml}
@@ -1538,7 +1538,7 @@ export default function TopicPulseScriptPage() {
     }
 
     function startCountdown() {
-      var count = 3;
+      var count = 5;
       cdNumEl.textContent = count;
       cdEl.style.display = 'block';
       cdTimer = setInterval(function() {
