@@ -152,4 +152,88 @@ export async function handleCfEnrollmentEvent(
   return { action: "ignored", email: contactEmail };
 }
 
+// ── CF API: Verify enrollment for a given email ─────────────────────────────
+// Called during one-click login to auto-provision accounts for existing
+// CF members who haven't signed up to the Toolkit yet.
+
+export interface CfContactInfo {
+  enrolled: boolean;
+  firstName?: string;
+  lastName?: string;
+  contactId?: string;
+}
+
+export async function checkCfEnrollmentByEmail(email: string): Promise<CfContactInfo> {
+  if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN) {
+    throw new Error("CF_API_TOKEN and CF_WORKSPACE_DOMAIN must be configured");
+  }
+
+  const baseUrl = `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${CF_API_TOKEN}`,
+    "Content-Type": "application/json",
+  };
+
+  // Step 1: Find the contact by email address
+  const contactRes = await fetch(
+    `${baseUrl}/contacts?filter[email_address]=${encodeURIComponent(email)}`,
+    { headers }
+  );
+
+  if (!contactRes.ok) {
+    const body = await contactRes.text();
+    console.error("[CF API] Contact lookup failed:", contactRes.status, body);
+    throw new Error(`CF API contact lookup failed: ${contactRes.status}`);
+  }
+
+  const contactData = await contactRes.json();
+  // CF 2.0 wraps results in a top-level key that can vary
+  const contacts: any[] =
+    contactData.contacts ?? contactData.data ?? [];
+
+  if (contacts.length === 0) {
+    console.log(`[CF API] No contact found for email: ${email}`);
+    return { enrolled: false };
+  }
+
+  const contact = contacts[0];
+  const contactId = String(contact.id);
+  const firstName: string | undefined = contact.first_name || undefined;
+  const lastName: string | undefined = contact.last_name || undefined;
+
+  // If no course filter is configured, any known contact is considered enrolled
+  if (!CF_COURSE_ID) {
+    return { enrolled: true, firstName, lastName, contactId };
+  }
+
+  // Step 2: Check for an active enrollment in the configured course
+  const enrollRes = await fetch(
+    `${baseUrl}/courses/${CF_COURSE_ID}/enrollments?filter[contact_id]=${contactId}`,
+    { headers }
+  );
+
+  if (!enrollRes.ok) {
+    const body = await enrollRes.text();
+    console.error("[CF API] Enrollment lookup failed:", enrollRes.status, body);
+    throw new Error(`CF API enrollment lookup failed: ${enrollRes.status}`);
+  }
+
+  const enrollData = await enrollRes.json();
+  const enrollments: any[] =
+    enrollData.course_enrollments ?? enrollData.enrollments ?? enrollData.data ?? [];
+
+  // An enrollment counts as active when it isn't suspended or revoked
+  const isEnrolled =
+    enrollments.length > 0 &&
+    enrollments.some(
+      (e: any) => !e.suspended_at && !e.revoked_at && e.status !== "inactive"
+    );
+
+  console.log(
+    `[CF API] ${email} → contact ${contactId}, enrollments: ${enrollments.length}, active: ${isEnrolled}`
+  );
+
+  return { enrolled: isEnrolled, firstName, lastName, contactId };
+}
+
 export { CF_WORKSPACE_DOMAIN, CF_COURSE_ID, CF_API_TOKEN };

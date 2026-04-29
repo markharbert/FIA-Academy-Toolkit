@@ -291,11 +291,12 @@ export async function registerRoutes(
 
   // ── CF One-Click Login ─────────────────────────────────────────────────────
   // Members click a button in the CF members area that passes their email via
-  // the CF merge field {{contact.email}}. We look up the user, verify they have
-  // CF enrollment, create a session, and redirect them into the dashboard.
+  // the CF merge field {{contact.email}}. We verify enrollment via the CF API,
+  // auto-creating an account if the member doesn't have one yet.
   //
   // CF Button URL: https://toolkit.fearlessmarketinglab.com/api/auth/cf-login?email={{contact.email}}
   app.get("/api/auth/cf-login", async (req: Request, res: Response) => {
+    const { checkCfEnrollmentByEmail } = await import("./clickfunnels");
     const APP_BASE_URL = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
     const email = (req.query.email as string || "").trim().toLowerCase();
 
@@ -303,32 +304,78 @@ export async function registerRoutes(
       return res.redirect(`${APP_BASE_URL}/login?error=missing_email`);
     }
 
-    try {
-      const user = await storage.getUserByEmail(email);
-
-      if (!user) {
-        // No account yet — redirect to login with a helpful message
-        return res.redirect(`${APP_BASE_URL}/login?error=cf_no_account&email=${encodeURIComponent(email)}`);
-      }
-
-      if (user.isDisabled) {
-        return res.redirect(`${APP_BASE_URL}/login?error=account_disabled`);
-      }
-
-      if (!user.cfEnrolled) {
-        return res.redirect(`${APP_BASE_URL}/login?error=cf_not_enrolled`);
-      }
-
-      // All clear — create the session
-      req.session.userId = user.id;
+    const doLogin = (userId: string) => {
+      req.session.userId = userId;
       req.session.save((err) => {
         if (err) {
           console.error("[CF Login] Session save error:", err);
           return res.redirect(`${APP_BASE_URL}/login?error=session_error`);
         }
-        console.log(`[CF Login] Auto-login for ${email}`);
+        console.log(`[CF Login] Auto-login success for ${email}`);
         res.redirect(`${APP_BASE_URL}/`);
       });
+    };
+
+    try {
+      let user = await storage.getUserByEmail(email);
+
+      // ── Case 1: User exists and is already marked as enrolled ──────────────
+      if (user && user.cfEnrolled && !user.isDisabled) {
+        return doLogin(user.id);
+      }
+
+      // ── Case 2: Disabled account ────────────────────────────────────────────
+      if (user?.isDisabled) {
+        return res.redirect(`${APP_BASE_URL}/login?error=account_disabled`);
+      }
+
+      // ── Cases 3 & 4: No account OR account exists but cfEnrolled=false ──────
+      // In both cases we check the CF API live to verify current enrollment.
+      console.log(`[CF Login] Checking CF API enrollment for ${email}`);
+      let cfInfo;
+      try {
+        cfInfo = await checkCfEnrollmentByEmail(email);
+      } catch (apiErr) {
+        console.error("[CF Login] CF API error:", apiErr);
+        // Fall back gracefully — don't block access if the API is unreachable
+        // but we already have a local user marked as enrolled (covered by Case 1).
+        // For new users or unverified ones, require manual login.
+        if (!user) {
+          return res.redirect(`${APP_BASE_URL}/login?error=cf_api_error`);
+        }
+        return res.redirect(`${APP_BASE_URL}/login?error=cf_not_enrolled`);
+      }
+
+      if (!cfInfo.enrolled) {
+        return res.redirect(`${APP_BASE_URL}/login?error=cf_not_enrolled`);
+      }
+
+      if (!user) {
+        // ── Case 3: CF-enrolled but no Toolkit account → auto-create ──────────
+        console.log(`[CF Login] Auto-creating account for CF member: ${email}`);
+        user = await storage.createUser({
+          email,
+          firstName: cfInfo.firstName,
+          lastName: cfInfo.lastName,
+        });
+        // Grant CF enrollment on the newly created account
+        await storage.updateUser(user.id, {
+          cfEnrolled: true,
+          cfEnrolledAt: new Date(),
+          cfContactId: cfInfo.contactId,
+        });
+      } else {
+        // ── Case 4: Account exists but cfEnrolled was false → re-grant ────────
+        console.log(`[CF Login] Re-granting CF access for existing user: ${email}`);
+        await storage.updateUser(user.id, {
+          cfEnrolled: true,
+          cfEnrolledAt: new Date(),
+          cfRevokedAt: null,
+          cfContactId: cfInfo.contactId || user.cfContactId,
+        });
+      }
+
+      return doLogin(user.id);
     } catch (err) {
       console.error("[CF Login] Error:", err);
       res.redirect(`${APP_BASE_URL}/login?error=server_error`);

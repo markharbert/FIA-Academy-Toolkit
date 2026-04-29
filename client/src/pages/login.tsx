@@ -28,6 +28,10 @@ const CF_ERROR_MESSAGES: Record<string, { type: "error" | "info"; message: strin
     type: "error",
     message: "No email address was passed from ClickFunnels. Please try again or log in manually below.",
   },
+  cf_api_error: {
+    type: "error",
+    message: "We couldn't verify your membership right now. Please log in manually below or try the button again in a moment.",
+  },
   session_error: {
     type: "error",
     message: "A session error occurred. Please try again.",
