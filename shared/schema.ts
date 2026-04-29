@@ -801,6 +801,40 @@ export type SpamFlag = { label: string; severity: "low" | "medium" | "high" };
 export type CopyFeedbackSection = { name: string; score: number; feedback: string };
 export type CopyFeedback = { sections: CopyFeedbackSection[]; topSuggestions: string[] };
 
+export type SubjectAnalysis = {
+  charCount: number;
+  wordCount: number;
+  hasEmoji: boolean;
+  hasNumber: boolean;
+  hasQuestion: boolean;
+  hasPersonalizationToken: boolean;
+  isIdealLength: boolean;
+};
+
+export type TechnicalHealth = {
+  hasHtmlVersion: boolean;
+  hasPlainTextVersion: boolean;
+  estimatedSizeKb: number;
+  missingAltCount: number;
+  trackingPixelCount: number;
+  uniqueExternalDomains: number;
+  hasPreheader: boolean;
+};
+
+export type SenderTrust = {
+  displayNameDomainMatch: boolean | null;
+  replyToMatchesFrom: boolean | null;
+  blacklisted: boolean;
+  blacklistHits: string[];
+};
+
+export type ContentQuality = {
+  wordCount: number;
+  hasPhysicalAddress: boolean;
+  hasPs: boolean;
+  hasPersonalization: boolean;
+};
+
 export const emailInboxAddresses = pgTable("email_inbox_addresses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
@@ -814,6 +848,7 @@ export const emailAnalyses = pgTable("email_analyses", {
   receivedAt: timestamp("received_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   fromAddress: text("from_address").notNull(),
   fromName: text("from_name"),
+  replyTo: text("reply_to"),
   subject: text("subject").notNull(),
   bodyText: text("body_text"),
   bodyHtml: text("body_html"),
@@ -831,6 +866,10 @@ export const emailAnalyses = pgTable("email_analyses", {
   sendingDomain: text("sending_domain"),
   sendingIp: text("sending_ip"),
   overallScore: integer("overall_score"),
+  subjectAnalysis: jsonb("subject_analysis").$type<SubjectAnalysis>(),
+  technicalHealth: jsonb("technical_health").$type<TechnicalHealth>(),
+  senderTrust: jsonb("sender_trust").$type<SenderTrust>(),
+  contentQuality: jsonb("content_quality").$type<ContentQuality>(),
   status: varchar("status", { length: 20 }).default("pending").notNull(),
 });
 

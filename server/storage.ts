@@ -290,7 +290,7 @@ export interface IStorage {
   getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
   getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined>;
   createEmailAnalysis(data: {
-    userId: string; fromAddress: string; fromName?: string; subject: string;
+    userId: string; fromAddress: string; fromName?: string; replyTo?: string; subject: string;
     bodyText?: string; bodyHtml?: string; rawHeaders?: string;
     spfResult?: string; dkimResult?: string;
   }): Promise<EmailAnalysis>;
@@ -1736,7 +1736,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEmailAnalysis(data: {
-    userId: string; fromAddress: string; fromName?: string; subject: string;
+    userId: string; fromAddress: string; fromName?: string; replyTo?: string; subject: string;
     bodyText?: string; bodyHtml?: string; rawHeaders?: string;
     spfResult?: string; dkimResult?: string;
   }): Promise<EmailAnalysis> {

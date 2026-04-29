@@ -4235,9 +4235,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const {
         parseSpfResult, parseDkimResult, parseDmarcResult,
-        extractSendingDomain, extractSendingIp,
+        extractSendingDomain, extractSendingIp, extractReplyTo,
         checkSpfRecord, checkDkimRecord, checkDmarcRecord,
         analyzeSpamSignals, scoreCopyWithAI, computeOverallScore,
+        analyzeSubjectLine, analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
       } = await import("./inboxAnalyzer");
 
       const toField: string = (req.body?.to || req.body?.envelope && JSON.parse(req.body.envelope)?.to?.[0]) || "";
@@ -4249,7 +4250,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!inboxAddr) { console.warn("[inbox-analyzer] Unknown token:", token); return; }
 
       const fromRaw: string = req.body?.from || "";
-      const fromNameMatch = fromRaw.match(/^"?([^"<]+)"?\s*</);
+      const fromNameMatch = fromRaw.match(/^"?([^"<\n]+)"?\s*</);
       const fromName = fromNameMatch ? fromNameMatch[1].trim() : undefined;
       const fromAddrMatch = fromRaw.match(/<([^>]+)>/) || fromRaw.match(/(\S+@\S+)/);
       const fromAddress = fromAddrMatch ? fromAddrMatch[1] : fromRaw;
@@ -4260,12 +4261,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const rawHeaders: string = req.body?.headers || "";
       const spfRaw: string = req.body?.spf || "";
       const dkimRaw: string = req.body?.dkim || "";
+      const replyTo: string = extractReplyTo(rawHeaders);
 
       // Create the analysis record
       const analysis = await storage.createEmailAnalysis({
         userId: inboxAddr.userId,
         fromAddress,
         fromName,
+        replyTo: replyTo || undefined,
         subject,
         bodyText,
         bodyHtml,
@@ -4290,7 +4293,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           ]);
 
           const { score: spamScore, flags: spamFlags } = analyzeSpamSignals(subject, bodyText, bodyHtml);
-          const copyFeedback = await scoreCopyWithAI(subject, bodyText);
+          const subjectAnalysis = analyzeSubjectLine(subject);
+          const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
+          const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
+
+          const [copyFeedback, senderTrust] = await Promise.all([
+            scoreCopyWithAI(subject, bodyText),
+            analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain),
+          ]);
+
           const copyScore = copyFeedback.sections.length > 0
             ? Math.round(copyFeedback.sections.reduce((s, sec) => s + sec.score, 0) / copyFeedback.sections.length * 10)
             : 50;
@@ -4304,6 +4315,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             dmarcRecordExists,
             spamScore,
             copyScore,
+            senderTrust,
+            technicalHealth,
+            contentQuality,
           });
 
           await storage.updateEmailAnalysis(analysis.id, {
@@ -4318,6 +4332,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             copyScore,
             copyFeedback,
             overallScore,
+            subjectAnalysis,
+            technicalHealth,
+            senderTrust,
+            contentQuality,
             status: "complete",
           });
         } catch (err) {
