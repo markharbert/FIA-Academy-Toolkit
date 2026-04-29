@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Video, Search, FileText, Settings } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 interface FeatureCardProps {
   title: string;
@@ -34,6 +35,9 @@ function FeatureCard({ title, description, icon, href, testId }: FeatureCardProp
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const firstName = user?.firstName || user?.displayName?.split(" ")[0] || "";
+
   const features = [
     {
       title: "Video Score",
@@ -69,8 +73,10 @@ export default function DashboardPage() {
     <div className="flex-1 overflow-auto">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome to Academy Toolkit</p>
+          <h1 className="text-3xl font-bold" data-testid="text-dashboard-title">
+            {firstName ? `Welcome, ${firstName}!` : "Welcome!"}
+          </h1>
+          <p className="text-muted-foreground">Welcome to the Academy Toolkit</p>
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
