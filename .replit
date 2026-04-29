@@ -47,3 +47,7 @@ integrations = ["javascript_database:1.0.0", "javascript_gemini_ai_integrations:
 [userenv.shared]
 SUPER_ADMIN_EMAILS = "mh@markharbert.com"
 APP_BASE_URL = "https://toolkit.fearlessmarketinglab.com"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
