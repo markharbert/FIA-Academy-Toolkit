@@ -1480,6 +1480,14 @@ export default function TopicPulseScriptPage() {
     .bottom-pad{height:80vh}
     /* hint bar */
     #hint{position:fixed;bottom:0;left:0;right:0;text-align:center;padding:4px;font-family:monospace;font-size:10px;color:#333;background:#0a0a0a}
+    /* countdown overlay */
+    #countdown{
+      display:none;position:fixed;top:64px;left:0;right:0;
+      text-align:center;z-index:200;pointer-events:none;
+    }
+    #cd-label{font-family:Arial,sans-serif;font-size:13px;color:rgba(255,255,255,.45);margin-bottom:2px}
+    #cd-num{font-family:Arial,sans-serif;font-size:88px;font-weight:700;color:#fff;line-height:1;
+      text-shadow:0 0 40px rgba(255,255,255,.3)}
   </style>
 </head>
 <body>
@@ -1495,6 +1503,10 @@ export default function TopicPulseScriptPage() {
     ${sectionsHtml}
     <div class="bottom-pad"></div>
   </div>
+  <div id="countdown">
+    <div id="cd-label">Starting in</div>
+    <div id="cd-num">3</div>
+  </div>
   <div id="hint">Space = play/pause &nbsp;·&nbsp; S/M/F = speed</div>
   <script>
     var playing = false;
@@ -1502,34 +1514,58 @@ export default function TopicPulseScriptPage() {
     var lastTime = null;
     var raf = null;
     var scrollAccum = 0;
-    var startDelay = 1500; // ms pause before scrolling begins
-    var scroller = document.getElementById('scroller');
-    var playBtn  = document.getElementById('playBtn');
+    var cdTimer = null;
+    var scroller  = document.getElementById('scroller');
+    var playBtn   = document.getElementById('playBtn');
+    var cdEl      = document.getElementById('countdown');
+    var cdNumEl   = document.getElementById('cd-num');
 
     function setSpeed(btn) {
       speed = parseFloat(btn.dataset.speed);
       document.querySelectorAll('.speed-btn').forEach(function(b){ b.classList.remove('active'); });
       btn.classList.add('active');
     }
+
+    function hideCountdown() {
+      if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
+      cdEl.style.display = 'none';
+    }
+
     function resetScroll() {
       playing = false;
       if (raf) { cancelAnimationFrame(raf); raf = null; }
+      hideCountdown();
       lastTime = null;
       scrollAccum = 0;
       scroller.scrollTop = 0;
       playBtn.textContent = '▶ Play';
     }
+
+    function startCountdown() {
+      var count = 3;
+      cdNumEl.textContent = count;
+      cdEl.style.display = 'block';
+      cdTimer = setInterval(function() {
+        count--;
+        if (count <= 0) {
+          hideCountdown();
+          if (playing) { lastTime = null; scrollAccum = 0; raf = requestAnimationFrame(tick); }
+        } else {
+          cdNumEl.textContent = count;
+        }
+      }, 1000);
+    }
+
     function togglePlay() {
       playing = !playing;
       if (playing) {
         playBtn.textContent = '⏸ Pause';
         if (raf) { cancelAnimationFrame(raf); raf = null; }
-        setTimeout(function() {
-          if (playing) { lastTime = null; scrollAccum = 0; raf = requestAnimationFrame(tick); }
-        }, startDelay);
+        startCountdown();
       } else {
         playBtn.textContent = '▶ Play';
         if (raf) { cancelAnimationFrame(raf); raf = null; }
+        hideCountdown();
       }
     }
     function tick(now) {
