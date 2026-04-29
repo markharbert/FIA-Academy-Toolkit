@@ -176,14 +176,15 @@ export async function checkCfEnrollmentByEmail(email: string): Promise<CfContact
   };
 
   // Step 1: Find the contact by email address
-  const contactRes = await fetch(
-    `${baseUrl}/contacts?filter[email_address]=${encodeURIComponent(email)}`,
-    { headers }
-  );
+  const contactUrl = `${baseUrl}/contacts?filter[email_address]=${encodeURIComponent(email)}`;
+  console.log("[CF API] Contacting:", contactUrl);
+  const contactRes = await fetch(contactUrl, { headers });
 
   if (!contactRes.ok) {
     const body = await contactRes.text();
     console.error("[CF API] Contact lookup failed:", contactRes.status, body);
+    console.error("[CF API] URL was:", contactUrl);
+    console.error("[CF API] Domain used:", CF_WORKSPACE_DOMAIN);
     throw new Error(`CF API contact lookup failed: ${contactRes.status}`);
   }
 
