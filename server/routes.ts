@@ -347,8 +347,24 @@ export async function registerRoutes(
     }
 
     try {
-      // Always verify live enrollment with CF API — never trust local flag alone
       console.log(`[CF Login] Verifying CF enrollment for ${email}`);
+
+      // Fast path: existing user already verified as enrolled via webhook
+      let user = await storage.getUserByEmail(email);
+      if (user?.cfEnrolled && !user?.isDisabled) {
+        console.log(`[CF Login] Fast-path login for locally-enrolled user: ${email}`);
+        req.session.userId = user.id;
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => { if (err) reject(err); else resolve(); });
+        });
+        return res.json({ success: true });
+      }
+
+      if (user?.isDisabled) {
+        return res.status(403).json({ success: false, error: "account_disabled" });
+      }
+
+      // No local enrollment record — verify with CF API
       let cfInfo;
       try {
         cfInfo = await checkCfEnrollmentByEmail(email);
@@ -362,12 +378,6 @@ export async function registerRoutes(
       }
 
       // CF confirmed enrolled — find or create local account
-      let user = await storage.getUserByEmail(email);
-
-      if (user?.isDisabled) {
-        return res.status(403).json({ success: false, error: "account_disabled" });
-      }
-
       if (!user) {
         console.log(`[CF Login] Auto-creating account for CF member: ${email}`);
         user = await storage.createUser({
@@ -807,6 +817,49 @@ export async function registerRoutes(
       console.error("[CF Admin] Status error:", err);
       res.status(500).json({ message: "Failed to get CF status" });
     }
+  });
+
+  // Admin: test CF API contact lookup for a given email (debug only)
+  app.get("/api/admin/cf/test-lookup", requireAdmin, async (req: Request, res: Response) => {
+    const email = (req.query.email as string || "").trim();
+    if (!email) return res.status(400).json({ message: "email query param required" });
+    const token = process.env.CF_API_TOKEN || "";
+    const rawDomain = (process.env.CF_WORKSPACE_DOMAIN || "").replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    const baseUrl = `https://${rawDomain}/api/v2`;
+    const enc = encodeURIComponent(email);
+    const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+
+    const attempts: Record<string, { status: number; body: string }> = {};
+
+    // Try a handful of possible contact search URL patterns
+    const urls: [string, string][] = [
+      ["filter[email_address]", `${baseUrl}/contacts?filter[email_address]=${enc}`],
+      ["filter%5Bemail_address%5D", `${baseUrl}/contacts?filter%5Bemail_address%5D=${enc}`],
+      ["filter[email]", `${baseUrl}/contacts?filter[email]=${enc}`],
+      ["filter%5Bemail%5D", `${baseUrl}/contacts?filter%5Bemail%5D=${enc}`],
+      ["GET /api/v2", `${baseUrl}`],
+      ["GET /api/v2/workspaces", `${baseUrl}/workspaces`],
+    ];
+    for (const [label, url] of urls) {
+      try {
+        const r = await fetch(url, { headers });
+        const body = await r.text();
+        attempts[label] = { status: r.status, body: body.slice(0, 300) };
+      } catch (e: any) {
+        attempts[label] = { status: -1, body: e.message };
+      }
+    }
+
+    // Also try full enrollment check
+    let enrollmentResult: any = null;
+    try {
+      const { checkCfEnrollmentByEmail } = await import("./clickfunnels");
+      enrollmentResult = await checkCfEnrollmentByEmail(email);
+    } catch (e: any) {
+      enrollmentResult = { error: e.message };
+    }
+
+    res.json({ rawDomain, baseUrl, attempts, enrollmentResult });
   });
 
   // Admin: list users with CF enrollment info
