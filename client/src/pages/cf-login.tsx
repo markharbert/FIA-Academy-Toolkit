@@ -125,14 +125,12 @@ export default function CfLoginPage() {
             <div className="w-full rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white/70 leading-relaxed">
               <p className="font-medium text-white mb-1">Need help?</p>
               <p>
-                Please reach out to support at{" "}
+                Please reach out to{" "}
                 <a
-                  href="https://markharbert.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="mailto:support@markharbert.com"
                   className="text-[hsl(203,54%,65%)] underline underline-offset-2 hover:text-[hsl(203,54%,80%)]"
                 >
-                  markharbert.com
+                  support@markharbert.com
                 </a>{" "}
                 and we&rsquo;ll get this sorted out for you.
               </p>
