@@ -2,7 +2,8 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 
-const CF_WORKSPACE_DOMAIN = process.env.CF_WORKSPACE_DOMAIN || "";
+// Strip any accidental protocol prefix so we can safely prepend https://
+const CF_WORKSPACE_DOMAIN = (process.env.CF_WORKSPACE_DOMAIN || "").replace(/^https?:\/\//, "");
 const CF_COURSE_ID = process.env.CF_COURSE_ID || "";
 const CF_API_TOKEN = process.env.CF_API_TOKEN || "";
 const CF_WEBHOOK_SECRET = process.env.CF_WEBHOOK_SECRET || "";
