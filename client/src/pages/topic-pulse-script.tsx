@@ -1806,7 +1806,7 @@ export default function TopicPulseScriptPage() {
 
       <div className="flex-1 overflow-hidden flex">
         <Tabs defaultValue="full" className="flex-1 h-full flex flex-col overflow-hidden">
-          <div className="border-b bg-background px-4 shrink-0">
+          <div className="border-b bg-background px-4 shrink-0 flex justify-center">
             <TabsList className="h-11 bg-transparent gap-1 p-0">
               <TabsTrigger value="full" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-full-script">
                 <FileText className="h-3.5 w-3.5" />
