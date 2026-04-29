@@ -78,7 +78,7 @@ export default function CfLoginPage() {
   const errorMessage = ERROR_MESSAGES[errorKey] || ERROR_MESSAGES.server_error;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[hsl(230,45%,8%)] px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: "hsl(230,75%,10%)" }}>
       <div className="w-full max-w-sm flex flex-col items-center gap-8">
         <img src={logoImage} alt="Academy Toolkit" className="h-16 w-auto" />
 
@@ -86,7 +86,7 @@ export default function CfLoginPage() {
           <div className="flex flex-col items-center gap-5 text-center">
             <div className="relative h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-white/10" />
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[hsl(262,83%,68%)] animate-spin" />
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[hsl(203,54%,53%)] animate-spin" />
             </div>
             <div className="space-y-2">
               <p className="text-white text-lg font-semibold">Verifying Your Enrollment</p>
@@ -130,7 +130,7 @@ export default function CfLoginPage() {
                   href="https://markharbert.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[hsl(262,83%,78%)] underline underline-offset-2 hover:text-[hsl(262,83%,88%)]"
+                  className="text-[hsl(203,54%,65%)] underline underline-offset-2 hover:text-[hsl(203,54%,80%)]"
                 >
                   markharbert.com
                 </a>{" "}

@@ -4,9 +4,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginInput } from "@shared/schema";
 import { useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Loader2, AlertTriangle, Info } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
@@ -88,25 +85,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-12 bg-sidebar">
-      <div className="flex flex-col items-center gap-6 w-full max-w-md">
-        <img src={logoImage} alt="Academy Toolkit" className="h-14" />
-      <Card className="w-full">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl" data-testid="text-login-title">Admin Login</CardTitle>
-          <CardDescription>
-            Members access this app through the Fearless Influencer Academy portal.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="flex min-h-screen items-center justify-center px-4 py-12" style={{ background: "hsl(230,75%,10%)" }}>
+      <div className="flex flex-col items-center gap-8 w-full max-w-sm">
+        <img src={logoImage} alt="Academy Toolkit" className="h-14 w-auto" />
+
+        <div className="w-full rounded-2xl border border-white/10 p-8 space-y-6" style={{ background: "hsl(230,75%,14%)" }}>
+          <div className="text-center space-y-1">
+            <h1 className="text-xl font-semibold text-white" data-testid="text-login-title">Admin Login</h1>
+            <p className="text-sm text-white/50">Members access this app through the Fearless Influencer Academy portal.</p>
+          </div>
+
           {error && (
-            <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2" data-testid="text-login-error">
+            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-300 flex items-start gap-2" data-testid="text-login-error">
               <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
               {error}
             </div>
           )}
           {notice && (
-            <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-300 flex items-start gap-2" data-testid="text-login-notice">
+            <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 text-sm text-blue-300 flex items-start gap-2" data-testid="text-login-notice">
               <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
               {notice}
             </div>
@@ -119,17 +115,19 @@ export default function LoginPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="text-white/80 text-sm">Email</FormLabel>
                     <FormControl>
-                      <Input
+                      <input
                         type="email"
                         placeholder="you@example.com"
                         autoComplete="email"
                         data-testid="input-email"
+                        className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 border border-white/15 focus:outline-none focus:border-[hsl(203,54%,53%)] focus:ring-1 focus:ring-[hsl(203,54%,53%)] transition-colors"
+                        style={{ background: "hsl(230,75%,10%)" }}
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-400" />
                   </FormItem>
                 )}
               />
@@ -139,17 +137,19 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-white/80 text-sm">Password</FormLabel>
                     <FormControl>
-                      <Input
+                      <input
                         type="password"
                         placeholder="Enter your password"
                         autoComplete="current-password"
                         data-testid="input-password"
+                        className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 border border-white/15 focus:outline-none focus:border-[hsl(203,54%,53%)] focus:ring-1 focus:ring-[hsl(203,54%,53%)] transition-colors"
+                        style={{ background: "hsl(230,75%,10%)" }}
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-400" />
                   </FormItem>
                 )}
               />
@@ -157,27 +157,32 @@ export default function LoginPage() {
               <div className="flex items-center justify-end">
                 <Link
                   href="/forgot-password"
-                  className="text-sm text-muted-foreground hover:text-foreground"
+                  className="text-sm text-white/40 hover:text-white/70 transition-colors"
                   data-testid="link-forgot-password"
                 >
                   Forgot password?
                 </Link>
               </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-login-submit">
+              <button
+                type="submit"
+                disabled={isLoading}
+                data-testid="button-login-submit"
+                className="w-full rounded-lg py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-60 flex items-center justify-center gap-2"
+                style={{ background: "hsl(358,100%,43%)" }}
+              >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Logging in...
                   </>
                 ) : (
                   "Log in"
                 )}
-              </Button>
+              </button>
             </form>
           </Form>
-        </CardContent>
-      </Card>
+        </div>
       </div>
     </div>
   );
