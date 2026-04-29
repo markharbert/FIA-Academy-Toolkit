@@ -1485,7 +1485,7 @@ export default function TopicPulseScriptPage() {
 <body>
   <div id="controls">
     <span class="title">${esc(script?.title ?? "Script")}</span>
-    <button class="speed-btn active" data-speed="40"  onclick="setSpeed(this)">Slow</button>
+    <button class="speed-btn active" data-speed="28"  onclick="setSpeed(this)">Slow</button>
     <button class="speed-btn"        data-speed="80"  onclick="setSpeed(this)">Med</button>
     <button class="speed-btn"        data-speed="140" onclick="setSpeed(this)">Fast</button>
     <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
@@ -1498,10 +1498,11 @@ export default function TopicPulseScriptPage() {
   <div id="hint">Space = play/pause &nbsp;·&nbsp; S/M/F = speed</div>
   <script>
     var playing = false;
-    var speed = 40;
+    var speed = 28;
     var lastTime = null;
     var raf = null;
     var scrollAccum = 0;
+    var startDelay = 1500; // ms pause before scrolling begins
     var scroller = document.getElementById('scroller');
     var playBtn  = document.getElementById('playBtn');
 
@@ -1520,9 +1521,16 @@ export default function TopicPulseScriptPage() {
     }
     function togglePlay() {
       playing = !playing;
-      playBtn.textContent = playing ? '⏸ Pause' : '▶ Play';
-      if (playing) { lastTime = null; scrollAccum = 0; raf = requestAnimationFrame(tick); }
-      else { if (raf) { cancelAnimationFrame(raf); raf = null; } }
+      if (playing) {
+        playBtn.textContent = '⏸ Pause';
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+        setTimeout(function() {
+          if (playing) { lastTime = null; scrollAccum = 0; raf = requestAnimationFrame(tick); }
+        }, startDelay);
+      } else {
+        playBtn.textContent = '▶ Play';
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+      }
     }
     function tick(now) {
       if (!playing) return;
@@ -1544,7 +1552,7 @@ export default function TopicPulseScriptPage() {
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-      if (e.key === 's' || e.key === 'S') setSpeed(document.querySelector('[data-speed="40"]'));
+      if (e.key === 's' || e.key === 'S') setSpeed(document.querySelector('[data-speed="28"]'));
       if (e.key === 'm' || e.key === 'M') setSpeed(document.querySelector('[data-speed="80"]'));
       if (e.key === 'f' || e.key === 'F') setSpeed(document.querySelector('[data-speed="140"]'));
       if (e.key === 'r' || e.key === 'R') resetScroll();
