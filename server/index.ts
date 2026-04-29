@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { bootstrapSuperAdmins } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 const app = express();
 const httpServer = createServer(app);
@@ -66,7 +68,24 @@ app.use((req, res, next) => {
   next();
 });
 
+async function runStartupMigrations() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE email_analyses
+        ADD COLUMN IF NOT EXISTS reply_to text,
+        ADD COLUMN IF NOT EXISTS subject_analysis jsonb,
+        ADD COLUMN IF NOT EXISTS technical_health jsonb,
+        ADD COLUMN IF NOT EXISTS sender_trust jsonb,
+        ADD COLUMN IF NOT EXISTS content_quality jsonb;
+    `);
+    console.log("[startup] email_analyses migration complete");
+  } catch (err) {
+    console.error("[startup] migration error:", err);
+  }
+}
+
 (async () => {
+  await runStartupMigrations();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

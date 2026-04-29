@@ -10,7 +10,7 @@ import {
   ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Loader2,
   Inbox, Info, TrendingUp, CircleCheck, CircleX, CircleAlert,
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
-  User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star,
+  User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -153,7 +153,7 @@ function SectionPanel({ title, icon: Icon, score, children }: {
 
 // ── Email Detail Panel ────────────────────────────────────────────────────────
 
-function EmailDetail({ email, onDelete }: { email: EmailAnalysis; onDelete: () => void }) {
+function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; onDelete: () => void; onReanalyze?: (id: string) => void }) {
   const cf = email.copyFeedback as CopyFeedback | null;
   const flags = (email.spamFlags as SpamFlag[] | null) || [];
   const sa = email.subjectAnalysis as SubjectAnalysis | null;
@@ -513,13 +513,41 @@ function EmailDetail({ email, onDelete }: { email: EmailAnalysis; onDelete: () =
         )}
 
         {email.status === "processing" && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse p-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Analysis in progress…
+          <div className="flex items-center gap-3 p-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Analysis in progress…
+            </div>
+            {onReanalyze && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs gap-1.5 text-muted-foreground"
+                onClick={() => onReanalyze(email.id)}
+                data-testid={`button-retry-processing-${email.id}`}
+              >
+                <RefreshCw className="h-3 w-3" />
+                Retry
+              </Button>
+            )}
           </div>
         )}
         {email.status === "failed" && (
-          <p className="text-sm text-red-500 p-2">Analysis failed. Please try again later.</p>
+          <div className="flex items-center gap-3 p-2">
+            <p className="text-sm text-red-500">Analysis failed.</p>
+            {onReanalyze && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => onReanalyze(email.id)}
+                data-testid={`button-retry-${email.id}`}
+              >
+                <RefreshCw className="h-3 w-3" />
+                Retry
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -528,7 +556,7 @@ function EmailDetail({ email, onDelete }: { email: EmailAnalysis; onDelete: () =
 
 // ── Email Row ────────────────────────────────────────────────────────────────
 
-function EmailRow({ email, onDelete }: { email: EmailAnalysis; onDelete: (id: string) => void }) {
+function EmailRow({ email, onDelete, onReanalyze }: { email: EmailAnalysis; onDelete: (id: string) => void; onReanalyze?: (id: string) => void }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -557,7 +585,7 @@ function EmailRow({ email, onDelete }: { email: EmailAnalysis; onDelete: (id: st
       {open && (
         <div className="px-4 pb-5">
           <Separator className="mb-5" />
-          <EmailDetail email={email} onDelete={() => onDelete(email.id)} />
+          <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} />
         </div>
       )}
     </div>
@@ -734,6 +762,17 @@ export default function InboxAnalyzerPage() {
     },
   });
 
+  const reanalyzeMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/inbox-analyzer/emails/${id}/reanalyze`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
+      toast({ title: "Re-analysis started", description: "Your email is being analyzed again." });
+    },
+    onError: () => {
+      toast({ title: "Failed to re-analyze", variant: "destructive" });
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background">
       {/* Hero */}
@@ -813,6 +852,7 @@ export default function InboxAnalyzerPage() {
                     key={email.id}
                     email={email}
                     onDelete={(id) => deleteMutation.mutate(id)}
+                    onReanalyze={(id) => reanalyzeMutation.mutate(id)}
                   />
                 ))}
               </div>

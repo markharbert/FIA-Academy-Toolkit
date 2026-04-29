@@ -4227,6 +4227,104 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // Re-run analysis on an existing email (e.g. stuck in processing/failed)
+  app.post("/api/inbox-analyzer/emails/:id/reanalyze", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const emailId = req.params.id;
+      const userId = (req as any).user?.id;
+      const analysis = await storage.getEmailAnalysis(emailId, userId);
+      if (!analysis) return res.status(404).json({ message: "Email not found" });
+
+      await storage.updateEmailAnalysis(emailId, { status: "processing" });
+      res.status(202).json({ message: "Re-analysis started" });
+
+      (async () => {
+        try {
+          const {
+            parseSpfResult, parseDkimResult, parseDmarcResult,
+            extractSendingDomain, extractSendingIp, extractReplyTo,
+            checkSpfRecord, checkDkimRecord, checkDmarcRecord,
+            analyzeSpamSignals, scoreCopyWithAI, computeOverallScore,
+            analyzeSubjectLine, analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
+          } = await import("./inboxAnalyzer");
+
+          const rawHeaders = analysis.rawHeaders || "";
+          const fromAddress = analysis.fromAddress;
+          const fromRaw = analysis.fromName ? `${analysis.fromName} <${fromAddress}>` : fromAddress;
+          const replyTo = analysis.replyTo || extractReplyTo(rawHeaders);
+          const spfRaw = analysis.spfResult || "";
+          const dkimRaw = analysis.dkimResult || "";
+          const subject = analysis.subject;
+          const bodyText = analysis.bodyText || "";
+          const bodyHtml = analysis.bodyHtml || "";
+
+          const dmarcResult = parseDmarcResult(rawHeaders);
+          const sendingDomain = extractSendingDomain(fromAddress);
+          const sendingIp = extractSendingIp(rawHeaders);
+
+          const [spfRecordExists, dkimRecordExists, dmarcRecordExists] = await Promise.all([
+            checkSpfRecord(sendingDomain),
+            checkDkimRecord(sendingDomain),
+            checkDmarcRecord(sendingDomain),
+          ]);
+
+          const { score: spamScore, flags: spamFlags } = analyzeSpamSignals(subject, bodyText, bodyHtml);
+          const subjectAnalysis = analyzeSubjectLine(subject);
+          const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
+          const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
+
+          const [copyFeedback, senderTrust] = await Promise.all([
+            scoreCopyWithAI(subject, bodyText),
+            analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain),
+          ]);
+
+          const copyScore = copyFeedback.sections.length > 0
+            ? Math.round(copyFeedback.sections.reduce((s, sec) => s + sec.score, 0) / copyFeedback.sections.length * 10)
+            : 50;
+
+          const overallScore = computeOverallScore({
+            spfResult: parseSpfResult(spfRaw),
+            dkimResult: parseDkimResult(dkimRaw),
+            dmarcResult,
+            spfRecordExists,
+            dkimRecordExists,
+            dmarcRecordExists,
+            spamScore,
+            copyScore,
+            senderTrust,
+            technicalHealth,
+            contentQuality,
+          });
+
+          await storage.updateEmailAnalysis(emailId, {
+            dmarcResult,
+            sendingDomain,
+            sendingIp,
+            spfRecordExists,
+            dkimRecordExists,
+            dmarcRecordExists,
+            spamScore,
+            spamFlags,
+            copyScore,
+            copyFeedback,
+            overallScore,
+            subjectAnalysis,
+            technicalHealth,
+            senderTrust,
+            contentQuality,
+            status: "complete",
+          });
+        } catch (err) {
+          console.error("[inbox-analyzer] reanalyze pipeline error:", err);
+          await storage.updateEmailAnalysis(emailId, { status: "failed" });
+        }
+      })();
+    } catch (err) {
+      console.error("[inbox-analyzer] reanalyze error:", err);
+      res.status(500).json({ message: "Failed to start re-analysis" });
+    }
+  });
+
   // SendGrid Inbound Parse webhook — receives incoming emails
   app.post("/api/inbox-analyzer/inbound", upload.any(), async (req: Request, res: Response) => {
     // Acknowledge immediately so SendGrid doesn't retry
@@ -4241,9 +4339,12 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         analyzeSubjectLine, analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
       } = await import("./inboxAnalyzer");
 
-      const toField: string = (req.body?.to || req.body?.envelope && JSON.parse(req.body.envelope)?.to?.[0]) || "";
+      const toRaw: string = (req.body?.to || req.body?.envelope && JSON.parse(req.body.envelope)?.to?.[0]) || "";
+      // Handle "Display Name <email@domain>" format in addition to plain "email@domain"
+      const emailInBrackets = toRaw.match(/<([^>]+)>/);
+      const toField = emailInBrackets ? emailInBrackets[1] : toRaw.trim();
       const tokenMatch = toField.match(/^([a-z0-9]+)@/i);
-      if (!tokenMatch) { console.warn("[inbox-analyzer] Could not extract token from:", toField); return; }
+      if (!tokenMatch) { console.warn("[inbox-analyzer] Could not extract token from:", toRaw); return; }
       const token = tokenMatch[1].toLowerCase();
 
       const inboxAddr = await storage.getInboxAddressByToken(token);
