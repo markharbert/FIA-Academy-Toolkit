@@ -314,14 +314,26 @@ export async function registerRoutes(
   });
 
   // GET: redirect to the /cf-login intermediary page (keeps CF button URL unchanged)
+  //
+  // IMPORTANT: We must read the email from the raw URL, not from req.query.
+  // req.query (via the qs library) decodes "+" as a space, which corrupts email
+  // addresses that contain "+" (e.g. mark+tag@example.com → "mark tag@example.com").
+  // We extract the raw encoded value and re-encode it with encodeURIComponent so
+  // the downstream /cf-login page receives the correct address.
   app.get("/api/auth/cf-login", cfLoginLimiter, (req: Request, res: Response) => {
     const APP_BASE_URL = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
-    const email = (req.query.email as string || "").trim();
 
-    if (!email) {
+    // Extract the raw (still encoded) email from the query string
+    const rawEmailMatch = req.originalUrl.match(/[?&]email=([^&]*)/);
+    const rawEmail = rawEmailMatch ? rawEmailMatch[1] : "";
+
+    if (!rawEmail) {
       return res.redirect(`${APP_BASE_URL}/cf-login?error=missing_email`);
     }
 
+    // decodeURIComponent decodes %XX sequences but leaves "+" as-is,
+    // then encodeURIComponent re-encodes everything (including "+") as %2B.
+    const email = decodeURIComponent(rawEmail).trim();
     res.redirect(`${APP_BASE_URL}/cf-login?email=${encodeURIComponent(email)}`);
   });
 
