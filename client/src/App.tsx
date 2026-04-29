@@ -30,6 +30,7 @@ import VideoToolsPage from "@/pages/video-tools";
 import EmailToolsPage from "@/pages/email-tools";
 import InboxAnalyzerPage from "@/pages/inbox-analyzer";
 import DmoTrackerPage from "@/pages/dmo-tracker";
+import CfLoginPage from "@/pages/cf-login";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -247,7 +248,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <AppLayout />
+          <Switch>
+            {/* Standalone page — no sidebar, no auth check */}
+            <Route path="/cf-login">{() => <CfLoginPage />}</Route>
+            <Route>{() => <AppLayout />}</Route>
+          </Switch>
           <Toaster />
         </AuthProvider>
       </TooltipProvider>

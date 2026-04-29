@@ -291,72 +291,72 @@ export async function registerRoutes(
   });
 
   // ── CF One-Click Login ─────────────────────────────────────────────────────
-  // Members click a button in the CF members area that passes their email via
-  // the CF merge field {{contact.email}}. Every login verifies enrollment live
-  // against the CF API — the local cfEnrolled flag is never used to skip the
-  // check, so a stale or forged email cannot grant access.
-  //
-  // Rate-limited: 10 attempts per IP per 10 minutes to prevent enumeration.
-  //
   // CF Button URL: https://toolkit.fearlessmarketinglab.com/api/auth/cf-login?email={{contact.email}}
+  //
+  // The GET endpoint (hit by the CF button) simply bounces members to the
+  // /cf-login frontend page, which shows a "verifying enrollment" spinner and
+  // then calls the POST endpoint below to do the actual work.
+  //
+  // Rate-limited on both GET and POST: 10 attempts per IP per 10 minutes.
   const cfLoginLimiter = rateLimit({
-    windowMs: 10 * 60 * 1000, // 10 minutes
+    windowMs: 10 * 60 * 1000,
     max: 10,
     standardHeaders: true,
     legacyHeaders: false,
     handler: (_req: Request, res: Response) => {
       const APP_BASE_URL = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
-      res.redirect(`${APP_BASE_URL}/login?error=rate_limited`);
+      // For GET redirect errors, land on the cf-login page in error state
+      if (_req.method === "POST") {
+        return res.status(429).json({ success: false, error: "rate_limited" });
+      }
+      res.redirect(`${APP_BASE_URL}/cf-login?error=rate_limited`);
     },
   });
 
-  app.get("/api/auth/cf-login", cfLoginLimiter, async (req: Request, res: Response) => {
-    const { checkCfEnrollmentByEmail } = await import("./clickfunnels");
+  // GET: redirect to the /cf-login intermediary page (keeps CF button URL unchanged)
+  app.get("/api/auth/cf-login", cfLoginLimiter, (req: Request, res: Response) => {
     const APP_BASE_URL = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
-    const email = (req.query.email as string || "").trim().toLowerCase();
+    const email = (req.query.email as string || "").trim();
 
     if (!email) {
-      return res.redirect(`${APP_BASE_URL}/login?error=missing_email`);
+      return res.redirect(`${APP_BASE_URL}/cf-login?error=missing_email`);
     }
 
-    const doLogin = (userId: string) => {
-      req.session.userId = userId;
-      req.session.save((err) => {
-        if (err) {
-          console.error("[CF Login] Session save error:", err);
-          return res.redirect(`${APP_BASE_URL}/login?error=session_error`);
-        }
-        console.log(`[CF Login] Auto-login success for ${email}`);
-        res.redirect(`${APP_BASE_URL}/`);
-      });
-    };
+    res.redirect(`${APP_BASE_URL}/cf-login?email=${encodeURIComponent(email)}`);
+  });
+
+  // POST: called by the /cf-login page; does CF API verification and sets session
+  app.post("/api/auth/cf-login-ajax", cfLoginLimiter, async (req: Request, res: Response) => {
+    const { checkCfEnrollmentByEmail } = await import("./clickfunnels");
+    const email = (req.body?.email as string || "").trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ success: false, error: "missing_email" });
+    }
 
     try {
-      // ── Always verify live enrollment with CF API ──────────────────────────
-      // We never fast-path on local cfEnrolled status. Every login must pass
-      // CF's live enrollment check so a forged or stale email cannot grant access.
+      // Always verify live enrollment with CF API — never trust local flag alone
       console.log(`[CF Login] Verifying CF enrollment for ${email}`);
       let cfInfo;
       try {
         cfInfo = await checkCfEnrollmentByEmail(email);
       } catch (apiErr) {
         console.error("[CF Login] CF API error:", apiErr);
-        return res.redirect(`${APP_BASE_URL}/login?error=cf_api_error`);
+        return res.status(502).json({ success: false, error: "cf_api_error" });
       }
 
       if (!cfInfo.enrolled) {
-        return res.redirect(`${APP_BASE_URL}/login?error=cf_not_enrolled`);
+        return res.status(403).json({ success: false, error: "cf_not_enrolled" });
       }
 
-      // ── CF confirmed: find or create the local account ────────────────────
+      // CF confirmed enrolled — find or create local account
       let user = await storage.getUserByEmail(email);
 
       if (user?.isDisabled) {
-        return res.redirect(`${APP_BASE_URL}/login?error=account_disabled`);
+        return res.status(403).json({ success: false, error: "account_disabled" });
       }
 
       if (!user) {
-        // Brand-new member — auto-create account with CF name
         console.log(`[CF Login] Auto-creating account for CF member: ${email}`);
         user = await storage.createUser({
           email,
@@ -369,7 +369,6 @@ export async function registerRoutes(
           cfContactId: cfInfo.contactId,
         });
       } else if (!user.cfEnrolled) {
-        // Existing account whose enrollment was revoked and is now re-enrolled
         console.log(`[CF Login] Re-granting CF access for ${email}`);
         await storage.updateUser(user.id, {
           cfEnrolled: true,
@@ -378,13 +377,21 @@ export async function registerRoutes(
           cfContactId: cfInfo.contactId || user.cfContactId,
         });
       }
-      // (If user.cfEnrolled is already true we still logged them in; local flag
-      //  stays in sync but the CF API was the authoritative gate above.)
 
-      return doLogin(user.id);
+      // Set session and return success
+      req.session.userId = user.id;
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      console.log(`[CF Login] Auto-login success for ${email}`);
+      return res.json({ success: true });
     } catch (err) {
       console.error("[CF Login] Error:", err);
-      res.redirect(`${APP_BASE_URL}/login?error=server_error`);
+      return res.status(500).json({ success: false, error: "server_error" });
     }
   });
 
