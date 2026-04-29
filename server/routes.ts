@@ -349,25 +349,18 @@ export async function registerRoutes(
     try {
       console.log(`[CF Login] Verifying CF enrollment for ${email}`);
 
-      // Fast path: existing user already verified as enrolled via webhook
+      // Look up any existing local account first (to get stored cfContactId for fast API lookup)
       let user = await storage.getUserByEmail(email);
-      if (user?.cfEnrolled && !user?.isDisabled) {
-        console.log(`[CF Login] Fast-path login for locally-enrolled user: ${email}`);
-        req.session.userId = user.id;
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => { if (err) reject(err); else resolve(); });
-        });
-        return res.json({ success: true });
-      }
 
       if (user?.isDisabled) {
         return res.status(403).json({ success: false, error: "account_disabled" });
       }
 
-      // No local enrollment record — verify with CF API
+      // Always verify live with CF API — pass known contactId for a single fast call,
+      // otherwise we paginate through enrollments to find and verify the contact.
       let cfInfo;
       try {
-        cfInfo = await checkCfEnrollmentByEmail(email);
+        cfInfo = await checkCfEnrollmentByEmail(email, user?.cfContactId ?? undefined);
       } catch (apiErr) {
         console.error("[CF Login] CF API error:", apiErr);
         return res.status(502).json({ success: false, error: "cf_api_error" });

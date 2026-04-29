@@ -166,7 +166,55 @@ export interface CfContactInfo {
   contactId?: string;
 }
 
-export async function checkCfEnrollmentByEmail(email: string): Promise<CfContactInfo> {
+// Paginate through course enrollments searching for a matching email address.
+// Returns the enrollment record and contact info when found, or null if not found.
+async function findEnrollmentByEmail(
+  baseUrl: string,
+  headers: Record<string, string>,
+  courseId: string,
+  email: string
+): Promise<{ enrollment: any; contact: any } | null> {
+  const normalizedEmail = email.toLowerCase();
+  let nextUrl: string | null =
+    `${baseUrl}/courses/${courseId}/enrollments?per=20`;
+  let page = 0;
+
+  while (nextUrl) {
+    page++;
+    console.log(`[CF API] Paginating enrollments page ${page}:`, nextUrl);
+    const r = await fetch(nextUrl, { headers });
+    if (!r.ok) {
+      const body = await r.text();
+      throw new Error(`CF API enrollments page failed: ${r.status} ${body.slice(0, 100)}`);
+    }
+
+    const enrollments: any[] = await r.json();
+    const match = enrollments.find(
+      (e: any) =>
+        e.contact?.email_address?.toLowerCase() === normalizedEmail
+    );
+    if (match) {
+      return { enrollment: match, contact: match.contact };
+    }
+
+    // Follow the Link: rel="next" header for the next page
+    const linkHeader = r.headers.get("link") || "";
+    const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch ? nextMatch[1] : null;
+  }
+
+  return null;
+}
+
+// Check active enrollment status from an enrollment record
+function isEnrollmentActive(enrollment: any): boolean {
+  return !enrollment.suspended && !enrollment.suspended_at;
+}
+
+export async function checkCfEnrollmentByEmail(
+  email: string,
+  knownContactId?: string
+): Promise<CfContactInfo> {
   if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN) {
     throw new Error("CF_API_TOKEN and CF_WORKSPACE_DOMAIN must be configured");
   }
@@ -176,137 +224,63 @@ export async function checkCfEnrollmentByEmail(email: string): Promise<CfContact
     Authorization: `Bearer ${CF_API_TOKEN}`,
     Accept: "application/json",
   };
-  const enc = encodeURIComponent(email);
 
-  // --- Strategy 1: Direct enrollment lookup by email on the course enrollments endpoint ---
-  // CF 2.0 /courses/{id}/enrollments is a confirmed-existing route (returns 401 without auth).
-  // Try filtering by email directly to skip needing a contact ID.
-  if (CF_COURSE_ID) {
-    const enrollmentEmailUrls = [
-      `${baseUrl}/courses/${CF_COURSE_ID}/enrollments?filter[contact][email_address]=${enc}`,
-      `${baseUrl}/courses/${CF_COURSE_ID}/enrollments?filter[email_address]=${enc}`,
-      `${baseUrl}/courses/${CF_COURSE_ID}/enrollments?filter[email]=${enc}`,
-    ];
-
-    for (const url of enrollmentEmailUrls) {
-      console.log("[CF API] Trying enrollment-by-email:", url);
-      const r = await fetch(url, { headers });
-      console.log("[CF API] Status:", r.status);
-
-      if (r.ok) {
-        const data = await r.json();
-        const enrollments: any[] =
-          data.course_enrollments ?? data.enrollments ?? data.data ?? [];
-        console.log(`[CF API] Enrollment-by-email got ${enrollments.length} results`);
-
-        if (enrollments.length > 0) {
-          const active = enrollments.some(
-            (e: any) => !e.suspended_at && !e.revoked_at && e.status !== "inactive"
-          );
-          const contact = enrollments[0]?.contact ?? enrollments[0]?.student ?? {};
-          const firstName: string | undefined = contact.first_name || undefined;
-          const lastName: string | undefined = contact.last_name || undefined;
-          const contactId: string | undefined = contact.id ? String(contact.id) : undefined;
-          console.log(`[CF API] Strategy 1 result — email: ${email}, enrolled: ${active}`);
-          return { enrolled: active, firstName, lastName, contactId };
-        }
-
-        // Empty list means not enrolled in this course
-        console.log(`[CF API] Strategy 1: no enrollment found for ${email}`);
-        return { enrolled: false };
-      }
-
-      if (r.status !== 404) {
-        // Non-404 failure (401, 500, etc.) — break out and let caller handle
-        const body = await r.text();
-        console.error("[CF API] Enrollment-by-email error:", r.status, body.slice(0, 200));
-        throw new Error(`CF API enrollment lookup failed: ${r.status}`);
-      }
-      // 404 = this filter format not supported, try next
-    }
-  }
-
-  // --- Strategy 2: Look up contact by email, then check enrollment ---
-  // The /contacts route does not exist at this workspace URL, so we try /users instead
-  // (CF 2.0 /users returns 401 without auth, meaning the route exists).
-  const contactLookupUrls = [
-    `${baseUrl}/users?filter[email_address]=${enc}`,
-    `${baseUrl}/users?filter[email]=${enc}`,
-    // Legacy fallback — included in case a future workspace exposes contacts here
-    `${baseUrl}/contacts?filter[email_address]=${enc}`,
-  ];
-
-  let contactId: string | undefined;
-  let firstName: string | undefined;
-  let lastName: string | undefined;
-  let foundContact = false;
-
-  for (const url of contactLookupUrls) {
-    console.log("[CF API] Trying contact lookup:", url);
-    const r = await fetch(url, { headers });
-    console.log("[CF API] Status:", r.status);
-
-    if (r.ok) {
-      const data = await r.json();
-      const items: any[] = data.users ?? data.contacts ?? data.data ?? [];
-      if (items.length > 0) {
-        const c = items[0];
-        contactId = String(c.id);
-        firstName = c.first_name || undefined;
-        lastName = c.last_name || undefined;
-        foundContact = true;
-        console.log(`[CF API] Found contact id=${contactId} via ${url}`);
-      } else {
-        console.log(`[CF API] No contact found for ${email} via ${url}`);
-        return { enrolled: false };
-      }
-      break;
-    }
-
-    if (r.status !== 404) {
-      const body = await r.text();
-      console.error("[CF API] Contact lookup error:", r.status, body.slice(0, 200));
-      throw new Error(`CF API contact lookup failed: ${r.status}`);
-    }
-  }
-
-  if (!foundContact || !contactId) {
-    console.error("[CF API] All contact lookup strategies failed for", email);
-    throw new Error("CF API contact lookup failed: no supported route found");
-  }
-
-  // If no course filter, any known contact is considered enrolled
-  if (!CF_COURSE_ID) {
-    return { enrolled: true, firstName, lastName, contactId };
-  }
-
-  // Step 2: Check enrollment by contact ID
-  const enrollRes = await fetch(
-    `${baseUrl}/courses/${CF_COURSE_ID}/enrollments?filter[contact_id]=${contactId}`,
-    { headers }
-  );
-
-  if (!enrollRes.ok) {
-    const body = await enrollRes.text();
-    console.error("[CF API] Enrollment lookup failed:", enrollRes.status, body.slice(0, 200));
-    throw new Error(`CF API enrollment lookup failed: ${enrollRes.status}`);
-  }
-
-  const enrollData = await enrollRes.json();
-  const enrollments: any[] =
-    enrollData.course_enrollments ?? enrollData.enrollments ?? enrollData.data ?? [];
-
-  const isEnrolled =
-    enrollments.length > 0 &&
-    enrollments.some(
-      (e: any) => !e.suspended_at && !e.revoked_at && e.status !== "inactive"
+  // --- Fast path: we already know the CF contact ID (stored from a previous webhook) ---
+  if (knownContactId && CF_COURSE_ID) {
+    console.log(`[CF API] Fast path — checking enrollment for contact ${knownContactId}`);
+    const r = await fetch(
+      `${baseUrl}/courses/${CF_COURSE_ID}/enrollments?filter[contact_id]=${knownContactId}`,
+      { headers }
     );
+    if (!r.ok) {
+      const body = await r.text();
+      throw new Error(`CF API enrollment check failed: ${r.status} ${body.slice(0, 100)}`);
+    }
+    const data: any[] = await r.json();
+    if (data.length === 0) {
+      console.log(`[CF API] No enrollment for contact ${knownContactId}`);
+      return { enrolled: false, contactId: knownContactId };
+    }
+    const enrollment = data[0];
+    const contact = enrollment.contact ?? {};
+    const active = isEnrollmentActive(enrollment);
+    console.log(`[CF API] Fast path result — contact ${knownContactId}, active: ${active}`);
+    return {
+      enrolled: active,
+      firstName: contact.first_name || undefined,
+      lastName: contact.last_name || undefined,
+      contactId: knownContactId,
+    };
+  }
+
+  // --- Slow path: no contact ID — paginate enrollments and match by email ---
+  if (!CF_COURSE_ID) {
+    // No course configured — can't verify enrollment
+    throw new Error("CF_COURSE_ID must be configured to verify enrollment");
+  }
+
+  console.log(`[CF API] Slow path — scanning enrollments for ${email}`);
+  const found = await findEnrollmentByEmail(baseUrl, headers, CF_COURSE_ID, email);
+
+  if (!found) {
+    console.log(`[CF API] No enrollment found for ${email} after full scan`);
+    return { enrolled: false };
+  }
+
+  const { enrollment, contact } = found;
+  const active = isEnrollmentActive(enrollment);
+  const contactId = contact?.id ? String(contact.id) : undefined;
 
   console.log(
-    `[CF API] Strategy 2 result — ${email} → contact ${contactId}, enrollments: ${enrollments.length}, active: ${isEnrolled}`
+    `[CF API] Slow path result — ${email} → contact ${contactId}, active: ${active}`
   );
 
-  return { enrolled: isEnrolled, firstName, lastName, contactId };
+  return {
+    enrolled: active,
+    firstName: contact?.first_name || undefined,
+    lastName: contact?.last_name || undefined,
+    contactId,
+  };
 }
 
 export { CF_WORKSPACE_DOMAIN, CF_COURSE_ID, CF_API_TOKEN };
