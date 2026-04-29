@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   LayoutDashboard,
   Wrench,
+  Mail,
   User,
   LogOut,
   Shield,
@@ -47,6 +48,12 @@ const navItems = [
     icon: Wrench,
     testId: "nav-video-tools",
     matchPaths: VIDEO_TOOL_PATHS,
+  },
+  {
+    title: "Email Tools",
+    url: "/email-tools",
+    icon: Mail,
+    testId: "nav-email-tools",
   },
 ];
 
