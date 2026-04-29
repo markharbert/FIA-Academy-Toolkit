@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,25 +8,66 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle, Info } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+
+const CF_ERROR_MESSAGES: Record<string, { type: "error" | "info"; message: string }> = {
+  cf_no_account: {
+    type: "info",
+    message: "No Academy Toolkit account found for this email. Create one below using your ClickFunnels email address.",
+  },
+  cf_not_enrolled: {
+    type: "error",
+    message: "Your membership doesn't include access to the Academy Toolkit. Please contact support if you believe this is an error.",
+  },
+  account_disabled: {
+    type: "error",
+    message: "Your account has been disabled. Please contact support.",
+  },
+  missing_email: {
+    type: "error",
+    message: "No email address was passed from ClickFunnels. Please try again or log in manually below.",
+  },
+  session_error: {
+    type: "error",
+    message: "A session error occurred. Please try again.",
+  },
+  server_error: {
+    type: "error",
+    message: "Something went wrong. Please log in manually below.",
+  },
+};
 
 export default function LoginPage() {
   const { login } = useAuth();
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const params = new URLSearchParams(window.location.search);
+  const errorParam = params.get("error");
+  const emailParam = params.get("email") || "";
+
+  useEffect(() => {
+    if (errorParam && CF_ERROR_MESSAGES[errorParam]) {
+      const { type, message } = CF_ERROR_MESSAGES[errorParam];
+      if (type === "error") setError(message);
+      else setNotice(message);
+    }
+  }, [errorParam]);
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "",
+      email: emailParam,
       password: "",
     },
   });
 
   const onSubmit = async (data: LoginInput) => {
     setError(null);
+    setNotice(null);
     setIsLoading(true);
     try {
       await login(data.email, data.password);
@@ -51,8 +92,15 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
-            <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" data-testid="text-login-error">
+            <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2" data-testid="text-login-error">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
               {error}
+            </div>
+          )}
+          {notice && (
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-300 flex items-start gap-2" data-testid="text-login-notice">
+              <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              {notice}
             </div>
           )}
 

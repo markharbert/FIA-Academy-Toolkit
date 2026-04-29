@@ -289,6 +289,52 @@ export async function registerRoutes(
     });
   });
 
+  // ── CF One-Click Login ─────────────────────────────────────────────────────
+  // Members click a button in the CF members area that passes their email via
+  // the CF merge field {{contact.email}}. We look up the user, verify they have
+  // CF enrollment, create a session, and redirect them into the dashboard.
+  //
+  // CF Button URL: https://toolkit.fearlessmarketinglab.com/api/auth/cf-login?email={{contact.email}}
+  app.get("/api/auth/cf-login", async (req: Request, res: Response) => {
+    const APP_BASE_URL = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+    const email = (req.query.email as string || "").trim().toLowerCase();
+
+    if (!email) {
+      return res.redirect(`${APP_BASE_URL}/login?error=missing_email`);
+    }
+
+    try {
+      const user = await storage.getUserByEmail(email);
+
+      if (!user) {
+        // No account yet — redirect to login with a helpful message
+        return res.redirect(`${APP_BASE_URL}/login?error=cf_no_account&email=${encodeURIComponent(email)}`);
+      }
+
+      if (user.isDisabled) {
+        return res.redirect(`${APP_BASE_URL}/login?error=account_disabled`);
+      }
+
+      if (!user.cfEnrolled) {
+        return res.redirect(`${APP_BASE_URL}/login?error=cf_not_enrolled`);
+      }
+
+      // All clear — create the session
+      req.session.userId = user.id;
+      req.session.save((err) => {
+        if (err) {
+          console.error("[CF Login] Session save error:", err);
+          return res.redirect(`${APP_BASE_URL}/login?error=session_error`);
+        }
+        console.log(`[CF Login] Auto-login for ${email}`);
+        res.redirect(`${APP_BASE_URL}/`);
+      });
+    } catch (err) {
+      console.error("[CF Login] Error:", err);
+      res.redirect(`${APP_BASE_URL}/login?error=server_error`);
+    }
+  });
+
   app.get("/api/auth/me", async (req: Request, res: Response) => {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Not authenticated" });
