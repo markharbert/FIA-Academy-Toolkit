@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -15,7 +14,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export default function CfLoginPage() {
-  const [, setLocation] = useLocation();
   const [stage, setStage] = useState<Stage>("verifying");
   const [errorKey, setErrorKey] = useState<string>("server_error");
   const minWaitDone = useRef(false);
@@ -33,8 +31,9 @@ export default function CfLoginPage() {
       if (minWaitDone.current) {
         if (result.success) {
           setStage("success");
-          // Short moment to let the success state render, then navigate
-          setTimeout(() => setLocation("/dashboard"), 400);
+          // Full page navigation so the browser picks up the session cookie fresh
+          // and bypasses any stale React Query auth cache.
+          setTimeout(() => { window.location.href = "/dashboard"; }, 400);
         } else {
           setErrorKey(result.error || "server_error");
           setStage("error");
@@ -48,7 +47,7 @@ export default function CfLoginPage() {
       if (apiFetchDone.current !== null) {
         if (apiFetchDone.current.success) {
           setStage("success");
-          setTimeout(() => setLocation("/dashboard"), 400);
+          setTimeout(() => { window.location.href = "/dashboard"; }, 400);
         } else {
           setErrorKey(apiFetchDone.current.error || "server_error");
           setStage("error");
@@ -73,7 +72,7 @@ export default function CfLoginPage() {
     }
 
     return () => clearTimeout(timer);
-  }, [setLocation]);
+  }, []);
 
   const errorMessage = ERROR_MESSAGES[errorKey] || ERROR_MESSAGES.server_error;
 
