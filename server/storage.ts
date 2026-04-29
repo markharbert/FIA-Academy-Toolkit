@@ -1,7 +1,7 @@
 import { 
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
-  dmoEntries,
+  dmoEntries, emailInboxAddresses, emailAnalyses,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -19,6 +19,7 @@ import {
   type UserApiKey, type InsertUserApiKey, type ApiKeyProvider,
   type SavedOffer, type InsertSavedOffer,
   type DmoEntry, type InsertDmoEntry,
+  type EmailAnalysis, type EmailInboxAddress,
 } from "@shared/schema";
 import crypto from "crypto";
 import { db, pool } from "./db";
@@ -284,6 +285,19 @@ export interface IStorage {
   getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }>;
   getDmoSummary(userId: string, period: string): Promise<{ summary: string; tips: string[]; moodScore: number | null; performanceScore: number | null; generatedAt: Date } | null>;
   upsertDmoSummary(userId: string, period: string, periodType: string, summary: string, tips: string[], moodScore: number | null, performanceScore: number | null): Promise<void>;
+
+  // Inbox Analyzer
+  getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
+  getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined>;
+  createEmailAnalysis(data: {
+    userId: string; fromAddress: string; fromName?: string; subject: string;
+    bodyText?: string; bodyHtml?: string; rawHeaders?: string;
+    spfResult?: string; dkimResult?: string;
+  }): Promise<EmailAnalysis>;
+  updateEmailAnalysis(id: string, data: Partial<EmailAnalysis>): Promise<void>;
+  getEmailAnalyses(userId: string, limit?: number): Promise<EmailAnalysis[]>;
+  getEmailAnalysis(id: string, userId: string): Promise<EmailAnalysis | undefined>;
+  deleteEmailAnalysis(id: string, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1704,8 +1718,57 @@ export class DatabaseStorage implements IStorage {
       [userId, period, periodType, summary, tips, moodScore, performanceScore]
     );
   }
-}
 
+  // ── Inbox Analyzer ───────────────────────────────────────────────────────
+
+  async getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress> {
+    const [existing] = await db.select().from(emailInboxAddresses).where(eq(emailInboxAddresses.userId, userId));
+    if (existing) return existing;
+    const { generateToken } = await import("./inboxAnalyzer");
+    const token = generateToken();
+    const [created] = await db.insert(emailInboxAddresses).values({ userId, token }).returning();
+    return created;
+  }
+
+  async getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined> {
+    const [row] = await db.select().from(emailInboxAddresses).where(eq(emailInboxAddresses.token, token));
+    return row || undefined;
+  }
+
+  async createEmailAnalysis(data: {
+    userId: string; fromAddress: string; fromName?: string; subject: string;
+    bodyText?: string; bodyHtml?: string; rawHeaders?: string;
+    spfResult?: string; dkimResult?: string;
+  }): Promise<EmailAnalysis> {
+    const [row] = await db.insert(emailAnalyses).values({
+      ...data,
+      status: "pending",
+    }).returning();
+    return row;
+  }
+
+  async updateEmailAnalysis(id: string, data: Partial<EmailAnalysis>): Promise<void> {
+    await db.update(emailAnalyses).set(data).where(eq(emailAnalyses.id, id));
+  }
+
+  async getEmailAnalyses(userId: string, limit = 50): Promise<EmailAnalysis[]> {
+    return db.select().from(emailAnalyses)
+      .where(eq(emailAnalyses.userId, userId))
+      .orderBy(desc(emailAnalyses.receivedAt))
+      .limit(limit);
+  }
+
+  async getEmailAnalysis(id: string, userId: string): Promise<EmailAnalysis | undefined> {
+    const [row] = await db.select().from(emailAnalyses)
+      .where(and(eq(emailAnalyses.id, id), eq(emailAnalyses.userId, userId)));
+    return row || undefined;
+  }
+
+  async deleteEmailAnalysis(id: string, userId: string): Promise<void> {
+    await db.delete(emailAnalyses)
+      .where(and(eq(emailAnalyses.id, id), eq(emailAnalyses.userId, userId)));
+  }
+}
 
 export const storage = new DatabaseStorage();
 

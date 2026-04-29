@@ -28,6 +28,7 @@ import {
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
 const VIDEO_TOOL_PATHS = ["/video-score", "/video-trends", "/video-trends/scripts", "/video-trends/explore", "/video-trends/saved", "/video-trends/settings"];
+const EMAIL_TOOL_PATHS = ["/email-tools/inbox-analyzer"];
 
 const navItems = [
   {
@@ -54,6 +55,7 @@ const navItems = [
     url: "/email-tools",
     icon: Mail,
     testId: "nav-email-tools",
+    matchPaths: EMAIL_TOOL_PATHS,
   },
 ];
 

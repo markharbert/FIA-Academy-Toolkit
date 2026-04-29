@@ -795,6 +795,54 @@ export const insertSavedOfferSchema = createInsertSchema(savedOffers).omit({
 export type InsertSavedOffer = z.infer<typeof insertSavedOfferSchema>;
 export type SavedOffer = typeof savedOffers.$inferSelect;
 
+// ─── Inbox Analyzer ──────────────────────────────────────────────────────────
+
+export type SpamFlag = { label: string; severity: "low" | "medium" | "high" };
+export type CopyFeedbackSection = { name: string; score: number; feedback: string };
+export type CopyFeedback = { sections: CopyFeedbackSection[]; topSuggestions: string[] };
+
+export const emailInboxAddresses = pgTable("email_inbox_addresses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  token: varchar("token", { length: 20 }).notNull().unique(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const emailAnalyses = pgTable("email_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  receivedAt: timestamp("received_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  fromAddress: text("from_address").notNull(),
+  fromName: text("from_name"),
+  subject: text("subject").notNull(),
+  bodyText: text("body_text"),
+  bodyHtml: text("body_html"),
+  rawHeaders: text("raw_headers"),
+  spfResult: varchar("spf_result", { length: 20 }),
+  dkimResult: varchar("dkim_result", { length: 20 }),
+  dmarcResult: varchar("dmarc_result", { length: 20 }),
+  spfRecordExists: boolean("spf_record_exists"),
+  dkimRecordExists: boolean("dkim_record_exists"),
+  dmarcRecordExists: boolean("dmarc_record_exists"),
+  spamScore: integer("spam_score"),
+  spamFlags: jsonb("spam_flags").$type<SpamFlag[]>(),
+  copyScore: integer("copy_score"),
+  copyFeedback: jsonb("copy_feedback").$type<CopyFeedback>(),
+  sendingDomain: text("sending_domain"),
+  sendingIp: text("sending_ip"),
+  overallScore: integer("overall_score"),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+});
+
+export const insertEmailAnalysisSchema = createInsertSchema(emailAnalyses).omit({
+  id: true,
+  receivedAt: true,
+});
+
+export type InsertEmailAnalysis = z.infer<typeof insertEmailAnalysisSchema>;
+export type EmailAnalysis = typeof emailAnalyses.$inferSelect;
+export type EmailInboxAddress = typeof emailInboxAddresses.$inferSelect;
+
 // ─── DMO Tracker ─────────────────────────────────────────────────────────────
 
 export const dmoEntries = pgTable("dmo_entries", {

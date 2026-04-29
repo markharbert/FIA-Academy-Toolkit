@@ -1,0 +1,581 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  Mail, Copy, Check, Trash2, ChevronDown, ChevronUp, Settings,
+  ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Loader2,
+  Inbox, Info, TrendingUp, CircleCheck, CircleX, CircleAlert,
+  ExternalLink,
+} from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { EmailAnalysis, SpamFlag, CopyFeedback } from "@shared/schema";
+
+const INBOX_DOMAIN = "email.fearlessmarketinglab.com";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function scoreColor(score: number | null | undefined) {
+  if (score == null) return "text-muted-foreground";
+  if (score >= 80) return "text-emerald-500";
+  if (score >= 60) return "text-yellow-500";
+  return "text-red-500";
+}
+
+function scoreBg(score: number | null | undefined) {
+  if (score == null) return "bg-muted";
+  if (score >= 80) return "bg-emerald-500";
+  if (score >= 60) return "bg-yellow-500";
+  return "bg-red-500";
+}
+
+function ScoreRing({ score, size = 64 }: { score: number | null | undefined; size?: number }) {
+  const r = size * 0.38;
+  const circ = 2 * Math.PI * r;
+  const pct = score != null ? Math.max(0, Math.min(100, score)) : 0;
+  const dash = (pct / 100) * circ;
+  const color = score == null ? "#888" : score >= 80 ? "#10b981" : score >= 60 ? "#eab308" : "#ef4444";
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={size * 0.09} className="text-muted/30" />
+      <circle
+        cx={size / 2} cy={size / 2} r={r} fill="none"
+        stroke={color} strokeWidth={size * 0.09}
+        strokeDasharray={`${dash} ${circ}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle"
+        fontSize={size * 0.26} fontWeight="700" fill={color}>
+        {score != null ? score : "—"}
+      </text>
+    </svg>
+  );
+}
+
+function AuthBadge({ result, label }: { result: string | null | undefined; label: string }) {
+  const r = (result || "unknown").toLowerCase();
+  const isPass = r === "pass";
+  const isFail = r === "fail" || r === "softfail";
+  return (
+    <div className="flex items-center gap-2">
+      {isPass ? (
+        <CircleCheck className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+      ) : isFail ? (
+        <CircleX className="h-4 w-4 text-red-500 flex-shrink-0" />
+      ) : (
+        <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+      )}
+      <span className="text-sm font-medium">{label}</span>
+      <Badge
+        variant="outline"
+        className={`text-[10px] px-1.5 py-0 uppercase font-bold ${
+          isPass ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+          : isFail ? "border-red-500/40 text-red-600 dark:text-red-400"
+          : "border-yellow-500/40 text-yellow-600 dark:text-yellow-400"
+        }`}
+      >
+        {r}
+      </Badge>
+    </div>
+  );
+}
+
+function DnsCheck({ exists, label }: { exists: boolean | null | undefined; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      {exists === true ? (
+        <CircleCheck className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+      ) : exists === false ? (
+        <CircleX className="h-4 w-4 text-red-500 flex-shrink-0" />
+      ) : (
+        <CircleAlert className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      )}
+      <span className="text-sm">{label}</span>
+      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+        exists === true ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+        : exists === false ? "border-red-500/40 text-red-600 dark:text-red-400"
+        : "text-muted-foreground"
+      }`}>
+        {exists === true ? "Found" : exists === false ? "Missing" : "Unknown"}
+      </Badge>
+    </div>
+  );
+}
+
+function SpamFlagChip({ flag }: { flag: SpamFlag }) {
+  const colors = {
+    high: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    low: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${colors[flag.severity]}`}>
+      {flag.severity === "high" ? <ShieldX className="h-3 w-3" /> : flag.severity === "medium" ? <ShieldAlert className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+      {flag.label}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "complete") return <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-xs">Analyzed</Badge>;
+  if (status === "processing") return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0 text-xs"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Analyzing</Badge>;
+  if (status === "failed") return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0 text-xs">Failed</Badge>;
+  return <Badge variant="outline" className="text-xs">Pending</Badge>;
+}
+
+// ── Email Detail Panel ────────────────────────────────────────────────────────
+
+function EmailDetail({ email }: { email: EmailAnalysis }) {
+  const cf = email.copyFeedback as CopyFeedback | null;
+  const flags = (email.spamFlags as SpamFlag[] | null) || [];
+
+  return (
+    <div className="space-y-5 pt-2">
+      {/* Score row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Overall", score: email.overallScore },
+          { label: "Authentication", score: email.spfResult === "pass" && email.dkimResult === "pass" && email.dmarcResult === "pass" ? 100 : email.spfResult === "pass" || email.dkimResult === "pass" ? 60 : 20 },
+          { label: "Spam Signals", score: email.spamScore },
+          { label: "Copy Quality", score: email.copyScore },
+        ].map((item) => (
+          <div key={item.label} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-muted/30 p-3">
+            <ScoreRing score={item.score} size={52} />
+            <span className="text-xs text-muted-foreground font-medium mt-0.5">{item.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Authentication */}
+      <div className="rounded-xl border border-border p-4 space-y-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-primary" />Authentication Results</h4>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <AuthBadge result={email.spfResult} label="SPF" />
+          <AuthBadge result={email.dkimResult} label="DKIM" />
+          <AuthBadge result={email.dmarcResult} label="DMARC" />
+        </div>
+        <Separator className="my-1" />
+        <h4 className="text-sm font-semibold text-muted-foreground">DNS Record Presence</h4>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <DnsCheck exists={email.spfRecordExists} label="SPF record" />
+          <DnsCheck exists={email.dkimRecordExists} label="DKIM record" />
+          <DnsCheck exists={email.dmarcRecordExists} label="DMARC record" />
+        </div>
+        {(email.sendingDomain || email.sendingIp) && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {email.sendingDomain && <span>Domain: <strong>{email.sendingDomain}</strong></span>}
+            {email.sendingIp && <span className="ml-3">IP: <strong>{email.sendingIp}</strong></span>}
+          </p>
+        )}
+      </div>
+
+      {/* Spam signals */}
+      <div className="rounded-xl border border-border p-4 space-y-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          Spam Signal Scan
+          <span className={`ml-auto text-sm font-bold ${scoreColor(email.spamScore)}`}>
+            {email.spamScore != null ? `${email.spamScore}/100` : "—"}
+          </span>
+        </h4>
+        {flags.length === 0 ? (
+          <p className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5"><CircleCheck className="h-4 w-4" />No spam signals detected</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {flags.map((f, i) => <SpamFlagChip key={i} flag={f} />)}
+          </div>
+        )}
+      </div>
+
+      {/* Copy score */}
+      {cf && cf.sections.length > 0 && (
+        <div className="rounded-xl border border-border p-4 space-y-3">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            AI Copy Analysis
+            <span className={`ml-auto text-sm font-bold ${scoreColor(email.copyScore)}`}>
+              {email.copyScore != null ? `${email.copyScore}/100` : "—"}
+            </span>
+          </h4>
+          <div className="space-y-3">
+            {cf.sections.map((sec) => (
+              <div key={sec.name} className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">{sec.name}</span>
+                  <span className={`text-xs font-bold ${scoreColor(sec.score * 10)}`}>{sec.score}/10</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-1.5">
+                  <div className={`h-1.5 rounded-full ${scoreBg(sec.score * 10)}`} style={{ width: `${sec.score * 10}%` }} />
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{sec.feedback}</p>
+              </div>
+            ))}
+          </div>
+          {cf.topSuggestions?.length > 0 && (
+            <>
+              <Separator />
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-foreground">Top Suggestions</p>
+                {cf.topSuggestions.map((s, i) => (
+                  <div key={i} className="flex gap-2 text-xs text-muted-foreground">
+                    <span className="text-primary font-bold flex-shrink-0">{i + 1}.</span>
+                    <span>{s}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {email.status === "processing" && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Analysis in progress…
+        </div>
+      )}
+      {email.status === "failed" && (
+        <p className="text-sm text-red-500">Analysis failed. Please try again later.</p>
+      )}
+    </div>
+  );
+}
+
+// ── Email Row ────────────────────────────────────────────────────────────────
+
+function EmailRow({ email, onDelete }: { email: EmailAnalysis; onDelete: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm" data-testid={`email-row-${email.id}`}>
+      <button
+        className="w-full text-left px-4 py-3.5 flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => setOpen((o) => !o)}
+        data-testid={`email-expand-${email.id}`}
+      >
+        {/* Score ring */}
+        <ScoreRing score={email.overallScore} size={44} />
+
+        {/* Subject + meta */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate">{email.subject}</p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">
+            {email.fromAddress}
+            {email.receivedAt && (
+              <span className="ml-2 opacity-60">· {new Date(email.receivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+            )}
+          </p>
+        </div>
+
+        {/* Status + toggle */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <StatusBadge status={email.status} />
+          {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4">
+          <Separator className="mb-4" />
+          <EmailDetail email={email} />
+          <div className="flex justify-end mt-4">
+            <Button
+              variant="ghost" size="sm"
+              className="text-muted-foreground hover:text-red-500 gap-1.5 text-xs"
+              onClick={() => onDelete(email.id)}
+              data-testid={`email-delete-${email.id}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />Delete
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── My Address Tab ────────────────────────────────────────────────────────────
+
+function MyAddressTab({ inboxEmail }: { inboxEmail: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    navigator.clipboard.writeText(inboxEmail);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      {/* Address hero */}
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Mail className="h-4 w-4 text-primary" />
+            Your Seed Address
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Add this address as a contact in your CRM or email platform. Every campaign you send will automatically be analyzed.</p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <code className="flex-1 bg-background border border-border rounded-lg px-4 py-3 text-sm font-mono text-foreground break-all select-all">
+              {inboxEmail}
+            </code>
+            <Button onClick={copy} variant="outline" className="gap-2 flex-shrink-0" data-testid="button-copy-address">
+              {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Setup steps */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Info className="h-4 w-4 text-primary" />
+            How to Set Up
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {[
+            { step: "1", title: "Copy your seed address above", desc: "This address is unique to your account — never share it publicly." },
+            { step: "2", title: "Add it as a contact in your CRM", desc: "In Keap, ActiveCampaign, Mailchimp, or any email platform — add the seed address as a contact and tag them if needed." },
+            { step: "3", title: "Send your campaign as normal", desc: "When you send your next email campaign, one copy automatically arrives here. No extra steps needed." },
+            { step: "4", title: "See your analysis", desc: "Within a few minutes your email will appear in the Emails tab with a full deliverability and copy report." },
+          ].map((item) => (
+            <div key={item.step} className="flex gap-3">
+              <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
+                {item.step}
+              </div>
+              <div>
+                <p className="text-sm font-semibold">{item.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* What we check */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            What Gets Analyzed
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {[
+              { icon: ShieldCheck, label: "Authentication", desc: "SPF, DKIM, and DMARC pass/fail results from your actual sending server" },
+              { icon: Info, label: "DNS Records", desc: "Verifies your SPF, DKIM selector, and DMARC policy records exist and are valid" },
+              { icon: AlertTriangle, label: "Spam Signal Scan", desc: "Checks for trigger words, formatting issues, missing unsubscribe links, and link density" },
+              { icon: TrendingUp, label: "AI Copy Scoring", desc: "AI evaluates your subject line, hook, body, and CTA against proven email marketing frameworks" },
+            ].map((item) => (
+              <div key={item.label} className="flex gap-3 p-3 rounded-lg bg-muted/40">
+                <item.icon className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold">{item.label}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Settings Tab ──────────────────────────────────────────────────────────────
+
+function SettingsTab() {
+  return (
+    <div className="space-y-4 max-w-2xl mx-auto">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings className="h-4 w-4 text-primary" />
+            Inbox Placement Monitoring
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Connect real email inboxes (Gmail, Outlook, Yahoo) to see if your emails land in the inbox or spam folder.</p>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border border-dashed border-border p-6 text-center space-y-2">
+            <Inbox className="h-8 w-8 text-muted-foreground/40 mx-auto" />
+            <p className="text-sm font-medium text-muted-foreground">Coming Soon</p>
+            <p className="text-xs text-muted-foreground/70 max-w-xs mx-auto">Add your seed email accounts here to monitor inbox vs. spam placement across Gmail, Outlook, and Yahoo.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ExternalLink className="h-4 w-4 text-primary" />
+            SendGrid Inbound Parse Setup
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Configure your domain to forward emails to this tool.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-1">
+            <p className="text-xs font-semibold text-foreground">Inbound Domain</p>
+            <code className="text-xs font-mono text-muted-foreground">{INBOX_DOMAIN}</code>
+          </div>
+          <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-1">
+            <p className="text-xs font-semibold text-foreground">MX Record</p>
+            <code className="text-xs font-mono text-muted-foreground">MX 10 mx.sendgrid.net</code>
+          </div>
+          <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-1">
+            <p className="text-xs font-semibold text-foreground">Webhook URL</p>
+            <code className="text-xs font-mono text-muted-foreground break-all">/api/inbox-analyzer/inbound</code>
+          </div>
+          <p className="text-xs text-muted-foreground">Set up these DNS and SendGrid Inbound Parse settings to start receiving emails for analysis.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function InboxAnalyzerPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: addressData, isLoading: addressLoading } = useQuery<{ email: string; token: string }>({
+    queryKey: ["/api/inbox-analyzer/address"],
+  });
+
+  const { data: emails = [], isLoading: emailsLoading, refetch } = useQuery<EmailAnalysis[]>({
+    queryKey: ["/api/inbox-analyzer/emails"],
+    refetchInterval: (query) => {
+      const data = query.state.data as EmailAnalysis[] | undefined;
+      const hasPending = data?.some((e) => e.status === "processing" || e.status === "pending");
+      return hasPending ? 4000 : false;
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/inbox-analyzer/emails/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
+      toast({ title: "Email deleted" });
+    },
+  });
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Hero */}
+      <div className="bg-sidebar text-sidebar-foreground px-4 sm:px-6 py-8 sm:py-10">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
+              <Inbox className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Inbox Analyzer</h1>
+              <p className="text-white/50 text-xs sm:text-sm mt-0.5">
+                Forward any campaign to your seed address — get instant deliverability and copy analysis.
+              </p>
+            </div>
+          </div>
+          {addressData && (
+            <div className="mt-4 inline-flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2">
+              <Mail className="h-3.5 w-3.5 text-white/60 flex-shrink-0" />
+              <code className="text-xs sm:text-sm font-mono text-white/90 break-all">{addressData.email}</code>
+            </div>
+          )}
+          {addressLoading && <div className="mt-4 h-8 w-64 bg-white/10 rounded-lg animate-pulse" />}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        <Tabs defaultValue="emails">
+          <div className="flex justify-center mb-6">
+            <TabsList className="h-10 bg-muted gap-1 p-1">
+              <TabsTrigger value="emails" className="gap-1.5 text-sm px-4" data-testid="tab-emails">
+                <Inbox className="h-3.5 w-3.5" />
+                Emails
+                {emails.length > 0 && (
+                  <span className="ml-1 bg-primary/20 text-primary text-xs rounded-full px-1.5 py-0.5 font-semibold leading-none">
+                    {emails.length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="address" className="gap-1.5 text-sm px-4" data-testid="tab-my-address">
+                <Mail className="h-3.5 w-3.5" />
+                My Address
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="gap-1.5 text-sm px-4" data-testid="tab-settings">
+                <Settings className="h-3.5 w-3.5" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Emails tab */}
+          <TabsContent value="emails" className="m-0">
+            {emailsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 rounded-xl bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : emails.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
+                  <Inbox className="h-8 w-8 text-muted-foreground/40" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-foreground">No emails yet</p>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+                    Add your seed address to your CRM and send a campaign to see it analyzed here.
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => document.querySelector<HTMLElement>('[data-testid="tab-my-address"]')?.click()} data-testid="button-go-to-address">
+                  Get My Address
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {emails.map((email) => (
+                  <EmailRow
+                    key={email.id}
+                    email={email}
+                    onDelete={(id) => deleteMutation.mutate(id)}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* My Address tab */}
+          <TabsContent value="address" className="m-0">
+            {addressData ? (
+              <MyAddressTab inboxEmail={addressData.email} />
+            ) : addressLoading ? (
+              <div className="space-y-4">
+                {[1, 2].map((i) => <div key={i} className="h-32 rounded-xl bg-muted animate-pulse" />)}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-10">Failed to load address. Please refresh.</p>
+            )}
+          </TabsContent>
+
+          {/* Settings tab */}
+          <TabsContent value="settings" className="m-0">
+            <SettingsTab />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}

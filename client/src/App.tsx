@@ -28,6 +28,7 @@ import TopicPulseSavedPage from "@/pages/topic-pulse-saved";
 import TopicPulseSettingsPage from "@/pages/topic-pulse-settings";
 import VideoToolsPage from "@/pages/video-tools";
 import EmailToolsPage from "@/pages/email-tools";
+import InboxAnalyzerPage from "@/pages/inbox-analyzer";
 import DmoTrackerPage from "@/pages/dmo-tracker";
 import NotFound from "@/pages/not-found";
 
@@ -154,6 +155,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/email-tools">
         {() => <ProtectedRoute component={EmailToolsPage} />}
+      </Route>
+      <Route path="/email-tools/inbox-analyzer">
+        {() => <ProtectedRoute component={InboxAnalyzerPage} />}
       </Route>
       <Route path="/dmo-tracker">
         {() => <ProtectedRoute component={DmoTrackerPage} />}

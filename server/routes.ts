@@ -4178,5 +4178,157 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ── Inbox Analyzer ──────────────────────────────────────────────────────────
+
+  // Get or create the user's unique seed inbox address
+  app.get("/api/inbox-analyzer/address", async (req: Request, res: Response) => {
+    if (!req.session?.userId) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const addr = await storage.getOrCreateInboxAddress(req.session.userId);
+      const { getInboxAddress } = await import("./inboxAnalyzer");
+      res.json({ token: addr.token, email: getInboxAddress(addr.token), createdAt: addr.createdAt });
+    } catch (err) {
+      console.error("[inbox-analyzer] address error", err);
+      res.status(500).json({ message: "Failed to get address" });
+    }
+  });
+
+  // List analyzed emails for the current user
+  app.get("/api/inbox-analyzer/emails", async (req: Request, res: Response) => {
+    if (!req.session?.userId) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const emails = await storage.getEmailAnalyses(req.session.userId);
+      res.json(emails);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch emails" });
+    }
+  });
+
+  // Get a single analyzed email
+  app.get("/api/inbox-analyzer/emails/:id", async (req: Request, res: Response) => {
+    if (!req.session?.userId) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const email = await storage.getEmailAnalysis(req.params.id, req.session.userId);
+      if (!email) return res.status(404).json({ message: "Not found" });
+      res.json(email);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch email" });
+    }
+  });
+
+  // Delete an analyzed email
+  app.delete("/api/inbox-analyzer/emails/:id", async (req: Request, res: Response) => {
+    if (!req.session?.userId) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      await storage.deleteEmailAnalysis(req.params.id, req.session.userId);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete email" });
+    }
+  });
+
+  // SendGrid Inbound Parse webhook — receives incoming emails
+  app.post("/api/inbox-analyzer/inbound", upload.any(), async (req: Request, res: Response) => {
+    // Acknowledge immediately so SendGrid doesn't retry
+    res.status(200).send("OK");
+
+    try {
+      const {
+        parseSpfResult, parseDkimResult, parseDmarcResult,
+        extractSendingDomain, extractSendingIp,
+        checkSpfRecord, checkDkimRecord, checkDmarcRecord,
+        analyzeSpamSignals, scoreCopyWithAI, computeOverallScore,
+      } = await import("./inboxAnalyzer");
+
+      const toField: string = (req.body?.to || req.body?.envelope && JSON.parse(req.body.envelope)?.to?.[0]) || "";
+      const tokenMatch = toField.match(/^([a-z0-9]+)@/i);
+      if (!tokenMatch) { console.warn("[inbox-analyzer] Could not extract token from:", toField); return; }
+      const token = tokenMatch[1].toLowerCase();
+
+      const inboxAddr = await storage.getInboxAddressByToken(token);
+      if (!inboxAddr) { console.warn("[inbox-analyzer] Unknown token:", token); return; }
+
+      const fromRaw: string = req.body?.from || "";
+      const fromNameMatch = fromRaw.match(/^"?([^"<]+)"?\s*</);
+      const fromName = fromNameMatch ? fromNameMatch[1].trim() : undefined;
+      const fromAddrMatch = fromRaw.match(/<([^>]+)>/) || fromRaw.match(/(\S+@\S+)/);
+      const fromAddress = fromAddrMatch ? fromAddrMatch[1] : fromRaw;
+
+      const subject: string = req.body?.subject || "(No subject)";
+      const bodyText: string = req.body?.text || "";
+      const bodyHtml: string = req.body?.html || "";
+      const rawHeaders: string = req.body?.headers || "";
+      const spfRaw: string = req.body?.spf || "";
+      const dkimRaw: string = req.body?.dkim || "";
+
+      // Create the analysis record
+      const analysis = await storage.createEmailAnalysis({
+        userId: inboxAddr.userId,
+        fromAddress,
+        fromName,
+        subject,
+        bodyText,
+        bodyHtml,
+        rawHeaders,
+        spfResult: parseSpfResult(spfRaw),
+        dkimResult: parseDkimResult(dkimRaw),
+      });
+
+      // Run full analysis pipeline async
+      (async () => {
+        try {
+          await storage.updateEmailAnalysis(analysis.id, { status: "processing" });
+
+          const dmarcResult = parseDmarcResult(rawHeaders);
+          const sendingDomain = extractSendingDomain(fromAddress);
+          const sendingIp = extractSendingIp(rawHeaders);
+
+          const [spfRecordExists, dkimRecordExists, dmarcRecordExists] = await Promise.all([
+            checkSpfRecord(sendingDomain),
+            checkDkimRecord(sendingDomain),
+            checkDmarcRecord(sendingDomain),
+          ]);
+
+          const { score: spamScore, flags: spamFlags } = analyzeSpamSignals(subject, bodyText, bodyHtml);
+          const copyFeedback = await scoreCopyWithAI(subject, bodyText);
+          const copyScore = copyFeedback.sections.length > 0
+            ? Math.round(copyFeedback.sections.reduce((s, sec) => s + sec.score, 0) / copyFeedback.sections.length * 10)
+            : 50;
+
+          const overallScore = computeOverallScore({
+            spfResult: parseSpfResult(spfRaw),
+            dkimResult: parseDkimResult(dkimRaw),
+            dmarcResult,
+            spfRecordExists,
+            dkimRecordExists,
+            dmarcRecordExists,
+            spamScore,
+            copyScore,
+          });
+
+          await storage.updateEmailAnalysis(analysis.id, {
+            dmarcResult,
+            sendingDomain,
+            sendingIp,
+            spfRecordExists,
+            dkimRecordExists,
+            dmarcRecordExists,
+            spamScore,
+            spamFlags,
+            copyScore,
+            copyFeedback,
+            overallScore,
+            status: "complete",
+          });
+        } catch (err) {
+          console.error("[inbox-analyzer] pipeline error:", err);
+          await storage.updateEmailAnalysis(analysis.id, { status: "failed" });
+        }
+      })();
+    } catch (err) {
+      console.error("[inbox-analyzer] inbound webhook error:", err);
+    }
+  });
+
   return httpServer;
 }
