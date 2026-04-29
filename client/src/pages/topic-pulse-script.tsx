@@ -1480,14 +1480,13 @@ export default function TopicPulseScriptPage() {
     .bottom-pad{height:80vh}
     /* hint bar */
     #hint{position:fixed;bottom:0;left:0;right:0;text-align:center;padding:4px;font-family:monospace;font-size:10px;color:#333;background:#0a0a0a}
-    /* countdown overlay */
+    /* countdown badge — lives inside the controls bar, far right */
     #countdown{
-      display:none;position:fixed;top:64px;left:0;right:0;
-      text-align:center;z-index:200;pointer-events:none;
+      display:none;margin-left:auto;
+      font-family:Arial,sans-serif;font-size:12px;
+      color:rgba(255,255,255,.55);white-space:nowrap;
     }
-    #cd-label{font-family:Arial,sans-serif;font-size:13px;color:rgba(255,255,255,.45);margin-bottom:2px}
-    #cd-num{font-family:Arial,sans-serif;font-size:88px;font-weight:700;color:#fff;line-height:1;
-      text-shadow:0 0 40px rgba(255,255,255,.3)}
+    #cd-num{font-weight:700;color:#fff;font-size:14px}
   </style>
 </head>
 <body>
@@ -1498,14 +1497,11 @@ export default function TopicPulseScriptPage() {
     <button class="speed-btn"        data-speed="140" onclick="setSpeed(this)">Fast</button>
     <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
     <button id="playBtn"  onclick="togglePlay()">▶ Play</button>
+    <span id="countdown">Scrolling begins in <span id="cd-num">3</span></span>
   </div>
   <div id="scroller">
     ${sectionsHtml}
     <div class="bottom-pad"></div>
-  </div>
-  <div id="countdown">
-    <div id="cd-label">Starting in</div>
-    <div id="cd-num">3</div>
   </div>
   <div id="hint">Space = play/pause &nbsp;·&nbsp; S/M/F = speed</div>
   <script>
