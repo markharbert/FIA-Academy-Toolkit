@@ -1118,194 +1118,7 @@ function hasScriptChanged(original: ScriptJson | null, edited: ScriptJson | null
   return false;
 }
 
-// ─── Teleprompter Overlay ────────────────────────────────────────────────────
-const SPEEDS = [
-  { label: "Slow",   value: 18 },
-  { label: "Med",    value: 38 },
-  { label: "Fast",   value: 65 },
-];
-
-function TeleprompterOverlay({ scriptJson, title, onClose }: {
-  scriptJson: ScriptJson;
-  title: string;
-  onClose: () => void;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const rafRef    = useRef<number>();
-  const lastTimeRef = useRef<number>();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [speedIdx, setSpeedIdx]   = useState(0);
-  const speed = SPEEDS[speedIdx].value;
-
-  // smooth scroll loop
-  useEffect(() => {
-    if (!isPlaying) {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      lastTimeRef.current = undefined;
-      return;
-    }
-    const tick = (now: number) => {
-      const el = scrollRef.current;
-      if (!el) return;
-      if (lastTimeRef.current !== undefined) {
-        el.scrollTop += (speed * (now - lastTimeRef.current)) / 1000;
-        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4) {
-          setIsPlaying(false);
-          return;
-        }
-      }
-      lastTimeRef.current = now;
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [isPlaying, speed]);
-
-  // keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === " ") { e.preventDefault(); setIsPlaying(p => !p); }
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowUp")   setSpeedIdx(i => Math.max(0, i - 1));
-      if (e.key === "ArrowDown") setSpeedIdx(i => Math.min(SPEEDS.length - 1, i + 1));
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  const resetScroll = () => {
-    setIsPlaying(false);
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
-  };
-
-  const fs = scriptJson.fullScript;
-  if (!fs) return null;
-
-  const SECTION_COLORS: Record<string, string> = {
-    "HOOK": "#f97316",
-    "SET THE HOOK": "#a855f7",
-    "FIRST CALL TO ACTION": "#eab308",
-    "CONTENT": "#22c55e",
-    "FINAL CALL TO ACTION": "#ec4899",
-  };
-
-  type TeleSection = { label: string; color: string; text: string };
-  const sections: TeleSection[] = [
-    { label: "HOOK",                 color: SECTION_COLORS["HOOK"],                 text: fs.hook.text ?? "" },
-    { label: "SET THE HOOK",         color: SECTION_COLORS["SET THE HOOK"],         text: fs.setHook.text ?? "" },
-    { label: "FIRST CALL TO ACTION", color: SECTION_COLORS["FIRST CALL TO ACTION"], text: fs.firstCTA.text ?? "" },
-    { label: "CONTENT",              color: SECTION_COLORS["CONTENT"],              text: fs.content.text ?? "" },
-    ...(fs.content.sections ?? []).map(s => ({
-      label: s.title.toUpperCase(),
-      color: SECTION_COLORS["CONTENT"],
-      text: s.content ?? "",
-    })),
-    { label: "FINAL CALL TO ACTION", color: SECTION_COLORS["FINAL CALL TO ACTION"], text: fs.finalCTA.text ?? "" },
-  ].filter(s => s.text.trim());
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-black"
-      data-testid="teleprompter-overlay"
-    >
-      {/* ── Controls bar ── */}
-      <div className="flex items-center justify-between px-6 py-3 bg-gray-950 border-b border-white/10 shrink-0">
-        <span className="text-white/40 text-sm truncate max-w-xs font-mono hidden sm:block">
-          {title}
-        </span>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Speed pills */}
-          {SPEEDS.map((s, i) => (
-            <button
-              key={s.value}
-              onClick={() => setSpeedIdx(i)}
-              className={`text-xs px-3 py-1.5 rounded-full font-mono transition-colors ${
-                speedIdx === i
-                  ? "bg-white text-black font-bold"
-                  : "bg-white/10 text-white/60 hover:bg-white/20"
-              }`}
-              data-testid={`teleprompter-speed-${s.label.toLowerCase()}`}
-            >
-              {s.label}
-            </button>
-          ))}
-          {/* Slower / Faster nudge */}
-          <button
-            onClick={() => setSpeedIdx(i => Math.max(0, i - 1))}
-            className="text-white/50 hover:text-white p-1.5 rounded transition"
-            title="Slower (↑)"
-          >
-            <ChevronUp className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setSpeedIdx(i => Math.min(SPEEDS.length - 1, i + 1))}
-            className="text-white/50 hover:text-white p-1.5 rounded transition"
-            title="Faster (↓)"
-          >
-            <ChevronDown className="h-4 w-4" />
-          </button>
-          {/* Reset */}
-          <button
-            onClick={resetScroll}
-            className="text-white/50 hover:text-white p-1.5 rounded transition"
-            title="Reset to top"
-            data-testid="teleprompter-reset"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </button>
-          {/* Play / Pause */}
-          <button
-            onClick={() => setIsPlaying(p => !p)}
-            className="flex items-center gap-2 bg-white text-black px-5 py-2 rounded-full text-sm font-bold hover:bg-white/90 transition ml-1"
-            data-testid="teleprompter-play-pause"
-          >
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            {isPlaying ? "Pause" : "Play"}
-          </button>
-          {/* Close */}
-          <button
-            onClick={onClose}
-            className="text-white/40 hover:text-white p-1.5 rounded transition ml-1"
-            title="Close (Esc)"
-            data-testid="teleprompter-close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* ── Scrolling script ── */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto"
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        <div className="max-w-3xl mx-auto px-8 py-20 space-y-20">
-          {sections.map((sec, i) => (
-            <div key={i}>
-              <div
-                className="text-xs font-bold tracking-[0.2em] font-mono mb-6 uppercase"
-                style={{ color: sec.color }}
-              >
-                {sec.label}
-              </div>
-              <p className="text-white text-3xl leading-[1.85] font-serif whitespace-pre-wrap">
-                {sec.text}
-              </p>
-            </div>
-          ))}
-          {/* extra bottom space so last line scrolls comfortably past center */}
-          <div className="h-[60vh]" />
-        </div>
-      </div>
-
-      {/* ── Keyboard hint ── */}
-      <div className="shrink-0 py-2 text-center text-white/20 text-xs font-mono">
-        Space = play/pause &nbsp;·&nbsp; ↑↓ = speed &nbsp;·&nbsp; Esc = close
-      </div>
-    </div>
-  );
-}
+// Teleprompter is opened as a standalone window (see handleOpenTeleprompter in the page component)
 
 export default function TopicPulseScriptPage() {
   const { scriptId } = useParams<{ scriptId: string }>();
@@ -1314,7 +1127,6 @@ export default function TopicPulseScriptPage() {
   const [editedScriptJson, setEditedScriptJson] = useState<ScriptJson | null>(null);
   const [showResearchPanel, setShowResearchPanel] = useState(false);
   const [savedNotice, setSavedNotice] = useState<"manual" | "auto" | null>(null);
-  const [showTeleprompter, setShowTeleprompter] = useState(false);
 
   const { data: script, isLoading } = useQuery<Script & { topic?: Topic }>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
@@ -1593,6 +1405,151 @@ export default function TopicPulseScriptPage() {
     if (pw) { pw.document.write(html); pw.document.close(); }
   };
 
+  const handleOpenTeleprompter = () => {
+    if (!editedScriptJson?.fullScript) return;
+    const fs = editedScriptJson.fullScript;
+    const esc = (t: string) => t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+    type TeleSection = { label: string; color: string; text: string };
+    const sections: TeleSection[] = [
+      { label: "HOOK",                 color: "#f97316", text: fs.hook.text ?? "" },
+      { label: "SET THE HOOK",         color: "#a855f7", text: fs.setHook.text ?? "" },
+      { label: "FIRST CALL TO ACTION", color: "#eab308", text: fs.firstCTA.text ?? "" },
+      { label: "CONTENT",              color: "#22c55e", text: fs.content.text ?? "" },
+      ...(fs.content.sections ?? []).map(s => ({
+        label: s.title.toUpperCase(),
+        color: "#22c55e",
+        text: s.content ?? "",
+      })),
+      { label: "FINAL CALL TO ACTION", color: "#ec4899", text: fs.finalCTA.text ?? "" },
+    ].filter(s => s.text.trim());
+
+    const sectionsHtml = sections.map(s => `
+      <div class="section">
+        <div class="section-label" style="color:${s.color}">${s.label}</div>
+        <p class="section-text">${esc(s.text)}</p>
+      </div>`).join("");
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Teleprompter — ${esc(script?.title ?? "Script")}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#0a0a0a;color:#fff;font-family:Georgia,"Times New Roman",serif;overflow:hidden}
+    /* ── Controls ── */
+    #controls{
+      position:fixed;top:0;left:0;right:0;z-index:100;
+      display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      padding:10px 18px;background:#111;border-bottom:1px solid #333;
+    }
+    #controls .title{font-family:Arial,sans-serif;font-size:12px;color:#555;margin-right:6px;white-space:nowrap;overflow:hidden;max-width:200px}
+    .speed-btn{
+      font-family:Arial,sans-serif;font-size:12px;padding:5px 14px;
+      border-radius:999px;border:none;cursor:pointer;
+      background:rgba(255,255,255,.12);color:rgba(255,255,255,.6);transition:.15s;
+    }
+    .speed-btn.active{background:#fff;color:#000;font-weight:700}
+    .speed-btn:hover:not(.active){background:rgba(255,255,255,.22);color:#fff}
+    #playBtn{
+      font-family:Arial,sans-serif;font-size:13px;font-weight:700;
+      padding:7px 22px;border-radius:999px;border:none;cursor:pointer;
+      background:#fff;color:#000;transition:.15s;margin-left:4px;
+    }
+    #playBtn:hover{background:#e5e5e5}
+    #resetBtn{
+      font-family:Arial,sans-serif;font-size:12px;padding:5px 12px;
+      border-radius:999px;border:none;cursor:pointer;
+      background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);transition:.15s;
+    }
+    #resetBtn:hover{background:rgba(255,255,255,.18);color:#fff}
+    /* ── Script content ── */
+    #scroller{
+      position:fixed;top:54px;bottom:0;left:0;right:0;
+      overflow-y:scroll;padding:40px 60px 0;
+      scrollbar-width:none;
+    }
+    #scroller::-webkit-scrollbar{display:none}
+    .section{margin-bottom:72px}
+    .section-label{
+      font-family:Arial,sans-serif;font-size:11px;font-weight:700;
+      letter-spacing:.18em;text-transform:uppercase;margin-bottom:20px;
+    }
+    .section-text{font-size:32px;line-height:1.85;white-space:pre-wrap;color:#fff}
+    .bottom-pad{height:80vh}
+    /* hint bar */
+    #hint{position:fixed;bottom:0;left:0;right:0;text-align:center;padding:4px;font-family:monospace;font-size:10px;color:#333;background:#0a0a0a}
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <span class="title">${esc(script?.title ?? "Script")}</span>
+    <button class="speed-btn active" data-speed="18" onclick="setSpeed(this)">Slow</button>
+    <button class="speed-btn"        data-speed="38" onclick="setSpeed(this)">Med</button>
+    <button class="speed-btn"        data-speed="65" onclick="setSpeed(this)">Fast</button>
+    <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
+    <button id="playBtn"  onclick="togglePlay()">▶ Play</button>
+  </div>
+  <div id="scroller">
+    ${sectionsHtml}
+    <div class="bottom-pad"></div>
+  </div>
+  <div id="hint">Space = play/pause &nbsp;·&nbsp; S/M/F = speed</div>
+  <script>
+    var playing = false;
+    var speed = 18;
+    var lastTime = null;
+    var raf = null;
+    var scroller = document.getElementById('scroller');
+    var playBtn  = document.getElementById('playBtn');
+
+    function setSpeed(btn) {
+      speed = parseFloat(btn.dataset.speed);
+      document.querySelectorAll('.speed-btn').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+    }
+    function resetScroll() {
+      playing = false;
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+      lastTime = null;
+      scroller.scrollTop = 0;
+      playBtn.textContent = '▶ Play';
+    }
+    function togglePlay() {
+      playing = !playing;
+      playBtn.textContent = playing ? '⏸ Pause' : '▶ Play';
+      if (playing) { lastTime = null; raf = requestAnimationFrame(tick); }
+      else { if (raf) { cancelAnimationFrame(raf); raf = null; } }
+    }
+    function tick(now) {
+      if (!playing) return;
+      if (lastTime !== null) {
+        scroller.scrollTop += speed * (now - lastTime) / 1000;
+        if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4) {
+          playing = false;
+          playBtn.textContent = '▶ Play';
+          return;
+        }
+      }
+      lastTime = now;
+      raf = requestAnimationFrame(tick);
+    }
+    document.addEventListener('keydown', function(e) {
+      if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+      if (e.key === 's' || e.key === 'S') setSpeed(document.querySelector('[data-speed="18"]'));
+      if (e.key === 'm' || e.key === 'M') setSpeed(document.querySelector('[data-speed="38"]'));
+      if (e.key === 'f' || e.key === 'F') setSpeed(document.querySelector('[data-speed="65"]'));
+      if (e.key === 'r' || e.key === 'R') resetScroll();
+    });
+  <\/script>
+</body>
+</html>`;
+
+    const tw = window.open("", "_blank", "width=960,height=520,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no");
+    if (tw) { tw.document.write(html); tw.document.close(); }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-full flex items-center justify-center">
@@ -1747,14 +1704,6 @@ export default function TopicPulseScriptPage() {
 
   return (
     <div className="min-h-full flex flex-col">
-      {/* ── Teleprompter overlay (portal-style, full-screen) ── */}
-      {showTeleprompter && editedScriptJson && (
-        <TeleprompterOverlay
-          scriptJson={editedScriptJson}
-          title={script.title}
-          onClose={() => setShowTeleprompter(false)}
-        />
-      )}
       {/* ── Hero header ── */}
       <div className="bg-sidebar text-sidebar-foreground px-6 py-6 shrink-0">
         <div className="max-w-5xl mx-auto">
@@ -1780,7 +1729,7 @@ export default function TopicPulseScriptPage() {
               {editedScriptJson?.fullScript && (
                 <Button
                   size="sm"
-                  onClick={() => setShowTeleprompter(true)}
+                  onClick={handleOpenTeleprompter}
                   className="bg-white/10 hover:bg-white/20 text-white border-0"
                   data-testid="button-teleprompter"
                 >
