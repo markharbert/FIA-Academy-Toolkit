@@ -393,6 +393,22 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
           </SectionPanel>
         )}
 
+        {/* CAN-SPAM Compliance */}
+        <SectionPanel title="CAN-SPAM Compliance" icon={AlertTriangle}>
+          <div className="space-y-2">
+            <CheckRow
+              pass={!flags.some(f => f.label.toLowerCase().includes("unsubscribe"))}
+              label="Unsubscribe link present"
+              detail={flags.some(f => f.label.toLowerCase().includes("unsubscribe")) ? "Required by CAN-SPAM" : "Detected in email"}
+            />
+            <CheckRow
+              pass={!!cq?.hasPhysicalAddress}
+              label="Physical address in footer"
+              detail={!cq?.hasPhysicalAddress ? "Required by CAN-SPAM" : "Detected in email"}
+            />
+          </div>
+        </SectionPanel>
+
         {/* Subject Line */}
         {sa && (
           <SectionPanel title="Subject Line Analysis" icon={Type}>
@@ -435,22 +451,6 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
             </div>
           </SectionPanel>
         )}
-
-        {/* CAN-SPAM Compliance */}
-        <SectionPanel title="CAN-SPAM Compliance" icon={AlertTriangle}>
-          <div className="space-y-2">
-            <CheckRow
-              pass={!flags.some(f => f.label.toLowerCase().includes("unsubscribe"))}
-              label="Unsubscribe link present"
-              detail={flags.some(f => f.label.toLowerCase().includes("unsubscribe")) ? "Required by CAN-SPAM" : "Detected in email"}
-            />
-            <CheckRow
-              pass={!!cq?.hasPhysicalAddress}
-              label="Physical address in footer"
-              detail={!cq?.hasPhysicalAddress ? "Required by CAN-SPAM" : "Detected in email"}
-            />
-          </div>
-        </SectionPanel>
 
         {/* Technical Health */}
         {th && (
