@@ -38,9 +38,10 @@ export function stripTrackingPixels(html: string): string {
 export function parseSpfResult(spfField: string | undefined): string {
   if (!spfField) return "unknown";
   const lower = spfField.toLowerCase();
+  // Check softfail before fail since "softfail" contains "fail"
+  if (lower.includes("softfail")) return "softfail";
   if (lower.includes("pass")) return "pass";
   if (lower.includes("fail")) return "fail";
-  if (lower.includes("softfail")) return "softfail";
   if (lower.includes("neutral")) return "neutral";
   if (lower.includes("none")) return "none";
   return "unknown";
@@ -60,11 +61,56 @@ export function parseDkimResult(dkimField: string | undefined): string {
   return "unknown";
 }
 
-export function parseDmarcResult(headersRaw: string | undefined): string {
-  if (!headersRaw) return "unknown";
-  const match = headersRaw.match(/dmarc=(\w+)/i);
-  if (!match) return "unknown";
-  return match[1].toLowerCase();
+export function parseDmarcResult(
+  headersRaw: string | undefined,
+  fromAddress?: string,
+  dkimResult?: string,
+  spfResult?: string,
+): string {
+  // First: try to find an explicit dmarc= result in Authentication-Results headers
+  if (headersRaw) {
+    const match = headersRaw.match(/dmarc=(\w+)/i);
+    if (match) return match[1].toLowerCase();
+  }
+
+  // Second: derive from DKIM identifier alignment (DMARC aligned pass)
+  // DMARC passes if DKIM passes AND the DKIM signing domain aligns with the From domain
+  if (dkimResult === "pass" && fromAddress && headersRaw) {
+    const fromDomain = fromAddress.match(/@([\w.-]+)/)?.[1]?.toLowerCase() || "";
+    // Find the DKIM-Signature d= tag (can span multiple lines due to header folding)
+    const dkimSigMatch = headersRaw.match(/^DKIM-Signature:[^\n]*(?:\n[ \t][^\n]*)*/im);
+    if (dkimSigMatch) {
+      const dkimBlock = dkimSigMatch[0].replace(/\r?\n[ \t]/g, " ");
+      const dDomain = dkimBlock.match(/\bd=([\w.-]+)/i)?.[1]?.toLowerCase() || "";
+      if (dDomain && fromDomain) {
+        // Allow exact match or organizational domain match (e.g. mail.example.com vs example.com)
+        const aligned =
+          dDomain === fromDomain ||
+          fromDomain.endsWith("." + dDomain) ||
+          dDomain.endsWith("." + fromDomain);
+        if (aligned) return "pass";
+      }
+    }
+  }
+
+  // Third: derive from SPF alignment (envelope-from domain aligns with From domain)
+  if (spfResult === "pass" && fromAddress && headersRaw) {
+    const fromDomain = fromAddress.match(/@([\w.-]+)/)?.[1]?.toLowerCase() || "";
+    // Look for Received-SPF or envelope-from clues in headers
+    const envMatch =
+      headersRaw.match(/Received-SPF:[^\n]*envelope-from=\S*@([\w.-]+)/i) ||
+      headersRaw.match(/smtp\.(?:mailfrom|envfrom)=([\w.-]+)/i);
+    if (envMatch) {
+      const envDomain = envMatch[1].toLowerCase();
+      const aligned =
+        envDomain === fromDomain ||
+        fromDomain.endsWith("." + envDomain) ||
+        envDomain.endsWith("." + fromDomain);
+      if (aligned) return "pass";
+    }
+  }
+
+  return "unknown";
 }
 
 export function extractSendingDomain(fromAddress: string): string {

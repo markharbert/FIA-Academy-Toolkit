@@ -4416,13 +4416,13 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           const fromAddress = analysis.fromAddress;
           const fromRaw = analysis.fromName ? `${analysis.fromName} <${fromAddress}>` : fromAddress;
           const replyTo = analysis.replyTo || extractReplyTo(rawHeaders);
-          const spfRaw = analysis.spfResult || "";
-          const dkimRaw = analysis.dkimResult || "";
+          const spfResult = analysis.spfResult || "unknown";
+          const dkimResult = analysis.dkimResult || "unknown";
           const subject = analysis.subject;
           const bodyText = analysis.bodyText || "";
           const bodyHtml = analysis.bodyHtml || "";
 
-          const dmarcResult = parseDmarcResult(rawHeaders);
+          const dmarcResult = parseDmarcResult(rawHeaders, fromAddress, dkimResult, spfResult);
           const sendingDomain = extractSendingDomain(fromAddress);
           const sendingIp = extractSendingIp(rawHeaders);
 
@@ -4525,9 +4525,13 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const bodyText: string = req.body?.text || "";
       const bodyHtml: string = stripTrackingPixels(req.body?.html || "");
       const rawHeaders: string = req.body?.headers || "";
-      const spfRaw: string = req.body?.spf || "";
+      // SendGrid sends the SPF result as "SPF" (uppercase) in the webhook body
+      const spfRaw: string = req.body?.SPF || req.body?.spf || "";
       const dkimRaw: string = req.body?.dkim || "";
       const replyTo: string = extractReplyTo(rawHeaders);
+
+      const spfResult = parseSpfResult(spfRaw);
+      const dkimResult = parseDkimResult(dkimRaw);
 
       // Create the analysis record
       const analysis = await storage.createEmailAnalysis({
@@ -4539,8 +4543,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         bodyText,
         bodyHtml,
         rawHeaders,
-        spfResult: parseSpfResult(spfRaw),
-        dkimResult: parseDkimResult(dkimRaw),
+        spfResult,
+        dkimResult,
       });
 
       // Run full analysis pipeline async
@@ -4548,7 +4552,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         try {
           await storage.updateEmailAnalysis(analysis.id, { status: "processing" });
 
-          const dmarcResult = parseDmarcResult(rawHeaders);
+          const dmarcResult = parseDmarcResult(rawHeaders, fromAddress, dkimResult, spfResult);
           const sendingDomain = extractSendingDomain(fromAddress);
           const sendingIp = extractSendingIp(rawHeaders);
 
