@@ -312,7 +312,13 @@ export function analyzeSpamLanguage(
 ): { score: number; flags: SpamFlag[] } {
   const flags: SpamFlag[] = [];
 
-  const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
+  const htmlAsText = (bodyHtml || "")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
   const bodyLower = ((bodyText || "").trim() || htmlAsText);
   const subjectLower = (subject || "").toLowerCase();
   const combined = subjectLower + " " + bodyLower;
