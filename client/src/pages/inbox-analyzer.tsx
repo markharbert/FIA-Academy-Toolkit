@@ -319,7 +319,7 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
                 if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) p += 3;
                 return Math.round((p / 15) * 100);
               })() : null },
-              { label: "Spam", score: email.spamScore },
+              { label: "CAN-SPAM", score: email.spamScore },
               { label: "Technical", score: th ? (() => {
                 let p = 0;
                 if (th.hasPlainTextVersion) p += 3;
@@ -436,17 +436,20 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
           </SectionPanel>
         )}
 
-        {/* Spam signals */}
-        <SectionPanel title="Spam Signal Scan" icon={AlertTriangle} score={email.spamScore}>
-          {flags.length === 0 ? (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-              <CircleCheck className="h-4 w-4" />No spam signals detected
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {flags.map((f, i) => <SpamFlagChip key={i} flag={f} />)}
-            </div>
-          )}
+        {/* CAN-SPAM Compliance */}
+        <SectionPanel title="CAN-SPAM Compliance" icon={AlertTriangle}>
+          <div className="space-y-2">
+            <CheckRow
+              pass={!flags.some(f => f.label.toLowerCase().includes("unsubscribe"))}
+              label="Unsubscribe link present"
+              detail={flags.some(f => f.label.toLowerCase().includes("unsubscribe")) ? "Required by CAN-SPAM" : "Detected in email"}
+            />
+            <CheckRow
+              pass={!!cq?.hasPhysicalAddress}
+              label="Physical address in footer"
+              detail={!cq?.hasPhysicalAddress ? "Required by CAN-SPAM" : "Detected in email"}
+            />
+          </div>
         </SectionPanel>
 
         {/* Technical Health */}
@@ -748,7 +751,7 @@ function MyAddressTab({ inboxEmail }: { inboxEmail: string }) {
             {[
               { icon: ShieldCheck, label: "Authentication", desc: "SPF, DKIM, and DMARC pass/fail results from your actual sending server" },
               { icon: ShieldAlert, label: "Sender Trust", desc: "IP blacklist checks across Spamhaus, Barracuda & SpamCop; display name and Reply-To alignment" },
-              { icon: AlertTriangle, label: "Spam Signal Scan", desc: "Trigger words, formatting issues, missing unsubscribe links, link density and more" },
+              { icon: AlertTriangle, label: "CAN-SPAM Compliance", desc: "Checks for required unsubscribe link and physical mailing address in the footer" },
               { icon: Type, label: "Subject Line", desc: "Character count, emoji, numbers, question marks, personalization tokens, and ideal length scoring" },
               { icon: Zap, label: "Technical Health", desc: "HTML/text version, preheader, email size, missing ALT text, tracking pixels, external domains" },
               { icon: BookOpen, label: "Content Quality", desc: "Word count, CAN-SPAM physical address, P.S. section, personalization detection" },

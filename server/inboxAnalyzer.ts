@@ -247,11 +247,17 @@ export function analyzeSpamSignals(
     flags.push({ label: `Subject line is too long (${subject.length} chars, ideal <50)`, severity: "low" });
   }
 
+  // Check HTML body too — many emails are HTML-only with no plain text version
+  const htmlTextLower = (bodyHtml || "").toLowerCase();
   const hasUnsub =
     bodyLower.includes("unsubscribe") ||
     bodyLower.includes("opt out") ||
     bodyLower.includes("opt-out") ||
-    bodyLower.includes("manage preferences");
+    bodyLower.includes("manage preferences") ||
+    htmlTextLower.includes("unsubscribe") ||
+    htmlTextLower.includes("opt out") ||
+    htmlTextLower.includes("opt-out") ||
+    htmlTextLower.includes("manage preferences");
   if (!hasUnsub) {
     flags.push({ label: "No unsubscribe link detected (CAN-SPAM requirement)", severity: "high" });
   }
@@ -382,10 +388,14 @@ export async function analyzeSenderTrust(
 export function analyzeContentQuality(bodyText: string, bodyHtml: string): ContentQuality {
   const wordCount = (bodyText || "").trim().split(/\s+/).filter(Boolean).length;
 
+  // Strip HTML tags to get plain text from HTML body for address/content checks
+  const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const textToSearch = bodyText || htmlAsText;
+
   const hasPhysicalAddress =
-    /\d+\s+[\w\s]{2,30}(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|place|pl|suite|ste)\b/i.test(bodyText) ||
-    /p\.?o\.?\s*box\s+\d+/i.test(bodyText) ||
-    /\b[A-Z]{2}\s+\d{5}(-\d{4})?\b/.test(bodyText);
+    /\d+\s+[\w\s]{2,30}(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|place|pl|suite|ste)\b/i.test(textToSearch) ||
+    /p\.?o\.?\s*box\s+\d+/i.test(textToSearch) ||
+    /\b[A-Z]{2}\s+\d{5}(-\d{4})?\b/.test(textToSearch);
 
   const hasPs = /\b(p\.s\.|p\.?s\.?\s+[A-Z])/i.test(bodyText);
 
