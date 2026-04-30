@@ -4,24 +4,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Mail, Copy, Check, Trash2, ChevronDown, ChevronUp, Settings,
   ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Loader2,
   Inbox, Info, TrendingUp, CircleCheck, CircleX, CircleAlert,
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
   User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
+  Plus, ToggleLeft, ToggleRight, AtSign,
 } from "lucide-react";
+import { SiGmail } from "react-icons/si";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import type {
   EmailAnalysis, SpamFlag, CopyFeedback,
-  SubjectAnalysis, TechnicalHealth, SenderTrust, ContentQuality,
+  SubjectAnalysis, TechnicalHealth, SenderTrust, ContentQuality, SeedInbox,
 } from "@shared/schema";
 
 const INBOX_DOMAIN = "email.fearlessmarketinglab.com";
@@ -680,65 +688,180 @@ function EmailRow({ email, onDelete, onReanalyze }: { email: EmailAnalysis; onDe
 
 // ── My Address Tab ────────────────────────────────────────────────────────────
 
-function MyAddressTab({ inboxEmail }: { inboxEmail: string }) {
+function CopyField({ value, testId }: { value: string; testId?: string }) {
   const [copied, setCopied] = useState(false);
-
   const copy = () => {
-    navigator.clipboard.writeText(inboxEmail);
+    navigator.clipboard.writeText(value);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  return (
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+      <code className="flex-1 bg-background border border-border rounded-lg px-4 py-3 text-sm font-mono text-foreground break-all select-all">
+        {value}
+      </code>
+      <Button onClick={copy} variant="outline" size="sm" className="gap-2 flex-shrink-0" data-testid={testId || "button-copy"}>
+        {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+        {copied ? "Copied!" : "Copy"}
+      </Button>
+    </div>
+  );
+}
+
+function ProviderIcon({ provider }: { provider: string }) {
+  if (provider === "gmail") return <SiGmail className="h-4 w-4 text-red-500 flex-shrink-0" />;
+  if (provider === "outlook") return <Mail className="h-4 w-4 text-blue-500 flex-shrink-0" />;
+  if (provider === "yahoo") return <Mail className="h-4 w-4 text-purple-500 flex-shrink-0" />;
+  return <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
+}
+
+function StepNumber({ n }: { n: number }) {
+  return (
+    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold flex-shrink-0">
+      {n}
+    </div>
+  );
+}
+
+function MyAddressTab({
+  inboxEmail,
+  sendingFromAddress: initialSendingFrom,
+  seedInboxes,
+  onSave,
+}: {
+  inboxEmail: string;
+  sendingFromAddress: string;
+  seedInboxes: SeedInbox[];
+  onSave: (addr: string) => void;
+}) {
+  const [fromAddr, setFromAddr] = useState(initialSendingFrom || "");
+  const [saved, setSaved] = useState(false);
+  const activeSeedInboxes = seedInboxes.filter(s => s.isActive);
+
+  const handleSave = () => {
+    onSave(fromAddr);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const stepCount = activeSeedInboxes.length > 0 ? 5 : 4;
+  let step = 0;
+  const nextStep = () => { step += 1; return step; };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Mail className="h-4 w-4 text-primary" />
-            Your Seed Address
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">Add this address as a contact in your CRM or email platform. Every campaign you send will automatically be analyzed.</p>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <code className="flex-1 bg-background border border-border rounded-lg px-4 py-3 text-sm font-mono text-foreground break-all select-all">
-              {inboxEmail}
-            </code>
-            <Button onClick={copy} variant="outline" className="gap-2 flex-shrink-0" data-testid="button-copy-address">
-              {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-              {copied ? "Copied!" : "Copy"}
+    <div className="space-y-4 max-w-2xl mx-auto">
+
+      {/* Step 1: Add scoring address */}
+      <Card className="border-primary/20">
+        <CardContent className="pt-5 pb-4">
+          <div className="flex gap-3 mb-3">
+            <StepNumber n={nextStep()} />
+            <div>
+              <p className="text-sm font-bold text-foreground">Add your scoring address to your CRM</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                This unique address receives a copy of every campaign you send — we analyze it automatically. Never share it publicly.
+              </p>
+            </div>
+          </div>
+          <CopyField value={inboxEmail} testId="button-copy-address" />
+        </CardContent>
+      </Card>
+
+      {/* Step 2 (optional): Add placement addresses */}
+      {activeSeedInboxes.length > 0 && (
+        <Card className="border-primary/20">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex gap-3 mb-3">
+              <StepNumber n={nextStep()} />
+              <div>
+                <p className="text-sm font-bold text-foreground">Add these placement addresses to your CRM</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  These are real inboxes we monitor. Adding them tells us exactly where your emails land — Primary, Promotions, Spam, or Junk.
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {activeSeedInboxes.map((inbox) => (
+                <div key={inbox.id}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <ProviderIcon provider={inbox.provider} />
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{inbox.label}</span>
+                  </div>
+                  <CopyField value={inbox.email} testId={`button-copy-seed-${inbox.id}`} />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 3: Enter sending From address */}
+      <Card className="border-primary/20">
+        <CardContent className="pt-5 pb-4">
+          <div className="flex gap-3 mb-3">
+            <StepNumber n={nextStep()} />
+            <div>
+              <p className="text-sm font-bold text-foreground">Enter your sending From address</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                The email address your subscribers see when you send — found in your CRM's From settings. We use this to match your emails in our placement inboxes.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9 font-mono text-sm"
+                placeholder="you@yourdomain.com"
+                value={fromAddr}
+                onChange={e => setFromAddr(e.target.value)}
+                data-testid="input-sending-from"
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={!fromAddr.trim() || fromAddr.trim() === initialSendingFrom}
+              className="gap-1.5 flex-shrink-0"
+              data-testid="button-save-sending-from"
+            >
+              {saved ? <><Check className="h-3.5 w-3.5" />Saved</> : "Save"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
+      {/* Step 4: Send your campaign */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Info className="h-4 w-4 text-primary" />
-            How to Set Up
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {[
-            { step: "1", title: "Copy your seed address above", desc: "This address is unique to your account — never share it publicly." },
-            { step: "2", title: "Add it as a contact in your CRM", desc: "In Keap, ActiveCampaign, Mailchimp, or any email platform — add the seed address as a contact and tag them if needed." },
-            { step: "3", title: "Send your campaign as normal", desc: "When you send your next email campaign, one copy automatically arrives here. No extra steps needed." },
-            { step: "4", title: "See your analysis", desc: "Within a few minutes your email will appear in the Emails tab with a full deliverability and copy report." },
-          ].map((item) => (
-            <div key={item.step} className="flex gap-3">
-              <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
-                {item.step}
-              </div>
-              <div>
-                <p className="text-sm font-semibold">{item.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
-              </div>
+        <CardContent className="pt-5 pb-4">
+          <div className="flex gap-3">
+            <StepNumber n={nextStep()} />
+            <div>
+              <p className="text-sm font-bold text-foreground">Send your campaign as normal</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Send to your list. The addresses above will each receive a copy automatically — no extra steps. Your copy analysis arrives in minutes; placement results are checked shortly after.
+              </p>
             </div>
-          ))}
+          </div>
         </CardContent>
       </Card>
 
+      {/* Step 5: View results */}
+      <Card>
+        <CardContent className="pt-5 pb-4">
+          <div className="flex gap-3 items-start">
+            <StepNumber n={nextStep()} />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-foreground">View your results in the Emails tab</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Your full report — authentication, deliverability, CAN-SPAM, copy score, and inbox placement — all in one place.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* What gets analyzed */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
@@ -772,28 +895,159 @@ function MyAddressTab({ inboxEmail }: { inboxEmail: string }) {
   );
 }
 
-// ── Settings Tab ──────────────────────────────────────────────────────────────
+// ── Settings Tab (admin only) ─────────────────────────────────────────────────
 
 function SettingsTab() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: seedInboxes = [], isLoading: seedLoading } = useQuery<SeedInbox[]>({
+    queryKey: ["/api/inbox-analyzer/seed-inboxes"],
+  });
+
+  const [newProvider, setNewProvider] = useState("gmail");
+  const [newLabel, setNewLabel] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+
+  const addMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/inbox-analyzer/seed-inboxes", { provider: newProvider, label: newLabel, email: newEmail }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
+      setNewLabel("");
+      setNewEmail("");
+      toast({ title: "Seed inbox added" });
+    },
+    onError: () => toast({ title: "Failed to add inbox", variant: "destructive" }),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiRequest("PATCH", `/api/inbox-analyzer/seed-inboxes/${id}/toggle`, { isActive }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/inbox-analyzer/seed-inboxes/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
+      toast({ title: "Seed inbox removed" });
+    },
+  });
+
   return (
-    <div className="space-y-4 max-w-2xl mx-auto">
+    <div className="space-y-6 max-w-2xl mx-auto">
+
+      {/* Seed Inbox Management */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <Settings className="h-4 w-4 text-primary" />
-            Inbox Placement Monitoring
+            <Inbox className="h-4 w-4 text-primary" />
+            Placement Seed Inboxes
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Connect real email inboxes (Gmail, Outlook, Yahoo) to see if your emails land in the inbox or spam folder.</p>
+          <p className="text-xs text-muted-foreground">
+            Real Gmail, Outlook, and Yahoo accounts you control. Members add these to their CRM — we check where their emails land.
+          </p>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border border-dashed border-border p-6 text-center space-y-2">
-            <Inbox className="h-8 w-8 text-muted-foreground/40 mx-auto" />
-            <p className="text-sm font-medium text-muted-foreground">Coming Soon</p>
-            <p className="text-xs text-muted-foreground/70 max-w-xs mx-auto">Add your seed email accounts here to monitor inbox vs. spam placement across Gmail, Outlook, and Yahoo.</p>
+        <CardContent className="space-y-4">
+
+          {/* Existing inboxes list */}
+          {seedLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map(i => <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />)}
+            </div>
+          ) : seedInboxes.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border p-5 text-center space-y-1">
+              <Inbox className="h-6 w-6 text-muted-foreground/40 mx-auto" />
+              <p className="text-sm text-muted-foreground">No seed inboxes added yet</p>
+              <p className="text-xs text-muted-foreground/70">Add a Gmail, Outlook, or Yahoo account below</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {seedInboxes.map((inbox) => (
+                <div key={inbox.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
+                  <ProviderIcon provider={inbox.provider} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{inbox.label}</p>
+                    <p className="text-xs font-mono text-muted-foreground truncate">{inbox.email}</p>
+                  </div>
+                  <Switch
+                    checked={inbox.isActive}
+                    onCheckedChange={(checked) => toggleMutation.mutate({ id: inbox.id, isActive: checked })}
+                    data-testid={`toggle-seed-${inbox.id}`}
+                  />
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500 flex-shrink-0" data-testid={`button-delete-seed-${inbox.id}`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Remove seed inbox?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will remove <strong>{inbox.email}</strong> from the placement list. Members who have already added it to their CRM will stop contributing placement data.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteMutation.mutate(inbox.id)} className="bg-red-600 hover:bg-red-700">
+                          Remove
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Add new inbox form */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-foreground">Add a Seed Inbox</p>
+            <div className="grid grid-cols-3 gap-2">
+              <Select value={newProvider} onValueChange={setNewProvider}>
+                <SelectTrigger className="text-sm" data-testid="select-seed-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gmail">Gmail</SelectItem>
+                  <SelectItem value="outlook">Outlook</SelectItem>
+                  <SelectItem value="yahoo">Yahoo</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                className="text-sm"
+                placeholder="Label (e.g. Gmail — Clean)"
+                value={newLabel}
+                onChange={e => setNewLabel(e.target.value)}
+                data-testid="input-seed-label"
+              />
+              <Input
+                className="text-sm font-mono"
+                placeholder="email@gmail.com"
+                value={newEmail}
+                onChange={e => setNewEmail(e.target.value)}
+                data-testid="input-seed-email"
+              />
+            </div>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              disabled={!newLabel.trim() || !newEmail.trim() || addMutation.isPending}
+              onClick={() => addMutation.mutate()}
+              data-testid="button-add-seed-inbox"
+            >
+              {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Add Inbox
+            </Button>
           </div>
         </CardContent>
       </Card>
 
+      {/* SendGrid Setup */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
@@ -826,9 +1080,15 @@ function SettingsTab() {
 export default function InboxAnalyzerPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.isAdmin ?? false;
 
-  const { data: addressData, isLoading: addressLoading } = useQuery<{ email: string; token: string }>({
+  const { data: addressData, isLoading: addressLoading } = useQuery<{ email: string; token: string; sendingFromAddress: string }>({
     queryKey: ["/api/inbox-analyzer/address"],
+  });
+
+  const { data: seedInboxes = [] } = useQuery<SeedInbox[]>({
+    queryKey: ["/api/inbox-analyzer/seed-inboxes"],
   });
 
   const { data: emails = [], isLoading: emailsLoading } = useQuery<EmailAnalysis[]>({
@@ -838,6 +1098,16 @@ export default function InboxAnalyzerPage() {
       const hasPending = data?.some((e) => e.status === "processing" || e.status === "pending");
       return hasPending ? 4000 : false;
     },
+  });
+
+  const saveSendingFromMutation = useMutation({
+    mutationFn: (sendingFromAddress: string) =>
+      apiRequest("PATCH", "/api/inbox-analyzer/address/sending-from", { sendingFromAddress }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/address"] });
+      toast({ title: "Sending address saved" });
+    },
+    onError: () => toast({ title: "Failed to save address", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -903,10 +1173,12 @@ export default function InboxAnalyzerPage() {
                 <Mail className="h-3.5 w-3.5" />
                 My Address
               </TabsTrigger>
-              <TabsTrigger value="settings" className="gap-1.5 text-sm px-4" data-testid="tab-settings">
-                <Settings className="h-3.5 w-3.5" />
-                Settings
-              </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="settings" className="gap-1.5 text-sm px-4" data-testid="tab-settings">
+                  <Settings className="h-3.5 w-3.5" />
+                  Settings
+                </TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -948,7 +1220,12 @@ export default function InboxAnalyzerPage() {
           {/* My Address tab */}
           <TabsContent value="address" className="m-0">
             {addressData ? (
-              <MyAddressTab inboxEmail={addressData.email} />
+              <MyAddressTab
+                inboxEmail={addressData.email}
+                sendingFromAddress={addressData.sendingFromAddress || ""}
+                seedInboxes={seedInboxes}
+                onSave={(addr) => saveSendingFromMutation.mutate(addr)}
+              />
             ) : addressLoading ? (
               <div className="space-y-4">
                 {[1, 2].map((i) => <div key={i} className="h-32 rounded-xl bg-muted animate-pulse" />)}
@@ -958,10 +1235,12 @@ export default function InboxAnalyzerPage() {
             )}
           </TabsContent>
 
-          {/* Settings tab */}
-          <TabsContent value="settings" className="m-0">
-            <SettingsTab />
-          </TabsContent>
+          {/* Settings tab (admin only) */}
+          {isAdmin && (
+            <TabsContent value="settings" className="m-0">
+              <SettingsTab />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>

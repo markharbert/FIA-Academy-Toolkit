@@ -4350,10 +4350,65 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const addr = await storage.getOrCreateInboxAddress(req.session.userId);
       const { getInboxAddress } = await import("./inboxAnalyzer");
-      res.json({ token: addr.token, email: getInboxAddress(addr.token), createdAt: addr.createdAt });
+      res.json({ token: addr.token, email: getInboxAddress(addr.token), createdAt: addr.createdAt, sendingFromAddress: addr.sendingFromAddress || "" });
     } catch (err) {
       console.error("[inbox-analyzer] address error", err);
       res.status(500).json({ message: "Failed to get address" });
+    }
+  });
+
+  app.patch("/api/inbox-analyzer/address/sending-from", requireAuth, async (req: Request, res: Response) => {
+    const { sendingFromAddress } = req.body;
+    if (typeof sendingFromAddress !== "string") return res.status(400).json({ message: "sendingFromAddress required" });
+    try {
+      await storage.getOrCreateInboxAddress(req.session!.userId!);
+      await storage.updateInboxSendingFrom(req.session!.userId!, sendingFromAddress.trim());
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[inbox-analyzer] sending-from error", err);
+      res.status(500).json({ message: "Failed to update sending address" });
+    }
+  });
+
+  app.get("/api/inbox-analyzer/seed-inboxes", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session!.userId!);
+      const activeOnly = !user?.isAdmin;
+      const inboxes = await storage.getSeedInboxes(activeOnly);
+      res.json(inboxes);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch seed inboxes" });
+    }
+  });
+
+  app.post("/api/inbox-analyzer/seed-inboxes", requireAdmin, async (req: Request, res: Response) => {
+    const { provider, label, email } = req.body;
+    if (!provider || !label || !email) return res.status(400).json({ message: "provider, label, and email are required" });
+    try {
+      const inbox = await storage.addSeedInbox({ provider, label, email, isActive: true });
+      res.json(inbox);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to add seed inbox" });
+    }
+  });
+
+  app.patch("/api/inbox-analyzer/seed-inboxes/:id/toggle", requireAdmin, async (req: Request, res: Response) => {
+    const { isActive } = req.body;
+    if (typeof isActive !== "boolean") return res.status(400).json({ message: "isActive boolean required" });
+    try {
+      await storage.toggleSeedInbox(req.params.id, isActive);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to toggle seed inbox" });
+    }
+  });
+
+  app.delete("/api/inbox-analyzer/seed-inboxes/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteSeedInbox(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete seed inbox" });
     }
   });
 

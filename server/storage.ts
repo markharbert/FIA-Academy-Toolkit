@@ -1,7 +1,7 @@
 import { 
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
-  dmoEntries, emailInboxAddresses, emailAnalyses,
+  dmoEntries, emailInboxAddresses, emailAnalyses, seedInboxes,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -19,7 +19,7 @@ import {
   type UserApiKey, type InsertUserApiKey, type ApiKeyProvider,
   type SavedOffer, type InsertSavedOffer,
   type DmoEntry, type InsertDmoEntry,
-  type EmailAnalysis, type EmailInboxAddress,
+  type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
 } from "@shared/schema";
 import crypto from "crypto";
 import { db, pool } from "./db";
@@ -289,6 +289,7 @@ export interface IStorage {
   // Inbox Analyzer
   getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
   getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined>;
+  updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void>;
   createEmailAnalysis(data: {
     userId: string; fromAddress: string; fromName?: string; replyTo?: string; subject: string;
     bodyText?: string; bodyHtml?: string; rawHeaders?: string;
@@ -298,6 +299,11 @@ export interface IStorage {
   getEmailAnalyses(userId: string, limit?: number): Promise<EmailAnalysis[]>;
   getEmailAnalysis(id: string, userId: string): Promise<EmailAnalysis | undefined>;
   deleteEmailAnalysis(id: string, userId: string): Promise<void>;
+  // Seed Inboxes (admin-managed)
+  getSeedInboxes(activeOnly?: boolean): Promise<SeedInbox[]>;
+  addSeedInbox(data: InsertSeedInbox): Promise<SeedInbox>;
+  deleteSeedInbox(id: string): Promise<void>;
+  toggleSeedInbox(id: string, isActive: boolean): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1767,6 +1773,30 @@ export class DatabaseStorage implements IStorage {
   async deleteEmailAnalysis(id: string, userId: string): Promise<void> {
     await db.delete(emailAnalyses)
       .where(and(eq(emailAnalyses.id, id), eq(emailAnalyses.userId, userId)));
+  }
+
+  async updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void> {
+    await db.update(emailInboxAddresses)
+      .set({ sendingFromAddress })
+      .where(eq(emailInboxAddresses.userId, userId));
+  }
+
+  async getSeedInboxes(activeOnly = false): Promise<SeedInbox[]> {
+    const rows = await db.select().from(seedInboxes).orderBy(asc(seedInboxes.createdAt));
+    return activeOnly ? rows.filter(r => r.isActive) : rows;
+  }
+
+  async addSeedInbox(data: InsertSeedInbox): Promise<SeedInbox> {
+    const [row] = await db.insert(seedInboxes).values(data).returning();
+    return row;
+  }
+
+  async deleteSeedInbox(id: string): Promise<void> {
+    await db.delete(seedInboxes).where(eq(seedInboxes.id, id));
+  }
+
+  async toggleSeedInbox(id: string, isActive: boolean): Promise<void> {
+    await db.update(seedInboxes).set({ isActive }).where(eq(seedInboxes.id, id));
   }
 }
 

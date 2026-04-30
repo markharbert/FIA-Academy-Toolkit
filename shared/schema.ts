@@ -839,8 +839,22 @@ export const emailInboxAddresses = pgTable("email_inbox_addresses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
   token: varchar("token", { length: 20 }).notNull().unique(),
+  sendingFromAddress: text("sending_from_address"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
+
+export const seedInboxes = pgTable("seed_inboxes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: text("provider").notNull(), // "gmail" | "outlook" | "yahoo" | "other"
+  label: text("label").notNull(),
+  email: text("email").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true });
+export type InsertSeedInbox = z.infer<typeof insertSeedInboxSchema>;
+export type SeedInbox = typeof seedInboxes.$inferSelect;
 
 export const emailAnalyses = pgTable("email_analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
