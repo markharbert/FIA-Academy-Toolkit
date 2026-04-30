@@ -290,6 +290,7 @@ export interface IStorage {
   getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
   getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined>;
   updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void>;
+  saveLastPlacementResults(userId: string, results: unknown[]): Promise<void>;
   createEmailAnalysis(data: {
     userId: string; fromAddress: string; fromName?: string; replyTo?: string; subject: string;
     bodyText?: string; bodyHtml?: string; rawHeaders?: string;
@@ -1781,6 +1782,12 @@ export class DatabaseStorage implements IStorage {
   async updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void> {
     await db.update(emailInboxAddresses)
       .set({ sendingFromAddress })
+      .where(eq(emailInboxAddresses.userId, userId));
+  }
+
+  async saveLastPlacementResults(userId: string, results: unknown[]): Promise<void> {
+    await db.update(emailInboxAddresses)
+      .set({ lastPlacementResults: results, lastPlacementCheckedAt: new Date() })
       .where(eq(emailInboxAddresses.userId, userId));
   }
 

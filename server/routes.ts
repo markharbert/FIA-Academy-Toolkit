@@ -4351,7 +4351,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const addr = await storage.getOrCreateInboxAddress(req.session.userId);
       const { getInboxAddress } = await import("./inboxAnalyzer");
-      res.json({ token: addr.token, email: getInboxAddress(addr.token), createdAt: addr.createdAt, sendingFromAddress: addr.sendingFromAddress || "" });
+      res.json({
+        token: addr.token,
+        email: getInboxAddress(addr.token),
+        createdAt: addr.createdAt,
+        sendingFromAddress: addr.sendingFromAddress || "",
+        lastPlacementResults: addr.lastPlacementResults || null,
+        lastPlacementCheckedAt: addr.lastPlacementCheckedAt || null,
+      });
     } catch (err) {
       console.error("[inbox-analyzer] address error", err);
       res.status(500).json({ message: "Failed to get address" });
@@ -4491,6 +4498,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           )
         )
       );
+
+      // Persist results so they survive page refresh
+      await storage.saveLastPlacementResults(userId, results);
 
       res.json({ results, sendingFrom });
     } catch (err: any) {

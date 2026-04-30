@@ -179,12 +179,14 @@ function SectionPanel({ title, icon: Icon, score, children }: {
 
 // ── Email Detail Panel ────────────────────────────────────────────────────────
 
-function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFromAddress = "" }: {
+function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFromAddress = "", lastPlacementResults = null, lastPlacementCheckedAt = null }: {
   email: EmailAnalysis;
   onDelete: () => void;
   onReanalyze?: (id: string) => void;
   seedInboxes?: SeedInbox[];
   sendingFromAddress?: string;
+  lastPlacementResults?: PlacementResult[] | null;
+  lastPlacementCheckedAt?: string | null;
 }) {
   const cf = email.copyFeedback as CopyFeedback | null;
   const flags = (email.spamFlags as SpamFlag[] | null) || [];
@@ -193,7 +195,8 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
   const st = email.senderTrust as SenderTrust | null;
   const cq = email.contentQuality as ContentQuality | null;
 
-  const [placementResults, setPlacementResults] = useState<PlacementResult[] | null>(null);
+  const [placementResults, setPlacementResults] = useState<PlacementResult[] | null>(lastPlacementResults);
+  const [placementCheckedAt, setPlacementCheckedAt] = useState<string | null>(lastPlacementCheckedAt);
   const [placementLoading, setPlacementLoading] = useState(false);
   const [placementError, setPlacementError] = useState<string | null>(null);
 
@@ -210,6 +213,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
       } else {
         const body = await res.json();
         setPlacementResults(body.results || []);
+        setPlacementCheckedAt(new Date().toISOString());
       }
     } catch {
       setPlacementError("Network error. Please try again.");
@@ -451,9 +455,9 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                     <p className="text-xs text-red-500 flex items-center gap-1"><CircleX className="h-3 w-3" />{placementError}</p>
                   )}
 
-                  {placementResults && (
+                  {placementCheckedAt && (
                     <p className="text-[10px] text-muted-foreground">
-                      Checked at {new Date(placementResults[0]?.checkedAt).toLocaleTimeString()} · Searches last 14 days
+                      Checked {new Date(placementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(placementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Searches last 14 days
                     </p>
                   )}
 
@@ -726,12 +730,14 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
 // ── Email Row ────────────────────────────────────────────────────────────────
 
-function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddress }: {
+function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddress, lastPlacementResults, lastPlacementCheckedAt }: {
   email: EmailAnalysis;
   onDelete: (id: string) => void;
   onReanalyze?: (id: string) => void;
   seedInboxes?: SeedInbox[];
   sendingFromAddress?: string;
+  lastPlacementResults?: PlacementResult[] | null;
+  lastPlacementCheckedAt?: string | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -805,7 +811,7 @@ function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddres
       {open && (
         <div className="px-4 pb-5">
           <Separator className="mb-5" />
-          <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} />
+          <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} />
         </div>
       )}
     </div>
@@ -1499,6 +1505,8 @@ export default function InboxAnalyzerPage() {
                     onReanalyze={(id) => reanalyzeMutation.mutate(id)}
                     seedInboxes={seedInboxes}
                     sendingFromAddress={addressData?.sendingFromAddress || ""}
+                    lastPlacementResults={(addressData as any)?.lastPlacementResults || null}
+                    lastPlacementCheckedAt={(addressData as any)?.lastPlacementCheckedAt || null}
                   />
                 ))}
               </div>

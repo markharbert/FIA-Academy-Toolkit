@@ -840,6 +840,8 @@ export const emailInboxAddresses = pgTable("email_inbox_addresses", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
   token: varchar("token", { length: 20 }).notNull().unique(),
   sendingFromAddress: text("sending_from_address"),
+  lastPlacementResults: jsonb("last_placement_results"),
+  lastPlacementCheckedAt: timestamp("last_placement_checked_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
