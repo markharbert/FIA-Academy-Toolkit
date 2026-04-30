@@ -221,18 +221,38 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
         </div>
 
         {/* Email body preview */}
-        {email.bodyText && (
+        {(email.bodyHtml || email.bodyText) && (
           <div className="rounded-xl border border-border bg-muted/10 p-4">
             <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wide mb-2 flex items-center gap-1.5">
               <FileText className="h-3 w-3" />
-              Email Body Preview
+              Email Body
             </p>
-            <div className="max-h-64 overflow-y-auto">
-              <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
-                {email.bodyText.slice(0, 1200)}
-                {email.bodyText.length > 1200 && <span className="text-muted-foreground"> …[truncated]</span>}
-              </p>
-            </div>
+            {email.bodyHtml ? (
+              <iframe
+                srcDoc={email.bodyHtml}
+                sandbox="allow-same-origin"
+                className="w-full rounded border border-border bg-white"
+                style={{ minHeight: "400px", height: "auto" }}
+                onLoad={(e) => {
+                  const frame = e.currentTarget;
+                  try {
+                    const doc = frame.contentDocument || frame.contentWindow?.document;
+                    if (doc) {
+                      frame.style.height = Math.min(doc.documentElement.scrollHeight, 800) + "px";
+                    }
+                  } catch {
+                    frame.style.height = "500px";
+                  }
+                }}
+              />
+            ) : (
+              <div className="max-h-64 overflow-y-auto">
+                <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                  {email.bodyText!.slice(0, 1200)}
+                  {email.bodyText!.length > 1200 && <span className="text-muted-foreground"> …[truncated]</span>}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
