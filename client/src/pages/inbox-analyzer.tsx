@@ -6,6 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Mail, Copy, Check, Trash2, ChevronDown, ChevronUp, Settings,
   ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Loader2,
   Inbox, Info, TrendingUp, CircleCheck, CircleX, CircleAlert,
@@ -268,9 +273,9 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="flex justify-between items-center">
-          {onReanalyze ? (
+        {/* Re-analyze button */}
+        {onReanalyze && (
+          <div className="flex justify-start">
             <Button
               variant="ghost" size="sm"
               className="text-muted-foreground hover:text-foreground gap-1.5 text-xs"
@@ -279,16 +284,8 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
             >
               <RefreshCw className="h-3.5 w-3.5" />Re-analyze
             </Button>
-          ) : <div />}
-          <Button
-            variant="ghost" size="sm"
-            className="text-muted-foreground hover:text-red-500 gap-1.5 text-xs"
-            onClick={onDelete}
-            data-testid={`email-delete-${email.id}`}
-          >
-            <Trash2 className="h-3.5 w-3.5" />Delete
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ── RIGHT: Full analysis report ─────────────────────────────────── */}
@@ -603,26 +600,70 @@ function EmailRow({ email, onDelete, onReanalyze }: { email: EmailAnalysis; onDe
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm" data-testid={`email-row-${email.id}`}>
-      <button
-        className="w-full text-left px-4 py-3.5 flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => setOpen((o) => !o)}
-        data-testid={`email-expand-${email.id}`}
-      >
-        <ScoreRing score={email.overallScore} size={44} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">{email.subject}</p>
-          <p className="text-xs text-muted-foreground truncate mt-0.5">
-            {email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress}
-            {email.receivedAt && (
-              <span className="ml-2 opacity-60">· {new Date(email.receivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="px-4 py-3.5 flex items-center gap-3">
+        {/* Clickable area to expand/collapse */}
+        <button
+          className="flex items-center gap-3 flex-1 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          onClick={() => setOpen((o) => !o)}
+          data-testid={`email-expand-${email.id}`}
+        >
+          <ScoreRing score={email.overallScore} size={44} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">{email.subject}</p>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress}
+              {email.receivedAt && (
+                <span className="ml-2 opacity-60">· {new Date(email.receivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+              )}
+            </p>
+          </div>
+        </button>
+
+        {/* Right-side controls — outside the expand button so clicks don't toggle */}
+        <div className="flex items-center gap-1 flex-shrink-0">
           <StatusBadge status={email.status} />
-          {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                onClick={(e) => e.stopPropagation()}
+                data-testid={`email-delete-${email.id}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this email?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove the email and its full analysis report. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  onClick={() => onDelete(email.id)}
+                  data-testid={`email-delete-confirm-${email.id}`}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <button
+            className="p-1 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            onClick={() => setOpen((o) => !o)}
+            aria-label={open ? "Collapse" : "Expand"}
+          >
+            {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="px-4 pb-5">
