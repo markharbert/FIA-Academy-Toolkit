@@ -96,8 +96,8 @@ function AuthBadge({ result, label }: { result: string | null | undefined; label
       {isPass ? <CircleCheck className="h-4 w-4 text-emerald-500 flex-shrink-0" />
         : isFail ? <CircleX className="h-4 w-4 text-red-500 flex-shrink-0" />
           : <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0" />}
-      <span className="text-sm font-medium">{label}</span>
-      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 uppercase font-bold ml-auto ${isPass ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+      <span className="text-base font-medium">{label}</span>
+      <Badge variant="outline" className={`text-xs px-1.5 py-0 uppercase font-bold ml-auto ${isPass ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
         : isFail ? "border-red-500/40 text-red-600 dark:text-red-400"
           : "border-yellow-500/40 text-yellow-600 dark:text-yellow-400"}`}>
         {r}
@@ -113,8 +113,8 @@ function CheckRow({ pass, warn, label, detail }: { pass?: boolean; warn?: boolea
         : warn ? <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
           : <CircleX className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />}
       <div className="flex-1 min-w-0">
-        <span className="text-sm">{label}</span>
-        {detail && <span className="text-xs text-muted-foreground ml-1.5">({detail})</span>}
+        <span className="text-base">{label}</span>
+        {detail && <span className="text-sm text-muted-foreground ml-1.5">({detail})</span>}
       </div>
     </div>
   );
@@ -126,8 +126,8 @@ function DnsCheck({ exists, label }: { exists: boolean | null | undefined; label
       {exists === true ? <CircleCheck className="h-4 w-4 text-emerald-500 flex-shrink-0" />
         : exists === false ? <CircleX className="h-4 w-4 text-red-500 flex-shrink-0" />
           : <CircleAlert className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
-      <span className="text-sm">{label}</span>
-      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ml-auto ${exists === true ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+      <span className="text-base">{label}</span>
+      <Badge variant="outline" className={`text-xs px-1.5 py-0 ml-auto ${exists === true ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
         : exists === false ? "border-red-500/40 text-red-600 dark:text-red-400"
           : "text-muted-foreground"}`}>
         {exists === true ? "Found" : exists === false ? "Missing" : "Unknown"}
@@ -165,11 +165,11 @@ function SectionPanel({ title, icon: Icon, score, children }: {
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <h4 className="text-sm font-semibold flex items-center gap-2">
+      <h4 className="text-base font-semibold flex items-center gap-2">
         <Icon className="h-4 w-4 text-primary flex-shrink-0" />
         {title}
         {score != null && (
-          <span className={`ml-auto text-sm font-bold ${scoreColor(score)}`}>{score}/100</span>
+          <span className={`ml-auto text-base font-bold ${scoreColor(score)}`}>{score}/100</span>
         )}
       </h4>
       {children}
@@ -225,7 +225,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
     : null;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[5fr_7fr] gap-6 pt-2">
+    <div className="grid grid-cols-1 xl:grid-cols-[6fr_7fr] gap-6 pt-2">
 
       {/* ── LEFT: Email content + sender info ──────────────────────────── */}
       <div className="space-y-4 min-w-0">
@@ -236,24 +236,24 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             <div className="flex items-start gap-2">
               <Type className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wide">Subject</p>
-                <p className="text-sm font-semibold text-foreground leading-snug break-words">{email.subject}</p>
+                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wide">Subject</p>
+                <p className="text-base font-semibold text-foreground leading-snug break-words">{email.subject}</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
               <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wide">From</p>
-                {email.fromName && <p className="text-sm font-medium text-foreground">{email.fromName}</p>}
-                <p className="text-xs text-muted-foreground break-all">{email.fromAddress}</p>
+                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wide">From</p>
+                {email.fromName && <p className="text-base font-medium text-foreground">{email.fromName}</p>}
+                <p className="text-sm text-muted-foreground break-all">{email.fromAddress}</p>
               </div>
             </div>
             {email.replyTo && (
               <div className="flex items-start gap-2">
                 <Reply className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wide">Reply-To</p>
-                  <p className="text-xs text-muted-foreground break-all">{email.replyTo}</p>
+                  <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wide">Reply-To</p>
+                  <p className="text-sm text-muted-foreground break-all">{email.replyTo}</p>
                 </div>
               </div>
             )}
@@ -261,9 +261,9 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               <div className="flex items-start gap-2">
                 <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wide">Sending Server</p>
-                  {email.sendingDomain && <p className="text-xs text-foreground font-medium">{email.sendingDomain}</p>}
-                  {email.sendingIp && <p className="text-xs text-muted-foreground font-mono">{email.sendingIp}</p>}
+                  <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wide">Sending Server</p>
+                  {email.sendingDomain && <p className="text-sm text-foreground font-medium">{email.sendingDomain}</p>}
+                  {email.sendingIp && <p className="text-sm text-muted-foreground font-mono">{email.sendingIp}</p>}
                 </div>
               </div>
             )}
@@ -271,8 +271,8 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               <div className="flex items-start gap-2">
                 <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wide">Received</p>
-                  <p className="text-xs text-muted-foreground">{receivedDate}</p>
+                  <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wide">Received</p>
+                  <p className="text-sm text-muted-foreground">{receivedDate}</p>
                 </div>
               </div>
             )}
@@ -282,7 +282,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
         {/* Email body preview */}
         {(email.bodyHtml || email.bodyText) && (
           <div className="rounded-xl border border-border bg-muted/10 p-4">
-            <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wide mb-2 flex items-center gap-1.5">
+            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wide mb-2 flex items-center gap-1.5">
               <FileText className="h-3 w-3" />
               Email Body
             </p>
@@ -306,7 +306,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               />
             ) : (
               <div className="max-h-64 overflow-y-auto">
-                <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
                   {email.bodyText!.slice(0, 1200)}
                   {email.bodyText!.length > 1200 && <span className="text-muted-foreground"> …[truncated]</span>}
                 </p>
@@ -320,7 +320,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
           <div className="flex justify-start">
             <Button
               variant="ghost" size="sm"
-              className="text-muted-foreground hover:text-foreground gap-1.5 text-xs"
+              className="text-muted-foreground hover:text-foreground gap-1.5 text-sm"
               onClick={() => onReanalyze(email.id)}
               data-testid={`button-reanalyze-${email.id}`}
             >
@@ -338,8 +338,8 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
           <div className="flex items-center gap-4 mb-4">
             <ScoreRing score={email.overallScore} size={72} />
             <div>
-              <p className="text-base font-bold text-foreground">Overall Score</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Based on 5 categories below</p>
+              <p className="text-lg font-bold text-foreground">Overall Score</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Based on 5 categories below</p>
               <StatusBadge status={email.status} />
             </div>
           </div>
@@ -381,11 +381,11 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             ].map((item) => (
               <div key={item.label} className="flex flex-col items-center gap-1 rounded-lg bg-muted/30 py-2 px-1">
                 <ScoreRing score={item.score} size={40} />
-                <span className="text-[10px] text-muted-foreground font-medium text-center leading-tight">{item.label}</span>
+                <span className="text-xs text-muted-foreground font-medium text-center leading-tight">{item.label}</span>
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-muted-foreground mt-2">Auth 30 · Trust 15 · Spam Language 35 · Technical 10 · Content 10</p>
+          <p className="text-xs text-muted-foreground mt-2">Auth 30 · Trust 15 · Spam Language 35 · Technical 10 · Content 10</p>
         </div>
 
         {/* ── Placement ─────────────────────────────────────────────── */}
@@ -397,8 +397,8 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
                   <CircleAlert className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-medium text-foreground">Placement monitoring not active</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">No seed inboxes have been set up yet. Once connected, you'll see if your emails land in Inbox or Spam across Gmail, Outlook, and more.</p>
+                    <p className="text-sm font-medium text-foreground">Placement monitoring not active</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">No seed inboxes have been set up yet. Once connected, you'll see if your emails land in Inbox or Spam across Gmail, Outlook, and more.</p>
                   </div>
                 </div>
               ) : (
@@ -408,13 +408,13 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                     <div key={inbox.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
                       <ProviderIcon provider={inbox.provider} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground">{inbox.label}</p>
-                        <p className="text-[10px] font-mono text-muted-foreground">{inbox.email}</p>
+                        <p className="text-sm font-medium text-foreground">{inbox.label}</p>
+                        <p className="text-xs font-mono text-muted-foreground">{inbox.email}</p>
                       </div>
-                      <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Not monitoring</span>
+                      <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Not monitoring</span>
                     </div>
                   ))}
-                  <p className="text-xs text-muted-foreground pt-1">Add these addresses to your CRM and connect them in My Address to enable placement checking.</p>
+                  <p className="text-sm text-muted-foreground pt-1">Add these addresses to your CRM and connect them in My Address to enable placement checking.</p>
                 </div>
               )}
             </div>
@@ -424,7 +424,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               {!sendingFromAddress ? (
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
                   <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground">Set your sending From address in My Address to run a placement check.</p>
+                  <p className="text-sm text-muted-foreground">Set your sending From address in My Address to run a placement check.</p>
                 </div>
               ) : (
                 <>
@@ -435,26 +435,26 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                       <div key={inbox.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
                         <ProviderIcon provider={inbox.provider} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground">{inbox.label}</p>
-                          <p className="text-[10px] font-mono text-muted-foreground">{inbox.email}</p>
+                          <p className="text-sm font-medium text-foreground">{inbox.label}</p>
+                          <p className="text-xs font-mono text-muted-foreground">{inbox.email}</p>
                         </div>
                         {placementLoading ? (
                           <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
                         ) : result ? (
                           <PlacementStatusBadge status={result.status} />
                         ) : (
-                          <span className="text-[10px] text-muted-foreground">—</span>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </div>
                     );
                   })}
 
                   {placementError && (
-                    <p className="text-xs text-red-500 flex items-center gap-1"><CircleX className="h-3 w-3" />{placementError}</p>
+                    <p className="text-sm text-red-500 flex items-center gap-1"><CircleX className="h-3 w-3" />{placementError}</p>
                   )}
 
                   {placementCheckedAt && (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Checked {new Date(placementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(placementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Searches last 14 days
                     </p>
                   )}
@@ -462,7 +462,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs gap-1.5 mt-1"
+                    className="h-8 text-sm gap-1.5 mt-1"
                     onClick={runPlacementCheck}
                     disabled={placementLoading}
                     data-testid={`button-placement-check-${email.id}`}
@@ -484,7 +484,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             <AuthBadge result={email.dmarcResult} label="DMARC" />
           </div>
           <Separator className="my-1" />
-          <p className="text-xs font-semibold text-muted-foreground">DNS Record Presence</p>
+          <p className="text-sm font-semibold text-muted-foreground">DNS Record Presence</p>
           <div className="grid sm:grid-cols-2 gap-2">
             <DnsCheck exists={email.spfRecordExists} label="SPF record" />
             <DnsCheck exists={email.dkimRecordExists} label="DKIM record" />
@@ -528,7 +528,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
           {flags.length === 0 ? (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
               <CircleCheck className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-              <p className="text-xs text-green-700 dark:text-green-400 font-medium">No spam triggers detected — great clean copy!</p>
+              <p className="text-sm text-green-700 dark:text-green-400 font-medium">No spam triggers detected — great clean copy!</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -546,14 +546,14 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 const label = sev === "high" ? "High Risk" : sev === "medium" ? "Medium Risk" : "Low Risk";
                 return (
                   <div key={sev}>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{label} Phrases</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{label} Phrases</p>
                     <div className="flex flex-wrap gap-1.5">
                       {allMatches.map(word => (
                         <span
                           key={word}
-                          className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${colorClass}`}
+                          className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${colorClass}`}
                         >
-                          {isSubject(word) && <span className="font-bold opacity-70 text-[9px] uppercase tracking-wider">SUBJ</span>}
+                          {isSubject(word) && <span className="font-bold opacity-70 text-[10px] uppercase tracking-wider">SUBJ</span>}
                           {word}
                         </span>
                       ))}
@@ -568,19 +568,19 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 if (structuralFlags.length === 0) return null;
                 return (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Structure & Patterns</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Structure & Patterns</p>
                     <div className="space-y-1.5">
                       {structuralFlags.map((f, i) => (
                         <div key={i} className="flex items-start gap-2">
-                          <span className={`mt-0.5 flex-shrink-0 h-3.5 w-3.5 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                          <span className={`mt-0.5 flex-shrink-0 h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
                             f.severity === "high" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
                             : f.severity === "medium" ? "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
                             : "bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400"
                           }`}>!</span>
                           <div className="flex-1">
-                            <p className="text-xs text-foreground leading-snug">{f.label}</p>
+                            <p className="text-sm text-foreground leading-snug">{f.label}</p>
                             {f.matches && f.matches.length > 0 && (
-                              <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{f.matches.slice(0, 6).join(", ")}{f.matches.length > 6 ? `… +${f.matches.length - 6}` : ""}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 font-mono">{f.matches.slice(0, 6).join(", ")}{f.matches.length > 6 ? `… +${f.matches.length - 6}` : ""}</p>
                             )}
                           </div>
                         </div>
@@ -1398,7 +1398,7 @@ export default function InboxAnalyzerPage() {
     <div className="min-h-screen bg-background">
       {/* Hero */}
       <div className="bg-sidebar text-sidebar-foreground px-4 sm:px-6 py-8 sm:py-10">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-[96rem] mx-auto">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
               <Inbox className="h-5 w-5 text-white" />
@@ -1421,7 +1421,7 @@ export default function InboxAnalyzerPage() {
       </div>
 
       {/* Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-[96rem] mx-auto px-4 sm:px-6 py-6">
         <Tabs defaultValue={isAdmin && defaultTab === "settings" ? "settings" : defaultTab === "address" ? "address" : "emails"}>
           <div className="flex justify-center mb-6">
             <TabsList className="h-10 bg-muted gap-1 p-1">
