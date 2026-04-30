@@ -179,13 +179,44 @@ function SectionPanel({ title, icon: Icon, score, children }: {
 
 // ── Email Detail Panel ────────────────────────────────────────────────────────
 
-function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; onDelete: () => void; onReanalyze?: (id: string) => void }) {
+function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFromAddress = "" }: {
+  email: EmailAnalysis;
+  onDelete: () => void;
+  onReanalyze?: (id: string) => void;
+  seedInboxes?: SeedInbox[];
+  sendingFromAddress?: string;
+}) {
   const cf = email.copyFeedback as CopyFeedback | null;
   const flags = (email.spamFlags as SpamFlag[] | null) || [];
   const sa = email.subjectAnalysis as SubjectAnalysis | null;
   const th = email.technicalHealth as TechnicalHealth | null;
   const st = email.senderTrust as SenderTrust | null;
   const cq = email.contentQuality as ContentQuality | null;
+
+  const [placementResults, setPlacementResults] = useState<PlacementResult[] | null>(null);
+  const [placementLoading, setPlacementLoading] = useState(false);
+  const [placementError, setPlacementError] = useState<string | null>(null);
+
+  const connectedInboxes = seedInboxes.filter(s => s.isActive && s.isConnected);
+
+  const runPlacementCheck = async () => {
+    setPlacementLoading(true);
+    setPlacementError(null);
+    try {
+      const res = await fetch("/api/inbox-analyzer/placement-check", { credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json();
+        setPlacementError(body.message || "Failed to check placement");
+      } else {
+        const body = await res.json();
+        setPlacementResults(body.results || []);
+      }
+    } catch {
+      setPlacementError("Network error. Please try again.");
+    } finally {
+      setPlacementLoading(false);
+    }
+  };
 
   const receivedDate = email.receivedAt
     ? new Date(email.receivedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
@@ -354,6 +385,94 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
             ))}
           </div>
         </div>
+
+        {/* ── Placement ─────────────────────────────────────────────── */}
+        <SectionPanel title="Inbox Placement" icon={Inbox}>
+          {connectedInboxes.length === 0 ? (
+            // No monitoring set up at all
+            <div className="space-y-2">
+              {seedInboxes.length === 0 ? (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
+                  <CircleAlert className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-medium text-foreground">Placement monitoring not active</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">No seed inboxes have been set up yet. Once connected, you'll see if your emails land in Inbox or Spam across Gmail, Outlook, and more.</p>
+                  </div>
+                </div>
+              ) : (
+                // Inboxes exist but none connected via OAuth
+                <div className="space-y-2">
+                  {seedInboxes.filter(s => s.isActive).map(inbox => (
+                    <div key={inbox.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
+                      <ProviderIcon provider={inbox.provider} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground">{inbox.label}</p>
+                        <p className="text-[10px] font-mono text-muted-foreground">{inbox.email}</p>
+                      </div>
+                      <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Not monitoring</span>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground pt-1">Add these addresses to your CRM and connect them in My Address to enable placement checking.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            // Connected inboxes — show check results or prompt
+            <div className="space-y-2">
+              {!sendingFromAddress ? (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
+                  <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground">Set your sending From address in My Address to run a placement check.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Results or idle state per inbox */}
+                  {connectedInboxes.map(inbox => {
+                    const result = placementResults?.find(r => r.inboxId === inbox.id);
+                    return (
+                      <div key={inbox.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
+                        <ProviderIcon provider={inbox.provider} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-foreground">{inbox.label}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground">{inbox.email}</p>
+                        </div>
+                        {placementLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
+                        ) : result ? (
+                          <PlacementStatusBadge status={result.status} />
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {placementError && (
+                    <p className="text-xs text-red-500 flex items-center gap-1"><CircleX className="h-3 w-3" />{placementError}</p>
+                  )}
+
+                  {placementResults && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Checked at {new Date(placementResults[0]?.checkedAt).toLocaleTimeString()} · Searches last 14 days
+                    </p>
+                  )}
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5 mt-1"
+                    onClick={runPlacementCheck}
+                    disabled={placementLoading}
+                    data-testid={`button-placement-check-${email.id}`}
+                  >
+                    {placementLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    {placementResults ? "Re-check Placement" : "Check Placement"}
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </SectionPanel>
 
         {/* Authentication */}
         <SectionPanel title="Email Authentication" icon={ShieldCheck}>
@@ -607,7 +726,13 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
 
 // ── Email Row ────────────────────────────────────────────────────────────────
 
-function EmailRow({ email, onDelete, onReanalyze }: { email: EmailAnalysis; onDelete: (id: string) => void; onReanalyze?: (id: string) => void }) {
+function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddress }: {
+  email: EmailAnalysis;
+  onDelete: (id: string) => void;
+  onReanalyze?: (id: string) => void;
+  seedInboxes?: SeedInbox[];
+  sendingFromAddress?: string;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -680,7 +805,7 @@ function EmailRow({ email, onDelete, onReanalyze }: { email: EmailAnalysis; onDe
       {open && (
         <div className="px-4 pb-5">
           <Separator className="mb-5" />
-          <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} />
+          <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} />
         </div>
       )}
     </div>
@@ -774,34 +899,12 @@ function MyAddressTab({
 }) {
   const [fromAddr, setFromAddr] = useState(initialSendingFrom || "");
   const [saved, setSaved] = useState(false);
-  const [placementResults, setPlacementResults] = useState<PlacementResult[] | null>(null);
-  const [placementLoading, setPlacementLoading] = useState(false);
-  const [placementError, setPlacementError] = useState<string | null>(null);
-  const activeSeedInboxes = seedInboxes.filter(s => s.isActive && s.isConnected);
+  const activeSeedInboxes = seedInboxes.filter(s => s.isActive);
 
   const handleSave = () => {
     onSave(fromAddr);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const runPlacementCheck = async () => {
-    setPlacementLoading(true);
-    setPlacementError(null);
-    try {
-      const res = await fetch("/api/inbox-analyzer/placement-check", { credentials: "include" });
-      if (!res.ok) {
-        const body = await res.json();
-        setPlacementError(body.message || "Failed to check placement");
-      } else {
-        const body = await res.json();
-        setPlacementResults(body.results || []);
-      }
-    } catch {
-      setPlacementError("Network error. Please try again.");
-    } finally {
-      setPlacementLoading(false);
-    }
   };
 
   const stepCount = activeSeedInboxes.length > 0 ? 5 : 4;
@@ -920,75 +1023,6 @@ function MyAddressTab({
           </div>
         </CardContent>
       </Card>
-
-      {/* Placement Check */}
-      {activeSeedInboxes.length > 0 && (
-        <Card className="border-primary/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Inbox className="h-4 w-4 text-primary" />
-              Check Inbox Placement
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              We search each connected seed inbox for recent emails from your sending address and report where they landed.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {!initialSendingFrom ? (
-              <div className="rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground flex items-center gap-2">
-                <CircleAlert className="h-4 w-4 flex-shrink-0" />
-                Enter your sending From address above (Step {stepCount - 1}) before running a placement check.
-              </div>
-            ) : (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={runPlacementCheck}
-                  disabled={placementLoading}
-                  data-testid="button-run-placement-check"
-                >
-                  {placementLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  {placementLoading ? "Checking…" : "Run Placement Check"}
-                </Button>
-
-                {placementError && (
-                  <div className="rounded-lg bg-red-500/10 px-4 py-3 text-xs text-red-600 flex items-center gap-2">
-                    <CircleX className="h-4 w-4 flex-shrink-0" />
-                    {placementError}
-                  </div>
-                )}
-
-                {placementResults && placementResults.length === 0 && (
-                  <div className="rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground flex items-center gap-2">
-                    <Info className="h-4 w-4 flex-shrink-0" />
-                    No results yet. Make sure you've sent a recent campaign (last 14 days) to these seed addresses.
-                  </div>
-                )}
-
-                {placementResults && placementResults.length > 0 && (
-                  <div className="space-y-2">
-                    {placementResults.map(result => (
-                      <div key={result.inboxId} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
-                        <ProviderIcon provider={result.provider} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground">{result.label}</p>
-                          <p className="text-xs font-mono text-muted-foreground">{result.email}</p>
-                        </div>
-                        <PlacementStatusBadge status={result.status} />
-                      </div>
-                    ))}
-                    <p className="text-xs text-muted-foreground pt-1">
-                      Checked at {new Date(placementResults[0]?.checkedAt).toLocaleTimeString()}. Searches your last 14 days of email.
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* What gets analyzed */}
       <Card>
@@ -1441,6 +1475,8 @@ export default function InboxAnalyzerPage() {
                     email={email}
                     onDelete={(id) => deleteMutation.mutate(id)}
                     onReanalyze={(id) => reanalyzeMutation.mutate(id)}
+                    seedInboxes={seedInboxes}
+                    sendingFromAddress={addressData?.sendingFromAddress || ""}
                   />
                 ))}
               </div>
