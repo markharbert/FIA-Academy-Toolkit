@@ -4395,7 +4395,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.post("/api/inbox-analyzer/emails/:id/reanalyze", requireAuth, async (req: Request, res: Response) => {
     try {
       const emailId = req.params.id;
-      const userId = (req as any).user?.id;
+      const userId = req.session.userId!;
       const analysis = await storage.getEmailAnalysis(emailId, userId);
       if (!analysis) return res.status(404).json({ message: "Email not found" });
 
