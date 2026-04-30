@@ -17,6 +17,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Mail, Copy, Check, Trash2, ChevronDown, ChevronUp, Settings,
   ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Loader2,
   Inbox, Info, CircleCheck, CircleX, CircleAlert,
@@ -34,6 +37,115 @@ import type {
 } from "@shared/schema";
 
 const INBOX_DOMAIN = "email.fearlessmarketinglab.com";
+
+// ── Spam phrase alternatives ──────────────────────────────────────────────────
+const PHRASE_ALTERNATIVES: Record<string, string[]> = {
+  // Classic spam
+  "click here": ["get instant access", "see the details", "grab your spot", "take a look", "open this"],
+  "click below": ["see it below", "take a look", "grab your spot below", "access it here"],
+  "free offer": ["complimentary resource", "no-cost guide", "included for members", "available access"],
+  "free membership": ["member access", "complimentary enrollment", "open access", "join the community"],
+  "free preview": ["take a look inside", "see what's included", "preview the content", "explore before joining"],
+  "free quote": ["get your estimate", "see your pricing", "request details", "explore your options"],
+  "free trial": ["try it out", "test drive it", "start with no commitment", "explore the platform"],
+  "free gift": ["complimentary bonus", "included resource", "extra for you", "our thank-you"],
+  "no risk": ["with confidence", "peace of mind included", "try it safely", "backed by our process"],
+  "risk free": ["with full confidence", "try it safely", "peace of mind guaranteed", "backed by results"],
+  "risk-free": ["with full confidence", "try it safely", "peace of mind guaranteed", "backed by results"],
+  "no obligation": ["take your time to decide", "explore freely", "no pressure at all", "you choose when you're ready"],
+  "guaranteed": ["backed by results", "committed to your outcome", "proven to work", "supported every step"],
+  "work from home": ["flexible location", "remote opportunity", "work from anywhere", "location-independent"],
+  // Urgency
+  "act now": ["take the next step", "get started today", "don't put it off", "the time is now"],
+  "apply now": ["get started", "take the first step", "join today", "begin your application"],
+  "call now": ["reach out today", "schedule a call", "book a time to connect"],
+  "call free": ["schedule a call", "book your consultation", "connect at no cost"],
+  "order now": ["get yours today", "secure your spot", "grab it today", "complete your order"],
+  "buy now": ["get started today", "join now", "grab your copy", "get access"],
+  "claim now": ["get access now", "secure your spot", "grab yours today", "get started"],
+  "claim your": ["access your", "get your", "secure your", "unlock your"],
+  "don't delete": ["keep reading", "this is worth your time", "you'll want to see this"],
+  "instant approval": ["quick decision", "fast response", "same-day processing", "apply with ease"],
+  "instant access": ["immediate access", "start right away", "access begins today", "get in quickly"],
+  "limited time offer": ["available through [date]", "closing soon", "doors close [date]", "open this week only"],
+  "limited time": ["for a short window", "briefly available", "until [date]", "ending soon"],
+  "limited offer": ["available while spots remain", "reserved for a few", "while we have room"],
+  "expires soon": ["closing [date]", "ending this week", "wrapping up soon", "doors close soon"],
+  "last chance": ["final reminder", "closing today", "this is the last call", "ending now"],
+  "don't miss": ["worth a look", "you'll want to see this", "before you go", "take a moment to read"],
+  "don't wait": ["the time is now", "worth acting on", "consider this soon", "the window is open"],
+  "hurry": ["time is short", "worth acting on today", "don't put this off", "the window is limited"],
+  "urgent": ["time-sensitive", "heads up", "important update", "needs your attention"],
+  "while supplies last": ["while spots remain", "before we close enrollment", "limited availability"],
+  // Promotional
+  "special offer": ["for members only", "reserved for subscribers", "this week's invitation", "a note for you"],
+  "special promotion": ["curated program", "members-only invitation", "subscriber benefit"],
+  "exclusive deal": ["members-only access", "subscriber benefit", "private invitation", "reserved access"],
+  "exclusive offer": ["reserved for you", "subscriber-only invitation", "a note for members"],
+  "amazing deal": ["exceptional value", "worth your attention", "strong return", "a great opportunity"],
+  "incredible deal": ["outstanding value", "worth considering", "strong opportunity"],
+  "unbelievable": ["remarkable", "impressive", "hard to believe it's real", "genuinely surprising"],
+  "lowest price": ["most accessible pricing", "designed to be affordable", "priced fairly"],
+  "best price": ["most competitive rate", "strong value", "priced with you in mind"],
+  "cheap": ["affordable", "budget-friendly", "accessible pricing", "easy on the wallet"],
+  // Financial
+  "free money": ["resources at no cost", "earn without upfront investment", "zero-cost earning"],
+  "make money fast": ["build income quickly", "accelerate your earnings", "grow your revenue faster"],
+  "make money": ["increase your income", "build revenue", "earn from your skills", "grow your earnings"],
+  "earn extra cash": ["add a revenue stream", "increase your income", "grow your earnings"],
+  "earn extra": ["add to your earnings", "increase your income", "build another stream"],
+  "earn cash": ["generate income", "grow your earnings", "monetize your skills"],
+  "extra income": ["additional revenue", "income supplement", "earn beyond your day job"],
+  "financial freedom": ["financial independence", "control over your finances", "earning what you deserve"],
+  "double your income": ["significantly grow your earnings", "scale your revenue", "multiply your results"],
+  "cash bonus": ["additional reward", "performance bonus", "extra value included"],
+  "credit card required": ["easy enrollment", "simple sign-up", "get started in minutes"],
+  "no credit check": ["open enrollment", "simple qualification", "easy to get started"],
+  "consolidate debt": ["simplify your payments", "organize your finances", "streamline your obligations"],
+  "debt relief": ["financial assistance", "debt management support", "financial recovery resources"],
+  "refinance": ["restructure your loan", "update your mortgage terms", "lower your rate"],
+  "100% free": ["included at no cost", "complimentary", "zero-cost access", "covered for you"],
+  "zero cost": ["included", "at no charge", "on us", "provided free of charge"],
+  "no fees": ["no additional charges", "included in your plan", "all-inclusive", "at no extra cost"],
+  "invest now": ["get started today", "take the first step", "begin with intention"],
+  "profit": ["grow your revenue", "increase your margins", "see stronger returns", "improve your bottom line"],
+  "get rich": ["build wealth", "create financial stability", "earn what you're worth", "grow your income"],
+  "fast cash": ["quick earnings", "rapid income", "immediate results", "fast-track your revenue"],
+  "winner": ["top performer", "standout result", "the one we're rooting for"],
+  // Health
+  "lose weight fast": ["reach your health goals", "improve your wellness", "transform your body"],
+  "lose weight": ["improve your health", "reach your wellness goals", "feel better", "transform how you feel"],
+  "weight loss": ["health transformation", "wellness journey", "body composition goals"],
+  "miracle cure": ["proven approach", "evidence-based solution", "effective method that works"],
+  "miracle pill": ["targeted supplement", "science-backed formula", "researched solution"],
+  "anti-aging": ["skin health", "youthful vitality", "age with confidence", "vibrant skin care"],
+  "clinically proven": ["evidence-based", "backed by research", "tested and validated", "scientifically supported"],
+  "burn fat": ["build a healthier body", "improve your metabolism", "reshape your physique"],
+  // Deceptive
+  "you've been selected": ["we've saved a spot for you", "we thought you'd love this", "this one's for you"],
+  "you have been selected": ["we've saved a spot for you", "we thought you'd love this", "this one's for you"],
+  "you are a winner": ["you've earned this", "exciting news for you", "something special for you"],
+  "you won": ["you've earned this", "exciting news", "this is for you"],
+  "congratulations": ["exciting update", "great news", "an important update for you"],
+  "as seen on": ["featured in", "recognized by", "covered by", "highlighted in"],
+  "once in a lifetime": ["a rare opportunity", "something worth considering", "hard to come by"],
+  "this is not spam": ["(remove this phrase entirely)", "let your content speak for itself", "build trust with value"],
+  "not junk": ["(remove this phrase)", "your content will speak for itself", "focus on value instead"],
+  // Low risk
+  "free": ["complimentary", "included", "at no cost", "bonus", "no charge"],
+  "bonus": ["extra", "additional resource", "something extra for you", "included resource"],
+  "prize": ["reward", "special recognition", "token of appreciation", "your recognition"],
+  "gift": ["included resource", "bonus material", "extra for you", "our thank-you"],
+  "discount": ["reduced investment", "savings", "preferential rate", "special pricing"],
+  "save": ["reduce your investment", "spend less", "get more for less", "lower your cost"],
+  "deal": ["opportunity", "value offer", "strong opportunity", "something worth seeing"],
+  "promotion": ["campaign", "launch", "program", "invitation"],
+  "offer": ["invitation", "opportunity", "open door", "resource for you"],
+  "sale": ["launch pricing", "introductory rate", "founding member price", "limited pricing"],
+  "exclusive": ["members-only", "by invitation", "reserved for you", "subscriber-only"],
+  "amazing": ["impressive", "strong", "noteworthy", "exceptional"],
+  "incredible": ["remarkable", "exceptional", "outstanding", "hard to find"],
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -174,6 +286,28 @@ function SectionPanel({ title, icon: Icon, score, children }: {
       </h4>
       {children}
     </div>
+  );
+}
+
+// ── Alt Chip — copyable alternative phrase ────────────────────────────────────
+function AltChip({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={copy}
+      className="flex items-center justify-between gap-2 w-full text-left px-2.5 py-1.5 rounded-md bg-muted hover:bg-muted/80 transition-colors group"
+    >
+      <span className="text-sm text-foreground">{text}</span>
+      {copied
+        ? <Check className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+        : <Copy className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity" />
+      }
+    </button>
   );
 }
 
@@ -548,15 +682,34 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   <div key={sev}>
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{label} Phrases</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {allMatches.map(word => (
-                        <span
-                          key={word}
-                          className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${colorClass}`}
-                        >
-                          {isSubject(word) && <span className="font-bold opacity-70 text-[10px] uppercase tracking-wider">SUBJ</span>}
-                          {word}
-                        </span>
-                      ))}
+                      {allMatches.map(word => {
+                        const alts = PHRASE_ALTERNATIVES[word.toLowerCase()];
+                        const pill = (
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${colorClass} ${alts ? "cursor-pointer hover:opacity-80 active:opacity-60 transition-opacity" : ""}`}
+                          >
+                            {isSubject(word) && <span className="font-bold opacity-70 text-[10px] uppercase tracking-wider">SUBJ</span>}
+                            {word}
+                            {alts && <span className="opacity-50 text-[9px] ml-0.5">▾</span>}
+                          </span>
+                        );
+                        if (!alts) return <span key={word}>{pill}</span>;
+                        return (
+                          <Popover key={word}>
+                            <PopoverTrigger asChild>{pill}</PopoverTrigger>
+                            <PopoverContent side="top" align="start" className="w-72 p-3">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                                Try instead of <span className="text-foreground normal-case font-mono">"{word}"</span>
+                              </p>
+                              <div className="flex flex-col gap-1.5">
+                                {alts.map(alt => (
+                                  <AltChip key={alt} text={alt} />
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -1385,11 +1538,18 @@ export default function InboxAnalyzerPage() {
 
   const reanalyzeMutation = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/inbox-analyzer/emails/${id}/reanalyze`),
+    onMutate: (id: string) => {
+      queryClient.setQueryData<EmailAnalysis[]>(
+        ["/api/inbox-analyzer/emails"],
+        (old) => old?.map(e => e.id === id ? { ...e, status: "processing" } : e) ?? []
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
       toast({ title: "Re-analysis started", description: "Your email is being analyzed again." });
     },
     onError: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
       toast({ title: "Failed to re-analyze", variant: "destructive" });
     },
   });
