@@ -291,6 +291,8 @@ export interface IStorage {
   getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined>;
   updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void>;
   saveLastPlacementResults(userId: string, results: unknown[]): Promise<void>;
+  setPlacementAutoCheckWindow(userId: string, until: Date): Promise<void>;
+  getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date }>>;
   createEmailAnalysis(data: {
     userId: string; fromAddress: string; fromName?: string; replyTo?: string; subject: string;
     bodyText?: string; bodyHtml?: string; rawHeaders?: string;
@@ -1789,6 +1791,28 @@ export class DatabaseStorage implements IStorage {
     await db.update(emailInboxAddresses)
       .set({ lastPlacementResults: results, lastPlacementCheckedAt: new Date() })
       .where(eq(emailInboxAddresses.userId, userId));
+  }
+
+  async setPlacementAutoCheckWindow(userId: string, until: Date): Promise<void> {
+    await db.update(emailInboxAddresses)
+      .set({ placementAutoCheckUntil: until })
+      .where(eq(emailInboxAddresses.userId, userId));
+  }
+
+  async getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date }>> {
+    const rows = await db.select({
+      userId: emailInboxAddresses.userId,
+      sendingFromAddress: emailInboxAddresses.sendingFromAddress,
+      lastPlacementCheckedAt: emailInboxAddresses.lastPlacementCheckedAt,
+      placementAutoCheckUntil: emailInboxAddresses.placementAutoCheckUntil,
+    })
+    .from(emailInboxAddresses)
+    .where(
+      sql`${emailInboxAddresses.placementAutoCheckUntil} > ${now}
+        AND ${emailInboxAddresses.sendingFromAddress} IS NOT NULL
+        AND ${emailInboxAddresses.sendingFromAddress} != ''`
+    );
+    return rows.filter(r => r.placementAutoCheckUntil != null) as Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date }>;
   }
 
   async getSeedInboxes(activeOnly = false): Promise<SeedInbox[]> {

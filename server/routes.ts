@@ -22,6 +22,7 @@ import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
+import { runPlacementCheckForUser, startPlacementScheduler } from "./placementScheduler";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -4358,6 +4359,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         sendingFromAddress: addr.sendingFromAddress || "",
         lastPlacementResults: addr.lastPlacementResults || null,
         lastPlacementCheckedAt: addr.lastPlacementCheckedAt || null,
+        placementAutoCheckUntil: addr.placementAutoCheckUntil || null,
       });
     } catch (err) {
       console.error("[inbox-analyzer] address error", err);
@@ -4686,6 +4688,16 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         dkimResult,
       });
 
+      // Start placement monitoring window (24 h) and fire initial check
+      (async () => {
+        const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+        await storage.setPlacementAutoCheckWindow(inboxAddr.userId, new Date(Date.now() + TWENTY_FOUR_H));
+        const freshAddr = await storage.getOrCreateInboxAddress(inboxAddr.userId);
+        if (freshAddr.sendingFromAddress) {
+          await runPlacementCheckForUser(storage, inboxAddr.userId, freshAddr.sendingFromAddress);
+        }
+      })().catch(err => console.error("[PlacementScheduler] initial check error:", err));
+
       // Run full analysis pipeline async
       (async () => {
         try {
@@ -4743,6 +4755,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       console.error("[inbox-analyzer] inbound webhook error:", err);
     }
   });
+
+  // Start the automatic placement monitoring scheduler
+  startPlacementScheduler(storage);
 
   return httpServer;
 }
