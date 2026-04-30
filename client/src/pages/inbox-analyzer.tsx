@@ -268,8 +268,18 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
           </div>
         )}
 
-        {/* Delete button */}
-        <div className="flex justify-end">
+        {/* Action buttons */}
+        <div className="flex justify-between items-center">
+          {onReanalyze ? (
+            <Button
+              variant="ghost" size="sm"
+              className="text-muted-foreground hover:text-foreground gap-1.5 text-xs"
+              onClick={() => onReanalyze(email.id)}
+              data-testid={`button-reanalyze-${email.id}`}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />Re-analyze
+            </Button>
+          ) : <div />}
           <Button
             variant="ghost" size="sm"
             className="text-muted-foreground hover:text-red-500 gap-1.5 text-xs"
