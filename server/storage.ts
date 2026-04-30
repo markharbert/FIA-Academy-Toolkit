@@ -1807,13 +1807,14 @@ export class DatabaseStorage implements IStorage {
     return row || null;
   }
 
-  async storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void> {
+  async storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, _verifiedEmail: string): Promise<void> {
+    // Do NOT overwrite the email field — it was manually set by the admin as the inbox identifier.
+    // The OAuth tokens are simply stored as credentials to access that inbox.
     await db.update(seedInboxes).set({
       oauthAccessToken: accessToken,
       oauthRefreshToken: refreshToken,
       oauthTokenExpiry: expiry,
       isConnected: true,
-      email,
     }).where(eq(seedInboxes.id, id));
   }
 
