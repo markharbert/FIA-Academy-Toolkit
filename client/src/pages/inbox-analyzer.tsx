@@ -218,8 +218,10 @@ function computeContentScore(cq: ContentQuality | null): number | null {
 
 function computePlacementScore(results: PlacementResult[] | null): number | null {
   if (!results || results.length === 0) return null;
-  const inbox = results.filter(r => r.status === "inbox").length;
-  return Math.round((inbox / results.length) * 100);
+  const definitive = results.filter(r => ["primary", "promotions", "social", "updates", "forums", "spam"].includes(r.status));
+  if (definitive.length === 0) return null;
+  const inboxCount = definitive.filter(r => r.status !== "spam").length;
+  return Math.round((inboxCount / definitive.length) * 100);
 }
 
 function ScoreRing({ score, size = 64 }: { score: number | null | undefined; size?: number }) {
