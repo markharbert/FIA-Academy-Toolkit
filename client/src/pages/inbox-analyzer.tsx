@@ -22,7 +22,7 @@ import {
   Inbox, Info, TrendingUp, CircleCheck, CircleX, CircleAlert,
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
   User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
-  Plus, ToggleLeft, ToggleRight, AtSign,
+  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare,
 } from "lucide-react";
 import { SiGmail } from "react-icons/si";
 import { apiRequest } from "@/lib/queryClient";
@@ -849,19 +849,41 @@ function StepNumber({ n }: { n: number }) {
   );
 }
 
+type PlacementStatus = "primary" | "promotions" | "social" | "updates" | "forums" | "spam" | "not_found" | "error" | "not_connected";
+
 type PlacementResult = {
   inboxId: string;
   label: string;
   email: string;
   provider: string;
-  status: "inbox" | "spam" | "not_found" | "error" | "not_connected";
+  status: PlacementStatus;
   checkedAt: string;
 };
 
-function PlacementStatusBadge({ status }: { status: PlacementResult["status"] }) {
-  if (status === "inbox") return (
+function PlacementStatusBadge({ status }: { status: PlacementStatus }) {
+  if (status === "primary") return (
     <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-      <CircleCheck className="h-3 w-3" /> Inbox
+      <CircleCheck className="h-3 w-3" /> Primary
+    </span>
+  );
+  if (status === "promotions") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 bg-orange-500/10 px-2 py-0.5 rounded-full">
+      <Tag className="h-3 w-3" /> Promotions
+    </span>
+  );
+  if (status === "social") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-600 bg-purple-500/10 px-2 py-0.5 rounded-full">
+      <Users className="h-3 w-3" /> Social
+    </span>
+  );
+  if (status === "updates") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-500/10 px-2 py-0.5 rounded-full">
+      <Bell className="h-3 w-3" /> Updates
+    </span>
+  );
+  if (status === "forums") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-500/10 px-2 py-0.5 rounded-full">
+      <MessageSquare className="h-3 w-3" /> Forums
     </span>
   );
   if (status === "spam") return (

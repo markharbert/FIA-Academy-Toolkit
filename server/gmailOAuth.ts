@@ -48,12 +48,23 @@ export async function exchangeGmailCode(code: string): Promise<{
   };
 }
 
+export type PlacementStatus =
+  | "primary"
+  | "promotions"
+  | "social"
+  | "updates"
+  | "forums"
+  | "spam"
+  | "not_found"
+  | "error"
+  | "not_connected";
+
 export type PlacementResult = {
   inboxId: string;
   label: string;
   email: string;
   provider: string;
-  status: "inbox" | "spam" | "not_found" | "error" | "not_connected";
+  status: PlacementStatus;
   checkedAt: string;
 };
 
@@ -83,25 +94,23 @@ export async function checkGmailPlacement(
     const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
 
     const safeSender = senderAddress.replace(/['"\\]/g, "");
+    const base_q = `from:${safeSender} newer_than:14d`;
 
-    const [inboxRes, spamRes] = await Promise.all([
-      gmail.users.messages.list({
-        userId: "me",
-        q: `from:${safeSender} in:inbox newer_than:14d`,
-        maxResults: 1,
-      }),
-      gmail.users.messages.list({
-        userId: "me",
-        q: `from:${safeSender} in:spam newer_than:14d`,
-        maxResults: 1,
-      }),
+    const [primaryRes, promotionsRes, socialRes, updatesRes, forumsRes, spamRes] = await Promise.all([
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:primary`, maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:promotions`, maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:social`, maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:updates`, maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:forums`, maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} in:spam`, maxResults: 1 }),
     ]);
 
-    const inboxCount = (inboxRes.data.messages || []).length;
-    const spamCount = (spamRes.data.messages || []).length;
-
-    if (inboxCount > 0) return { ...base, status: "inbox" };
-    if (spamCount > 0) return { ...base, status: "spam" };
+    if ((primaryRes.data.messages || []).length > 0) return { ...base, status: "primary" };
+    if ((promotionsRes.data.messages || []).length > 0) return { ...base, status: "promotions" };
+    if ((socialRes.data.messages || []).length > 0) return { ...base, status: "social" };
+    if ((updatesRes.data.messages || []).length > 0) return { ...base, status: "updates" };
+    if ((forumsRes.data.messages || []).length > 0) return { ...base, status: "forums" };
+    if ((spamRes.data.messages || []).length > 0) return { ...base, status: "spam" };
     return { ...base, status: "not_found" };
   } catch (err: any) {
     console.error("[GmailPlacement] Error checking inbox", inbox.email, err?.message);
