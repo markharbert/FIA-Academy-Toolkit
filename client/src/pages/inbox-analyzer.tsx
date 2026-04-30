@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -723,6 +724,43 @@ function StepNumber({ n }: { n: number }) {
   );
 }
 
+type PlacementResult = {
+  inboxId: string;
+  label: string;
+  email: string;
+  provider: string;
+  status: "inbox" | "spam" | "not_found" | "error" | "not_connected";
+  checkedAt: string;
+};
+
+function PlacementStatusBadge({ status }: { status: PlacementResult["status"] }) {
+  if (status === "inbox") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+      <CircleCheck className="h-3 w-3" /> Inbox
+    </span>
+  );
+  if (status === "spam") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-500/10 px-2 py-0.5 rounded-full">
+      <CircleX className="h-3 w-3" /> Spam
+    </span>
+  );
+  if (status === "not_found") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+      <CircleAlert className="h-3 w-3" /> Not found
+    </span>
+  );
+  if (status === "not_connected") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+      <Info className="h-3 w-3" /> Not connected
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-yellow-600 bg-yellow-500/10 px-2 py-0.5 rounded-full">
+      <CircleAlert className="h-3 w-3" /> Error
+    </span>
+  );
+}
+
 function MyAddressTab({
   inboxEmail,
   sendingFromAddress: initialSendingFrom,
@@ -736,12 +774,34 @@ function MyAddressTab({
 }) {
   const [fromAddr, setFromAddr] = useState(initialSendingFrom || "");
   const [saved, setSaved] = useState(false);
-  const activeSeedInboxes = seedInboxes.filter(s => s.isActive);
+  const [placementResults, setPlacementResults] = useState<PlacementResult[] | null>(null);
+  const [placementLoading, setPlacementLoading] = useState(false);
+  const [placementError, setPlacementError] = useState<string | null>(null);
+  const activeSeedInboxes = seedInboxes.filter(s => s.isActive && s.isConnected);
 
   const handleSave = () => {
     onSave(fromAddr);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const runPlacementCheck = async () => {
+    setPlacementLoading(true);
+    setPlacementError(null);
+    try {
+      const res = await fetch("/api/inbox-analyzer/placement-check", { credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json();
+        setPlacementError(body.message || "Failed to check placement");
+      } else {
+        const body = await res.json();
+        setPlacementResults(body.results || []);
+      }
+    } catch {
+      setPlacementError("Network error. Please try again.");
+    } finally {
+      setPlacementLoading(false);
+    }
   };
 
   const stepCount = activeSeedInboxes.length > 0 ? 5 : 4;
@@ -861,6 +921,75 @@ function MyAddressTab({
         </CardContent>
       </Card>
 
+      {/* Placement Check */}
+      {activeSeedInboxes.length > 0 && (
+        <Card className="border-primary/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Inbox className="h-4 w-4 text-primary" />
+              Check Inbox Placement
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              We search each connected seed inbox for recent emails from your sending address and report where they landed.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!initialSendingFrom ? (
+              <div className="rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground flex items-center gap-2">
+                <CircleAlert className="h-4 w-4 flex-shrink-0" />
+                Enter your sending From address above (Step {stepCount - 1}) before running a placement check.
+              </div>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={runPlacementCheck}
+                  disabled={placementLoading}
+                  data-testid="button-run-placement-check"
+                >
+                  {placementLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {placementLoading ? "Checking…" : "Run Placement Check"}
+                </Button>
+
+                {placementError && (
+                  <div className="rounded-lg bg-red-500/10 px-4 py-3 text-xs text-red-600 flex items-center gap-2">
+                    <CircleX className="h-4 w-4 flex-shrink-0" />
+                    {placementError}
+                  </div>
+                )}
+
+                {placementResults && placementResults.length === 0 && (
+                  <div className="rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground flex items-center gap-2">
+                    <Info className="h-4 w-4 flex-shrink-0" />
+                    No results yet. Make sure you've sent a recent campaign (last 14 days) to these seed addresses.
+                  </div>
+                )}
+
+                {placementResults && placementResults.length > 0 && (
+                  <div className="space-y-2">
+                    {placementResults.map(result => (
+                      <div key={result.inboxId} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
+                        <ProviderIcon provider={result.provider} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground">{result.label}</p>
+                          <p className="text-xs font-mono text-muted-foreground">{result.email}</p>
+                        </div>
+                        <PlacementStatusBadge status={result.status} />
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground pt-1">
+                      Checked at {new Date(placementResults[0]?.checkedAt).toLocaleTimeString()}. Searches your last 14 days of email.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* What gets analyzed */}
       <Card>
         <CardHeader className="pb-2">
@@ -900,6 +1029,20 @@ function MyAddressTab({
 function SettingsTab() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const search = useSearch();
+
+  // Show success/error toast on redirect back from Google OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    if (params.get("connected") === "1") {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
+      toast({ title: "Gmail inbox connected!", description: "The inbox is now authorized and ready to check placement." });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=settings");
+    } else if (params.get("error")) {
+      toast({ title: "OAuth connection failed", description: "Google authorization was denied or failed. Try again.", variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=settings");
+    }
+  }, [search]);
 
   const { data: seedInboxes = [], isLoading: seedLoading } = useQuery<SeedInbox[]>({
     queryKey: ["/api/inbox-analyzer/seed-inboxes"],
@@ -908,14 +1051,20 @@ function SettingsTab() {
   const [newProvider, setNewProvider] = useState("gmail");
   const [newLabel, setNewLabel] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const addMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/inbox-analyzer/seed-inboxes", { provider: newProvider, label: newLabel, email: newEmail }),
-    onSuccess: () => {
+    onSuccess: (data: SeedInbox) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
       setNewLabel("");
       setNewEmail("");
-      toast({ title: "Seed inbox added" });
+      setShowAddForm(false);
+      toast({ title: "Inbox added" });
+      // Immediately kick off OAuth for Gmail
+      if (data.provider === "gmail") {
+        window.location.href = `/api/inbox-analyzer/seed-inboxes/connect/gmail?inboxId=${data.id}`;
+      }
     },
     onError: () => toast({ title: "Failed to add inbox", variant: "destructive" }),
   });
@@ -924,6 +1073,14 @@ function SettingsTab() {
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       apiRequest("PATCH", `/api/inbox-analyzer/seed-inboxes/${id}/toggle`, { isActive }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] }),
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/inbox-analyzer/seed-inboxes/${id}/disconnect`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
+      toast({ title: "Inbox disconnected" });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -945,7 +1102,7 @@ function SettingsTab() {
             Placement Seed Inboxes
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Real Gmail, Outlook, and Yahoo accounts you control. Members add these to their CRM — we check where their emails land.
+            Real Gmail accounts you control. Members add them to their CRM — we check where their emails land via Gmail API.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -953,49 +1110,106 @@ function SettingsTab() {
           {/* Existing inboxes list */}
           {seedLoading ? (
             <div className="space-y-2">
-              {[1, 2].map(i => <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />)}
+              {[1, 2].map(i => <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />)}
             </div>
           ) : seedInboxes.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-5 text-center space-y-1">
               <Inbox className="h-6 w-6 text-muted-foreground/40 mx-auto" />
               <p className="text-sm text-muted-foreground">No seed inboxes added yet</p>
-              <p className="text-xs text-muted-foreground/70">Add a Gmail, Outlook, or Yahoo account below</p>
+              <p className="text-xs text-muted-foreground/70">Click "Add Inbox" below to get started</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {seedInboxes.map((inbox) => (
-                <div key={inbox.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
-                  <ProviderIcon provider={inbox.provider} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{inbox.label}</p>
-                    <p className="text-xs font-mono text-muted-foreground truncate">{inbox.email}</p>
+                <div key={inbox.id} className="rounded-lg border border-border bg-muted/20 overflow-hidden">
+                  {/* Top row: icon, label, email, toggle, delete */}
+                  <div className="flex items-center gap-3 p-3">
+                    <ProviderIcon provider={inbox.provider} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground">{inbox.label}</p>
+                        {inbox.isConnected ? (
+                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-600 border-emerald-500/20">
+                            Connected
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
+                            Not connected
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs font-mono text-muted-foreground truncate">{inbox.email}</p>
+                    </div>
+                    <Switch
+                      checked={inbox.isActive}
+                      onCheckedChange={(checked) => toggleMutation.mutate({ id: inbox.id, isActive: checked })}
+                      data-testid={`toggle-seed-${inbox.id}`}
+                    />
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500 flex-shrink-0" data-testid={`button-delete-seed-${inbox.id}`}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remove seed inbox?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will remove <strong>{inbox.email}</strong> from the placement list and revoke its OAuth connection. Members who added it to their CRM will no longer contribute placement data.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteMutation.mutate(inbox.id)} className="bg-red-600 hover:bg-red-700">
+                            Remove
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
-                  <Switch
-                    checked={inbox.isActive}
-                    onCheckedChange={(checked) => toggleMutation.mutate({ id: inbox.id, isActive: checked })}
-                    data-testid={`toggle-seed-${inbox.id}`}
-                  />
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500 flex-shrink-0" data-testid={`button-delete-seed-${inbox.id}`}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Remove seed inbox?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will remove <strong>{inbox.email}</strong> from the placement list. Members who have already added it to their CRM will stop contributing placement data.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => deleteMutation.mutate(inbox.id)} className="bg-red-600 hover:bg-red-700">
-                          Remove
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+
+                  {/* Bottom row: OAuth connect / disconnect for Gmail */}
+                  {inbox.provider === "gmail" && (
+                    <div className="border-t border-border px-3 py-2 bg-muted/10 flex items-center justify-between">
+                      {inbox.isConnected ? (
+                        <div className="flex items-center gap-3 w-full">
+                          <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                          <p className="text-xs text-muted-foreground flex-1">Gmail API authorized — placement checks active</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs text-muted-foreground hover:text-red-500 px-2"
+                            onClick={() => disconnectMutation.mutate(inbox.id)}
+                            disabled={disconnectMutation.isPending}
+                            data-testid={`button-disconnect-${inbox.id}`}
+                          >
+                            Disconnect
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 w-full">
+                          <CircleAlert className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />
+                          <p className="text-xs text-muted-foreground flex-1">Connect this Gmail account to enable placement checking</p>
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs gap-1.5 flex-shrink-0"
+                            onClick={() => { window.location.href = `/api/inbox-analyzer/seed-inboxes/connect/gmail?inboxId=${inbox.id}`; }}
+                            data-testid={`button-connect-gmail-${inbox.id}`}
+                          >
+                            <SiGmail className="h-3 w-3" />
+                            Connect with Google
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {inbox.provider === "outlook" && !inbox.isConnected && (
+                    <div className="border-t border-border px-3 py-2 bg-muted/10 flex items-center gap-2">
+                      <Info className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <p className="text-xs text-muted-foreground">Outlook OAuth requires a Microsoft Azure app registration — coming soon</p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1003,47 +1217,61 @@ function SettingsTab() {
 
           <Separator />
 
-          {/* Add new inbox form */}
-          <div className="space-y-3">
-            <p className="text-xs font-semibold text-foreground">Add a Seed Inbox</p>
-            <div className="grid grid-cols-3 gap-2">
-              <Select value={newProvider} onValueChange={setNewProvider}>
-                <SelectTrigger className="text-sm" data-testid="select-seed-provider">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gmail">Gmail</SelectItem>
-                  <SelectItem value="outlook">Outlook</SelectItem>
-                  <SelectItem value="yahoo">Yahoo</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                className="text-sm"
-                placeholder="Label (e.g. Gmail — Clean)"
-                value={newLabel}
-                onChange={e => setNewLabel(e.target.value)}
-                data-testid="input-seed-label"
-              />
-              <Input
-                className="text-sm font-mono"
-                placeholder="email@gmail.com"
-                value={newEmail}
-                onChange={e => setNewEmail(e.target.value)}
-                data-testid="input-seed-email"
-              />
-            </div>
-            <Button
-              size="sm"
-              className="gap-1.5"
-              disabled={!newLabel.trim() || !newEmail.trim() || addMutation.isPending}
-              onClick={() => addMutation.mutate()}
-              data-testid="button-add-seed-inbox"
-            >
-              {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          {/* Add new inbox */}
+          {!showAddForm ? (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowAddForm(true)} data-testid="button-show-add-form">
+              <Plus className="h-3.5 w-3.5" />
               Add Inbox
             </Button>
-          </div>
+          ) : (
+            <div className="space-y-3 p-4 rounded-lg border border-border bg-muted/10">
+              <p className="text-xs font-semibold text-foreground">New Seed Inbox</p>
+              <div className="grid grid-cols-3 gap-2">
+                <Select value={newProvider} onValueChange={setNewProvider}>
+                  <SelectTrigger className="text-sm" data-testid="select-seed-provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gmail">Gmail</SelectItem>
+                    <SelectItem value="outlook">Outlook</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  className="text-sm"
+                  placeholder="Label (e.g. Gmail A)"
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value)}
+                  data-testid="input-seed-label"
+                />
+                <Input
+                  className="text-sm font-mono"
+                  placeholder="email@gmail.com"
+                  value={newEmail}
+                  onChange={e => setNewEmail(e.target.value)}
+                  data-testid="input-seed-email"
+                />
+              </div>
+              {newProvider === "gmail" && (
+                <p className="text-xs text-muted-foreground">
+                  After adding, you'll be redirected to Google to authorize inbox access.
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={!newLabel.trim() || !newEmail.trim() || addMutation.isPending}
+                  onClick={() => addMutation.mutate()}
+                  data-testid="button-add-seed-inbox"
+                >
+                  {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : newProvider === "gmail" ? <SiGmail className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                  {newProvider === "gmail" ? "Add & Connect with Google" : "Add Inbox"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>Cancel</Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1082,6 +1310,8 @@ export default function InboxAnalyzerPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.isAdmin ?? false;
+  const search = useSearch();
+  const defaultTab = new URLSearchParams(search).get("tab") || "emails";
 
   const { data: addressData, isLoading: addressLoading } = useQuery<{ email: string; token: string; sendingFromAddress: string }>({
     queryKey: ["/api/inbox-analyzer/address"],
@@ -1157,7 +1387,7 @@ export default function InboxAnalyzerPage() {
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <Tabs defaultValue="emails">
+        <Tabs defaultValue={isAdmin && defaultTab === "settings" ? "settings" : defaultTab === "address" ? "address" : "emails"}>
           <div className="flex justify-center mb-6">
             <TabsList className="h-10 bg-muted gap-1 p-1">
               <TabsTrigger value="emails" className="gap-1.5 text-sm px-4" data-testid="tab-emails">

@@ -21,6 +21,7 @@ import { processSession, subscribeToSession } from "./processing";
 import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
+import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -4409,6 +4410,92 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to delete seed inbox" });
+    }
+  });
+
+  // Gmail OAuth: start connect flow (admin only)
+  app.get("/api/inbox-analyzer/seed-inboxes/connect/gmail", requireAdmin, async (req: Request, res: Response) => {
+    const inboxId = req.query.inboxId as string;
+    if (!inboxId) return res.status(400).json({ message: "inboxId required" });
+    try {
+      const inbox = await storage.getSeedInboxById(inboxId);
+      if (!inbox) return res.status(404).json({ message: "Inbox not found" });
+      if (inbox.provider !== "gmail") return res.status(400).json({ message: "Only Gmail inboxes can be connected via Google OAuth" });
+      const url = getGmailAuthUrl(inboxId);
+      res.redirect(url);
+    } catch (err: any) {
+      console.error("[GmailOAuth] connect error:", err?.message);
+      res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_config");
+    }
+  });
+
+  // Gmail OAuth: callback (must be public — Google redirects here)
+  app.get("/api/inbox-analyzer/seed-inboxes/callback/gmail", async (req: Request, res: Response) => {
+    const code = req.query.code as string;
+    const state = req.query.state as string; // inboxId
+    const error = req.query.error as string;
+
+    if (error || !code || !state) {
+      return res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_denied");
+    }
+
+    try {
+      const { accessToken, refreshToken, expiry, email } = await exchangeGmailCode(code);
+      await storage.storeSeedInboxOAuthTokens(state, accessToken, refreshToken, expiry, email);
+      res.redirect("/email-tools/inbox-analyzer?tab=settings&connected=1");
+    } catch (err: any) {
+      console.error("[GmailOAuth] callback error:", err?.message);
+      res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_failed");
+    }
+  });
+
+  // Disconnect a seed inbox OAuth
+  app.delete("/api/inbox-analyzer/seed-inboxes/:id/disconnect", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.disconnectSeedInbox(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to disconnect inbox" });
+    }
+  });
+
+  // Placement check: member triggers check of their sending address against connected seed inboxes
+  app.get("/api/inbox-analyzer/placement-check", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session!.userId!;
+    try {
+      const address = await storage.getOrCreateInboxAddress(userId);
+      const sendingFrom = address?.sendingFromAddress;
+      if (!sendingFrom) {
+        return res.status(400).json({ message: "Set your sending From address in My Address first" });
+      }
+
+      const allInboxes = await storage.getSeedInboxes(true); // active only
+      const connectedInboxes = allInboxes.filter(i => i.isConnected && i.provider === "gmail");
+
+      if (connectedInboxes.length === 0) {
+        return res.json({ results: [], sendingFrom, message: "No connected seed inboxes yet" });
+      }
+
+      const results: PlacementResult[] = await Promise.all(
+        connectedInboxes.map(inbox =>
+          checkGmailPlacement(
+            {
+              id: inbox.id,
+              label: inbox.label,
+              email: inbox.email,
+              provider: inbox.provider,
+              oauthAccessToken: inbox.oauthAccessToken,
+              oauthRefreshToken: inbox.oauthRefreshToken,
+            },
+            sendingFrom
+          )
+        )
+      );
+
+      res.json({ results, sendingFrom });
+    } catch (err: any) {
+      console.error("[PlacementCheck] error:", err?.message);
+      res.status(500).json({ message: "Failed to check placement" });
     }
   });
 

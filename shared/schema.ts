@@ -845,14 +845,19 @@ export const emailInboxAddresses = pgTable("email_inbox_addresses", {
 
 export const seedInboxes = pgTable("seed_inboxes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  provider: text("provider").notNull(), // "gmail" | "outlook" | "yahoo" | "other"
+  provider: text("provider").notNull(), // "gmail" | "outlook" | "other"
   label: text("label").notNull(),
   email: text("email").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  // OAuth tokens (stored encrypted)
+  oauthAccessToken: text("oauth_access_token"),
+  oauthRefreshToken: text("oauth_refresh_token"),
+  oauthTokenExpiry: timestamp("oauth_token_expiry"),
+  isConnected: boolean("is_connected").default(false).notNull(),
 });
 
-export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true });
+export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true, oauthAccessToken: true, oauthRefreshToken: true, oauthTokenExpiry: true, isConnected: true });
 export type InsertSeedInbox = z.infer<typeof insertSeedInboxSchema>;
 export type SeedInbox = typeof seedInboxes.$inferSelect;
 

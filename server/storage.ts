@@ -301,9 +301,12 @@ export interface IStorage {
   deleteEmailAnalysis(id: string, userId: string): Promise<void>;
   // Seed Inboxes (admin-managed)
   getSeedInboxes(activeOnly?: boolean): Promise<SeedInbox[]>;
+  getSeedInboxById(id: string): Promise<SeedInbox | null>;
   addSeedInbox(data: InsertSeedInbox): Promise<SeedInbox>;
   deleteSeedInbox(id: string): Promise<void>;
   toggleSeedInbox(id: string, isActive: boolean): Promise<void>;
+  storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void>;
+  disconnectSeedInbox(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1797,6 +1800,30 @@ export class DatabaseStorage implements IStorage {
 
   async toggleSeedInbox(id: string, isActive: boolean): Promise<void> {
     await db.update(seedInboxes).set({ isActive }).where(eq(seedInboxes.id, id));
+  }
+
+  async getSeedInboxById(id: string): Promise<SeedInbox | null> {
+    const [row] = await db.select().from(seedInboxes).where(eq(seedInboxes.id, id));
+    return row || null;
+  }
+
+  async storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void> {
+    await db.update(seedInboxes).set({
+      oauthAccessToken: accessToken,
+      oauthRefreshToken: refreshToken,
+      oauthTokenExpiry: expiry,
+      isConnected: true,
+      email,
+    }).where(eq(seedInboxes.id, id));
+  }
+
+  async disconnectSeedInbox(id: string): Promise<void> {
+    await db.update(seedInboxes).set({
+      oauthAccessToken: null,
+      oauthRefreshToken: null,
+      oauthTokenExpiry: null,
+      isConnected: false,
+    }).where(eq(seedInboxes.id, id));
   }
 }
 
