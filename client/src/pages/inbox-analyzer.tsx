@@ -614,7 +614,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               <div className="pt-0.5 space-y-1">
                 {lastPlacementCheckedAt && (
                   <p className="text-xs text-muted-foreground">
-                    Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Searches last 14 days
+                    Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Confirmed
                   </p>
                 )}
                 {allResolved ? null : windowActive ? (
