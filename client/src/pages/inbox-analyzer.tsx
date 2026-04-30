@@ -19,7 +19,7 @@ import {
 import {
   Mail, Copy, Check, Trash2, ChevronDown, ChevronUp, Settings,
   ShieldCheck, ShieldAlert, ShieldX, AlertTriangle, Loader2,
-  Inbox, Info, TrendingUp, CircleCheck, CircleX, CircleAlert,
+  Inbox, Info, CircleCheck, CircleX, CircleAlert,
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
   User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
   Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare,
@@ -29,8 +29,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import type {
-  EmailAnalysis, SpamFlag, CopyFeedback,
-  SubjectAnalysis, TechnicalHealth, SenderTrust, ContentQuality, SeedInbox,
+  EmailAnalysis, SpamFlag,
+  TechnicalHealth, SenderTrust, ContentQuality, SeedInbox,
 } from "@shared/schema";
 
 const INBOX_DOMAIN = "email.fearlessmarketinglab.com";
@@ -188,9 +188,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
   lastPlacementResults?: PlacementResult[] | null;
   lastPlacementCheckedAt?: string | null;
 }) {
-  const cf = email.copyFeedback as CopyFeedback | null;
   const flags = (email.spamFlags as SpamFlag[] | null) || [];
-  const sa = email.subjectAnalysis as SubjectAnalysis | null;
   const th = email.technicalHealth as TechnicalHealth | null;
   const st = email.senderTrust as SenderTrust | null;
   const cq = email.contentQuality as ContentQuality | null;
@@ -341,11 +339,11 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             <ScoreRing score={email.overallScore} size={72} />
             <div>
               <p className="text-base font-bold text-foreground">Overall Score</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Based on 6 categories below</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Based on 5 categories below</p>
               <StatusBadge status={email.status} />
             </div>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             {[
               { label: "Auth", score: (() => {
                 let p = 0;
@@ -363,7 +361,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) p += 3;
                 return Math.round((p / 15) * 100);
               })() : null },
-              { label: "CAN-SPAM", score: email.spamScore },
+              { label: "Spam", score: email.spamScore },
               { label: "Technical", score: th ? (() => {
                 let p = 0;
                 if (th.hasPlainTextVersion) p += 3;
@@ -380,7 +378,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 if (cq.wordCount >= 50 && cq.wordCount <= 600) p += 3;
                 return Math.round((p / 10) * 100);
               })() : null },
-              { label: "Copy", score: email.copyScore },
             ].map((item) => (
               <div key={item.label} className="flex flex-col items-center gap-1 rounded-lg bg-muted/30 py-2 px-1">
                 <ScoreRing score={item.score} size={40} />
@@ -388,6 +385,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               </div>
             ))}
           </div>
+          <p className="text-[10px] text-muted-foreground mt-2">Auth 30 · Trust 15 · Spam Language 35 · Technical 10 · Content 10</p>
         </div>
 
         {/* ── Placement ─────────────────────────────────────────────── */}
@@ -525,20 +523,74 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
           </SectionPanel>
         )}
 
-        {/* CAN-SPAM Compliance */}
-        <SectionPanel title="CAN-SPAM Compliance" icon={AlertTriangle}>
-          <div className="space-y-2">
-            <CheckRow
-              pass={!flags.some(f => f.label.toLowerCase().includes("unsubscribe"))}
-              label="Unsubscribe link present"
-              detail={flags.some(f => f.label.toLowerCase().includes("unsubscribe")) ? "Required by CAN-SPAM" : "Detected in email"}
-            />
-            <CheckRow
-              pass={!!cq?.hasPhysicalAddress}
-              label="Physical address in footer"
-              detail={!cq?.hasPhysicalAddress ? "Required by CAN-SPAM" : "Detected in email"}
-            />
-          </div>
+        {/* Spam Language Analysis */}
+        <SectionPanel title="Spammy Language Analysis" icon={AlertTriangle} score={email.spamScore}>
+          {flags.length === 0 ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
+              <CircleCheck className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+              <p className="text-xs text-green-700 dark:text-green-400 font-medium">No spam triggers detected — great clean copy!</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Trigger word pills grouped by severity */}
+              {(["high", "medium", "low"] as const).map(sev => {
+                const sevFlags = flags.filter(f => f.severity === sev && (f.category === "trigger_word" || f.category === "subject_trigger") && f.matches && f.matches.length > 0);
+                if (sevFlags.length === 0) return null;
+                const allMatches = Array.from(new Set(sevFlags.flatMap(f => f.matches || [])));
+                const isSubject = (word: string) => flags.some(f => f.category === "subject_trigger" && f.matches?.includes(word));
+                const colorClass = sev === "high"
+                  ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 border-red-200 dark:border-red-800"
+                  : sev === "medium"
+                  ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 border-orange-200 dark:border-orange-800"
+                  : "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800";
+                const label = sev === "high" ? "High Risk" : sev === "medium" ? "Medium Risk" : "Low Risk";
+                return (
+                  <div key={sev}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{label} Phrases</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allMatches.map(word => (
+                        <span
+                          key={word}
+                          className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${colorClass}`}
+                        >
+                          {isSubject(word) && <span className="font-bold opacity-70 text-[9px] uppercase tracking-wider">SUBJ</span>}
+                          {word}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Structural / pattern flags */}
+              {(() => {
+                const structuralFlags = flags.filter(f => f.category === "structural" || f.category === "pattern");
+                if (structuralFlags.length === 0) return null;
+                return (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Structure & Patterns</p>
+                    <div className="space-y-1.5">
+                      {structuralFlags.map((f, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className={`mt-0.5 flex-shrink-0 h-3.5 w-3.5 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                            f.severity === "high" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
+                            : f.severity === "medium" ? "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
+                            : "bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          }`}>!</span>
+                          <div className="flex-1">
+                            <p className="text-xs text-foreground leading-snug">{f.label}</p>
+                            {f.matches && f.matches.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{f.matches.slice(0, 6).join(", ")}{f.matches.length > 6 ? `… +${f.matches.length - 6}` : ""}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </SectionPanel>
 
         {/* Technical Health */}
@@ -606,83 +658,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 detail={!cq.hasPs ? "P.S. is one of the most-read parts" : "great engagement technique"}
               />
             </div>
-          </SectionPanel>
-        )}
-
-        {/* Subject Line */}
-        {sa && (
-          <SectionPanel title="Subject Line Analysis" icon={Type}>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <CheckRow
-                pass={sa.isIdealLength}
-                warn={!sa.isIdealLength && sa.charCount > 0}
-                label={`${sa.charCount} characters`}
-                detail={sa.isIdealLength ? "ideal 30–60" : sa.charCount < 30 ? "too short" : "too long"}
-              />
-              <CheckRow
-                pass={true}
-                warn={false}
-                label={`${sa.wordCount} word${sa.wordCount !== 1 ? "s" : ""}`}
-              />
-              <CheckRow
-                pass={sa.hasNumber}
-                warn={!sa.hasNumber}
-                label={sa.hasNumber ? "Contains a number" : "No number in subject"}
-                detail={!sa.hasNumber ? "numbers boost specificity" : undefined}
-              />
-              <CheckRow
-                pass={sa.hasQuestion}
-                warn={!sa.hasQuestion}
-                label={sa.hasQuestion ? "Contains a question" : "No question mark"}
-                detail={!sa.hasQuestion ? "questions invite curiosity" : undefined}
-              />
-              <CheckRow
-                pass={sa.hasEmoji}
-                warn={!sa.hasEmoji}
-                label={sa.hasEmoji ? "Emoji detected" : "No emoji"}
-                detail={!sa.hasEmoji ? "emojis can boost open rates" : undefined}
-              />
-              <CheckRow
-                pass={sa.hasPersonalizationToken}
-                warn={!sa.hasPersonalizationToken}
-                label={sa.hasPersonalizationToken ? "Personalization token found" : "No personalization token"}
-                detail={!sa.hasPersonalizationToken ? "e.g. {first_name}" : undefined}
-              />
-            </div>
-          </SectionPanel>
-        )}
-
-        {/* AI Copy scoring */}
-        {cf && cf.sections.length > 0 && (
-          <SectionPanel title="AI Copy Analysis" icon={TrendingUp} score={email.copyScore}>
-            <div className="space-y-3">
-              {cf.sections.map((sec) => (
-                <div key={sec.name} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-foreground">{sec.name}</span>
-                    <span className={`text-xs font-bold ${scoreColor(sec.score * 10)}`}>{sec.score}/10</span>
-                  </div>
-                  <div className="w-full bg-muted rounded-full h-1.5">
-                    <div className={`h-1.5 rounded-full ${scoreBg(sec.score * 10)}`} style={{ width: `${sec.score * 10}%` }} />
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{sec.feedback}</p>
-                </div>
-              ))}
-            </div>
-            {cf.topSuggestions?.length > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-foreground">Top Suggestions</p>
-                  {cf.topSuggestions.map((s, i) => (
-                    <div key={i} className="flex gap-2 text-xs text-muted-foreground">
-                      <span className="text-primary font-bold flex-shrink-0">{i + 1}.</span>
-                      <span>{s}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
           </SectionPanel>
         )}
 
@@ -1045,7 +1020,7 @@ function MyAddressTab({
             <div className="flex-1">
               <p className="text-sm font-bold text-foreground">View your results in the Emails tab</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Your full report — authentication, deliverability, CAN-SPAM, copy score, and inbox placement — all in one place.
+                Your full report — authentication, sender trust, spammy language analysis, technical health, and inbox placement — all in one place.
               </p>
             </div>
           </div>
@@ -1063,13 +1038,11 @@ function MyAddressTab({
         <CardContent>
           <div className="grid sm:grid-cols-2 gap-3">
             {[
-              { icon: ShieldCheck, label: "Authentication", desc: "SPF, DKIM, and DMARC pass/fail results from your actual sending server" },
-              { icon: ShieldAlert, label: "Sender Trust", desc: "IP blacklist checks across Spamhaus, Barracuda & SpamCop; display name and Reply-To alignment" },
-              { icon: AlertTriangle, label: "CAN-SPAM Compliance", desc: "Checks for required unsubscribe link and physical mailing address in the footer" },
-              { icon: Type, label: "Subject Line", desc: "Character count, emoji, numbers, question marks, personalization tokens, and ideal length scoring" },
-              { icon: Zap, label: "Technical Health", desc: "HTML/text version, preheader, email size, missing ALT text, tracking pixels, external domains" },
-              { icon: BookOpen, label: "Content Quality", desc: "Word count, CAN-SPAM physical address, P.S. section, personalization detection" },
-              { icon: TrendingUp, label: "AI Copy Scoring", desc: "AI evaluates your subject line, hook, body, CTA and overall flow against proven email frameworks" },
+              { icon: ShieldCheck, label: "Authentication (30 pts)", desc: "SPF, DKIM, and DMARC pass/fail results from your actual sending server — plus DNS record presence." },
+              { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist checks across Spamhaus, Barracuda & SpamCop; display name / domain match; Reply-To alignment." },
+              { icon: AlertTriangle, label: "Spammy Language (35 pts)", desc: "Comprehensive scan for 100+ high / medium / low-risk trigger phrases in both subject and body — grouped by severity with highlighted matches." },
+              { icon: Zap, label: "Technical Health (10 pts)", desc: "HTML/text version, preheader, email size, missing ALT text, tracking pixels, and external domains." },
+              { icon: BookOpen, label: "Content Quality (10 pts)", desc: "Word count ideal range, physical address (CAN-SPAM), P.S. section, and personalization detection." },
             ].map((item) => (
               <div key={item.label} className="flex gap-3 p-3 rounded-lg bg-muted/40">
                 <item.icon className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />

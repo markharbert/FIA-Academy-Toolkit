@@ -4560,8 +4560,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             parseSpfResult, parseDkimResult, parseDmarcResult,
             extractSendingDomain, extractSendingIp, extractReplyTo,
             checkSpfRecord, checkDkimRecord, checkDmarcRecord,
-            analyzeSpamSignals, scoreCopyWithAI, computeOverallScore,
-            analyzeSubjectLine, analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
+            analyzeSpamLanguage, computeOverallScore,
+            analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
           } = await import("./inboxAnalyzer");
 
           const rawHeaders = analysis.rawHeaders || "";
@@ -4584,19 +4584,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             checkDmarcRecord(sendingDomain),
           ]);
 
-          const { score: spamScore, flags: spamFlags } = analyzeSpamSignals(subject, bodyText, bodyHtml);
-          const subjectAnalysis = analyzeSubjectLine(subject);
+          const { score: spamScore, flags: spamFlags } = analyzeSpamLanguage(subject, bodyText, bodyHtml);
           const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
           const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
-
-          const [copyFeedback, senderTrust] = await Promise.all([
-            scoreCopyWithAI(subject, bodyText),
-            analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain),
-          ]);
-
-          const copyScore = copyFeedback.sections.length > 0
-            ? Math.round(copyFeedback.sections.reduce((s, sec) => s + sec.score, 0) / copyFeedback.sections.length * 10)
-            : 50;
+          const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain);
 
           const overallScore = computeOverallScore({
             spfResult,
@@ -4606,7 +4597,6 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             dkimRecordExists,
             dmarcRecordExists,
             spamScore,
-            copyScore,
             senderTrust,
             technicalHealth,
             contentQuality,
@@ -4621,10 +4611,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             dmarcRecordExists,
             spamScore,
             spamFlags,
-            copyScore,
-            copyFeedback,
             overallScore,
-            subjectAnalysis,
             technicalHealth,
             senderTrust,
             contentQuality,
@@ -4651,8 +4638,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         parseSpfResult, parseDkimResult, parseDmarcResult,
         extractSendingDomain, extractSendingIp, extractReplyTo,
         checkSpfRecord, checkDkimRecord, checkDmarcRecord,
-        analyzeSpamSignals, scoreCopyWithAI, computeOverallScore,
-        analyzeSubjectLine, analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
+        analyzeSpamLanguage, computeOverallScore,
+        analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
         stripTrackingPixels,
       } = await import("./inboxAnalyzer");
 
@@ -4714,19 +4701,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             checkDmarcRecord(sendingDomain),
           ]);
 
-          const { score: spamScore, flags: spamFlags } = analyzeSpamSignals(subject, bodyText, bodyHtml);
-          const subjectAnalysis = analyzeSubjectLine(subject);
+          const { score: spamScore, flags: spamFlags } = analyzeSpamLanguage(subject, bodyText, bodyHtml);
           const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
           const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
-
-          const [copyFeedback, senderTrust] = await Promise.all([
-            scoreCopyWithAI(subject, bodyText),
-            analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain),
-          ]);
-
-          const copyScore = copyFeedback.sections.length > 0
-            ? Math.round(copyFeedback.sections.reduce((s, sec) => s + sec.score, 0) / copyFeedback.sections.length * 10)
-            : 50;
+          const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain);
 
           const overallScore = computeOverallScore({
             spfResult: parseSpfResult(spfRaw),
@@ -4736,7 +4714,6 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             dkimRecordExists,
             dmarcRecordExists,
             spamScore,
-            copyScore,
             senderTrust,
             technicalHealth,
             contentQuality,
@@ -4751,10 +4728,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             dmarcRecordExists,
             spamScore,
             spamFlags,
-            copyScore,
-            copyFeedback,
             overallScore,
-            subjectAnalysis,
             technicalHealth,
             senderTrust,
             contentQuality,

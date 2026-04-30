@@ -797,7 +797,12 @@ export type SavedOffer = typeof savedOffers.$inferSelect;
 
 // ─── Inbox Analyzer ──────────────────────────────────────────────────────────
 
-export type SpamFlag = { label: string; severity: "low" | "medium" | "high" };
+export type SpamFlag = {
+  label: string;
+  severity: "low" | "medium" | "high";
+  category?: "trigger_word" | "subject_trigger" | "structural" | "pattern";
+  matches?: string[];
+};
 export type CopyFeedbackSection = { name: string; score: number; feedback: string };
 export type CopyFeedback = { sections: CopyFeedbackSection[]; topSuggestions: string[] };
 

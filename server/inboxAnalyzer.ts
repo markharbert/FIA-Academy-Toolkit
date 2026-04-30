@@ -190,103 +190,261 @@ async function checkBlacklists(ip: string): Promise<string[]> {
   return hits;
 }
 
-// ── Spam signal analysis ────────────────────────────────────────────────────
+// ── Spam language analysis ──────────────────────────────────────────────────
 
-const HIGH_RISK_WORDS = [
-  "free money", "guaranteed", "no risk", "winner", "you won", "claim now",
-  "act now", "limited time", "make money fast", "earn $", "click here",
-  "buy now", "order now", "cheap", "discount", "cash bonus", "credit card required",
-  "consolidate debt", "lowest price", "no fees", "free offer", "once in a lifetime",
-  "work from home", "weight loss", "lose weight", "miracle", "100% free",
+type TriggerEntry = { phrase: string; severity: "high" | "medium" | "low"; category: string };
+
+const SPAM_TRIGGERS: TriggerEntry[] = [
+  // ── HIGH RISK ──────────────────────────────────────────────────────────────
+  // Deceptive / too-good-to-be-true
+  { phrase: "you've been selected", severity: "high", category: "Deceptive" },
+  { phrase: "you have been selected", severity: "high", category: "Deceptive" },
+  { phrase: "you are a winner", severity: "high", category: "Deceptive" },
+  { phrase: "you won", severity: "high", category: "Deceptive" },
+  { phrase: "congratulations", severity: "high", category: "Deceptive" },
+  { phrase: "as seen on", severity: "high", category: "Deceptive" },
+  { phrase: "once in a lifetime", severity: "high", category: "Deceptive" },
+  { phrase: "this is not spam", severity: "high", category: "Deceptive" },
+  { phrase: "not junk", severity: "high", category: "Deceptive" },
+  // Financial
+  { phrase: "free money", severity: "high", category: "Financial" },
+  { phrase: "make money fast", severity: "high", category: "Financial" },
+  { phrase: "earn extra cash", severity: "high", category: "Financial" },
+  { phrase: "extra income", severity: "high", category: "Financial" },
+  { phrase: "financial freedom", severity: "high", category: "Financial" },
+  { phrase: "double your income", severity: "high", category: "Financial" },
+  { phrase: "cash bonus", severity: "high", category: "Financial" },
+  { phrase: "credit card required", severity: "high", category: "Financial" },
+  { phrase: "no credit check", severity: "high", category: "Financial" },
+  { phrase: "consolidate debt", severity: "high", category: "Financial" },
+  { phrase: "debt relief", severity: "high", category: "Financial" },
+  { phrase: "refinance", severity: "high", category: "Financial" },
+  { phrase: "100% free", severity: "high", category: "Financial" },
+  { phrase: "zero cost", severity: "high", category: "Financial" },
+  { phrase: "no fees", severity: "high", category: "Financial" },
+  // Health / weight loss
+  { phrase: "lose weight fast", severity: "high", category: "Health" },
+  { phrase: "weight loss", severity: "high", category: "Health" },
+  { phrase: "miracle cure", severity: "high", category: "Health" },
+  { phrase: "miracle pill", severity: "high", category: "Health" },
+  { phrase: "anti-aging", severity: "high", category: "Health" },
+  { phrase: "clinically proven", severity: "high", category: "Health" },
+  // Pressure / urgency classics
+  { phrase: "act now", severity: "high", category: "Urgency" },
+  { phrase: "apply now", severity: "high", category: "Urgency" },
+  { phrase: "call now", severity: "high", category: "Urgency" },
+  { phrase: "call free", severity: "high", category: "Urgency" },
+  { phrase: "don't delete", severity: "high", category: "Urgency" },
+  { phrase: "instant approval", severity: "high", category: "Urgency" },
+  { phrase: "instant access", severity: "high", category: "Urgency" },
+  { phrase: "order now", severity: "high", category: "Urgency" },
+  { phrase: "buy now", severity: "high", category: "Urgency" },
+  { phrase: "claim now", severity: "high", category: "Urgency" },
+  { phrase: "claim your", severity: "high", category: "Urgency" },
+  // Classic spam phrases
+  { phrase: "click here", severity: "high", category: "Classic Spam" },
+  { phrase: "click below", severity: "high", category: "Classic Spam" },
+  { phrase: "free offer", severity: "high", category: "Classic Spam" },
+  { phrase: "free membership", severity: "high", category: "Classic Spam" },
+  { phrase: "free preview", severity: "high", category: "Classic Spam" },
+  { phrase: "free quote", severity: "high", category: "Classic Spam" },
+  { phrase: "free trial", severity: "high", category: "Classic Spam" },
+  { phrase: "free gift", severity: "high", category: "Classic Spam" },
+  { phrase: "no risk", severity: "high", category: "Classic Spam" },
+  { phrase: "risk free", severity: "high", category: "Classic Spam" },
+  { phrase: "risk-free", severity: "high", category: "Classic Spam" },
+  { phrase: "no obligation", severity: "high", category: "Classic Spam" },
+  { phrase: "guaranteed", severity: "high", category: "Classic Spam" },
+  { phrase: "work from home", severity: "high", category: "Classic Spam" },
+
+  // ── MEDIUM RISK ────────────────────────────────────────────────────────────
+  { phrase: "limited time offer", severity: "medium", category: "Urgency" },
+  { phrase: "limited time", severity: "medium", category: "Urgency" },
+  { phrase: "limited offer", severity: "medium", category: "Urgency" },
+  { phrase: "expires soon", severity: "medium", category: "Urgency" },
+  { phrase: "last chance", severity: "medium", category: "Urgency" },
+  { phrase: "don't miss", severity: "medium", category: "Urgency" },
+  { phrase: "don't wait", severity: "medium", category: "Urgency" },
+  { phrase: "hurry", severity: "medium", category: "Urgency" },
+  { phrase: "urgent", severity: "medium", category: "Urgency" },
+  { phrase: "while supplies last", severity: "medium", category: "Urgency" },
+  { phrase: "special offer", severity: "medium", category: "Promotional" },
+  { phrase: "special promotion", severity: "medium", category: "Promotional" },
+  { phrase: "exclusive deal", severity: "medium", category: "Promotional" },
+  { phrase: "exclusive offer", severity: "medium", category: "Promotional" },
+  { phrase: "amazing deal", severity: "medium", category: "Promotional" },
+  { phrase: "incredible deal", severity: "medium", category: "Promotional" },
+  { phrase: "unbelievable", severity: "medium", category: "Promotional" },
+  { phrase: "lowest price", severity: "medium", category: "Promotional" },
+  { phrase: "best price", severity: "medium", category: "Promotional" },
+  { phrase: "cheap", severity: "medium", category: "Promotional" },
+  { phrase: "earn extra", severity: "medium", category: "Financial" },
+  { phrase: "make money", severity: "medium", category: "Financial" },
+  { phrase: "earn cash", severity: "medium", category: "Financial" },
+  { phrase: "invest now", severity: "medium", category: "Financial" },
+  { phrase: "profit", severity: "medium", category: "Financial" },
+  { phrase: "lose weight", severity: "medium", category: "Health" },
+  { phrase: "burn fat", severity: "medium", category: "Health" },
+  { phrase: "get rich", severity: "medium", category: "Financial" },
+  { phrase: "fast cash", severity: "medium", category: "Financial" },
+  { phrase: "winner", severity: "medium", category: "Deceptive" },
+
+  // ── LOW RISK ───────────────────────────────────────────────────────────────
+  { phrase: "free", severity: "low", category: "Common Marketing" },
+  { phrase: "bonus", severity: "low", category: "Common Marketing" },
+  { phrase: "prize", severity: "low", category: "Common Marketing" },
+  { phrase: "gift", severity: "low", category: "Common Marketing" },
+  { phrase: "discount", severity: "low", category: "Common Marketing" },
+  { phrase: "save", severity: "low", category: "Common Marketing" },
+  { phrase: "deal", severity: "low", category: "Common Marketing" },
+  { phrase: "promotion", severity: "low", category: "Common Marketing" },
+  { phrase: "offer", severity: "low", category: "Common Marketing" },
+  { phrase: "sale", severity: "low", category: "Common Marketing" },
+  { phrase: "exclusive", severity: "low", category: "Common Marketing" },
+  { phrase: "amazing", severity: "low", category: "Common Marketing" },
+  { phrase: "incredible", severity: "low", category: "Common Marketing" },
 ];
 
-const MEDIUM_RISK_WORDS = [
-  "free", "urgent", "important", "exclusive", "special offer", "limited",
-  "amazing", "incredible", "unbelievable", "hurry", "expire", "deal",
-  "offer", "promotion", "save", "discount", "bonus", "gift", "prize",
-];
-
-export function analyzeSpamSignals(
+export function analyzeSpamLanguage(
   subject: string,
   bodyText: string,
   bodyHtml: string
 ): { score: number; flags: SpamFlag[] } {
   const flags: SpamFlag[] = [];
-  const subjectLower = subject.toLowerCase();
-  const bodyLower = (bodyText || "").toLowerCase();
+
+  const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
+  const bodyLower = ((bodyText || "").trim() || htmlAsText);
+  const subjectLower = (subject || "").toLowerCase();
   const combined = subjectLower + " " + bodyLower;
 
-  for (const word of HIGH_RISK_WORDS) {
-    if (combined.includes(word)) {
-      flags.push({ label: `Spam phrase detected: "${word}"`, severity: "high" });
+  // ── Trigger word scan ────────────────────────────────────────────────────
+  const subjectMatches: string[] = [];
+  const bodyMatches: string[] = [];
+  const seenPhrases = new Set<string>();
+
+  for (const trigger of SPAM_TRIGGERS) {
+    const phrase = trigger.phrase;
+    if (seenPhrases.has(phrase)) continue;
+
+    const inSubject = subjectLower.includes(phrase);
+    const inBody = bodyLower.includes(phrase);
+
+    if (inSubject) {
+      seenPhrases.add(phrase);
+      subjectMatches.push(phrase);
+      flags.push({
+        label: `"${phrase}" in subject line`,
+        severity: trigger.severity === "low" ? "low" : trigger.severity === "medium" ? "medium" : "high",
+        category: "subject_trigger",
+        matches: [phrase],
+      });
+    } else if (inBody) {
+      seenPhrases.add(phrase);
+      bodyMatches.push(phrase);
     }
   }
 
-  let mediumHits = 0;
-  for (const word of MEDIUM_RISK_WORDS) {
-    if (combined.includes(word)) mediumHits++;
+  // Group body trigger words into a single flag per severity
+  const highBody = bodyMatches.filter(p => SPAM_TRIGGERS.find(t => t.phrase === p)?.severity === "high");
+  const medBody  = bodyMatches.filter(p => SPAM_TRIGGERS.find(t => t.phrase === p)?.severity === "medium");
+  const lowBody  = bodyMatches.filter(p => SPAM_TRIGGERS.find(t => t.phrase === p)?.severity === "low");
+
+  if (highBody.length > 0) {
+    flags.push({
+      label: `${highBody.length} high-risk spam phrase${highBody.length > 1 ? "s" : ""} in body`,
+      severity: "high",
+      category: "trigger_word",
+      matches: highBody,
+    });
   }
-  if (mediumHits >= 3) {
-    flags.push({ label: `${mediumHits} promotional trigger words found`, severity: "medium" });
-  } else if (mediumHits >= 1) {
-    flags.push({ label: `${mediumHits} promotional trigger word(s) found`, severity: "low" });
+  if (medBody.length > 0) {
+    flags.push({
+      label: `${medBody.length} medium-risk trigger word${medBody.length > 1 ? "s" : ""} in body`,
+      severity: "medium",
+      category: "trigger_word",
+      matches: medBody,
+    });
+  }
+  if (lowBody.length > 0) {
+    flags.push({
+      label: `${lowBody.length} common marketing word${lowBody.length > 1 ? "s" : ""} in body`,
+      severity: "low",
+      category: "trigger_word",
+      matches: lowBody,
+    });
   }
 
-  const capsRatio = (subject.match(/[A-Z]/g) || []).length / Math.max(subject.length, 1);
+  // ── Structural / pattern checks ──────────────────────────────────────────
+  // Excessive caps in subject
+  const capsRatio = (subject.match(/[A-Z]/g) || []).length / Math.max(subject.replace(/\s/g, "").length, 1);
   if (capsRatio > 0.5 && subject.length > 5) {
-    flags.push({ label: "Subject line uses excessive ALL CAPS", severity: "high" });
+    flags.push({ label: "Subject line uses excessive ALL CAPS", severity: "high", category: "structural" });
   } else if (capsRatio > 0.3 && subject.length > 5) {
-    flags.push({ label: "Subject line has significant capitalization", severity: "medium" });
+    flags.push({ label: "Subject uses significant capitalization", severity: "medium", category: "structural" });
   }
 
+  // Excessive punctuation in subject
   if (/[!?]{2,}/.test(subject)) {
-    flags.push({ label: "Subject line has excessive punctuation (!!! or ???)", severity: "medium" });
+    flags.push({ label: 'Subject line has excessive punctuation ("!!" or "??")', severity: "medium", category: "structural" });
   }
 
-  if (subject.length > 70) {
-    flags.push({ label: `Subject line is too long (${subject.length} chars, ideal <50)`, severity: "low" });
+  // Multiple exclamation marks in body
+  const bodyExclamations = (bodyLower.match(/!/g) || []).length;
+  if (bodyExclamations >= 5) {
+    flags.push({ label: `${bodyExclamations} exclamation marks in body`, severity: "medium", category: "pattern" });
   }
 
-  // Check HTML body too — many emails are HTML-only with no plain text version
-  const htmlTextLower = (bodyHtml || "").toLowerCase();
-  const hasUnsub =
-    bodyLower.includes("unsubscribe") ||
-    bodyLower.includes("opt out") ||
-    bodyLower.includes("opt-out") ||
-    bodyLower.includes("manage preferences") ||
-    htmlTextLower.includes("unsubscribe") ||
-    htmlTextLower.includes("opt out") ||
-    htmlTextLower.includes("opt-out") ||
-    htmlTextLower.includes("manage preferences");
+  // ALL CAPS words in body (3+ letters)
+  const capsWordMatches = bodyText.match(/\b[A-Z]{3,}\b/g) || [];
+  const filteredCapsWords = [...new Set(capsWordMatches)].filter(w =>
+    !["SPF", "DKIM", "DMARC", "HTML", "URL", "CTA", "P.S", "PS"].includes(w)
+  );
+  if (filteredCapsWords.length >= 4) {
+    flags.push({
+      label: `${filteredCapsWords.length} ALL CAPS words in body`,
+      severity: "medium",
+      category: "pattern",
+      matches: filteredCapsWords.slice(0, 8),
+    });
+  }
+
+  // Fake Re:/Fwd: in subject
+  if (/^(re:|fwd?:|fw:)\s/i.test(subject)) {
+    flags.push({ label: 'Fake "Re:" or "Fwd:" prefix in subject — common phishing tactic', severity: "high", category: "structural" });
+  }
+
+  // No unsubscribe link
+  const combinedRaw = (bodyText + " " + bodyHtml).toLowerCase();
+  const hasUnsub = /unsubscribe|opt.?out|manage preferences|manage subscription/i.test(combinedRaw);
   if (!hasUnsub) {
-    flags.push({ label: "No unsubscribe link detected (CAN-SPAM requirement)", severity: "high" });
+    flags.push({ label: "No unsubscribe link detected (CAN-SPAM requirement)", severity: "high", category: "structural" });
   }
 
+  // Link density
   if (bodyHtml) {
-    const linkMatches = (bodyHtml.match(/<a\s/gi) || []).length;
-    const wordCount = (bodyText || bodyHtml.replace(/<[^>]+>/g, " ")).split(/\s+/).length;
-    if (linkMatches > 10) {
-      flags.push({ label: `High link count (${linkMatches} links) may trigger filters`, severity: "medium" });
-    }
-    if (linkMatches > 0 && wordCount > 0 && linkMatches / wordCount > 0.05) {
-      flags.push({ label: "Link-to-text ratio is high", severity: "medium" });
-    }
-    const imgMatches = (bodyHtml.match(/<img\s/gi) || []).length;
-    if (imgMatches > 0 && wordCount < 50) {
-      flags.push({ label: "Email appears image-heavy with little text", severity: "medium" });
+    const linkCount = (bodyHtml.match(/<a\s/gi) || []).length;
+    const wordCount = bodyLower.split(/\s+/).filter(Boolean).length;
+    if (linkCount > 10) {
+      flags.push({ label: `High link count (${linkCount} links) may trigger filters`, severity: "medium", category: "pattern" });
+    } else if (wordCount > 0 && linkCount / wordCount > 0.05) {
+      flags.push({ label: "High link-to-text ratio", severity: "medium", category: "pattern" });
     }
   }
 
+  // ── Score calculation (0–100) ────────────────────────────────────────────
   let deductions = 0;
   for (const f of flags) {
-    if (f.severity === "high") deductions += 20;
-    else if (f.severity === "medium") deductions += 10;
-    else deductions += 5;
+    if (f.severity === "high") deductions += 18;
+    else if (f.severity === "medium") deductions += 8;
+    else deductions += 3;
   }
   const score = Math.max(0, 100 - deductions);
 
   return { score, flags };
 }
+
+// Keep old export name as alias so existing callers don't immediately break
+export const analyzeSpamSignals = analyzeSpamLanguage;
 
 // ── Subject line analysis ──────────────────────────────────────────────────
 
@@ -464,7 +622,7 @@ Respond ONLY with valid JSON in this exact format:
 }
 
 // ── Overall score ───────────────────────────────────────────────────────────
-// Breakdown: Auth 30 + SenderTrust 15 + Spam 15 + Technical 10 + Content 10 + Copy 20 = 100
+// Breakdown: Auth 30 + SenderTrust 15 + SpamLanguage 35 + Technical 10 + Content 10 = 100
 
 export function computeOverallScore(params: {
   spfResult: string;
@@ -474,7 +632,7 @@ export function computeOverallScore(params: {
   dkimRecordExists: boolean;
   dmarcRecordExists: boolean;
   spamScore: number;
-  copyScore: number;
+  copyScore?: number;
   senderTrust?: SenderTrust | null;
   technicalHealth?: TechnicalHealth | null;
   contentQuality?: ContentQuality | null;
@@ -500,8 +658,9 @@ export function computeOverallScore(params: {
   }
   // max 15
 
-  // Spam signals: 15 pts
-  const spamPoints = Math.round((params.spamScore / 100) * 15);
+  // Spam language: 35 pts (replaces old Spam 15 + Copy 20)
+  const spamPoints = Math.round((params.spamScore / 100) * 35);
+  // max 35
 
   // Technical health: 10 pts
   let techPoints = 6; // default
@@ -527,8 +686,5 @@ export function computeOverallScore(params: {
   }
   // max 10
 
-  // Copy: 20 pts
-  const copyPoints = Math.round((params.copyScore / 100) * 20);
-
-  return Math.min(100, authPoints + trustPoints + spamPoints + techPoints + contentPoints + copyPoints);
+  return Math.min(100, authPoints + trustPoints + spamPoints + techPoints + contentPoints);
 }
