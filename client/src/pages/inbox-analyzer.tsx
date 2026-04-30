@@ -409,49 +409,6 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
           </div>
         </SectionPanel>
 
-        {/* Subject Line */}
-        {sa && (
-          <SectionPanel title="Subject Line Analysis" icon={Type}>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <CheckRow
-                pass={sa.isIdealLength}
-                warn={!sa.isIdealLength && sa.charCount > 0}
-                label={`${sa.charCount} characters`}
-                detail={sa.isIdealLength ? "ideal 30–60" : sa.charCount < 30 ? "too short" : "too long"}
-              />
-              <CheckRow
-                pass={true}
-                warn={false}
-                label={`${sa.wordCount} word${sa.wordCount !== 1 ? "s" : ""}`}
-              />
-              <CheckRow
-                pass={sa.hasNumber}
-                warn={!sa.hasNumber}
-                label={sa.hasNumber ? "Contains a number" : "No number in subject"}
-                detail={!sa.hasNumber ? "numbers boost specificity" : undefined}
-              />
-              <CheckRow
-                pass={sa.hasQuestion}
-                warn={!sa.hasQuestion}
-                label={sa.hasQuestion ? "Contains a question" : "No question mark"}
-                detail={!sa.hasQuestion ? "questions invite curiosity" : undefined}
-              />
-              <CheckRow
-                pass={sa.hasEmoji}
-                warn={!sa.hasEmoji}
-                label={sa.hasEmoji ? "Emoji detected" : "No emoji"}
-                detail={!sa.hasEmoji ? "emojis can boost open rates" : undefined}
-              />
-              <CheckRow
-                pass={sa.hasPersonalizationToken}
-                warn={!sa.hasPersonalizationToken}
-                label={sa.hasPersonalizationToken ? "Personalization token found" : "No personalization token"}
-                detail={!sa.hasPersonalizationToken ? "e.g. {first_name}" : undefined}
-              />
-            </div>
-          </SectionPanel>
-        )}
-
         {/* Technical Health */}
         {th && (
           <SectionPanel title="Technical Health" icon={Zap}>
@@ -515,6 +472,49 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
                 warn={!cq.hasPs}
                 label={cq.hasPs ? "P.S. section found" : "No P.S. section"}
                 detail={!cq.hasPs ? "P.S. is one of the most-read parts" : "great engagement technique"}
+              />
+            </div>
+          </SectionPanel>
+        )}
+
+        {/* Subject Line */}
+        {sa && (
+          <SectionPanel title="Subject Line Analysis" icon={Type}>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <CheckRow
+                pass={sa.isIdealLength}
+                warn={!sa.isIdealLength && sa.charCount > 0}
+                label={`${sa.charCount} characters`}
+                detail={sa.isIdealLength ? "ideal 30–60" : sa.charCount < 30 ? "too short" : "too long"}
+              />
+              <CheckRow
+                pass={true}
+                warn={false}
+                label={`${sa.wordCount} word${sa.wordCount !== 1 ? "s" : ""}`}
+              />
+              <CheckRow
+                pass={sa.hasNumber}
+                warn={!sa.hasNumber}
+                label={sa.hasNumber ? "Contains a number" : "No number in subject"}
+                detail={!sa.hasNumber ? "numbers boost specificity" : undefined}
+              />
+              <CheckRow
+                pass={sa.hasQuestion}
+                warn={!sa.hasQuestion}
+                label={sa.hasQuestion ? "Contains a question" : "No question mark"}
+                detail={!sa.hasQuestion ? "questions invite curiosity" : undefined}
+              />
+              <CheckRow
+                pass={sa.hasEmoji}
+                warn={!sa.hasEmoji}
+                label={sa.hasEmoji ? "Emoji detected" : "No emoji"}
+                detail={!sa.hasEmoji ? "emojis can boost open rates" : undefined}
+              />
+              <CheckRow
+                pass={sa.hasPersonalizationToken}
+                warn={!sa.hasPersonalizationToken}
+                label={sa.hasPersonalizationToken ? "Personalization token found" : "No personalization token"}
+                detail={!sa.hasPersonalizationToken ? "e.g. {first_name}" : undefined}
               />
             </div>
           </SectionPanel>
