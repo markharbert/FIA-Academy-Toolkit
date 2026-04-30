@@ -386,22 +386,22 @@ export async function analyzeSenderTrust(
 // ── Content quality analysis ────────────────────────────────────────────────
 
 export function analyzeContentQuality(bodyText: string, bodyHtml: string): ContentQuality {
-  const wordCount = (bodyText || "").trim().split(/\s+/).filter(Boolean).length;
+  // Strip HTML tags to get plain text from HTML body for all checks
+  const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const textToSearch = (bodyText || "").trim() || htmlAsText;
 
-  // Strip HTML tags to get plain text from HTML body for address/content checks
-  const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  const textToSearch = bodyText || htmlAsText;
+  const wordCount = textToSearch.split(/\s+/).filter(Boolean).length;
 
   const hasPhysicalAddress =
     /\d+\s+[\w\s]{2,30}(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|place|pl|suite|ste)\b/i.test(textToSearch) ||
     /p\.?o\.?\s*box\s+\d+/i.test(textToSearch) ||
     /\b[A-Z]{2}\s+\d{5}(-\d{4})?\b/.test(textToSearch);
 
-  const hasPs = /\b(p\.s\.|p\.?s\.?\s+[A-Z])/i.test(bodyText);
+  const hasPs = /\bp\.?\s*s\.?\b/i.test(textToSearch);
 
   const hasPersonalization =
-    /\{[a-z_]+\}|%[a-z_]+%|\[\[[\w\s]+\]\]/i.test(bodyText + bodyHtml) ||
-    /\b(?:Hi|Hey|Dear|Hello)\s+[A-Z][a-z]+[,!]/i.test(bodyText);
+    /\{[a-z_]+\}|%[a-z_]+%|\[\[[\w\s]+\]\]/i.test(textToSearch + bodyHtml) ||
+    /\b(?:Hi|Hey|Dear|Hello)\s+[A-Z][a-z]+[,!]/i.test(textToSearch);
 
   return {
     wordCount,
