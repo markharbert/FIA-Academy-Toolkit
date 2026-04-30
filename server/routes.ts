@@ -4447,8 +4447,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             : 50;
 
           const overallScore = computeOverallScore({
-            spfResult: parseSpfResult(spfRaw),
-            dkimResult: parseDkimResult(dkimRaw),
+            spfResult,
+            dkimResult,
             dmarcResult,
             spfRecordExists,
             dkimRecordExists,
