@@ -18,6 +18,21 @@ export function generateToken(): string {
   return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
+export function stripTrackingPixels(html: string): string {
+  if (!html) return html;
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    // Strip 1x1 / 0x0 images (both dimensions must be ≤ 1)
+    const wMatch = tag.match(/\bwidth\s*=\s*["']?(\d+)["']?/i);
+    const hMatch = tag.match(/\bheight\s*=\s*["']?(\d+)["']?/i);
+    if (wMatch && hMatch && parseInt(wMatch[1]) <= 1 && parseInt(hMatch[1]) <= 1) return "";
+    // Strip images hidden via CSS
+    if (/style\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden|(?:width|height)\s*:\s*0)/i.test(tag)) return "";
+    // Strip known tracking pixel URL patterns
+    if (/src\s*=\s*["'][^"']*(?:\/(?:track|pixel|open|beacon|wf|trk)(?:[/?.])|open\.(?:gif|png|php)|\.pixel\.)/.test(tag)) return "";
+    return tag;
+  });
+}
+
 // ── Parse SendGrid webhook fields ──────────────────────────────────────────
 
 export function parseSpfResult(spfField: string | undefined): string {

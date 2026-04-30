@@ -4501,6 +4501,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         checkSpfRecord, checkDkimRecord, checkDmarcRecord,
         analyzeSpamSignals, scoreCopyWithAI, computeOverallScore,
         analyzeSubjectLine, analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
+        stripTrackingPixels,
       } = await import("./inboxAnalyzer");
 
       const toRaw: string = (req.body?.to || req.body?.envelope && JSON.parse(req.body.envelope)?.to?.[0]) || "";
@@ -4522,7 +4523,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
       const subject: string = req.body?.subject || "(No subject)";
       const bodyText: string = req.body?.text || "";
-      const bodyHtml: string = req.body?.html || "";
+      const bodyHtml: string = stripTrackingPixels(req.body?.html || "");
       const rawHeaders: string = req.body?.headers || "";
       const spfRaw: string = req.body?.spf || "";
       const dkimRaw: string = req.body?.dkim || "";

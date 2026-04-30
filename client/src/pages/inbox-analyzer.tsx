@@ -23,6 +23,18 @@ const INBOX_DOMAIN = "email.fearlessmarketinglab.com";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+function stripTrackingPixels(html: string): string {
+  if (!html) return html;
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    const wMatch = tag.match(/\bwidth\s*=\s*["']?(\d+)["']?/i);
+    const hMatch = tag.match(/\bheight\s*=\s*["']?(\d+)["']?/i);
+    if (wMatch && hMatch && parseInt(wMatch[1]) <= 1 && parseInt(hMatch[1]) <= 1) return "";
+    if (/style\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden|(?:width|height)\s*:\s*0)/i.test(tag)) return "";
+    if (/src\s*=\s*["'][^"']*(?:\/(?:track|pixel|open|beacon|wf|trk)(?:[/?.])|open\.(?:gif|png|php)|\.pixel\.)/.test(tag)) return "";
+    return tag;
+  });
+}
+
 function scoreColor(score: number | null | undefined) {
   if (score == null) return "text-muted-foreground";
   if (score >= 80) return "text-emerald-500";
@@ -229,7 +241,7 @@ function EmailDetail({ email, onDelete, onReanalyze }: { email: EmailAnalysis; o
             </p>
             {email.bodyHtml ? (
               <iframe
-                srcDoc={email.bodyHtml}
+                srcDoc={stripTrackingPixels(email.bodyHtml)}
                 sandbox="allow-same-origin"
                 className="w-full rounded border border-border bg-white"
                 style={{ minHeight: "400px", height: "auto" }}
