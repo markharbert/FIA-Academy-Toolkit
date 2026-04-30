@@ -31,6 +31,8 @@ import EmailToolsPage from "@/pages/email-tools";
 import InboxAnalyzerPage from "@/pages/inbox-analyzer";
 import DmoTrackerPage from "@/pages/dmo-tracker";
 import CfLoginPage from "@/pages/cf-login";
+import HelpPage from "@/pages/help";
+import HelpArticlePage from "@/pages/help-article";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -162,6 +164,12 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/dmo-tracker">
         {() => <ProtectedRoute component={DmoTrackerPage} />}
+      </Route>
+      <Route path="/help">
+        {() => <ProtectedRoute component={HelpPage} />}
+      </Route>
+      <Route path="/help/:slug">
+        {() => <ProtectedRoute component={HelpArticlePage} />}
       </Route>
       <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>

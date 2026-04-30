@@ -24,6 +24,7 @@ import {
   Shield,
   ExternalLink,
   Target,
+  BookOpen,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
@@ -145,6 +146,26 @@ export function AppSidebar() {
                 >
                   <ExternalLink />
                   <span>Back to Dashboard</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+        <SidebarGroup>
+          <SidebarGroupLabel>Help &amp; Support</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location.startsWith("/help")}
+                  tooltip="Help Docs"
+                  onClick={() => setLocation("/help")}
+                  data-testid="nav-help"
+                >
+                  <BookOpen />
+                  <span>Help Docs</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
