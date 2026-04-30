@@ -291,7 +291,7 @@ export interface IStorage {
   getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined>;
   updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void>;
   saveLastPlacementResults(userId: string, results: unknown[]): Promise<void>;
-  setPlacementAutoCheckWindow(userId: string, until: Date): Promise<void>;
+  setPlacementAutoCheckWindow(userId: string, until: Date | null): Promise<void>;
   getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date }>>;
   createEmailAnalysis(data: {
     userId: string; fromAddress: string; fromName?: string; replyTo?: string; subject: string;
@@ -1793,7 +1793,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(emailInboxAddresses.userId, userId));
   }
 
-  async setPlacementAutoCheckWindow(userId: string, until: Date): Promise<void> {
+  async setPlacementAutoCheckWindow(userId: string, until: Date | null): Promise<void> {
     await db.update(emailInboxAddresses)
       .set({ placementAutoCheckUntil: until })
       .where(eq(emailInboxAddresses.userId, userId));

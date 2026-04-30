@@ -379,20 +379,13 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
   // Derive auto-monitoring phase info
   const now = Date.now();
-  const windowEnd  = placementAutoCheckUntil ? new Date(placementAutoCheckUntil).getTime() : null;
-  const windowStart = windowEnd ? windowEnd - 24 * 60 * 60 * 1000 : null;
+  const windowEnd    = placementAutoCheckUntil ? new Date(placementAutoCheckUntil).getTime() : null;
   const windowActive = windowEnd ? now < windowEnd : false;
-  const windowAge  = windowStart ? now - windowStart : null;
-  const inPhase1   = windowActive && windowAge !== null && windowAge < 60 * 60 * 1000;
-  const checkInterval = inPhase1 ? 15 * 60 * 1000 : 60 * 60 * 1000;
-  const lastCheckMs = lastPlacementCheckedAt ? new Date(lastPlacementCheckedAt).getTime() : null;
-  const nextCheckMs = lastCheckMs ? lastCheckMs + checkInterval : null;
-  const msUntilNext = nextCheckMs ? Math.max(0, nextCheckMs - now) : null;
-  const nextCheckLabel = msUntilNext !== null
-    ? msUntilNext < 60_000
-      ? "< 1 min"
-      : `~${Math.round(msUntilNext / 60_000)} min`
-    : null;
+  const windowClosed = windowEnd ? now >= windowEnd : false;
+
+  const DEFINITIVE = new Set(["primary", "promotions", "social", "updates", "forums", "spam"]);
+  const allResolved = !!lastPlacementResults?.length &&
+    (lastPlacementResults as PlacementResult[]).every(r => DEFINITIVE.has(r.status));
 
   const receivedDate = email.receivedAt
     ? new Date(email.receivedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
@@ -624,14 +617,13 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                     Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Searches last 14 days
                   </p>
                 )}
-                {windowActive ? (
+                {allResolved ? null : windowActive ? (
                   <p className="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    Auto-monitoring active · {inPhase1 ? "checking every 15 min" : "checking every hour"}
-                    {nextCheckLabel && <span className="text-muted-foreground ml-1">· next in {nextCheckLabel}</span>}
+                    Monitoring active · waiting for email to appear in seed inboxes
                   </p>
-                ) : windowEnd ? (
-                  <p className="text-xs text-muted-foreground">Monitoring window closed · 24-hour check period complete</p>
+                ) : windowClosed ? (
+                  <p className="text-xs text-muted-foreground">Monitoring ended · email not detected within 24 hours</p>
                 ) : null}
               </div>
             </div>
