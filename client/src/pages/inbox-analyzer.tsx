@@ -175,6 +175,53 @@ function scoreBg(score: number | null | undefined) {
   return "bg-red-500";
 }
 
+function computeAuthScore(email: EmailAnalysis): number | null {
+  if (!email.spfResult && !email.dkimResult && !email.dmarcResult) return null;
+  let pts = 0;
+  if (email.spfResult === "pass") pts += 8;
+  else if (email.spfResult === "softfail") pts += 4;
+  if (email.dkimResult === "pass") pts += 8;
+  if (email.dmarcResult === "pass") pts += 7;
+  if (email.spfRecordExists) pts += 4;
+  if (email.dkimRecordExists) pts += 3;
+  return Math.round((pts / 30) * 100);
+}
+
+function computeSenderTrustScore(st: SenderTrust | null): number | null {
+  if (!st) return null;
+  let pts = 0;
+  if (!st.blacklisted) pts += 8;
+  if (st.displayNameDomainMatch === true) pts += 4;
+  if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) pts += 3;
+  return Math.round((pts / 15) * 100);
+}
+
+function computeTechScore(th: TechnicalHealth | null): number | null {
+  if (!th) return null;
+  let pts = 0;
+  if (th.hasPlainTextVersion) pts += 3;
+  if (th.hasPreheader) pts += 2;
+  if (th.trackingPixelCount === 0) pts += 2;
+  if (th.estimatedSizeKb < 100) pts += 2;
+  if (th.missingAltCount === 0) pts += 1;
+  return Math.round((pts / 10) * 100);
+}
+
+function computeContentScore(cq: ContentQuality | null): number | null {
+  if (!cq) return null;
+  let pts = 0;
+  if (cq.hasPhysicalAddress) pts += 4;
+  if (cq.hasPersonalization) pts += 3;
+  if (cq.wordCount >= 50 && cq.wordCount <= 600) pts += 3;
+  return Math.round((pts / 10) * 100);
+}
+
+function computePlacementScore(results: PlacementResult[] | null): number | null {
+  if (!results || results.length === 0) return null;
+  const inbox = results.filter(r => r.status === "inbox").length;
+  return Math.round((inbox / results.length) * 100);
+}
+
 function ScoreRing({ score, size = 64 }: { score: number | null | undefined; size?: number }) {
   const r = size * 0.38;
   const circ = 2 * Math.PI * r;
@@ -516,7 +563,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
         </div>
 
         {/* ── Placement ─────────────────────────────────────────────── */}
-        <SectionPanel title="Inbox Placement" icon={Inbox}>
+        <SectionPanel title="Inbox Placement" icon={Inbox} score={computePlacementScore(lastPlacementResults)}>
           {connectedInboxes.length === 0 ? (
             // No seed inboxes configured at all
             <div className="space-y-2">
@@ -592,7 +639,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
         </SectionPanel>
 
         {/* Authentication */}
-        <SectionPanel title="Email Authentication" icon={ShieldCheck}>
+        <SectionPanel title="Email Authentication" icon={ShieldCheck} score={computeAuthScore(email)}>
           <div className="grid sm:grid-cols-2 gap-2">
             <AuthBadge result={email.spfResult} label="SPF" />
             <AuthBadge result={email.dkimResult} label="DKIM" />
@@ -609,7 +656,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
         {/* Sender Trust */}
         {st && (
-          <SectionPanel title="Sender Trust" icon={ShieldCheck}>
+          <SectionPanel title="Sender Trust" icon={ShieldCheck} score={computeSenderTrustScore(st)}>
             <div className="space-y-2">
               <CheckRow
                 pass={!st.blacklisted}
@@ -729,7 +776,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
         {/* Technical Health */}
         {th && (
-          <SectionPanel title="Technical Health" icon={Zap}>
+          <SectionPanel title="Technical Health" icon={Zap} score={computeTechScore(th)}>
             <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
               <CheckRow pass={th.hasHtmlVersion} label="HTML version present" />
               <CheckRow pass={th.hasPlainTextVersion} label="Plain text version present" detail={!th.hasPlainTextVersion ? "helps avoid spam filters" : undefined} />
@@ -766,7 +813,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
         {/* Content Quality */}
         {cq && (
-          <SectionPanel title="Content Quality" icon={BookOpen}>
+          <SectionPanel title="Content Quality" icon={BookOpen} score={computeContentScore(cq)}>
             <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
               <CheckRow
                 pass={cq.wordCount >= 50 && cq.wordCount <= 600}
