@@ -265,6 +265,8 @@ export interface IStorage {
   // Video Trends Credits
   getVideoTrendsCredits(userId: string): Promise<{ creditsUsed: number; totalCreditsUsed: number; monthlyLimit: number; windowStartedAt: Date; remaining: number; resetsAt: Date }>;
   useVideoTrendsCredits(userId: string, amount: number): Promise<{ success: boolean; remaining: number; error?: string }>;
+  reserveVideoTrendsCredits(userId: string, amount: number): Promise<{ success: boolean; reserved: number; remaining: number; error?: string }>;
+  refundVideoTrendsCredits(userId: string, amount: number): Promise<void>;
   getAggregateVideoTrendsCredits(): Promise<{ totalCreditsUsedAllTime: number; totalCreditsUsedThisMonth: number; activeUsers: number; topUsers: Array<{ userId: string; email: string | null; displayName: string | null; creditsThisMonth: number; creditsTotal: number }> }>;
   
   // Saved Offers (Call To Action)
@@ -1500,7 +1502,71 @@ export class DatabaseStorage implements IStorage {
     
     return { success: true, remaining: credits.monthlyLimit - newCreditsUsed };
   }
-  
+
+  async reserveVideoTrendsCredits(userId: string, amount: number): Promise<{ success: boolean; reserved: number; remaining: number; error?: string }> {
+    if (amount <= 0) {
+      return { success: true, reserved: 0, remaining: 0 };
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const limit = await this.getMonthlyCreditsLimit();
+      const windowDays = this.CREDITS_WINDOW_DAYS;
+      // Upsert the record so future steps always find a row.
+      await client.query(
+        `INSERT INTO video_trends_credits (user_id, credits_used, total_credits_used, monthly_limit, window_started_at, updated_at)
+         VALUES ($1, 0, 0, $2, NOW(), NOW())
+         ON CONFLICT (user_id) DO NOTHING`,
+        [userId, limit]
+      );
+      // Reset credits_used if the billing window has expired so the reservation
+      // works correctly regardless of whether the caller pre-fetched credit state.
+      await client.query(
+        `UPDATE video_trends_credits
+         SET credits_used = 0,
+             window_started_at = NOW(),
+             updated_at = NOW()
+         WHERE user_id = $1
+           AND window_started_at < NOW() - ($2 || ' days')::interval`,
+        [userId, windowDays]
+      );
+      // Atomically increment credits_used only when sufficient budget remains.
+      const result = await client.query(
+        `UPDATE video_trends_credits
+         SET credits_used = credits_used + $2,
+             total_credits_used = total_credits_used + $2,
+             updated_at = NOW()
+         WHERE user_id = $1
+           AND monthly_limit - credits_used >= $2
+         RETURNING credits_used, monthly_limit`,
+        [userId, amount]
+      );
+      await client.query("COMMIT");
+      if (result.rowCount && result.rowCount > 0) {
+        const row = result.rows[0];
+        return { success: true, reserved: amount, remaining: row.monthly_limit - row.credits_used };
+      }
+      return { success: false, reserved: 0, remaining: 0, error: "Insufficient credits" };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async refundVideoTrendsCredits(userId: string, amount: number): Promise<void> {
+    if (amount <= 0) return;
+    const now = new Date();
+    await db.update(videoTrendsCredits)
+      .set({
+        creditsUsed: sql`GREATEST(0, credits_used - ${amount})`,
+        totalCreditsUsed: sql`GREATEST(0, total_credits_used - ${amount})`,
+        updatedAt: now,
+      })
+      .where(eq(videoTrendsCredits.userId, userId));
+  }
+
   async getAggregateVideoTrendsCredits(): Promise<{ totalCreditsUsedAllTime: number; totalCreditsUsedThisMonth: number; activeUsers: number; topUsers: Array<{ userId: string; email: string | null; displayName: string | null; creditsThisMonth: number; creditsTotal: number }> }> {
     const now = new Date();
     const windowDays = this.CREDITS_WINDOW_DAYS;

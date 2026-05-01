@@ -45,7 +45,7 @@ interface KeywordDataResult {
   creditsUsed: number;
 }
 
-async function getKeywordData(keywords: string[], userId?: string): Promise<KeywordDataResult> {
+async function getKeywordData(keywords: string[], userId?: string, creditBudget?: number): Promise<KeywordDataResult> {
   const results = new Map<string, KeywordData>();
   const defaultData: KeywordData = { volume: null, cpc: null, competition: null, trend: null };
   
@@ -67,6 +67,20 @@ async function getKeywordData(keywords: string[], userId?: string): Promise<Keyw
   
   if (uncachedKeywords.length === 0) {
     return { data: results, creditsUsed: 0 };
+  }
+
+  // Enforce the credit budget: cap paid lookups to what the user can afford.
+  // Keywords beyond the budget fall back to default (no volume/cpc data).
+  if (creditBudget !== undefined && creditBudget < uncachedKeywords.length) {
+    const budgetedKeywords = uncachedKeywords.slice(0, creditBudget);
+    const skippedKeywords = uncachedKeywords.slice(creditBudget);
+    skippedKeywords.forEach(kw => results.set(kw.toLowerCase(), defaultData));
+    if (budgetedKeywords.length === 0) {
+      return { data: results, creditsUsed: 0 };
+    }
+    console.log(`[KeywordsEverywhere] Credit budget (${creditBudget}) caps uncached lookups from ${uncachedKeywords.length} to ${budgetedKeywords.length}`);
+    uncachedKeywords.length = 0;
+    uncachedKeywords.push(...budgetedKeywords);
   }
   
   try {
@@ -394,7 +408,7 @@ export interface GenerateTopicsResult {
   creditsUsed: number;
 }
 
-export async function generateTopics(input: TopicSearchInput, runId: string, userId?: string): Promise<GenerateTopicsResult> {
+export async function generateTopics(input: TopicSearchInput, runId: string, userId?: string, creditBudget?: number): Promise<GenerateTopicsResult> {
   const cacheKey = `${input.seedQuery}:${input.region || "global"}`;
   const cached = topicCache.get(cacheKey);
   
@@ -407,7 +421,7 @@ export async function generateTopics(input: TopicSearchInput, runId: string, use
   
   const allQueries = Array.from(new Set([...autocompleteSuggestions, ...variations]));
   
-  const keywordResult = await getKeywordData(allQueries, userId);
+  const keywordResult = await getKeywordData(allQueries, userId, creditBudget);
   const keywordDataMap = keywordResult.data;
   const creditsUsed = keywordResult.creditsUsed;
   

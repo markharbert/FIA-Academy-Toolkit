@@ -3600,43 +3600,83 @@ export async function registerRoutes(
         });
       }
 
-      const startTime = Date.now();
-      
-      const run = await storage.createTopicRun({
-        userId: req.session.userId!,
-        seedQuery: parsed.data.seedQuery,
-        settingsJson: {
-          affiliateProduct: parsed.data.affiliateProduct,
-          audienceLevel: parsed.data.audienceLevel,
-          tonePreference: parsed.data.tonePreference,
-          videoType: parsed.data.videoType,
-          region: parsed.data.region,
-          recencyDays: parsed.data.recencyDays,
-        },
-        status: "processing",
-      });
+      // Atomically reserve a worst-case credit budget BEFORE any paid keyword lookups.
+      // Max possible uncached keywords per search: 15 (autocomplete) + 20 (variations) = 35.
+      // We cap the reservation at the user's remaining balance so the reserve always fits.
+      const MAX_TOPIC_PULSE_KEYWORDS = 35;
+      const reserveAmount = Math.min(MAX_TOPIC_PULSE_KEYWORDS, credits.remaining);
+      const reservation = await storage.reserveVideoTrendsCredits(req.session.userId!, reserveAmount);
 
-      const result = await generateTopics(parsed.data, run.id, req.session.userId);
-      const createdTopics = await storage.createTopics(result.topics);
-
-      if (result.creditsUsed > 0) {
-        await storage.useVideoTrendsCredits(req.session.userId!, result.creditsUsed);
-        console.log(`[TopicPulse] Deducted ${result.creditsUsed} credits for user ${req.session.userId}`);
+      if (!reservation.success) {
+        const resetsAt = new Date(credits.resetsAt);
+        const daysRemaining = Math.ceil((resetsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+        return res.status(402).json({
+          message: `Insufficient credits to start this search. Your credits will reset in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`,
+          creditsRemaining: credits.remaining,
+          resetsAt: credits.resetsAt,
+        });
       }
 
-      const runtimeMs = Date.now() - startTime;
-      await storage.updateTopicRun(run.id, {
-        status: "complete",
-        runtimeMs,
-        topicCount: createdTopics.length,
-      });
+      // From this point on, the reservation is held. Any failure must refund it.
+      let reservationSettled = false;
+      const userId = req.session.userId!;
 
-      res.json({
-        runId: run.id,
-        topics: createdTopics,
-        runtimeMs,
-        creditsUsed: result.creditsUsed,
-      });
+      try {
+        const startTime = Date.now();
+        
+        const run = await storage.createTopicRun({
+          userId,
+          seedQuery: parsed.data.seedQuery,
+          settingsJson: {
+            affiliateProduct: parsed.data.affiliateProduct,
+            audienceLevel: parsed.data.audienceLevel,
+            tonePreference: parsed.data.tonePreference,
+            videoType: parsed.data.videoType,
+            region: parsed.data.region,
+            recencyDays: parsed.data.recencyDays,
+          },
+          status: "processing",
+        });
+
+        // Pass the reserved amount as the hard budget cap for paid keyword lookups.
+        // Actual usage will always be 0 ≤ creditsUsed ≤ reserveAmount.
+        const result = await generateTopics(parsed.data, run.id, userId, reserveAmount);
+
+        // Settle reservation: refund the unused portion (reserved - actual usage).
+        const refundAmount = reserveAmount - result.creditsUsed;
+        if (refundAmount > 0) {
+          await storage.refundVideoTrendsCredits(userId, refundAmount);
+          console.log(`[TopicPulse] Reserved ${reserveAmount}, used ${result.creditsUsed}, refunded ${refundAmount} for user ${userId}`);
+        } else {
+          console.log(`[TopicPulse] Reserved and used ${reserveAmount} credits for user ${userId}`);
+        }
+        reservationSettled = true;
+
+        const createdTopics = await storage.createTopics(result.topics);
+
+        const runtimeMs = Date.now() - startTime;
+        await storage.updateTopicRun(run.id, {
+          status: "complete",
+          runtimeMs,
+          topicCount: createdTopics.length,
+        });
+
+        res.json({
+          runId: run.id,
+          topics: createdTopics,
+          runtimeMs,
+          creditsUsed: result.creditsUsed,
+        });
+      } catch (innerErr) {
+        if (!reservationSettled) {
+          // Refund the full reservation since no paid work was successfully completed.
+          await storage.refundVideoTrendsCredits(userId, reserveAmount).catch(refundErr => {
+            console.error(`[TopicPulse] Failed to refund reservation of ${reserveAmount} for user ${userId}:`, refundErr);
+          });
+          console.warn(`[TopicPulse] Refunded full reservation of ${reserveAmount} for user ${userId} after error`);
+        }
+        throw innerErr;
+      }
     } catch (err) {
       console.error("[TopicPulse] Search error:", err);
       res.status(500).json({ message: "Failed to search topics" });
