@@ -3214,42 +3214,6 @@ export async function registerRoutes(
 
 
 
-  // Transcript download as TXT file
-  app.get("/api/sessions/:id/transcript.txt", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const session = await storage.getSession(req.params.id);
-      
-      if (!session) {
-        return res.status(404).json({ message: "Session not found" });
-      }
-
-      const currentUser = await storage.getUser(req.session.userId!);
-      const isAdmin = currentUser?.isAdmin === true;
-      if (session.userId !== req.session.userId && !isAdmin) {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
-      const transcript = session.transcriptEditedText || session.transcriptText;
-      if (!transcript) {
-        return res.status(404).json({ message: "No transcript available" });
-      }
-
-      const sanitizedTitle = (session.title || "practice-session")
-        .replace(/[^a-zA-Z0-9\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .toLowerCase()
-        .slice(0, 50);
-      const filename = `${sanitizedTitle}-transcript.txt`;
-
-      res.setHeader("Content-Type", "text/plain; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      res.send(transcript);
-    } catch (err) {
-      console.error("Transcript download error:", err);
-      res.status(500).json({ message: "Failed to download transcript" });
-    }
-  });
-
   // PDF report download (legacy endpoint - keep for backward compatibility)
   app.get("/api/sessions/:id/pdf", requireAuth, async (req: Request, res: Response) => {
     const traceId = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

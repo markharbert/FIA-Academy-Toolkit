@@ -26,8 +26,8 @@ interface CreditsData {
 
 const PRESETS = [
   { label: "Review",      icon: ShoppingBag, type: "review",       color: "bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/30 hover:bg-violet-500/20",       activeColor: "bg-violet-500 text-white ring-violet-500" },
-  { label: "Comparison",  icon: ListChecks,  type: "vs",           color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30 hover:bg-blue-500/20",                 activeColor: "bg-blue-500 text-white ring-blue-500" },
-  { label: "How-To",      icon: BookOpen,    type: "tutorial",     color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 ring-teal-500/30 hover:bg-teal-500/20",                 activeColor: "bg-teal-500 text-white ring-teal-500" },
+  { label: "Comparison",  icon: ListChecks,  type: "comparison",   color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30 hover:bg-blue-500/20",                 activeColor: "bg-blue-500 text-white ring-blue-500" },
+  { label: "How-To",      icon: BookOpen,    type: "how-to",       color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 ring-teal-500/30 hover:bg-teal-500/20",                 activeColor: "bg-teal-500 text-white ring-teal-500" },
   { label: "Problem Fix", icon: HelpCircle,  type: "problem-fix",  color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/30 hover:bg-amber-500/20",            activeColor: "bg-amber-500 text-white ring-amber-500" },
 ];
 
@@ -51,7 +51,7 @@ export default function TopicPulsePage() {
   const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
     queryKey: ["/api/topic-pulse/runs", runsPage],
     queryFn: async () => {
-      const res = await fetch(`/api/topic-pulse/runs?page=${runsPage}&limit=${PAGE_SIZE}`);
+      const res = await fetch(`/api/topic-pulse/runs?page=${runsPage}&limit=${PAGE_SIZE}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load runs");
       return res.json();
     },
