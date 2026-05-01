@@ -1,7 +1,7 @@
 # Academy Toolkit
 
 ## Overview
-Academy Toolkit is a web application designed for private practice in video marketing. It allows users to record short in-browser videos, receive automatic transcriptions, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA. The application prioritizes private practice with no public sharing features. Videos persist indefinitely unless explicitly deleted by users or admins.
+Academy Toolkit is a web application designed for private practice in video marketing. It allows users to upload videos, receive automatic transcriptions, and get AI-powered scoring and improvement suggestions based on a 5-part video formula: Hook, Set the Hook, First CTA, Content, and Final CTA. The application prioritizes private practice with no public sharing features. Videos persist indefinitely unless explicitly deleted by users or admins.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

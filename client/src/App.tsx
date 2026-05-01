@@ -4,15 +4,12 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { Navbar } from "@/components/navbar";
-import { Footer } from "@/components/footer";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { Loader2 } from "lucide-react";
 
 import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
-import SignupPage from "@/pages/signup";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import DashboardPage from "@/pages/dashboard";
