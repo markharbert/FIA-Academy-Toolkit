@@ -377,6 +377,27 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
   const st = email.senderTrust as SenderTrust | null;
   const cq = email.contentQuality as ContentQuality | null;
 
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [isRechecking, setIsRechecking] = useState(false);
+
+  const handleRecheck = async () => {
+    setIsRechecking(true);
+    try {
+      const res = await fetch("/api/inbox-analyzer/placement-check", { credentials: "include" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to run placement check");
+      }
+      await qc.invalidateQueries({ queryKey: ["/api/inbox-analyzer/address"] });
+      toast({ title: "Placement rechecked", description: "Results have been refreshed." });
+    } catch (err: any) {
+      toast({ title: "Recheck failed", description: err.message || "Could not run placement check", variant: "destructive" });
+    } finally {
+      setIsRechecking(false);
+    }
+  };
+
   const connectedInboxes = seedInboxes.filter(s => s.isActive && s.isConnected);
 
   // Derive auto-monitoring phase info
@@ -631,11 +652,24 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               <div className="pt-0.5 space-y-1">
                 {/* Only show "Last checked" when a real check has actually run (we have results) */}
                 {lastPlacementCheckedAt && hasAnyResults && (
-                  <p className="text-xs text-muted-foreground">
-                    Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                    {/* Only say "Confirmed" once monitoring has fully stopped (window cleared) */}
-                    {!windowActive && !windowClosed ? " · Confirmed" : ""}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      {/* Only say "Confirmed" once monitoring has fully stopped (window cleared) */}
+                      {!windowActive && !windowClosed ? " · Confirmed" : ""}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                      onClick={handleRecheck}
+                      disabled={isRechecking}
+                      data-testid="button-recheck-placement"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${isRechecking ? "animate-spin" : ""}`} />
+                      {isRechecking ? "Checking…" : "Recheck"}
+                    </Button>
+                  </div>
                 )}
                 {windowActive ? (
                   !hasAnyResults ? (
