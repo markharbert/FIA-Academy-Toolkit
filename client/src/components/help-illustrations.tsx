@@ -31,31 +31,31 @@ export function VideoToolsHubIllustration() {
 }
 
 export function SessionsListIllustration() {
-  return <ScreenshotIllustration src={step3} alt="Video Score sessions list with New Session button" />;
+  return <ScreenshotIllustration src={step3} alt="Video Score sessions list with Score New Video button" />;
 }
 
-export function GoalTypeSelectorIllustration() {
-  return <ScreenshotIllustration src={step4} alt="New Practice Session dialog with goal type selector" />;
+export function UploadPageIllustration() {
+  return <ScreenshotIllustration src={step4} alt="Add Video page with drag-and-drop upload zone" />;
 }
 
-export function DeviceSetupIllustration() {
-  return <ScreenshotIllustration src={step5} alt="Camera and microphone setup screen with audio level meter" />;
+export function FileSelectedIllustration() {
+  return <ScreenshotIllustration src={step5} alt="Video file selected showing filename and Upload and Analyze button" />;
 }
 
-export function RecordingInterfaceIllustration() {
-  return <ScreenshotIllustration src={step6} alt="Recording in progress with REC indicator and Stop button" />;
+export function UploadingIllustration() {
+  return <ScreenshotIllustration src={step6} alt="Upload in progress with progress bar showing percentage" />;
 }
 
 export function ProcessingStatusIllustration() {
-  return <ScreenshotIllustration src={step7} alt="Processing pipeline showing Upload, Transcription, AI Scoring steps" />;
+  return <ScreenshotIllustration src={step7} alt="Processing pipeline showing Transcription and AI Scoring steps" />;
 }
 
 export function OverallScoreIllustration() {
-  return <ScreenshotIllustration src={step8} alt="Overall score circle showing 82 out of 100 with formula breakdown bars" />;
+  return <ScreenshotIllustration src={step8} alt="Overall score showing 82 out of 100 with formula breakdown bars" />;
 }
 
 export function FormulaBreakdownIllustration() {
-  return <ScreenshotIllustration src={step9} alt="Detailed feedback cards for Hook and Set the Hook sections" />;
+  return <ScreenshotIllustration src={step9} alt="Detailed feedback accordion for Hook and Set the Hook sections" />;
 }
 
 export function DownloadReportIllustration() {
@@ -66,9 +66,9 @@ export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "sidebar-nav": SidebarNavIllustration,
   "video-tools-hub": VideoToolsHubIllustration,
   "sessions-list": SessionsListIllustration,
-  "goal-type-selector": GoalTypeSelectorIllustration,
-  "device-setup": DeviceSetupIllustration,
-  "recording-interface": RecordingInterfaceIllustration,
+  "upload-page": UploadPageIllustration,
+  "file-selected": FileSelectedIllustration,
+  "uploading": UploadingIllustration,
   "processing-status": ProcessingStatusIllustration,
   "overall-score": OverallScoreIllustration,
   "formula-breakdown": FormulaBreakdownIllustration,

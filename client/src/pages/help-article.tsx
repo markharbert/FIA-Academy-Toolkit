@@ -96,7 +96,7 @@ export default function HelpArticlePage() {
 
               {/* Content + illustration */}
               <div className="ml-[52px] space-y-4">
-                <div className={`grid gap-6 ${Illustration ? "lg:grid-cols-[1fr_340px]" : ""}`}>
+                <div className="space-y-5">
 
                   {/* Text content */}
                   <div className="space-y-3">
@@ -146,9 +146,9 @@ export default function HelpArticlePage() {
                     )}
                   </div>
 
-                  {/* Illustration */}
+                  {/* Illustration — full width below text */}
                   {Illustration && (
-                    <div className="lg:sticky lg:top-4 h-fit">
+                    <div>
                       <Illustration />
                     </div>
                   )}
