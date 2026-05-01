@@ -79,7 +79,7 @@ function gmailDateStr(d: Date): string {
 export async function checkGmailPlacement(
   inbox: { id: string; label: string; email: string; provider: string; oauthAccessToken: string | null; oauthRefreshToken: string | null },
   senderAddress: string,
-  context?: { receivedAt?: Date | null; subject?: string | null }
+  context?: { receivedAt?: Date | null; subject?: string | null; messageId?: string | null }
 ): Promise<PlacementResult> {
   const base: Omit<PlacementResult, "status"> = {
     inboxId: inbox.id,
@@ -120,20 +120,29 @@ export async function checkGmailPlacement(
     //   2. Every category search explicitly adds "-in:spam" so it can never match a
     //      message that is currently sitting in the spam folder.
 
+    // Strategy 1 (best): use the globally-unique Message-ID.
+    //   rfc822msgid: matches exactly one message in the world — no ambiguity possible,
+    //   not affected by same sender/subject, not affected by date.
+    //
+    // Strategy 2 (good): tight date window + subject when Message-ID is unavailable.
+    //   1 day before → 2 days after the known received-at, plus subject for precision.
+    //
+    // Strategy 3 (fallback): sender + newer_than:5d when we have no pinned context.
+    //   Reduced from 14d to limit cross-contamination from older emails.
     let base_q: string;
-    if (context?.receivedAt) {
+    if (context?.messageId) {
+      const safeMessageId = context.messageId.replace(/['"\\<> ]/g, "");
+      base_q = `rfc822msgid:${safeMessageId}`;
+    } else if (context?.receivedAt) {
       const received = context.receivedAt;
-      const dayBefore   = new Date(received.getTime() - 24 * 60 * 60 * 1000);
+      const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
       const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
       base_q = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
       if (context.subject) {
-        // Strip characters that could break the Gmail query, keep first 50 chars
         const safeSubject = context.subject.replace(/['"\\]/g, "").substring(0, 50).trim();
         if (safeSubject) base_q += ` subject:"${safeSubject}"`;
       }
     } else {
-      // Fallback when no pinned context — use a shorter window than before to
-      // reduce the chance of unrelated old emails being matched.
       base_q = `from:${safeSender} newer_than:5d`;
     }
 

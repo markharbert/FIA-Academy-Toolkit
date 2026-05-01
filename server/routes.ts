@@ -4746,10 +4746,12 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         return res.json({ results: [], sendingFrom, message: "No connected seed inboxes yet" });
       }
 
-      // Pass the pinned email context (subject + received-at) so the Gmail query
-      // targets only the specific email under monitoring, not any older message
-      // from the same sender that might be sitting in spam.
+      // Pass the pinned email context (Message-ID, subject, received-at) so the Gmail
+      // query targets only the specific email under monitoring.  Message-ID is the gold
+      // standard: a single globally-unique identifier that matches exactly one message
+      // regardless of sender, subject, or date.
       const emailContext = {
+        messageId: address?.placementCheckMessageId ?? null,
         receivedAt: address?.placementCheckReceivedAt ?? null,
         subject: address?.placementCheckSubject ?? null,
       };
@@ -4943,6 +4945,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const spfRaw: string = req.body?.SPF || req.body?.spf || "";
       const dkimRaw: string = req.body?.dkim || "";
       const replyTo: string = extractReplyTo(rawHeaders);
+      // Extract the globally-unique Message-ID from headers (strips surrounding angle brackets)
+      const messageIdMatch = rawHeaders.match(/^Message-ID:\s*<?([^>\r\n]+)>?/im);
+      const messageId: string | undefined = messageIdMatch ? messageIdMatch[1].trim() : undefined;
 
       const spfResult = parseSpfResult(spfRaw);
       const dkimResult = parseDkimResult(dkimRaw);
@@ -4953,6 +4958,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         fromAddress,
         fromName,
         replyTo: replyTo || undefined,
+        messageId,
         subject,
         bodyText,
         bodyHtml,
@@ -4973,7 +4979,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         await storage.setPlacementAutoCheckWindow(
           inboxAddr.userId,
           new Date(Date.now() + TWENTY_FOUR_H),
-          { receivedAt: new Date(), subject }
+          { receivedAt: new Date(), subject, messageId }
         );
       })().catch(err => console.error("[PlacementScheduler] window open error:", err));
 

@@ -855,6 +855,7 @@ export const emailInboxAddresses = pgTable("email_inbox_addresses", {
   lastPlacementCheckedAt: timestamp("last_placement_checked_at"),
   placementAutoCheckUntil: timestamp("placement_auto_check_until"),
   // Pinned context for the current monitoring window — identifies the specific email being tracked
+  placementCheckMessageId: text("placement_check_message_id"),
   placementCheckReceivedAt: timestamp("placement_check_received_at"),
   placementCheckSubject: text("placement_check_subject"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -885,6 +886,7 @@ export const emailAnalyses = pgTable("email_analyses", {
   fromAddress: text("from_address").notNull(),
   fromName: text("from_name"),
   replyTo: text("reply_to"),
+  messageId: text("message_id"),
   subject: text("subject").notNull(),
   bodyText: text("body_text"),
   bodyHtml: text("body_html"),

@@ -90,7 +90,12 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] email_analyses migration complete");
     await db.execute(sql`
+      ALTER TABLE email_analyses
+        ADD COLUMN IF NOT EXISTS message_id text
+    `);
+    await db.execute(sql`
       ALTER TABLE email_inbox_addresses
+        ADD COLUMN IF NOT EXISTS placement_check_message_id text,
         ADD COLUMN IF NOT EXISTS placement_check_received_at timestamp,
         ADD COLUMN IF NOT EXISTS placement_check_subject text
     `);
