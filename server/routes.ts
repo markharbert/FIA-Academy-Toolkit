@@ -124,6 +124,27 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Middleware that verifies the session exists and belongs to the caller
+// BEFORE any file-writing middleware (e.g. multer) runs.  This prevents
+// authenticated users from leaving orphaned files on disk by targeting
+// sessions they do not own.
+async function requireSessionOwnership(req: Request, res: Response, next: NextFunction) {
+  try {
+    const session = await storage.getSession(req.params.id);
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+    if (session.userId !== req.session.userId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    res.locals.verifiedSession = session;
+    next();
+  } catch (err) {
+    console.error("[requireSessionOwnership] DB error:", err);
+    return res.status(500).json({ message: "Session authorization check failed" });
+  }
+}
+
 // Admin middleware
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
@@ -2467,7 +2488,27 @@ export async function registerRoutes(
 
       try {
         const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-        
+
+        // Enforce MAX_VIDEO_SIZE against the authoritative cloud-storage metadata
+        // before touching local disk.  The client-supplied `size` in the request body
+        // is untrustworthy; reading it from object metadata closes the bypass.
+        // This check is fail-closed: any failure to retrieve or parse the metadata
+        // results in a rejection rather than a fallback to disk materialization.
+        const [objectMetadata] = await objectFile.getMetadata();
+        const actualSize = Number(objectMetadata.size);
+        if (isNaN(actualSize)) {
+          console.warn(`[Confirm:${traceId}] Could not determine object size from metadata`);
+          return res.status(500).json({ message: "Could not verify upload size", traceId });
+        }
+        if (actualSize > MAX_VIDEO_SIZE) {
+          console.warn(`[Confirm:${traceId}] Object too large: ${actualSize} bytes (max ${MAX_VIDEO_SIZE})`);
+          return res.status(400).json({
+            message: `File too large. Maximum size is ${MAX_VIDEO_SIZE / (1024 * 1024 * 1024)}GB`,
+            traceId,
+          });
+        }
+        console.log(`[Confirm:${traceId}] Object size check passed: ${actualSize} bytes`);
+
         // Stream the file to disk instead of buffering in memory
         // This is critical for handling large files (700MB+)
         await new Promise<void>((resolve, reject) => {
@@ -2618,22 +2659,20 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/sessions/:id/upload", requireAuth, upload.single("video"), async (req: Request, res: Response) => {
+  app.post("/api/sessions/:id/upload", requireAuth, requireSessionOwnership, upload.single("video"), async (req: Request, res: Response) => {
     const traceId = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     console.log(`[Upload:${traceId}] Starting upload for session ${req.params.id}`);
+
+    // Helper: delete the multer-written file if we need to abort after it was saved
+    const cleanupUploadedFile = () => {
+      if (req.file) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
+    };
     
     try {
-      const session = await storage.getSession(req.params.id);
-      
-      if (!session) {
-        console.log(`[Upload:${traceId}] Session not found`);
-        return res.status(404).json({ message: "Session not found", traceId });
-      }
-
-      if (session.userId !== req.session.userId) {
-        console.log(`[Upload:${traceId}] Access denied`);
-        return res.status(403).json({ message: "Access denied", traceId });
-      }
+      // Session ownership was already verified by requireSessionOwnership middleware
+      const session = res.locals.verifiedSession;
 
       if (!req.file) {
         console.log(`[Upload:${traceId}] No video file provided`);
@@ -2762,6 +2801,7 @@ export async function registerRoutes(
         traceId,
       });
     } catch (err) {
+      cleanupUploadedFile();
       console.error(`[Upload] Error:`, err);
       res.status(500).json({ message: "Failed to upload video", error: err instanceof Error ? err.message : "Unknown error" });
     }
