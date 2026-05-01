@@ -27,13 +27,22 @@ export function extractYouTubeVideoId(url: string): string | null {
     return match[4];
   }
   
+  const ALLOWED_YOUTUBE_HOSTNAMES = new Set([
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "youtu.be",
+  ]);
+
   try {
     const urlObj = new URL(url);
-    if (urlObj.hostname.includes("youtube.com")) {
-      return urlObj.searchParams.get("v");
-    } else if (urlObj.hostname === "youtu.be") {
+    if (!ALLOWED_YOUTUBE_HOSTNAMES.has(urlObj.hostname)) {
+      return null;
+    }
+    if (urlObj.hostname === "youtu.be") {
       return urlObj.pathname.slice(1).split("?")[0];
     }
+    return urlObj.searchParams.get("v");
   } catch {
     return null;
   }
@@ -102,7 +111,11 @@ export async function downloadYouTubeAudio(
     return { success: false, error: "Invalid YouTube URL" };
   }
 
-  const videoInfo = await getYouTubeVideoInfo(url);
+  // Build a canonical URL from the validated video ID so that yt-dlp and
+  // subsequent HTTP requests never use the raw user-supplied URL.
+  const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+  const videoInfo = await getYouTubeVideoInfo(canonicalUrl);
   if (!videoInfo) {
     return { success: false, error: "Could not fetch video information. The video may be private, age-restricted, or unavailable." };
   }
@@ -135,7 +148,7 @@ export async function downloadYouTubeAudio(
       "--no-check-certificates",
       "--js-runtimes", `deno:${denoPath}`,
       "-o", audioPath.replace(".m4a", ".%(ext)s"),
-      url
+      canonicalUrl
     ]);
 
     let stderr = "";

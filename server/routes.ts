@@ -2294,11 +2294,13 @@ export async function registerRoutes(
 
       console.log(`[Presign:${traceId}] Generated upload URL, objectPath: ${objectPath}`);
 
-      // Store the pending upload info in session
+      // Store the pending upload info in session, including the issued object path
+      // so confirm-upload can verify it matches and prevent path substitution attacks
       await storage.updateSession(session.id, {
         processingStatus: "uploading",
         processingProgress: 0,
         processingMessage: "Preparing for upload...",
+        cloudStoragePath: objectPath,
       });
 
       res.json({
@@ -2339,6 +2341,13 @@ export async function registerRoutes(
       
       if (!objectPath || !filename) {
         return res.status(400).json({ message: "Missing required fields: objectPath, filename", traceId });
+      }
+
+      // Verify the object path matches the one issued for this session during request-upload-url.
+      // This prevents a user from substituting an arbitrary path to access another user's object.
+      if (!session.cloudStoragePath || session.cloudStoragePath !== objectPath) {
+        console.warn(`[Confirm:${traceId}] Object path mismatch: supplied=${objectPath}, expected=${session.cloudStoragePath}`);
+        return res.status(403).json({ message: "Object path does not match the upload issued for this session", traceId });
       }
 
       console.log(`[Confirm:${traceId}] Object path: ${objectPath}, filename: ${filename}, size: ${size}`);
