@@ -96,21 +96,45 @@ export async function checkGmailPlacement(
     const safeSender = senderAddress.replace(/['"\\]/g, "");
     const base_q = `from:${safeSender} newer_than:14d`;
 
-    const [primaryRes, promotionsRes, socialRes, updatesRes, forumsRes, spamRes] = await Promise.all([
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:primary`, maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:promotions`, maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:social`, maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:updates`, maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:forums`, maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} in:spam`, maxResults: 1 }),
+    // KEY FIX: Gmail retains the original category label (e.g. "category:primary") on
+    // emails even after they are moved to Spam. Searching "category:primary" alone will
+    // therefore match spam emails and produce a false "primary" result.
+    //
+    // Two-layer defence:
+    //   1. Spam is checked FIRST — if the message is in spam, that result wins regardless
+    //      of whatever category label Gmail has assigned.
+    //   2. Every category search explicitly adds "-in:spam" so it can never match a
+    //      message that is currently sitting in the spam folder.
+
+    const [spamRes, primaryRes, promotionsRes, socialRes, updatesRes, forumsRes] = await Promise.all([
+      gmail.users.messages.list({ userId: "me", q: `${base_q} in:spam`,                         maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:primary -in:spam`,       maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:promotions -in:spam`,    maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:social -in:spam`,        maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:updates -in:spam`,       maxResults: 1 }),
+      gmail.users.messages.list({ userId: "me", q: `${base_q} category:forums -in:spam`,        maxResults: 1 }),
     ]);
 
-    if ((primaryRes.data.messages || []).length > 0) return { ...base, status: "primary" };
-    if ((promotionsRes.data.messages || []).length > 0) return { ...base, status: "promotions" };
-    if ((socialRes.data.messages || []).length > 0) return { ...base, status: "social" };
-    if ((updatesRes.data.messages || []).length > 0) return { ...base, status: "updates" };
-    if ((forumsRes.data.messages || []).length > 0) return { ...base, status: "forums" };
-    if ((spamRes.data.messages || []).length > 0) return { ...base, status: "spam" };
+    const spamCount     = (spamRes.data.messages     || []).length;
+    const primaryCount  = (primaryRes.data.messages  || []).length;
+    const promoCount    = (promotionsRes.data.messages || []).length;
+    const socialCount   = (socialRes.data.messages   || []).length;
+    const updatesCount  = (updatesRes.data.messages  || []).length;
+    const forumsCount   = (forumsRes.data.messages   || []).length;
+
+    console.log(
+      `[GmailPlacement] ${inbox.email} | sender: ${safeSender} | ` +
+      `spam:${spamCount} primary:${primaryCount} promos:${promoCount} ` +
+      `social:${socialCount} updates:${updatesCount} forums:${forumsCount}`
+    );
+
+    // Spam checked first — overrides any category label.
+    if (spamCount  > 0) return { ...base, status: "spam" };
+    if (primaryCount  > 0) return { ...base, status: "primary" };
+    if (promoCount > 0) return { ...base, status: "promotions" };
+    if (socialCount > 0) return { ...base, status: "social" };
+    if (updatesCount > 0) return { ...base, status: "updates" };
+    if (forumsCount > 0) return { ...base, status: "forums" };
     return { ...base, status: "not_found" };
   } catch (err: any) {
     console.error("[GmailPlacement] Error checking inbox", inbox.email, err?.message);
