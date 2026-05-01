@@ -35,13 +35,14 @@ Production scope is the Express API in `server/`, shared schema/types in `shared
 - Admin and integration surfaces: `/api/admin/*`, `/api/webhooks/clickfunnels`, `/api/clickfunnels/sso-url`, `server/clickfunnels.ts`, and audit logging in `server/userActionLog.ts`.
 - Email analyzer surface: `/api/inbox-analyzer/*`, SendGrid inbound route, `server/inboxAnalyzer.ts`, `server/gmailOAuth.ts`, and placement-monitoring logic in `server/placementScheduler.ts`.
 - Topic Pulse/API-key surface: `/api/topic-pulse/*`, `/api/youtube/*`, `server/topic-pulse.ts`, `server/youtube.ts`, and API-key encryption helpers in `server/storage.ts`.
+- Request parsing and failure handling: global body parsers and top-level error middleware in `server/index.ts`, especially any code that buffers public request bodies or rethrows request errors.
 - Dev-only/out-of-scope: Vite dev middleware in `server/vite.ts`, Replit development plugins, `.local/state`, workflow logs, `attached_assets`, `node_modules`, and generated `dist` content except static serving configuration.
 
 ## Threat Categories
 
 ### Spoofing
 
-The app has multiple login mechanisms: password login, Google OAuth, ClickFunnels one-click login, and session cookies. Every route that creates or changes a session must prove the caller controls the identity being logged in. Session cookies must be signed with a strong production-only secret, stored server-side, `HttpOnly`, `Secure` in production, and not accepted for disabled users.
+The app has multiple login mechanisms: password login, Google OAuth, ClickFunnels one-click login, and session cookies. Every route that creates or changes a session must prove the caller controls the identity being logged in. Login and account-connection flows should reject cross-site session planting with Origin or CSRF defenses, and successful authentication should rotate the session identifier instead of reusing a pre-login anonymous session. Session cookies must be signed with a strong production-only secret, stored server-side, `HttpOnly`, `Secure` in production, and not accepted for disabled users.
 
 ### Tampering
 
@@ -49,11 +50,11 @@ Users can create and modify sessions, folders, DMO entries, scripts, saved topic
 
 ### Information Disclosure
 
-Video recordings, transcripts, email bodies, generated scripts, user API keys, user lists, and admin views are sensitive. API responses and file-serving routes must scope records to `req.session.userId` unless explicitly admin-authorized. Logs must not expose secrets, password reset tokens, raw user API keys, or large private content. Error responses in production must not disclose stack traces or internal storage details.
+Video recordings, transcripts, email bodies, generated scripts, user API keys, user lists, and admin views are sensitive. API responses and file-serving routes must scope records to `req.session.userId` unless explicitly admin-authorized. Shared admin-managed inboxes must not become query or presence oracles for ordinary users. Logs must not expose secrets, password reset tokens, raw user API keys, or large private content. Error responses in production must not disclose stack traces or internal storage details.
 
 ### Denial of Service
 
-The app accepts large video uploads, runs ffmpeg/yt-dlp, makes AI calls, performs DNS blacklist checks, and processes inbound emails. Public and authenticated endpoints that trigger expensive work need size limits, format validation, per-user/IP rate limits or quotas, timeouts, and safe concurrency controls. Inbound email processing should limit payload size and attachment handling.
+The app accepts large video uploads, runs ffmpeg/yt-dlp, makes AI calls, performs DNS blacklist checks, and processes inbound emails. Public and authenticated endpoints that trigger expensive work need size limits, format validation, per-user/IP rate limits or quotas, timeouts, and safe concurrency controls. Session middleware should not create durable anonymous server-side state on every request unless the route truly needs it, and public request handlers should avoid unbounded body buffering. Error handling must fail the request without crashing the process.
 
 ### Elevation of Privilege
 
