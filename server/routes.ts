@@ -46,6 +46,14 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+// Dedicated multer for the public inbound email webhook.
+// Uses memory storage with a strict 1 MB cap so no data ever touches disk
+// before the inbox token is validated.
+const inboundUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1 * 1024 * 1024, files: 5 },
+});
+
 // Configure multer for video uploads with broad format support
 const upload = multer({
   storage: multer.diskStorage({
@@ -4570,7 +4578,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   });
 
   // SendGrid Inbound Parse webhook — receives incoming emails
-  app.post("/api/inbox-analyzer/inbound", upload.any(), async (req: Request, res: Response) => {
+  app.post("/api/inbox-analyzer/inbound", inboundUpload.any(), async (req: Request, res: Response) => {
     // Acknowledge immediately so SendGrid doesn't retry
     res.status(200).send("OK");
 

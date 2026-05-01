@@ -57,7 +57,8 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
+      if (capturedJsonResponse && !isProduction) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 
