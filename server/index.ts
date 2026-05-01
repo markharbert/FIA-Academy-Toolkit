@@ -89,6 +89,12 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS can_spam_compliance jsonb;
     `);
     console.log("[startup] email_analyses migration complete");
+    await db.execute(sql`
+      ALTER TABLE email_inbox_addresses
+        ADD COLUMN IF NOT EXISTS placement_check_received_at timestamp,
+        ADD COLUMN IF NOT EXISTS placement_check_subject text
+    `);
+    console.log("[startup] email_inbox_addresses migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

@@ -26,7 +26,8 @@ export async function runPlacementCheckForUser(
   storage: IStorage,
   userId: string,
   sendingFrom: string,
-  previousResults: unknown[] | null = null
+  previousResults: unknown[] | null = null,
+  emailContext?: { receivedAt?: Date | null; subject?: string | null }
 ): Promise<void> {
   try {
     const allInboxes = await storage.getSeedInboxes(true);
@@ -44,7 +45,8 @@ export async function runPlacementCheckForUser(
             oauthAccessToken:  inbox.oauthAccessToken,
             oauthRefreshToken: inbox.oauthRefreshToken,
           },
-          sendingFrom
+          sendingFrom,
+          emailContext
         )
       )
     );
@@ -95,7 +97,8 @@ export function startPlacementScheduler(storage: IStorage): void {
         storage,
         user.userId,
         user.sendingFromAddress,
-        user.lastPlacementResults
+        user.lastPlacementResults,
+        { receivedAt: user.placementCheckReceivedAt, subject: user.placementCheckSubject }
       );
       await new Promise(r => setTimeout(r, STAGGER_MS));
     }

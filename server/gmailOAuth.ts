@@ -68,9 +68,18 @@ export type PlacementResult = {
   checkedAt: string;
 };
 
+// Format a Date as YYYY/MM/DD for Gmail's after:/before: operators (uses UTC day)
+function gmailDateStr(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
+}
+
 export async function checkGmailPlacement(
   inbox: { id: string; label: string; email: string; provider: string; oauthAccessToken: string | null; oauthRefreshToken: string | null },
-  senderAddress: string
+  senderAddress: string,
+  context?: { receivedAt?: Date | null; subject?: string | null }
 ): Promise<PlacementResult> {
   const base: Omit<PlacementResult, "status"> = {
     inboxId: inbox.id,
@@ -94,17 +103,39 @@ export async function checkGmailPlacement(
     const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
 
     const safeSender = senderAddress.replace(/['"\\]/g, "");
-    const base_q = `from:${safeSender} newer_than:14d`;
 
-    // KEY FIX: Gmail retains the original category label (e.g. "category:primary") on
-    // emails even after they are moved to Spam. Searching "category:primary" alone will
-    // therefore match spam emails and produce a false "primary" result.
+    // Build a query that targets ONLY the specific email being monitored.
     //
-    // Two-layer defence:
-    //   1. Spam is checked FIRST — if the message is in spam, that result wins regardless
-    //      of whatever category label Gmail has assigned.
+    // If we have the email's received-at timestamp, use a tight 3-day window
+    // (1 day before → 2 days after) instead of newer_than:14d.  This prevents
+    // older emails from the same sender — e.g. an old message already in the
+    // spam folder — from poisoning the result.
+    //
+    // We also append the subject (first 50 chars, sanitised) so the match is
+    // as specific as possible.
+    //
+    // KEY FIX: Gmail retains the original category label (e.g. "category:primary") on
+    // emails even after they are moved to Spam.  Two-layer defence:
+    //   1. Spam is checked FIRST — if the message is in spam, that result wins.
     //   2. Every category search explicitly adds "-in:spam" so it can never match a
     //      message that is currently sitting in the spam folder.
+
+    let base_q: string;
+    if (context?.receivedAt) {
+      const received = context.receivedAt;
+      const dayBefore   = new Date(received.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
+      base_q = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
+      if (context.subject) {
+        // Strip characters that could break the Gmail query, keep first 50 chars
+        const safeSubject = context.subject.replace(/['"\\]/g, "").substring(0, 50).trim();
+        if (safeSubject) base_q += ` subject:"${safeSubject}"`;
+      }
+    } else {
+      // Fallback when no pinned context — use a shorter window than before to
+      // reduce the chance of unrelated old emails being matched.
+      base_q = `from:${safeSender} newer_than:5d`;
+    }
 
     const [spamRes, primaryRes, promotionsRes, socialRes, updatesRes, forumsRes] = await Promise.all([
       gmail.users.messages.list({ userId: "me", q: `${base_q} in:spam`,                         maxResults: 1 }),
@@ -123,7 +154,7 @@ export async function checkGmailPlacement(
     const forumsCount   = (forumsRes.data.messages   || []).length;
 
     console.log(
-      `[GmailPlacement] ${inbox.email} | sender: ${safeSender} | ` +
+      `[GmailPlacement] ${inbox.email} | query: "${base_q}" | ` +
       `spam:${spamCount} primary:${primaryCount} promos:${promoCount} ` +
       `social:${socialCount} updates:${updatesCount} forums:${forumsCount}`
     );

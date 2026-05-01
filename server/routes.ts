@@ -4746,6 +4746,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         return res.json({ results: [], sendingFrom, message: "No connected seed inboxes yet" });
       }
 
+      // Pass the pinned email context (subject + received-at) so the Gmail query
+      // targets only the specific email under monitoring, not any older message
+      // from the same sender that might be sitting in spam.
+      const emailContext = {
+        receivedAt: address?.placementCheckReceivedAt ?? null,
+        subject: address?.placementCheckSubject ?? null,
+      };
+
       const results: PlacementResult[] = await Promise.all(
         connectedInboxes.map(inbox =>
           checkGmailPlacement(
@@ -4757,7 +4765,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
               oauthAccessToken: inbox.oauthAccessToken,
               oauthRefreshToken: inbox.oauthRefreshToken,
             },
-            sendingFrom
+            sendingFrom,
+            emailContext
           )
         )
       );
@@ -4952,7 +4961,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         dkimResult,
       });
 
-      // Open a 24-hour placement monitoring window.
+      // Open a 24-hour placement monitoring window, pinned to THIS specific email.
       // We do NOT fire an immediate check here because Gmail's spam filters need a few
       // minutes to process the email before its folder assignment is reliable.
       // Setting lastPlacementCheckedAt = now (done inside setPlacementAutoCheckWindow)
@@ -4961,7 +4970,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       // Two consecutive matching checks are then required before monitoring stops.
       (async () => {
         const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
-        await storage.setPlacementAutoCheckWindow(inboxAddr.userId, new Date(Date.now() + TWENTY_FOUR_H));
+        await storage.setPlacementAutoCheckWindow(
+          inboxAddr.userId,
+          new Date(Date.now() + TWENTY_FOUR_H),
+          { receivedAt: new Date(), subject }
+        );
       })().catch(err => console.error("[PlacementScheduler] window open error:", err));
 
       // Run full analysis pipeline async

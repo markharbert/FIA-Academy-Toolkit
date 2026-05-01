@@ -293,8 +293,8 @@ export interface IStorage {
   getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined>;
   updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void>;
   saveLastPlacementResults(userId: string, results: unknown[]): Promise<void>;
-  setPlacementAutoCheckWindow(userId: string, until: Date | null): Promise<void>;
-  getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null }>>;
+  setPlacementAutoCheckWindow(userId: string, until: Date | null, emailContext?: { receivedAt: Date; subject: string }): Promise<void>;
+  getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null }>>;
   createEmailAnalysis(data: {
     userId: string; fromAddress: string; fromName?: string; replyTo?: string; subject: string;
     bodyText?: string; bodyHtml?: string; rawHeaders?: string;
@@ -1859,24 +1859,29 @@ export class DatabaseStorage implements IStorage {
       .where(eq(emailInboxAddresses.userId, userId));
   }
 
-  async setPlacementAutoCheckWindow(userId: string, until: Date | null): Promise<void> {
+  async setPlacementAutoCheckWindow(userId: string, until: Date | null, emailContext?: { receivedAt: Date; subject: string }): Promise<void> {
     // When opening a new window (until != null), stamp lastPlacementCheckedAt so the
     // 15-min scheduler throttle enforces a minimum delay before the first real check.
     // This lets Gmail's spam filters finish running (takes ~1-5 min) before we read
     // the folder. When closing the window (until == null) we leave the timestamp alone.
     const extra = until !== null ? { lastPlacementCheckedAt: new Date() } : {};
+    const contextFields = emailContext
+      ? { placementCheckReceivedAt: emailContext.receivedAt, placementCheckSubject: emailContext.subject }
+      : {};
     await db.update(emailInboxAddresses)
-      .set({ placementAutoCheckUntil: until, ...extra })
+      .set({ placementAutoCheckUntil: until, ...extra, ...contextFields })
       .where(eq(emailInboxAddresses.userId, userId));
   }
 
-  async getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null }>> {
+  async getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null }>> {
     const rows = await db.select({
       userId: emailInboxAddresses.userId,
       sendingFromAddress: emailInboxAddresses.sendingFromAddress,
       lastPlacementCheckedAt: emailInboxAddresses.lastPlacementCheckedAt,
       placementAutoCheckUntil: emailInboxAddresses.placementAutoCheckUntil,
       lastPlacementResults: emailInboxAddresses.lastPlacementResults,
+      placementCheckReceivedAt: emailInboxAddresses.placementCheckReceivedAt,
+      placementCheckSubject: emailInboxAddresses.placementCheckSubject,
     })
     .from(emailInboxAddresses)
     .where(
@@ -1884,7 +1889,7 @@ export class DatabaseStorage implements IStorage {
         AND ${emailInboxAddresses.sendingFromAddress} IS NOT NULL
         AND ${emailInboxAddresses.sendingFromAddress} != ''`
     );
-    return rows.filter(r => r.placementAutoCheckUntil != null) as Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null }>;
+    return rows.filter(r => r.placementAutoCheckUntil != null) as Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null }>;
   }
 
   async getSeedInboxes(activeOnly = false): Promise<SeedInbox[]> {
