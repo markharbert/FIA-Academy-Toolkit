@@ -172,7 +172,7 @@ export default function TopicPulseScriptsPage() {
                         {script.topic && (
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
                             <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                              <span className="font-medium text-foreground/70">Topic:</span> {script.topic.keyword}
+                              <span className="font-medium text-foreground/70">Topic:</span> {script.topic.keywordQuery}
                             </span>
                             <span className="text-muted-foreground/40 text-xs">·</span>
                             <Tooltip>

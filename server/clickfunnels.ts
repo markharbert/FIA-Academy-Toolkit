@@ -182,7 +182,7 @@ async function findEnrollmentByEmail(
   while (nextUrl) {
     page++;
     console.log(`[CF API] Paginating enrollments page ${page}:`, nextUrl);
-    const r = await fetch(nextUrl, { headers });
+    const r: Response = await fetch(nextUrl, { headers });
     if (!r.ok) {
       const body = await r.text();
       throw new Error(`CF API enrollments page failed: ${r.status} ${body.slice(0, 100)}`);
@@ -198,8 +198,8 @@ async function findEnrollmentByEmail(
     }
 
     // Follow the Link: rel="next" header for the next page
-    const linkHeader = r.headers.get("link") || "";
-    const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+    const linkHeader: string = r.headers.get("link") || "";
+    const nextMatch: RegExpMatchArray | null = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
     nextUrl = nextMatch ? nextMatch[1] : null;
   }
 

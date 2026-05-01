@@ -31,10 +31,7 @@ export default function TopicPulseSettingsPage() {
 
   const saveKeyMutation = useMutation({
     mutationFn: async (apiKey: string) => {
-      const res = await apiRequest("/api/topic-pulse/api-keys/keywords-everywhere", {
-        method: "POST",
-        body: JSON.stringify({ apiKey }),
-      });
+      const res = await apiRequest("POST", "/api/topic-pulse/api-keys/keywords-everywhere", { apiKey });
       return res;
     },
     onSuccess: () => {
@@ -50,7 +47,7 @@ export default function TopicPulseSettingsPage() {
 
   const deleteKeyMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("/api/topic-pulse/api-keys/keywords-everywhere", { method: "DELETE" });
+      return apiRequest("DELETE", "/api/topic-pulse/api-keys/keywords-everywhere");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/api-keys/keywords-everywhere"] });

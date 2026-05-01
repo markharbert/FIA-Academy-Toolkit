@@ -1265,7 +1265,7 @@ function SettingsTab() {
   const [showAddForm, setShowAddForm] = useState(false);
 
   const addMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/inbox-analyzer/seed-inboxes", { provider: newProvider, label: newLabel, email: newEmail }),
+    mutationFn: () => apiRequest("POST", "/api/inbox-analyzer/seed-inboxes", { provider: newProvider, label: newLabel, email: newEmail }).then(r => r.json() as Promise<SeedInbox>),
     onSuccess: (data: SeedInbox) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
       setNewLabel("");

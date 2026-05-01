@@ -452,7 +452,6 @@ export async function generateTopics(input: TopicSearchInput, runId: string, use
       suggestedAngles: null,
       suggestedHooks: null,
       suggestedTitles: null,
-      suggestedThumbnailText: null,
       commonQuestions: null,
     });
   }
@@ -504,7 +503,6 @@ For questions, list common questions viewers have about this topic.`;
       suggestedAngles: data.angles || null,
       suggestedHooks: data.hooks || null,
       suggestedTitles: data.titles || null,
-      suggestedThumbnailText: data.thumbnailText || null,
       commonQuestions: data.questions || null,
     };
   } catch (err) {
