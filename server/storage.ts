@@ -18,7 +18,7 @@ import {
   type LinkPlaceholder, type InsertLinkPlaceholder,
   type UserApiKey, type InsertUserApiKey, type ApiKeyProvider,
   type SavedOffer, type InsertSavedOffer,
-  type DmoEntry, type InsertDmoEntry,
+  type DmoEntry, type InsertDmoEntry, type DmoEntryData,
   type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
 } from "@shared/schema";
 import crypto from "crypto";
@@ -280,7 +280,7 @@ export interface IStorage {
 
   // DMO Tracker
   getDmoEntry(userId: string, date: string): Promise<DmoEntry | undefined>;
-  upsertDmoEntry(userId: string, date: string, data: Partial<InsertDmoEntry>): Promise<DmoEntry>;
+  upsertDmoEntry(userId: string, date: string, data: DmoEntryData): Promise<DmoEntry>;
   getDmoEntries(userId: string, limit?: number): Promise<DmoEntry[]>;
   getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }>;
   getDmoSummary(userId: string, period: string): Promise<{ summary: string; tips: string[]; moodScore: number | null; performanceScore: number | null; generatedAt: Date } | null>;
@@ -1628,7 +1628,7 @@ export class DatabaseStorage implements IStorage {
     return row || undefined;
   }
 
-  async upsertDmoEntry(userId: string, date: string, data: Partial<InsertDmoEntry>): Promise<DmoEntry> {
+  async upsertDmoEntry(userId: string, date: string, data: DmoEntryData): Promise<DmoEntry> {
     const now = new Date();
     const existing = await this.getDmoEntry(userId, date);
     if (existing) {

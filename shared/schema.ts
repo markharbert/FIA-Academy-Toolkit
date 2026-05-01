@@ -939,3 +939,13 @@ export const insertDmoEntrySchema = createInsertSchema(dmoEntries).omit({
 
 export type InsertDmoEntry = z.infer<typeof insertDmoEntrySchema>;
 export type DmoEntry = typeof dmoEntries.$inferSelect;
+
+export const dmoEntryDataSchema = createInsertSchema(dmoEntries).omit({
+  id: true,
+  userId: true,
+  date: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type DmoEntryData = z.infer<typeof dmoEntryDataSchema>;

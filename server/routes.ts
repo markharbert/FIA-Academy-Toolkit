@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
@@ -4188,8 +4188,12 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const userId = req.session.userId!;
       const today = new Date().toISOString().split("T")[0];
-      const { date = today, ...data } = req.body;
-      const entry = await storage.upsertDmoEntry(userId, date, data);
+      const date: string = typeof req.body.date === "string" ? req.body.date : today;
+      const parsed = dmoEntryDataSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid DMO entry data" });
+      }
+      const entry = await storage.upsertDmoEntry(userId, date, parsed.data);
       const streak = await storage.getDmoStreak(userId);
       res.json({ entry, streak });
     } catch (err) {
