@@ -78,9 +78,23 @@ declare module "express-session" {
 }
 
 // Auth middleware
-function requireAuth(req: Request, res: Response, next: NextFunction) {
+async function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     return res.status(401).json({ message: "Authentication required" });
+  }
+  try {
+    const user = await storage.getUser(req.session.userId);
+    if (!user) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    if (user.isDisabled) {
+      req.session.destroy(() => {});
+      return res.status(403).json({ message: "Account is disabled" });
+    }
+  } catch (err) {
+    console.error("[requireAuth] DB error:", err);
+    return res.status(500).json({ message: "Authentication check failed" });
   }
   next();
 }
@@ -223,6 +237,10 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
+      if (user.isDisabled) {
+        return res.status(403).json({ message: "This account has been disabled. Please contact support." });
+      }
+
       req.session.userId = user.id;
       
       // Update last login timestamp
@@ -339,77 +357,22 @@ export async function registerRoutes(
     res.redirect(`${APP_BASE_URL}/cf-login?email=${encodeURIComponent(email)}`);
   });
 
-  // POST: called by the /cf-login page; does CF API verification and sets session
-  app.post("/api/auth/cf-login-ajax", cfLoginLimiter, async (req: Request, res: Response) => {
-    const { checkCfEnrollmentByEmail } = await import("./clickfunnels");
-    const email = (req.body?.email as string || "").trim().toLowerCase();
-
-    if (!email) {
-      return res.status(400).json({ success: false, error: "missing_email" });
-    }
-
-    try {
-      console.log(`[CF Login] Verifying CF enrollment for ${email}`);
-
-      // Look up any existing local account first (to get stored cfContactId for fast API lookup)
-      let user = await storage.getUserByEmail(email);
-
-      if (user?.isDisabled) {
-        return res.status(403).json({ success: false, error: "account_disabled" });
-      }
-
-      // Always verify live with CF API — pass known contactId for a single fast call,
-      // otherwise we paginate through enrollments to find and verify the contact.
-      let cfInfo;
-      try {
-        cfInfo = await checkCfEnrollmentByEmail(email, user?.cfContactId ?? undefined);
-      } catch (apiErr) {
-        console.error("[CF Login] CF API error:", apiErr);
-        return res.status(502).json({ success: false, error: "cf_api_error" });
-      }
-
-      if (!cfInfo.enrolled) {
-        return res.status(403).json({ success: false, error: "cf_not_enrolled" });
-      }
-
-      // CF confirmed enrolled — find or create local account
-      if (!user) {
-        console.log(`[CF Login] Auto-creating account for CF member: ${email}`);
-        user = await storage.createUser({
-          email,
-          firstName: cfInfo.firstName,
-          lastName: cfInfo.lastName,
-        });
-        await storage.updateUser(user.id, {
-          cfEnrolled: true,
-          cfEnrolledAt: new Date(),
-          cfContactId: cfInfo.contactId,
-        });
-      } else if (!user.cfEnrolled) {
-        console.log(`[CF Login] Re-granting CF access for ${email}`);
-        await storage.updateUser(user.id, {
-          cfEnrolled: true,
-          cfEnrolledAt: new Date(),
-          cfRevokedAt: null,
-          cfContactId: cfInfo.contactId || user.cfContactId,
-        });
-      }
-
-      // Set session and return success
-      req.session.userId = user.id;
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-
-      console.log(`[CF Login] Auto-login success for ${email}`);
-      return res.json({ success: true });
-    } catch (err) {
-      console.error("[CF Login] Error:", err);
-      return res.status(500).json({ success: false, error: "server_error" });
-    }
+  // POST: CF one-click login — DISABLED for security.
+  // This endpoint previously accepted an email address and granted a session to any
+  // caller whose email was enrolled in ClickFunnels. Verifying enrollment via the CF
+  // API only proves the *email* is enrolled; it does not prove the HTTP requester
+  // controls that email address. A proper implementation requires ClickFunnels to
+  // issue a signed, short-lived token (e.g. an OAuth authorization code or a
+  // webhook-signed assertion) that is tied to the specific contact and request.
+  // Until such a mechanism is available, this route returns 501 to prevent
+  // unauthenticated account takeover.
+  app.post("/api/auth/cf-login-ajax", cfLoginLimiter, (_req: Request, res: Response) => {
+    console.warn("[CF Login] cf-login-ajax is disabled — email-only login is not secure");
+    return res.status(501).json({
+      success: false,
+      error: "cf_login_disabled",
+      message: "ClickFunnels one-click login is temporarily unavailable. Please log in with your email and password or contact support.",
+    });
   });
 
   app.get("/api/auth/me", async (req: Request, res: Response) => {
@@ -420,6 +383,11 @@ export async function registerRoutes(
     const user = await storage.getUser(req.session.userId);
     if (!user) {
       return res.status(401).json({ message: "User not found" });
+    }
+
+    if (user.isDisabled) {
+      req.session.destroy(() => {});
+      return res.status(403).json({ message: "Account is disabled" });
     }
 
     console.log("[Auth] /api/auth/me - user.isAdmin:", user.isAdmin, "user.role:", user.role, "user.email:", user.email);
@@ -686,6 +654,11 @@ export async function registerRoutes(
           console.error("[OAuth Google] No user returned from strategy, info:", JSON.stringify(info));
           return res.redirect("/login?error=oauth_failed&reason=no_user");
         }
+
+        if (user.isDisabled) {
+          console.warn("[OAuth Google] Login attempt by disabled user:", user.id);
+          return res.redirect("/login?error=account_disabled");
+        }
         
         // Set session and save before redirect
         console.log("[OAuth Google] Setting session for user:", user.id);
@@ -743,12 +716,14 @@ export async function registerRoutes(
         const rawBody = (req as any).rawBody || "";
         const body = (req as any).parsedBody || {};
 
-        // Verify signature when secret is configured
-        if (process.env.CF_WEBHOOK_SECRET) {
-          if (!verifyCfWebhookSignature(rawBody, signature)) {
-            console.warn("[CF Webhook] Invalid signature");
-            return res.status(401).json({ message: "Invalid signature" });
-          }
+        // Verify signature — fail closed if secret is not configured
+        if (!process.env.CF_WEBHOOK_SECRET) {
+          console.warn("[CF Webhook] CF_WEBHOOK_SECRET not configured — rejecting unsigned webhook");
+          return res.status(401).json({ message: "Webhook signature verification not configured" });
+        }
+        if (!verifyCfWebhookSignature(rawBody, signature)) {
+          console.warn("[CF Webhook] Invalid signature");
+          return res.status(401).json({ message: "Invalid signature" });
         }
 
         const event = parseCfWebhookEvent(body);
