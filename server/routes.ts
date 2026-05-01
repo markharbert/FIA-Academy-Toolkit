@@ -4824,7 +4824,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             extractSendingDomain, extractSendingIp, extractReplyTo,
             checkSpfRecord, checkDkimRecord, checkDmarcRecord,
             analyzeSpamLanguage, computeOverallScore,
-            analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
+            analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality, analyzeCanSpamCompliance,
           } = await import("./inboxAnalyzer");
 
           const rawHeaders = analysis.rawHeaders || "";
@@ -4850,6 +4850,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           const { score: spamScore, flags: spamFlags } = analyzeSpamLanguage(subject, bodyText, bodyHtml);
           const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
           const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
+          const canSpamCompliance = analyzeCanSpamCompliance(bodyText, bodyHtml, subject);
           const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain);
 
           const overallScore = computeOverallScore({
@@ -4863,6 +4864,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             senderTrust,
             technicalHealth,
             contentQuality,
+            canSpamCompliance,
           });
 
           await storage.updateEmailAnalysis(emailId, {
@@ -4878,6 +4880,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             technicalHealth,
             senderTrust,
             contentQuality,
+            canSpamCompliance,
             status: "complete",
           });
         } catch (err) {
@@ -4902,7 +4905,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         extractSendingDomain, extractSendingIp, extractReplyTo,
         checkSpfRecord, checkDkimRecord, checkDmarcRecord,
         analyzeSpamLanguage, computeOverallScore,
-        analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality,
+        analyzeTechnicalHealth, analyzeSenderTrust, analyzeContentQuality, analyzeCanSpamCompliance,
         stripTrackingPixels,
       } = await import("./inboxAnalyzer");
 
@@ -4979,6 +4982,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           const { score: spamScore, flags: spamFlags } = analyzeSpamLanguage(subject, bodyText, bodyHtml);
           const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
           const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
+          const canSpamCompliance = analyzeCanSpamCompliance(bodyText, bodyHtml, subject);
           const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain);
 
           const overallScore = computeOverallScore({
@@ -4992,6 +4996,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             senderTrust,
             technicalHealth,
             contentQuality,
+            canSpamCompliance,
           });
 
           await storage.updateEmailAnalysis(analysis.id, {
@@ -5007,6 +5012,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             technicalHealth,
             senderTrust,
             contentQuality,
+            canSpamCompliance,
             status: "complete",
           });
         } catch (err) {

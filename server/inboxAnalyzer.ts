@@ -1,6 +1,6 @@
 import dns from "dns";
 import OpenAI from "openai";
-import type { SpamFlag, CopyFeedback, SubjectAnalysis, TechnicalHealth, SenderTrust, ContentQuality } from "@shared/schema";
+import type { SpamFlag, CopyFeedback, SubjectAnalysis, TechnicalHealth, SenderTrust, ContentQuality, CanSpamCompliance } from "@shared/schema";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -414,18 +414,6 @@ export function analyzeSpamLanguage(
     });
   }
 
-  // Fake Re:/Fwd: in subject
-  if (/^(re:|fwd?:|fw:)\s/i.test(subject)) {
-    flags.push({ label: 'Fake "Re:" or "Fwd:" prefix in subject — common phishing tactic', severity: "high", category: "structural" });
-  }
-
-  // No unsubscribe link
-  const combinedRaw = (bodyText + " " + bodyHtml).toLowerCase();
-  const hasUnsub = /unsubscribe|opt.?out|manage preferences|manage subscription/i.test(combinedRaw);
-  if (!hasUnsub) {
-    flags.push({ label: "No unsubscribe link detected (CAN-SPAM requirement)", severity: "high", category: "structural" });
-  }
-
   // Link density
   if (bodyHtml) {
     const linkCount = (bodyHtml.match(/<a\s/gi) || []).length;
@@ -556,11 +544,6 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string): Conte
 
   const wordCount = textToSearch.split(/\s+/).filter(Boolean).length;
 
-  const hasPhysicalAddress =
-    /\d+\s+[\w\s]{2,30}(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|place|pl|suite|ste)\b/i.test(textToSearch) ||
-    /p\.?o\.?\s*box\s+\d+/i.test(textToSearch) ||
-    /\b[A-Z]{2}\s+\d{5}(-\d{4})?\b/.test(textToSearch);
-
   const hasPs = /\bp\.?\s*s\.?\b/i.test(textToSearch);
 
   const hasPersonalization =
@@ -569,10 +552,38 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string): Conte
 
   return {
     wordCount,
-    hasPhysicalAddress,
     hasPs,
     hasPersonalization,
   };
+}
+
+// ── CAN-SPAM Compliance analysis ─────────────────────────────────────────────
+
+export function analyzeCanSpamCompliance(bodyText: string, bodyHtml: string, subject: string): CanSpamCompliance {
+  const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const textToSearch = (bodyText || "").trim() || htmlAsText;
+  const combinedRaw = (textToSearch + " " + bodyHtml).toLowerCase();
+
+  // Physical mailing address (street address, PO box, or state+zip)
+  const hasPhysicalAddress =
+    /\d+\s+[\w\s]{2,30}(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|place|pl|suite|ste)\b/i.test(textToSearch) ||
+    /p\.?o\.?\s*box\s+\d+/i.test(textToSearch) ||
+    /\b[A-Z]{2}\s+\d{5}(-\d{4})?\b/.test(textToSearch);
+
+  // Unsubscribe / opt-out mechanism
+  const hasUnsubscribeLink = /unsubscribe|opt.?out|manage preferences|manage subscription/i.test(combinedRaw);
+
+  // Honest subject line — fake Re:/Fwd: is a CAN-SPAM violation
+  const hasHonestSubject = !/^(re:|fwd?:|fw:)\s/i.test(subject);
+
+  // Score: physical address 4pts + unsubscribe 4pts + honest subject 2pts = 10pts max → scaled to 0–100
+  let pts = 0;
+  if (hasPhysicalAddress) pts += 4;
+  if (hasUnsubscribeLink) pts += 4;
+  if (hasHonestSubject) pts += 2;
+  const score = Math.round((pts / 10) * 100);
+
+  return { hasPhysicalAddress, hasUnsubscribeLink, hasHonestSubject, score };
 }
 
 // ── AI copy scoring ─────────────────────────────────────────────────────────
@@ -628,7 +639,7 @@ Respond ONLY with valid JSON in this exact format:
 }
 
 // ── Overall score ───────────────────────────────────────────────────────────
-// Breakdown: Auth 30 + SenderTrust 15 + SpamLanguage 35 + Technical 10 + Content 10 = 100
+// Breakdown: Auth 30 + SenderTrust 15 + SpamLanguage 28 + Technical 10 + Content 7 + CAN-SPAM 10 = 100
 
 export function computeOverallScore(params: {
   spfResult: string;
@@ -642,6 +653,7 @@ export function computeOverallScore(params: {
   senderTrust?: SenderTrust | null;
   technicalHealth?: TechnicalHealth | null;
   contentQuality?: ContentQuality | null;
+  canSpamCompliance?: CanSpamCompliance | null;
 }): number {
   // Auth: 30 pts
   let authPoints = 0;
@@ -664,9 +676,9 @@ export function computeOverallScore(params: {
   }
   // max 15
 
-  // Spam language: 35 pts (replaces old Spam 15 + Copy 20)
-  const spamPoints = Math.round((params.spamScore / 100) * 35);
-  // max 35
+  // Spam language: 28 pts
+  const spamPoints = Math.round((params.spamScore / 100) * 28);
+  // max 28
 
   // Technical health: 10 pts
   let techPoints = 6; // default
@@ -681,16 +693,27 @@ export function computeOverallScore(params: {
   }
   // max 10
 
-  // Content quality: 10 pts
-  let contentPoints = 5; // default
+  // Content quality: 7 pts (personalization 3 + word count 3 + P.S. 1)
+  let contentPoints = 4; // default
   if (params.contentQuality) {
     const cq = params.contentQuality;
     contentPoints = 0;
-    if (cq.hasPhysicalAddress) contentPoints += 4;
     if (cq.hasPersonalization) contentPoints += 3;
     if (cq.wordCount >= 50 && cq.wordCount <= 600) contentPoints += 3;
+    if (cq.hasPs) contentPoints += 1;
+  }
+  // max 7
+
+  // CAN-SPAM Compliance: 10 pts (physical address 4 + unsubscribe 4 + honest subject 2)
+  let canSpamPoints = 5; // default when not yet analyzed
+  if (params.canSpamCompliance) {
+    const cs = params.canSpamCompliance;
+    canSpamPoints = 0;
+    if (cs.hasPhysicalAddress) canSpamPoints += 4;
+    if (cs.hasUnsubscribeLink) canSpamPoints += 4;
+    if (cs.hasHonestSubject) canSpamPoints += 2;
   }
   // max 10
 
-  return Math.min(100, authPoints + trustPoints + spamPoints + techPoints + contentPoints);
+  return Math.min(100, authPoints + trustPoints + spamPoints + techPoints + contentPoints + canSpamPoints);
 }

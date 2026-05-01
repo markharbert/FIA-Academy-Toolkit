@@ -85,7 +85,8 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS subject_analysis jsonb,
         ADD COLUMN IF NOT EXISTS technical_health jsonb,
         ADD COLUMN IF NOT EXISTS sender_trust jsonb,
-        ADD COLUMN IF NOT EXISTS content_quality jsonb;
+        ADD COLUMN IF NOT EXISTS content_quality jsonb,
+        ADD COLUMN IF NOT EXISTS can_spam_compliance jsonb;
     `);
     console.log("[startup] email_analyses migration complete");
   } catch (err) {

@@ -835,9 +835,15 @@ export type SenderTrust = {
 
 export type ContentQuality = {
   wordCount: number;
-  hasPhysicalAddress: boolean;
   hasPs: boolean;
   hasPersonalization: boolean;
+};
+
+export type CanSpamCompliance = {
+  hasPhysicalAddress: boolean;
+  hasUnsubscribeLink: boolean;
+  hasHonestSubject: boolean;
+  score: number; // 0–100 for display
 };
 
 export const emailInboxAddresses = pgTable("email_inbox_addresses", {
@@ -897,6 +903,7 @@ export const emailAnalyses = pgTable("email_analyses", {
   technicalHealth: jsonb("technical_health").$type<TechnicalHealth>(),
   senderTrust: jsonb("sender_trust").$type<SenderTrust>(),
   contentQuality: jsonb("content_quality").$type<ContentQuality>(),
+  canSpamCompliance: jsonb("can_spam_compliance").$type<CanSpamCompliance>(),
   status: varchar("status", { length: 20 }).default("pending").notNull(),
 });
 

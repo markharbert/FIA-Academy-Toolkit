@@ -25,7 +25,7 @@ import {
   Inbox, Info, CircleCheck, CircleX, CircleAlert,
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
   User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
-  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare,
+  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare, Scale,
 } from "lucide-react";
 import { SiGmail } from "react-icons/si";
 import { apiRequest } from "@/lib/queryClient";
@@ -33,7 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import type {
   EmailAnalysis, SpamFlag,
-  TechnicalHealth, SenderTrust, ContentQuality, SeedInbox,
+  TechnicalHealth, SenderTrust, ContentQuality, CanSpamCompliance, SeedInbox,
 } from "@shared/schema";
 
 const INBOX_DOMAIN = "email.fearlessmarketinglab.com";
@@ -210,10 +210,10 @@ function computeTechScore(th: TechnicalHealth | null): number | null {
 function computeContentScore(cq: ContentQuality | null): number | null {
   if (!cq) return null;
   let pts = 0;
-  if (cq.hasPhysicalAddress) pts += 4;
   if (cq.hasPersonalization) pts += 3;
   if (cq.wordCount >= 50 && cq.wordCount <= 600) pts += 3;
-  return Math.round((pts / 10) * 100);
+  if (cq.hasPs) pts += 1;
+  return Math.round((pts / 7) * 100);
 }
 
 function computePlacementScore(results: PlacementResult[] | null): number | null {
@@ -376,6 +376,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
   const th = email.technicalHealth as TechnicalHealth | null;
   const st = email.senderTrust as SenderTrust | null;
   const cq = email.contentQuality as ContentQuality | null;
+  const cs = (email as any).canSpamCompliance as CanSpamCompliance | null;
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -539,11 +540,11 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             <ScoreRing score={email.overallScore} size={72} />
             <div>
               <p className="text-lg font-bold text-foreground">Overall Score</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Based on 5 categories below</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Based on 6 categories below</p>
               <StatusBadge status={email.status} />
             </div>
           </div>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-6 gap-2">
             {[
               { label: "Auth", score: (() => {
                 let p = 0;
@@ -573,11 +574,12 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               })() : null },
               { label: "Content", score: cq ? (() => {
                 let p = 0;
-                if (cq.hasPhysicalAddress) p += 4;
                 if (cq.hasPersonalization) p += 3;
                 if (cq.wordCount >= 50 && cq.wordCount <= 600) p += 3;
-                return Math.round((p / 10) * 100);
+                if (cq.hasPs) p += 1;
+                return Math.round((p / 7) * 100);
               })() : null },
+              { label: "CAN-SPAM", score: cs?.score ?? null },
             ].map((item) => (
               <div key={item.label} className="flex flex-col items-center gap-1 rounded-lg bg-muted/30 py-2 px-1">
                 <ScoreRing score={item.score} size={40} />
@@ -585,7 +587,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               </div>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground mt-2">Auth 30 · Trust 15 · Spam Language 35 · Technical 10 · Content 10</p>
+          <p className="text-xs text-muted-foreground mt-2">Auth 30 · Trust 15 · Spam 28 · Technical 10 · Content 7 · CAN-SPAM 10</p>
         </div>
 
         {/* ── Placement ─────────────────────────────────────────────── */}
@@ -895,15 +897,33 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 detail={!cq.hasPersonalization ? "use first name or merge tags" : undefined}
               />
               <CheckRow
-                pass={cq.hasPhysicalAddress}
-                label={cq.hasPhysicalAddress ? "Physical address found" : "No physical address"}
-                detail={!cq.hasPhysicalAddress ? "required by CAN-SPAM" : "CAN-SPAM compliant"}
-              />
-              <CheckRow
                 pass={cq.hasPs}
                 warn={!cq.hasPs}
                 label={cq.hasPs ? "P.S. section found" : "No P.S. section"}
-                detail={!cq.hasPs ? "P.S. is one of the most-read parts" : "great engagement technique"}
+                detail={!cq.hasPs ? "P.S. is one of the most-read parts of any email" : "great engagement technique"}
+              />
+            </div>
+          </SectionPanel>
+        )}
+
+        {/* CAN-SPAM Compliance */}
+        {cs && (
+          <SectionPanel title="CAN-SPAM Compliance" icon={Scale} score={cs.score}>
+            <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
+              <CheckRow
+                pass={cs.hasPhysicalAddress}
+                label={cs.hasPhysicalAddress ? "Physical mailing address found" : "No physical address"}
+                detail={cs.hasPhysicalAddress ? "meets CAN-SPAM requirement" : "required — include a street address or PO box"}
+              />
+              <CheckRow
+                pass={cs.hasUnsubscribeLink}
+                label={cs.hasUnsubscribeLink ? "Unsubscribe mechanism present" : "No unsubscribe link detected"}
+                detail={cs.hasUnsubscribeLink ? "meets CAN-SPAM requirement" : "required — add an unsubscribe or opt-out link"}
+              />
+              <CheckRow
+                pass={cs.hasHonestSubject}
+                label={cs.hasHonestSubject ? "Subject line is honest" : 'Deceptive subject prefix (Re:/Fwd:)'}
+                detail={cs.hasHonestSubject ? "no fake Re:/Fwd: prefix" : "fake Re:/Fwd: violates CAN-SPAM and triggers spam filters"}
               />
             </div>
           </SectionPanel>
