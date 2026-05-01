@@ -22,7 +22,7 @@ import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
-import { runPlacementCheckForUser, startPlacementScheduler } from "./placementScheduler";
+import { startPlacementScheduler } from "./placementScheduler";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -4874,15 +4874,17 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         dkimResult,
       });
 
-      // Start placement monitoring window (24 h) and fire initial check
+      // Open a 24-hour placement monitoring window.
+      // We do NOT fire an immediate check here because Gmail's spam filters need a few
+      // minutes to process the email before its folder assignment is reliable.
+      // Setting lastPlacementCheckedAt = now (done inside setPlacementAutoCheckWindow)
+      // enforces the 15-min scheduler throttle, so the first real check runs ~15 minutes
+      // after the email arrives — safely after spam filtering completes.
+      // Two consecutive matching checks are then required before monitoring stops.
       (async () => {
         const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
         await storage.setPlacementAutoCheckWindow(inboxAddr.userId, new Date(Date.now() + TWENTY_FOUR_H));
-        const freshAddr = await storage.getOrCreateInboxAddress(inboxAddr.userId);
-        if (freshAddr.sendingFromAddress) {
-          await runPlacementCheckForUser(storage, inboxAddr.userId, freshAddr.sendingFromAddress);
-        }
-      })().catch(err => console.error("[PlacementScheduler] initial check error:", err));
+      })().catch(err => console.error("[PlacementScheduler] window open error:", err));
 
       // Run full analysis pipeline async
       (async () => {

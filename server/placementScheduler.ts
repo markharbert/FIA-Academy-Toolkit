@@ -11,10 +11,22 @@ function allResolved(results: PlacementResult[]): boolean {
   return results.length > 0 && results.every(r => DEFINITIVE_STATUSES.has(r.status));
 }
 
+// Returns true only if both result sets contain the same status for every inbox.
+// Requires the same number of results and matching status per inboxId.
+function resultsMatch(prev: unknown[] | null, next: PlacementResult[]): boolean {
+  if (!prev || !Array.isArray(prev) || prev.length === 0) return false;
+  if (prev.length !== next.length) return false;
+  const prevMap = new Map(
+    (prev as Array<{ inboxId: string; status: string }>).map(r => [r.inboxId, r.status])
+  );
+  return next.every(r => prevMap.get(r.inboxId) === r.status);
+}
+
 export async function runPlacementCheckForUser(
   storage: IStorage,
   userId: string,
-  sendingFrom: string
+  sendingFrom: string,
+  previousResults: unknown[] | null = null
 ): Promise<void> {
   try {
     const allInboxes = await storage.getSeedInboxes(true);
@@ -38,11 +50,24 @@ export async function runPlacementCheckForUser(
     );
 
     await storage.saveLastPlacementResults(userId, results);
-    console.log(`[PlacementScheduler] checked ${connected.length} inbox(es) for user ${userId}`);
 
-    if (allResolved(results)) {
-      await storage.setPlacementAutoCheckWindow(userId, null);
-      console.log(`[PlacementScheduler] all inboxes resolved for user ${userId} — monitoring stopped`);
+    const definitiveNow = allResolved(results);
+    const confirmedMatch = definitiveNow && resultsMatch(previousResults, results);
+
+    if (definitiveNow) {
+      if (confirmedMatch) {
+        // Same definitive result on two consecutive checks — trustworthy, stop monitoring.
+        await storage.setPlacementAutoCheckWindow(userId, null);
+        const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
+        console.log(`[PlacementScheduler] CONFIRMED for user ${userId} — ${summary} — monitoring stopped`);
+      } else {
+        // First time we've seen a definitive result. Keep monitoring; next check will confirm.
+        const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
+        console.log(`[PlacementScheduler] first definitive reading for user ${userId} — ${summary} — awaiting confirmation check`);
+      }
+    } else {
+      const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
+      console.log(`[PlacementScheduler] checked ${connected.length} inbox(es) for user ${userId} — ${summary}`);
     }
   } catch (err: any) {
     console.error(`[PlacementScheduler] error for user ${userId}:`, err?.message);
@@ -66,7 +91,12 @@ export function startPlacementScheduler(storage: IStorage): void {
 
       if (timeSinceCheck < CHECK_INTERVAL_MS) continue;
 
-      await runPlacementCheckForUser(storage, user.userId, user.sendingFromAddress);
+      await runPlacementCheckForUser(
+        storage,
+        user.userId,
+        user.sendingFromAddress,
+        user.lastPlacementResults
+      );
       await new Promise(r => setTimeout(r, STAGGER_MS));
     }
   }
@@ -76,5 +106,5 @@ export function startPlacementScheduler(storage: IStorage): void {
     () => tick().catch(err => console.error("[PlacementScheduler] tick error:", err)),
     TICK_INTERVAL_MS
   );
-  console.log("[PlacementScheduler] started (tick every 5 min, check interval 15 min)");
+  console.log("[PlacementScheduler] started (tick every 5 min, check interval 15 min, confirmation required)");
 }
