@@ -33,6 +33,7 @@ import {
   CF_WORKSPACE_DOMAIN,
   CF_API_TOKEN,
   CF_COURSE_ID,
+  type CfContactInfo,
 } from "./clickfunnels";
 
 const openai = new OpenAI({
@@ -457,22 +458,96 @@ export async function registerRoutes(
     res.redirect(`${APP_BASE_URL}/cf-login?email=${encodeURIComponent(email)}`);
   });
 
-  // POST: CF one-click login — DISABLED for security.
-  // This endpoint previously accepted an email address and granted a session to any
-  // caller whose email was enrolled in ClickFunnels. Verifying enrollment via the CF
-  // API only proves the *email* is enrolled; it does not prove the HTTP requester
-  // controls that email address. A proper implementation requires ClickFunnels to
-  // issue a signed, short-lived token (e.g. an OAuth authorization code or a
-  // webhook-signed assertion) that is tied to the specific contact and request.
-  // Until such a mechanism is available, this route returns 501 to prevent
-  // unauthenticated account takeover.
-  app.post("/api/auth/cf-login-ajax", cfLoginLimiter, (_req: Request, res: Response) => {
-    console.warn("[CF Login] cf-login-ajax is disabled — email-only login is not secure");
-    return res.status(501).json({
-      success: false,
-      error: "cf_login_disabled",
-      message: "ClickFunnels one-click login is temporarily unavailable. Please log in with your email and password or contact support.",
-    });
+  // POST: CF one-click login
+  // Accepts the member's email from the CF button URL, verifies active enrollment
+  // via the CF API, then creates a session. If the user does not yet have a local
+  // account but IS enrolled, one is auto-provisioned.
+  app.post("/api/auth/cf-login-ajax", cfLoginLimiter, async (req: Request, res: Response) => {
+    try {
+      const { email: rawEmail } = req.body;
+      const email = (rawEmail || "").trim().toLowerCase();
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ success: false, error: "missing_email" });
+      }
+
+      let user = await storage.getUserByEmail(email);
+
+      // Reject explicitly disabled accounts before touching CF API
+      if (user?.isDisabled) {
+        console.warn(`[CF Login] disabled account attempt: ${email}`);
+        return res.status(403).json({ success: false, error: "account_disabled" });
+      }
+
+      // If CF is configured, verify active enrollment (always, so revoked members
+      // are caught even when cfEnrolled is still true in our DB from a prior session).
+      if (CF_API_TOKEN && CF_COURSE_ID) {
+        let cfInfo: CfContactInfo;
+        try {
+          cfInfo = await checkCfEnrollmentByEmail(email, user?.cfContactId ?? undefined);
+        } catch (err: any) {
+          console.error("[CF Login] CF API error:", err?.message);
+          return res.status(502).json({ success: false, error: "cf_api_error" });
+        }
+
+        if (!cfInfo.enrolled) {
+          console.warn(`[CF Login] not enrolled: ${email}`);
+          return res.status(403).json({ success: false, error: "cf_not_enrolled" });
+        }
+
+        if (user) {
+          // Keep local enrollment state in sync
+          if (!user.cfEnrolled || user.cfRevokedAt) {
+            await storage.updateUser(user.id, {
+              cfEnrolled: true,
+              cfEnrolledAt: user.cfEnrolledAt ?? new Date(),
+              cfRevokedAt: null,
+              isDisabled: false,
+              cfContactId: cfInfo.contactId ?? user.cfContactId,
+            });
+          }
+        } else {
+          // Auto-provision: enrolled in CF but hasn't signed up to Toolkit yet
+          console.log(`[CF Login] auto-provisioning account for enrolled member: ${email}`);
+          const displayName =
+            [cfInfo.firstName, cfInfo.lastName].filter(Boolean).join(" ") || email.split("@")[0];
+          user = await storage.createUser({
+            email,
+            displayName,
+            firstName: cfInfo.firstName || "",
+            lastName: cfInfo.lastName || "",
+          });
+          await storage.updateUser(user.id, {
+            cfEnrolled: true,
+            cfEnrolledAt: new Date(),
+            cfContactId: cfInfo.contactId ?? null,
+          });
+        }
+      } else {
+        // CF not configured (dev/staging) — require the account to exist
+        if (!user) {
+          return res.status(403).json({ success: false, error: "cf_not_enrolled" });
+        }
+      }
+
+      req.session.userId = user!.id;
+      await storage.updateUser(user!.id, { lastLoginAt: new Date() });
+
+      logUserAction({
+        userId: user!.id,
+        actionType: "login_success",
+        actionLabel: ActionLabels.login_success,
+        entityType: "auth",
+        metadata: { method: "cf_one_click" },
+        req,
+      });
+
+      console.log(`[CF Login] session created for ${email} (userId: ${user!.id})`);
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("[CF Login] unexpected error:", err?.message);
+      return res.status(500).json({ success: false, error: "server_error" });
+    }
   });
 
   app.get("/api/auth/me", async (req: Request, res: Response) => {
