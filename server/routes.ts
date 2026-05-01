@@ -85,6 +85,8 @@ const upload = multer({
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    gmailOAuthNonce: string;
+    gmailOAuthInboxId: string;
   }
 }
 
@@ -4448,7 +4450,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const user = await storage.getUser(req.session!.userId!);
       const activeOnly = !user?.isAdmin;
       const inboxes = await storage.getSeedInboxes(activeOnly);
-      res.json(inboxes);
+      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...rest }) => rest);
+      res.json(sanitized);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch seed inboxes" });
     }
@@ -4493,7 +4496,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const inbox = await storage.getSeedInboxById(inboxId);
       if (!inbox) return res.status(404).json({ message: "Inbox not found" });
       if (inbox.provider !== "gmail") return res.status(400).json({ message: "Only Gmail inboxes can be connected via Google OAuth" });
-      const url = getGmailAuthUrl(inboxId);
+      const nonce = crypto.randomBytes(16).toString("hex");
+      req.session.gmailOAuthNonce = nonce;
+      req.session.gmailOAuthInboxId = inboxId;
+      const url = getGmailAuthUrl(`${inboxId}:${nonce}`);
       res.redirect(url);
     } catch (err: any) {
       console.error("[GmailOAuth] connect error:", err?.message);
@@ -4501,19 +4507,56 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  // Gmail OAuth: callback (must be public — Google redirects here)
+  // Gmail OAuth: callback — requires an active admin session with a matching nonce
   app.get("/api/inbox-analyzer/seed-inboxes/callback/gmail", async (req: Request, res: Response) => {
     const code = req.query.code as string;
-    const state = req.query.state as string; // inboxId
+    const state = req.query.state as string;
     const error = req.query.error as string;
 
     if (error || !code || !state) {
       return res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_denied");
     }
 
+    const colonIdx = state.lastIndexOf(":");
+    if (colonIdx === -1) {
+      return res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_denied");
+    }
+    const inboxId = state.slice(0, colonIdx);
+    const nonce = state.slice(colonIdx + 1);
+
+    const sessionNonce = req.session.gmailOAuthNonce;
+    const sessionInboxId = req.session.gmailOAuthInboxId;
+    const sessionUserId = req.session.userId;
+
+    if (!sessionUserId || !sessionNonce || sessionNonce !== nonce || sessionInboxId !== inboxId) {
+      console.warn("[GmailOAuth] callback rejected: invalid session or nonce mismatch");
+      return res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_denied");
+    }
+
+    const user = await storage.getUser(sessionUserId);
+    if (!user?.isAdmin) {
+      console.warn("[GmailOAuth] callback rejected: user is not admin");
+      return res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_denied");
+    }
+
+    delete req.session.gmailOAuthNonce;
+    delete req.session.gmailOAuthInboxId;
+
     try {
+      const inbox = await storage.getSeedInboxById(inboxId);
+      if (!inbox) {
+        console.warn("[GmailOAuth] callback rejected: inbox not found", inboxId);
+        return res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_failed");
+      }
+
       const { accessToken, refreshToken, expiry, email } = await exchangeGmailCode(code);
-      await storage.storeSeedInboxOAuthTokens(state, accessToken, refreshToken, expiry, email);
+
+      if (email.toLowerCase() !== inbox.email.toLowerCase()) {
+        console.warn("[GmailOAuth] callback rejected: authorized account", email, "does not match inbox", inbox.email);
+        return res.redirect("/email-tools/inbox-analyzer?tab=settings&error=oauth_email_mismatch");
+      }
+
+      await storage.storeSeedInboxOAuthTokens(inboxId, accessToken, refreshToken, expiry, email);
       res.redirect("/email-tools/inbox-analyzer?tab=settings&connected=1");
     } catch (err: any) {
       console.error("[GmailOAuth] callback error:", err?.message);
