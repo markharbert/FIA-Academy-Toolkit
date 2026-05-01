@@ -388,6 +388,16 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
   const DEFINITIVE = new Set(["primary", "promotions", "social", "updates", "forums", "spam"]);
   const allResolved = !!lastPlacementResults?.length &&
     (lastPlacementResults as PlacementResult[]).every(r => DEFINITIVE.has(r.status));
+  const hasAnyResults = !!lastPlacementResults?.length;
+
+  // Minutes until the next placement check fires (scheduler runs every 15 min;
+  // lastPlacementCheckedAt is stamped both when the window opens and after each real check).
+  const CHECK_INTERVAL_MS = 15 * 60 * 1000;
+  const minsUntilNextCheck = lastPlacementCheckedAt
+    ? Math.max(0, Math.ceil(
+        (new Date(lastPlacementCheckedAt).getTime() + CHECK_INTERVAL_MS - now) / 60000
+      ))
+    : 15;
 
   const receivedDate = email.receivedAt
     ? new Date(email.receivedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
@@ -605,8 +615,13 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                     </div>
                     {result ? (
                       <PlacementStatusBadge status={result.status} />
+                    ) : windowActive ? (
+                      <span className="flex items-center gap-1.5 text-xs text-blue-500 dark:text-blue-400">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Checking…
+                      </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Pending first check…</span>
+                      <span className="text-xs text-muted-foreground">Not detected</span>
                     )}
                   </div>
                 );
@@ -614,16 +629,40 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
               {/* Last-checked + monitoring status */}
               <div className="pt-0.5 space-y-1">
-                {lastPlacementCheckedAt && (
+                {/* Only show "Last checked" when a real check has actually run (we have results) */}
+                {lastPlacementCheckedAt && hasAnyResults && (
                   <p className="text-xs text-muted-foreground">
-                    Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Confirmed
+                    Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    {/* Only say "Confirmed" once monitoring has fully stopped (window cleared) */}
+                    {!windowActive && !windowClosed ? " · Confirmed" : ""}
                   </p>
                 )}
-                {allResolved ? null : windowActive ? (
-                  <p className="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Monitoring active · waiting for email to appear in seed inboxes
-                  </p>
+                {windowActive ? (
+                  !hasAnyResults ? (
+                    // No checks have run yet — still in the initial delay window
+                    <p className="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {minsUntilNextCheck > 0
+                        ? `First check in ~${minsUntilNextCheck} min — letting Gmail finish filtering`
+                        : "First check running soon — letting Gmail finish filtering"}
+                    </p>
+                  ) : allResolved ? (
+                    // First definitive result in — waiting for the confirmation check
+                    <p className="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {minsUntilNextCheck > 0
+                        ? `Result found · confirming on next check in ~${minsUntilNextCheck} min`
+                        : "Result found · confirmation check running soon"}
+                    </p>
+                  ) : (
+                    // Partial results — still waiting for all inboxes to report back
+                    <p className="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {minsUntilNextCheck > 0
+                        ? `Monitoring active · next check in ~${minsUntilNextCheck} min`
+                        : "Monitoring active · next check running soon"}
+                    </p>
+                  )
                 ) : windowClosed ? (
                   <p className="text-xs text-muted-foreground">Monitoring ended · email not detected within 24 hours</p>
                 ) : null}
