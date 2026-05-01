@@ -17,6 +17,10 @@ const CF_ERROR_MESSAGES: Record<string, { type: "error" | "info"; message: strin
     type: "error",
     message: "Your membership doesn't include access to the Academy Toolkit. Please contact support if you believe this is an error.",
   },
+  cf_revoked: {
+    type: "error",
+    message: "Your ClickFunnels membership has been revoked. Please reactivate your membership to continue.",
+  },
   account_disabled: {
     type: "error",
     message: "Your account has been disabled. Please contact support.",

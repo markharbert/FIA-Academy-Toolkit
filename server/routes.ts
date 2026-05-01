@@ -29,7 +29,10 @@ import {
   generateCfSsoUrl,
   parseCfWebhookEvent,
   handleCfEnrollmentEvent,
+  checkCfEnrollmentByEmail,
   CF_WORKSPACE_DOMAIN,
+  CF_API_TOKEN,
+  CF_COURSE_ID,
 } from "./clickfunnels";
 
 const openai = new OpenAI({
@@ -99,6 +102,18 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
     if (user.isDisabled) {
       req.session.destroy(() => {});
       return res.status(403).json({ message: "Account is disabled" });
+    }
+    // When CF is configured, enforce active membership on every authenticated
+    // request so revoked members are denied mid-session without waiting for
+    // their session to naturally expire. Admins are always exempt.
+    if (process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
+      if (user.cfEnrolled !== true) {
+        req.session.destroy(() => {});
+        return res.status(403).json({
+          message: "Active ClickFunnels membership required",
+          error: "cf_not_enrolled",
+        });
+      }
     }
   } catch (err) {
     console.error("[requireAuth] DB error:", err);
@@ -179,6 +194,30 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Email already registered" });
       }
 
+      // If ClickFunnels is configured, verify the email is an active enrolled member
+      // before creating an account. Self-registration is not permitted when CF enforcement
+      // is active — access must be granted through the CF enrollment webhook.
+      let cfSignupInfo: { enrolled: boolean; contactId?: string } | null = null;
+      if (CF_API_TOKEN && CF_COURSE_ID) {
+        try {
+          const cfInfo = await checkCfEnrollmentByEmail(email);
+          if (!cfInfo.enrolled) {
+            console.warn(`[Signup] CF enrollment check failed for ${email} — not enrolled`);
+            return res.status(403).json({
+              message: "This toolkit is exclusively available to active members. Please ensure your ClickFunnels membership is active.",
+              error: "cf_not_enrolled",
+            });
+          }
+          cfSignupInfo = cfInfo;
+        } catch (cfErr) {
+          console.error("[Signup] CF enrollment check error:", cfErr);
+          return res.status(503).json({
+            message: "Unable to verify membership status. Please try again later.",
+            error: "cf_check_failed",
+          });
+        }
+      }
+
       const passwordHash = await bcrypt.hash(password, 10);
       const clientIp = req.ip || req.socket.remoteAddress || "unknown";
       
@@ -188,6 +227,17 @@ export async function registerRoutes(
         emailConsentAt: emailConsent ? new Date() : undefined,
         emailConsentIp: emailConsent ? clientIp : undefined,
       });
+
+      // If CF verification passed, persist enrollment status immediately so
+      // the user passes requireAuth's cfEnrolled check on their first request.
+      if (cfSignupInfo?.enrolled) {
+        await storage.updateUser(user.id, {
+          cfEnrolled: true,
+          cfEnrolledAt: new Date(),
+          cfRevokedAt: null,
+          cfContactId: cfSignupInfo.contactId || null,
+        });
+      }
 
       req.session.userId = user.id;
 
@@ -210,9 +260,9 @@ export async function registerRoutes(
           role: user.role || (user.isAdmin ? "admin" : "user"),
           isDisabled: user.isDisabled,
           gravatarUrl,
-          cfEnrolled: user.cfEnrolled,
-          cfEnrolledAt: user.cfEnrolledAt,
-          cfRevokedAt: user.cfRevokedAt,
+          cfEnrolled: cfSignupInfo?.enrolled ?? user.cfEnrolled,
+          cfEnrolledAt: cfSignupInfo?.enrolled ? new Date() : user.cfEnrolledAt,
+          cfRevokedAt: cfSignupInfo?.enrolled ? null : user.cfRevokedAt,
         }
       });
     } catch (err) {
@@ -247,6 +297,25 @@ export async function registerRoutes(
 
       if (user.isDisabled) {
         return res.status(403).json({ message: "This account has been disabled. Please contact support." });
+      }
+
+      // If ClickFunnels is configured, require active membership for non-admin users.
+      // Admins bypass this check so they always retain access regardless of CF status.
+      if (CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
+        if (user.cfEnrolled === false) {
+          console.warn(`[Login] CF membership revoked for user ${user.id} (${email})`);
+          return res.status(403).json({
+            message: "Your membership has been revoked. Please reactivate your ClickFunnels membership to continue.",
+            error: "cf_revoked",
+          });
+        }
+        if (user.cfEnrolled !== true) {
+          console.warn(`[Login] CF enrollment not confirmed for user ${user.id} (${email})`);
+          return res.status(403).json({
+            message: "This toolkit is exclusively available to active members. Your membership status could not be confirmed.",
+            error: "cf_not_enrolled",
+          });
+        }
       }
 
       req.session.userId = user.id;
@@ -396,6 +465,18 @@ export async function registerRoutes(
     if (user.isDisabled) {
       req.session.destroy(() => {});
       return res.status(403).json({ message: "Account is disabled" });
+    }
+
+    // When CF is configured, enforce active membership here too so the client
+    // cannot stay in an authenticated-looking state after membership is revoked.
+    if (process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
+      if (user.cfEnrolled !== true) {
+        req.session.destroy(() => {});
+        return res.status(403).json({
+          message: "Active ClickFunnels membership required",
+          error: "cf_not_enrolled",
+        });
+      }
     }
 
     console.log("[Auth] /api/auth/me - user.isAdmin:", user.isAdmin, "user.role:", user.role, "user.email:", user.email);
@@ -667,6 +748,18 @@ export async function registerRoutes(
           console.warn("[OAuth Google] Login attempt by disabled user:", user.id);
           return res.redirect("/login?error=account_disabled");
         }
+
+        // If ClickFunnels is configured, require active membership for non-admin users.
+        if (CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
+          if (user.cfEnrolled === false) {
+            console.warn("[OAuth Google] CF membership revoked for user:", user.id);
+            return res.redirect("/login?error=cf_revoked");
+          }
+          if (user.cfEnrolled !== true) {
+            console.warn("[OAuth Google] CF enrollment not confirmed for user:", user.id);
+            return res.redirect("/login?error=cf_not_enrolled");
+          }
+        }
         
         // Set session and save before redirect
         console.log("[OAuth Google] Setting session for user:", user.id);
@@ -757,6 +850,12 @@ export async function registerRoutes(
       const user = await storage.getUser(req.session.userId!);
       if (!user?.email) {
         return res.status(400).json({ message: "No email on account" });
+      }
+      // Only active CF members (or admins) may mint SSO URLs.
+      // A revoked or never-enrolled non-admin should not receive a signed CF token.
+      if (!user.isAdmin && user.cfEnrolled !== true) {
+        console.warn(`[CF SSO] Denied SSO URL for non-enrolled user ${user.id}`);
+        return res.status(403).json({ message: "Active ClickFunnels membership required" });
       }
       const redirectTo = (req.query.redirect as string) || undefined;
       const url = generateCfSsoUrl(user.email, redirectTo);
@@ -899,6 +998,10 @@ export async function registerRoutes(
         cfEnrolled: grant,
         cfEnrolledAt: grant ? new Date() : user.cfEnrolledAt,
         cfRevokedAt: grant ? null : new Date(),
+        // Mirror webhook revocation semantics: revoke disables the account so
+        // existing sessions are terminated by requireAuth on the next request.
+        // Granting re-enables the account so the user can log in again.
+        isDisabled: !grant,
       });
 
       res.json({ ok: true, cfEnrolled: grant });

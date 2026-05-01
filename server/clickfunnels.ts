@@ -114,11 +114,10 @@ export async function handleCfEnrollmentEvent(
 
   const user = await storage.getUserByEmail(contactEmail);
 
-  const isGrantEvent = [
-    "courses/enrollment.created",
-    "contact.identified",
-    "contact.created",
-  ].includes(eventType);
+  // Only explicit course enrollment events qualify as grants.
+  // contact.identified / contact.created do not prove course enrollment and
+  // may arrive without a courseId, which would bypass the courseMatches check.
+  const isGrantEvent = eventType === "courses/enrollment.created";
 
   const isRevokeEvent = [
     "courses/enrollment.suspended",
@@ -134,6 +133,9 @@ export async function handleCfEnrollmentEvent(
         cfContactId: contactId || user.cfContactId,
         cfEnrolledAt: new Date(),
         cfRevokedAt: null,
+        // Re-enabling the account ensures previously revoked (and thus disabled)
+        // members can log in again after their membership is reinstated in CF.
+        isDisabled: false,
       });
       return { action: "granted", email: contactEmail };
     }
@@ -146,6 +148,7 @@ export async function handleCfEnrollmentEvent(
       await storage.updateUser(user.id, {
         cfEnrolled: false,
         cfRevokedAt: new Date(),
+        isDisabled: true,
       });
       return { action: "revoked", email: contactEmail };
     }
