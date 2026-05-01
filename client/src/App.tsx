@@ -22,7 +22,6 @@ import TopicPulseExplorePage from "@/pages/topic-pulse-explore";
 import TopicPulseScriptPage from "@/pages/topic-pulse-script";
 import TopicPulseScriptsPage from "@/pages/topic-pulse-scripts";
 import TopicPulseSavedPage from "@/pages/topic-pulse-saved";
-import TopicPulseSettingsPage from "@/pages/topic-pulse-settings";
 import VideoToolsPage from "@/pages/video-tools";
 import EmailToolsPage from "@/pages/email-tools";
 import InboxAnalyzerPage from "@/pages/inbox-analyzer";
@@ -146,9 +145,6 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/video-trends/saved">
         {() => <ProtectedRoute component={TopicPulseSavedPage} />}
-      </Route>
-      <Route path="/video-trends/settings">
-        {() => <ProtectedRoute component={TopicPulseSettingsPage} />}
       </Route>
       <Route path="/video-tools">
         {() => <ProtectedRoute component={VideoToolsPage} />}

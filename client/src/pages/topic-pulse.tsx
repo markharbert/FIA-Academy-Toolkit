@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Settings, Sparkles, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
+import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun } from "@shared/schema";
@@ -232,7 +232,7 @@ export default function TopicPulsePage() {
         <div className="max-w-4xl mx-auto px-5 py-6 space-y-8">
 
           {/* Stat cards */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div
               className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
               onClick={() => navigate("/video-trends/saved")}
@@ -269,23 +269,6 @@ export default function TopicPulsePage() {
               </div>
             </div>
 
-            <div
-              className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
-              onClick={() => navigate("/video-trends/settings")}
-              data-testid="card-settings"
-            >
-              <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" />
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1.5 rounded-lg bg-amber-500/10">
-                    <Settings className="h-4 w-4 text-amber-500" />
-                  </div>
-                  <span className="text-sm font-medium text-muted-foreground">Settings</span>
-                </div>
-                <div className="text-sm font-semibold text-foreground/70 mt-1">API keys &</div>
-                <p className="text-xs text-muted-foreground">preferences</p>
-              </div>
-            </div>
           </div>
 
           {/* Recent searches */}

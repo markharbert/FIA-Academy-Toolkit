@@ -3563,7 +3563,7 @@ export async function registerRoutes(
     }
   });
   
-  app.get("/api/topic-pulse/api-keys/keywords-everywhere", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/topic-pulse/api-keys/keywords-everywhere", requireAdmin, async (req: Request, res: Response) => {
     try {
       const apiKey = await storage.getUserApiKey(req.session.userId!, "keywords_everywhere");
       res.json({
@@ -3577,7 +3577,7 @@ export async function registerRoutes(
     }
   });
   
-  app.post("/api/topic-pulse/api-keys/keywords-everywhere", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/topic-pulse/api-keys/keywords-everywhere", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { apiKey } = req.body;
       if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length < 10) {
@@ -3595,7 +3595,7 @@ export async function registerRoutes(
     }
   });
   
-  app.delete("/api/topic-pulse/api-keys/keywords-everywhere", requireAuth, async (req: Request, res: Response) => {
+  app.delete("/api/topic-pulse/api-keys/keywords-everywhere", requireAdmin, async (req: Request, res: Response) => {
     try {
       await storage.deleteUserApiKey(req.session.userId!, "keywords_everywhere");
       res.json({ success: true });

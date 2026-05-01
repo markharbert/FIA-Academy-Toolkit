@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -43,8 +44,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Loader2, CheckCircle, AlertCircle,
   Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
-  CheckCircle2, LogOut, RefreshCw, Search, Mail, Eye, Info, Clock,
-  Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap
+  CheckCircle2, LogOut, RefreshCw, Search, Mail, Eye, EyeOff, Info, Clock,
+  Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
+  Key, Youtube, MessageSquare, XCircle, Trash2
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -691,6 +693,11 @@ export default function AdminPage() {
   const [keStatusLoading, setKeStatusLoading] = useState(true);
   const [creditLimitInput, setCreditLimitInput] = useState<string>("");
   const [creditLimitSaving, setCreditLimitSaving] = useState(false);
+  const [keApiKeyData, setKeApiKeyData] = useState<{ configured: boolean; keyLastFour: string | null; updatedAt: string | null } | null>(null);
+  const [keApiKeyDataLoading, setKeApiKeyDataLoading] = useState(true);
+  const [keApiKeyInput, setKeApiKeyInput] = useState("");
+  const [keApiKeyShowInput, setKeApiKeyShowInput] = useState(false);
+  const [topicApiStatus, setTopicApiStatus] = useState<{ youtube: boolean; openai: boolean; reddit: boolean; keywordsEverywhere: boolean } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   // User management state
@@ -745,6 +752,7 @@ export default function AdminPage() {
       fetchKeStatus();
       fetchOverviewStats();
       fetchActivityFeed();
+      fetchKeApiKeyData();
     }
   }, [user, authLoading, setLocation]);
 
@@ -883,6 +891,58 @@ export default function AdminPage() {
     } finally {
       setKeStatusLoading(false);
     }
+  };
+
+  const fetchKeApiKeyData = async () => {
+    try {
+      setKeApiKeyDataLoading(true);
+      const [keyRes, statusRes] = await Promise.all([
+        fetch("/api/topic-pulse/api-keys/keywords-everywhere", { credentials: "include" }),
+        fetch("/api/topic-pulse/status", { credentials: "include" }),
+      ]);
+      if (keyRes.ok) setKeApiKeyData(await keyRes.json());
+      if (statusRes.ok) setTopicApiStatus(await statusRes.json());
+    } catch (err) {
+      console.error("Failed to fetch KE API key data:", err);
+    } finally {
+      setKeApiKeyDataLoading(false);
+    }
+  };
+
+  const saveKeApiKeyMutation = useMutation({
+    mutationFn: async (apiKey: string) => {
+      const res = await apiRequest("POST", "/api/topic-pulse/api-keys/keywords-everywhere", { apiKey });
+      return res;
+    },
+    onSuccess: () => {
+      setKeApiKeyInput("");
+      fetchKeApiKeyData();
+      toast({ title: "API key saved", description: "Keywords Everywhere API key has been securely stored." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to save API key", variant: "destructive" });
+    },
+  });
+
+  const deleteKeApiKeyMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", "/api/topic-pulse/api-keys/keywords-everywhere");
+    },
+    onSuccess: () => {
+      fetchKeApiKeyData();
+      toast({ title: "API key removed", description: "Keywords Everywhere API key has been deleted." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to remove API key", variant: "destructive" });
+    },
+  });
+
+  const handleSaveKeApiKey = () => {
+    if (keApiKeyInput.trim().length < 10) {
+      toast({ title: "Invalid key", description: "Please enter a valid API key", variant: "destructive" });
+      return;
+    }
+    saveKeApiKeyMutation.mutate(keApiKeyInput.trim());
   };
 
   const handleSaveCreditLimit = async () => {
@@ -1668,6 +1728,188 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* KE API Key + System Status */}
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Keywords Everywhere Personal API Key */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="h-5 w-5" />
+                  Keywords Everywhere API Key
+                </CardTitle>
+                <CardDescription>
+                  Personal API key for keyword search volume, CPC, and competition data.{" "}
+                  <a
+                    href="https://keywordseverywhere.com/ke/pricing.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                    data-testid="link-ke-pricing"
+                  >
+                    Get a key
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {keApiKeyDataLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading...
+                  </div>
+                ) : keApiKeyData?.configured ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-3">
+                        <Key className="h-5 w-5 text-green-500" />
+                        <div>
+                          <p className="font-medium">API Key Configured</p>
+                          <p className="text-sm text-muted-foreground">Ending in ...{keApiKeyData.keyLastFour}</p>
+                        </div>
+                      </div>
+                      <Badge variant="default" className="flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Active
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteKeApiKeyMutation.mutate()}
+                      disabled={deleteKeApiKeyMutation.isPending || saveKeApiKeyMutation.isPending}
+                      data-testid="button-delete-ke-api-key"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deleteKeApiKeyMutation.isPending ? "Removing..." : "Remove Key"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-3">
+                        <Key className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">No API Key Configured</p>
+                          <p className="text-sm text-muted-foreground">Add your key to enable keyword metrics</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="flex items-center gap-1">
+                        <XCircle className="h-3 w-3" />
+                        Not Set
+                      </Badge>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          type={keApiKeyShowInput ? "text" : "password"}
+                          placeholder="Enter your Keywords Everywhere API key"
+                          value={keApiKeyInput}
+                          onChange={(e) => setKeApiKeyInput(e.target.value)}
+                          disabled={saveKeApiKeyMutation.isPending}
+                          className="pr-10"
+                          data-testid="input-ke-api-key"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full"
+                          onClick={() => setKeApiKeyShowInput(!keApiKeyShowInput)}
+                          disabled={saveKeApiKeyMutation.isPending}
+                          data-testid="button-ke-toggle-visibility"
+                        >
+                          {keApiKeyShowInput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <Button
+                        onClick={handleSaveKeApiKey}
+                        disabled={saveKeApiKeyMutation.isPending || !keApiKeyInput.trim()}
+                        data-testid="button-save-ke-api-key"
+                      >
+                        {saveKeApiKeyMutation.isPending ? "Saving..." : "Save Key"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* System API Status */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Key className="h-5 w-5" />
+                  System API Status
+                </CardTitle>
+                <CardDescription>
+                  Services powering Video Trends. Keys are managed via environment variables.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-md bg-muted/50">
+                  <div className="flex items-center gap-3">
+                    <Youtube className="h-5 w-5 text-red-500" />
+                    <div>
+                      <p className="font-medium">YouTube Data API</p>
+                      <p className="text-sm text-muted-foreground">Enhanced topic metrics</p>
+                    </div>
+                  </div>
+                  {topicApiStatus?.youtube ? (
+                    <Badge variant="default" className="flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <XCircle className="h-3 w-3" />
+                      Optional
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-md bg-muted/50">
+                  <div className="flex items-center gap-3">
+                    <div className="h-5 w-5 flex items-center justify-center text-green-500 font-bold text-xs">AI</div>
+                    <div>
+                      <p className="font-medium">OpenAI API</p>
+                      <p className="text-sm text-muted-foreground">Script generation</p>
+                    </div>
+                  </div>
+                  {topicApiStatus?.openai ? (
+                    <Badge variant="default" className="flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="flex items-center gap-1">
+                      <XCircle className="h-3 w-3" />
+                      Required
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-md bg-muted/50">
+                  <div className="flex items-center gap-3">
+                    <MessageSquare className="h-5 w-5 text-orange-500" />
+                    <div>
+                      <p className="font-medium">Reddit API</p>
+                      <p className="text-sm text-muted-foreground">Community question mining</p>
+                    </div>
+                  </div>
+                  {topicApiStatus?.reddit ? (
+                    <Badge variant="default" className="flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <XCircle className="h-3 w-3" />
+                      Optional
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ==================== CLICKFUNNELS TAB ==================== */}
