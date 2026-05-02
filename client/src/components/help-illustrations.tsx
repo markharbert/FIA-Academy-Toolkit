@@ -15,13 +15,14 @@ import srP1Step8 from "@assets/help/sr-p1-step8.jpg";
 import srP1Compliance from "@assets/help/sr-p1-dns-godaddy.jpg";
 import srP1Dns from "@assets/help/sr-p1-dns.jpg";
 
-import srP2Top from "@assets/help/sr-p2-top.jpg";
-import srP2Charts1 from "@assets/help/sr-p2-charts1.jpg";
-import srP2Charts2 from "@assets/help/sr-p2-charts2.jpg";
-import srP2Compliance from "@assets/help/sr-p2-compliance.jpg";
-import srP2ComplianceExpanded from "@assets/help/sr-p2-compliance-expanded.jpg";
-import srP2ActionPlan from "@assets/help/sr-p2-action-plan.jpg";
-import srP2Infrastructure from "@assets/help/sr-p2-infrastructure.jpg";
+import srP2Step1 from "@assets/help/sr-p2-step1.jpg";
+import srP2Step2 from "@assets/help/sr-p2-step2.jpg";
+import srP2Step3 from "@assets/help/sr-p2-step3.jpg";
+import srP2Step4 from "@assets/help/sr-p2-step4.jpg";
+import srP2Step5 from "@assets/help/sr-p2-step5.jpg";
+import srP2Step6 from "@assets/help/sr-p2-step6.jpg";
+import srP2Step7 from "@assets/help/sr-p2-step7.jpg";
+import srP2Step8 from "@assets/help/sr-p2-step8.jpg";
 
 function ScreenshotIllustration({ src, alt }: { src: string; alt: string }) {
   return (
@@ -97,35 +98,35 @@ export function PostmasterAuthChartIllustration() {
 }
 
 export function SrP2ConnectTopIllustration() {
-  return <ScreenshotIllustration src={srP2Top} alt="Sender Reputation page showing the Connect Google Postmaster setup card with two steps before any account is linked" />;
+  return <ScreenshotIllustration src={srP2Step1} alt="Sender Reputation header with the green Connected badge highlighted, showing the Google account linked as mark@markharbert.com" />;
 }
 
 export function SrP2DashboardTopIllustration() {
-  return <ScreenshotIllustration src={srP2Top} alt="Sender Reputation dashboard header showing High Reputation badge, Connected status with email, time range selector, Refresh button, and six stat cards for Spam Rate, SPF, DKIM, DMARC, Outbound TLS, and Inbound TLS" />;
+  return <ScreenshotIllustration src={srP2Step2} alt="Sender Reputation dashboard with red annotation boxes highlighting the High Reputation badge and the six stat cards row showing Spam Rate, SPF, DKIM, DMARC, Outbound TLS, and Inbound TLS" />;
 }
 
 export function SrP2OverviewChartsIllustration() {
-  return <ScreenshotIllustration src={srP2Charts1} alt="Overview tab showing Spam Complaint Rate area chart with 0.1% and 0.3% reference lines on the left, and Domain Reputation History stepped line chart on the right" />;
+  return <ScreenshotIllustration src={srP2Step3} alt="Overview tab annotated: red box on the Overview tab, orange boxes highlighting the Spam Complaint Rate chart on the left and the Domain Reputation History chart on the right" />;
 }
 
 export function SrP2AuthTlsChartsIllustration() {
-  return <ScreenshotIllustration src={srP2Charts2} alt="Overview tab showing Authentication Pass Rates card with SPF, DKIM, and DMARC progress bars and line chart on the left, and TLS Encryption card with Outbound and Inbound area chart on the right" />;
+  return <ScreenshotIllustration src={srP2Step4} alt="Overview tab annotated: red box on the Overview tab, orange boxes highlighting the Authentication Pass Rates chart and the TLS Encryption chart in the second row" />;
 }
 
 export function SrP2ComplianceChecklistIllustration() {
-  return <ScreenshotIllustration src={srP2Compliance} alt="Compliance tab showing Gmail Compliance card with 6 Passing badge and checklist rows for SPF, DKIM, DMARC, Spam Complaint Rate, TLS Encryption, and Reverse DNS all showing Passing status" />;
+  return <ScreenshotIllustration src={srP2Step5} alt="Compliance tab annotated: red box on the Compliance tab, orange box around the full Gmail Compliance checklist card showing all requirements with Passing badges" />;
 }
 
 export function SrP2ComplianceDetailIllustration() {
-  return <ScreenshotIllustration src={srP2ComplianceExpanded} alt="Compliance tab with SPF Authentication row expanded showing the requirement description, 99% pass rate excellent note, and link to Google's guidance" />;
+  return <ScreenshotIllustration src={srP2Step6} alt="Compliance tab annotated: red box on the Compliance tab, orange box around the expanded SPF Authentication row showing the description, 99% pass rate, and Google guidance link" />;
 }
 
 export function SrP2ActionPlanIllustration() {
-  return <ScreenshotIllustration src={srP2ActionPlan} alt="Action Plan tab showing an All clear badge and a single green Healthy card titled Everything looks great — your email health is in good shape" />;
+  return <ScreenshotIllustration src={srP2Step7} alt="Action Plan tab annotated: red box on the Action Plan tab, orange box on the All clear badge, and green box around the Healthy status card" />;
 }
 
 export function SrP2InfrastructureIllustration() {
-  return <ScreenshotIllustration src={srP2Infrastructure} alt="Infrastructure tab showing Sending IP Reputation card with 8 High IPs and 2 Medium IPs, and Delivery Errors card showing no significant delivery errors" />;
+  return <ScreenshotIllustration src={srP2Step8} alt="Infrastructure tab annotated: red box on the Infrastructure tab, orange boxes highlighting the Sending IP Reputation card with 8 High and 2 Medium IPs, and the Delivery Errors card" />;
 }
 
 export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
