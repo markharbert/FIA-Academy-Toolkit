@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ShieldCheck, ShieldAlert, ShieldX, Shield, ExternalLink, RefreshCw,
   Loader2, AlertTriangle, CheckCircle2, XCircle, Globe, Lock, Mail,
@@ -1321,128 +1322,172 @@ function DomainDashboard({ domain, lastSyncedAt, onSync, isSyncing }: {
         <StatCard label="Inbound TLS" value={pct(latestInEnc, 1)} sublabel="encrypted" color={authColor(latestInEnc) as any} />
       </div>
 
-      {/* Compliance + Action Plan — always visible when there's any data at all */}
-      {domain.trafficStats.length > 0 && (
-        <>
-          <ComplianceSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
-          <ActionPlanSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
-        </>
-      )}
+      {/* Tabbed content */}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="w-full justify-start h-9 p-1 bg-muted/50 border border-border rounded-xl mb-1">
+          <TabsTrigger value="overview" className="text-xs px-4 rounded-lg" data-testid="tab-overview">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="compliance" className="text-xs px-4 rounded-lg" data-testid="tab-compliance">
+            Compliance
+          </TabsTrigger>
+          <TabsTrigger value="infrastructure" className="text-xs px-4 rounded-lg" data-testid="tab-infrastructure">
+            Infrastructure
+          </TabsTrigger>
+        </TabsList>
 
-      {filtered.length === 0 ? (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40 border border-border">
-          <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium">No data in this time range</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Try a wider range, or click Refresh to pull the latest data from Google.</p>
+        {/* ── Overview tab ── */}
+        <TabsContent value="overview" className="mt-4 space-y-5">
+          {filtered.length === 0 ? (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40 border border-border">
+              <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">No data in this time range</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Try a wider range, or click Refresh to pull the latest data from Google.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <Card>
+                  <CardHeader className="pb-2 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      Spam Complaint Rate
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <SpamRateChart stats={filtered} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-purple-500" />
+                      Domain Reputation History
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <ReputationHistoryChart stats={filtered} />
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <Card>
+                  <CardHeader className="pb-2 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                      Authentication Pass Rates
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">SPF · DKIM · DMARC</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4 space-y-4">
+                    <div className="grid grid-cols-3 gap-3">
+                      <RatioBar label="SPF" value={latestSpf} />
+                      <RatioBar label="DKIM" value={latestDkim} />
+                      <RatioBar label="DMARC" value={latestDmarc} />
+                    </div>
+                    <Separator />
+                    <AuthChart stats={filtered} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2 pt-4 px-5">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-blue-500" />
+                      TLS Encryption
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">Outbound · Inbound</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <RatioBar label="Outbound" value={latestOutEnc} />
+                      <RatioBar label="Inbound" value={latestInEnc} />
+                    </div>
+                    <Separator />
+                    <EncryptionChart stats={filtered} />
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+
+          <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-muted/40 border border-border">
+            <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Google Postmaster data is always 24–48 hours delayed. Spam rate data only appears when your domain sends 200+ emails per day to Gmail users.
+            </p>
           </div>
-        </div>
-      ) : (
-        <>
-          {/* Charts — row 1 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card>
-              <CardHeader className="pb-2 pt-4 px-5">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  Spam Complaint Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-4">
-                <SpamRateChart stats={filtered} />
-              </CardContent>
-            </Card>
+        </TabsContent>
 
-            <Card>
-              <CardHeader className="pb-2 pt-4 px-5">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-purple-500" />
-                  Domain Reputation History
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-4">
-                <ReputationHistoryChart stats={filtered} />
-              </CardContent>
-            </Card>
+        {/* ── Compliance tab ── */}
+        <TabsContent value="compliance" className="mt-4 space-y-5">
+          {domain.trafficStats.length > 0 ? (
+            <>
+              <ComplianceSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
+              <ActionPlanSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
+            </>
+          ) : (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40 border border-border">
+              <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">No data available yet</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Click Refresh to pull data from Google Postmaster.</p>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Infrastructure tab ── */}
+        <TabsContent value="infrastructure" className="mt-4 space-y-5">
+          {filtered.length === 0 ? (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40 border border-border">
+              <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">No data in this time range</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Try a wider range, or click Refresh to pull the latest data from Google.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <Card>
+                <CardHeader className="pb-2 pt-4 px-5">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Server className="h-4 w-4 text-indigo-500" />
+                    Sending IP Reputation
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-4">
+                  <IpReputationSection stats={filtered} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2 pt-4 px-5">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <XCircle className="h-4 w-4 text-red-500" />
+                    Delivery Errors
+                    <span className="text-[10px] font-normal text-muted-foreground ml-1">avg over selected period</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-4">
+                  <DeliveryErrorsSection stats={filtered} />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-muted/40 border border-border">
+            <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              IP reputation data only appears when your domain sends 200+ emails per day to Gmail users. Data is always 24–48 hours delayed.
+            </p>
           </div>
-
-          {/* Charts — row 2 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card>
-              <CardHeader className="pb-2 pt-4 px-5">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-blue-500" />
-                  Authentication Pass Rates
-                  <span className="text-[10px] font-normal text-muted-foreground ml-1">SPF · DKIM · DMARC</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-4 space-y-4">
-                <div className="grid grid-cols-3 gap-3">
-                  <RatioBar label="SPF" value={latestSpf} />
-                  <RatioBar label="DKIM" value={latestDkim} />
-                  <RatioBar label="DMARC" value={latestDmarc} />
-                </div>
-                <Separator />
-                <AuthChart stats={filtered} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2 pt-4 px-5">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Lock className="h-4 w-4 text-blue-500" />
-                  TLS Encryption
-                  <span className="text-[10px] font-normal text-muted-foreground ml-1">Outbound · Inbound</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-4 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <RatioBar label="Outbound" value={latestOutEnc} />
-                  <RatioBar label="Inbound" value={latestInEnc} />
-                </div>
-                <Separator />
-                <EncryptionChart stats={filtered} />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* IP reputation + delivery errors */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card>
-              <CardHeader className="pb-2 pt-4 px-5">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Server className="h-4 w-4 text-indigo-500" />
-                  Sending IP Reputation
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-4">
-                <IpReputationSection stats={filtered} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2 pt-4 px-5">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <XCircle className="h-4 w-4 text-red-500" />
-                  Delivery Errors
-                  <span className="text-[10px] font-normal text-muted-foreground ml-1">avg over selected period</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-4">
-                <DeliveryErrorsSection stats={filtered} />
-              </CardContent>
-            </Card>
-          </div>
-        </>
-      )}
-
-      {/* Data freshness note */}
-      <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-muted/40 border border-border">
-        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Google Postmaster data is always 24–48 hours delayed. Spam rate and IP reputation data only appear when your domain sends 200+ emails per day to Gmail users. Click Refresh to pull the latest available data.
-        </p>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
