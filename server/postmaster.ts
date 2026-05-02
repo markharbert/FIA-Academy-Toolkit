@@ -88,10 +88,37 @@ export type PostmasterDomainData = {
   trafficStats: DailyTrafficStat[];
 };
 
-function parseStat(s: any): DailyTrafficStat | null {
+function parseStat(s: any, logSample = false): DailyTrafficStat | null {
+  if (logSample) {
+    console.log("[Postmaster] sample record:", JSON.stringify(s).slice(0, 500));
+  }
+
+  let dateStr: string;
   const d = s.date;
-  if (!d?.year || !d?.month || !d?.day) return null;
-  const dateStr = `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+
+  if (typeof d === "string" && d.length >= 8) {
+    // Already a string like "2024-05-01"
+    dateStr = d.slice(0, 10);
+  } else if (d && typeof d === "object" && (d.year || d.Year)) {
+    // Object like { year, month, day } or { Year, Month, Day }
+    const year = d.year ?? d.Year;
+    const month = d.month ?? d.Month;
+    const day = d.day ?? d.Day;
+    if (!year || !month || !day) return null;
+    dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  } else if (s.name) {
+    // Some APIs encode date in the resource name: domains/x.com/trafficStats/2024-05-01
+    const match = (s.name as string).match(/(\d{4}-\d{2}-\d{2})$/);
+    if (match) {
+      dateStr = match[1];
+    } else {
+      console.log("[Postmaster] unrecognised record shape, name:", s.name, "date:", JSON.stringify(d));
+      return null;
+    }
+  } else {
+    console.log("[Postmaster] unrecognised date field:", JSON.stringify(d));
+    return null;
+  }
 
   const range = s.userReportedSpamRatioRange || s.spamRateRange;
   const spamRateLow: number | null = range?.lowPercentile ?? null;
@@ -171,8 +198,8 @@ export async function fetchPostmasterData(
         const page = statsData.trafficStats || [];
         console.log(`[Postmaster] ${domainName} page ${pagesFetched + 1}: ${page.length} records, nextPageToken: ${statsData.nextPageToken ? "yes" : "no"}`);
 
-        for (const s of page) {
-          const parsed = parseStat(s);
+        for (let i = 0; i < page.length; i++) {
+          const parsed = parseStat(page[i], pagesFetched === 0 && i === 0);
           if (parsed) allStats.push(parsed);
         }
 
