@@ -88,10 +88,51 @@ export type PostmasterDomainData = {
   trafficStats: DailyTrafficStat[];
 };
 
+function parseStat(s: any): DailyTrafficStat | null {
+  const d = s.date;
+  if (!d?.year || !d?.month || !d?.day) return null;
+  const dateStr = `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+
+  const range = s.userReportedSpamRatioRange || s.spamRateRange;
+  const spamRateLow: number | null = range?.lowPercentile ?? null;
+  const spamRateHigh: number | null = range?.highPercentile ?? null;
+  const spamRate: number | null =
+    spamRateLow != null && spamRateHigh != null
+      ? (spamRateLow + spamRateHigh) / 2
+      : (spamRateLow ?? spamRateHigh ?? null);
+
+  const ipReputations: IpReputation[] = (s.ipReputations || []).map((ip: any) => ({
+    reputation: ip.reputation || "REPUTATION_CATEGORY_UNSPECIFIED",
+    numIps: ip.numIps ?? null,
+    ipCount: ip.ipCount ?? null,
+    sampleIps: Array.isArray(ip.sampleIps) ? ip.sampleIps : [],
+  }));
+
+  const deliveryErrors: DeliveryError[] = (s.deliveryErrors || []).map((e: any) => ({
+    errorType: e.errorType || "",
+    errorClass: e.errorClass || "",
+    errorRatio: typeof e.errorRatio === "number" ? e.errorRatio : 0,
+  }));
+
+  return {
+    date: dateStr,
+    domainReputation: s.domainReputation || null,
+    spamRate,
+    spamRateLow,
+    spamRateHigh,
+    spfSuccessRatio: s.spfSuccessRatio ?? null,
+    dkimSuccessRatio: s.dkimSuccessRatio ?? null,
+    dmarcSuccessRatio: s.dmarcSuccessRatio ?? null,
+    outboundEncryptionRatio: s.outboundEncryptionRatio ?? null,
+    inboundEncryptionRatio: s.inboundEncryptionRatio ?? null,
+    ipReputations,
+    deliveryErrors,
+  };
+}
+
 export async function fetchPostmasterData(
   accessToken: string,
   refreshToken: string | null,
-  days = 180,
 ): Promise<PostmasterDomainData[]> {
   const oAuth2Client = getPostmasterOAuthClient();
   oAuth2Client.setCredentials({
@@ -103,11 +144,8 @@ export async function fetchPostmasterData(
 
   const { data: domainsData } = await postmaster.domains.list();
   const domains = domainsData.domains || [];
+  console.log(`[Postmaster] Found ${domains.length} domains:`, domains.map(d => d.name));
   if (domains.length === 0) return [];
-
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
 
   const results: PostmasterDomainData[] = [];
 
@@ -115,63 +153,36 @@ export async function fetchPostmasterData(
     const domainName = domain.name?.replace("domains/", "") || "";
     if (!domainName) continue;
 
+    const allStats: DailyTrafficStat[] = [];
+
     try {
-      const { data: statsData } = await postmaster.domains.trafficStats.list({
-        parent: domain.name!,
-        "startDate.year": startDate.getFullYear(),
-        "startDate.month": startDate.getMonth() + 1,
-        "startDate.day": startDate.getDate(),
-        "endDate.year": endDate.getFullYear(),
-        "endDate.month": endDate.getMonth() + 1,
-        "endDate.day": endDate.getDate(),
-      } as any);
+      // Fetch with pagination — no explicit date range, let Google return what it has
+      let pageToken: string | undefined;
+      let pagesFetched = 0;
 
-      const stats = (statsData as any).trafficStats || [];
-
-      const dailyStats: DailyTrafficStat[] = stats.map((s: any) => {
-        const d = s.date;
-        const dateStr = d
-          ? `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`
-          : "";
-
-        const range = s.userReportedSpamRatioRange || s.spamRateRange;
-        const spamRateLow: number | null = range?.lowPercentile ?? null;
-        const spamRateHigh: number | null = range?.highPercentile ?? null;
-        const spamRate: number | null =
-          spamRateLow != null && spamRateHigh != null
-            ? (spamRateLow + spamRateHigh) / 2
-            : (spamRateLow ?? spamRateHigh ?? null);
-
-        const ipReputations: IpReputation[] = (s.ipReputations || []).map((ip: any) => ({
-          reputation: ip.reputation || "REPUTATION_CATEGORY_UNSPECIFIED",
-          numIps: ip.numIps ?? null,
-          ipCount: ip.ipCount ?? null,
-          sampleIps: Array.isArray(ip.sampleIps) ? ip.sampleIps : [],
-        }));
-
-        const deliveryErrors: DeliveryError[] = (s.deliveryErrors || []).map((e: any) => ({
-          errorType: e.errorType || "",
-          errorClass: e.errorClass || "",
-          errorRatio: typeof e.errorRatio === "number" ? e.errorRatio : 0,
-        }));
-
-        return {
-          date: dateStr,
-          domainReputation: s.domainReputation || null,
-          spamRate,
-          spamRateLow,
-          spamRateHigh,
-          spfSuccessRatio: s.spfSuccessRatio ?? null,
-          dkimSuccessRatio: s.dkimSuccessRatio ?? null,
-          dmarcSuccessRatio: s.dmarcSuccessRatio ?? null,
-          outboundEncryptionRatio: s.outboundEncryptionRatio ?? null,
-          inboundEncryptionRatio: s.inboundEncryptionRatio ?? null,
-          ipReputations,
-          deliveryErrors,
+      do {
+        const params: Record<string, any> = {
+          parent: domain.name!,
+          pageSize: 30,
         };
-      }).filter((s: DailyTrafficStat) => s.date);
+        if (pageToken) params.pageToken = pageToken;
 
-      const sorted = [...dailyStats].sort((a, b) => b.date.localeCompare(a.date));
+        const { data: statsData } = await (postmaster.domains.trafficStats as any).list(params);
+        const page = statsData.trafficStats || [];
+        console.log(`[Postmaster] ${domainName} page ${pagesFetched + 1}: ${page.length} records, nextPageToken: ${statsData.nextPageToken ? "yes" : "no"}`);
+
+        for (const s of page) {
+          const parsed = parseStat(s);
+          if (parsed) allStats.push(parsed);
+        }
+
+        pageToken = statsData.nextPageToken || undefined;
+        pagesFetched++;
+      } while (pageToken && pagesFetched < 6); // max 6 pages = ~180 days
+
+      console.log(`[Postmaster] ${domainName} total: ${allStats.length} daily records`);
+
+      const sorted = [...allStats].sort((a, b) => b.date.localeCompare(a.date));
 
       results.push({
         domainName,
@@ -181,10 +192,13 @@ export async function fetchPostmasterData(
         latestDkimRatio: sorted.find(s => s.dkimSuccessRatio !== null)?.dkimSuccessRatio ?? null,
         latestDmarcRatio: sorted.find(s => s.dmarcSuccessRatio !== null)?.dmarcSuccessRatio ?? null,
         latestEncryptionRatio: sorted.find(s => s.outboundEncryptionRatio !== null)?.outboundEncryptionRatio ?? null,
-        trafficStats: dailyStats,
+        trafficStats: allStats,
       });
     } catch (err: any) {
-      console.error(`[Postmaster] Failed to fetch stats for ${domainName}:`, err?.message);
+      const status = err?.response?.status;
+      const message = err?.response?.data?.error?.message || err?.message;
+      const details = JSON.stringify(err?.response?.data?.error?.details ?? []);
+      console.error(`[Postmaster] ${domainName} stats error (HTTP ${status}): ${message} — details: ${details}`);
       results.push({
         domainName,
         latestReputation: null,
