@@ -864,27 +864,34 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "rep-bad",
       severity: "critical",
-      title: "Domain reputation is Bad",
-      what: "Gmail is actively filtering or blocking your emails. This is the most serious issue and needs immediate attention.",
+      title: "Your domain has a BAD reputation with Gmail",
+      what: "This is the most serious problem. Gmail is either blocking your emails or sending almost all of them straight to spam. Most of your subscribers are not seeing your messages at all right now. You need to stop and fix this before sending anything else.",
       steps: [
-        "Stop all bulk email sending for 2–4 weeks to give Gmail's systems time to recover.",
-        "Scrub your contact list — remove anyone who hasn't opened or clicked an email in the last 90 days.",
-        "Contact your email platform's support team (ActiveCampaign, Mailchimp, etc.) and let them know about the reputation issue.",
-        "After pausing, restart with very small sends of 50–100 emails per day to your most engaged contacts only.",
-        "Add an easy one-click unsubscribe link and honor all requests within 24 hours.",
+        "Stop sending all bulk emails right now. Do not send any newsletters, broadcasts, or mass emails for at least 2 weeks. Sending more emails while your reputation is bad will make things worse.",
+        "Log in to your email platform (like ActiveCampaign, Mailchimp, Keap, etc.) and export your full contact list.",
+        "Delete everyone who has not opened or clicked any email in the last 90 days. These inactive people are the biggest reason your reputation dropped.",
+        "Delete any contacts you bought from a list or got from a third party. Purchased lists are almost always the root cause of spam complaints.",
+        "Call or chat with your email platform's support team. Tell them: 'My Google Postmaster Tools is showing BAD domain reputation. Can you help me get on a clean sending IP?' They deal with this regularly.",
+        "After 2 weeks of not sending, restart very slowly. Send to only your 50–100 most engaged contacts first — people who have opened an email in the last 30 days.",
+        "Add a clearly visible unsubscribe link near the top of every email, not just at the bottom. Make it one click. Never make people type their email to unsubscribe.",
+        "Check your domain on the MXToolbox blacklist checker: go to mxtoolbox.com, click 'Blacklists', and type in your domain name. If you're listed, follow the removal instructions on each blocklist's website.",
+        "After 4–6 weeks of sending only to highly engaged contacts, check this dashboard again. Your reputation should start improving.",
       ],
     });
   } else if (rep === "LOW") {
     items.push({
       id: "rep-low",
       severity: "warning",
-      title: "Domain reputation is Low",
-      what: "Your emails are at risk of landing in spam. Gmail has detected elevated complaint rates or authentication issues from your domain.",
+      title: "Your domain reputation is LOW — emails may be going to spam",
+      what: "Gmail is suspicious of your emails right now. Some of your messages are probably landing in spam folders instead of the inbox. This is fixable, but you need to act now before it gets worse.",
       steps: [
-        "Reduce your sending volume by 50% for the next 2 weeks.",
-        "Only send to contacts who have opened or clicked an email in the last 90 days.",
-        "Remove anyone who hasn't engaged in the past 6 months.",
-        "Make sure your unsubscribe link is working, easy to find, and one-click.",
+        "Cut your sending volume in half for the next 2 weeks. If you normally send to 10,000 people, only send to 5,000 — your most active ones.",
+        "Only email people who have opened or clicked something you sent in the last 90 days. Skip everyone else for now.",
+        "Go into your email platform and permanently remove anyone who has not engaged in 6 months or more.",
+        "Check that your unsubscribe link is easy to find and works with one click. Test it yourself right now.",
+        "Look at your last 5 subject lines. Did any of them use words like FREE, URGENT, GUARANTEED, or lots of exclamation points? Those trigger spam filters — avoid them.",
+        "Visit mail-tester.com and send a test email to the address they give you. They will show you a score and flag anything that might be causing spam issues.",
+        "Keep checking this dashboard weekly. As long as you keep sending only to engaged contacts, your reputation will slowly improve.",
       ],
     });
   }
@@ -895,27 +902,30 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "spam-critical",
       severity: "critical",
-      title: `Spam complaint rate is critically high (${(latestSpam * 100).toFixed(3)}%)`,
-      what: "More than 0.3% of your Gmail recipients are marking your emails as spam. Gmail will block or heavily filter your emails at this level.",
+      title: `Too many people are marking your emails as spam (${(latestSpam * 100).toFixed(3)}%)`,
+      what: "More than 3 out of every 1,000 Gmail users are hitting the spam button on your emails. Google's limit is 1 out of every 1,000. At this level, Gmail will start blocking your emails automatically. This needs to be fixed today.",
       steps: [
-        "Stop sending to unengaged contacts immediately.",
-        "Only email people who opened or clicked something in the last 60 days.",
-        "Add a one-click unsubscribe link near the top of every email — not just buried at the bottom.",
-        "Remove any contacts you purchased or acquired from a third-party list — these are almost always the source of spam complaints.",
-        "Send a re-permission email to your remaining list asking if they still want to hear from you, and remove non-responders.",
+        "Stop sending bulk emails immediately. Every email you send right now makes the problem worse.",
+        "Log in to your email platform and filter your list to show only people who have opened or clicked an email in the last 60 days. Delete everyone else — for now.",
+        "Delete any contacts from purchased lists or lead lists you got from someone else. These people never asked to hear from you and are the most likely to hit spam.",
+        "Look at your last 10 emails. Were the subject lines honest and clear? Did the emails match what you promised when people signed up? If not, that is why people are complaining.",
+        "Make sure every email has a one-click unsubscribe link that is easy to see. Put it near the top of the email too, not just at the bottom.",
+        "Send a short email to your remaining list saying something like: 'I want to make sure you still want to hear from me. Click here to stay subscribed. If not, just ignore this and I'll remove you.' Then delete everyone who does not click.",
+        "Wait 1 week after cleaning your list, then send a test email to mail-tester.com to check your score before sending to your real list again.",
       ],
     });
   } else if (latestSpam != null && latestSpam >= 0.001) {
     items.push({
       id: "spam-warning",
       severity: "warning",
-      title: `Spam complaint rate is elevated (${(latestSpam * 100).toFixed(3)}%)`,
-      what: "Your spam rate is approaching Google's 0.1% warning threshold. Left unchecked, this will start hurting your inbox placement.",
+      title: `Your spam complaint rate is getting close to Google's limit (${(latestSpam * 100).toFixed(3)}%)`,
+      what: "Right now 1–3 out of every 1,000 Gmail recipients are marking your emails as spam. Google's warning threshold is 1 per 1,000. You have not crossed it yet, but you are getting close. If you do nothing, your inbox placement will start dropping.",
       steps: [
-        "Audit your contact list and remove anyone who hasn't engaged in 90+ days.",
-        "Review your recent subject lines — avoid anything that feels misleading, overly salesy, or clickbait-y.",
-        "Make sure your unsubscribe link is clearly visible and working correctly.",
-        "Send a re-engagement campaign to inactive subscribers and permanently remove those who don't respond.",
+        "Log in to your email platform and look at your contacts. Remove anyone who has not opened or clicked anything in the last 90 days.",
+        "Look at your last 5 subject lines. Were they honest and interesting, or did they feel like clickbait? Gmail users hit spam when they feel tricked. Write subject lines that clearly describe what is inside the email.",
+        "Make sure your unsubscribe link is easy to find and works immediately. If people cannot find the unsubscribe button, they hit the spam button instead.",
+        "Send a re-engagement email to your inactive contacts asking if they still want to be on your list. Remove everyone who does not respond within 7 days.",
+        "Visit mail-tester.com and send them a test email to see if anything in your emails is being flagged as spammy.",
       ],
     });
   }
@@ -926,26 +936,31 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "spf-critical",
       severity: "critical",
-      title: `SPF is failing for ${(100 - latestSpf * 100).toFixed(0)}% of emails`,
-      what: "SPF tells Gmail which servers are authorized to send email from your domain. A large portion of your emails are coming from servers not listed in your SPF record, which looks suspicious to Gmail.",
+      title: `SPF is failing — Gmail cannot verify ${(100 - latestSpf * 100).toFixed(0)}% of your emails`,
+      what: "SPF is like an ID badge for your email. It tells Gmail: 'This email really did come from my domain.' Right now, most of your emails are missing that badge. Gmail treats emails without a valid SPF badge as suspicious, and many of them may be going to spam.",
       steps: [
-        "Log in to your domain's DNS provider (GoDaddy, Namecheap, Cloudflare, etc.).",
-        "Look for a TXT record starting with 'v=spf1'. If it's missing, you need to create one.",
-        "Make sure every email service you use (your ESP, Gmail, any CRMs) is listed in that SPF record.",
-        "Use the free SPF checker at mxtoolbox.com/spf to verify your record is valid and complete.",
-        "DNS changes can take 24–48 hours to fully take effect.",
+        "Log in to wherever you bought your domain name — this is usually GoDaddy, Namecheap, Cloudflare, Google Domains, or Squarespace.",
+        "Look for a section called 'DNS Settings', 'DNS Records', or 'Manage DNS'. Click on it.",
+        "Look for a record of type 'TXT' that starts with 'v=spf1'. This is your SPF record.",
+        "If you do NOT see one, you need to create one. Go to mxtoolbox.com/spf-survey and type in your domain. It will show you what services are sending email from your domain.",
+        "If you DO see one, go to mxtoolbox.com/spf and paste your domain in. It will tell you if anything is missing.",
+        "Your SPF record needs to include every email service you use — your main email platform (ActiveCampaign, Mailchimp, etc.), Gmail if you send from Gmail, and any CRM that sends emails for you.",
+        "If you are not sure what to put in the record, contact the support team for your email platform. Tell them: 'I need to add you to my SPF record. What should I include?' They will give you the exact text.",
+        "After you update the record, wait 24–48 hours for it to take effect, then come back to this dashboard and click Refresh.",
       ],
     });
   } else if (latestSpf != null && latestSpf < 0.95) {
     items.push({
       id: "spf-warning",
       severity: "warning",
-      title: `SPF pass rate is below 95% (${(latestSpf * 100).toFixed(0)}%)`,
-      what: "Most of your emails pass SPF, but some are still failing. This is often caused by a service that was recently added but not yet included in your SPF record.",
+      title: `SPF is failing for some emails (${(latestSpf * 100).toFixed(0)}% passing)`,
+      what: "Most of your emails are passing SPF, but some are still failing. This usually means you recently started using a new email tool that is not listed in your SPF record yet.",
       steps: [
-        "Check if you've recently started using a new email tool that isn't in your SPF record.",
-        "Visit mxtoolbox.com/spf and compare your current record against all services you send from.",
-        "Update your SPF record to include any missing services.",
+        "Think about whether you have recently started using a new email tool, CRM, or any service that sends emails on your behalf.",
+        "Go to mxtoolbox.com/spf and type in your domain. It will show your current SPF record and flag any problems.",
+        "Contact the support team for any new email service you use and ask: 'What do I need to add to my SPF record to authorize your service?' Copy what they give you.",
+        "Log in to your domain's DNS settings and add the new entry to your existing SPF record.",
+        "Wait 24–48 hours, then come back and click Refresh to see if it improved.",
       ],
     });
   }
@@ -956,25 +971,30 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "dkim-critical",
       severity: "critical",
-      title: `DKIM signing is failing for ${(100 - latestDkim * 100).toFixed(0)}% of emails`,
-      what: "DKIM is a digital signature that proves your emails are legitimate and haven't been tampered with. Most of your emails are going out unsigned, which seriously undermines Gmail's trust in you.",
+      title: `DKIM signature is missing on ${(100 - latestDkim * 100).toFixed(0)}% of your emails`,
+      what: "DKIM is like a wax seal on a letter — it proves the email actually came from you and was not changed along the way. Right now, most of your emails are going out without that seal. Gmail sees unsealed emails as risky and may send them to spam.",
       steps: [
-        "Log in to each email platform you send from (ActiveCampaign, Mailchimp, etc.) and find 'DKIM' or 'Domain Authentication' in their settings.",
-        "Follow the platform's setup guide to add the required DNS records (usually CNAME or TXT records).",
-        "Send a test email to mail-tester.com to confirm DKIM is passing.",
-        "If you're unsure, contact your email platform's support team — most have step-by-step guides for this.",
+        "Log in to your email platform (ActiveCampaign, Mailchimp, Keap, ConvertKit, etc.).",
+        "Go to the account settings or sending settings and look for a section called 'DKIM', 'Domain Authentication', 'Custom Domain', or 'Sender Authentication'.",
+        "Follow the instructions your platform gives you. They will ask you to add 1–2 records to your domain's DNS settings.",
+        "Log in to your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.) and add those DNS records exactly as your email platform shows them.",
+        "Go back to your email platform and click the button that says 'Verify' or 'Check DNS'. It should turn green.",
+        "If you get stuck, contact your email platform's support and say: 'I need help setting up DKIM authentication for my domain. Can you walk me through it?' Most support teams will do this in a live chat.",
+        "After setting it up, go to mail-tester.com, send them a test email, and check that DKIM shows as passing (green checkmark).",
+        "Come back to this dashboard and click Refresh in 24–48 hours to confirm the improvement.",
       ],
     });
   } else if (latestDkim != null && latestDkim < 0.95) {
     items.push({
       id: "dkim-warning",
       severity: "warning",
-      title: `DKIM pass rate is below 95% (${(latestDkim * 100).toFixed(0)}%)`,
-      what: "Most emails are signed correctly but some are failing. This can happen when emails are forwarded — forwarding often strips or breaks the DKIM signature.",
+      title: `DKIM is failing for some emails (${(latestDkim * 100).toFixed(0)}% passing)`,
+      what: "Most of your emails have the DKIM signature, but some do not. This can happen when emails are forwarded, or if you are sending from a platform that has not been set up with DKIM yet.",
       steps: [
-        "Check if any of your emails are being forwarded from another address, which can break the DKIM signature.",
-        "Verify that DKIM is enabled in all email platforms you send from.",
-        "Send a test via mail-tester.com to confirm DKIM is passing on your main sending domain.",
+        "Check if any of your emails go through a forwarding address. Forwarding often breaks the DKIM signature. If so, try sending from the final address directly instead of forwarding.",
+        "Log in to every email platform or tool you use to send emails. Check that DKIM authentication is turned on in each one.",
+        "Go to mail-tester.com and send a test email. Look at the DKIM section of the report to see if it passes.",
+        "If a platform is not set up, follow the DKIM setup instructions in their settings or contact their support team.",
       ],
     });
   }
@@ -985,24 +1005,27 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "dmarc-critical",
       severity: "critical",
-      title: `DMARC is failing for ${(100 - latestDmarc * 100).toFixed(0)}% of emails`,
-      what: "DMARC ties together SPF and DKIM. When DMARC fails, Gmail cannot verify that your emails are actually from you. This is almost always caused by SPF or DKIM failures.",
+      title: `DMARC is failing — Gmail cannot confirm ${(100 - latestDmarc * 100).toFixed(0)}% of your emails are real`,
+      what: "DMARC is the final check Gmail uses to decide if your email is real or a fake. It uses both SPF and DKIM to make that decision. If those two checks fail, DMARC fails too. Right now, most of your emails are not passing this final check.",
       steps: [
-        "Fix your SPF and DKIM issues first — correcting those will automatically improve your DMARC pass rate.",
-        "Log in to your DNS provider and check for a TXT record starting with 'v=DMARC1'. If it's missing, add one.",
-        "Start with a monitor-only policy: v=DMARC1; p=none; rua=mailto:you@yourdomain.com",
-        "Check mxtoolbox.com/dmarc to verify your DMARC record is set up correctly.",
+        "Look at the SPF and DKIM items on this page first. Fixing those two things will automatically fix most of your DMARC problems.",
+        "Once SPF and DKIM are working, log in to your domain's DNS settings and look for a TXT record that starts with 'v=DMARC1'.",
+        "If you do not have a DMARC record at all, you need to create one. Start with this safe setting that just monitors without blocking anything: v=DMARC1; p=none; rua=mailto:youremail@yourdomain.com (replace the email address with your own).",
+        "Go to mxtoolbox.com/dmarc and type in your domain. It will tell you if your DMARC record is set up correctly.",
+        "If you are not sure what to do, contact your email platform's support and say: 'I need help setting up a DMARC record for my domain. My SPF and DKIM are set up but DMARC is still failing.'",
+        "Wait 24–48 hours after making changes, then click Refresh on this dashboard.",
       ],
     });
   } else if (latestDmarc != null && latestDmarc < 0.95) {
     items.push({
       id: "dmarc-warning",
       severity: "warning",
-      title: `DMARC pass rate is below 95% (${(latestDmarc * 100).toFixed(0)}%)`,
-      what: "Most emails pass DMARC but some are still failing. This is usually a downstream effect of SPF or DKIM issues.",
+      title: `DMARC is failing for some emails (${(latestDmarc * 100).toFixed(0)}% passing)`,
+      what: "Most of your emails pass DMARC, but some do not. This is almost always caused by the same emails that are failing SPF or DKIM.",
       steps: [
-        "Address any SPF or DKIM issues listed above — fixing those will improve DMARC automatically.",
-        "Check that your DMARC policy isn't set to 'reject' while you're still working on authentication.",
+        "Fix any SPF or DKIM issues listed on this page first. DMARC failures are usually just a side effect of those problems.",
+        "Check your DMARC policy in your DNS settings. If it says 'p=reject' or 'p=quarantine', change it to 'p=none' temporarily while you are fixing the other issues.",
+        "Go to mxtoolbox.com/dmarc and check that your DMARC record is correctly formatted.",
       ],
     });
   }
@@ -1017,25 +1040,26 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "ip-bad",
       severity: "critical",
-      title: "Sending IPs have Bad reputation with Gmail",
-      what: "The IP addresses your emails are being sent from have been flagged by Gmail as bad actors. Emails from these IPs are likely being blocked or sent straight to spam.",
+      title: "The IP addresses sending your emails have a BAD reputation",
+      what: "Think of an IP address like a return address on an envelope. Your emails are being sent from addresses that Gmail has flagged as coming from spammers. Gmail automatically rejects or sends those emails to spam — even if your content is fine. This is usually your email platform's problem, not something you did wrong.",
       steps: [
-        "Contact your email service provider (ActiveCampaign, Mailchimp, SendGrid, etc.) and tell them your sending IPs have a BAD reputation in Google Postmaster Tools.",
-        "Ask them to move your account to a different, cleaner IP address or IP pool.",
-        "If you run your own email server, seriously consider switching to a reputable email service provider.",
-        "Check if your sending IP is on any public blocklists at mxtoolbox.com/blacklists.",
+        "Contact your email platform's support team (ActiveCampaign, Mailchimp, SendGrid, Keap, etc.) right now. Use live chat if they have it.",
+        "Tell them exactly this: 'Google Postmaster Tools is showing a BAD IP reputation for my sending IPs. I need to be moved to a different IP address or a dedicated IP pool.'",
+        "If they cannot help you, ask if you can upgrade to a dedicated IP address. With a dedicated IP, only your emails use that address — no one else can hurt your reputation.",
+        "While you wait for that to be fixed, go to mxtoolbox.com and click 'Blacklists'. Enter your domain name and see if you are listed on any public spam databases. If you are, visit each blocklist website and request removal.",
+        "If your email platform refuses to help, consider switching to a different provider. Your sending reputation depends on the quality of their infrastructure.",
       ],
     });
   } else if (lowIps.length > 0) {
     items.push({
       id: "ip-low",
       severity: "warning",
-      title: "Some sending IPs have Low reputation",
-      what: "A portion of your sending IPs have a lower reputation with Gmail, which may be causing some emails to land in spam folders.",
+      title: "Some of your sending IPs have a LOW reputation",
+      what: "Some of the IP addresses your emails go out from have a lower reputation with Gmail. This can cause some emails to land in spam instead of the inbox. This is likely your email platform's shared IP pool having some bad senders on it.",
       steps: [
-        "Contact your email service provider and mention that some sending IPs are showing LOW reputation in Google Postmaster Tools.",
-        "Ask if they can move your account to a higher-reputation IP pool.",
-        "Reducing your spam complaint rate and fixing authentication will help your IPs recover over time.",
+        "Contact your email platform's support team. Tell them: 'Some of my sending IPs are showing LOW reputation in Google Postmaster Tools. Can you move me to a cleaner IP pool?'",
+        "Ask if they offer dedicated IP addresses. A dedicated IP means your reputation is entirely in your own hands.",
+        "In the meantime, focus on getting your spam complaint rate as low as possible. As your complaints go down, your IP reputation will naturally improve over time.",
       ],
     });
   }
@@ -1058,14 +1082,16 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "delivery-spam",
       severity: "critical",
-      title: "Gmail is detecting spam in your email content",
-      what: "Gmail's spam filters are flagging the actual content of your emails, not just complaints from recipients.",
+      title: "Gmail is flagging your email content as spam",
+      what: "This is different from people hitting the spam button — Gmail's own filters are reading your emails and deciding they look like spam before anyone even sees them. This is about the words and formatting inside your emails.",
       steps: [
-        "Avoid spam trigger words in subject lines — things like 'FREE!!!', 'Act NOW', 'GUARANTEED', or 'Click here'.",
-        "Don't use all-caps text or excessive exclamation points in your copy.",
-        "Every email must have a clearly visible unsubscribe link.",
-        "Avoid attaching files unless absolutely necessary.",
-        "Test your email content at mail-tester.com before sending to your full list.",
+        "Read your last 3 emails out loud. Do they sound like an advertisement or a used car sales pitch? If yes, that is the problem. Write emails that sound like a real person talking to another real person.",
+        "Remove these types of words and phrases from your subject lines and email body: FREE, ACT NOW, URGENT, GUARANTEED, CLICK HERE, LIMITED TIME, EARN MONEY, WINNER, CONGRATULATIONS.",
+        "Do not write in ALL CAPS anywhere in your email. Do not use more than one exclamation point per email.",
+        "Make sure every email has an unsubscribe link that is clearly visible. Gmail penalizes emails that hide or remove the unsubscribe option.",
+        "Do not attach files to mass emails. Attachments are a major spam signal.",
+        "Do not use lots of different fonts, colors, or giant images. Simple, plain-text-style emails get better delivery than flashy HTML ones.",
+        "Go to mail-tester.com and send them a copy of your next email before you send it to your list. They will grade it and tell you exactly what to fix.",
       ],
     });
   }
@@ -1074,12 +1100,13 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "delivery-ratelimit",
       severity: "warning",
-      title: "Gmail is rate-limiting your sending speed",
-      what: "You're sending emails too fast and Gmail is throttling your delivery as a result.",
+      title: "Gmail is slowing down your emails because you are sending too fast",
+      what: "Imagine trying to pour a whole bucket of water through a small funnel all at once — it overflows. That is what is happening with your emails. You are sending too many too quickly, and Gmail is putting the brakes on. Some emails are being delayed or not delivered at all.",
       steps: [
-        "Spread your email sends over a longer window instead of blasting everyone at once.",
-        "Work with your email provider to enable 'send time optimization' or scheduled batch sending.",
-        "If you recently increased your list size, gradually warm up your sending volume rather than jumping straight to large sends.",
+        "Log in to your email platform and look for a setting called 'sending schedule', 'throttle', 'batch sending', or 'send window'. Turn on a slower, more spread-out sending schedule.",
+        "Instead of sending your entire list at 9am all at once, spread it out over 4–6 hours or even the whole day.",
+        "If you recently added a lot of new contacts to your list, do not email them all at once. Start with small groups and increase the number slowly over several weeks. This is called 'warming up' your list.",
+        "Contact your email platform's support and ask: 'How do I set up rate limiting or throttled sending so I do not get blocked by Gmail?' They can guide you through the settings.",
       ],
     });
   }
@@ -1088,13 +1115,18 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "delivery-rbl",
       severity: "critical",
-      title: `${hasIpRbl && hasDomainRbl ? "Sending IP and domain are" : hasIpRbl ? "Sending IP is" : "Domain is"} on a public blocklist`,
-      what: "Your sending IP or domain has been added to a public email blocklist (RBL), which causes many email providers to automatically reject your emails.",
+      title: `Your ${hasIpRbl && hasDomainRbl ? "sending IP and domain are" : hasIpRbl ? "sending IP is" : "domain is"} on a public spam blocklist`,
+      what: "There are public lists that email providers around the world use to automatically block emails from known spammers. Your domain or IP address has ended up on one of these lists. This means some email providers are automatically rejecting your emails before they are even checked.",
       steps: [
-        "Go to mxtoolbox.com/blacklists and enter your domain or IP to see which blocklists you're on.",
-        "Visit each blocklist's website and follow their removal or delisting process — most are free.",
-        "You'll usually need to fix the underlying issue (spam complaints, open relay, etc.) before they'll delist you.",
-        "Contact your email provider for help if the blocklisted IP is a shared one from your ESP.",
+        "Go to mxtoolbox.com in your browser. Click the big 'Blacklists' button at the top.",
+        "Type in your domain name (like yourdomain.com) and hit enter. Wait a few seconds while it checks 100+ blocklists.",
+        "Look at the results. Any row highlighted in red means you are on that blocklist.",
+        "For each red result, click the name of the blocklist. It will take you to that blocklist's website.",
+        "Look for a button that says 'Request Removal', 'Delist', or 'Submit Removal Request'. Fill out their form.",
+        "Most blocklists will ask you to confirm that you have fixed the problem that got you listed. Before submitting, make sure your spam complaint rate is going down and your email content is clean.",
+        "Some blocklists charge a fee for faster removal. You do not have to pay — the free removal usually happens within 1–3 days.",
+        "If your email platform's shared IP is blacklisted (not just your domain), contact their support team. It is their IP and they need to fix it.",
+        "After removal, come back in 48 hours and run the blacklist check again to confirm you are off all of them.",
       ],
     });
   }
@@ -1103,11 +1135,12 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "delivery-ptr",
       severity: "warning",
-      title: "Sending server PTR (reverse DNS) record issue",
-      what: "Your sending server's reverse DNS record isn't configured correctly. Some email providers use this as a spam signal.",
+      title: "Your email server's reverse address lookup is not set up correctly",
+      what: "When Gmail receives an email from you, it looks up the sending server's address to verify it is legitimate. Right now, that lookup is not working correctly. It is like sending a letter with a return address that does not match any real building — it looks suspicious.",
       steps: [
-        "If you use a shared email provider (ActiveCampaign, Mailchimp, etc.), contact their support — this is their infrastructure to fix.",
-        "If you run your own email server, ask your hosting provider to set up a proper PTR record that matches your mail server's hostname.",
+        "If you use a shared email platform like ActiveCampaign, Mailchimp, or Keap, this is their problem to fix, not yours. Contact their support team and say: 'Google Postmaster Tools is showing a BAD_PTR_RECORD error for my sending domain. Can you fix the PTR record on your sending servers?'",
+        "If you run your own email server (most people do not), you need to contact your hosting company (like DigitalOcean, Linode, AWS, etc.) and ask them to set a reverse DNS (rDNS or PTR) record that matches your mail server's hostname.",
+        "After it is fixed, wait 24–48 hours and then click Refresh on this dashboard to confirm the error is gone.",
       ],
     });
   }
@@ -1116,12 +1149,14 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "delivery-dmarc-policy",
       severity: "warning",
-      title: "Emails being rejected due to DMARC policy",
-      what: "Your DMARC policy is actively rejecting or quarantining emails that fail authentication, which is causing delivery failures.",
+      title: "Your DMARC settings are blocking some of your own emails",
+      what: "DMARC is a security setting for your domain. Right now it is set to block or quarantine emails that do not pass authentication checks. If your SPF or DKIM are not fully working yet, your DMARC policy may be blocking your own legitimate emails.",
       steps: [
-        "If you just set up DMARC, temporarily change the policy to 'p=none' so you can monitor without blocking emails.",
-        "Fix your SPF and DKIM issues first so emails consistently pass authentication.",
-        "Once authentication is consistently passing, you can safely enforce 'p=quarantine' and eventually 'p=reject'.",
+        "Log in to your domain's DNS settings (GoDaddy, Namecheap, Cloudflare, etc.).",
+        "Find the TXT record that starts with 'v=DMARC1'.",
+        "Look for the part that says 'p=reject' or 'p=quarantine'. Change it to 'p=none'. This turns DMARC into a monitoring-only mode so it stops blocking your emails while you fix the underlying issues.",
+        "Save the change and wait 24 hours.",
+        "Now focus on fixing your SPF and DKIM (see those items on this page). Once both are consistently passing, you can safely change DMARC back to 'p=quarantine' and eventually 'p=reject'.",
       ],
     });
   }
@@ -1131,12 +1166,14 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
     items.push({
       id: "all-good",
       severity: "ok",
-      title: "Everything looks healthy",
-      what: "All of your email health metrics are within good ranges. Here's how to keep it that way.",
+      title: "Everything looks great — your email health is in good shape",
+      what: "All of your email health metrics are in the green. Your emails are being delivered properly and Gmail trusts your domain. Here is how to keep it that way.",
       steps: [
-        "Keep your spam complaint rate below 0.1% by regularly cleaning unengaged contacts from your list.",
-        "Only send to people who have actively engaged in the past 90 days.",
-        "Check this dashboard weekly so you catch any issues before they become serious.",
+        "Clean your list every 90 days. Remove anyone who has not opened or clicked anything in the last 3 months. A smaller, engaged list always outperforms a large, inactive one.",
+        "Only email people who have actively given you permission. Never add someone to your list without their knowledge.",
+        "Check this dashboard once a week. Problems are much easier to fix when they are caught early. Set a reminder in your calendar right now.",
+        "Keep writing emails that people actually want to read. If people look forward to your emails, they will not mark them as spam.",
+        "Before sending a big email blast, go to mail-tester.com and send them a test copy. If your score drops below 8/10, find out why and fix it before sending.",
       ],
     });
   }
@@ -1352,6 +1389,9 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
           <TabsTrigger value="compliance" className="text-xs px-4 rounded-lg" data-testid="tab-compliance">
             Compliance
           </TabsTrigger>
+          <TabsTrigger value="action-plan" className="text-xs px-4 rounded-lg" data-testid="tab-action-plan">
+            Action Plan
+          </TabsTrigger>
           <TabsTrigger value="infrastructure" className="text-xs px-4 rounded-lg" data-testid="tab-infrastructure">
             Infrastructure
           </TabsTrigger>
@@ -1447,10 +1487,22 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
         {/* ── Compliance tab ── */}
         <TabsContent value="compliance" className="mt-4 space-y-5">
           {domain.trafficStats.length > 0 ? (
-            <>
-              <ComplianceSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
-              <ActionPlanSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
-            </>
+            <ComplianceSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
+          ) : (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40 border border-border">
+              <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">No data available yet</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Click Refresh to pull data from Google Postmaster.</p>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Action Plan tab ── */}
+        <TabsContent value="action-plan" className="mt-4 space-y-5">
+          {domain.trafficStats.length > 0 ? (
+            <ActionPlanSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
           ) : (
             <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40 border border-border">
               <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
