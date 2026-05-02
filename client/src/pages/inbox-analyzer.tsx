@@ -477,6 +477,30 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 </div>
               </div>
             )}
+            {email.messageId && (
+              <div className="flex items-start gap-2">
+                <Hash className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wide">Message-ID</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <code className="text-xs text-muted-foreground font-mono truncate flex-1 min-w-0" title={email.messageId}>
+                      {email.messageId}
+                    </code>
+                    <button
+                      data-testid="button-copy-message-id"
+                      onClick={() => {
+                        navigator.clipboard.writeText(email.messageId!);
+                        toast({ description: "Message-ID copied to clipboard" });
+                      }}
+                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                      title="Copy Message-ID"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -588,28 +612,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             ))}
           </div>
           <p className="text-xs text-muted-foreground mt-2">Auth 30 · Trust 15 · Spam 28 · Technical 10 · Content 7 · CAN-SPAM 10</p>
-
-          {/* Message-ID fingerprint */}
-          {email.messageId && (
-            <div className="flex items-center gap-2 mt-3 px-2 py-1.5 rounded-md bg-muted/30 border border-border/40">
-              <Hash className="h-3 w-3 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground shrink-0 font-medium">Message-ID</span>
-              <code className="text-xs text-muted-foreground/70 font-mono truncate flex-1 min-w-0" title={email.messageId}>
-                {email.messageId}
-              </code>
-              <button
-                data-testid="button-copy-message-id"
-                onClick={() => {
-                  navigator.clipboard.writeText(email.messageId!);
-                  toast({ description: "Message-ID copied to clipboard" });
-                }}
-                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                title="Copy Message-ID"
-              >
-                <Copy className="h-3 w-3" />
-              </button>
-            </div>
-          )}
         </div>
 
         {/* ── Placement ─────────────────────────────────────────────── */}
