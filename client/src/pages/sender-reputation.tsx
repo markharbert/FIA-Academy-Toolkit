@@ -1287,27 +1287,28 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
 
   return (
     <div className="space-y-6">
-      {/* Top row: reputation badge + domain selector + controls */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <ReputationBadge reputation={domain.latestReputation} />
-          {domains.length > 1 && (
-            <Select value={selectedDomain || domains[0].domainName} onValueChange={onSelectDomain}>
-              <SelectTrigger className="w-52 h-8 text-xs" data-testid="select-domain">
-                <Globe className="h-3.5 w-3.5 mr-1.5 text-muted-foreground flex-shrink-0" />
-                <SelectValue placeholder="Select domain" />
-              </SelectTrigger>
-              <SelectContent>
-                {domains.map(d => (
-                  <SelectItem key={d.domainName} value={d.domainName} className="text-xs" data-testid={`option-domain-${d.domainName}`}>
-                    {d.domainName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
+      {/* Top row: reputation badge on left, all controls on right */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ReputationBadge reputation={domain.latestReputation} />
         <div className="flex flex-wrap items-center gap-2">
+          {domains.length > 1 && (
+            <>
+              <Select value={selectedDomain || domains[0].domainName} onValueChange={onSelectDomain}>
+                <SelectTrigger className="w-44 h-8 text-xs" data-testid="select-domain">
+                  <Globe className="h-3.5 w-3.5 mr-1.5 text-muted-foreground flex-shrink-0" />
+                  <SelectValue placeholder="Select domain" />
+                </SelectTrigger>
+                <SelectContent>
+                  {domains.map(d => (
+                    <SelectItem key={d.domainName} value={d.domainName} className="text-xs" data-testid={`option-domain-${d.domainName}`}>
+                      {d.domainName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-border">|</span>
+            </>
+          )}
           <Select value={String(days)} onValueChange={v => setDays(Number(v))}>
             <SelectTrigger className="w-32 h-8 text-xs" data-testid="select-time-range">
               <SelectValue />
@@ -1321,7 +1322,7 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
             </SelectContent>
           </Select>
           {lastSyncedAt && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
               Updated {new Date(lastSyncedAt).toLocaleDateString()}
             </span>
           )}
