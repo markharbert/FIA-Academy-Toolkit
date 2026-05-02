@@ -358,6 +358,10 @@ export function findArticle(slug: string): HelpArticle | undefined {
   return undefined;
 }
 
+export function findCategory(slug: string): HelpCategory | undefined {
+  return helpCategories.find(c => c.slug === slug);
+}
+
 export function allArticles(): HelpArticle[] {
   return helpCategories.flatMap(c => c.articles);
 }

@@ -39,10 +39,12 @@ export default function HelpPage() {
             const Icon = CATEGORY_ICONS[cat.icon] || BookOpen;
             const count = cat.articles.length;
             return (
-              <div
+              <button
                 key={cat.slug}
-                className={`rounded-xl border border-border bg-card p-4 space-y-2 transition-shadow ${count > 0 ? "hover:shadow-md cursor-pointer" : "opacity-60"}`}
-                onClick={() => count > 0 && setLocation(`/help/${cat.articles[0].slug}`)}
+                type="button"
+                disabled={count === 0}
+                className={`text-left rounded-xl border border-border bg-card p-4 space-y-2 transition-shadow ${count > 0 ? "hover-elevate active-elevate-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : "opacity-60 cursor-not-allowed"}`}
+                onClick={() => count > 0 && setLocation(`/help/category/${cat.slug}`)}
                 data-testid={`help-category-${cat.slug}`}
               >
                 <div className="flex items-center justify-between">
@@ -58,7 +60,7 @@ export default function HelpPage() {
                   {count > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">{cat.description}</p>
-              </div>
+              </button>
             );
           })}
         </div>

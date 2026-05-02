@@ -28,7 +28,13 @@ export default function HelpArticlePage() {
           Help Docs
         </button>
         <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-muted-foreground">{article.category}</span>
+        <button
+          onClick={() => setLocation(`/help/category/${article.categorySlug}`)}
+          className="hover:text-foreground transition-colors"
+          data-testid="link-category"
+        >
+          {article.category}
+        </button>
         <ChevronRight className="h-3.5 w-3.5" />
         <span className="text-foreground font-medium">{article.title}</span>
       </div>

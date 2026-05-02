@@ -29,6 +29,7 @@ import SenderReputationPage from "@/pages/sender-reputation";
 import DmoTrackerPage from "@/pages/dmo-tracker";
 import CfLoginPage from "@/pages/cf-login";
 import HelpPage from "@/pages/help";
+import HelpCategoryPage from "@/pages/help-category";
 import HelpArticlePage from "@/pages/help-article";
 import NotFound from "@/pages/not-found";
 
@@ -164,6 +165,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/help">
         {() => <ProtectedRoute component={HelpPage} />}
+      </Route>
+      <Route path="/help/category/:slug">
+        {() => <ProtectedRoute component={HelpCategoryPage} />}
       </Route>
       <Route path="/help/:slug">
         {() => <ProtectedRoute component={HelpArticlePage} />}
