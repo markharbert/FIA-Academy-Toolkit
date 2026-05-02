@@ -21,7 +21,9 @@ export function Footer() {
         </div>
         <nav className="flex items-center gap-5 text-sm">
           <a
-            href="#"
+            href="https://markharbert.com/terms-and-conditions"
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-muted-foreground hover:text-foreground transition-colors"
             data-testid="link-footer-terms"
           >
