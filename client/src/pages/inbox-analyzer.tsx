@@ -674,10 +674,10 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               <p className="text-sm text-muted-foreground">Set your sending From address in My Address to enable automatic placement monitoring.</p>
             </div>
           ) : !isActivePlacementEmail ? (
-            // ── Older email — placement only tracked for the most recent one ──
+            // ── No placement data for this email ──
             <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
               <CircleAlert className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-muted-foreground">Placement is monitored for the most recently received email. Open the latest email in your list to see results.</p>
+              <p className="text-sm text-muted-foreground">No placement data recorded for this email.</p>
             </div>
           ) : (
             // ── Active monitoring: checks are in progress ──
