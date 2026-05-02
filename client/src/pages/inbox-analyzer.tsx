@@ -540,19 +540,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
           </div>
         )}
 
-        {/* Re-analyze button */}
-        {onReanalyze && (
-          <div className="flex justify-start">
-            <Button
-              variant="ghost" size="sm"
-              className="text-muted-foreground hover:text-foreground gap-1.5 text-sm"
-              onClick={() => onReanalyze(email.id)}
-              data-testid={`button-reanalyze-${email.id}`}
-            >
-              <RefreshCw className="h-3.5 w-3.5" />Re-analyze
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* ── RIGHT: Full analysis report ─────────────────────────────────── */}
@@ -560,13 +547,25 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
         {/* Score overview */}
         <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-4 mb-4">
-            <ScoreRing score={email.overallScore} size={72} />
-            <div>
-              <p className="text-lg font-bold text-foreground">Overall Score</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Based on 6 categories below</p>
-              <StatusBadge status={email.status} />
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex items-center gap-4">
+              <ScoreRing score={email.overallScore} size={72} />
+              <div>
+                <p className="text-lg font-bold text-foreground">Overall Score</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Based on 6 categories below</p>
+                <StatusBadge status={email.status} />
+              </div>
             </div>
+            {onReanalyze && (
+              <Button
+                variant="ghost" size="sm"
+                className="text-muted-foreground hover:text-foreground gap-1.5 text-sm flex-shrink-0"
+                onClick={() => onReanalyze(email.id)}
+                data-testid={`button-reanalyze-${email.id}`}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />Re-analyze
+              </Button>
+            )}
           </div>
           <div className="grid grid-cols-6 gap-2">
             {[
