@@ -5218,6 +5218,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       } catch (seedErr) {
         console.error("[inbox-intel] auto-seed error:", seedErr);
       }
+      // Kick off website screenshot in background (best-effort)
+      if (created.website) {
+        const { captureWebsiteScreenshotAsync } = await import("./inboxIntelScreenshots");
+        captureWebsiteScreenshotAsync(created.id, created.website);
+      }
       res.status(201).json(created);
     } catch (err) {
       console.error("[inbox-intel] create tracker error:", err);
@@ -5294,12 +5299,56 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
+      const before = await storage.getCompetitorTracker(req.params.id, userId);
+      if (!before) return res.status(404).json({ message: "Competitor not found" });
       const updated = await storage.updateCompetitorTracker(req.params.id, userId, parsed.data);
       if (!updated) return res.status(404).json({ message: "Competitor not found" });
+      // If website changed, re-capture screenshot in background
+      const websiteChanged =
+        parsed.data.website !== undefined &&
+        (parsed.data.website || null) !== (before.website || null);
+      if (websiteChanged) {
+        const { captureWebsiteScreenshotAsync } = await import("./inboxIntelScreenshots");
+        captureWebsiteScreenshotAsync(updated.id, updated.website);
+      }
       res.json(updated);
     } catch (err) {
       console.error("[inbox-intel] update tracker error:", err);
       res.status(500).json({ message: "Failed to update competitor" });
+    }
+  });
+
+  // Manually re-capture the competitor's website screenshot
+  app.post("/api/inbox-intel/trackers/:id/refresh-screenshot", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const tracker = await storage.getCompetitorTracker(req.params.id, userId);
+      if (!tracker) return res.status(404).json({ message: "Competitor not found" });
+      if (!tracker.website) {
+        return res.status(400).json({ message: "Add a website to this competitor first" });
+      }
+      const { captureWebsiteScreenshotAsync } = await import("./inboxIntelScreenshots");
+      captureWebsiteScreenshotAsync(tracker.id, tracker.website);
+      res.json({ ok: true, status: "capturing" });
+    } catch (err) {
+      console.error("[inbox-intel] refresh screenshot error:", err);
+      res.status(500).json({ message: "Failed to refresh screenshot" });
+    }
+  });
+
+  // Serve the cached competitor screenshot (auth-scoped to the tracker owner)
+  app.get("/api/inbox-intel/trackers/:id/screenshot", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const tracker = await storage.getCompetitorTracker(req.params.id, userId);
+      if (!tracker) return res.status(404).json({ message: "Not found" });
+      if (!tracker.screenshotPath) return res.status(404).json({ message: "No screenshot yet" });
+      const file = await objectStorageService.getObjectEntityFile(tracker.screenshotPath);
+      await objectStorageService.downloadObject(file, res, 86400);
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.status(404).json({ message: "Screenshot unavailable" });
+      }
     }
   });
 

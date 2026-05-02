@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, Plus, ArrowRight, Loader2, ChevronLeft, Mail, Pin, Inbox } from "lucide-react";
+import { Eye, Plus, ArrowRight, Loader2, ChevronLeft, Mail, Pin, Inbox, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,6 +39,19 @@ export default function InboxIntelPage() {
 
   const { data: trackers = [], isLoading } = useQuery<CompetitorTrackerWithStats[]>({
     queryKey: ["/api/inbox-intel/trackers"],
+    // Auto-refetch every 6s while any tracker is still waiting for its screenshot
+    refetchInterval: (q) => {
+      const list = (q.state.data as CompetitorTrackerWithStats[] | undefined) || [];
+      // Only poll while a tracker is actively capturing (or website set with no
+      // status yet for older rows). Stop on terminal states: ready / failed / none.
+      const anyWaiting = list.some(
+        (t) =>
+          t.website &&
+          !t.screenshotPath &&
+          (t.screenshotStatus === "capturing" || t.screenshotStatus == null),
+      );
+      return anyWaiting ? 6000 : false;
+    },
   });
 
   const form = useForm<NewTrackerForm>({
@@ -241,35 +254,7 @@ export default function InboxIntelPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {trackers.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setLocation(`/email-tools/inbox-intel/${t.id}`)}
-                data-testid={`card-tracker-${t.id}`}
-                className="group text-left rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                    {t.name.substring(0, 1).toUpperCase()}
-                  </div>
-                  {t.pinnedCount > 0 && (
-                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/30 flex items-center gap-1">
-                      <Pin className="h-2.5 w-2.5" /> {t.pinnedCount}
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-base font-bold text-foreground mb-0.5 truncate" data-testid={`text-tracker-name-${t.id}`}>{t.name}</h3>
-                {t.website && (
-                  <p className="text-xs text-muted-foreground truncate mb-3">{t.website.replace(/^https?:\/\//, "")}</p>
-                )}
-                <div className="grid grid-cols-3 gap-3 mt-4">
-                  <Stat label="Seeds" value={t.seedCount.toString()} />
-                  <Stat label="Emails" value={t.emailCount.toString()} />
-                  <Stat label="Last" value={formatRelative(t.lastReceivedAt)} small />
-                </div>
-                <div className="flex items-center justify-end mt-4 text-xs font-semibold text-violet-600 dark:text-violet-400">
-                  Open <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-0.5 transition-transform" />
-                </div>
-              </button>
+              <TrackerTile key={t.id} tracker={t} onOpen={() => setLocation(`/email-tools/inbox-intel/${t.id}`)} />
             ))}
           </div>
         )}
@@ -299,5 +284,89 @@ function Stat({ label, value, small }: { label: string; value: string; small?: b
       <div className={`font-bold text-foreground ${small ? "text-xs" : "text-base"}`}>{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">{label}</div>
     </div>
+  );
+}
+
+function TrackerTile({ tracker, onOpen }: { tracker: CompetitorTrackerWithStats; onOpen: () => void }) {
+  const t = tracker;
+  const [imgError, setImgError] = useState(false);
+  // Bust cached screenshot when it updates
+  const screenshotSrc = t.screenshotPath
+    ? `/api/inbox-intel/trackers/${t.id}/screenshot?v=${t.screenshotUpdatedAt ? new Date(t.screenshotUpdatedAt).getTime() : ""}`
+    : null;
+  const showScreenshot = !!screenshotSrc && !imgError;
+  const isCapturing =
+    !t.screenshotPath &&
+    !!t.website &&
+    (t.screenshotStatus === "capturing" || t.screenshotStatus == null);
+
+  return (
+    <button
+      onClick={onOpen}
+      data-testid={`card-tracker-${t.id}`}
+      className="group text-left rounded-xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {/* Screenshot header (16:9) */}
+      <div className="relative aspect-[16/9] w-full bg-muted/40 overflow-hidden border-b border-border">
+        {showScreenshot ? (
+          <img
+            src={screenshotSrc!}
+            alt={`${t.name} website preview`}
+            loading="lazy"
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-300"
+            data-testid={`img-screenshot-${t.id}`}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-gradient-to-br from-muted/20 to-muted/40">
+            {isCapturing ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin mb-1.5" />
+                <span className="text-[10px] uppercase tracking-wider">Capturing preview…</span>
+              </>
+            ) : (
+              <>
+                <Globe className="h-6 w-6 mb-1 opacity-50" />
+                <span className="text-[10px] uppercase tracking-wider opacity-70">
+                  {t.website ? "Preview unavailable" : "No website"}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+        {t.pinnedCount > 0 && (
+          <span className="absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/90 text-white shadow-sm flex items-center gap-1 backdrop-blur-sm">
+            <Pin className="h-2.5 w-2.5" /> {t.pinnedCount}
+          </span>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="p-5">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-bold shrink-0">
+            {t.name.substring(0, 1).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-bold text-foreground truncate" data-testid={`text-tracker-name-${t.id}`}>
+              {t.name}
+            </h3>
+            {t.website && (
+              <p className="text-xs text-muted-foreground truncate">
+                {t.website.replace(/^https?:\/\//, "")}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="Seeds" value={t.seedCount.toString()} />
+          <Stat label="Emails" value={t.emailCount.toString()} />
+          <Stat label="Last" value={formatRelative(t.lastReceivedAt)} small />
+        </div>
+        <div className="flex items-center justify-end mt-4 text-xs font-semibold text-violet-600 dark:text-violet-400">
+          Open <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-0.5 transition-transform" />
+        </div>
+      </div>
+    </button>
   );
 }

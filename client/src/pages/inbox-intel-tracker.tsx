@@ -21,6 +21,8 @@ import {
   ShieldAlert,
   Link as LinkIcon,
   TrendingUp,
+  RefreshCw,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,6 +125,21 @@ export default function InboxIntelTrackerPage() {
     },
   });
 
+  const refreshScreenshotMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/inbox-intel/trackers/${trackerId}/refresh-screenshot`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-intel/trackers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-intel/trackers", trackerId] });
+      toast({ title: "Refreshing preview", description: "We're capturing a new screenshot — refresh in a few seconds." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Couldn't refresh preview", description: err?.message, variant: "destructive" });
+    },
+  });
+
   const togglePinMutation = useMutation({
     mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
       await apiRequest("PATCH", `/api/inbox-intel/emails/${id}/pin`, { pinned });
@@ -200,17 +217,36 @@ export default function InboxIntelTrackerPage() {
                 )}
               </div>
             </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
+            <div className="flex items-center gap-1">
+              {tracker.website && (
                 <Button
                   variant="ghost"
                   size="sm"
+                  onClick={() => refreshScreenshotMutation.mutate()}
+                  disabled={refreshScreenshotMutation.isPending}
                   className="text-white/70 hover:text-white hover:bg-white/10"
-                  data-testid="button-delete-tracker"
+                  data-testid="button-refresh-screenshot"
+                  title="Re-capture website screenshot"
                 >
-                  <Trash2 className="h-4 w-4 mr-1" /> Remove
+                  {refreshScreenshotMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                  )}
+                  Refresh preview
                 </Button>
-              </AlertDialogTrigger>
+              )}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white/70 hover:text-white hover:bg-white/10"
+                    data-testid="button-delete-tracker"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" /> Remove
+                  </Button>
+                </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Remove this competitor?</AlertDialogTitle>
@@ -228,8 +264,9 @@ export default function InboxIntelTrackerPage() {
                     Remove
                   </AlertDialogAction>
                 </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
           {tracker.notes && (
             <p className="text-white/60 text-sm mt-3 max-w-2xl whitespace-pre-line">{tracker.notes}</p>

@@ -1004,12 +1004,18 @@ export const competitorTrackers = pgTable("competitor_trackers", {
   name: text("name").notNull(),
   website: text("website"),
   notes: text("notes"),
+  screenshotPath: text("screenshot_path"),
+  screenshotUpdatedAt: timestamp("screenshot_updated_at"),
+  screenshotStatus: text("screenshot_status"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
 export const insertCompetitorTrackerSchema = createInsertSchema(competitorTrackers).omit({
   id: true,
   userId: true,
+  screenshotPath: true,
+  screenshotUpdatedAt: true,
+  screenshotStatus: true,
   createdAt: true,
 }).extend({
   name: z.string().trim().min(1, "Competitor name is required").max(100, "Name must be 100 characters or less"),
@@ -1105,6 +1111,9 @@ export type CompetitorTrackerWithStats = CompetitorTracker & {
   pinnedCount: number;
   lastReceivedAt: Date | null;
 };
+
+// Screenshot capture status for the tracker hub tile
+export type ScreenshotStatus = "ready" | "capturing" | "failed" | "none";
 
 // ── Inbox Intel — Phase 2 analytics & feed ──────────────────────────────────
 

@@ -5,7 +5,7 @@ import {
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
   type CompetitorTracker, type InsertCompetitorTracker, type CompetitorTrackerWithStats,
   type CompetitorSeedAddress, type CapturedCompetitorEmail, type CapturedCompetitorEmailLink,
-  type TrackerAnalytics, type FeedResponse,
+  type TrackerAnalytics, type FeedResponse, type ScreenshotStatus,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -332,6 +332,8 @@ export interface IStorage {
   getCompetitorTracker(id: string, userId: string): Promise<CompetitorTracker | undefined>;
   createCompetitorTracker(userId: string, data: InsertCompetitorTracker): Promise<CompetitorTracker>;
   updateCompetitorTracker(id: string, userId: string, data: Partial<InsertCompetitorTracker>): Promise<CompetitorTracker | undefined>;
+  setCompetitorTrackerScreenshot(id: string, screenshotPath: string | null, status?: ScreenshotStatus): Promise<void>;
+  setCompetitorTrackerScreenshotStatus(id: string, status: ScreenshotStatus): Promise<void>;
   deleteCompetitorTracker(id: string, userId: string): Promise<void>;
   countCompetitorTrackers(userId: string): Promise<number>;
   getCompetitorSeedAddresses(trackerId: string, userId: string): Promise<CompetitorSeedAddress[]>;
@@ -2050,7 +2052,10 @@ export class DatabaseStorage implements IStorage {
   async getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]> {
     const rows = await db.execute(sql`
       SELECT
-        t.id, t.user_id AS "userId", t.name, t.website, t.notes, t.created_at AS "createdAt",
+        t.id, t.user_id AS "userId", t.name, t.website, t.notes,
+        t.screenshot_path AS "screenshotPath", t.screenshot_updated_at AS "screenshotUpdatedAt",
+        t.screenshot_status AS "screenshotStatus",
+        t.created_at AS "createdAt",
         COALESCE((SELECT COUNT(*)::int FROM ${competitorSeedAddresses} s WHERE s.tracker_id = t.id), 0) AS "seedCount",
         COALESCE((SELECT COUNT(*)::int FROM ${capturedCompetitorEmails} e WHERE e.tracker_id = t.id), 0) AS "emailCount",
         COALESCE((SELECT COUNT(*)::int FROM ${capturedCompetitorEmails} e WHERE e.tracker_id = t.id AND e.is_pinned = true), 0) AS "pinnedCount",
@@ -2065,12 +2070,34 @@ export class DatabaseStorage implements IStorage {
       name: r.name,
       website: r.website,
       notes: r.notes,
+      screenshotPath: r.screenshotPath || null,
+      screenshotUpdatedAt: r.screenshotUpdatedAt ? (r.screenshotUpdatedAt instanceof Date ? r.screenshotUpdatedAt : new Date(r.screenshotUpdatedAt)) : null,
+      screenshotStatus: (r.screenshotStatus as ScreenshotStatus | null) || null,
       createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
       seedCount: Number(r.seedCount) || 0,
       emailCount: Number(r.emailCount) || 0,
       pinnedCount: Number(r.pinnedCount) || 0,
       lastReceivedAt: r.lastReceivedAt ? (r.lastReceivedAt instanceof Date ? r.lastReceivedAt : new Date(r.lastReceivedAt)) : null,
     }));
+  }
+
+  async setCompetitorTrackerScreenshot(id: string, screenshotPath: string | null, status?: ScreenshotStatus): Promise<void> {
+    const resolvedStatus: ScreenshotStatus = status ?? (screenshotPath ? "ready" : "none");
+    await db
+      .update(competitorTrackers)
+      .set({
+        screenshotPath,
+        screenshotUpdatedAt: screenshotPath ? new Date() : null,
+        screenshotStatus: resolvedStatus,
+      })
+      .where(eq(competitorTrackers.id, id));
+  }
+
+  async setCompetitorTrackerScreenshotStatus(id: string, status: ScreenshotStatus): Promise<void> {
+    await db
+      .update(competitorTrackers)
+      .set({ screenshotStatus: status })
+      .where(eq(competitorTrackers.id, id));
   }
 
   async getCompetitorTracker(id: string, userId: string): Promise<CompetitorTracker | undefined> {
