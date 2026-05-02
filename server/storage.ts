@@ -351,6 +351,18 @@ export interface IStorage {
   countPinnedEmailsForTracker(trackerId: string): Promise<number>;
   pruneOldCapturedBodies(trackerId: string, keepLatest: number): Promise<number>;
   getTrackerAnalytics(trackerId: string, userId: string): Promise<TrackerAnalytics>;
+  getEmailsForCsvExport(
+    userId: string,
+    filters: {
+      trackerIds?: string[];
+      esp?: string;
+      search?: string;
+      pinnedOnly?: boolean;
+      from?: Date;
+      to?: Date;
+      limit?: number;
+    },
+  ): Promise<Array<{ trackerName: string; email: CapturedCompetitorEmail }>>;
   getCapturedEmailsFeed(
     userId: string,
     filters: {
@@ -2453,6 +2465,67 @@ export class DatabaseStorage implements IStorage {
       trackers,
       esps,
     };
+  }
+
+  async getEmailsForCsvExport(
+    userId: string,
+    filters: {
+      trackerIds?: string[];
+      esp?: string;
+      search?: string;
+      pinnedOnly?: boolean;
+      from?: Date;
+      to?: Date;
+      limit?: number;
+    },
+  ): Promise<Array<{ trackerName: string; email: CapturedCompetitorEmail }>> {
+    const limit = Math.min(Math.max(filters.limit ?? 5000, 1), 5000);
+
+    const ownedIds = (
+      await db
+        .select({ id: competitorTrackers.id })
+        .from(competitorTrackers)
+        .where(eq(competitorTrackers.userId, userId))
+    ).map((r) => r.id);
+    const ownedSet = new Set(ownedIds);
+    if (ownedIds.length === 0) return [];
+
+    const conds: any[] = [eq(capturedCompetitorEmails.userId, userId)];
+    if (filters.trackerIds && filters.trackerIds.length > 0) {
+      const valid = filters.trackerIds.filter((id) => ownedSet.has(id));
+      if (valid.length === 0) return [];
+      conds.push(inArray(capturedCompetitorEmails.trackerId, valid));
+    }
+    if (filters.esp) conds.push(eq(capturedCompetitorEmails.detectedEsp, filters.esp));
+    if (filters.pinnedOnly) conds.push(eq(capturedCompetitorEmails.isPinned, true));
+    if (filters.from) conds.push(gte(capturedCompetitorEmails.receivedAt, filters.from));
+    if (filters.to) conds.push(lte(capturedCompetitorEmails.receivedAt, filters.to));
+    if (filters.search && filters.search.trim().length > 0) {
+      const q = `%${filters.search.trim().toLowerCase()}%`;
+      conds.push(
+        sql`(LOWER(${capturedCompetitorEmails.subject}) LIKE ${q}
+           OR LOWER(COALESCE(${capturedCompetitorEmails.fromName}, '')) LIKE ${q}
+           OR LOWER(COALESCE(${capturedCompetitorEmails.fromEmail}, '')) LIKE ${q})`,
+      );
+    }
+
+    // Defense-in-depth: also constrain the joined tracker to the same userId so
+    // a row whose userId somehow slipped past (or whose trackerId points to
+    // someone else's tracker) is filtered at the SQL layer too.
+    conds.push(eq(competitorTrackers.userId, userId));
+
+    const rows = await db
+      .select({
+        trackerName: competitorTrackers.name,
+        email: capturedCompetitorEmails,
+      })
+      .from(capturedCompetitorEmails)
+      .innerJoin(competitorTrackers, eq(capturedCompetitorEmails.trackerId, competitorTrackers.id))
+      .where(and(...conds))
+      .orderBy(desc(capturedCompetitorEmails.receivedAt))
+      .limit(limit);
+
+    return rows.map((r) => ({ trackerName: r.trackerName, email: r.email }));
   }
 
   // Null-out HTML/plain bodies for non-pinned emails beyond the latest N.

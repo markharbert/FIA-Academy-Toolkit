@@ -1249,3 +1249,65 @@ export interface FunnelAnalysis {
   verdict: string;
   hint: string | null;
 }
+
+// ── Inbox Intel — Phase 4 cross-competitor insights & compare ──────────────
+
+export interface LeaderboardEntry {
+  trackerId: string;
+  trackerName: string;
+  count7d: number;
+  prior7d: number;
+  pctChange: number | null; // null when prior7d was 0 (no baseline)
+}
+
+export type AnomalyType = "spike" | "gap" | "esp_change" | "auth_regression";
+export type AnomalySeverity = "info" | "warn" | "alert";
+
+export interface AnomalyEvent {
+  id: string;
+  trackerId: string;
+  trackerName: string;
+  type: AnomalyType;
+  severity: AnomalySeverity;
+  message: string;
+  occurredAt: Date;
+}
+
+export interface InsightsResponse {
+  generatedAt: Date;
+  totalTrackers: number;
+  totalEmails7d: number;
+  totalEmails30d: number;
+  activeTrackerCount: number; // trackers that received ≥1 email in last 7d
+  leaderboard: LeaderboardEntry[]; // top 5 by count7d
+  anomalies: AnomalyEvent[];
+}
+
+export interface CompareTrackerSummary {
+  id: string;
+  name: string;
+  website: string | null;
+  screenshotPath: string | null;
+  emailCount: number;
+  emails7d: number;
+  emails30d: number;
+  weekOverWeekPct: number | null;
+  avgEmailsPerWeek: number;
+  primaryEsp: string | null;
+  espConfidencePct: number;
+  busiestDayOfWeek: number | null;
+  busiestHour: number | null;
+  avgSubjectLength: number;
+  pctEmoji: number;
+  spfPassPct: number;
+  dkimPassPct: number;
+  dmarcPassPct: number;
+  welcomeSeriesDetected: boolean;
+  welcomeSeriesSteps: number;
+  welcomeSeriesDurationMs: number;
+  lastReceivedAt: Date | null;
+}
+
+export interface CompareResponse {
+  trackers: CompareTrackerSummary[];
+}

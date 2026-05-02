@@ -5317,6 +5317,128 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ── Phase 4 — cross-competitor insights ─────────────────────────────────
+  app.get("/api/inbox-intel/insights", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const trackers = await storage.getCompetitorTrackers(userId);
+      // Fetch all emails per tracker in parallel (bounded: 20 trackers × ~100 emails)
+      const perTracker = await Promise.all(
+        trackers.map(async (t) => ({
+          tracker: t,
+          emails: await storage.getCapturedEmails(t.id, userId, 500),
+        })),
+      );
+      const { computeInsights } = await import("./inboxIntelInsights");
+      const insights = computeInsights(perTracker);
+      res.json(insights);
+    } catch (err) {
+      console.error("[inbox-intel] insights error:", err);
+      res.status(500).json({ message: "Failed to compute insights" });
+    }
+  });
+
+  // ── Phase 4 — side-by-side compare summaries ───────────────────────────
+  app.get("/api/inbox-intel/compare", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const idsParam = (req.query.ids as string | undefined) || "";
+      const requestedIds = idsParam
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (requestedIds.length === 0) {
+        return res.json({ trackers: [] });
+      }
+      if (requestedIds.length > 4) {
+        return res.status(400).json({ message: "Compare up to 4 competitors at a time." });
+      }
+      const intel = await import("./inboxIntel");
+      const { analyzeFunnel } = await import("./inboxIntelFunnel");
+      const { summarizeForCompare } = await import("./inboxIntelInsights");
+
+      const summaries = await Promise.all(
+        requestedIds.map(async (id) => {
+          const tracker = await storage.getCompetitorTracker(id, userId);
+          if (!tracker) return null;
+          const seedsRaw = await storage.getCompetitorSeedAddresses(id, userId);
+          const seeds = seedsRaw.map((s) => ({ ...s, address: intel.buildSeedAddress(s.token) }));
+          const emails = await storage.getCapturedEmails(id, userId, 500);
+          const analytics = await storage.getTrackerAnalytics(id, userId);
+          const funnel = analyzeFunnel(seeds, emails);
+          return summarizeForCompare({ tracker, emails, analytics, funnel });
+        }),
+      );
+      // Preserve client-supplied order; drop unauthorized/missing ids silently.
+      res.json({ trackers: summaries.filter((s) => s !== null) });
+    } catch (err) {
+      console.error("[inbox-intel] compare error:", err);
+      res.status(500).json({ message: "Failed to load comparison" });
+    }
+  });
+
+  // ── Phase 4 — CSV export per tracker ────────────────────────────────────
+  app.get(
+    "/api/inbox-intel/trackers/:id/emails.csv",
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session!.userId!;
+        const trackerId = req.params.id;
+        const tracker = await storage.getCompetitorTracker(trackerId, userId);
+        if (!tracker) return res.status(404).json({ message: "Competitor not found" });
+        const emails = await storage.getCapturedEmails(trackerId, userId, 5000);
+        const { emailsToCsv, csvFilename } = await import("./inboxIntelCsv");
+        const csv = emailsToCsv(emails.map((email) => ({ trackerName: tracker.name, email })));
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${csvFilename(tracker.name)}"`,
+        );
+        res.send(csv);
+      } catch (err) {
+        console.error("[inbox-intel] tracker CSV error:", err);
+        res.status(500).json({ message: "Failed to export CSV" });
+      }
+    },
+  );
+
+  // ── Phase 4 — CSV export across feed (same filters as /feed) ────────────
+  app.get("/api/inbox-intel/feed.csv", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const q = req.query as Record<string, string | undefined>;
+      const trackerIds = q.trackerIds
+        ? q.trackerIds.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined;
+      const parseDate = (v?: string): Date | undefined => {
+        if (!v) return undefined;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? undefined : d;
+      };
+      const rows = await storage.getEmailsForCsvExport(userId, {
+        trackerIds,
+        esp: q.esp || undefined,
+        search: q.search || undefined,
+        pinnedOnly: q.pinnedOnly === "true" || q.pinnedOnly === "1",
+        from: parseDate(q.from),
+        to: parseDate(q.to),
+        limit: 5000,
+      });
+      const { emailsToCsv, csvFilename } = await import("./inboxIntelCsv");
+      const csv = emailsToCsv(rows);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${csvFilename("inbox-intel-feed")}"`,
+      );
+      res.send(csv);
+    } catch (err) {
+      console.error("[inbox-intel] feed CSV error:", err);
+      res.status(500).json({ message: "Failed to export CSV" });
+    }
+  });
+
   app.patch("/api/inbox-intel/trackers/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;

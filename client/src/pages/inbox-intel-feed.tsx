@@ -11,6 +11,7 @@ import {
   Inbox,
   Loader2,
   Calendar,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -279,6 +280,17 @@ export default function InboxIntelFeedPage() {
             >
               <Pin className="h-3.5 w-3.5" />
               Pinned only
+            </Button>
+
+            {/* CSV download — uses current filters */}
+            <Button variant="outline" asChild className="gap-1.5" title="Download as CSV">
+              <a
+                href={`/api/inbox-intel/feed.csv?${queryString}`}
+                data-testid="link-download-feed-csv"
+              >
+                <Download className="h-3.5 w-3.5" />
+                CSV
+              </a>
             </Button>
 
             {hasActiveFilters && (

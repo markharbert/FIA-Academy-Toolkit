@@ -28,6 +28,7 @@ import {
   Zap,
   Megaphone,
   HelpCircle,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -244,6 +245,20 @@ export default function InboxIntelTrackerPage() {
                   Refresh preview
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                className="text-white/70 hover:text-white hover:bg-white/10"
+                title="Download all captured emails as CSV"
+              >
+                <a
+                  href={`/api/inbox-intel/trackers/${trackerId}/emails.csv`}
+                  data-testid="link-download-tracker-csv"
+                >
+                  <Download className="h-4 w-4 mr-1" /> CSV
+                </a>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"

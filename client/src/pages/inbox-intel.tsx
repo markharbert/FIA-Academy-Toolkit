@@ -4,7 +4,25 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, Plus, ArrowRight, Loader2, ChevronLeft, Mail, Pin, Inbox, Globe, Pencil } from "lucide-react";
+import {
+  Eye,
+  Plus,
+  ArrowRight,
+  Loader2,
+  ChevronLeft,
+  Mail,
+  Pin,
+  Inbox,
+  Globe,
+  Pencil,
+  GitCompare,
+  Activity,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Info,
+  Bell,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +30,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { insertCompetitorTrackerSchema, type CompetitorTrackerWithStats } from "@shared/schema";
+import {
+  insertCompetitorTrackerSchema,
+  type CompetitorTrackerWithStats,
+  type InsightsResponse,
+  type AnomalyEvent,
+  type LeaderboardEntry,
+} from "@shared/schema";
 import { EditTrackerDialog } from "@/components/edit-tracker-dialog";
 
 const MAX_TRACKERS = 20;
@@ -120,6 +144,16 @@ export default function InboxIntelPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {trackers.length >= 2 && (
+              <Button
+                variant="outline"
+                onClick={() => setLocation("/email-tools/inbox-intel/compare")}
+                data-testid="button-view-compare"
+                className="gap-2"
+              >
+                <GitCompare className="h-4 w-4" /> Compare
+              </Button>
+            )}
             {trackers.length > 0 && (
               <Button
                 variant="outline"
@@ -234,6 +268,9 @@ export default function InboxIntelPage() {
           </div>
         )}
 
+        {/* Insights — what's changed this week */}
+        {trackers.length > 0 && <InsightsSection />}
+
         {/* Trackers grid */}
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
@@ -276,6 +313,143 @@ export default function InboxIntelPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function InsightsSection() {
+  const [, setLocation] = useLocation();
+  const { data, isLoading } = useQuery<InsightsResponse>({
+    queryKey: ["/api/inbox-intel/insights"],
+  });
+
+  if (isLoading) return null;
+  if (!data) return null;
+  const hasContent =
+    data.anomalies.length > 0 ||
+    data.leaderboard.length > 0 ||
+    data.totalEmails7d > 0;
+  if (!hasContent) return null;
+
+  return (
+    <div className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-4" data-testid="insights-section">
+      {/* Alerts */}
+      <div className="lg:col-span-2 rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Bell className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          <h3 className="text-sm font-bold text-foreground">What's changed this week</h3>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-auto">
+            {data.totalEmails7d} email{data.totalEmails7d === 1 ? "" : "s"} captured · {data.activeTrackerCount} active
+          </span>
+        </div>
+        {data.anomalies.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic" data-testid="text-no-anomalies">
+            No anomalies detected. Things look steady — keep watching.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {data.anomalies.slice(0, 6).map((a) => (
+              <AnomalyRow
+                key={a.id}
+                anomaly={a}
+                onOpen={() => setLocation(`/email-tools/inbox-intel/${a.trackerId}`)}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Leaderboard */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Activity className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          <h3 className="text-sm font-bold text-foreground">Top sends this week</h3>
+        </div>
+        {data.leaderboard.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">No emails captured this week yet.</p>
+        ) : (
+          <ol className="space-y-2">
+            {data.leaderboard.map((row, i) => (
+              <LeaderboardRow
+                key={row.trackerId}
+                rank={i + 1}
+                row={row}
+                onOpen={() => setLocation(`/email-tools/inbox-intel/${row.trackerId}`)}
+              />
+            ))}
+          </ol>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AnomalyRow({ anomaly, onOpen }: { anomaly: AnomalyEvent; onOpen: () => void }) {
+  const sev = anomaly.severity;
+  const Icon = sev === "alert" ? AlertTriangle : sev === "warn" ? TrendingUp : Info;
+  const tone =
+    sev === "alert"
+      ? "text-rose-600 dark:text-rose-400 bg-rose-500/10"
+      : sev === "warn"
+        ? "text-amber-600 dark:text-amber-400 bg-amber-500/10"
+        : "text-sky-600 dark:text-sky-400 bg-sky-500/10";
+  return (
+    <li>
+      <button
+        onClick={onOpen}
+        className="w-full text-left flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/40 transition-colors"
+        data-testid={`anomaly-${anomaly.type}-${anomaly.trackerId}`}
+      >
+        <span className={`shrink-0 rounded-md p-1 ${tone}`}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="text-xs font-semibold text-foreground block truncate">
+            {anomaly.trackerName}
+          </span>
+          <span className="text-xs text-muted-foreground">{anomaly.message}</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function LeaderboardRow({
+  rank,
+  row,
+  onOpen,
+}: {
+  rank: number;
+  row: LeaderboardEntry;
+  onOpen: () => void;
+}) {
+  const pct = row.pctChange;
+  return (
+    <li>
+      <button
+        onClick={onOpen}
+        className="w-full text-left flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/40 transition-colors"
+        data-testid={`leaderboard-${row.trackerId}`}
+      >
+        <span className="w-5 h-5 rounded-full bg-muted text-[10px] font-bold flex items-center justify-center text-muted-foreground shrink-0">
+          {rank}
+        </span>
+        <span className="text-xs font-semibold text-foreground truncate flex-1">
+          {row.trackerName}
+        </span>
+        <span className="text-xs font-bold text-foreground tabular-nums">{row.count7d}</span>
+        {pct !== null && pct !== 0 && (
+          <span
+            className={`inline-flex items-center text-[10px] font-semibold tabular-nums ${
+              pct > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+            }`}
+          >
+            {pct > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+            {pct > 0 ? "+" : ""}
+            {pct}%
+          </span>
+        )}
+      </button>
+    </li>
   );
 }
 
