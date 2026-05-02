@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
+import { Footer } from "@/components/footer";
 import { Loader2 } from "lucide-react";
 
 import LandingPage from "@/pages/landing";
@@ -255,7 +256,12 @@ function AppLayout() {
               <SidebarTrigger className="-ml-1 text-white hover:bg-white/10 hover:text-white" data-testid="button-sidebar-toggle" />
             </header>
             <main className="flex-1 overflow-auto">
-              <ProtectedRoutes />
+              <div className="flex flex-col min-h-full">
+                <div className="flex-1">
+                  <ProtectedRoutes />
+                </div>
+                <Footer />
+              </div>
             </main>
           </SidebarInset>
         </div>
@@ -268,6 +274,7 @@ function AppLayout() {
       <main className="flex-1">
         <PublicRoutes />
       </main>
+      <Footer />
     </div>
   );
 }
