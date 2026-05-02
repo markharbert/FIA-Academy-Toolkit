@@ -446,6 +446,86 @@ const scriptsArticle: HelpArticle = {
   ],
 };
 
+// ─── Inbox Intel Article ──────────────────────────────────────────────────────
+
+const inboxIntelArticle: HelpArticle = {
+  slug: "inbox-intel",
+  title: "How to Use Inbox Intel",
+  subtitle: "Spy on your competitors' email funnels by subscribing with private seed addresses, then watch every campaign get captured, classified, and compared automatically.",
+  category: "Email Tools",
+  categorySlug: "email-tools",
+  readMinutes: 6,
+  overview:
+    "Inbox Intel turns your competitors' email lists into a permanent, searchable swipe file. You add a competitor, generate up to 5 unique private seed addresses on watch.fearlessmarketinglab.com, use those addresses to opt in to their lists, and from then on every email they send you is captured, parsed, and stored. The platform tells you which messages are part of an automated welcome funnel vs a one-off broadcast, what email-sending platform they use, when they send, and how their cadence is changing — across all of your tracked competitors at once.",
+  steps: [
+    {
+      number: 1,
+      title: "Add your first competitor",
+      body: [
+        "Open Email Tools from the sidebar and click Inbox Intel. The hub is where you manage every competitor you're watching — you can track up to 20 at once.",
+        "Click Add competitor in the top-right and give the tracker a name (e.g. 'Brennan Dunn'), an optional website, and any notes you want to remember about why you're watching them.",
+        "If you supply a website, Inbox Intel automatically captures a preview screenshot in the background and shows it on the tile — that's why a brand-new tracker shows 'Capturing preview…' for a few seconds.",
+      ],
+      tip: "The What's changed this week panel surfaces anomalies — sudden send spikes, long silences, ESP changes, and authentication regressions — across all your trackers, and the Top sends leaderboard ranks who's sending the most this week.",
+      illustrationKey: "ii-hub",
+    },
+    {
+      number: 2,
+      title: "Get your private seed addresses and subscribe",
+      body: [
+        "Open the tracker and you'll see up to 5 personal-looking seed addresses on watch.fearlessmarketinglab.com (e.g. sarah.thompson83@..., mike.r.davis@...). They're designed to look like real personal mailboxes so opt-in forms accept them.",
+        "Copy a seed address and use it to subscribe to the competitor's list — sign up for their lead magnet, newsletter, or free training the way a normal subscriber would.",
+        "Click + Generate seed (with an optional label like 'Homepage opt-in' or 'Webinar') to create additional seeds. Using multiple seeds across different opt-in points helps Inbox Intel detect automated welcome series with high confidence by cross-checking what arrives at each one.",
+      ],
+      note: "All metrics (sender, subject, links, ESP, authentication, etc.) are kept forever. The latest 100 full-HTML email bodies are kept per tracker — older bodies are pruned automatically. Pin up to 25 emails per tracker to keep their bodies indefinitely.",
+      illustrationKey: "ii-tracker-emails",
+    },
+    {
+      number: 3,
+      title: "Read sending patterns on the Analytics tab",
+      body: [
+        "Switch to the Analytics tab to see the rule-based fingerprint of how this competitor sends — no AI involved, every number is computed from the captured emails.",
+        "The four stat tiles at the top give you the headline numbers: total emails captured, average per week, the busiest send window (day + hour), and the primary email sending platform with a confidence score.",
+        "Below that, the Cadence heatmap shows every send plotted on a 7-day × 24-hour grid so you can spot when this sender prefers to send, and the Send volume chart shows daily counts over the last 90 days so you can see ramp-ups and quiet periods at a glance.",
+      ],
+      tip: "ESP detection combines high-confidence header signals with HTML body fingerprints across ~25 platforms — Mailchimp, Klaviyo, ConvertKit, ActiveCampaign, HubSpot, beehiiv, Substack, ClickFunnels, Keap, Drip, AWeber, and many more. The confidence percentage tells you how sure we are.",
+      illustrationKey: "ii-tracker-analytics",
+    },
+    {
+      number: 4,
+      title: "Spot the welcome funnel on the Funnel tab",
+      body: [
+        "The Funnel tab runs a two-stage rule-based classifier on the emails captured for this tracker and tells you whether they're running an automated welcome sequence.",
+        "Stage 1 is cross-seed alignment: if the same email arrives at multiple seeds at very close offsets-from-signup, it's automated with high confidence. Stage 2 fills in the rest with single-seed heuristics — first email under 30 minutes, tight cadence runs, and the gap that ends the welcome era.",
+        "The verdict card shows the headline (e.g. 'Detected a 5-email welcome series over 7 days') and a confidence badge (HIGH, MEDIUM, or LOW), followed by counts of how many captured emails landed in each bucket — welcome steps, automated, broadcast, unclassified.",
+      ],
+      note: "Below the verdict you'll see the step-by-step welcome sequence (each step is clickable to open the email) and a per-seed timeline showing dots positioned by time-since-signup — amber for automated, violet for broadcast, gray for unclassified.",
+      illustrationKey: "ii-tracker-funnel",
+    },
+    {
+      number: 5,
+      title: "Browse everyone in one stream with the Unified Feed",
+      body: [
+        "From the Inbox Intel hub, click View full feed to see every captured email across every competitor in one chronological stream, grouped by day.",
+        "The filter bar lets you search by subject or sender, narrow to a date preset (today / 7d / 30d / 90d / all), select specific competitors, filter by detected ESP, and toggle Pinned only to see just the messages you've starred.",
+        "Click the CSV button to export the filtered feed (capped at 5000 rows) for analysis in a spreadsheet, or open any email row to read the full message and pin it for permanent retention.",
+      ],
+      tip: "Pinning is how you build a swipe file — pinned emails are exempt from the automatic pruning that trims older HTML bodies, so the messages you actually want to study stay readable forever.",
+      illustrationKey: "ii-feed",
+    },
+    {
+      number: 6,
+      title: "Compare up to 4 competitors side-by-side",
+      body: [
+        "From the Inbox Intel hub click Compare to open the comparison view, then use the picker to add up to 4 trackers. Selected competitors appear as removable chips at the top.",
+        "Each card shows the same metrics in the same place so you can scan across them at a glance: this-week vs last-30-days activity with week-over-week change, average sends per week, total captured, primary email platform with confidence, busiest send window, subject-line style, authentication pass rates, and a one-line welcome funnel summary.",
+        "Use the comparison to answer questions like who is ramping up sends, who switched ESPs recently, who has the longest welcome funnel, and whose subjects skew long, ALL CAPS, or emoji-heavy.",
+      ],
+      illustrationKey: "ii-compare",
+    },
+  ],
+};
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const helpCategories: HelpCategory[] = [
@@ -461,7 +541,7 @@ export const helpCategories: HelpCategory[] = [
     title: "Email Tools",
     description: "Analyze your emails for spam triggers, authentication, and inbox placement.",
     icon: "Mail",
-    articles: [googlePostmasterSetupArticle, senderReputationDashboardArticle],
+    articles: [googlePostmasterSetupArticle, senderReputationDashboardArticle, inboxIntelArticle],
   },
   {
     slug: "dmo-tracker",

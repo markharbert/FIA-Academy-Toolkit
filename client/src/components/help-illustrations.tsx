@@ -35,6 +35,13 @@ import scriptsDetail from "@assets/help/scripts-detail.jpg";
 import scriptsSections from "@assets/help/scripts-sections.jpg";
 import scriptsCta from "@assets/help/scripts-cta.jpg";
 
+import iiHub from "@assets/help/ii-hub.jpg";
+import iiTrackerEmails from "@assets/help/ii-tracker-emails.jpg";
+import iiTrackerAnalytics from "@assets/help/ii-tracker-analytics.jpg";
+import iiTrackerFunnel from "@assets/help/ii-tracker-funnel.jpg";
+import iiFeed from "@assets/help/ii-feed.jpg";
+import iiCompare from "@assets/help/ii-compare.jpg";
+
 import { AnnotatedScreenshot, type Annotation } from "@/components/annotated-screenshot";
 
 function ScreenshotIllustration({ src, alt }: { src: string; alt: string }) {
@@ -283,6 +290,101 @@ export function ScriptsCtaIllustration() {
   );
 }
 
+// ─── Inbox Intel Illustrations ────────────────────────────────────────────────
+
+export function InboxIntelHubIllustration() {
+  const annotations: Annotation[] = [
+    { x: 85.5, y: 35.5, w: 10.5, h: 4.0, color: "red", label: "1 Add competitor", labelPos: "outside-top" },
+    { x: 16.5, y: 41.5, w: 39.5, h: 15.5, color: "orange", label: "2 What's changed this week", labelPos: "outside-top" },
+    { x: 57.0, y: 41.5, w: 21.0, h: 15.5, color: "amber", label: "3 Top sends leaderboard", labelPos: "outside-top" },
+    { x: 16.5, y: 60.0, w: 61.5, h: 38.0, color: "blue", label: "4 Competitor tiles", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iiHub}
+      alt="Inbox Intel hub showing the Tracked Competitors header (3 of 20), Compare and View full feed and Add competitor buttons, the What's changed this week panel with a Pat Flynn anomaly, the Top sends leaderboard with Amy Porterfield and Brennan Dunn, and three competitor tiles for Pat Flynn, Amy Porterfield, and Brennan Dunn each with seed count, email count, and last-received date"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxIntelTrackerEmailsIllustration() {
+  const annotations: Annotation[] = [
+    { x: 51.5, y: 12.5, w: 44.5, h: 5.0, color: "red", label: "1 Tracker actions", labelPos: "outside-top" },
+    { x: 16.5, y: 28.0, w: 61.5, h: 30.5, color: "orange", label: "2 Private seed addresses", labelPos: "outside-top" },
+    { x: 17.5, y: 67.0, w: 29.0, h: 5.0, color: "amber", label: "3 Tab navigation", labelPos: "outside-top" },
+    { x: 17.5, y: 77.0, w: 61.5, h: 22.5, color: "blue", label: "4 Captured emails", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iiTrackerEmails}
+      alt="Brennan Dunn tracker detail page on the Captured emails tab showing the Refresh preview, CSV, Edit, and Remove action buttons, the Seed addresses block listing three personal-looking seed mailboxes on watch.fearlessmarketinglab.com with received counts and last-received dates, the Captured emails / Analytics / Funnel tabs, and the first three captured email rows"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxIntelTrackerAnalyticsIllustration() {
+  const annotations: Annotation[] = [
+    { x: 29.5, y: 67.0, w: 8.5, h: 5.0, color: "red", label: "1 Analytics tab", labelPos: "outside-top" },
+    { x: 16.5, y: 74.0, w: 61.5, h: 10.5, color: "orange", label: "2 Stat tiles", labelPos: "outside-top" },
+    { x: 16.5, y: 86.5, w: 30.5, h: 13.0, color: "amber", label: "3 Cadence heatmap", labelPos: "outside-top" },
+    { x: 47.5, y: 86.5, w: 30.0, h: 13.0, color: "blue", label: "4 Send volume chart", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iiTrackerAnalytics}
+      alt="Brennan Dunn tracker detail on the Analytics tab showing four stat tiles — Total emails 33, Avg per week 4, Busiest send Sat at 11, and Primary ESP ConvertKit at 100% confidence — and the start of a Cadence heatmap by day of week and hour of day card next to a Send volume per day card"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxIntelTrackerFunnelIllustration() {
+  const annotations: Annotation[] = [
+    { x: 37.0, y: 67.0, w: 7.5, h: 5.0, color: "red", label: "1 Funnel tab", labelPos: "outside-top" },
+    { x: 16.5, y: 75.0, w: 61.5, h: 8.5, color: "orange", label: "2 Verdict + confidence", labelPos: "outside-top" },
+    { x: 16.5, y: 86.0, w: 61.5, h: 7.0, color: "amber", label: "3 Auto vs broadcast counts", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iiTrackerFunnel}
+      alt="Brennan Dunn tracker detail on the Funnel tab showing the verdict 'Detected a 5-email welcome series over 7 days' with a HIGH CONFIDENCE badge, and the four classification counts — 5 welcome steps, 15 automated, 18 broadcast, 0 unclassified"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxIntelFeedIllustration() {
+  const annotations: Annotation[] = [
+    { x: 17.0, y: 29.5, w: 61.0, h: 6.5, color: "red", label: "1 Filter bar", labelPos: "outside-top" },
+    { x: 78.0, y: 30.5, w: 11.0, h: 4.5, color: "orange", label: "2 Pinned only", labelPos: "outside-top" },
+    { x: 17.0, y: 41.0, w: 61.5, h: 58.0, color: "amber", label: "3 Day-grouped stream", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iiFeed}
+      alt="Unified Feed page showing the search input, Last 30 days date selector, All competitors and Any ESP filters, Pinned only toggle, and CSV download button above a day-grouped chronological stream — Yesterday with three Amy Porterfield emails followed by Thursday April 30 with Brennan Dunn emails"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxIntelCompareIllustration() {
+  const annotations: Annotation[] = [
+    { x: 22.5, y: 30.5, w: 39.0, h: 4.5, color: "red", label: "1 Pick up to 4", labelPos: "outside-top" },
+    { x: 16.5, y: 40.0, w: 61.5, h: 59.0, color: "orange", label: "2 Side-by-side cards", labelPos: "outside-top" },
+    { x: 17.0, y: 75.0, w: 29.0, h: 16.0, color: "amber", label: "3 Activity & metrics", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iiCompare}
+      alt="Compare competitors page with two trackers selected — Brennan Dunn and Amy Porterfield — and side-by-side cards each showing Activity (this week, last 30 days, avg per week, total captured), Email platform with confidence, and the start of the Busiest send window block"
+      annotations={annotations}
+    />
+  );
+}
+
 export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "video-tools-hub": VideoToolsHubIllustration,
   "sessions-list": SessionsListIllustration,
@@ -316,4 +418,10 @@ export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "scripts-detail": ScriptsDetailIllustration,
   "scripts-sections": ScriptsSectionsIllustration,
   "scripts-cta": ScriptsCtaIllustration,
+  "ii-hub": InboxIntelHubIllustration,
+  "ii-tracker-emails": InboxIntelTrackerEmailsIllustration,
+  "ii-tracker-analytics": InboxIntelTrackerAnalyticsIllustration,
+  "ii-tracker-funnel": InboxIntelTrackerFunnelIllustration,
+  "ii-feed": InboxIntelFeedIllustration,
+  "ii-compare": InboxIntelCompareIllustration,
 };
