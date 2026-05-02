@@ -49,15 +49,32 @@ export async function exchangePostmasterCode(code: string): Promise<{
   };
 }
 
+export type IpReputation = {
+  reputation: string;
+  numIps: number | null;
+  ipCount: number | null;
+  sampleIps: string[];
+};
+
+export type DeliveryError = {
+  errorType: string;
+  errorClass: string;
+  errorRatio: number;
+};
+
 export type DailyTrafficStat = {
   date: string;
   domainReputation: string | null;
   spamRate: number | null;
+  spamRateLow: number | null;
+  spamRateHigh: number | null;
   spfSuccessRatio: number | null;
   dkimSuccessRatio: number | null;
   dmarcSuccessRatio: number | null;
   outboundEncryptionRatio: number | null;
-  deliveryErrors: Array<{ errorType: string; errorClass: string; errorRatio: number }>;
+  inboundEncryptionRatio: number | null;
+  ipReputations: IpReputation[];
+  deliveryErrors: DeliveryError[];
 };
 
 export type PostmasterDomainData = {
@@ -74,6 +91,7 @@ export type PostmasterDomainData = {
 export async function fetchPostmasterData(
   accessToken: string,
   refreshToken: string | null,
+  days = 180,
 ): Promise<PostmasterDomainData[]> {
   const oAuth2Client = getPostmasterOAuthClient();
   oAuth2Client.setCredentials({
@@ -89,7 +107,7 @@ export async function fetchPostmasterData(
 
   const endDate = new Date();
   const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 30);
+  startDate.setDate(startDate.getDate() - days);
 
   const results: PostmasterDomainData[] = [];
 
@@ -116,25 +134,40 @@ export async function fetchPostmasterData(
           ? `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`
           : "";
 
-        let spamRate: number | null = null;
         const range = s.userReportedSpamRatioRange || s.spamRateRange;
-        if (range) {
-          spamRate = ((range.lowPercentile ?? 0) + (range.highPercentile ?? 0)) / 2;
-        }
+        const spamRateLow: number | null = range?.lowPercentile ?? null;
+        const spamRateHigh: number | null = range?.highPercentile ?? null;
+        const spamRate: number | null =
+          spamRateLow != null && spamRateHigh != null
+            ? (spamRateLow + spamRateHigh) / 2
+            : (spamRateLow ?? spamRateHigh ?? null);
+
+        const ipReputations: IpReputation[] = (s.ipReputations || []).map((ip: any) => ({
+          reputation: ip.reputation || "REPUTATION_CATEGORY_UNSPECIFIED",
+          numIps: ip.numIps ?? null,
+          ipCount: ip.ipCount ?? null,
+          sampleIps: Array.isArray(ip.sampleIps) ? ip.sampleIps : [],
+        }));
+
+        const deliveryErrors: DeliveryError[] = (s.deliveryErrors || []).map((e: any) => ({
+          errorType: e.errorType || "",
+          errorClass: e.errorClass || "",
+          errorRatio: typeof e.errorRatio === "number" ? e.errorRatio : 0,
+        }));
 
         return {
           date: dateStr,
           domainReputation: s.domainReputation || null,
           spamRate,
+          spamRateLow,
+          spamRateHigh,
           spfSuccessRatio: s.spfSuccessRatio ?? null,
           dkimSuccessRatio: s.dkimSuccessRatio ?? null,
           dmarcSuccessRatio: s.dmarcSuccessRatio ?? null,
           outboundEncryptionRatio: s.outboundEncryptionRatio ?? null,
-          deliveryErrors: (s.deliveryErrors || []).map((e: any) => ({
-            errorType: e.errorType || "",
-            errorClass: e.errorClass || "",
-            errorRatio: e.errorRatio || 0,
-          })),
+          inboundEncryptionRatio: s.inboundEncryptionRatio ?? null,
+          ipReputations,
+          deliveryErrors,
         };
       }).filter((s: DailyTrafficStat) => s.date);
 
@@ -142,7 +175,7 @@ export async function fetchPostmasterData(
 
       results.push({
         domainName,
-        latestReputation: sorted.find(s => s.domainReputation)?.domainReputation ?? null,
+        latestReputation: sorted.find(s => s.domainReputation && s.domainReputation !== "REPUTATION_CATEGORY_UNSPECIFIED")?.domainReputation ?? null,
         latestSpamRate: sorted.find(s => s.spamRate !== null)?.spamRate ?? null,
         latestSpfRatio: sorted.find(s => s.spfSuccessRatio !== null)?.spfSuccessRatio ?? null,
         latestDkimRatio: sorted.find(s => s.dkimSuccessRatio !== null)?.dkimSuccessRatio ?? null,
