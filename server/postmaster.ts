@@ -62,6 +62,11 @@ export type DeliveryError = {
   errorRatio: number;
 };
 
+export type FeedbackLoop = {
+  id: string;
+  spamRatio: number;
+};
+
 export type DailyTrafficStat = {
   date: string;
   domainReputation: string | null;
@@ -75,6 +80,7 @@ export type DailyTrafficStat = {
   inboundEncryptionRatio: number | null;
   ipReputations: IpReputation[];
   deliveryErrors: DeliveryError[];
+  feedbackLoops: FeedbackLoop[];
 };
 
 export type PostmasterDomainData = {
@@ -88,54 +94,62 @@ export type PostmasterDomainData = {
   trafficStats: DailyTrafficStat[];
 };
 
-function parseStat(s: any, logSample = false): DailyTrafficStat | null {
-  if (logSample) {
-    console.log("[Postmaster] sample record:", JSON.stringify(s).slice(0, 500));
-  }
-
-  let dateStr: string;
+function parseDateFromRecord(s: any): string | null {
   const d = s.date;
 
   if (typeof d === "string" && d.length >= 8) {
-    // Already a string like "2024-05-01"
-    dateStr = d.slice(0, 10);
+    return d.slice(0, 10);
   } else if (d && typeof d === "object" && (d.year || d.Year)) {
-    // Object like { year, month, day } or { Year, Month, Day }
     const year = d.year ?? d.Year;
     const month = d.month ?? d.Month;
     const day = d.day ?? d.Day;
     if (!year || !month || !day) return null;
-    dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   } else if (s.name) {
-    // Date is encoded in the resource name as YYYYMMDD: domains/x.com/trafficStats/20260126
     const nameStr = s.name as string;
     const withDash = nameStr.match(/(\d{4}-\d{2}-\d{2})$/);
     const noDash = nameStr.match(/(\d{4})(\d{2})(\d{2})$/);
-    if (withDash) {
-      dateStr = withDash[1];
-    } else if (noDash) {
-      dateStr = `${noDash[1]}-${noDash[2]}-${noDash[3]}`;
-    } else {
-      console.log("[Postmaster] unrecognised record shape, name:", s.name, "date:", JSON.stringify(d));
-      return null;
-    }
-  } else {
-    console.log("[Postmaster] unrecognised date field:", JSON.stringify(d));
+    if (withDash) return withDash[1];
+    if (noDash) return `${noDash[1]}-${noDash[2]}-${noDash[3]}`;
+  }
+
+  return null;
+}
+
+function parseStat(s: any, logSample = false): DailyTrafficStat | null {
+  if (logSample) {
+    console.log("[Postmaster] sample record:", JSON.stringify(s).slice(0, 600));
+  }
+
+  const dateStr = parseDateFromRecord(s);
+  if (!dateStr) {
+    console.log("[Postmaster] unrecognised date field — name:", s.name, "date:", JSON.stringify(s.date));
     return null;
   }
 
-  const range = s.userReportedSpamRatioRange || s.spamRateRange;
-  const spamRateLow: number | null = range?.lowPercentile ?? null;
-  const spamRateHigh: number | null = range?.highPercentile ?? null;
-  const spamRate: number | null =
-    spamRateLow != null && spamRateHigh != null
-      ? (spamRateLow + spamRateHigh) / 2
-      : (spamRateLow ?? spamRateHigh ?? null);
+  // v1beta1 uses userReportedSpamRatio/LowerBound/UpperBound; v1 uses userReportedSpamRatioRange
+  let spamRate: number | null = null;
+  let spamRateLow: number | null = null;
+  let spamRateHigh: number | null = null;
+
+  if (s.userReportedSpamRatio != null) {
+    spamRate = s.userReportedSpamRatio;
+    spamRateLow = s.userReportedSpamRatioLowerBound ?? null;
+    spamRateHigh = s.userReportedSpamRatioUpperBound ?? null;
+  } else {
+    const range = s.userReportedSpamRatioRange || s.spamRateRange;
+    spamRateLow = range?.lowPercentile ?? null;
+    spamRateHigh = range?.highPercentile ?? null;
+    spamRate =
+      spamRateLow != null && spamRateHigh != null
+        ? (spamRateLow + spamRateHigh) / 2
+        : (spamRateLow ?? spamRateHigh ?? null);
+  }
 
   const ipReputations: IpReputation[] = (s.ipReputations || []).map((ip: any) => ({
     reputation: ip.reputation || "REPUTATION_CATEGORY_UNSPECIFIED",
-    numIps: ip.numIps ?? null,
-    ipCount: ip.ipCount ?? null,
+    numIps: ip.numIps != null ? Number(ip.numIps) : null,
+    ipCount: ip.ipCount != null ? Number(ip.ipCount) : null,
     sampleIps: Array.isArray(ip.sampleIps) ? ip.sampleIps : [],
   }));
 
@@ -144,6 +158,13 @@ function parseStat(s: any, logSample = false): DailyTrafficStat | null {
     errorClass: e.errorClass || "",
     errorRatio: typeof e.errorRatio === "number" ? e.errorRatio : 0,
   }));
+
+  const feedbackLoops: FeedbackLoop[] = (s.spammyFeedbackLoops || [])
+    .filter((f: any) => f.id && f.spamRatio != null)
+    .map((f: any) => ({
+      id: f.id as string,
+      spamRatio: f.spamRatio as number,
+    }));
 
   return {
     date: dateStr,
@@ -158,6 +179,7 @@ function parseStat(s: any, logSample = false): DailyTrafficStat | null {
     inboundEncryptionRatio: s.inboundEncryptionRatio ?? null,
     ipReputations,
     deliveryErrors,
+    feedbackLoops,
   };
 }
 
@@ -171,7 +193,8 @@ export async function fetchPostmasterData(
     refresh_token: refreshToken || undefined,
   });
 
-  const postmaster = google.gmailpostmastertools({ version: "v1", auth: oAuth2Client });
+  // v1beta1 gives us spammyFeedbackLoops + more precise spam ratio fields
+  const postmaster = google.gmailpostmastertools({ version: "v1beta1", auth: oAuth2Client });
 
   const { data: domainsData } = await postmaster.domains.list();
   const domains = domainsData.domains || [];
@@ -187,7 +210,6 @@ export async function fetchPostmasterData(
     const allStats: DailyTrafficStat[] = [];
 
     try {
-      // Fetch with pagination — no explicit date range, let Google return what it has
       let pageToken: string | undefined;
       let pagesFetched = 0;
 
@@ -209,7 +231,7 @@ export async function fetchPostmasterData(
 
         pageToken = statsData.nextPageToken || undefined;
         pagesFetched++;
-      } while (pageToken && pagesFetched < 6); // max 6 pages = ~180 days
+      } while (pageToken && pagesFetched < 6);
 
       console.log(`[Postmaster] ${domainName} total: ${allStats.length} daily records`);
 

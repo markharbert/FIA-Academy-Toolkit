@@ -13,6 +13,7 @@ import {
   Loader2, AlertTriangle, CheckCircle2, XCircle, Globe, Lock, Mail,
   ArrowLeft, PlugZap, Unplug, Info, TrendingUp, TrendingDown, Minus,
   Server, Wifi, Activity, ClipboardList, ChevronDown, ChevronUp,
+  BadgeCheck, CircleAlert, CircleX, CircleDashed, Megaphone,
 } from "lucide-react";
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -34,6 +35,11 @@ type DeliveryError = {
   errorRatio: number;
 };
 
+type FeedbackLoop = {
+  id: string;
+  spamRatio: number;
+};
+
 type DailyTrafficStat = {
   date: string;
   domainReputation: string | null;
@@ -47,6 +53,7 @@ type DailyTrafficStat = {
   inboundEncryptionRatio: number | null;
   ipReputations: IpReputation[];
   deliveryErrors: DeliveryError[];
+  feedbackLoops: FeedbackLoop[];
 };
 
 type PostmasterDomainData = {
@@ -516,6 +523,323 @@ function DeliveryErrorsSection({ stats }: { stats: DailyTrafficStat[] }) {
         );
       })}
     </div>
+  );
+}
+
+// ── Gmail Compliance ───────────────────────────────────────────────────────────
+
+type ComplianceStatus = "pass" | "warning" | "fail" | "nodata" | "manual";
+
+type ComplianceItem = {
+  id: string;
+  label: string;
+  detail: string;
+  status: ComplianceStatus;
+  note: string;
+  learnUrl?: string;
+};
+
+function buildComplianceItems(domain: PostmasterDomainData, filtered: DailyTrafficStat[]): ComplianceItem[] {
+  const latest = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
+
+  const ratioStatus = (v: number | null): ComplianceStatus =>
+    v == null ? "nodata" : v >= 0.95 ? "pass" : v >= 0.80 ? "warning" : "fail";
+
+  const spamStatus = (v: number | null): ComplianceStatus =>
+    v == null ? "nodata" : v < 0.001 ? "pass" : v < 0.003 ? "warning" : "fail";
+
+  const spf = latest.find(s => s.spfSuccessRatio != null)?.spfSuccessRatio ?? null;
+  const dkim = latest.find(s => s.dkimSuccessRatio != null)?.dkimSuccessRatio ?? null;
+  const dmarc = latest.find(s => s.dmarcSuccessRatio != null)?.dmarcSuccessRatio ?? null;
+  const spam = latest.find(s => s.spamRate != null)?.spamRate ?? null;
+  const tls = latest.find(s => s.outboundEncryptionRatio != null)?.outboundEncryptionRatio ?? null;
+
+  const hasPtrError = filtered.some(s =>
+    s.deliveryErrors.some(e => e.errorType === "BAD_PTR_RECORD" && e.errorRatio > 0.001)
+  );
+  const ptrStatus: ComplianceStatus = filtered.length === 0 ? "nodata" : hasPtrError ? "warning" : "pass";
+
+  const spfPct = spf != null ? Math.round(spf * 100) : null;
+  const dkimPct = dkim != null ? Math.round(dkim * 100) : null;
+  const dmarcPct = dmarc != null ? Math.round(dmarc * 100) : null;
+  const tlsPct = tls != null ? Math.round(tls * 100) : null;
+
+  return [
+    {
+      id: "spf",
+      label: "SPF Authentication",
+      detail: "All emails must pass SPF to prove they came from an authorised server.",
+      status: ratioStatus(spf),
+      note: spf == null ? "No data yet" : spfPct! >= 95 ? `${spfPct}% pass rate — excellent` : `${spfPct}% pass rate — below 95% target`,
+      learnUrl: "https://support.google.com/mail/answer/81126#authentication",
+    },
+    {
+      id: "dkim",
+      label: "DKIM Signing",
+      detail: "Every email must carry a valid DKIM signature. Required for bulk senders.",
+      status: ratioStatus(dkim),
+      note: dkim == null ? "No data yet" : dkimPct! >= 95 ? `${dkimPct}% pass rate — excellent` : `${dkimPct}% pass rate — below 95% target`,
+      learnUrl: "https://support.google.com/mail/answer/81126#authentication",
+    },
+    {
+      id: "dmarc",
+      label: "DMARC Policy",
+      detail: "A DMARC record must exist and emails must align with SPF or DKIM.",
+      status: ratioStatus(dmarc),
+      note: dmarc == null ? "No data yet" : dmarcPct! >= 95 ? `${dmarcPct}% pass rate — excellent` : `${dmarcPct}% pass rate — below 95% target`,
+      learnUrl: "https://support.google.com/mail/answer/81126#authentication",
+    },
+    {
+      id: "spam",
+      label: "Spam Complaint Rate",
+      detail: "Keep below 0.10%. Consistently over 0.30% will result in delivery being blocked.",
+      status: spamStatus(spam),
+      note: spam == null
+        ? "No data yet — need 200+ emails/day to Gmail"
+        : spam < 0.001 ? `${(spam * 100).toFixed(4)}% — well under 0.10% limit`
+        : spam < 0.003 ? `${(spam * 100).toFixed(4)}% — approaching 0.10% warning threshold`
+        : `${(spam * 100).toFixed(4)}% — above 0.30% critical limit`,
+      learnUrl: "https://support.google.com/mail/answer/81126#spam-rate",
+    },
+    {
+      id: "tls",
+      label: "TLS Encryption",
+      detail: "Emails should be delivered over an encrypted TLS connection.",
+      status: tls == null ? "nodata" : tls >= 0.95 ? "pass" : "warning",
+      note: tls == null ? "No data yet" : tlsPct! >= 95 ? `${tlsPct}% of sends encrypted — great` : `${tlsPct}% encrypted — some sends are unencrypted`,
+      learnUrl: "https://support.google.com/mail/answer/81126#tls",
+    },
+    {
+      id: "ptr",
+      label: "Valid Reverse DNS (PTR)",
+      detail: "Your sending IP must have a valid PTR record that resolves back to your domain.",
+      status: ptrStatus,
+      note: ptrStatus === "nodata" ? "No data yet" : ptrStatus === "pass" ? "No PTR issues detected in this period" : "PTR record errors detected — contact your email provider",
+      learnUrl: "https://support.google.com/mail/answer/81126#requirements-for-all-senders",
+    },
+    {
+      id: "unsubscribe",
+      label: "One-Click Unsubscribe",
+      detail: "All marketing emails must include a List-Unsubscribe-Post header and a visible unsubscribe link. Required for bulk senders (5 000+ emails/day to Gmail).",
+      status: "manual",
+      note: "Cannot be verified from Postmaster data — check your email platform settings.",
+      learnUrl: "https://support.google.com/mail/answer/81126#one-click-unsubscribe",
+    },
+    {
+      id: "headers",
+      label: "Valid Message Headers",
+      detail: "Every email must include valid From, To, Date, and Message-ID headers.",
+      status: "manual",
+      note: "Reputable ESPs (ActiveCampaign, Mailchimp, etc.) handle this automatically.",
+      learnUrl: "https://support.google.com/mail/answer/81126#requirements-for-all-senders",
+    },
+    {
+      id: "mixing",
+      label: "Separate Email Streams",
+      detail: "Marketing and transactional emails should be sent from different subdomains or IP pools. Mixing them risks your transactional delivery when spam rates rise.",
+      status: "manual",
+      note: "Use a separate subdomain (e.g. mail.yourdomain.com) for marketing sends.",
+      learnUrl: "https://support.google.com/mail/answer/81126#format-requirements",
+    },
+  ];
+}
+
+const STATUS_CONFIG: Record<ComplianceStatus, {
+  icon: typeof CheckCircle2;
+  iconClass: string;
+  badgeClass: string;
+  badgeLabel: string;
+}> = {
+  pass: {
+    icon: BadgeCheck,
+    iconClass: "text-emerald-500",
+    badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    badgeLabel: "Passing",
+  },
+  warning: {
+    icon: CircleAlert,
+    iconClass: "text-amber-500",
+    badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    badgeLabel: "Warning",
+  },
+  fail: {
+    icon: CircleX,
+    iconClass: "text-red-500",
+    badgeClass: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+    badgeLabel: "Failing",
+  },
+  nodata: {
+    icon: CircleDashed,
+    iconClass: "text-muted-foreground",
+    badgeClass: "bg-muted/50 text-muted-foreground border-border",
+    badgeLabel: "No data",
+  },
+  manual: {
+    icon: CircleDashed,
+    iconClass: "text-muted-foreground",
+    badgeClass: "bg-muted/50 text-muted-foreground border-border",
+    badgeLabel: "Manual",
+  },
+};
+
+function ComplianceSection({ domain, filtered }: { domain: PostmasterDomainData; filtered: DailyTrafficStat[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const items = useMemo(() => buildComplianceItems(domain, filtered), [domain, filtered]);
+
+  const autoItems = items.filter(i => i.status !== "manual");
+  const manualItems = items.filter(i => i.status === "manual");
+
+  const passing = autoItems.filter(i => i.status === "pass").length;
+  const failing = autoItems.filter(i => i.status === "fail").length;
+  const warnings = autoItems.filter(i => i.status === "warning").length;
+
+  // Aggregate feedback loops across all filtered days
+  const feedbackMap: Record<string, { total: number; count: number }> = {};
+  for (const s of filtered) {
+    for (const f of (s.feedbackLoops ?? [])) {
+      if (!feedbackMap[f.id]) feedbackMap[f.id] = { total: 0, count: 0 };
+      feedbackMap[f.id].total += f.spamRatio;
+      feedbackMap[f.id].count += 1;
+    }
+  }
+  const feedbackLoops = Object.entries(feedbackMap)
+    .map(([id, v]) => ({ id, avgSpamRatio: v.total / v.count }))
+    .sort((a, b) => b.avgSpamRatio - a.avgSpamRatio);
+
+  const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
+
+  const renderItem = (item: ComplianceItem, isManual: boolean) => {
+    const cfg = STATUS_CONFIG[item.status];
+    const Icon = cfg.icon;
+    const isOpen = expandedId === item.id;
+
+    return (
+      <div key={item.id} className="border-b border-border last:border-0">
+        <button
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+          onClick={() => toggle(item.id)}
+          data-testid={`compliance-item-${item.id}`}
+        >
+          <Icon className={`h-4 w-4 flex-shrink-0 ${cfg.iconClass}`} />
+          <span className="flex-1 text-sm font-medium text-foreground">{item.label}</span>
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.badgeClass} flex-shrink-0`}>
+            {cfg.badgeLabel}
+          </span>
+          {isOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />}
+        </button>
+        {isOpen && (
+          <div className="px-4 pb-4 pt-1 ml-7 space-y-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">{item.detail}</p>
+            <p className={`text-xs font-medium ${item.status === "pass" ? "text-emerald-600 dark:text-emerald-400" : item.status === "fail" ? "text-red-600 dark:text-red-400" : item.status === "warning" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+              {item.note}
+            </p>
+            {item.learnUrl && (
+              <a href={item.learnUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline">
+                Google's guidance <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 pt-5 px-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <BadgeCheck className="h-4 w-4 text-blue-500" />
+              Gmail Compliance
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Google's Feb 2024 bulk sender requirements — verified against your live data
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {failing > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
+                {failing} failing
+              </span>
+            )}
+            {warnings > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                {warnings} warning
+              </span>
+            )}
+            {passing > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                {passing} passing
+              </span>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="px-0 pb-0">
+        {/* Auto-verified */}
+        <div className="px-5 pb-1">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            Verified from your data
+          </p>
+        </div>
+        <div className="divide-y-0">
+          {autoItems.map(item => renderItem(item, false))}
+        </div>
+
+        <Separator className="my-1" />
+
+        {/* Manual checks */}
+        <div className="px-5 py-1">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            Requires manual verification
+          </p>
+        </div>
+        <div>
+          {manualItems.map(item => renderItem(item, true))}
+        </div>
+
+        {/* Feedback Loops */}
+        {feedbackLoops.length > 0 && (
+          <>
+            <Separator className="my-1" />
+            <div className="px-5 py-1">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Megaphone className="h-3 w-3" />
+                Spammy Campaign Signals
+              </p>
+            </div>
+            <div className="px-5 pb-4 pt-1 space-y-2">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                These campaign identifiers (from your email platform's feedback loop headers) had elevated spam complaint rates with Gmail over the selected period.
+              </p>
+              <div className="space-y-1.5 mt-2">
+                {feedbackLoops.slice(0, 10).map(f => (
+                  <div key={f.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/40 border border-border">
+                    <span className="text-xs font-mono text-foreground truncate max-w-[70%]">{f.id}</span>
+                    <span className={`text-xs font-bold tabular-nums ${f.avgSpamRatio >= 0.003 ? "text-red-600 dark:text-red-400" : f.avgSpamRatio >= 0.001 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                      {(f.avgSpamRatio * 100).toFixed(3)}% spam rate
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="px-5 py-3 border-t border-border bg-muted/20 rounded-b-xl">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Click any item above for details and how to fix it. Requirements apply to all senders; one-click unsubscribe and DMARC enforcement are required for senders of 5 000+ emails/day to Gmail.{" "}
+            <a href="https://support.google.com/mail/answer/81126" target="_blank" rel="noopener noreferrer"
+              className="text-primary hover:underline inline-flex items-center gap-0.5">
+              Full requirements <ExternalLink className="h-2.5 w-2.5" />
+            </a>
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -997,9 +1321,12 @@ function DomainDashboard({ domain, lastSyncedAt, onSync, isSyncing }: {
         <StatCard label="Inbound TLS" value={pct(latestInEnc, 1)} sublabel="encrypted" color={authColor(latestInEnc) as any} />
       </div>
 
-      {/* Action Plan — always visible when there's any data at all */}
+      {/* Compliance + Action Plan — always visible when there's any data at all */}
       {domain.trafficStats.length > 0 && (
-        <ActionPlanSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
+        <>
+          <ComplianceSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
+          <ActionPlanSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
+        </>
       )}
 
       {filtered.length === 0 ? (
