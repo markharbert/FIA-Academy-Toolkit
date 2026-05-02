@@ -141,10 +141,10 @@ export function SrP2InfrastructureIllustration() {
 
 export function VtHubIllustration() {
   const annotations: Annotation[] = [
-    { x: 26.5, y: 23.5, w: 42, h: 5.0, color: "red", label: "1 Search bar", labelPos: "outside-top" },
-    { x: 37.5, y: 18.0, w: 21, h: 3.5, color: "amber", label: "2 Credits", labelPos: "outside-top" },
-    { x: 35.0, y: 28.5, w: 28.5, h: 4.2, color: "blue", label: "3 Quick presets", labelPos: "outside-bottom" },
-    { x: 18.0, y: 56.5, w: 63.0, h: 16.5, color: "green", label: "4 Recent searches", labelPos: "outside-top" },
+    { x: 33.0, y: 30.5, w: 53.0, h: 4.5, color: "red", label: "1 Search bar", labelPos: "outside-top" },
+    { x: 46.5, y: 24.5, w: 27.5, h: 3.0, color: "amber", label: "2 Credits", labelPos: "outside-top" },
+    { x: 40.5, y: 36.0, w: 37.0, h: 4.0, color: "blue", label: "3 Quick presets", labelPos: "outside-bottom" },
+    { x: 18.0, y: 66.0, w: 61.0, h: 22.0, color: "green", label: "4 Recent searches", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -157,8 +157,8 @@ export function VtHubIllustration() {
 
 export function VtExploreListIllustration() {
   const annotations: Annotation[] = [
-    { x: 16.5, y: 11.5, w: 64.5, h: 6.0, color: "red", label: "1 Filter & sort", labelPos: "outside-top" },
-    { x: 79.0, y: 20.5, w: 17.0, h: 4.5, color: "orange", label: "2 Topic signals", labelPos: "outside-top" },
+    { x: 20.0, y: 17.0, w: 78.0, h: 3.5, color: "red", label: "1 Filter & sort", labelPos: "outside-top" },
+    { x: 79.0, y: 27.5, w: 18.0, h: 3.7, color: "orange", label: "2 Topic signals", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -171,10 +171,10 @@ export function VtExploreListIllustration() {
 
 export function VtTopicDetailIllustration() {
   const annotations: Annotation[] = [
-    { x: 22.0, y: 21.3, w: 44.0, h: 8.0, color: "red", label: "1 Selected topic", labelPos: "outside-top" },
-    { x: 67.5, y: 28.5, w: 16.5, h: 5.0, color: "orange", label: "2 Generate Script", labelPos: "outside-top" },
-    { x: 67.5, y: 42.0, w: 31.0, h: 5.0, color: "amber", label: "3 Opportunity Score", labelPos: "outside-top" },
-    { x: 67.5, y: 50.0, w: 31.0, h: 21.5, color: "blue", label: "4 Keyword data", labelPos: "outside-bottom" },
+    { x: 21.0, y: 22.0, w: 43.5, h: 6.7, color: "red", label: "1 Selected topic", labelPos: "outside-top" },
+    { x: 66.5, y: 29.0, w: 18.5, h: 4.4, color: "orange", label: "2 Generate Script", labelPos: "outside-top" },
+    { x: 66.5, y: 42.5, w: 32.5, h: 4.0, color: "amber", label: "3 Opportunity Score", labelPos: "outside-top" },
+    { x: 66.5, y: 51.5, w: 32.5, h: 21.5, color: "blue", label: "4 Keyword data", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -187,8 +187,8 @@ export function VtTopicDetailIllustration() {
 
 export function VtSavedIllustration() {
   const annotations: Annotation[] = [
-    { x: 18.0, y: 13.0, w: 28.0, h: 4.0, color: "red", label: "1 Active / completed", labelPos: "outside-top" },
-    { x: 17.0, y: 18.5, w: 80.0, h: 23.0, color: "orange", label: "2 Saved topics", labelPos: "outside-top" },
+    { x: 25.0, y: 11.5, w: 12.0, h: 3.0, color: "red", label: "1 Active / completed", labelPos: "outside-top" },
+    { x: 20.5, y: 22.5, w: 78.0, h: 17.0, color: "orange", label: "2 Saved topics", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -201,10 +201,10 @@ export function VtSavedIllustration() {
 
 export function VtScriptDetailIllustration() {
   const annotations: Annotation[] = [
-    { x: 21.0, y: 16.5, w: 77.0, h: 8.5, color: "red", label: "1 Topic stats", labelPos: "outside-top" },
-    { x: 21.0, y: 28.0, w: 77.0, h: 4.5, color: "orange", label: "2 Format tabs", labelPos: "outside-top" },
-    { x: 63.0, y: 34.0, w: 29.0, h: 5.0, color: "amber", label: "3 Copy / PDF", labelPos: "outside-bottom" },
-    { x: 21.0, y: 43.0, w: 77.0, h: 40.0, color: "green", label: "4 5-part script", labelPos: "outside-top" },
+    { x: 20.5, y: 16.5, w: 78.0, h: 8.5, color: "red", label: "1 Topic stats", labelPos: "outside-top" },
+    { x: 35.5, y: 28.5, w: 47.5, h: 3.5, color: "orange", label: "2 Format tabs", labelPos: "outside-top" },
+    { x: 63.5, y: 34.7, w: 28.5, h: 4.5, color: "amber", label: "3 Copy / PDF", labelPos: "outside-bottom" },
+    { x: 20.5, y: 44.5, w: 78.0, h: 42.0, color: "green", label: "4 5-part script", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
