@@ -1,6 +1,9 @@
 import { google } from "googleapis";
 
-const POSTMASTER_SCOPES = ["https://www.googleapis.com/auth/postmaster.readonly"];
+const POSTMASTER_SCOPES = [
+  "https://www.googleapis.com/auth/postmaster.readonly",
+  "email",
+];
 
 export function getPostmasterOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
