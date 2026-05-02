@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component, type ReactNode } from "react";
 import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,6 +37,31 @@ import type {
 } from "@shared/schema";
 
 const INBOX_DOMAIN = "email.fearlessmarketinglab.com";
+
+// ── Error boundary so a crash in one email row doesn't blank the whole page ───
+class EmailDetailErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: string | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(err: unknown) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl">
+          <strong>Unable to display this email report.</strong>
+          <span className="ml-1 font-mono text-xs opacity-75">{this.state.error}</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ── Spam phrase alternatives ──────────────────────────────────────────────────
 const PHRASE_ALTERNATIVES: Record<string, string[]> = {
@@ -226,10 +251,11 @@ function computePlacementScore(results: PlacementResult[] | null): number | null
 
 // Identifies the email service provider from the sending domain and returns
 // tailored support advice for a blacklisted IP.
-function getBlacklistGuidance(sendingDomain: string | null | undefined, sendingIp: string | null | undefined, blacklistHits: string[]): string {
+function getBlacklistGuidance(sendingDomain: string | null | undefined, sendingIp: string | null | undefined, blacklistHits: string[] | null | undefined): string {
   const domain = (sendingDomain || "").toLowerCase();
   const ip = sendingIp || "your sending IP";
-  const lists = blacklistHits.length > 0 ? blacklistHits.join(", ") : "a spam blacklist";
+  const hits = blacklistHits ?? [];
+  const lists = hits.length > 0 ? hits.join(", ") : "a spam blacklist";
 
   const esp =
     /sendgrid\.net|sendgrid\.com/.test(domain) ? "SendGrid" :
@@ -653,7 +679,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
         {/* ── Placement ─────────────────────────────────────────────── */}
         <SectionPanel title="Inbox Placement" icon={Inbox} score={computePlacementScore(confirmedResults ?? lastPlacementResults)}>
-          {confirmedResults ? (
+          {confirmedResults && Array.isArray(confirmedResults) && confirmedResults.length > 0 ? (
             // ── Confirmed: results are written permanently to the email record ──
             <div className="space-y-2">
               {confirmedResults.map((result: PlacementResult) => (
@@ -813,13 +839,13 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             <div className="space-y-2">
               <CheckRow
                 pass={!st.blacklisted}
-                label={st.blacklisted ? `IP blacklisted on: ${st.blacklistHits.join(", ")}` : "IP not on any blocklists"}
+                label={st.blacklisted ? `IP blacklisted on: ${(st.blacklistHits ?? []).join(", ") || "unknown list"}` : "IP not on any blocklists"}
                 detail={st.blacklisted ? "may affect inbox delivery" : "Spamhaus, Barracuda, SpamCop checked"}
               />
               {st.blacklisted && (
                 <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
                   <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
-                  <span>{getBlacklistGuidance(email.sendingDomain, email.sendingIp, st.blacklistHits)}</span>
+                  <span>{getBlacklistGuidance(email.sendingDomain, email.sendingIp, st.blacklistHits ?? [])}</span>
                 </div>
               )}
               {st.displayNameDomainMatch !== null && (
@@ -1182,7 +1208,9 @@ function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddres
       {open && (
         <div className="px-4 pb-5">
           <Separator className="mb-5" />
-          <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} placementAutoCheckUntil={placementAutoCheckUntil} isActivePlacementEmail={isActivePlacementEmail} />
+          <EmailDetailErrorBoundary>
+            <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} placementAutoCheckUntil={placementAutoCheckUntil} isActivePlacementEmail={isActivePlacementEmail} />
+          </EmailDetailErrorBoundary>
         </div>
       )}
     </div>
