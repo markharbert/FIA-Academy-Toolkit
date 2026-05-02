@@ -313,15 +313,37 @@ export default function InboxIntelTrackerPage() {
                     {seed.lastReceivedAt && <span>Last: {formatDate(seed.lastReceivedAt)}</span>}
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteSeedMutation.mutate(seed.id)}
-                  data-testid={`button-delete-seed-${seed.id}`}
-                  className="text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      data-testid={`button-delete-seed-${seed.id}`}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Remove this seed address?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This deletes <span className="font-mono">{seed.address}</span>
+                        {seed.label ? ` (${seed.label})` : ""}. Any future emails sent to it will no longer be captured. Already-captured emails for {tracker.name} are kept. This can't be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid={`button-cancel-delete-seed-${seed.id}`}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteSeedMutation.mutate(seed.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        data-testid={`button-confirm-delete-seed-${seed.id}`}
+                      >
+                        Remove
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             ))}
           </div>
