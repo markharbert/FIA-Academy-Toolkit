@@ -123,6 +123,103 @@ const videoScoringArticle: HelpArticle = {
   ],
 };
 
+// ─── Google Postmaster Setup Article ──────────────────────────────────────────
+
+const googlePostmasterSetupArticle: HelpArticle = {
+  slug: "google-postmaster-setup",
+  title: "Setting Up Google Postmaster Tools",
+  subtitle: "A step-by-step guide to adding your sending domain to Google Postmaster Tools so the Sender Reputation tool can pull your real data.",
+  category: "Email Tools",
+  categorySlug: "email-tools",
+  readMinutes: 5,
+  overview:
+    "Google Postmaster Tools is a free Google product that shows you how Gmail sees your sending domain. It tracks your spam rate, authentication pass rates, and domain reputation over time. Before Academy Toolkit can display your Sender Reputation data, you need to add and verify your domain inside Google Postmaster Tools. This guide walks you through every step.",
+  steps: [
+    {
+      number: 1,
+      title: "What is Google Postmaster Tools and why do you need it?",
+      body: [
+        "Google Postmaster Tools is a free dashboard made by Google. It shows you data about the emails you send to Gmail and Google Workspace inboxes — things like your spam rate, whether your SPF, DKIM, and DMARC records are passing, and what Google thinks of your sending domain overall.",
+        "Academy Toolkit connects directly to Postmaster Tools and pulls this data into your Sender Reputation dashboard. But first, Google needs you to prove you own your sending domain. That is what the setup process below is for.",
+      ],
+      note: "You need a Google Account to use Postmaster Tools. If your business uses Google Workspace (Gmail for your custom domain), use that account. Otherwise a personal Gmail account works fine — as long as it is the account you will use to manage Postmaster going forward.",
+      illustrationKey: "postmaster-signin",
+    },
+    {
+      number: 2,
+      title: "Sign in to Google Postmaster Tools",
+      body: [
+        "Open a new browser tab and go to postmaster.google.com. Sign in with the Google account you want to use.",
+        "You will land on the Postmaster Tools home screen. If this is your first time, it will show an empty list with a prompt to add a domain. That is exactly where you are going next.",
+      ],
+      tip: "Use the Google account that your IT team or email service provider gave you access to. This does not have to be the same Google account you use for everyday email — it just needs to be the one you will use for domain management.",
+      illustrationKey: "postmaster-signin",
+    },
+    {
+      number: 3,
+      title: "Add your sending domain",
+      body: [
+        'On the Postmaster Tools home screen, click the large blue "+" button (or the "Add domain" button if you see that instead).',
+        "A small dialog will pop up asking you to enter your domain. Type in your sending domain — this is the domain that appears in your From address when you send email. For example, if you send from hello@yourcompany.com, your domain is yourcompany.com.",
+        'Click "Continue." Google will then give you a TXT record — a short piece of code you need to add to your domain\'s DNS settings to prove you own it.',
+      ],
+      warning: "Make sure you enter the root domain (yourcompany.com), not a subdomain like mail.yourcompany.com, unless your emails are actually sent from that subdomain. Most senders use the root domain.",
+      illustrationKey: "postmaster-setup-guide",
+    },
+    {
+      number: 4,
+      title: "Copy your TXT verification record",
+      body: [
+        "After you enter your domain, Google shows you a TXT record. It looks something like this:",
+        "google-site-verification=AbCdEfGhIjKlMnOpQrStUvWxYz1234567890",
+        "Copy that entire value and keep it on your clipboard or paste it into a notes app. You are going to add it to your DNS settings in the next step.",
+      ],
+      note: "Do not close the Postmaster Tools tab yet. After you add the TXT record to your DNS, you will come back here to click Verify.",
+      illustrationKey: "postmaster-setup-guide",
+    },
+    {
+      number: 5,
+      title: "Add the TXT record to your DNS — GoDaddy",
+      body: [
+        "If your domain is registered with GoDaddy, here is how to add the TXT record:",
+        "1. Sign in to your GoDaddy account and go to your Domain Portfolio.",
+        "2. Click on your domain name to open its settings page.",
+        '3. Click the "DNS" tab, then click "DNS Records."',
+        '4. Click "Add New Record." Choose "TXT" as the record type.',
+        '5. In the "Name" field, type @ (that means the root of your domain).',
+        '6. In the "Value" field, paste the full TXT record you copied from Google.',
+        '7. Leave the TTL at its default (usually 1 hour) and click "Save."',
+      ],
+      tip: "DNS changes can take anywhere from a few minutes to 48 hours to take effect, though GoDaddy usually updates within 10–30 minutes.",
+      illustrationKey: "godaddy-dns",
+    },
+    {
+      number: 6,
+      title: "Add the TXT record — Cloudflare, Namecheap, and other providers",
+      body: [
+        "The process is the same regardless of where your domain is hosted. You are always looking for the DNS settings for your domain and adding a new TXT record.",
+        "For Cloudflare: Log in, select your domain, go to DNS > Records, click Add Record, choose TXT, set Name to @ and paste the value from Google.",
+        "For Namecheap: Log in, go to Domain List, click Manage next to your domain, click Advanced DNS, click Add New Record, choose TXT Record, set Host to @ and paste the value.",
+        "For any other provider: Look for a section called DNS Management, DNS Settings, or Name Server Management. Add a new TXT record with the host set to @ (or leave it blank) and paste the Google verification value.",
+      ],
+      tip: "Not sure who hosts your DNS? Go to mxtoolbox.com, type in your domain, and run an MX lookup. The results will show you your DNS provider.",
+      illustrationKey: "cloudflare-dns",
+    },
+    {
+      number: 7,
+      title: "Verify your domain and wait for data",
+      body: [
+        "Once you have added the TXT record to your DNS, go back to the Postmaster Tools tab in your browser. Click the Verify button next to your domain.",
+        "If DNS has already updated, Google will confirm the domain is verified and mark it as active. If it fails, wait 15–30 minutes and try again — DNS updates are not instant.",
+        "After your domain is verified, Google starts collecting data. It usually takes 24–48 hours for the first charts and scores to appear. The more email you send to Gmail addresses, the faster data will show up.",
+      ],
+      note: "Once your domain is verified in Postmaster Tools, head back to Academy Toolkit. Go to Email Tools, open Sender Reputation, and connect your Google account. Your dashboard will start showing data as soon as Google has enough to display.",
+      tip: "Ready to connect to Academy Toolkit? See Part 2: How to Use Sender Reputation for the next steps.",
+      illustrationKey: "mxtoolbox-verify",
+    },
+  ],
+};
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const helpCategories: HelpCategory[] = [
@@ -138,7 +235,7 @@ export const helpCategories: HelpCategory[] = [
     title: "Email Tools",
     description: "Analyze your emails for spam triggers, authentication, and inbox placement.",
     icon: "Mail",
-    articles: [],
+    articles: [googlePostmasterSetupArticle],
   },
   {
     slug: "dmo-tracker",
