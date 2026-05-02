@@ -4607,14 +4607,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const isAdmin = user?.isAdmin ?? false;
       const activeOnly = !isAdmin;
       const inboxes = await storage.getSeedInboxes(activeOnly);
-      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...rest }) => {
-        // Strip the real email address for non-admin users
-        if (!isAdmin) {
-          const { email: _email, ...publicFields } = rest;
-          return publicFields;
-        }
-        return rest;
-      });
+      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...rest }) => rest);
       res.json(sanitized);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch seed inboxes" });
@@ -4629,20 +4622,6 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.json(inbox);
     } catch (err) {
       res.status(500).json({ message: "Failed to add seed inbox" });
-    }
-  });
-
-  app.patch("/api/inbox-analyzer/seed-inboxes/:id", requireAdmin, async (req: Request, res: Response) => {
-    const { label, email } = req.body;
-    if (!label && !email) return res.status(400).json({ message: "label or email required" });
-    if (label !== undefined && typeof label !== "string") return res.status(400).json({ message: "label must be a string" });
-    if (email !== undefined && typeof email !== "string") return res.status(400).json({ message: "email must be a string" });
-    try {
-      const updated = await storage.updateSeedInbox(req.params.id, { label, email });
-      const { oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...rest } = updated;
-      res.json(rest);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to update seed inbox" });
     }
   });
 

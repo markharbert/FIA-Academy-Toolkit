@@ -309,7 +309,6 @@ export interface IStorage {
   getSeedInboxes(activeOnly?: boolean): Promise<SeedInbox[]>;
   getSeedInboxById(id: string): Promise<SeedInbox | null>;
   addSeedInbox(data: InsertSeedInbox): Promise<SeedInbox>;
-  updateSeedInbox(id: string, data: { label?: string; email?: string }): Promise<SeedInbox>;
   deleteSeedInbox(id: string): Promise<void>;
   toggleSeedInbox(id: string, isActive: boolean): Promise<void>;
   storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void>;
@@ -1918,14 +1917,6 @@ export class DatabaseStorage implements IStorage {
 
   async addSeedInbox(data: InsertSeedInbox): Promise<SeedInbox> {
     const [row] = await db.insert(seedInboxes).values(data).returning();
-    return row;
-  }
-
-  async updateSeedInbox(id: string, data: { label?: string; email?: string }): Promise<SeedInbox> {
-    const updates: Partial<typeof seedInboxes.$inferInsert> = {};
-    if (data.label !== undefined) updates.label = data.label;
-    if (data.email !== undefined) updates.email = data.email;
-    const [row] = await db.update(seedInboxes).set(updates).where(eq(seedInboxes.id, id)).returning();
     return row;
   }
 
