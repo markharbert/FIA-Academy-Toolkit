@@ -216,6 +216,107 @@ const googlePostmasterSetupArticle: HelpArticle = {
   ],
 };
 
+// ─── Sender Reputation Dashboard Article ──────────────────────────────────────
+
+const senderReputationDashboardArticle: HelpArticle = {
+  slug: "sender-reputation-dashboard",
+  title: "How to Use Sender Reputation",
+  subtitle: "A complete walkthrough of every section of your Sender Reputation dashboard — what each number means and how to act on it.",
+  category: "Email Tools",
+  categorySlug: "email-tools",
+  readMinutes: 7,
+  overview:
+    "Once your Google account is connected, the Sender Reputation dashboard gives you a live window into how Gmail sees your sending domain. This guide walks through every section — the reputation badge, the six stat cards, the four tabs (Overview, Compliance, Action Plan, and Infrastructure) — and explains what each piece of data means so you can make confident decisions about your email program.",
+  steps: [
+    {
+      number: 1,
+      title: "Connect your Google account",
+      body: [
+        "Go to Email Tools in the sidebar and click Open tool under Sender Reputation. If you have not connected yet, you will see a setup card with two steps: first verify your sending domain in Google Postmaster Tools (covered in Part 1 of this guide), then click the Connect Google Postmaster button.",
+        "After clicking the button you will be taken to Google to sign in and grant read-only access. Once approved, you are redirected back and the dashboard loads your domain data automatically. The green Connected badge in the header confirms the link is live, and it shows the Google account you connected.",
+      ],
+      tip: "You only need to connect once. After that, the dashboard stays connected and pulls fresh data whenever you click Refresh.",
+      illustrationKey: "sr-p2-connect-top",
+    },
+    {
+      number: 2,
+      title: "Your Reputation Badge and Stat Cards",
+      body: [
+        "At the top of the dashboard you will see your overall Reputation Badge. This is Google's summary of how your domain is performing — it can be High, Medium, Low, or Bad. High means Gmail considers you a trusted sender and your emails consistently land in the inbox. Medium means your reputation is acceptable but worth watching. Low or Bad means Gmail is suspicious of your mail and deliverability is at risk.",
+        "Below the badge are six stat cards showing your most recent metrics at a glance: Spam Rate (the percentage of Gmail recipients who marked your mail as spam), SPF pass rate, DKIM pass rate, DMARC pass rate, Outbound TLS encryption, and Inbound TLS encryption. Green numbers are healthy. Amber or red numbers need your attention.",
+        "Use the time range selector on the right to choose how many days of data to view — options run from 7 days up to 180 days. Click Refresh any time to pull the latest data from Google.",
+      ],
+      note: "Google Postmaster data is always 24–48 hours delayed. The numbers you see now reflect what happened up to two days ago, not today.",
+      illustrationKey: "sr-p2-dashboard-top",
+    },
+    {
+      number: 3,
+      title: "Overview tab — Spam Rate and Reputation History charts",
+      body: [
+        "The Overview tab is the first thing you see when the dashboard loads. It contains four charts arranged in two rows.",
+        "The Spam Complaint Rate chart on the top-left plots your user-reported spam rate over time. Two reference lines mark the key thresholds: a yellow dashed line at 0.1% (Google's recommended limit) and a red dashed line at 0.3% (the policy violation level where Gmail starts blocking your emails automatically). Your goal is to stay well below the yellow line at all times. The number shown above the chart is your most recent data point.",
+        "The Domain Reputation History chart on the top-right tracks how your reputation score has changed day by day. It uses a stepped line so you can clearly see when your reputation changed from one level to another. If the line is sitting at High for the whole period, your domain is in good standing.",
+      ],
+      tip: "If your spam rate chart shows a spike on a specific date, look back at what you sent that day. A spike almost always points to a specific email blast or subject line that people did not expect or want.",
+      illustrationKey: "sr-p2-overview-charts",
+    },
+    {
+      number: 4,
+      title: "Overview tab — Authentication and Encryption charts",
+      body: [
+        "The second row of the Overview tab holds the Authentication Pass Rates card and the TLS Encryption card.",
+        "Authentication Pass Rates shows three colored progress bars at the top — one each for SPF, DKIM, and DMARC — giving you an at-a-glance health check. Below the bars is a line chart tracking all three rates over time. The dashed green reference line at 95% is your target. All three lines should sit at or very close to 100%. If any line dips significantly, something has changed in your DNS setup or your email platform's configuration.",
+        "The TLS Encryption card works the same way but for connection security. Outbound TLS shows what percentage of your emails left your server over an encrypted connection. Inbound TLS shows the same for mail arriving at Gmail. Both should be close to 100% — most modern email infrastructure is already encrypted by default.",
+      ],
+      note: "A drop in authentication rates does not always mean something is broken today — it can also reflect emails that were sent before a DNS record was fully propagated. Check whether the dip lines up with a recent DNS change.",
+      illustrationKey: "sr-p2-auth-tls-charts",
+    },
+    {
+      number: 5,
+      title: "Compliance tab — Gmail's bulk sender requirements",
+      body: [
+        "Click the Compliance tab to see how your domain is doing against Google's February 2024 bulk sender requirements. This is a checklist of nine requirements organized into two groups.",
+        "The first group — Verified from your data — covers the requirements the dashboard can check automatically using your Postmaster data: SPF Authentication, DKIM Signing, DMARC Policy, Spam Complaint Rate, TLS Encryption, and Valid Reverse DNS (PTR). Each row shows a Passing, Warning, Failing, or No Data badge. A passing count in the top-right corner of the card tells you at a glance how many requirements you are meeting.",
+        "The second group — Requires manual verification — covers requirements that cannot be checked from Postmaster data alone: One-Click Unsubscribe, Valid Message Headers, and Separate Email Streams. These are things your email platform handles, and you need to verify them yourself in your platform settings.",
+        "Click any row to expand it. The expanded view shows you what the requirement means, your current status with a specific pass rate or note, and a link to Google's own guidance on that requirement.",
+      ],
+      tip: "If you are a low-volume sender (under 5,000 emails per day to Gmail), the one-click unsubscribe and DMARC enforcement requirements are technically optional — but following them anyway is a best practice that improves your deliverability regardless of volume.",
+      illustrationKey: "sr-p2-compliance-checklist",
+    },
+    {
+      number: 6,
+      title: "Compliance tab — expanding a requirement for details",
+      body: [
+        "Click any row in the compliance checklist to expand it and see more information. The expanded panel shows three things: a plain-English explanation of what the requirement actually means, your current status in green (passing) or amber/red (warning or failing) with the specific number or note, and a link to Google's official guidance page for that requirement.",
+        "For example, expanding SPF Authentication shows your exact pass rate, confirms whether it meets the 95% target, and links directly to Google's page on sender authentication. Use the links to go deeper on any requirement you are not sure about.",
+      ],
+      illustrationKey: "sr-p2-compliance-detail",
+    },
+    {
+      number: 7,
+      title: "Action Plan tab — what to fix and how",
+      body: [
+        "The Action Plan tab reads all of your live data and generates a prioritized list of things to do. Issues are sorted by severity — red Action Required items come first, followed by amber Needs Attention items, and finally green Healthy items.",
+        "When everything is in good shape, you will see a single green Healthy card titled 'Everything looks great — your email health is in good shape' with maintenance tips for keeping it that way.",
+        "When there are problems, each card gives you a plain-English explanation of what is happening and why it matters — written so that someone who has never heard of SPF or DMARC can still understand it. Click the card to expand it and see a numbered step-by-step fix written in the same plain language. The steps tell you exactly what to do, where to go, and what to say to your email provider if you need their help.",
+      ],
+      note: "The Action Plan is generated fresh every time you load the page. As you fix issues and your data improves, resolved items disappear from the list automatically.",
+      illustrationKey: "sr-p2-action-plan-view",
+    },
+    {
+      number: 8,
+      title: "Infrastructure tab — sending IPs and delivery errors",
+      body: [
+        "The Infrastructure tab shows the technical layer underneath your sending — the actual IP addresses your emails go out from and any delivery errors Gmail has reported.",
+        "The Sending IP Reputation card groups your sending IPs by reputation level: High, Medium, Low, or Bad. Each row shows how many IPs fall into that category and gives a few example IP addresses. Ideally all of your IPs sit in the High bucket. If you see IPs in the Low or Bad category, your email platform is sending from shared IP pools that have been damaged by other senders — contact your platform's support team and ask to be moved to a cleaner IP pool.",
+        "The Delivery Errors card aggregates any SMTP errors Gmail reported when receiving your mail — things like rate limit exceeded, spam detected, bad DMARC policy, or IP on a blocklist. In a healthy setup this card shows 'No significant delivery errors in this period.' If you do see errors, the Action Plan tab will already contain specific steps for fixing them.",
+      ],
+      tip: "If you do not see any data on the Infrastructure tab, it is because Google only reports IP reputation and delivery errors for domains sending 200 or more emails per day to Gmail users. Low-volume senders will see this section as empty — that is normal.",
+      illustrationKey: "sr-p2-infrastructure-view",
+    },
+  ],
+};
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const helpCategories: HelpCategory[] = [
@@ -231,7 +332,7 @@ export const helpCategories: HelpCategory[] = [
     title: "Email Tools",
     description: "Analyze your emails for spam triggers, authentication, and inbox placement.",
     icon: "Mail",
-    articles: [googlePostmasterSetupArticle],
+    articles: [googlePostmasterSetupArticle, senderReputationDashboardArticle],
   },
   {
     slug: "dmo-tracker",
