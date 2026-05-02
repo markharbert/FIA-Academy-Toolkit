@@ -1262,8 +1262,11 @@ function ActionPlanSection({ domain, filtered }: { domain: PostmasterDomainData;
   );
 }
 
-function DomainDashboard({ domain, lastSyncedAt, onSync, isSyncing }: {
+function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, lastSyncedAt, onSync, isSyncing }: {
   domain: PostmasterDomainData;
+  domains: PostmasterDomainData[];
+  selectedDomain: string;
+  onSelectDomain: (d: string) => void;
   lastSyncedAt: string | null | undefined;
   onSync: () => void;
   isSyncing: boolean;
@@ -1284,9 +1287,26 @@ function DomainDashboard({ domain, lastSyncedAt, onSync, isSyncing }: {
 
   return (
     <div className="space-y-6">
-      {/* Top: reputation + controls */}
+      {/* Top row: reputation badge + domain selector + controls */}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <ReputationBadge reputation={domain.latestReputation} />
+        <div className="flex flex-wrap items-center gap-3">
+          <ReputationBadge reputation={domain.latestReputation} />
+          {domains.length > 1 && (
+            <Select value={selectedDomain || domains[0].domainName} onValueChange={onSelectDomain}>
+              <SelectTrigger className="w-52 h-8 text-xs" data-testid="select-domain">
+                <Globe className="h-3.5 w-3.5 mr-1.5 text-muted-foreground flex-shrink-0" />
+                <SelectValue placeholder="Select domain" />
+              </SelectTrigger>
+              <SelectContent>
+                {domains.map(d => (
+                  <SelectItem key={d.domainName} value={d.domainName} className="text-xs" data-testid={`option-domain-${d.domainName}`}>
+                    {d.domainName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={String(days)} onValueChange={v => setDays(Number(v))}>
             <SelectTrigger className="w-32 h-8 text-xs" data-testid="select-time-range">
@@ -1549,14 +1569,37 @@ export default function SenderReputationPage() {
             <ArrowLeft className="h-3.5 w-3.5" />
             Email Tools
           </button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-              <ShieldCheck className="h-5 w-5 text-white" />
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                <ShieldCheck className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white tracking-tight">Sender Reputation</h1>
+                <p className="text-white/50 text-xs mt-0.5">Google Postmaster Tools — complete domain health dashboard</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">Sender Reputation</h1>
-              <p className="text-white/50 text-xs mt-0.5">Google Postmaster Tools — complete domain health dashboard</p>
-            </div>
+            {status?.connected && (
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                  <span className="text-xs text-white/80 font-medium">Connected</span>
+                  <span className="text-white/40 text-xs hidden sm:inline">·</span>
+                  <span className="text-xs text-white/50 hidden sm:inline truncate max-w-[180px]">{status.connectedEmail}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white/40 hover:text-white/80 hover:bg-white/10 text-xs h-8 px-2.5"
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                  data-testid="button-disconnect-postmaster"
+                >
+                  {disconnectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
+                  <span className="ml-1.5 hidden sm:inline">Disconnect</span>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1619,50 +1662,6 @@ export default function SenderReputationPage() {
         ) : (
           /* ── Connected ─────────────────────────────────────────────────── */
           <div className="space-y-6">
-            {/* Connection bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-muted/30 border border-border">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-emerald-500/15 flex items-center justify-center">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Connected to Google Postmaster</p>
-                  <p className="text-xs text-muted-foreground">{status.connectedEmail}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {status.domains.length > 1 && (
-                  <Select
-                    value={selectedDomain || status.domains[0].domainName}
-                    onValueChange={setSelectedDomain}
-                  >
-                    <SelectTrigger className="w-56 h-8 text-xs" data-testid="select-domain">
-                      <Globe className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                      <SelectValue placeholder="Select domain" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {status.domains.map(d => (
-                        <SelectItem key={d.domainName} value={d.domainName} className="text-xs" data-testid={`option-domain-${d.domainName}`}>
-                          {d.domainName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-red-500 text-xs h-8"
-                  onClick={() => disconnectMutation.mutate()}
-                  disabled={disconnectMutation.isPending}
-                  data-testid="button-disconnect-postmaster"
-                >
-                  {disconnectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Unplug className="h-3.5 w-3.5 mr-1" />}
-                  Disconnect
-                </Button>
-              </div>
-            </div>
-
             {status.domains.length === 0 ? (
               <Card>
                 <CardContent className="pt-8 pb-8 text-center space-y-3">
@@ -1686,6 +1685,9 @@ export default function SenderReputationPage() {
               activeDomain && (
                 <DomainDashboard
                   domain={activeDomain}
+                  domains={status.domains}
+                  selectedDomain={selectedDomain || status.domains[0]?.domainName || ""}
+                  onSelectDomain={setSelectedDomain}
                   lastSyncedAt={status.lastSyncedAt}
                   onSync={() => syncMutation.mutate()}
                   isSyncing={syncMutation.isPending}
