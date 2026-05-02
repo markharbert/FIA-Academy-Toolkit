@@ -25,7 +25,7 @@ import {
   Inbox, Info, CircleCheck, CircleX, CircleAlert,
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
   User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
-  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare, Scale,
+  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare, Scale, Pencil,
 } from "lucide-react";
 import { SiGmail } from "react-icons/si";
 import { apiRequest } from "@/lib/queryClient";
@@ -33,7 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import type {
   EmailAnalysis, SpamFlag,
-  TechnicalHealth, SenderTrust, ContentQuality, CanSpamCompliance, SeedInbox,
+  TechnicalHealth, SenderTrust, ContentQuality, CanSpamCompliance, PublicSeedInbox,
 } from "@shared/schema";
 
 const INBOX_DOMAIN = "email.fearlessmarketinglab.com";
@@ -420,16 +420,17 @@ function AltChip({ text }: { text: string }) {
 
 // ── Email Detail Panel ────────────────────────────────────────────────────────
 
-function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFromAddress = "", lastPlacementResults = null, lastPlacementCheckedAt = null, placementAutoCheckUntil = null, isActivePlacementEmail = false }: {
+function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFromAddress = "", lastPlacementResults = null, lastPlacementCheckedAt = null, placementAutoCheckUntil = null, isActivePlacementEmail = false, isAdmin = false }: {
   email: EmailAnalysis;
   onDelete: () => void;
   onReanalyze?: (id: string) => void;
-  seedInboxes?: SeedInbox[];
+  seedInboxes?: PublicSeedInbox[];
   sendingFromAddress?: string;
   lastPlacementResults?: PlacementResult[] | null;
   lastPlacementCheckedAt?: string | null;
   placementAutoCheckUntil?: string | null;
   isActivePlacementEmail?: boolean;
+  isAdmin?: boolean;
 }) {
   const flags = (email.spamFlags as SpamFlag[] | null) || [];
   const th = email.technicalHealth as TechnicalHealth | null;
@@ -687,7 +688,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   <ProviderIcon provider={result.provider} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground">{result.label}</p>
-                    <p className="text-xs font-mono text-muted-foreground">{result.email}</p>
+                    {isAdmin && <p className="text-xs font-mono text-muted-foreground">{result.email}</p>}
                   </div>
                   <PlacementStatusBadge status={result.status} />
                 </div>
@@ -716,7 +717,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                       <ProviderIcon provider={inbox.provider} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">{inbox.label}</p>
-                        <p className="text-xs font-mono text-muted-foreground">{inbox.email}</p>
+                        {isAdmin && inbox.email && <p className="text-xs font-mono text-muted-foreground">{inbox.email}</p>}
                       </div>
                       <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Not connected</span>
                     </div>
@@ -747,7 +748,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                     <ProviderIcon provider={inbox.provider} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{inbox.label}</p>
-                      <p className="text-xs font-mono text-muted-foreground">{inbox.email}</p>
+                      {isAdmin && inbox.email && <p className="text-xs font-mono text-muted-foreground">{inbox.email}</p>}
                     </div>
                     {result ? (
                       <PlacementStatusBadge status={result.status} />
@@ -1125,16 +1126,17 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
 // ── Email Row ────────────────────────────────────────────────────────────────
 
-function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddress, lastPlacementResults, lastPlacementCheckedAt, placementAutoCheckUntil, isActivePlacementEmail }: {
+function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddress, lastPlacementResults, lastPlacementCheckedAt, placementAutoCheckUntil, isActivePlacementEmail, isAdmin = false }: {
   email: EmailAnalysis;
   onDelete: (id: string) => void;
   onReanalyze?: (id: string) => void;
-  seedInboxes?: SeedInbox[];
+  seedInboxes?: PublicSeedInbox[];
   sendingFromAddress?: string;
   lastPlacementResults?: PlacementResult[] | null;
   lastPlacementCheckedAt?: string | null;
   placementAutoCheckUntil?: string | null;
   isActivePlacementEmail?: boolean;
+  isAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -1209,7 +1211,7 @@ function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddres
         <div className="px-4 pb-5">
           <Separator className="mb-5" />
           <EmailDetailErrorBoundary>
-            <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} placementAutoCheckUntil={placementAutoCheckUntil} isActivePlacementEmail={isActivePlacementEmail} />
+            <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} placementAutoCheckUntil={placementAutoCheckUntil} isActivePlacementEmail={isActivePlacementEmail} isAdmin={isAdmin} />
           </EmailDetailErrorBoundary>
         </div>
       )}
@@ -1321,7 +1323,7 @@ function MyAddressTab({
 }: {
   inboxEmail: string;
   sendingFromAddress: string;
-  seedInboxes: SeedInbox[];
+  seedInboxes: PublicSeedInbox[];
   onSave: (addr: string) => void;
 }) {
   const [fromAddr, setFromAddr] = useState(initialSendingFrom || "");
@@ -1377,7 +1379,10 @@ function MyAddressTab({
                     <ProviderIcon provider={inbox.provider} />
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{inbox.label}</span>
                   </div>
-                  <CopyField value={inbox.email} testId={`button-copy-seed-${inbox.id}`} />
+                  {inbox.email
+                    ? <CopyField value={inbox.email} testId={`button-copy-seed-${inbox.id}`} />
+                    : <p className="text-sm text-muted-foreground italic">Contact your admin for this address</p>
+                  }
                 </div>
               ))}
             </div>
@@ -1503,7 +1508,7 @@ function SettingsTab() {
     }
   }, [search]);
 
-  const { data: seedInboxes = [], isLoading: seedLoading } = useQuery<SeedInbox[]>({
+  const { data: seedInboxes = [], isLoading: seedLoading } = useQuery<PublicSeedInbox[]>({
     queryKey: ["/api/inbox-analyzer/seed-inboxes"],
   });
 
@@ -1512,9 +1517,31 @@ function SettingsTab() {
   const [newEmail, setNewEmail] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+
+  const startEdit = (inbox: PublicSeedInbox) => {
+    setEditingId(inbox.id);
+    setEditLabel(inbox.label);
+    setEditEmail(inbox.email ?? "");
+  };
+  const cancelEdit = () => setEditingId(null);
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, label, email }: { id: string; label: string; email: string }) =>
+      apiRequest("PATCH", `/api/inbox-analyzer/seed-inboxes/${id}`, { label, email }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
+      setEditingId(null);
+      toast({ title: "Inbox updated" });
+    },
+    onError: () => toast({ title: "Failed to update inbox", variant: "destructive" }),
+  });
+
   const addMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/inbox-analyzer/seed-inboxes", { provider: newProvider, label: newLabel, email: newEmail }).then(r => r.json() as Promise<SeedInbox>),
-    onSuccess: (data: SeedInbox) => {
+    mutationFn: () => apiRequest("POST", "/api/inbox-analyzer/seed-inboxes", { provider: newProvider, label: newLabel, email: newEmail }).then(r => r.json() as Promise<PublicSeedInbox>),
+    onSuccess: (data: PublicSeedInbox) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
       setNewLabel("");
       setNewEmail("");
@@ -1581,51 +1608,98 @@ function SettingsTab() {
             <div className="space-y-3">
               {seedInboxes.map((inbox) => (
                 <div key={inbox.id} className="rounded-lg border border-border bg-muted/20 overflow-hidden">
-                  {/* Top row: icon, label, email, toggle, delete */}
-                  <div className="flex items-center gap-3 p-3">
-                    <ProviderIcon provider={inbox.provider} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-foreground">{inbox.label}</p>
-                        {inbox.isConnected ? (
-                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-600 border-emerald-500/20">
-                            Connected
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
-                            Not connected
-                          </Badge>
-                        )}
+                  {/* Top row: icon, label, email, controls */}
+                  {editingId === inbox.id ? (
+                    /* ── Inline edit form ── */
+                    <div className="p-3 space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Edit Inbox</p>
+                      <div className="flex gap-2">
+                        <Input
+                          className="text-sm flex-1"
+                          placeholder="Display name"
+                          value={editLabel}
+                          onChange={e => setEditLabel(e.target.value)}
+                          data-testid={`input-edit-label-${inbox.id}`}
+                        />
+                        <Input
+                          className="text-sm flex-1 font-mono"
+                          placeholder="email@gmail.com"
+                          value={editEmail}
+                          onChange={e => setEditEmail(e.target.value)}
+                          data-testid={`input-edit-email-${inbox.id}`}
+                        />
                       </div>
-                      <p className="text-xs font-mono text-muted-foreground truncate">{inbox.email}</p>
-                    </div>
-                    <Switch
-                      checked={inbox.isActive}
-                      onCheckedChange={(checked) => toggleMutation.mutate({ id: inbox.id, isActive: checked })}
-                      data-testid={`toggle-seed-${inbox.id}`}
-                    />
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500 flex-shrink-0" data-testid={`button-delete-seed-${inbox.id}`}>
-                          <Trash2 className="h-3.5 w-3.5" />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs px-3"
+                          disabled={!editLabel.trim() || !editEmail.trim() || updateMutation.isPending}
+                          onClick={() => updateMutation.mutate({ id: inbox.id, label: editLabel.trim(), email: editEmail.trim() })}
+                          data-testid={`button-save-edit-${inbox.id}`}
+                        >
+                          {updateMutation.isPending ? "Saving…" : "Save"}
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remove seed inbox?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will remove <strong>{inbox.email}</strong> from the placement list and revoke its OAuth connection. Members who added it to their CRM will no longer contribute placement data.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => deleteMutation.mutate(inbox.id)} className="bg-red-600 hover:bg-red-700">
-                            Remove
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs px-3" onClick={cancelEdit} data-testid={`button-cancel-edit-${inbox.id}`}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Normal display row ── */
+                    <div className="flex items-center gap-3 p-3">
+                      <ProviderIcon provider={inbox.provider} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-foreground">{inbox.label}</p>
+                          {inbox.isConnected ? (
+                            <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-600 border-emerald-500/20">
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
+                              Not connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs font-mono text-muted-foreground truncate">{inbox.email}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground flex-shrink-0"
+                        onClick={() => startEdit(inbox)}
+                        data-testid={`button-edit-seed-${inbox.id}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Switch
+                        checked={inbox.isActive}
+                        onCheckedChange={(checked) => toggleMutation.mutate({ id: inbox.id, isActive: checked })}
+                        data-testid={`toggle-seed-${inbox.id}`}
+                      />
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500 flex-shrink-0" data-testid={`button-delete-seed-${inbox.id}`}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove seed inbox?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove <strong>{inbox.label}</strong> from the placement list and revoke its OAuth connection. Members who added it to their CRM will no longer contribute placement data.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteMutation.mutate(inbox.id)} className="bg-red-600 hover:bg-red-700">
+                              Remove
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  )}
 
                   {/* Bottom row: OAuth connect / disconnect for Gmail */}
                   {inbox.provider === "gmail" && (
@@ -1790,7 +1864,7 @@ export default function InboxAnalyzerPage() {
     },
   });
 
-  const { data: seedInboxes = [] } = useQuery<SeedInbox[]>({
+  const { data: seedInboxes = [] } = useQuery<PublicSeedInbox[]>({
     queryKey: ["/api/inbox-analyzer/seed-inboxes"],
   });
 
@@ -1935,6 +2009,7 @@ export default function InboxAnalyzerPage() {
                       lastPlacementCheckedAt={isActivePlacement ? (addressData?.lastPlacementCheckedAt || null) : null}
                       placementAutoCheckUntil={isActivePlacement ? (addressData?.placementAutoCheckUntil || null) : null}
                       isActivePlacementEmail={isActivePlacement}
+                      isAdmin={isAdmin}
                     />
                   );
                 })}

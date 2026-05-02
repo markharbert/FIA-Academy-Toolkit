@@ -878,6 +878,8 @@ export const seedInboxes = pgTable("seed_inboxes", {
 export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true, oauthAccessToken: true, oauthRefreshToken: true, oauthTokenExpiry: true, isConnected: true });
 export type InsertSeedInbox = z.infer<typeof insertSeedInboxSchema>;
 export type SeedInbox = typeof seedInboxes.$inferSelect;
+// API returns email as optional for non-admin users
+export type PublicSeedInbox = Omit<SeedInbox, 'email' | 'oauthAccessToken' | 'oauthRefreshToken' | 'oauthTokenExpiry'> & { email?: string };
 
 export const emailAnalyses = pgTable("email_analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
