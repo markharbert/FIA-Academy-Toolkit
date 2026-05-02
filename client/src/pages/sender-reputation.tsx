@@ -869,8 +869,8 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
       steps: [
         "Stop sending all bulk emails right now. Do not send any newsletters, broadcasts, or mass emails for at least 2 weeks. Sending more emails while your reputation is bad will make things worse.",
         "Log in to your email platform (like ActiveCampaign, Mailchimp, Keap, etc.) and export your full contact list.",
-        "Delete everyone who has not opened or clicked any email in the last 90 days. These inactive people are the biggest reason your reputation dropped.",
-        "Delete any contacts you bought from a list or got from a third party. Purchased lists are almost always the root cause of spam complaints.",
+        "Create a new segment in your email platform called 'Inactive — 90 days' and move everyone who has not opened or clicked any email in the last 90 days into it. Stop sending your regular emails to this segment for now — you will use it for a re-engagement campaign later.",
+        "Create a separate segment for any contacts you bought from a list or got from a third party. Do not send your regular emails to this group — purchased contacts are almost always the root cause of spam complaints and need a different approach before they can be emailed again.",
         "Call or chat with your email platform's support team. Tell them: 'My Google Postmaster Tools is showing BAD domain reputation. Can you help me get on a clean sending IP?' They deal with this regularly.",
         "After 2 weeks of not sending, restart very slowly. Send to only your 50–100 most engaged contacts first — people who have opened an email in the last 30 days.",
         "Add a clearly visible unsubscribe link near the top of every email, not just at the bottom. Make it one click. Never make people type their email to unsubscribe.",
@@ -887,7 +887,7 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
       steps: [
         "Cut your sending volume in half for the next 2 weeks. If you normally send to 10,000 people, only send to 5,000 — your most active ones.",
         "Only email people who have opened or clicked something you sent in the last 90 days. Skip everyone else for now.",
-        "Go into your email platform and permanently remove anyone who has not engaged in 6 months or more.",
+        "Create a segment in your email platform called 'Inactive — 6 months' and move anyone who has not engaged in 6 months or more into it. Exclude this segment from your regular sends for now. You can run a targeted re-engagement campaign for them later.",
         "Check that your unsubscribe link is easy to find and works with one click. Test it yourself right now.",
         "Look at your last 5 subject lines. Did any of them use words like FREE, URGENT, GUARANTEED, or lots of exclamation points? Those trigger spam filters — avoid them.",
         "Visit mail-tester.com and send a test email to the address they give you. They will show you a score and flag anything that might be causing spam issues.",
@@ -906,11 +906,11 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
       what: "More than 3 out of every 1,000 Gmail users are hitting the spam button on your emails. Google's limit is 1 out of every 1,000. At this level, Gmail will start blocking your emails automatically. This needs to be fixed today.",
       steps: [
         "Stop sending bulk emails immediately. Every email you send right now makes the problem worse.",
-        "Log in to your email platform and filter your list to show only people who have opened or clicked an email in the last 60 days. Delete everyone else — for now.",
-        "Delete any contacts from purchased lists or lead lists you got from someone else. These people never asked to hear from you and are the most likely to hit spam.",
+        "Log in to your email platform and create a segment called 'Active — last 60 days' containing only people who have opened or clicked an email in the last 60 days. Only send to this segment for now. Everyone else gets moved to a separate segment to be re-engaged later.",
+        "Move any contacts from purchased lists or lead lists you got from someone else into their own segment and stop emailing them with your regular campaigns. These people never opted in to hear from you and are the most likely to hit spam. A special re-permission campaign will be needed before you email them again.",
         "Look at your last 10 emails. Were the subject lines honest and clear? Did the emails match what you promised when people signed up? If not, that is why people are complaining.",
         "Make sure every email has a one-click unsubscribe link that is easy to see. Put it near the top of the email too, not just at the bottom.",
-        "Send a short email to your remaining list saying something like: 'I want to make sure you still want to hear from me. Click here to stay subscribed. If not, just ignore this and I'll remove you.' Then delete everyone who does not click.",
+        "Send a short re-permission email to your active segment saying something like: 'I want to make sure you still want to hear from me. Click here to confirm you're in.' Move everyone who does not click within 7 days into an 'Unconfirmed' segment and stop sending regular emails to them. You can try to re-engage them later with a different approach.",
         "Wait 1 week after cleaning your list, then send a test email to mail-tester.com to check your score before sending to your real list again.",
       ],
     });
@@ -921,10 +921,10 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
       title: `Your spam complaint rate is getting close to Google's limit (${(latestSpam * 100).toFixed(3)}%)`,
       what: "Right now 1–3 out of every 1,000 Gmail recipients are marking your emails as spam. Google's warning threshold is 1 per 1,000. You have not crossed it yet, but you are getting close. If you do nothing, your inbox placement will start dropping.",
       steps: [
-        "Log in to your email platform and look at your contacts. Remove anyone who has not opened or clicked anything in the last 90 days.",
+        "Log in to your email platform and create a segment called 'Inactive — 90 days' for anyone who has not opened or clicked anything in the last 90 days. Move them out of your active sending list for now — you can re-engage them later with a dedicated campaign.",
         "Look at your last 5 subject lines. Were they honest and interesting, or did they feel like clickbait? Gmail users hit spam when they feel tricked. Write subject lines that clearly describe what is inside the email.",
         "Make sure your unsubscribe link is easy to find and works immediately. If people cannot find the unsubscribe button, they hit the spam button instead.",
-        "Send a re-engagement email to your inactive contacts asking if they still want to be on your list. Remove everyone who does not respond within 7 days.",
+        "Send a re-engagement email to your inactive segment asking if they still want to hear from you. Move anyone who does not respond within 7 days into a 'Cold' segment and stop sending your regular emails to them. They are not gone forever — just paused until you have a specific re-engagement plan for them.",
         "Visit mail-tester.com and send them a test email to see if anything in your emails is being flagged as spammy.",
       ],
     });
@@ -1169,7 +1169,7 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
       title: "Everything looks great — your email health is in good shape",
       what: "All of your email health metrics are in the green. Your emails are being delivered properly and Gmail trusts your domain. Here is how to keep it that way.",
       steps: [
-        "Clean your list every 90 days. Remove anyone who has not opened or clicked anything in the last 3 months. A smaller, engaged list always outperforms a large, inactive one.",
+        "Audit your list every 90 days. Move anyone who has not opened or clicked anything in the last 3 months into an inactive segment and stop sending your regular campaigns to them. A smaller, engaged active segment always outperforms a large, mixed one — and you can always run re-engagement campaigns to bring people back.",
         "Only email people who have actively given you permission. Never add someone to your list without their knowledge.",
         "Check this dashboard once a week. Problems are much easier to fix when they are caught early. Set a reminder in your calendar right now.",
         "Keep writing emails that people actually want to read. If people look forward to your emails, they will not mark them as spam.",
