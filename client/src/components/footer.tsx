@@ -4,7 +4,7 @@ export function Footer() {
   const year = new Date().getFullYear();
   return (
     <footer
-      className="border-t border-border bg-background mt-8"
+      className="border-t bg-[hsl(230,45%,14%)] border-[hsl(230,45%,19%)] text-white mt-8"
       data-testid="site-footer"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -15,7 +15,7 @@ export function Footer() {
             className="h-8 w-auto"
             data-testid="img-footer-logo"
           />
-          <span className="text-xs text-muted-foreground tabular-nums">
+          <span className="text-xs text-white tabular-nums">
             © {year} Academy Toolkit
           </span>
         </div>
@@ -24,7 +24,7 @@ export function Footer() {
             href="https://markharbert.com/terms-and-conditions"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-white hover:text-white/80 transition-colors"
             data-testid="link-footer-terms"
           >
             Terms &amp; Conditions
@@ -33,7 +33,7 @@ export function Footer() {
             href="https://markharbert.com/privacy-policy"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-white hover:text-white/80 transition-colors"
             data-testid="link-footer-privacy"
           >
             Privacy Policy
