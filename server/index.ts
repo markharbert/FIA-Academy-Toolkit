@@ -6,6 +6,15 @@ import { bootstrapSuperAdmins } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
+// Prevent stray async errors (e.g. TLS socket events fired after a promise
+// resolves) from crashing the entire process.
+process.on("uncaughtException", (err: Error) => {
+  console.error("[process] uncaughtException — server kept alive:", err?.message);
+});
+process.on("unhandledRejection", (reason: unknown) => {
+  console.error("[process] unhandledRejection — server kept alive:", reason);
+});
+
 const app = express();
 const httpServer = createServer(app);
 
