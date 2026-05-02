@@ -24,6 +24,14 @@ import srP2Step6 from "@assets/help/sr-p2-step6.jpg";
 import srP2Step7 from "@assets/help/sr-p2-step7.jpg";
 import srP2Step8 from "@assets/help/sr-p2-step8.jpg";
 
+import vtHub from "@assets/help/vt-hub.jpg";
+import vtExploreList from "@assets/help/vt-explore-list.jpg";
+import vtTopicDetail from "@assets/help/vt-topic-detail.jpg";
+import vtSaved from "@assets/help/vt-saved.jpg";
+import vtScriptDetail from "@assets/help/vt-script-detail.jpg";
+
+import { AnnotatedScreenshot, type Annotation } from "@/components/annotated-screenshot";
+
 function ScreenshotIllustration({ src, alt }: { src: string; alt: string }) {
   return (
     <div className="rounded-xl border border-border overflow-hidden shadow-sm">
@@ -129,6 +137,84 @@ export function SrP2InfrastructureIllustration() {
   return <ScreenshotIllustration src={srP2Step8} alt="Infrastructure tab annotated: red box on the Infrastructure tab, orange boxes highlighting the Sending IP Reputation card with 8 High and 2 Medium IPs, and the Delivery Errors card" />;
 }
 
+// ─── Video Trends Illustrations ───────────────────────────────────────────────
+
+export function VtHubIllustration() {
+  const annotations: Annotation[] = [
+    { x: 26.5, y: 23.5, w: 42, h: 5.0, color: "red", label: "1 Search bar", labelPos: "outside-top" },
+    { x: 37.5, y: 18.0, w: 21, h: 3.5, color: "amber", label: "2 Credits", labelPos: "outside-top" },
+    { x: 35.0, y: 28.5, w: 28.5, h: 4.2, color: "blue", label: "3 Quick presets", labelPos: "outside-bottom" },
+    { x: 18.0, y: 56.5, w: 63.0, h: 16.5, color: "green", label: "4 Recent searches", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={vtHub}
+      alt="Video Trends hub showing the keyword search bar, monthly credits badge, quick-filter preset pills, Saved Topics and Scripts stat cards, and a Recent Searches list with two prior runs"
+      annotations={annotations}
+    />
+  );
+}
+
+export function VtExploreListIllustration() {
+  const annotations: Annotation[] = [
+    { x: 16.5, y: 11.5, w: 64.5, h: 6.0, color: "red", label: "1 Filter & sort", labelPos: "outside-top" },
+    { x: 79.0, y: 20.5, w: 17.0, h: 4.5, color: "orange", label: "2 Topic signals", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={vtExploreList}
+      alt="Video Trends results page for the seed query 'claude ai tutorial' showing 24 topic cards. Each card has the topic title, monthly search volume badge, intent badge (How-To, Beginner Guide), a trend arrow, and an opportunity score on the right"
+      annotations={annotations}
+    />
+  );
+}
+
+export function VtTopicDetailIllustration() {
+  const annotations: Annotation[] = [
+    { x: 22.0, y: 21.3, w: 44.0, h: 8.0, color: "red", label: "1 Selected topic", labelPos: "outside-top" },
+    { x: 67.5, y: 28.5, w: 16.5, h: 5.0, color: "orange", label: "2 Generate Script", labelPos: "outside-top" },
+    { x: 67.5, y: 42.0, w: 31.0, h: 5.0, color: "amber", label: "3 Opportunity Score", labelPos: "outside-top" },
+    { x: 67.5, y: 50.0, w: 31.0, h: 21.5, color: "blue", label: "4 Keyword data", labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={vtTopicDetail}
+      alt="Topic detail side panel for 'Claude Ai Tutorial' showing the Generate Script, Save, and Research Deeper buttons, an Opportunity Score of 66/100 marked Good potential, and the Google Search Data card with monthly volume 210, CPC $1.53, Low competition (25%), and a +448% trend"
+      annotations={annotations}
+    />
+  );
+}
+
+export function VtSavedIllustration() {
+  const annotations: Annotation[] = [
+    { x: 18.0, y: 13.0, w: 28.0, h: 4.0, color: "red", label: "1 Active / completed", labelPos: "outside-top" },
+    { x: 17.0, y: 18.5, w: 80.0, h: 23.0, color: "orange", label: "2 Saved topics", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={vtSaved}
+      alt="Saved Topics page showing two active saved topics — 'Claude Ai Tutorial' and 'Claude Ai Tutorial For Beginners' — each with their search volume, intent, trend, and opportunity score badges"
+      annotations={annotations}
+    />
+  );
+}
+
+export function VtScriptDetailIllustration() {
+  const annotations: Annotation[] = [
+    { x: 21.0, y: 16.5, w: 77.0, h: 8.5, color: "red", label: "1 Topic stats", labelPos: "outside-top" },
+    { x: 21.0, y: 28.0, w: 77.0, h: 4.5, color: "orange", label: "2 Format tabs", labelPos: "outside-top" },
+    { x: 63.0, y: 34.0, w: 29.0, h: 5.0, color: "amber", label: "3 Copy / PDF", labelPos: "outside-bottom" },
+    { x: 21.0, y: 43.0, w: 77.0, h: 40.0, color: "green", label: "4 5-part script", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={vtScriptDetail}
+      alt="Generated script detail page for 'Claude Ai Tutorial' showing the topic stats row (210 monthly searches, 66/100 opportunity, $1.53 CPC, Low competition, +448% trend), the Long Form / Shorts / Description / Pinned Comment / Call To Action tabs, Copy and Download PDF buttons, and the script content opening with section 1 Hook"
+      annotations={annotations}
+    />
+  );
+}
+
 export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "video-tools-hub": VideoToolsHubIllustration,
   "sessions-list": SessionsListIllustration,
@@ -153,4 +239,9 @@ export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "sr-p2-compliance-detail": SrP2ComplianceDetailIllustration,
   "sr-p2-action-plan-view": SrP2ActionPlanIllustration,
   "sr-p2-infrastructure-view": SrP2InfrastructureIllustration,
+  "vt-hub": VtHubIllustration,
+  "vt-explore-list": VtExploreListIllustration,
+  "vt-topic-detail": VtTopicDetailIllustration,
+  "vt-saved": VtSavedIllustration,
+  "vt-script-detail": VtScriptDetailIllustration,
 };

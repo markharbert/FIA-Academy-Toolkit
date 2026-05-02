@@ -317,6 +317,77 @@ const senderReputationDashboardArticle: HelpArticle = {
   ],
 };
 
+// ─── Video Trends Article ─────────────────────────────────────────────────────
+
+const videoTrendsArticle: HelpArticle = {
+  slug: "video-trends",
+  title: "How to Use Video Trends",
+  subtitle: "Find in-demand YouTube topics with real search-volume data, then turn the best ones into a complete script using Mark's 5-part formula.",
+  category: "Video Tools",
+  categorySlug: "video-tools",
+  readMinutes: 5,
+  overview:
+    "Video Trends does two jobs in one place. First, it pulls real keyword data from Google, YouTube, Pinterest, and TikTok to show you what people are actually searching for around any niche or keyword. Second, once you find a topic worth recording, it generates a complete video script — Hook, Set the Hook, First CTA, Content, and Final CTA — that follows the same proven formula you score your videos against. This guide walks through every screen.",
+  steps: [
+    {
+      number: 1,
+      title: "Open Video Trends and run a search",
+      body: [
+        'In the sidebar, click "Video Tools" and then open Video Trends. You will land on the hub page.',
+        "In the search bar at the top, type a niche or keyword you want to research — for example a product, a problem your audience faces, or a topic you have been thinking about covering. Then click Find Topics. A run typically returns 24 topic ideas with full keyword data in under a minute.",
+        "If you want to bias the results toward a specific style of video, click one of the Quick filter presets — Review, Comparison, How-To, or Problem Fix — before you search. Your monthly credits are shown above the search bar so you always know how many runs you have left this month.",
+      ],
+      tip: "Searches that are too broad (\"marketing\") return generic topics. Searches that are too narrow (\"left-handed gardening shears for tomatoes\") may return too little data. Aim for the middle — \"affiliate marketing\" or \"claude ai tutorial\" works well.",
+      illustrationKey: "vt-hub",
+    },
+    {
+      number: 2,
+      title: "Browse your results",
+      body: [
+        "When the run finishes you are taken to the results page. Every topic appears as its own card with four signals on the right side, so you can scan the list quickly:",
+      ],
+      bullets: [
+        "Monthly search volume — how many people search for this exact phrase on Google each month",
+        "Intent badges — How-To, Beginner Guide, Review, Comparison, and so on, so you know what kind of video the searcher is looking for",
+        "Trend arrow — green up means search demand is rising, red down means it is falling, gray dash means steady",
+        "Opportunity score — a 0–100 composite of volume, competition, CPC, and trend; the higher the better",
+      ],
+      note: "Use the Filter and Sort controls at the top of the page to narrow the list. Set a Min Score to hide weak topics, sort by Volume to find the biggest opportunities, or sort by Competition to find the easiest wins.",
+      illustrationKey: "vt-explore-list",
+    },
+    {
+      number: 3,
+      title: "Click a topic to see the full data",
+      body: [
+        "Click any topic card to open its detail panel on the right. The panel shows you everything the keyword data revealed — your Opportunity Score with a plain-English label (Great opportunity, Good potential, or Challenging), the Google volume, CPC and competition, the trend percentage, and platform-specific data for YouTube, Pinterest, and TikTok if available.",
+        "From this panel you have three actions: Generate Script turns this topic into a full 5-part video script (covered in the next step), Save adds it to your Saved Topics list to come back to later, and Research Deeper runs a brand-new search using this topic as the seed so you can branch out into related ideas.",
+      ],
+      tip: "Scroll down inside the side panel to see the AI-generated extras for this topic — suggested video angles, hook ideas, title ideas, and the most common questions people ask about it. These are great raw material for your script.",
+      illustrationKey: "vt-topic-detail",
+    },
+    {
+      number: 4,
+      title: "Save topics for later",
+      body: [
+        'When you find a topic you like but are not ready to record yet, click "Save" in the side panel. Saved topics live in your Saved Topics page, which you can open from the Video Trends sidebar at any time.',
+        "Saved topics are split into Active (still on your list) and Completed (you have already recorded a video for them). Mark a topic complete when you finish a video so the list stays focused on what is next.",
+      ],
+      illustrationKey: "vt-saved",
+    },
+    {
+      number: 5,
+      title: "Generate a script in Mark's 5-part formula",
+      body: [
+        'When you are ready to record, click "Generate Script" on the topic. The AI writes a complete video script in the same 5-part formula you score your videos against — Hook, Set the Hook, First CTA, Content, and Final CTA — using the keyword data, audience intent, and angles it surfaced for that topic.',
+        "The script page opens with the topic stats pinned at the top so you keep the data in mind, and the script body laid out section-by-section with target durations on each part. Switch between Long Form and Shorts at the top to get a script tuned for the format you are recording.",
+        "When you are happy with the script, use Copy Full Script to paste it into your teleprompter or notes app, or Download PDF to save a branded copy. The Description, Pinned Comment, and Call To Action tabs give you matching copy you can paste straight into YouTube when you upload.",
+      ],
+      note: "Generated scripts are saved automatically — you can come back to them from the Generated Scripts page in the Video Trends sidebar at any time.",
+      illustrationKey: "vt-script-detail",
+    },
+  ],
+};
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const helpCategories: HelpCategory[] = [
@@ -325,7 +396,7 @@ export const helpCategories: HelpCategory[] = [
     title: "Video Tools",
     description: "Record, transcribe, and score your practice videos. Research trending topics and generate scripts.",
     icon: "Video",
-    articles: [videoScoringArticle],
+    articles: [videoScoringArticle, videoTrendsArticle],
   },
   {
     slug: "email-tools",
