@@ -106,6 +106,47 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS placement_confirmed_at timestamp
     `);
     console.log("[startup] email_analyses placement columns migration complete");
+
+    // One-time backfill: copy account-level confirmed placement results to the
+    // individual email record so old confirmed emails show their result permanently.
+    // Matches by message_id when available, otherwise picks the most-recently-received
+    // email for that user. Skips any email that already has placement_results set.
+    const addressRows = await db.execute(sql`
+      SELECT user_id, last_placement_results, placement_check_message_id
+      FROM email_inbox_addresses
+      WHERE last_placement_results IS NOT NULL
+        AND jsonb_array_length(last_placement_results::jsonb) > 0
+    `);
+    let backfilled = 0;
+    for (const addr of addressRows.rows as Array<{ user_id: string; last_placement_results: unknown; placement_check_message_id: string | null }>) {
+      // Try exact message_id match first
+      if (addr.placement_check_message_id) {
+        const updated = await db.execute(sql`
+          UPDATE email_analyses
+          SET placement_results = ${addr.last_placement_results}::jsonb,
+              placement_confirmed_at = NOW()
+          WHERE user_id = ${addr.user_id}
+            AND message_id = ${addr.placement_check_message_id}
+            AND placement_results IS NULL
+        `);
+        if ((updated.rowCount ?? 0) > 0) { backfilled++; continue; }
+      }
+      // Fallback: most recently received email for this user
+      const fallback = await db.execute(sql`
+        UPDATE email_analyses
+        SET placement_results = ${addr.last_placement_results}::jsonb,
+            placement_confirmed_at = NOW()
+        WHERE id = (
+          SELECT id FROM email_analyses
+          WHERE user_id = ${addr.user_id}
+            AND placement_results IS NULL
+          ORDER BY received_at DESC
+          LIMIT 1
+        )
+      `);
+      if ((fallback.rowCount ?? 0) > 0) backfilled++;
+    }
+    if (backfilled > 0) console.log(`[startup] backfilled placement_results onto ${backfilled} email record(s)`);
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

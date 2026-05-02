@@ -1814,25 +1814,26 @@ export default function InboxAnalyzerPage() {
             ) : (
               <div className="space-y-3">
                 {emails.map((email, index) => {
-                  // Placement monitoring is per-user and tied to one specific email at a time.
-                  // Match by Message-ID if available; otherwise fall back to the most recent email.
                   const placementMsgId = addressData?.placementCheckMessageId;
+                  // Use Message-ID match when available; fall back to most-recent (index 0)
+                  // for old emails whose message_id was not stored in the database.
                   const isActivePlacement = placementMsgId
-                    ? email.messageId === placementMsgId
+                    ? (email.messageId === placementMsgId ||
+                       (index === 0 && !emails.some(e => e.messageId === placementMsgId)))
                     : index === 0;
                   return (
-                  <EmailRow
-                    key={email.id}
-                    email={email}
-                    onDelete={(id) => deleteMutation.mutate(id)}
-                    onReanalyze={(id) => reanalyzeMutation.mutate(id)}
-                    seedInboxes={seedInboxes}
-                    sendingFromAddress={addressData?.sendingFromAddress || ""}
-                    lastPlacementResults={isActivePlacement ? (addressData?.lastPlacementResults || null) : null}
-                    lastPlacementCheckedAt={isActivePlacement ? (addressData?.lastPlacementCheckedAt || null) : null}
-                    placementAutoCheckUntil={isActivePlacement ? (addressData?.placementAutoCheckUntil || null) : null}
-                    isActivePlacementEmail={isActivePlacement}
-                  />
+                    <EmailRow
+                      key={email.id}
+                      email={email}
+                      onDelete={(id) => deleteMutation.mutate(id)}
+                      onReanalyze={(id) => reanalyzeMutation.mutate(id)}
+                      seedInboxes={seedInboxes}
+                      sendingFromAddress={addressData?.sendingFromAddress || ""}
+                      lastPlacementResults={isActivePlacement ? (addressData?.lastPlacementResults || null) : null}
+                      lastPlacementCheckedAt={isActivePlacement ? (addressData?.lastPlacementCheckedAt || null) : null}
+                      placementAutoCheckUntil={isActivePlacement ? (addressData?.placementAutoCheckUntil || null) : null}
+                      isActivePlacementEmail={isActivePlacement}
+                    />
                   );
                 })}
               </div>
