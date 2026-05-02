@@ -107,10 +107,14 @@ function parseStat(s: any, logSample = false): DailyTrafficStat | null {
     if (!year || !month || !day) return null;
     dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   } else if (s.name) {
-    // Some APIs encode date in the resource name: domains/x.com/trafficStats/2024-05-01
-    const match = (s.name as string).match(/(\d{4}-\d{2}-\d{2})$/);
-    if (match) {
-      dateStr = match[1];
+    // Date is encoded in the resource name as YYYYMMDD: domains/x.com/trafficStats/20260126
+    const nameStr = s.name as string;
+    const withDash = nameStr.match(/(\d{4}-\d{2}-\d{2})$/);
+    const noDash = nameStr.match(/(\d{4})(\d{2})(\d{2})$/);
+    if (withDash) {
+      dateStr = withDash[1];
+    } else if (noDash) {
+      dateStr = `${noDash[1]}-${noDash[2]}-${noDash[3]}`;
     } else {
       console.log("[Postmaster] unrecognised record shape, name:", s.name, "date:", JSON.stringify(d));
       return null;
