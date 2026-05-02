@@ -60,6 +60,11 @@ export async function runPlacementCheckForUser(
       if (confirmedMatch) {
         // Same definitive result on two consecutive checks — trustworthy, stop monitoring.
         await storage.setPlacementAutoCheckWindow(userId, null);
+        // Permanently store confirmed results on the specific email record so they
+        // are never overwritten when a new email arrives and opens a new window.
+        if (emailContext?.messageId) {
+          await storage.saveEmailPlacementResults(emailContext.messageId, userId, results);
+        }
         const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
         console.log(`[PlacementScheduler] CONFIRMED for user ${userId} — ${summary} — monitoring stopped`);
       } else {

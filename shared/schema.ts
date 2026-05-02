@@ -910,6 +910,8 @@ export const emailAnalyses = pgTable("email_analyses", {
   contentQuality: jsonb("content_quality").$type<ContentQuality>(),
   canSpamCompliance: jsonb("can_spam_compliance").$type<CanSpamCompliance>(),
   status: varchar("status", { length: 20 }).default("pending").notNull(),
+  placementResults: jsonb("placement_results"),
+  placementConfirmedAt: timestamp("placement_confirmed_at"),
 });
 
 export const insertEmailAnalysisSchema = createInsertSchema(emailAnalyses).omit({

@@ -295,6 +295,7 @@ export interface IStorage {
   saveLastPlacementResults(userId: string, results: unknown[]): Promise<void>;
   setPlacementAutoCheckWindow(userId: string, until: Date | null, emailContext?: { receivedAt: Date; subject: string; messageId?: string }): Promise<void>;
   getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>>;
+  saveEmailPlacementResults(messageId: string, userId: string, results: unknown[]): Promise<void>;
   createEmailAnalysis(data: {
     userId: string; fromAddress: string; fromName?: string; replyTo?: string; messageId?: string; subject: string;
     bodyText?: string; bodyHtml?: string; rawHeaders?: string;
@@ -1879,6 +1880,14 @@ export class DatabaseStorage implements IStorage {
     await db.update(emailInboxAddresses)
       .set({ placementAutoCheckUntil: until, ...extra, ...contextFields })
       .where(eq(emailInboxAddresses.userId, userId));
+  }
+
+  async saveEmailPlacementResults(messageId: string, userId: string, results: unknown[]): Promise<void> {
+    await db.update(emailAnalyses)
+      .set({ placementResults: results, placementConfirmedAt: new Date() })
+      .where(
+        sql`${emailAnalyses.messageId} = ${messageId} AND ${emailAnalyses.userId} = ${userId}`
+      );
   }
 
   async getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>> {

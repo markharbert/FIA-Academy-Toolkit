@@ -402,7 +402,12 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
   const connectedInboxes = seedInboxes.filter(s => s.isActive && s.isConnected);
 
-  // Derive auto-monitoring phase info
+  // Confirmed results live directly on the email record (written once, never overwritten).
+  // These take full priority — no need for address-level monitoring state once confirmed.
+  const confirmedResults = (email.placementResults as PlacementResult[] | null) ?? null;
+  const confirmedAt = email.placementConfirmedAt ? new Date(email.placementConfirmedAt as string) : null;
+
+  // Derive auto-monitoring phase info (used only while confirmation is still pending)
   const now = Date.now();
   const windowEnd    = placementAutoCheckUntil ? new Date(placementAutoCheckUntil).getTime() : null;
   const windowActive = windowEnd ? now < windowEnd : false;
@@ -615,9 +620,28 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
         </div>
 
         {/* ── Placement ─────────────────────────────────────────────── */}
-        <SectionPanel title="Inbox Placement" icon={Inbox} score={computePlacementScore(lastPlacementResults)}>
-          {connectedInboxes.length === 0 ? (
-            // No seed inboxes configured at all
+        <SectionPanel title="Inbox Placement" icon={Inbox} score={computePlacementScore(confirmedResults ?? lastPlacementResults)}>
+          {confirmedResults ? (
+            // ── Confirmed: results are written permanently to the email record ──
+            <div className="space-y-2">
+              {confirmedResults.map((result: PlacementResult) => (
+                <div key={result.inboxId} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
+                  <ProviderIcon provider={result.provider} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{result.label}</p>
+                    <p className="text-xs font-mono text-muted-foreground">{result.email}</p>
+                  </div>
+                  <PlacementStatusBadge status={result.status} />
+                </div>
+              ))}
+              {confirmedAt && (
+                <p className="text-xs text-muted-foreground pt-0.5">
+                  Confirmed {confirmedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {confirmedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                </p>
+              )}
+            </div>
+          ) : connectedInboxes.length === 0 ? (
+            // ── No seed inboxes configured ──
             <div className="space-y-2">
               {seedInboxes.length === 0 ? (
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
@@ -644,17 +668,19 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               )}
             </div>
           ) : !sendingFromAddress ? (
+            // ── No sending address set ──
             <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
               <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-muted-foreground">Set your sending From address in My Address to enable automatic placement monitoring.</p>
             </div>
           ) : !isActivePlacementEmail ? (
+            // ── Older email — placement only tracked for the most recent one ──
             <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
               <CircleAlert className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
               <p className="text-sm text-muted-foreground">Placement is monitored for the most recently received email. Open the latest email in your list to see results.</p>
             </div>
           ) : (
-            // Connected inboxes + sending address configured
+            // ── Active monitoring: checks are in progress ──
             <div className="space-y-2">
               {connectedInboxes.map(inbox => {
                 const result = lastPlacementResults?.find((r: PlacementResult) => r.inboxId === inbox.id);
@@ -667,27 +693,20 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                     </div>
                     {result ? (
                       <PlacementStatusBadge status={result.status} />
-                    ) : windowActive ? (
+                    ) : (
                       <span className="flex items-center gap-1.5 text-xs text-blue-500 dark:text-blue-400">
                         <Loader2 className="h-3 w-3 animate-spin" />
                         Checking…
                       </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Not detected</span>
                     )}
                   </div>
                 );
               })}
-
-              {/* Last-checked + monitoring status */}
               <div className="pt-0.5 space-y-1">
-                {/* Only show "Last checked" when a real check has actually run (we have results) */}
                 {lastPlacementCheckedAt && hasAnyResults && (
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs text-muted-foreground">
                       Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                      {/* Only say "Confirmed" once monitoring has fully stopped (window cleared) */}
-                      {!windowActive && !windowClosed ? " · Confirmed" : ""}
                     </p>
                     <Button
                       variant="ghost"
@@ -704,7 +723,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 )}
                 {windowActive ? (
                   !hasAnyResults ? (
-                    // No checks have run yet — still in the initial delay window
                     <p className="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1.5">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       {minsUntilNextCheck > 0
@@ -712,7 +730,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                         : "First check running soon — letting Gmail finish filtering"}
                     </p>
                   ) : allResolved ? (
-                    // First definitive result in — waiting for the confirmation check
                     <p className="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1.5">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       {minsUntilNextCheck > 0
@@ -720,7 +737,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                         : "Result found · confirmation check running soon"}
                     </p>
                   ) : (
-                    // Partial results — still waiting for all inboxes to report back
                     <p className="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1.5">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       {minsUntilNextCheck > 0

@@ -100,6 +100,12 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS placement_check_subject text
     `);
     console.log("[startup] email_inbox_addresses migration complete");
+    await db.execute(sql`
+      ALTER TABLE email_analyses
+        ADD COLUMN IF NOT EXISTS placement_results jsonb,
+        ADD COLUMN IF NOT EXISTS placement_confirmed_at timestamp
+    `);
+    console.log("[startup] email_analyses placement columns migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }
