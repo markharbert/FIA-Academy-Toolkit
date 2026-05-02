@@ -23,6 +23,7 @@ import {
   TrendingUp,
   RefreshCw,
   Globe,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { EditTrackerDialog } from "@/components/edit-tracker-dialog";
 import type {
   CompetitorTracker,
   CompetitorSeedAddress,
@@ -80,6 +82,7 @@ export default function InboxIntelTrackerPage() {
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [seedLabel, setSeedLabel] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery<TrackerDetailResponse>({
     queryKey: ["/api/inbox-intel/trackers", trackerId],
@@ -236,6 +239,17 @@ export default function InboxIntelTrackerPage() {
                   Refresh preview
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditOpen(true)}
+                className="text-white/70 hover:text-white hover:bg-white/10"
+                data-testid="button-edit-tracker"
+                title="Edit competitor"
+              >
+                <Pencil className="h-4 w-4 mr-1" /> Edit
+              </Button>
+              <EditTrackerDialog tracker={tracker} open={editOpen} onOpenChange={setEditOpen} />
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button

@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, Plus, ArrowRight, Loader2, ChevronLeft, Mail, Pin, Inbox, Globe } from "lucide-react";
+import { Eye, Plus, ArrowRight, Loader2, ChevronLeft, Mail, Pin, Inbox, Globe, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { insertCompetitorTrackerSchema, type CompetitorTrackerWithStats } from "@shared/schema";
+import { EditTrackerDialog } from "@/components/edit-tracker-dialog";
 
 const MAX_TRACKERS = 20;
 
@@ -290,6 +291,7 @@ function Stat({ label, value, small }: { label: string; value: string; small?: b
 function TrackerTile({ tracker, onOpen }: { tracker: CompetitorTrackerWithStats; onOpen: () => void }) {
   const t = tracker;
   const [imgError, setImgError] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   // Bust cached screenshot when it updates
   const screenshotSrc = t.screenshotPath
     ? `/api/inbox-intel/trackers/${t.id}/screenshot?v=${t.screenshotUpdatedAt ? new Date(t.screenshotUpdatedAt).getTime() : ""}`
@@ -300,73 +302,112 @@ function TrackerTile({ tracker, onOpen }: { tracker: CompetitorTrackerWithStats;
     !!t.website &&
     (t.screenshotStatus === "capturing" || t.screenshotStatus == null);
 
-  return (
-    <button
-      onClick={onOpen}
-      data-testid={`card-tracker-${t.id}`}
-      className="group text-left rounded-xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      {/* Screenshot header (16:9) */}
-      <div className="relative aspect-[16/9] w-full bg-muted/40 overflow-hidden border-b border-border">
-        {showScreenshot ? (
-          <img
-            src={screenshotSrc!}
-            alt={`${t.name} website preview`}
-            loading="lazy"
-            onError={() => setImgError(true)}
-            className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-300"
-            data-testid={`img-screenshot-${t.id}`}
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-gradient-to-br from-muted/20 to-muted/40">
-            {isCapturing ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin mb-1.5" />
-                <span className="text-[10px] uppercase tracking-wider">Capturing preview…</span>
-              </>
-            ) : (
-              <>
-                <Globe className="h-6 w-6 mb-1 opacity-50" />
-                <span className="text-[10px] uppercase tracking-wider opacity-70">
-                  {t.website ? "Preview unavailable" : "No website"}
-                </span>
-              </>
-            )}
-          </div>
-        )}
-        {t.pinnedCount > 0 && (
-          <span className="absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/90 text-white shadow-sm flex items-center gap-1 backdrop-blur-sm">
-            <Pin className="h-2.5 w-2.5" /> {t.pinnedCount}
-          </span>
-        )}
-      </div>
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onOpen();
+    }
+  };
 
-      {/* Body */}
-      <div className="p-5">
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-bold shrink-0">
-            {t.name.substring(0, 1).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold text-foreground truncate" data-testid={`text-tracker-name-${t.id}`}>
-              {t.name}
-            </h3>
-            {t.website && (
-              <p className="text-xs text-muted-foreground truncate">
-                {t.website.replace(/^https?:\/\//, "")}
-              </p>
-            )}
-          </div>
+  return (
+    <>
+      <div
+        onClick={onOpen}
+        onKeyDown={handleKeyDown}
+        role="button"
+        tabIndex={0}
+        data-testid={`card-tracker-${t.id}`}
+        className="group relative cursor-pointer text-left rounded-xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {/* Screenshot header (16:9) */}
+        <div className="relative aspect-[16/9] w-full bg-muted/40 overflow-hidden border-b border-border">
+          {showScreenshot ? (
+            <img
+              src={screenshotSrc!}
+              alt={`${t.name} website preview`}
+              loading="lazy"
+              onError={() => setImgError(true)}
+              className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-300"
+              data-testid={`img-screenshot-${t.id}`}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-gradient-to-br from-muted/20 to-muted/40">
+              {isCapturing ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin mb-1.5" />
+                  <span className="text-[10px] uppercase tracking-wider">Capturing preview…</span>
+                </>
+              ) : (
+                <>
+                  <Globe className="h-6 w-6 mb-1 opacity-50" />
+                  <span className="text-[10px] uppercase tracking-wider opacity-70">
+                    {t.website ? "Preview unavailable" : "No website"}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+          {/* Edit button (top-left overlay) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditOpen(true);
+            }}
+            onKeyDown={(e) => {
+              // Prevent Enter/Space from bubbling to parent card's onKeyDown
+              // (which would navigate to the detail page instead of opening edit).
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+              }
+            }}
+            onKeyUp={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+              }
+            }}
+            data-testid={`button-edit-tracker-${t.id}`}
+            title="Edit competitor"
+            aria-label={`Edit ${t.name}`}
+            className="absolute top-2 left-2 h-7 w-7 rounded-full bg-black/55 hover:bg-black/75 text-white flex items-center justify-center shadow-sm backdrop-blur-sm opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 transition-opacity"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          {t.pinnedCount > 0 && (
+            <span className="absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/90 text-white shadow-sm flex items-center gap-1 backdrop-blur-sm">
+              <Pin className="h-2.5 w-2.5" /> {t.pinnedCount}
+            </span>
+          )}
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          <Stat label="Seeds" value={t.seedCount.toString()} />
-          <Stat label="Emails" value={t.emailCount.toString()} />
-          <Stat label="Last" value={formatRelative(t.lastReceivedAt)} small />
-        </div>
-        <div className="flex items-center justify-end mt-4 text-xs font-semibold text-violet-600 dark:text-violet-400">
-          Open <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-0.5 transition-transform" />
+
+        {/* Body */}
+        <div className="p-5">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-bold shrink-0">
+              {t.name.substring(0, 1).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-bold text-foreground truncate" data-testid={`text-tracker-name-${t.id}`}>
+                {t.name}
+              </h3>
+              {t.website && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {t.website.replace(/^https?:\/\//, "")}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <Stat label="Seeds" value={t.seedCount.toString()} />
+            <Stat label="Emails" value={t.emailCount.toString()} />
+            <Stat label="Last" value={formatRelative(t.lastReceivedAt)} small />
+          </div>
+          <div className="flex items-center justify-end mt-4 text-xs font-semibold text-violet-600 dark:text-violet-400">
+            Open <ArrowRight className="h-3 w-3 ml-1 group-hover:translate-x-0.5 transition-transform" />
+          </div>
         </div>
       </div>
-    </button>
+      <EditTrackerDialog tracker={t} open={editOpen} onOpenChange={setEditOpen} />
+    </>
   );
 }
