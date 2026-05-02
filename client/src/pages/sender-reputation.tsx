@@ -1322,6 +1322,12 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
   const spamColor = latestSpam == null ? "muted" : latestSpam < 0.001 ? "emerald" : latestSpam < 0.003 ? "amber" : "red";
   const authColor = (v: number | null) => v == null ? "muted" : v >= 0.95 ? "emerald" : v >= 0.80 ? "amber" : "red";
 
+  const actionPlanIssueCount = useMemo(() => {
+    const effectiveFiltered = filtered.length > 0 ? filtered : domain.trafficStats;
+    const items = buildActionPlan(domain, effectiveFiltered);
+    return items.filter(i => i.severity === "critical" || i.severity === "warning").length;
+  }, [domain, filtered]);
+
   return (
     <div className="space-y-6">
       {/* Top row: reputation badge on left, all controls on right */}
@@ -1390,7 +1396,14 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
             Compliance
           </TabsTrigger>
           <TabsTrigger value="action-plan" className="text-xs px-4 rounded-lg" data-testid="tab-action-plan">
-            Action Plan
+            <span className="flex items-center gap-1.5">
+              Action Plan
+              {actionPlanIssueCount > 0 && (
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none" data-testid="badge-action-plan-count">
+                  {actionPlanIssueCount}
+                </span>
+              )}
+            </span>
           </TabsTrigger>
           <TabsTrigger value="infrastructure" className="text-xs px-4 rounded-lg" data-testid="tab-infrastructure">
             Infrastructure
