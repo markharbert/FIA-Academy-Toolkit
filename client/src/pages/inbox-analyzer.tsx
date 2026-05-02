@@ -993,6 +993,42 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 detail={!cq.hasPs ? "P.S. is one of the most-read parts of any email" : "great engagement technique"}
               />
             </div>
+
+            {/* Per-item guidance for anything missing */}
+            {(!cq.hasPs || !cq.hasPersonalization || cq.wordCount < 50 || cq.wordCount > 600) && (
+              <div className="space-y-2 pt-1">
+                {!cq.hasPs && (
+                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                    <span><strong>No P.S. line — no action required.</strong> A P.S. is one of the most-read parts of an email and a great place to repeat your call-to-action, but leaving it out will not affect whether your email lands in the inbox. Think of it as an engagement tip, not a deliverability requirement.</span>
+                  </div>
+                )}
+                {!cq.hasPersonalization && (
+                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                    <span><strong>No personalization — no action required.</strong> Adding a first name or other merge tag can improve open and click rates because it feels more personal, but it is not a factor email providers use to determine spam placement. Your deliverability is not affected.</span>
+                  </div>
+                )}
+                {cq.wordCount < 50 && cq.wordCount > 0 && (
+                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                    <span><strong>Very short email.</strong> Extremely brief emails can occasionally raise spam filter flags because they lack context, but this varies by provider. Consider adding more value or explanation to your message if you are seeing placement issues.</span>
+                  </div>
+                )}
+                {cq.wordCount > 600 && (
+                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                    <span><strong>Long email.</strong> Word count alone does not hurt deliverability, but reader engagement tends to drop in longer emails. Consider breaking very long content into a series of shorter emails, or adding clear section headers to help readers scan.</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* General reminder that content quality is about engagement, not spam filters */}
+            <div className="flex items-start gap-2 pt-1 text-xs text-muted-foreground">
+              <CircleCheck className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-muted-foreground/60" />
+              <span>Content quality signals measure engagement best practices. None of these items will directly cause your email to land in spam — they are suggestions for improving reader experience and click rates.</span>
+            </div>
           </SectionPanel>
         )}
 
