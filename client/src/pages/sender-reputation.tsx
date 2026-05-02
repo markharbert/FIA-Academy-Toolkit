@@ -12,7 +12,7 @@ import {
   ShieldCheck, ShieldAlert, ShieldX, Shield, ExternalLink, RefreshCw,
   Loader2, AlertTriangle, CheckCircle2, XCircle, Globe, Lock, Mail,
   ArrowLeft, PlugZap, Unplug, Info, TrendingUp, TrendingDown, Minus,
-  Server, Wifi, Activity,
+  Server, Wifi, Activity, ClipboardList, ChevronDown, ChevronUp,
 } from "lucide-react";
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -519,6 +519,424 @@ function DeliveryErrorsSection({ stats }: { stats: DailyTrafficStat[] }) {
   );
 }
 
+// ── Action Plan ────────────────────────────────────────────────────────────────
+
+type ActionItem = {
+  id: string;
+  severity: "critical" | "warning" | "ok";
+  title: string;
+  what: string;
+  steps: string[];
+};
+
+function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficStat[]): ActionItem[] {
+  const items: ActionItem[] = [];
+  const latest = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
+
+  // Domain reputation
+  const rep = domain.latestReputation;
+  if (rep === "BAD") {
+    items.push({
+      id: "rep-bad",
+      severity: "critical",
+      title: "Domain reputation is Bad",
+      what: "Gmail is actively filtering or blocking your emails. This is the most serious issue and needs immediate attention.",
+      steps: [
+        "Stop all bulk email sending for 2–4 weeks to give Gmail's systems time to recover.",
+        "Scrub your contact list — remove anyone who hasn't opened or clicked an email in the last 90 days.",
+        "Contact your email platform's support team (ActiveCampaign, Mailchimp, etc.) and let them know about the reputation issue.",
+        "After pausing, restart with very small sends of 50–100 emails per day to your most engaged contacts only.",
+        "Add an easy one-click unsubscribe link and honor all requests within 24 hours.",
+      ],
+    });
+  } else if (rep === "LOW") {
+    items.push({
+      id: "rep-low",
+      severity: "warning",
+      title: "Domain reputation is Low",
+      what: "Your emails are at risk of landing in spam. Gmail has detected elevated complaint rates or authentication issues from your domain.",
+      steps: [
+        "Reduce your sending volume by 50% for the next 2 weeks.",
+        "Only send to contacts who have opened or clicked an email in the last 90 days.",
+        "Remove anyone who hasn't engaged in the past 6 months.",
+        "Make sure your unsubscribe link is working, easy to find, and one-click.",
+      ],
+    });
+  }
+
+  // Spam rate
+  const latestSpam = latest.find(s => s.spamRate != null)?.spamRate ?? null;
+  if (latestSpam != null && latestSpam >= 0.003) {
+    items.push({
+      id: "spam-critical",
+      severity: "critical",
+      title: `Spam complaint rate is critically high (${(latestSpam * 100).toFixed(3)}%)`,
+      what: "More than 0.3% of your Gmail recipients are marking your emails as spam. Gmail will block or heavily filter your emails at this level.",
+      steps: [
+        "Stop sending to unengaged contacts immediately.",
+        "Only email people who opened or clicked something in the last 60 days.",
+        "Add a one-click unsubscribe link near the top of every email — not just buried at the bottom.",
+        "Remove any contacts you purchased or acquired from a third-party list — these are almost always the source of spam complaints.",
+        "Send a re-permission email to your remaining list asking if they still want to hear from you, and remove non-responders.",
+      ],
+    });
+  } else if (latestSpam != null && latestSpam >= 0.001) {
+    items.push({
+      id: "spam-warning",
+      severity: "warning",
+      title: `Spam complaint rate is elevated (${(latestSpam * 100).toFixed(3)}%)`,
+      what: "Your spam rate is approaching Google's 0.1% warning threshold. Left unchecked, this will start hurting your inbox placement.",
+      steps: [
+        "Audit your contact list and remove anyone who hasn't engaged in 90+ days.",
+        "Review your recent subject lines — avoid anything that feels misleading, overly salesy, or clickbait-y.",
+        "Make sure your unsubscribe link is clearly visible and working correctly.",
+        "Send a re-engagement campaign to inactive subscribers and permanently remove those who don't respond.",
+      ],
+    });
+  }
+
+  // SPF
+  const latestSpf = latest.find(s => s.spfSuccessRatio != null)?.spfSuccessRatio ?? null;
+  if (latestSpf != null && latestSpf < 0.80) {
+    items.push({
+      id: "spf-critical",
+      severity: "critical",
+      title: `SPF is failing for ${(100 - latestSpf * 100).toFixed(0)}% of emails`,
+      what: "SPF tells Gmail which servers are authorized to send email from your domain. A large portion of your emails are coming from servers not listed in your SPF record, which looks suspicious to Gmail.",
+      steps: [
+        "Log in to your domain's DNS provider (GoDaddy, Namecheap, Cloudflare, etc.).",
+        "Look for a TXT record starting with 'v=spf1'. If it's missing, you need to create one.",
+        "Make sure every email service you use (your ESP, Gmail, any CRMs) is listed in that SPF record.",
+        "Use the free SPF checker at mxtoolbox.com/spf to verify your record is valid and complete.",
+        "DNS changes can take 24–48 hours to fully take effect.",
+      ],
+    });
+  } else if (latestSpf != null && latestSpf < 0.95) {
+    items.push({
+      id: "spf-warning",
+      severity: "warning",
+      title: `SPF pass rate is below 95% (${(latestSpf * 100).toFixed(0)}%)`,
+      what: "Most of your emails pass SPF, but some are still failing. This is often caused by a service that was recently added but not yet included in your SPF record.",
+      steps: [
+        "Check if you've recently started using a new email tool that isn't in your SPF record.",
+        "Visit mxtoolbox.com/spf and compare your current record against all services you send from.",
+        "Update your SPF record to include any missing services.",
+      ],
+    });
+  }
+
+  // DKIM
+  const latestDkim = latest.find(s => s.dkimSuccessRatio != null)?.dkimSuccessRatio ?? null;
+  if (latestDkim != null && latestDkim < 0.80) {
+    items.push({
+      id: "dkim-critical",
+      severity: "critical",
+      title: `DKIM signing is failing for ${(100 - latestDkim * 100).toFixed(0)}% of emails`,
+      what: "DKIM is a digital signature that proves your emails are legitimate and haven't been tampered with. Most of your emails are going out unsigned, which seriously undermines Gmail's trust in you.",
+      steps: [
+        "Log in to each email platform you send from (ActiveCampaign, Mailchimp, etc.) and find 'DKIM' or 'Domain Authentication' in their settings.",
+        "Follow the platform's setup guide to add the required DNS records (usually CNAME or TXT records).",
+        "Send a test email to mail-tester.com to confirm DKIM is passing.",
+        "If you're unsure, contact your email platform's support team — most have step-by-step guides for this.",
+      ],
+    });
+  } else if (latestDkim != null && latestDkim < 0.95) {
+    items.push({
+      id: "dkim-warning",
+      severity: "warning",
+      title: `DKIM pass rate is below 95% (${(latestDkim * 100).toFixed(0)}%)`,
+      what: "Most emails are signed correctly but some are failing. This can happen when emails are forwarded — forwarding often strips or breaks the DKIM signature.",
+      steps: [
+        "Check if any of your emails are being forwarded from another address, which can break the DKIM signature.",
+        "Verify that DKIM is enabled in all email platforms you send from.",
+        "Send a test via mail-tester.com to confirm DKIM is passing on your main sending domain.",
+      ],
+    });
+  }
+
+  // DMARC
+  const latestDmarc = latest.find(s => s.dmarcSuccessRatio != null)?.dmarcSuccessRatio ?? null;
+  if (latestDmarc != null && latestDmarc < 0.80) {
+    items.push({
+      id: "dmarc-critical",
+      severity: "critical",
+      title: `DMARC is failing for ${(100 - latestDmarc * 100).toFixed(0)}% of emails`,
+      what: "DMARC ties together SPF and DKIM. When DMARC fails, Gmail cannot verify that your emails are actually from you. This is almost always caused by SPF or DKIM failures.",
+      steps: [
+        "Fix your SPF and DKIM issues first — correcting those will automatically improve your DMARC pass rate.",
+        "Log in to your DNS provider and check for a TXT record starting with 'v=DMARC1'. If it's missing, add one.",
+        "Start with a monitor-only policy: v=DMARC1; p=none; rua=mailto:you@yourdomain.com",
+        "Check mxtoolbox.com/dmarc to verify your DMARC record is set up correctly.",
+      ],
+    });
+  } else if (latestDmarc != null && latestDmarc < 0.95) {
+    items.push({
+      id: "dmarc-warning",
+      severity: "warning",
+      title: `DMARC pass rate is below 95% (${(latestDmarc * 100).toFixed(0)}%)`,
+      what: "Most emails pass DMARC but some are still failing. This is usually a downstream effect of SPF or DKIM issues.",
+      steps: [
+        "Address any SPF or DKIM issues listed above — fixing those will improve DMARC automatically.",
+        "Check that your DMARC policy isn't set to 'reject' while you're still working on authentication.",
+      ],
+    });
+  }
+
+  // IP reputation
+  const latestIpStats = [...filtered].sort((a, b) => b.date.localeCompare(a.date))
+    .find(s => s.ipReputations && s.ipReputations.length > 0);
+  const badIps = latestIpStats?.ipReputations.filter(ip => ip.reputation === "BAD") ?? [];
+  const lowIps = latestIpStats?.ipReputations.filter(ip => ip.reputation === "LOW") ?? [];
+
+  if (badIps.length > 0) {
+    items.push({
+      id: "ip-bad",
+      severity: "critical",
+      title: "Sending IPs have Bad reputation with Gmail",
+      what: "The IP addresses your emails are being sent from have been flagged by Gmail as bad actors. Emails from these IPs are likely being blocked or sent straight to spam.",
+      steps: [
+        "Contact your email service provider (ActiveCampaign, Mailchimp, SendGrid, etc.) and tell them your sending IPs have a BAD reputation in Google Postmaster Tools.",
+        "Ask them to move your account to a different, cleaner IP address or IP pool.",
+        "If you run your own email server, seriously consider switching to a reputable email service provider.",
+        "Check if your sending IP is on any public blocklists at mxtoolbox.com/blacklists.",
+      ],
+    });
+  } else if (lowIps.length > 0) {
+    items.push({
+      id: "ip-low",
+      severity: "warning",
+      title: "Some sending IPs have Low reputation",
+      what: "A portion of your sending IPs have a lower reputation with Gmail, which may be causing some emails to land in spam folders.",
+      steps: [
+        "Contact your email service provider and mention that some sending IPs are showing LOW reputation in Google Postmaster Tools.",
+        "Ask if they can move your account to a higher-reputation IP pool.",
+        "Reducing your spam complaint rate and fixing authentication will help your IPs recover over time.",
+      ],
+    });
+  }
+
+  // Delivery errors
+  const aggregated: Record<string, number> = {};
+  for (const s of filtered) {
+    for (const e of s.deliveryErrors) {
+      aggregated[e.errorType] = (aggregated[e.errorType] ?? 0) + e.errorRatio;
+    }
+  }
+  const hasSpamDetected = (aggregated["SPAM_DETECTED"] ?? 0) > 0;
+  const hasRateLimit = (aggregated["RATE_LIMIT_EXCEEDED"] ?? 0) > 0;
+  const hasIpRbl = (aggregated["IP_IN_RBL"] ?? 0) > 0;
+  const hasDomainRbl = (aggregated["DOMAIN_IN_RBL"] ?? 0) > 0;
+  const hasBadDmarc = (aggregated["BAD_DMARC_POLICY"] ?? 0) > 0;
+  const hasBadPtr = (aggregated["BAD_PTR_RECORD"] ?? 0) > 0;
+
+  if (hasSpamDetected) {
+    items.push({
+      id: "delivery-spam",
+      severity: "critical",
+      title: "Gmail is detecting spam in your email content",
+      what: "Gmail's spam filters are flagging the actual content of your emails, not just complaints from recipients.",
+      steps: [
+        "Avoid spam trigger words in subject lines — things like 'FREE!!!', 'Act NOW', 'GUARANTEED', or 'Click here'.",
+        "Don't use all-caps text or excessive exclamation points in your copy.",
+        "Every email must have a clearly visible unsubscribe link.",
+        "Avoid attaching files unless absolutely necessary.",
+        "Test your email content at mail-tester.com before sending to your full list.",
+      ],
+    });
+  }
+
+  if (hasRateLimit) {
+    items.push({
+      id: "delivery-ratelimit",
+      severity: "warning",
+      title: "Gmail is rate-limiting your sending speed",
+      what: "You're sending emails too fast and Gmail is throttling your delivery as a result.",
+      steps: [
+        "Spread your email sends over a longer window instead of blasting everyone at once.",
+        "Work with your email provider to enable 'send time optimization' or scheduled batch sending.",
+        "If you recently increased your list size, gradually warm up your sending volume rather than jumping straight to large sends.",
+      ],
+    });
+  }
+
+  if (hasIpRbl || hasDomainRbl) {
+    items.push({
+      id: "delivery-rbl",
+      severity: "critical",
+      title: `${hasIpRbl && hasDomainRbl ? "Sending IP and domain are" : hasIpRbl ? "Sending IP is" : "Domain is"} on a public blocklist`,
+      what: "Your sending IP or domain has been added to a public email blocklist (RBL), which causes many email providers to automatically reject your emails.",
+      steps: [
+        "Go to mxtoolbox.com/blacklists and enter your domain or IP to see which blocklists you're on.",
+        "Visit each blocklist's website and follow their removal or delisting process — most are free.",
+        "You'll usually need to fix the underlying issue (spam complaints, open relay, etc.) before they'll delist you.",
+        "Contact your email provider for help if the blocklisted IP is a shared one from your ESP.",
+      ],
+    });
+  }
+
+  if (hasBadPtr) {
+    items.push({
+      id: "delivery-ptr",
+      severity: "warning",
+      title: "Sending server PTR (reverse DNS) record issue",
+      what: "Your sending server's reverse DNS record isn't configured correctly. Some email providers use this as a spam signal.",
+      steps: [
+        "If you use a shared email provider (ActiveCampaign, Mailchimp, etc.), contact their support — this is their infrastructure to fix.",
+        "If you run your own email server, ask your hosting provider to set up a proper PTR record that matches your mail server's hostname.",
+      ],
+    });
+  }
+
+  if (hasBadDmarc) {
+    items.push({
+      id: "delivery-dmarc-policy",
+      severity: "warning",
+      title: "Emails being rejected due to DMARC policy",
+      what: "Your DMARC policy is actively rejecting or quarantining emails that fail authentication, which is causing delivery failures.",
+      steps: [
+        "If you just set up DMARC, temporarily change the policy to 'p=none' so you can monitor without blocking emails.",
+        "Fix your SPF and DKIM issues first so emails consistently pass authentication.",
+        "Once authentication is consistently passing, you can safely enforce 'p=quarantine' and eventually 'p=reject'.",
+      ],
+    });
+  }
+
+  // All clear
+  if (items.length === 0) {
+    items.push({
+      id: "all-good",
+      severity: "ok",
+      title: "Everything looks healthy",
+      what: "All of your email health metrics are within good ranges. Here's how to keep it that way.",
+      steps: [
+        "Keep your spam complaint rate below 0.1% by regularly cleaning unengaged contacts from your list.",
+        "Only send to people who have actively engaged in the past 90 days.",
+        "Check this dashboard weekly so you catch any issues before they become serious.",
+      ],
+    });
+  }
+
+  return items;
+}
+
+function ActionPlanSection({ domain, filtered }: { domain: PostmasterDomainData; filtered: DailyTrafficStat[] }) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const items = useMemo(() => buildActionPlan(domain, filtered), [domain, filtered]);
+
+  const criticalItems = items.filter(i => i.severity === "critical");
+  const warningItems = items.filter(i => i.severity === "warning");
+  const okItems = items.filter(i => i.severity === "ok");
+
+  const toggle = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const renderItem = (item: ActionItem) => {
+    const isExpanded = expandedIds.has(item.id);
+    const config = {
+      critical: {
+        badge: "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30",
+        dot: "bg-red-500",
+        label: "Action Required",
+        ring: "border-red-500/20",
+      },
+      warning: {
+        badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30",
+        dot: "bg-amber-500",
+        label: "Needs Attention",
+        ring: "border-amber-500/20",
+      },
+      ok: {
+        badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30",
+        dot: "bg-emerald-500",
+        label: "Healthy",
+        ring: "border-emerald-500/20",
+      },
+    }[item.severity];
+
+    return (
+      <div key={item.id} className={`rounded-xl border bg-card overflow-hidden ${config.ring}`}>
+        <button
+          className="w-full text-left px-5 py-4 flex items-start gap-3 hover:bg-muted/30 transition-colors"
+          onClick={() => toggle(item.id)}
+          data-testid={`action-item-${item.id}`}
+        >
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${config.dot}`} />
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${config.badge}`}>
+                {config.label}
+              </span>
+            </div>
+            <p className="text-sm font-semibold text-foreground leading-snug">{item.title}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.what}</p>
+          </div>
+          <div className="flex-shrink-0 text-muted-foreground mt-0.5">
+            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </div>
+        </button>
+
+        {isExpanded && (
+          <div className="px-5 pb-5 pt-1 border-t border-border bg-muted/20">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-3 mt-3">
+              {item.severity === "ok" ? "Maintenance tips" : "Step-by-step fix"}
+            </p>
+            <ol className="space-y-2.5">
+              {item.steps.map((step, i) => (
+                <li key={i} className="flex gap-3 items-start">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-background border border-border text-[10px] font-bold text-muted-foreground flex items-center justify-center mt-0.5">
+                    {i + 1}
+                  </span>
+                  <p className="text-sm text-foreground leading-relaxed">{step}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 pt-5 px-5">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <ClipboardList className="h-4 w-4 text-primary" />
+          Action Plan
+          {criticalItems.length > 0 && (
+            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30">
+              {criticalItems.length} critical
+            </span>
+          )}
+          {warningItems.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+              {warningItems.length} warning
+            </span>
+          )}
+          {criticalItems.length === 0 && warningItems.length === 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+              All clear
+            </span>
+          )}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Click any item to see exactly what to do. Issues are based on your live data.
+        </p>
+      </CardHeader>
+      <CardContent className="px-5 pb-5 space-y-2.5">
+        {criticalItems.map(renderItem)}
+        {warningItems.map(renderItem)}
+        {okItems.map(renderItem)}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DomainDashboard({ domain, lastSyncedAt, onSync, isSyncing }: {
   domain: PostmasterDomainData;
   lastSyncedAt: string | null | undefined;
@@ -578,6 +996,11 @@ function DomainDashboard({ domain, lastSyncedAt, onSync, isSyncing }: {
         <StatCard label="Outbound TLS" value={pct(latestOutEnc, 1)} sublabel="encrypted" color={authColor(latestOutEnc) as any} />
         <StatCard label="Inbound TLS" value={pct(latestInEnc, 1)} sublabel="encrypted" color={authColor(latestInEnc) as any} />
       </div>
+
+      {/* Action Plan — always visible when there's any data at all */}
+      {domain.trafficStats.length > 0 && (
+        <ActionPlanSection domain={domain} filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
+      )}
 
       {filtered.length === 0 ? (
         <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40 border border-border">
