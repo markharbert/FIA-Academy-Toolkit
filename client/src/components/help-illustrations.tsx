@@ -30,6 +30,11 @@ import vtTopicDetail from "@assets/help/vt-topic-detail.jpg";
 import vtSaved from "@assets/help/vt-saved.jpg";
 import vtScriptDetail from "@assets/help/vt-script-detail.jpg";
 
+import scriptsList from "@assets/help/scripts-list.jpg";
+import scriptsDetail from "@assets/help/scripts-detail.jpg";
+import scriptsSections from "@assets/help/scripts-sections.jpg";
+import scriptsCta from "@assets/help/scripts-cta.jpg";
+
 import { AnnotatedScreenshot, type Annotation } from "@/components/annotated-screenshot";
 
 function ScreenshotIllustration({ src, alt }: { src: string; alt: string }) {
@@ -215,6 +220,69 @@ export function VtScriptDetailIllustration() {
   );
 }
 
+// ─── Scripts Illustrations ────────────────────────────────────────────────────
+
+export function ScriptsListIllustration() {
+  const annotations: Annotation[] = [
+    { x: 45.0, y: 8.0, w: 8.0, h: 4.5, color: "red", label: "1 Scripts count", labelPos: "outside-top" },
+    { x: 25.5, y: 21.0, w: 68.5, h: 11.0, color: "orange", label: "2 Click card to open", labelPos: "outside-top" },
+    { x: 28.0, y: 28.5, w: 34.5, h: 3.5, color: "amber", label: "3 Topic metrics", labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={scriptsList}
+      alt="Generated Scripts page showing three saved scripts — Claude Ai Tutorial, Affiliate Marketing Pinterest, and Affiliate Marketing For Beginners — each card displaying creation date, target video length, topic name, monthly search volume, trend, and opportunity score badges"
+      annotations={annotations}
+    />
+  );
+}
+
+export function ScriptsDetailIllustration() {
+  const annotations: Annotation[] = [
+    { x: 34.5, y: 7.5, w: 16.0, h: 5.0, color: "red", label: "1 Script title", labelPos: "outside-top" },
+    { x: 79.0, y: 7.5, w: 9.0, h: 5.5, color: "orange", label: "2 Teleprompter mode", labelPos: "outside-top" },
+    { x: 88.0, y: 7.5, w: 9.5, h: 5.5, color: "amber", label: "3 Research panel", labelPos: "outside-top" },
+    { x: 24.0, y: 33.5, w: 68.0, h: 6.5, color: "green", label: "4 Save / Copy / PDF", labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={scriptsDetail}
+      alt="Script detail page for Claude Ai Tutorial showing the script title, Teleprompter and Research buttons in the header, the topic stats row (210 monthly searches, 66/100 opportunity, $1.53 CPC, Low competition, +448% trend), the format tabs, and the Save Script, Copy Full Script, and Download PDF action buttons"
+      annotations={annotations}
+    />
+  );
+}
+
+export function ScriptsSectionsIllustration() {
+  const annotations: Annotation[] = [
+    { x: 25.5, y: 40.5, w: 68.5, h: 30.0, color: "red", label: "1 Hook section", labelPos: "outside-top" },
+    { x: 28.5, y: 54.5, w: 56.0, h: 11.5, color: "amber", label: "2 On-screen text", labelPos: "outside-bottom" },
+    { x: 25.5, y: 71.5, w: 68.5, h: 25.0, color: "blue", label: "3 Next section", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={scriptsSections}
+      alt="Script body view showing two sections of the 5-part formula — section 1 Hook (15-20 seconds) with its prose copy and an On-Screen Text panel listing three text overlays, followed by section 2 Set the Hook (30-45 seconds) with its own prose"
+      annotations={annotations}
+    />
+  );
+}
+
+export function ScriptsCtaIllustration() {
+  const annotations: Annotation[] = [
+    { x: 73.0, y: 28.5, w: 12.5, h: 4.0, color: "red", label: "1 Call To Action tab", labelPos: "outside-top" },
+    { x: 28.0, y: 36.5, w: 63.0, h: 23.5, color: "orange", label: "2 Manage offers", labelPos: "outside-top" },
+    { x: 28.0, y: 64.5, w: 63.0, h: 24.0, color: "amber", label: "3 Refresh scripts with offer", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={scriptsCta}
+      alt="Call To Action tab of a generated script showing the Your Saved Offers card with an Add New Offer button and the Refresh Scripts with Offer card with a Refresh Scripts with Default Offer button to update the Final CTA, Shorts Script, and Pinned Comment with your saved offer"
+      annotations={annotations}
+    />
+  );
+}
+
 export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "video-tools-hub": VideoToolsHubIllustration,
   "sessions-list": SessionsListIllustration,
@@ -244,4 +312,8 @@ export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "vt-topic-detail": VtTopicDetailIllustration,
   "vt-saved": VtSavedIllustration,
   "vt-script-detail": VtScriptDetailIllustration,
+  "scripts-list": ScriptsListIllustration,
+  "scripts-detail": ScriptsDetailIllustration,
+  "scripts-sections": ScriptsSectionsIllustration,
+  "scripts-cta": ScriptsCtaIllustration,
 };

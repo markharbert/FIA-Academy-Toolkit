@@ -388,6 +388,64 @@ const videoTrendsArticle: HelpArticle = {
   ],
 };
 
+// ─── Scripts Article ──────────────────────────────────────────────────────────
+
+const scriptsArticle: HelpArticle = {
+  slug: "scripts",
+  title: "How to Use Generated Scripts",
+  subtitle: "Edit, organize, and reuse the video scripts you generate from Video Trends — including matching descriptions, pinned comments, and CTAs.",
+  category: "Video Tools",
+  categorySlug: "video-tools",
+  readMinutes: 4,
+  overview:
+    "Every time you click Generate Script in Video Trends, the result is saved to your Generated Scripts library so you can come back to it any time. The scripts page is where you edit the copy, switch between Long Form and Shorts versions, grab a matching YouTube description and pinned comment, plug in your offer for the CTAs, and export the final script for your teleprompter.",
+  steps: [
+    {
+      number: 1,
+      title: "Open your Generated Scripts library",
+      body: [
+        "From the sidebar, open Video Tools and click Generated Scripts. This page lists every script you have generated, newest first.",
+        "Each card shows the script title, the date it was created, the target video length, and the same topic signals you saw in Video Trends — monthly search volume, trend arrow, and opportunity score — so you can quickly tell which scripts are still worth recording.",
+        "Click any card to open the full script editor.",
+      ],
+      illustrationKey: "scripts-list",
+    },
+    {
+      number: 2,
+      title: "The script header — title, stats, and tools",
+      body: [
+        "At the top of each script you will see the title, the topic stats pinned in a row (so you keep the keyword data in mind while you edit), and two tools on the right.",
+        "Teleprompter opens a full-screen scrolling teleprompter view of the long-form script — perfect for recording. Research opens a YouTube research side panel where you can search YouTube for related videos and skim titles, view counts, and top comments to gather ideas while you edit.",
+        "Underneath the stats, the format tabs let you switch between Long Form, Shorts, Description, Pinned Comment, and Call To Action — each with its own copy generated from the same topic.",
+      ],
+      tip: "The action buttons under the tabs let you Save Script (saves your edits), Copy Full Script (copies the entire script to your clipboard), and Download PDF (a branded copy you can print or share).",
+      illustrationKey: "scripts-detail",
+    },
+    {
+      number: 3,
+      title: "Edit the 5-part script section by section",
+      body: [
+        "The Long Form tab lays out the script in the 5-part formula — Hook, Set the Hook, First CTA, Content, and Final CTA — with a target duration on each section so you stay on time.",
+        "Each of the five sections is a directly editable text area — just click into the prose and rewrite it in your own voice. The Content section is broken down further into smaller content blocks; those individual blocks have edit and delete controls so you can re-order or remove pieces.",
+        "Each section also displays an On-Screen Text panel listing the text overlays the AI suggested for that part of the video — these are shown for reference while you record. Use Save Script after a round of edits so your changes are preserved the next time you open the script.",
+      ],
+      note: "The Shorts tab is a separate, shorter rewrite of the same topic tuned for vertical 30–60 second video — edit it independently from the Long Form version.",
+      illustrationKey: "scripts-sections",
+    },
+    {
+      number: 4,
+      title: "Plug in your offer with the Call To Action tab",
+      body: [
+        "The Call To Action tab is where you connect your script to a real product, lead magnet, or course you want to promote.",
+        "Add an offer once and Academy Toolkit will reuse it across every future script. Click Add New Offer to save a new one, or pick from the list of offers you already saved.",
+        "When you have an offer set as your default, click Refresh Scripts with Default Offer to rewrite the Final CTA, the Shorts script's CTA, and the Pinned Comment to mention that specific offer. The Hook, Set the Hook, First CTA, and Content sections are left untouched so any edits you made there stay intact.",
+      ],
+      tip: "Saved offers are shared across all of your scripts, so updating the offer once updates it everywhere the next time you refresh.",
+      illustrationKey: "scripts-cta",
+    },
+  ],
+};
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const helpCategories: HelpCategory[] = [
@@ -396,7 +454,7 @@ export const helpCategories: HelpCategory[] = [
     title: "Video Tools",
     description: "Record, transcribe, and score your practice videos. Research trending topics and generate scripts.",
     icon: "Video",
-    articles: [videoScoringArticle, videoTrendsArticle],
+    articles: [videoScoringArticle, videoTrendsArticle, scriptsArticle],
   },
   {
     slug: "email-tools",
