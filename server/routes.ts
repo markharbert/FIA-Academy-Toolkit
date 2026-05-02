@@ -4580,6 +4580,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         lastPlacementResults: addr.lastPlacementResults || null,
         lastPlacementCheckedAt: addr.lastPlacementCheckedAt || null,
         placementAutoCheckUntil: addr.placementAutoCheckUntil || null,
+        placementCheckMessageId: addr.placementCheckMessageId || null,
       });
     } catch (err) {
       console.error("[inbox-analyzer] address error", err);

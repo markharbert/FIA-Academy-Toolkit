@@ -362,7 +362,7 @@ function AltChip({ text }: { text: string }) {
 
 // ── Email Detail Panel ────────────────────────────────────────────────────────
 
-function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFromAddress = "", lastPlacementResults = null, lastPlacementCheckedAt = null, placementAutoCheckUntil = null }: {
+function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFromAddress = "", lastPlacementResults = null, lastPlacementCheckedAt = null, placementAutoCheckUntil = null, isActivePlacementEmail = false }: {
   email: EmailAnalysis;
   onDelete: () => void;
   onReanalyze?: (id: string) => void;
@@ -371,6 +371,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
   lastPlacementResults?: PlacementResult[] | null;
   lastPlacementCheckedAt?: string | null;
   placementAutoCheckUntil?: string | null;
+  isActivePlacementEmail?: boolean;
 }) {
   const flags = (email.spamFlags as SpamFlag[] | null) || [];
   const th = email.technicalHealth as TechnicalHealth | null;
@@ -646,6 +647,11 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
               <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-muted-foreground">Set your sending From address in My Address to enable automatic placement monitoring.</p>
+            </div>
+          ) : !isActivePlacementEmail ? (
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
+              <CircleAlert className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-muted-foreground">Placement is monitored for the most recently received email. Open the latest email in your list to see results.</p>
             </div>
           ) : (
             // Connected inboxes + sending address configured
@@ -1003,7 +1009,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
 // ── Email Row ────────────────────────────────────────────────────────────────
 
-function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddress, lastPlacementResults, lastPlacementCheckedAt, placementAutoCheckUntil }: {
+function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddress, lastPlacementResults, lastPlacementCheckedAt, placementAutoCheckUntil, isActivePlacementEmail }: {
   email: EmailAnalysis;
   onDelete: (id: string) => void;
   onReanalyze?: (id: string) => void;
@@ -1012,6 +1018,7 @@ function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddres
   lastPlacementResults?: PlacementResult[] | null;
   lastPlacementCheckedAt?: string | null;
   placementAutoCheckUntil?: string | null;
+  isActivePlacementEmail?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -1085,7 +1092,7 @@ function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddres
       {open && (
         <div className="px-4 pb-5">
           <Separator className="mb-5" />
-          <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} placementAutoCheckUntil={placementAutoCheckUntil} />
+          <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} placementAutoCheckUntil={placementAutoCheckUntil} isActivePlacementEmail={isActivePlacementEmail} />
         </div>
       )}
     </div>
@@ -1656,6 +1663,7 @@ export default function InboxAnalyzerPage() {
     lastPlacementResults: PlacementResult[] | null;
     lastPlacementCheckedAt: string | null;
     placementAutoCheckUntil: string | null;
+    placementCheckMessageId: string | null;
   }>({
     queryKey: ["/api/inbox-analyzer/address"],
     refetchInterval: (query) => {
@@ -1789,7 +1797,14 @@ export default function InboxAnalyzerPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {emails.map((email) => (
+                {emails.map((email, index) => {
+                  // Placement monitoring is per-user and tied to one specific email at a time.
+                  // Match by Message-ID if available; otherwise fall back to the most recent email.
+                  const placementMsgId = addressData?.placementCheckMessageId;
+                  const isActivePlacement = placementMsgId
+                    ? email.messageId === placementMsgId
+                    : index === 0;
+                  return (
                   <EmailRow
                     key={email.id}
                     email={email}
@@ -1797,11 +1812,13 @@ export default function InboxAnalyzerPage() {
                     onReanalyze={(id) => reanalyzeMutation.mutate(id)}
                     seedInboxes={seedInboxes}
                     sendingFromAddress={addressData?.sendingFromAddress || ""}
-                    lastPlacementResults={addressData?.lastPlacementResults || null}
-                    lastPlacementCheckedAt={addressData?.lastPlacementCheckedAt || null}
-                    placementAutoCheckUntil={addressData?.placementAutoCheckUntil || null}
+                    lastPlacementResults={isActivePlacement ? (addressData?.lastPlacementResults || null) : null}
+                    lastPlacementCheckedAt={isActivePlacement ? (addressData?.lastPlacementCheckedAt || null) : null}
+                    placementAutoCheckUntil={isActivePlacement ? (addressData?.placementAutoCheckUntil || null) : null}
+                    isActivePlacementEmail={isActivePlacement}
                   />
-                ))}
+                  );
+                })}
               </div>
             )}
           </TabsContent>
