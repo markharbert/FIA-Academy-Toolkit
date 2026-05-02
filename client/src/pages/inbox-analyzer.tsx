@@ -224,6 +224,38 @@ function computePlacementScore(results: PlacementResult[] | null): number | null
   return Math.round((inboxCount / definitive.length) * 100);
 }
 
+// Identifies the email service provider from the sending domain and returns
+// tailored support advice for a blacklisted IP.
+function getBlacklistGuidance(sendingDomain: string | null | undefined, sendingIp: string | null | undefined, blacklistHits: string[]): string {
+  const domain = (sendingDomain || "").toLowerCase();
+  const ip = sendingIp || "your sending IP";
+  const lists = blacklistHits.length > 0 ? blacklistHits.join(", ") : "a spam blacklist";
+
+  const esp =
+    /sendgrid\.net|sendgrid\.com/.test(domain) ? "SendGrid" :
+    /amazonses\.com|amazonaws\.com/.test(domain) ? "Amazon SES" :
+    /mailchimp\.com|list-manage\.com|mailchi\.mp/.test(domain) ? "Mailchimp" :
+    /aweber\.com/.test(domain) ? "AWeber" :
+    /activehosted\.com|activecampaign\.com/.test(domain) ? "ActiveCampaign" :
+    /klaviyo\.com|klaviyoemail\.com/.test(domain) ? "Klaviyo" :
+    /constantcontact\.com/.test(domain) ? "Constant Contact" :
+    /convertkit\.com|ck\.page/.test(domain) ? "ConvertKit" :
+    /getresponse\.com/.test(domain) ? "GetResponse" :
+    /infusionmail\.com|infusionsoft\.com|keap\.com/.test(domain) ? "Keap (Infusionsoft)" :
+    /hubspot\.com|hs-email\.net/.test(domain) ? "HubSpot" :
+    /drip\.com/.test(domain) ? "Drip" :
+    /sendinblue\.com|brevo\.com/.test(domain) ? "Brevo (Sendinblue)" :
+    /campaignmonitor\.com|cmail[0-9]/.test(domain) ? "Campaign Monitor" :
+    /clickfunnels\.com|myclickfunnels\.com/.test(domain) ? "ClickFunnels" :
+    /reply2mark\.com|fearlessmarketinglab\.com/.test(domain) ? "your email platform" :
+    null;
+
+  if (esp) {
+    return `This IP (${ip}) is shared infrastructure used by ${esp}. Contact ${esp} support and let them know your sending IP appears on ${lists}. They can reassign you to a clean IP or help submit a removal request on your behalf.`;
+  }
+  return `The sending IP (${ip}) was found on ${lists}. Contact your email service provider's support team, share the IP address and the blacklist name(s), and ask them to either assign you a clean sending IP or assist with removal.`;
+}
+
 function ScoreRing({ score, size = 64 }: { score: number | null | undefined; size?: number }) {
   const r = size * 0.38;
   const circ = 2 * Math.PI * r;
@@ -784,6 +816,12 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 label={st.blacklisted ? `IP blacklisted on: ${st.blacklistHits.join(", ")}` : "IP not on any blocklists"}
                 detail={st.blacklisted ? "may affect inbox delivery" : "Spamhaus, Barracuda, SpamCop checked"}
               />
+              {st.blacklisted && (
+                <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                  <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>{getBlacklistGuidance(email.sendingDomain, email.sendingIp, st.blacklistHits)}</span>
+                </div>
+              )}
               {st.displayNameDomainMatch !== null && (
                 <CheckRow
                   pass={st.displayNameDomainMatch === true}
