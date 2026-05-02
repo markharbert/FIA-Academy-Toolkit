@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -194,6 +194,16 @@ export default function DashboardPage() {
     return Math.round(total / scoredEmails.length);
   }, [scoredEmails]);
   const latestEmail = emails[0] ?? null;
+
+  const [inboxLastVisited] = useState<string | null>(() =>
+    localStorage.getItem("inbox_analyzer_last_visited")
+  );
+  const hasNewEmail = useMemo(() => {
+    if (!latestEmail?.receivedAt) return false;
+    if (!inboxLastVisited) return true;
+    return new Date(String(latestEmail.receivedAt)) > new Date(inboxLastVisited);
+  }, [latestEmail, inboxLastVisited]);
+
   const lastPlacement = useMemo(() => {
     const results = latestEmail?.receivedAt
       ? (emails.find(e => {
@@ -390,6 +400,9 @@ export default function DashboardPage() {
                 <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
                   <Mail className="h-4 w-4 text-blue-500" />
                   Inbox Health
+                  {hasNewEmail && (
+                    <Badge className="h-4 px-1.5 text-[10px] leading-none bg-blue-500 hover:bg-blue-500 text-white border-0 rounded-full">New</Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">

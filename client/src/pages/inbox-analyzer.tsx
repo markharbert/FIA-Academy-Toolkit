@@ -1647,6 +1647,10 @@ export default function InboxAnalyzerPage() {
   const search = useSearch();
   const defaultTab = new URLSearchParams(search).get("tab") || "emails";
 
+  useEffect(() => {
+    localStorage.setItem("inbox_analyzer_last_visited", new Date().toISOString());
+  }, []);
+
   const { data: addressData, isLoading: addressLoading } = useQuery<{
     email: string; token: string; sendingFromAddress: string;
     lastPlacementResults: PlacementResult[] | null;
