@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Mail, Inbox, ShieldCheck, ArrowRight, type LucideIcon } from "lucide-react";
+import { Mail, Inbox, ShieldCheck, ArrowRight, Eye, type LucideIcon } from "lucide-react";
 
 interface Tool {
   title: string;
@@ -34,6 +34,17 @@ const EMAIL_TOOLS: Tool[] = [
     gradient: "from-emerald-500 to-teal-600",
     iconBg: "bg-emerald-500/20",
     testId: "tool-sender-reputation",
+  },
+  {
+    title: "Inbox Intel",
+    description: "Spy on your competitors' email funnels",
+    detail: "Get unique private seed addresses to subscribe to your competitors' lists. Every email they send is automatically captured, parsed, and analyzed — so you can swipe what works and outsmart their cadence.",
+    url: "/email-tools/inbox-intel",
+    icon: Eye,
+    gradient: "from-violet-500 to-purple-600",
+    iconBg: "bg-violet-500/20",
+    badge: "New",
+    testId: "tool-inbox-intel",
   },
 ];
 

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress } from "@shared/schema";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
@@ -5044,6 +5044,321 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       })();
     } catch (err) {
       console.error("[inbox-analyzer] inbound webhook error:", err);
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Inbox Intel — Competitor Email Intelligence
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // SendGrid Inbound Parse webhook for the watch.* subdomain.
+  // Public (no auth) — we route by recipient token, which is unguessable.
+  // Multer parse errors are caught locally so the webhook always returns 200
+  // quickly and never bubbles into the global error handler.
+  const inboundParseSafe = (req: Request, res: Response, next: (err?: any) => void) => {
+    inboundUpload.any()(req, res, (err: any) => {
+      if (err) {
+        console.warn("[inbox-intel] inbound parse error:", err?.message || err);
+        if (!res.headersSent) res.status(200).send("OK");
+        return;
+      }
+      next();
+    });
+  };
+  app.post("/api/inbox-intel/inbound", inboundParseSafe, async (req: Request, res: Response) => {
+    if (!res.headersSent) res.status(200).send("OK");
+
+    try {
+      const intel = await import("./inboxIntel");
+      const { insertCompetitorTrackerSchema } = await import("@shared/schema");
+      void insertCompetitorTrackerSchema; // ensure module side-effect for shared schema typing
+
+      // Recipient extraction (handles both `to` field and SendGrid `envelope`)
+      const toRaw: string =
+        req.body?.to ||
+        (req.body?.envelope ? (() => {
+          try { const env = JSON.parse(req.body.envelope); return env?.to?.[0] || ""; } catch { return ""; }
+        })() : "") || "";
+
+      const token = intel.extractToken(toRaw);
+      if (!token) {
+        console.warn("[inbox-intel] Could not extract token from:", toRaw);
+        return;
+      }
+
+      const seed = await storage.getCompetitorSeedByToken(token);
+      if (!seed) {
+        console.warn("[inbox-intel] Unknown token:", token);
+        return;
+      }
+
+      // Parse sender / subject / body
+      const fromRaw: string = req.body?.from || "";
+      const { name: fromName, email: fromEmail, domain: fromDomain } = intel.parseFromField(fromRaw);
+      const subject: string = (req.body?.subject || "(No subject)").substring(0, 500);
+      const bodyText: string = req.body?.text || "";
+      const bodyHtmlRaw: string = req.body?.html || "";
+      const bodyHtml = intel.stripTrackingPixels(bodyHtmlRaw);
+      const rawHeaders: string = req.body?.headers || "";
+
+      const replyToEmail = intel.extractReplyTo(rawHeaders);
+      const messageId = intel.extractMessageId(rawHeaders);
+      const sentAt = intel.extractSentAt(rawHeaders);
+
+      const spfResult = intel.parseSpf(req.body?.SPF || req.body?.spf);
+      const dkimResult = intel.parseDkim(req.body?.dkim);
+      const dmarcResult = intel.parseDmarc(rawHeaders);
+
+      const detectedEsp = intel.detectEsp(rawHeaders);
+      const listUnsubscribePresent = intel.hasListUnsubscribe(rawHeaders);
+      const listUnsubscribePostPresent = intel.hasListUnsubscribePost(rawHeaders);
+
+      const preheader = intel.extractPreheader(bodyHtml);
+      const plainText = bodyText || intel.htmlToPlainText(bodyHtml);
+      const wordCount = intel.countWords(plainText);
+      const linkCount = (bodyHtml.match(/<a\b/gi) || []).length;
+      const imageCount = intel.countImages(bodyHtml);
+      const subjStats = intel.subjectStats(subject);
+
+      // Persist email row
+      const created = await storage.createCapturedEmail({
+        userId: seed.userId,
+        trackerId: seed.trackerId,
+        seedAddressId: seed.id,
+        subject,
+        preheader: preheader || null,
+        fromName: fromName || null,
+        fromEmail: fromEmail || null,
+        fromDomain: fromDomain || null,
+        replyToEmail: replyToEmail || null,
+        messageId: messageId || null,
+        plainBody: plainText.substring(0, 200_000) || null,
+        htmlBody: bodyHtml || null,
+        htmlBodySize: bodyHtml ? bodyHtml.length : null,
+        bodyAvailable: !!(bodyHtml || plainText),
+        wordCount,
+        linkCount,
+        imageCount,
+        subjectLength: subjStats.length,
+        subjectHasEmoji: subjStats.hasEmoji,
+        subjectIsAllCaps: subjStats.isAllCaps,
+        preheaderLength: preheader ? preheader.length : 0,
+        spfResult,
+        dkimResult,
+        dmarcResult,
+        detectedEsp: detectedEsp || null,
+        listUnsubscribePresent,
+        listUnsubscribePostPresent,
+        sentAt: sentAt || null,
+      });
+
+      // Persist links
+      const links = intel.extractLinks(bodyHtml, fromDomain);
+      if (links.length > 0) {
+        await storage.addCapturedEmailLinks(created.id, links);
+      }
+
+      // Bump seed counter
+      await storage.incrementSeedReceived(seed.id);
+
+      // Prune old non-pinned bodies — keep latest 100 with full HTML
+      try {
+        const pruned = await storage.pruneOldCapturedBodies(seed.trackerId, 100);
+        if (pruned > 0) {
+          console.log(`[inbox-intel] Pruned ${pruned} old email bodies for tracker ${seed.trackerId}`);
+        }
+      } catch (pruneErr) {
+        console.error("[inbox-intel] prune error:", pruneErr);
+      }
+    } catch (err) {
+      console.error("[inbox-intel] inbound webhook error:", err);
+    }
+  });
+
+  // ── Tracker CRUD ─────────────────────────────────────────────────────────
+  const MAX_TRACKERS = 20;
+  const MAX_SEEDS_PER_TRACKER = 5;
+  const MAX_PINNED_PER_TRACKER = 25;
+
+  app.get("/api/inbox-intel/trackers", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const trackers = await storage.getCompetitorTrackers(userId);
+      res.json(trackers);
+    } catch (err) {
+      console.error("[inbox-intel] list trackers error:", err);
+      res.status(500).json({ message: "Failed to load competitors" });
+    }
+  });
+
+  app.post("/api/inbox-intel/trackers", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const { insertCompetitorTrackerSchema } = await import("@shared/schema");
+      const parsed = insertCompetitorTrackerSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+      const total = await storage.countCompetitorTrackers(userId);
+      if (total >= MAX_TRACKERS) {
+        return res.status(409).json({ message: `Limit reached: ${MAX_TRACKERS} competitors maximum` });
+      }
+      const created = await storage.createCompetitorTracker(userId, parsed.data);
+      // Auto-generate the first seed address so the user has something to use immediately
+      try {
+        const intel = await import("./inboxIntel");
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const token = intel.generateSeedToken();
+          const existing = await storage.getCompetitorSeedByToken(token);
+          if (!existing) {
+            await storage.createCompetitorSeedAddress(userId, created.id, token);
+            break;
+          }
+        }
+      } catch (seedErr) {
+        console.error("[inbox-intel] auto-seed error:", seedErr);
+      }
+      res.status(201).json(created);
+    } catch (err) {
+      console.error("[inbox-intel] create tracker error:", err);
+      res.status(500).json({ message: "Failed to create competitor" });
+    }
+  });
+
+  app.get("/api/inbox-intel/trackers/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const trackerId = req.params.id;
+      const tracker = await storage.getCompetitorTracker(trackerId, userId);
+      if (!tracker) return res.status(404).json({ message: "Competitor not found" });
+      const intel = await import("./inboxIntel");
+      const seedsRaw = await storage.getCompetitorSeedAddresses(trackerId, userId);
+      const seeds = seedsRaw.map((s) => ({ ...s, address: intel.buildSeedAddress(s.token) }));
+      const emails = await storage.getCapturedEmails(trackerId, userId, 200);
+      const pinnedCount = await storage.countPinnedEmailsForTracker(trackerId);
+      res.json({ tracker, seeds, emails, pinnedCount });
+    } catch (err) {
+      console.error("[inbox-intel] get tracker error:", err);
+      res.status(500).json({ message: "Failed to load competitor" });
+    }
+  });
+
+  app.patch("/api/inbox-intel/trackers/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const { insertCompetitorTrackerSchema } = await import("@shared/schema");
+      const parsed = insertCompetitorTrackerSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+      const updated = await storage.updateCompetitorTracker(req.params.id, userId, parsed.data);
+      if (!updated) return res.status(404).json({ message: "Competitor not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[inbox-intel] update tracker error:", err);
+      res.status(500).json({ message: "Failed to update competitor" });
+    }
+  });
+
+  app.delete("/api/inbox-intel/trackers/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const tracker = await storage.getCompetitorTracker(req.params.id, userId);
+      if (!tracker) return res.status(404).json({ message: "Competitor not found" });
+      await storage.deleteCompetitorTracker(req.params.id, userId);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[inbox-intel] delete tracker error:", err);
+      res.status(500).json({ message: "Failed to delete competitor" });
+    }
+  });
+
+  // ── Seed addresses ──────────────────────────────────────────────────────
+  app.post("/api/inbox-intel/trackers/:id/seeds", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const trackerId = req.params.id;
+      const tracker = await storage.getCompetitorTracker(trackerId, userId);
+      if (!tracker) return res.status(404).json({ message: "Competitor not found" });
+      const { seedAddressLabelSchema } = await import("@shared/schema");
+      const parsed = seedAddressLabelSchema.safeParse(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+      const total = await storage.countCompetitorSeedsForTracker(trackerId);
+      if (total >= MAX_SEEDS_PER_TRACKER) {
+        return res.status(409).json({ message: `Limit reached: ${MAX_SEEDS_PER_TRACKER} seed addresses per competitor` });
+      }
+      const intel = await import("./inboxIntel");
+      let token = "";
+      let saved: CompetitorSeedAddress | null = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        token = intel.generateSeedToken();
+        const existing = await storage.getCompetitorSeedByToken(token);
+        if (!existing) {
+          saved = await storage.createCompetitorSeedAddress(
+            userId,
+            trackerId,
+            token,
+            parsed.data.label || undefined,
+          );
+          break;
+        }
+      }
+      if (!saved) {
+        return res.status(500).json({ message: "Couldn't generate a unique address — try again" });
+      }
+      res.status(201).json({ ...saved, address: intel.buildSeedAddress(saved.token) });
+    } catch (err) {
+      console.error("[inbox-intel] create seed error:", err);
+      res.status(500).json({ message: "Failed to create seed address" });
+    }
+  });
+
+  app.delete("/api/inbox-intel/seeds/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      await storage.deleteCompetitorSeedAddress(req.params.id, userId);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[inbox-intel] delete seed error:", err);
+      res.status(500).json({ message: "Failed to delete seed address" });
+    }
+  });
+
+  // ── Captured emails ─────────────────────────────────────────────────────
+  app.get("/api/inbox-intel/emails/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const email = await storage.getCapturedEmail(req.params.id, userId);
+      if (!email) return res.status(404).json({ message: "Email not found" });
+      const links = await storage.getCapturedEmailLinks(email.id);
+      res.json({ email, links });
+    } catch (err) {
+      console.error("[inbox-intel] get email error:", err);
+      res.status(500).json({ message: "Failed to load email" });
+    }
+  });
+
+  app.patch("/api/inbox-intel/emails/:id/pin", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const pinned = !!req.body?.pinned;
+      const existing = await storage.getCapturedEmail(req.params.id, userId);
+      if (!existing) return res.status(404).json({ message: "Email not found" });
+      if (pinned && !existing.isPinned) {
+        const total = await storage.countPinnedEmailsForTracker(existing.trackerId);
+        if (total >= MAX_PINNED_PER_TRACKER) {
+          return res.status(409).json({
+            message: `Limit reached: ${MAX_PINNED_PER_TRACKER} pinned emails per competitor`,
+          });
+        }
+      }
+      const updated = await storage.setCapturedEmailPin(req.params.id, userId, pinned);
+      res.json(updated);
+    } catch (err) {
+      console.error("[inbox-intel] pin email error:", err);
+      res.status(500).json({ message: "Failed to update pin" });
     }
   });
 

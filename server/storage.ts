@@ -2,6 +2,9 @@ import {
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
   dmoEntries, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
+  competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
+  type CompetitorTracker, type InsertCompetitorTracker, type CompetitorTrackerWithStats,
+  type CompetitorSeedAddress, type CapturedCompetitorEmail, type CapturedCompetitorEmailLink,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -322,6 +325,28 @@ export interface IStorage {
   getPostmasterDomains(userId: string): Promise<PostmasterDomain[]>;
   upsertPostmasterDomain(userId: string, domainName: string, data: { latestReputation: string | null; latestSpamRate: number | null; latestSpfRatio: number | null; latestDkimRatio: number | null; latestDmarcRatio: number | null; latestEncryptionRatio: number | null; trafficStats: any[] }): Promise<void>;
   deletePostmasterDomains(userId: string): Promise<void>;
+
+  // Inbox Intel (Competitor Email Intelligence)
+  getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
+  getCompetitorTracker(id: string, userId: string): Promise<CompetitorTracker | undefined>;
+  createCompetitorTracker(userId: string, data: InsertCompetitorTracker): Promise<CompetitorTracker>;
+  updateCompetitorTracker(id: string, userId: string, data: Partial<InsertCompetitorTracker>): Promise<CompetitorTracker | undefined>;
+  deleteCompetitorTracker(id: string, userId: string): Promise<void>;
+  countCompetitorTrackers(userId: string): Promise<number>;
+  getCompetitorSeedAddresses(trackerId: string, userId: string): Promise<CompetitorSeedAddress[]>;
+  getCompetitorSeedByToken(token: string): Promise<CompetitorSeedAddress | undefined>;
+  createCompetitorSeedAddress(userId: string, trackerId: string, token: string, label?: string): Promise<CompetitorSeedAddress>;
+  deleteCompetitorSeedAddress(id: string, userId: string): Promise<void>;
+  countCompetitorSeedsForTracker(trackerId: string): Promise<number>;
+  incrementSeedReceived(id: string): Promise<void>;
+  createCapturedEmail(data: Omit<CapturedCompetitorEmail, "id" | "receivedAt" | "isPinned" | "pinnedAt" | "bodyAvailable"> & { bodyAvailable?: boolean }): Promise<CapturedCompetitorEmail>;
+  addCapturedEmailLinks(emailId: string, links: Array<{ url: string; domain?: string; anchorText?: string; position: number; hasUtm: boolean }>): Promise<void>;
+  getCapturedEmails(trackerId: string, userId: string, limit?: number): Promise<CapturedCompetitorEmail[]>;
+  getCapturedEmail(id: string, userId: string): Promise<CapturedCompetitorEmail | undefined>;
+  getCapturedEmailLinks(emailId: string): Promise<CapturedCompetitorEmailLink[]>;
+  setCapturedEmailPin(id: string, userId: string, pinned: boolean): Promise<CapturedCompetitorEmail | undefined>;
+  countPinnedEmailsForTracker(trackerId: string): Promise<number>;
+  pruneOldCapturedBodies(trackerId: string, keepLatest: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2004,6 +2029,230 @@ export class DatabaseStorage implements IStorage {
 
   async deletePostmasterDomains(userId: string): Promise<void> {
     await db.delete(postmasterDomains).where(eq(postmasterDomains.userId, userId));
+  }
+
+  // ── Inbox Intel (Competitor Email Intelligence) ─────────────────────────────
+
+  async getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]> {
+    const rows = await db.execute(sql`
+      SELECT
+        t.id, t.user_id AS "userId", t.name, t.website, t.notes, t.created_at AS "createdAt",
+        COALESCE((SELECT COUNT(*)::int FROM ${competitorSeedAddresses} s WHERE s.tracker_id = t.id), 0) AS "seedCount",
+        COALESCE((SELECT COUNT(*)::int FROM ${capturedCompetitorEmails} e WHERE e.tracker_id = t.id), 0) AS "emailCount",
+        COALESCE((SELECT COUNT(*)::int FROM ${capturedCompetitorEmails} e WHERE e.tracker_id = t.id AND e.is_pinned = true), 0) AS "pinnedCount",
+        (SELECT MAX(e.received_at) FROM ${capturedCompetitorEmails} e WHERE e.tracker_id = t.id) AS "lastReceivedAt"
+      FROM ${competitorTrackers} t
+      WHERE t.user_id = ${userId}
+      ORDER BY t.created_at DESC
+    `);
+    return (rows.rows as any[]).map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      name: r.name,
+      website: r.website,
+      notes: r.notes,
+      createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
+      seedCount: Number(r.seedCount) || 0,
+      emailCount: Number(r.emailCount) || 0,
+      pinnedCount: Number(r.pinnedCount) || 0,
+      lastReceivedAt: r.lastReceivedAt ? (r.lastReceivedAt instanceof Date ? r.lastReceivedAt : new Date(r.lastReceivedAt)) : null,
+    }));
+  }
+
+  async getCompetitorTracker(id: string, userId: string): Promise<CompetitorTracker | undefined> {
+    const [row] = await db
+      .select()
+      .from(competitorTrackers)
+      .where(and(eq(competitorTrackers.id, id), eq(competitorTrackers.userId, userId)));
+    return row || undefined;
+  }
+
+  async createCompetitorTracker(userId: string, data: InsertCompetitorTracker): Promise<CompetitorTracker> {
+    const [row] = await db
+      .insert(competitorTrackers)
+      .values({
+        userId,
+        name: data.name,
+        website: data.website || null,
+        notes: data.notes || null,
+      })
+      .returning();
+    return row;
+  }
+
+  async updateCompetitorTracker(
+    id: string,
+    userId: string,
+    data: Partial<InsertCompetitorTracker>,
+  ): Promise<CompetitorTracker | undefined> {
+    const updates: any = {};
+    if (data.name !== undefined) updates.name = data.name;
+    if (data.website !== undefined) updates.website = data.website || null;
+    if (data.notes !== undefined) updates.notes = data.notes || null;
+    if (Object.keys(updates).length === 0) {
+      return this.getCompetitorTracker(id, userId);
+    }
+    const [row] = await db
+      .update(competitorTrackers)
+      .set(updates)
+      .where(and(eq(competitorTrackers.id, id), eq(competitorTrackers.userId, userId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async deleteCompetitorTracker(id: string, userId: string): Promise<void> {
+    await db
+      .delete(competitorTrackers)
+      .where(and(eq(competitorTrackers.id, id), eq(competitorTrackers.userId, userId)));
+  }
+
+  async countCompetitorTrackers(userId: string): Promise<number> {
+    const [{ value }] = await db
+      .select({ value: count() })
+      .from(competitorTrackers)
+      .where(eq(competitorTrackers.userId, userId));
+    return Number(value) || 0;
+  }
+
+  async getCompetitorSeedAddresses(trackerId: string, userId: string): Promise<CompetitorSeedAddress[]> {
+    return db
+      .select()
+      .from(competitorSeedAddresses)
+      .where(and(eq(competitorSeedAddresses.trackerId, trackerId), eq(competitorSeedAddresses.userId, userId)))
+      .orderBy(asc(competitorSeedAddresses.createdAt));
+  }
+
+  async getCompetitorSeedByToken(token: string): Promise<CompetitorSeedAddress | undefined> {
+    const [row] = await db
+      .select()
+      .from(competitorSeedAddresses)
+      .where(eq(competitorSeedAddresses.token, token));
+    return row || undefined;
+  }
+
+  async createCompetitorSeedAddress(
+    userId: string,
+    trackerId: string,
+    token: string,
+    label?: string,
+  ): Promise<CompetitorSeedAddress> {
+    const [row] = await db
+      .insert(competitorSeedAddresses)
+      .values({ userId, trackerId, token, label: label || null })
+      .returning();
+    return row;
+  }
+
+  async deleteCompetitorSeedAddress(id: string, userId: string): Promise<void> {
+    await db
+      .delete(competitorSeedAddresses)
+      .where(and(eq(competitorSeedAddresses.id, id), eq(competitorSeedAddresses.userId, userId)));
+  }
+
+  async countCompetitorSeedsForTracker(trackerId: string): Promise<number> {
+    const [{ value }] = await db
+      .select({ value: count() })
+      .from(competitorSeedAddresses)
+      .where(eq(competitorSeedAddresses.trackerId, trackerId));
+    return Number(value) || 0;
+  }
+
+  async incrementSeedReceived(id: string): Promise<void> {
+    await db
+      .update(competitorSeedAddresses)
+      .set({
+        receivedCount: sql`${competitorSeedAddresses.receivedCount} + 1`,
+        lastReceivedAt: new Date(),
+      })
+      .where(eq(competitorSeedAddresses.id, id));
+  }
+
+  async createCapturedEmail(data: any): Promise<CapturedCompetitorEmail> {
+    const [row] = await db.insert(capturedCompetitorEmails).values(data).returning();
+    return row;
+  }
+
+  async addCapturedEmailLinks(
+    emailId: string,
+    links: Array<{ url: string; domain?: string; anchorText?: string; position: number; hasUtm: boolean }>,
+  ): Promise<void> {
+    if (links.length === 0) return;
+    await db.insert(capturedCompetitorEmailLinks).values(
+      links.map((l) => ({
+        emailId,
+        url: l.url,
+        domain: l.domain || null,
+        anchorText: l.anchorText || null,
+        position: l.position,
+        hasUtm: l.hasUtm,
+      })),
+    );
+  }
+
+  async getCapturedEmails(trackerId: string, userId: string, limit = 200): Promise<CapturedCompetitorEmail[]> {
+    return db
+      .select()
+      .from(capturedCompetitorEmails)
+      .where(and(eq(capturedCompetitorEmails.trackerId, trackerId), eq(capturedCompetitorEmails.userId, userId)))
+      .orderBy(desc(capturedCompetitorEmails.receivedAt))
+      .limit(limit);
+  }
+
+  async getCapturedEmail(id: string, userId: string): Promise<CapturedCompetitorEmail | undefined> {
+    const [row] = await db
+      .select()
+      .from(capturedCompetitorEmails)
+      .where(and(eq(capturedCompetitorEmails.id, id), eq(capturedCompetitorEmails.userId, userId)));
+    return row || undefined;
+  }
+
+  async getCapturedEmailLinks(emailId: string): Promise<CapturedCompetitorEmailLink[]> {
+    return db
+      .select()
+      .from(capturedCompetitorEmailLinks)
+      .where(eq(capturedCompetitorEmailLinks.emailId, emailId))
+      .orderBy(asc(capturedCompetitorEmailLinks.position));
+  }
+
+  async setCapturedEmailPin(
+    id: string,
+    userId: string,
+    pinned: boolean,
+  ): Promise<CapturedCompetitorEmail | undefined> {
+    const [row] = await db
+      .update(capturedCompetitorEmails)
+      .set({ isPinned: pinned, pinnedAt: pinned ? new Date() : null })
+      .where(and(eq(capturedCompetitorEmails.id, id), eq(capturedCompetitorEmails.userId, userId)))
+      .returning();
+    return row || undefined;
+  }
+
+  async countPinnedEmailsForTracker(trackerId: string): Promise<number> {
+    const [{ value }] = await db
+      .select({ value: count() })
+      .from(capturedCompetitorEmails)
+      .where(and(eq(capturedCompetitorEmails.trackerId, trackerId), eq(capturedCompetitorEmails.isPinned, true)));
+    return Number(value) || 0;
+  }
+
+  // Null-out HTML/plain bodies for non-pinned emails beyond the latest N.
+  // Keeps the row (so metrics live forever) but reclaims storage.
+  async pruneOldCapturedBodies(trackerId: string, keepLatest: number): Promise<number> {
+    const result = await db.execute(sql`
+      UPDATE ${capturedCompetitorEmails}
+      SET html_body = NULL,
+          plain_body = NULL,
+          body_available = false
+      WHERE id IN (
+        SELECT id FROM ${capturedCompetitorEmails}
+        WHERE tracker_id = ${trackerId}
+          AND is_pinned = false
+          AND body_available = true
+        ORDER BY received_at DESC
+        OFFSET ${keepLatest}
+      )
+    `);
+    return (result as any).rowCount || 0;
   }
 }
 

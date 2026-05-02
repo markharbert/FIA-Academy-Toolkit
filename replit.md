@@ -29,6 +29,7 @@ Preferred communication style: Simple, everyday language.
 - **Dashboard**: A live command center displaying real-time statistics and activities from all integrated tools.
 - **ClickFunnels Integration**: Grants/revokes app access based on ClickFunnels enrollment events, provides SSO capabilities, and enforces membership checks during authentication.
 - **Help Documentation**: In-app documentation hub with illustrated guides for all features.
+- **Inbox Intel**: Competitor email intelligence tool. Members create up to 20 competitor trackers, each with up to 5 unique private seed addresses on `watch.fearlessmarketinglab.com`. Use the seed addresses to subscribe to competitors' email lists; incoming emails are automatically captured, parsed (sender, subject, links, images, ESP fingerprint, authentication), and stored. Latest 100 full-HTML captures kept per tracker (oldest auto-pruned), all metrics retained forever, up to 25 pinned emails per tracker preserved indefinitely. Pure rule-based analysis — no AI generation. Requires SendGrid Inbound Parse subdomain `watch.fearlessmarketinglab.com` configured to POST to `/api/inbox-intel/inbound`.
 
 ## External Dependencies
 

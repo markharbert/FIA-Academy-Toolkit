@@ -995,3 +995,113 @@ export const postmasterDomains = pgTable("postmaster_domains", {
 });
 
 export type PostmasterDomain = typeof postmasterDomains.$inferSelect;
+
+// ── Inbox Intel (Competitor Email Intelligence) ───────────────────────────────
+
+export const competitorTrackers = pgTable("competitor_trackers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  website: text("website"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertCompetitorTrackerSchema = createInsertSchema(competitorTrackers).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+}).extend({
+  name: z.string().trim().min(1, "Competitor name is required").max(100, "Name must be 100 characters or less"),
+  website: z.string().trim().max(200).optional().or(z.literal("")).nullish(),
+  notes: z.string().trim().max(500).optional().or(z.literal("")).nullish(),
+});
+
+export type CompetitorTracker = typeof competitorTrackers.$inferSelect;
+export type InsertCompetitorTracker = z.infer<typeof insertCompetitorTrackerSchema>;
+
+export const competitorSeedAddresses = pgTable("competitor_seed_addresses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  trackerId: varchar("tracker_id").notNull().references(() => competitorTrackers.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  label: text("label"),
+  receivedCount: integer("received_count").default(0).notNull(),
+  lastReceivedAt: timestamp("last_received_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const seedAddressLabelSchema = z.object({
+  label: z.string().trim().max(60, "Label must be 60 characters or less").optional().or(z.literal("")),
+});
+
+export type CompetitorSeedAddress = typeof competitorSeedAddresses.$inferSelect;
+
+export const capturedCompetitorEmails = pgTable("captured_competitor_emails", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  trackerId: varchar("tracker_id").notNull().references(() => competitorTrackers.id, { onDelete: "cascade" }),
+  seedAddressId: varchar("seed_address_id").references(() => competitorSeedAddresses.id, { onDelete: "set null" }),
+
+  // Headers / sender
+  subject: text("subject").notNull(),
+  preheader: text("preheader"),
+  fromName: text("from_name"),
+  fromEmail: text("from_email"),
+  fromDomain: text("from_domain"),
+  replyToEmail: text("reply_to_email"),
+  messageId: text("message_id"),
+
+  // Body (htmlBody/plainBody set to NULL after pruning)
+  plainBody: text("plain_body"),
+  htmlBody: text("html_body"),
+  htmlBodySize: integer("html_body_size"),
+  bodyAvailable: boolean("body_available").default(true).notNull(),
+
+  // Metrics (kept forever)
+  wordCount: integer("word_count"),
+  linkCount: integer("link_count"),
+  imageCount: integer("image_count"),
+  subjectLength: integer("subject_length"),
+  subjectHasEmoji: boolean("subject_has_emoji"),
+  subjectIsAllCaps: boolean("subject_is_all_caps"),
+  preheaderLength: integer("preheader_length"),
+
+  // Authentication / ESP (kept forever)
+  spfResult: text("spf_result"),
+  dkimResult: text("dkim_result"),
+  dmarcResult: text("dmarc_result"),
+  detectedEsp: text("detected_esp"),
+  listUnsubscribePresent: boolean("list_unsubscribe_present"),
+  listUnsubscribePostPresent: boolean("list_unsubscribe_post_present"),
+
+  // Pinning
+  isPinned: boolean("is_pinned").default(false).notNull(),
+  pinnedAt: timestamp("pinned_at"),
+
+  // Timing
+  receivedAt: timestamp("received_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  sentAt: timestamp("sent_at"),
+});
+
+export type CapturedCompetitorEmail = typeof capturedCompetitorEmails.$inferSelect;
+
+export const capturedCompetitorEmailLinks = pgTable("captured_competitor_email_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  emailId: varchar("email_id").notNull().references(() => capturedCompetitorEmails.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  domain: text("domain"),
+  anchorText: text("anchor_text"),
+  position: integer("position"),
+  hasUtm: boolean("has_utm").default(false).notNull(),
+});
+
+export type CapturedCompetitorEmailLink = typeof capturedCompetitorEmailLinks.$inferSelect;
+
+// Aggregated tracker view returned by the trackers list endpoint
+export type CompetitorTrackerWithStats = CompetitorTracker & {
+  seedCount: number;
+  emailCount: number;
+  pinnedCount: number;
+  lastReceivedAt: Date | null;
+};
