@@ -76,6 +76,44 @@ function gmailDateStr(d: Date): string {
   return `${y}/${m}/${day}`;
 }
 
+// Run all six folder searches for a given base query.
+// Returns counts and a derived status, or null if all counts are zero.
+async function queryFolders(
+  gmail: ReturnType<typeof google.gmail>,
+  base_q: string,
+  inboxEmail: string
+): Promise<{ status: PlacementStatus; queryUsed: string } | null> {
+  const [spamRes, primaryRes, promotionsRes, socialRes, updatesRes, forumsRes] = await Promise.all([
+    gmail.users.messages.list({ userId: "me", q: `${base_q} in:spam`,                      maxResults: 1 }),
+    gmail.users.messages.list({ userId: "me", q: `${base_q} category:primary -in:spam`,    maxResults: 1 }),
+    gmail.users.messages.list({ userId: "me", q: `${base_q} category:promotions -in:spam`, maxResults: 1 }),
+    gmail.users.messages.list({ userId: "me", q: `${base_q} category:social -in:spam`,     maxResults: 1 }),
+    gmail.users.messages.list({ userId: "me", q: `${base_q} category:updates -in:spam`,    maxResults: 1 }),
+    gmail.users.messages.list({ userId: "me", q: `${base_q} category:forums -in:spam`,     maxResults: 1 }),
+  ]);
+
+  const spamCount    = (spamRes.data.messages      || []).length;
+  const primaryCount = (primaryRes.data.messages   || []).length;
+  const promoCount   = (promotionsRes.data.messages || []).length;
+  const socialCount  = (socialRes.data.messages    || []).length;
+  const updatesCount = (updatesRes.data.messages   || []).length;
+  const forumsCount  = (forumsRes.data.messages    || []).length;
+
+  console.log(
+    `[GmailPlacement] ${inboxEmail} | query: "${base_q}" | ` +
+    `spam:${spamCount} primary:${primaryCount} promos:${promoCount} ` +
+    `social:${socialCount} updates:${updatesCount} forums:${forumsCount}`
+  );
+
+  if (spamCount    > 0) return { status: "spam",       queryUsed: base_q };
+  if (primaryCount > 0) return { status: "primary",    queryUsed: base_q };
+  if (promoCount   > 0) return { status: "promotions", queryUsed: base_q };
+  if (socialCount  > 0) return { status: "social",     queryUsed: base_q };
+  if (updatesCount > 0) return { status: "updates",    queryUsed: base_q };
+  if (forumsCount  > 0) return { status: "forums",     queryUsed: base_q };
+  return null; // nothing found with this query
+}
+
 export async function checkGmailPlacement(
   inbox: { id: string; label: string; email: string; provider: string; oauthAccessToken: string | null; oauthRefreshToken: string | null },
   senderAddress: string,
@@ -104,77 +142,65 @@ export async function checkGmailPlacement(
 
     const safeSender = senderAddress.replace(/['"\\]/g, "");
 
-    // Build a query that targets ONLY the specific email being monitored.
+    // Three-strategy cascade — tries the most specific first, falls back on zero results.
     //
-    // If we have the email's received-at timestamp, use a tight 3-day window
-    // (1 day before → 2 days after) instead of newer_than:14d.  This prevents
-    // older emails from the same sender — e.g. an old message already in the
-    // spam folder — from poisoning the result.
+    // KEY INSIGHT: some email senders (e.g. ClickFunnels) use internal Docker hostnames
+    // as the Message-ID domain (e.g. @cf2-admin…ptvzn.mail).  Gmail's rfc822msgid: search
+    // sometimes fails to find these even though the email is in the inbox.  When that
+    // happens we fall through to Strategy 2 or 3 rather than returning not_found prematurely.
     //
-    // We also append the subject (first 50 chars, sanitised) so the match is
-    // as specific as possible.
+    // Strategy 1 — rfc822msgid: (exact single-message match, best precision):
+    //   Only used when we have a stored Message-ID.  If it returns zero across all folders,
+    //   cascade to Strategy 2 instead of giving up.
     //
-    // KEY FIX: Gmail retains the original category label (e.g. "category:primary") on
-    // emails even after they are moved to Spam.  Two-layer defence:
-    //   1. Spam is checked FIRST — if the message is in spam, that result wins.
-    //   2. Every category search explicitly adds "-in:spam" so it can never match a
-    //      message that is currently sitting in the spam folder.
+    // Strategy 2 — tight date window + from + subject (good precision):
+    //   1 day before → 2 days after received-at timestamp, filtered by sender and subject.
+    //   Only used when we have the received-at timestamp.
+    //   If it also returns zero, cascade to Strategy 3.
+    //
+    // Strategy 3 — sender + newer_than:5d (last resort, lowest precision):
+    //   Widest net; can match recent emails from the same sender regardless of subject.
+    //
+    // Spam-first rule: spam is always checked FIRST so it overrides category labels.
+    // Every non-spam query uses -in:spam to avoid false category matches.
 
-    // Strategy 1 (best): use the globally-unique Message-ID.
-    //   rfc822msgid: matches exactly one message in the world — no ambiguity possible,
-    //   not affected by same sender/subject, not affected by date.
-    //
-    // Strategy 2 (good): tight date window + subject when Message-ID is unavailable.
-    //   1 day before → 2 days after the known received-at, plus subject for precision.
-    //
-    // Strategy 3 (fallback): sender + newer_than:5d when we have no pinned context.
-    //   Reduced from 14d to limit cross-contamination from older emails.
-    let base_q: string;
-    if (context?.messageId) {
+    let result: { status: PlacementStatus; queryUsed: string } | null = null;
+
+    // Strategy 1: rfc822msgid:
+    if (!result && context?.messageId) {
       const safeMessageId = context.messageId.replace(/['"\\<> ]/g, "");
-      base_q = `rfc822msgid:${safeMessageId}`;
-    } else if (context?.receivedAt) {
-      const received = context.receivedAt;
-      const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
-      const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
-      base_q = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
-      if (context.subject) {
-        const safeSubject = context.subject.replace(/['"\\]/g, "").substring(0, 50).trim();
-        if (safeSubject) base_q += ` subject:"${safeSubject}"`;
+      result = await queryFolders(gmail, `rfc822msgid:${safeMessageId}`, inbox.email);
+      if (!result) {
+        console.log(`[GmailPlacement] ${inbox.email} | rfc822msgid found nothing — trying date fallback`);
       }
-    } else {
-      base_q = `from:${safeSender} newer_than:5d`;
     }
 
-    const [spamRes, primaryRes, promotionsRes, socialRes, updatesRes, forumsRes] = await Promise.all([
-      gmail.users.messages.list({ userId: "me", q: `${base_q} in:spam`,                         maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:primary -in:spam`,       maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:promotions -in:spam`,    maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:social -in:spam`,        maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:updates -in:spam`,       maxResults: 1 }),
-      gmail.users.messages.list({ userId: "me", q: `${base_q} category:forums -in:spam`,        maxResults: 1 }),
-    ]);
+    // Strategy 2: tight date window + from + subject
+    if (!result && context?.receivedAt) {
+      const received     = context.receivedAt;
+      const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
+      let q2 = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
+      if (context.subject) {
+        const safeSubject = context.subject.replace(/['"\\]/g, "").substring(0, 50).trim();
+        if (safeSubject) q2 += ` subject:"${safeSubject}"`;
+      }
+      result = await queryFolders(gmail, q2, inbox.email);
+      if (!result) {
+        console.log(`[GmailPlacement] ${inbox.email} | date+subject query found nothing — trying sender fallback`);
+      }
+    }
 
-    const spamCount     = (spamRes.data.messages     || []).length;
-    const primaryCount  = (primaryRes.data.messages  || []).length;
-    const promoCount    = (promotionsRes.data.messages || []).length;
-    const socialCount   = (socialRes.data.messages   || []).length;
-    const updatesCount  = (updatesRes.data.messages  || []).length;
-    const forumsCount   = (forumsRes.data.messages   || []).length;
+    // Strategy 3: from + newer_than:5d
+    if (!result) {
+      result = await queryFolders(gmail, `from:${safeSender} newer_than:5d`, inbox.email);
+    }
 
-    console.log(
-      `[GmailPlacement] ${inbox.email} | query: "${base_q}" | ` +
-      `spam:${spamCount} primary:${primaryCount} promos:${promoCount} ` +
-      `social:${socialCount} updates:${updatesCount} forums:${forumsCount}`
-    );
+    if (result) {
+      console.log(`[GmailPlacement] ${inbox.email} | resolved → ${result.status}`);
+      return { ...base, status: result.status };
+    }
 
-    // Spam checked first — overrides any category label.
-    if (spamCount  > 0) return { ...base, status: "spam" };
-    if (primaryCount  > 0) return { ...base, status: "primary" };
-    if (promoCount > 0) return { ...base, status: "promotions" };
-    if (socialCount > 0) return { ...base, status: "social" };
-    if (updatesCount > 0) return { ...base, status: "updates" };
-    if (forumsCount > 0) return { ...base, status: "forums" };
     return { ...base, status: "not_found" };
   } catch (err: any) {
     console.error("[GmailPlacement] Error checking inbox", inbox.email, err?.message);
