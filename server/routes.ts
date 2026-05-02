@@ -5269,6 +5269,25 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.get("/api/inbox-intel/trackers/:id/funnel", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const trackerId = req.params.id;
+      const tracker = await storage.getCompetitorTracker(trackerId, userId);
+      if (!tracker) return res.status(404).json({ message: "Competitor not found" });
+      const intel = await import("./inboxIntel");
+      const seedsRaw = await storage.getCompetitorSeedAddresses(trackerId, userId);
+      const seeds = seedsRaw.map((s) => ({ ...s, address: intel.buildSeedAddress(s.token) }));
+      const emails = await storage.getCapturedEmails(trackerId, userId, 500);
+      const { analyzeFunnel } = await import("./inboxIntelFunnel");
+      const analysis = analyzeFunnel(seeds, emails);
+      res.json(analysis);
+    } catch (err) {
+      console.error("[inbox-intel] funnel error:", err);
+      res.status(500).json({ message: "Failed to analyze funnel" });
+    }
+  });
+
   app.get("/api/inbox-intel/feed", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;

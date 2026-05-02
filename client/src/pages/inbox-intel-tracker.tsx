@@ -24,6 +24,10 @@ import {
   RefreshCw,
   Globe,
   Pencil,
+  GitBranch,
+  Zap,
+  Megaphone,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +58,7 @@ import type {
   CompetitorSeedAddress,
   CapturedCompetitorEmail,
   TrackerAnalytics,
+  FunnelAnalysis,
 } from "@shared/schema";
 
 const MAX_SEEDS = 5;
@@ -403,6 +408,9 @@ export default function InboxIntelTrackerPage() {
             <TabsTrigger value="analytics" data-testid="tab-analytics">
               <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Analytics
             </TabsTrigger>
+            <TabsTrigger value="funnel" data-testid="tab-funnel">
+              <GitBranch className="h-3.5 w-3.5 mr-1.5" /> Funnel
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="emails" className="space-y-3 mt-0">
@@ -486,6 +494,16 @@ export default function InboxIntelTrackerPage() {
 
           <TabsContent value="analytics" className="mt-0">
             <AnalyticsPanel trackerId={trackerId!} trackerName={tracker.name} />
+          </TabsContent>
+
+          <TabsContent value="funnel" className="mt-0">
+            <FunnelPanel
+              trackerId={trackerId!}
+              trackerName={tracker.name}
+              onOpenEmail={(emailId) =>
+                setLocation(`/email-tools/inbox-intel/${trackerId}/email/${emailId}`)
+              }
+            />
           </TabsContent>
         </Tabs>
       </div>
@@ -845,6 +863,296 @@ function AuthStat({ label, pct }: { label: string; pct: number }) {
       <Icon className="h-3.5 w-3.5 mx-auto mb-1" />
       <div className="text-base font-bold">{pct}%</div>
       <div className="text-[9px] uppercase tracking-wider opacity-80 mt-0.5">{label}</div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Funnel panel — fetches /api/inbox-intel/trackers/:id/funnel
+// ──────────────────────────────────────────────────────────────────────────
+
+function formatOffset(ms: number): string {
+  if (ms < 0) return "—";
+  const sec = Math.round(ms / 1000);
+  const min = Math.round(sec / 60);
+  const hr = Math.floor(min / 60);
+  const days = Math.floor(hr / 24);
+  if (days >= 1) {
+    const remHr = hr - days * 24;
+    return remHr > 0 ? `+${days}d ${remHr}h` : `+${days}d`;
+  }
+  if (hr >= 1) {
+    const remMin = min - hr * 60;
+    return remMin > 0 ? `+${hr}h ${remMin}m` : `+${hr}h`;
+  }
+  if (min >= 1) return `+${min}m`;
+  return `+${sec}s`;
+}
+
+function FunnelPanel({
+  trackerId,
+  trackerName,
+  onOpenEmail,
+}: {
+  trackerId: string;
+  trackerName: string;
+  onOpenEmail: (emailId: string) => void;
+}) {
+  const { data: funnel, isLoading } = useQuery<FunnelAnalysis>({
+    queryKey: ["/api/inbox-intel/trackers", trackerId, "funnel"],
+    enabled: !!trackerId,
+    staleTime: 30 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!funnel) {
+    return (
+      <div className="text-center py-16 border border-dashed border-border rounded-xl">
+        <p className="text-sm text-muted-foreground">Couldn't load funnel data.</p>
+      </div>
+    );
+  }
+
+  const { welcomeSeries, timelines, automatedCount, broadcastCount, unknownCount } = funnel;
+  const confidenceColor =
+    welcomeSeries.confidence === "high"
+      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+      : welcomeSeries.confidence === "medium"
+        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+        : "bg-muted text-muted-foreground border-border";
+
+  return (
+    <div className="space-y-5" data-testid="funnel-panel">
+      {/* Verdict card */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+              Funnel verdict
+            </div>
+            <p className="text-base font-semibold text-foreground" data-testid="text-funnel-verdict">
+              {funnel.verdict}
+            </p>
+            {funnel.hint && (
+              <p className="text-xs text-muted-foreground mt-1.5 flex items-start gap-1.5">
+                <HelpCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                <span>{funnel.hint}</span>
+              </p>
+            )}
+          </div>
+          {welcomeSeries.detected && (
+            <span
+              className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${confidenceColor} flex-shrink-0`}
+              data-testid="badge-funnel-confidence"
+            >
+              {welcomeSeries.confidence} confidence
+            </span>
+          )}
+        </div>
+
+        {/* Quick stats strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-4 border-t border-border">
+          <FunnelStat
+            label="Welcome steps"
+            value={welcomeSeries.steps.length.toString()}
+            tone={welcomeSeries.detected ? "good" : "neutral"}
+          />
+          <FunnelStat
+            label="Automated"
+            value={automatedCount.toString()}
+            tone="good"
+          />
+          <FunnelStat label="Broadcast" value={broadcastCount.toString()} tone="neutral" />
+          <FunnelStat label="Unclassified" value={unknownCount.toString()} tone="neutral" />
+        </div>
+      </div>
+
+      {/* Welcome series steps */}
+      {welcomeSeries.steps.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-500" /> Detected welcome sequence
+            </h3>
+            {welcomeSeries.medianGapMs > 0 && (
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                median gap {formatOffset(welcomeSeries.medianGapMs).replace("+", "")}
+              </span>
+            )}
+          </div>
+          <ol className="space-y-2">
+            {welcomeSeries.steps.map((step) => (
+              <li
+                key={step.emailId}
+                onClick={() => onOpenEmail(step.emailId)}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border bg-background hover-elevate active-elevate-2 cursor-pointer transition-colors"
+                data-testid={`funnel-step-${step.step}`}
+              >
+                <div className="w-7 h-7 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold text-xs flex items-center justify-center flex-shrink-0">
+                  {step.step}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-foreground truncate">
+                    {step.subject}
+                  </div>
+                  {step.fromName && (
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {step.fromName}
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs font-mono text-muted-foreground flex-shrink-0">
+                  {formatOffset(step.offsetMs)}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* Per-seed timeline */}
+      {timelines.length > 0 && timelines.some((t) => t.emails.length > 0) && (
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2 mb-3">
+            <GitBranch className="h-4 w-4 text-violet-500" /> Per-seed timeline
+          </h3>
+          <p className="text-[11px] text-muted-foreground mb-4">
+            Each row is a seed address. Dots are emails, positioned by time-since-signup.{" "}
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500" /> automated
+            </span>
+            {"  "}
+            <span className="inline-flex items-center gap-1 ml-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-violet-500" /> broadcast
+            </span>
+            {"  "}
+            <span className="inline-flex items-center gap-1 ml-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground/40" /> unclassified
+            </span>
+          </p>
+          <div className="space-y-3">
+            {timelines.map((t) => (
+              <SeedTimelineRow key={t.seedAddressId} timeline={t} onOpenEmail={onOpenEmail} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Insufficient-data state when nothing renders above */}
+      {!welcomeSeries.detected &&
+        funnel.emailCount === 0 && (
+          <div className="text-center py-12 border border-dashed border-border rounded-xl">
+            <Inbox className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">
+              Once {trackerName} starts sending to your seed addresses, you'll see the funnel here.
+            </p>
+          </div>
+        )}
+    </div>
+  );
+}
+
+function FunnelStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "good" | "neutral";
+}) {
+  const color =
+    tone === "good"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : "text-foreground";
+  return (
+    <div className="text-center">
+      <div className={`text-xl font-bold ${color}`} data-testid={`funnel-stat-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+        {value}
+      </div>
+      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mt-0.5">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function SeedTimelineRow({
+  timeline,
+  onOpenEmail,
+}: {
+  timeline: FunnelAnalysis["timelines"][number];
+  onOpenEmail: (id: string) => void;
+}) {
+  // Use the seed's own max offset so the row is normalized to its visible window.
+  const offsets = timeline.emails
+    .map((e) => e.offsetMs)
+    .filter((v): v is number => v != null && v >= 0);
+  const maxOffset = offsets.length ? Math.max(...offsets) : 0;
+  const denom = Math.max(maxOffset, 1);
+
+  return (
+    <div className="border border-border rounded-lg p-3" data-testid={`seed-timeline-${timeline.seedAddressId}`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs">
+          <span className="font-mono text-muted-foreground truncate inline-block max-w-[260px] align-middle">
+            {timeline.seedAddress}
+          </span>
+          {timeline.seedLabel && (
+            <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+              {timeline.seedLabel}
+            </span>
+          )}
+        </div>
+        <div className="text-[10px] text-muted-foreground">
+          {timeline.emails.length} {timeline.emails.length === 1 ? "email" : "emails"}
+        </div>
+      </div>
+
+      {timeline.emails.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground italic">No emails on this seed yet.</p>
+      ) : (
+        <div className="relative h-8 bg-muted/30 rounded">
+          {/* Day-0 marker */}
+          <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
+          {timeline.emails.map((e) => {
+            if (e.offsetMs == null || e.offsetMs < 0) return null;
+            const pct = (e.offsetMs / denom) * 100;
+            const dotColor =
+              e.classification === "automated"
+                ? "bg-amber-500 hover:bg-amber-400"
+                : e.classification === "broadcast"
+                  ? "bg-violet-500 hover:bg-violet-400"
+                  : "bg-muted-foreground/40 hover:bg-muted-foreground/60";
+            return (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => onOpenEmail(e.id)}
+                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full ${dotColor} ring-2 ring-card transition-transform hover:scale-125 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+                style={{ left: `${pct}%` }}
+                title={`${e.subject} · ${formatOffset(e.offsetMs)}`}
+                data-testid={`funnel-dot-${e.id}`}
+                aria-label={`${e.classification} email: ${e.subject}, at ${formatOffset(e.offsetMs)}`}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {timeline.emails.length > 0 && offsets.length > 0 && (
+        <div className="flex justify-between mt-1 text-[10px] text-muted-foreground font-mono">
+          <span>signup</span>
+          <span>{formatOffset(maxOffset)}</span>
+        </div>
+      )}
     </div>
   );
 }

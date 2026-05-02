@@ -1197,3 +1197,55 @@ export interface FeedResponse {
   trackers: { id: string; name: string }[];
   esps: string[];
 }
+
+// ── Inbox Intel — Phase 3 funnel detection ─────────────────────────────────
+
+export type FunnelClassification = "automated" | "broadcast" | "unknown";
+export type FunnelConfidence = "high" | "medium" | "low";
+
+export interface FunnelEmail {
+  id: string;
+  seedAddressId: string | null;
+  subject: string;
+  fromName: string | null;
+  receivedAt: Date;
+  offsetMs: number | null; // ms since seed signup; null when seed deleted
+  classification: FunnelClassification;
+  confidence: FunnelConfidence;
+}
+
+export interface FunnelSeedTimeline {
+  seedAddressId: string;
+  seedLabel: string | null;
+  seedAddress: string;
+  signupAt: Date;
+  emails: FunnelEmail[];
+}
+
+export interface WelcomeSeriesStep {
+  emailId: string;
+  step: number;
+  subject: string;
+  fromName: string | null;
+  offsetMs: number; // representative offset (median across seeds when matched)
+  receivedAt: Date; // representative timestamp
+}
+
+export interface FunnelAnalysis {
+  seedCount: number;
+  emailCount: number;
+  hasEnoughData: boolean;
+  welcomeSeries: {
+    detected: boolean;
+    confidence: FunnelConfidence;
+    steps: WelcomeSeriesStep[];
+    totalDurationMs: number;
+    medianGapMs: number;
+  };
+  automatedCount: number;
+  broadcastCount: number;
+  unknownCount: number;
+  timelines: FunnelSeedTimeline[];
+  verdict: string;
+  hint: string | null;
+}
