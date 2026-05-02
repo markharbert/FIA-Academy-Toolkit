@@ -27,6 +27,7 @@ import EmailToolsPage from "@/pages/email-tools";
 import InboxAnalyzerPage from "@/pages/inbox-analyzer";
 import SenderReputationPage from "@/pages/sender-reputation";
 import InboxIntelPage from "@/pages/inbox-intel";
+import InboxIntelFeedPage from "@/pages/inbox-intel-feed";
 import InboxIntelTrackerPage from "@/pages/inbox-intel-tracker";
 import InboxIntelEmailPage from "@/pages/inbox-intel-email";
 import DmoTrackerPage from "@/pages/dmo-tracker";
@@ -165,6 +166,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/email-tools/inbox-intel">
         {() => <ProtectedRoute component={InboxIntelPage} />}
+      </Route>
+      <Route path="/email-tools/inbox-intel/feed">
+        {() => <ProtectedRoute component={InboxIntelFeedPage} />}
       </Route>
       <Route path="/email-tools/inbox-intel/:trackerId">
         {() => <ProtectedRoute component={InboxIntelTrackerPage} />}

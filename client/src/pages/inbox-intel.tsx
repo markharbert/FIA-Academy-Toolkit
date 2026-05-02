@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, Plus, ArrowRight, Loader2, ChevronLeft, Mail, Pin } from "lucide-react";
+import { Eye, Plus, ArrowRight, Loader2, ChevronLeft, Mail, Pin, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -105,6 +105,17 @@ export default function InboxIntelPage() {
               {trackers.length} of {MAX_TRACKERS} {trackers.length === 1 ? "competitor" : "competitors"} tracked
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            {trackers.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => setLocation("/email-tools/inbox-intel/feed")}
+                data-testid="button-view-feed"
+                className="gap-2"
+              >
+                <Inbox className="h-4 w-4" /> View full feed
+              </Button>
+            )}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button
@@ -200,6 +211,7 @@ export default function InboxIntelPage() {
               </Form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {atLimit && (

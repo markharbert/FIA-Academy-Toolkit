@@ -219,17 +219,22 @@ export function stripTrackingPixels(html: string): string {
   });
 }
 
-// Quick first-pass ESP detection from headers — Phase 2 will expand this
-export function detectEsp(headers: string): string | undefined {
-  if (!headers) return undefined;
-  const h = headers.toLowerCase();
-  if (h.includes("x-mailer: mailchimp") || h.includes("mandrillapp.com") || h.includes("list-id:") && h.includes("mailchimp")) return "Mailchimp";
+// ESP detection. Combines header signals (high confidence) with HTML body
+// fingerprints (medium confidence — link patterns, tracking domains, footer text).
+// Headers always win when present; HTML signals are a fallback for ESPs that
+// strip identifying headers.
+export function detectEsp(headers: string, html?: string): string | undefined {
+  const h = (headers || "").toLowerCase();
+  const body = (html || "").toLowerCase();
+
+  // ── Header signals (high confidence) ──
+  if (h.includes("x-mailer: mailchimp") || h.includes("mandrillapp.com") || (h.includes("list-id:") && h.includes("mailchimp"))) return "Mailchimp";
   if (h.includes("x-sg-eid") || h.includes("sendgrid.net")) return "SendGrid";
   if (h.includes("x-klaviyo") || h.includes("klaviyomail.com")) return "Klaviyo";
   if (h.includes("x-aws-ses") || h.includes("amazonses.com")) return "Amazon SES";
   if (h.includes("x-mc-user") || h.includes("mailerlite.com")) return "MailerLite";
   if (h.includes("x-cm-")) return "Campaign Monitor";
-  if (h.includes("constantcontact.com")) return "Constant Contact";
+  if (h.includes("constantcontact.com") || h.includes("ccsend.com")) return "Constant Contact";
   if (h.includes("activehosted.com") || h.includes("x-ac-")) return "ActiveCampaign";
   if (h.includes("convertkit") || h.includes("x-ck-")) return "ConvertKit";
   if (h.includes("hubspotemail.net") || h.includes("hubspot.com")) return "HubSpot";
@@ -239,5 +244,290 @@ export function detectEsp(headers: string): string | undefined {
   if (h.includes("infusionsoft") || h.includes("keap")) return "Keap";
   if (h.includes("getresponse.com")) return "GetResponse";
   if (h.includes("aweber.com")) return "AWeber";
+  if (h.includes("kit.com") || h.includes("ck-tracking")) return "Kit (ConvertKit)";
+  if (h.includes("beehiiv.com") || h.includes("x-beehiiv")) return "beehiiv";
+  if (h.includes("substack.com")) return "Substack";
+  if (h.includes("flodesk.com") || h.includes("x-flodesk")) return "Flodesk";
+  if (h.includes("omnisend.com")) return "Omnisend";
+  if (h.includes("brevo.com") || h.includes("sendinblue.com")) return "Brevo";
+  if (h.includes("postmarkapp.com")) return "Postmark";
+  if (h.includes("mailgun.org") || h.includes("mailgun.net")) return "Mailgun";
+  if (h.includes("returnpath.net") || h.includes("salesforce.com") || h.includes("exacttarget.com") || h.includes("marketingcloud")) return "Salesforce Marketing Cloud";
+  if (h.includes("eloqua.com")) return "Oracle Eloqua";
+  if (h.includes("pardot.com")) return "Pardot";
+
+  // ── HTML body fingerprint signals (medium confidence) ──
+  // Tracking link / open-pixel host patterns are the most reliable HTML clue.
+  if (!body) return undefined;
+
+  if (body.includes("list-manage.com") || body.includes("us1.campaign-archive") || body.includes("eepurl.com")) return "Mailchimp";
+  if (body.includes("trk.klclick") || body.includes("manage.kmail-lists.com") || body.includes("a.klaviyomail.com")) return "Klaviyo";
+  if (body.includes("hs-analytics") || body.includes("hubspotusercontent") || body.includes("/_hcms/")) return "HubSpot";
+  if (body.includes("acemlnb.com") || body.includes("acemlna.com") || body.includes("activehosted.com")) return "ActiveCampaign";
+  if (body.includes("convertkit-mail") || body.includes("ck.page") || body.includes("kit.com/email")) return "ConvertKit";
+  if (body.includes("links.constantcontact") || body.includes("conta.cc") || body.includes("ccsend.com")) return "Constant Contact";
+  if (body.includes("e.cmail19.com") || body.includes("e.cmail20.com") || body.includes("createsend") || body.includes("cmail")) return "Campaign Monitor";
+  if (body.includes("clickfunnels.com/email") || body.includes("cfmlinks.com")) return "ClickFunnels";
+  if (body.includes("infusionsoft.com/app/linkClick") || body.includes("keapcrm.com")) return "Keap";
+  if (body.includes("link.mailerlite.com") || body.includes("mailerlite.com/")) return "MailerLite";
+  if (body.includes("drip.com/track") || body.includes("getdrip.com")) return "Drip";
+  if (body.includes("aweber.com") || body.includes("send.aweber.com")) return "AWeber";
+  if (body.includes("getresponse.com/click") || body.includes("getresponse-mail")) return "GetResponse";
+  if (body.includes("beehiiv.com/c/") || body.includes("media.beehiiv.com")) return "beehiiv";
+  if (body.includes("substackcdn.com") || body.includes("substack.com/redirect")) return "Substack";
+  if (body.includes("flodesk.com/") && body.includes("track")) return "Flodesk";
+  if (body.includes("omnisnd.com") || body.includes("e.omnisend.com")) return "Omnisend";
+  if (body.includes("r.brevo.com") || body.includes("rsbr.us")) return "Brevo";
+  if (body.includes("ontramail.com") || body.includes("ontraport-")) return "Ontraport";
+  if (body.includes("exct.net") || body.includes("cl.exct") || body.includes("et.salesforce")) return "Salesforce Marketing Cloud";
+  if (body.includes("pardot.com/r/") || body.includes("go.pardot")) return "Pardot";
+  if (body.includes("eloqua.com/e/") || body.includes("s.eloqua")) return "Oracle Eloqua";
+  if (body.includes("sendgrid.net/wf/")) return "SendGrid";
+
   return undefined;
+}
+
+// ── Phase 2: Analytics aggregation ──────────────────────────────────────────
+
+import type { TrackerAnalytics, CadenceCell, VolumeBucket, TopValue } from "@shared/schema";
+
+const STOPWORDS = new Set([
+  "the","a","an","and","or","but","of","to","in","on","for","with","at","by",
+  "is","are","was","were","be","been","being","have","has","had","do","does",
+  "did","will","would","could","should","may","might","must","can","this",
+  "that","these","those","it","its","i","you","your","my","we","our","they",
+  "their","what","which","who","when","where","why","how","re","fwd","new",
+]);
+
+function emptyAnalytics(): TrackerAnalytics {
+  return {
+    totalEmails: 0,
+    firstReceivedAt: null,
+    lastReceivedAt: null,
+    averageEmailsPerWeek: 0,
+    busiestDayOfWeek: null,
+    busiestHour: null,
+    cadenceHeatmap: [],
+    volumeByDay: [],
+    subject: {
+      avgLength: 0,
+      pctEmoji: 0,
+      pctAllCaps: 0,
+      avgWords: 0,
+      topOpeningWords: [],
+      longest: null,
+      shortest: null,
+    },
+    esp: { primary: null, confidencePct: 0, distribution: [], changeCount: 0 },
+    authentication: {
+      spfPassPct: 0,
+      dkimPassPct: 0,
+      dmarcPassPct: 0,
+      listUnsubscribePct: 0,
+      oneClickUnsubscribePct: 0,
+      weakAuthCount: 0,
+    },
+    content: { avgWords: 0, avgLinks: 0, avgImages: 0, pctWithUtm: 0, topLinkDomains: [] },
+  };
+}
+
+function pct(num: number, denom: number): number {
+  if (!denom) return 0;
+  return Math.round((num / denom) * 1000) / 10; // 1 decimal
+}
+
+function avg(nums: Array<number | null | undefined>): number {
+  const valid = nums.filter((n): n is number => typeof n === "number" && !Number.isNaN(n));
+  if (!valid.length) return 0;
+  return Math.round((valid.reduce((s, n) => s + n, 0) / valid.length) * 10) / 10;
+}
+
+interface AnalyticsEmailRow {
+  receivedAt: Date | string | null;
+  subject: string | null;
+  subjectLength: number | null;
+  subjectHasEmoji: boolean | null;
+  subjectIsAllCaps: boolean | null;
+  wordCount: number | null;
+  linkCount: number | null;
+  imageCount: number | null;
+  spfResult: string | null;
+  dkimResult: string | null;
+  dmarcResult: string | null;
+  listUnsubscribePresent: boolean | null;
+  listUnsubscribePostPresent: boolean | null;
+  detectedEsp: string | null;
+}
+
+export function computeTrackerAnalytics(
+  emails: AnalyticsEmailRow[],
+  topLinkDomains: TopValue[],
+  emailsWithUtmCount: number,
+): TrackerAnalytics {
+  if (!emails.length) return emptyAnalytics();
+
+  const total = emails.length;
+  const dates: Date[] = emails
+    .map((e) => (e.receivedAt ? (e.receivedAt instanceof Date ? e.receivedAt : new Date(e.receivedAt)) : null))
+    .filter((d): d is Date => !!d && !Number.isNaN(d.getTime()));
+
+  const sortedAsc = [...dates].sort((a, b) => a.getTime() - b.getTime());
+  const firstReceivedAt = sortedAsc[0] || null;
+  const lastReceivedAt = sortedAsc[sortedAsc.length - 1] || null;
+
+  // Cadence heatmap (7 × 24)
+  const cadence = new Map<string, number>();
+  const dayCounts = new Array(7).fill(0);
+  const hourCounts = new Array(24).fill(0);
+  for (const d of dates) {
+    const dow = d.getDay();
+    const hod = d.getHours();
+    const key = `${dow}-${hod}`;
+    cadence.set(key, (cadence.get(key) || 0) + 1);
+    dayCounts[dow]++;
+    hourCounts[hod]++;
+  }
+  const cadenceHeatmap: CadenceCell[] = [];
+  for (let dow = 0; dow < 7; dow++) {
+    for (let hod = 0; hod < 24; hod++) {
+      const c = cadence.get(`${dow}-${hod}`) || 0;
+      if (c > 0) cadenceHeatmap.push({ dayOfWeek: dow, hourOfDay: hod, count: c });
+    }
+  }
+  const busiestDayOfWeek = dayCounts.some((c) => c > 0)
+    ? dayCounts.indexOf(Math.max(...dayCounts))
+    : null;
+  const busiestHour = hourCounts.some((c) => c > 0)
+    ? hourCounts.indexOf(Math.max(...hourCounts))
+    : null;
+
+  // Volume by day — last 90 days
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 89);
+  ninetyDaysAgo.setHours(0, 0, 0, 0);
+  const volumeMap = new Map<string, number>();
+  for (let i = 0; i < 90; i++) {
+    const d = new Date(ninetyDaysAgo);
+    d.setDate(d.getDate() + i);
+    volumeMap.set(d.toISOString().slice(0, 10), 0);
+  }
+  for (const d of dates) {
+    if (d < ninetyDaysAgo) continue;
+    const key = d.toISOString().slice(0, 10);
+    if (volumeMap.has(key)) volumeMap.set(key, (volumeMap.get(key) || 0) + 1);
+  }
+  const volumeByDay: VolumeBucket[] = [...volumeMap.entries()].map(([date, count]) => ({ date, count }));
+
+  // Average emails per week (over the active window)
+  let averageEmailsPerWeek = 0;
+  if (firstReceivedAt && lastReceivedAt) {
+    const spanDays = Math.max(1, (lastReceivedAt.getTime() - firstReceivedAt.getTime()) / 86400000);
+    const spanWeeks = Math.max(1, spanDays / 7);
+    averageEmailsPerWeek = Math.round((total / spanWeeks) * 10) / 10;
+  }
+
+  // Subject stats
+  const subjectLengths = emails.map((e) => e.subjectLength).filter((n): n is number => typeof n === "number");
+  const emojiCount = emails.filter((e) => e.subjectHasEmoji === true).length;
+  const allCapsCount = emails.filter((e) => e.subjectIsAllCaps === true).length;
+  const subjectWordCounts = emails
+    .map((e) => (e.subject ? e.subject.trim().split(/\s+/).filter(Boolean).length : 0))
+    .filter((n) => n > 0);
+  const openingWordMap = new Map<string, number>();
+  for (const e of emails) {
+    if (!e.subject) continue;
+    const first = e.subject
+      .trim()
+      .toLowerCase()
+      .replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\W_]+/u, "")
+      .split(/\s+/)[0];
+    if (!first || STOPWORDS.has(first)) continue;
+    openingWordMap.set(first, (openingWordMap.get(first) || 0) + 1);
+  }
+  const topOpeningWords: TopValue[] = [...openingWordMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([value, count]) => ({ value, count }));
+  const subjectsForLength = emails
+    .map((e) => e.subject)
+    .filter((s): s is string => !!s && s.length > 0);
+  const longest = subjectsForLength.length
+    ? subjectsForLength.reduce((a, b) => (a.length >= b.length ? a : b))
+    : null;
+  const shortest = subjectsForLength.length
+    ? subjectsForLength.reduce((a, b) => (a.length <= b.length ? a : b))
+    : null;
+
+  // ESP distribution
+  const espMap = new Map<string, number>();
+  for (const e of emails) {
+    const v = e.detectedEsp || "Unknown";
+    espMap.set(v, (espMap.get(v) || 0) + 1);
+  }
+  const espDistribution: TopValue[] = [...espMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([value, count]) => ({ value, count }));
+  const knownEsps = espDistribution.filter((d) => d.value !== "Unknown");
+  const primary = knownEsps[0]?.value || null;
+  const primaryCount = knownEsps[0]?.count || 0;
+  const knownTotal = knownEsps.reduce((s, d) => s + d.count, 0);
+  const confidencePct = knownTotal > 0 ? pct(primaryCount, knownTotal) : 0;
+  // Count ESP changes across the chronological sequence (Unknown breaks count)
+  let changeCount = 0;
+  let prev: string | null = null;
+  for (const e of [...emails].sort((a, b) => {
+    const ad = a.receivedAt ? new Date(a.receivedAt).getTime() : 0;
+    const bd = b.receivedAt ? new Date(b.receivedAt).getTime() : 0;
+    return ad - bd;
+  })) {
+    const cur = e.detectedEsp || null;
+    if (cur && prev && cur !== prev) changeCount++;
+    if (cur) prev = cur;
+  }
+
+  // Authentication
+  const spfPass = emails.filter((e) => e.spfResult === "pass").length;
+  const dkimPass = emails.filter((e) => e.dkimResult === "pass").length;
+  const dmarcPass = emails.filter((e) => e.dmarcResult === "pass").length;
+  const listUnsub = emails.filter((e) => e.listUnsubscribePresent === true).length;
+  const oneClick = emails.filter((e) => e.listUnsubscribePostPresent === true).length;
+  const weakAuthCount = emails.filter(
+    (e) => e.spfResult !== "pass" || e.dkimResult !== "pass" || e.dmarcResult !== "pass",
+  ).length;
+
+  return {
+    totalEmails: total,
+    firstReceivedAt,
+    lastReceivedAt,
+    averageEmailsPerWeek,
+    busiestDayOfWeek,
+    busiestHour,
+    cadenceHeatmap,
+    volumeByDay,
+    subject: {
+      avgLength: avg(subjectLengths),
+      pctEmoji: pct(emojiCount, total),
+      pctAllCaps: pct(allCapsCount, total),
+      avgWords: avg(subjectWordCounts),
+      topOpeningWords,
+      longest,
+      shortest,
+    },
+    esp: { primary, confidencePct, distribution: espDistribution, changeCount },
+    authentication: {
+      spfPassPct: pct(spfPass, total),
+      dkimPassPct: pct(dkimPass, total),
+      dmarcPassPct: pct(dmarcPass, total),
+      listUnsubscribePct: pct(listUnsub, total),
+      oneClickUnsubscribePct: pct(oneClick, total),
+      weakAuthCount,
+    },
+    content: {
+      avgWords: avg(emails.map((e) => e.wordCount)),
+      avgLinks: avg(emails.map((e) => e.linkCount)),
+      avgImages: avg(emails.map((e) => e.imageCount)),
+      pctWithUtm: pct(emailsWithUtmCount, total),
+      topLinkDomains,
+    },
+  };
 }

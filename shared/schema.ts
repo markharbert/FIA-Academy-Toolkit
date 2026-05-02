@@ -1105,3 +1105,86 @@ export type CompetitorTrackerWithStats = CompetitorTracker & {
   pinnedCount: number;
   lastReceivedAt: Date | null;
 };
+
+// ── Inbox Intel — Phase 2 analytics & feed ──────────────────────────────────
+
+export interface CadenceCell {
+  dayOfWeek: number; // 0 = Sunday … 6 = Saturday
+  hourOfDay: number; // 0 … 23
+  count: number;
+}
+
+export interface VolumeBucket {
+  date: string; // YYYY-MM-DD
+  count: number;
+}
+
+export interface TopValue {
+  value: string;
+  count: number;
+}
+
+export interface TrackerAnalytics {
+  totalEmails: number;
+  firstReceivedAt: Date | null;
+  lastReceivedAt: Date | null;
+  averageEmailsPerWeek: number;
+  busiestDayOfWeek: number | null;
+  busiestHour: number | null;
+  cadenceHeatmap: CadenceCell[];
+  volumeByDay: VolumeBucket[];
+  subject: {
+    avgLength: number;
+    pctEmoji: number;
+    pctAllCaps: number;
+    avgWords: number;
+    topOpeningWords: TopValue[];
+    longest: string | null;
+    shortest: string | null;
+  };
+  esp: {
+    primary: string | null;
+    confidencePct: number;
+    distribution: TopValue[];
+    changeCount: number;
+  };
+  authentication: {
+    spfPassPct: number;
+    dkimPassPct: number;
+    dmarcPassPct: number;
+    listUnsubscribePct: number;
+    oneClickUnsubscribePct: number;
+    weakAuthCount: number;
+  };
+  content: {
+    avgWords: number;
+    avgLinks: number;
+    avgImages: number;
+    pctWithUtm: number;
+    topLinkDomains: TopValue[];
+  };
+}
+
+export interface FeedItem {
+  id: string;
+  trackerId: string;
+  trackerName: string;
+  subject: string;
+  fromName: string | null;
+  fromEmail: string | null;
+  fromDomain: string | null;
+  detectedEsp: string | null;
+  receivedAt: Date;
+  isPinned: boolean;
+  bodyAvailable: boolean;
+  wordCount: number | null;
+  linkCount: number | null;
+  subjectHasEmoji: boolean | null;
+}
+
+export interface FeedResponse {
+  items: FeedItem[];
+  total: number;
+  trackers: { id: string; name: string }[];
+  esps: string[];
+}

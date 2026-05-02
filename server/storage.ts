@@ -5,6 +5,7 @@ import {
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
   type CompetitorTracker, type InsertCompetitorTracker, type CompetitorTrackerWithStats,
   type CompetitorSeedAddress, type CapturedCompetitorEmail, type CapturedCompetitorEmailLink,
+  type TrackerAnalytics, type FeedResponse,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -27,7 +28,7 @@ import {
 } from "@shared/schema";
 import crypto from "crypto";
 import { db, pool } from "./db";
-import { eq, and, lt, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
+import { eq, and, lt, lte, gte, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
 
 // Email normalization helper - centralizes email handling to prevent duplicates
 export function normalizeEmail(email: string | null | undefined): string | null {
@@ -347,6 +348,19 @@ export interface IStorage {
   setCapturedEmailPin(id: string, userId: string, pinned: boolean): Promise<CapturedCompetitorEmail | undefined>;
   countPinnedEmailsForTracker(trackerId: string): Promise<number>;
   pruneOldCapturedBodies(trackerId: string, keepLatest: number): Promise<number>;
+  getTrackerAnalytics(trackerId: string, userId: string): Promise<TrackerAnalytics>;
+  getCapturedEmailsFeed(
+    userId: string,
+    filters: {
+      trackerIds?: string[];
+      esp?: string;
+      search?: string;
+      pinnedOnly?: boolean;
+      from?: Date;
+      to?: Date;
+      limit?: number;
+    },
+  ): Promise<FeedResponse>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2233,6 +2247,185 @@ export class DatabaseStorage implements IStorage {
       .from(capturedCompetitorEmails)
       .where(and(eq(capturedCompetitorEmails.trackerId, trackerId), eq(capturedCompetitorEmails.isPinned, true)));
     return Number(value) || 0;
+  }
+
+  async getTrackerAnalytics(trackerId: string, userId: string): Promise<TrackerAnalytics> {
+    const { computeTrackerAnalytics } = await import("./inboxIntel");
+    // Verify ownership: getCompetitorTracker scopes by userId
+    const tracker = await this.getCompetitorTracker(trackerId, userId);
+    if (!tracker) {
+      return computeTrackerAnalytics([], [], 0);
+    }
+    // All metric columns retained forever — pull just what we need
+    const emails = await db
+      .select({
+        receivedAt: capturedCompetitorEmails.receivedAt,
+        subject: capturedCompetitorEmails.subject,
+        subjectLength: capturedCompetitorEmails.subjectLength,
+        subjectHasEmoji: capturedCompetitorEmails.subjectHasEmoji,
+        subjectIsAllCaps: capturedCompetitorEmails.subjectIsAllCaps,
+        wordCount: capturedCompetitorEmails.wordCount,
+        linkCount: capturedCompetitorEmails.linkCount,
+        imageCount: capturedCompetitorEmails.imageCount,
+        spfResult: capturedCompetitorEmails.spfResult,
+        dkimResult: capturedCompetitorEmails.dkimResult,
+        dmarcResult: capturedCompetitorEmails.dmarcResult,
+        listUnsubscribePresent: capturedCompetitorEmails.listUnsubscribePresent,
+        listUnsubscribePostPresent: capturedCompetitorEmails.listUnsubscribePostPresent,
+        detectedEsp: capturedCompetitorEmails.detectedEsp,
+      })
+      .from(capturedCompetitorEmails)
+      .where(and(eq(capturedCompetitorEmails.trackerId, trackerId), eq(capturedCompetitorEmails.userId, userId)));
+
+    // Top link domains across all this tracker's emails
+    const domainRows = await db.execute(sql`
+      SELECT l.domain AS domain, COUNT(*)::int AS count
+      FROM ${capturedCompetitorEmailLinks} l
+      JOIN ${capturedCompetitorEmails} e ON l.email_id = e.id
+      WHERE e.tracker_id = ${trackerId}
+        AND e.user_id = ${userId}
+        AND l.domain IS NOT NULL
+        AND l.domain <> ''
+      GROUP BY l.domain
+      ORDER BY count DESC
+      LIMIT 5
+    `);
+    const topLinkDomains = (domainRows.rows as any[]).map((r) => ({
+      value: String(r.domain),
+      count: Number(r.count) || 0,
+    }));
+
+    // Distinct emails that contain at least one UTM-tagged link
+    const utmRows = await db.execute(sql`
+      SELECT COUNT(DISTINCT e.id)::int AS count
+      FROM ${capturedCompetitorEmails} e
+      JOIN ${capturedCompetitorEmailLinks} l ON l.email_id = e.id
+      WHERE e.tracker_id = ${trackerId}
+        AND e.user_id = ${userId}
+        AND l.has_utm = true
+    `);
+    const emailsWithUtmCount = Number((utmRows.rows[0] as any)?.count) || 0;
+
+    return computeTrackerAnalytics(emails as any, topLinkDomains, emailsWithUtmCount);
+  }
+
+  async getCapturedEmailsFeed(
+    userId: string,
+    filters: {
+      trackerIds?: string[];
+      esp?: string;
+      search?: string;
+      pinnedOnly?: boolean;
+      from?: Date;
+      to?: Date;
+      limit?: number;
+    },
+  ): Promise<FeedResponse> {
+    const limit = Math.min(Math.max(filters.limit ?? 100, 1), 500);
+
+    // Tracker list for the filter dropdown (scoped to user)
+    const trackerRows = await db
+      .select({ id: competitorTrackers.id, name: competitorTrackers.name })
+      .from(competitorTrackers)
+      .where(eq(competitorTrackers.userId, userId))
+      .orderBy(asc(competitorTrackers.name));
+    const trackers = trackerRows.map((t) => ({ id: t.id, name: t.name }));
+    const ownedTrackerIds = new Set(trackers.map((t) => t.id));
+
+    // Distinct ESPs the user has seen (for filter dropdown)
+    const espRows = await db.execute(sql`
+      SELECT DISTINCT detected_esp
+      FROM ${capturedCompetitorEmails}
+      WHERE user_id = ${userId} AND detected_esp IS NOT NULL AND detected_esp <> ''
+      ORDER BY detected_esp ASC
+    `);
+    const esps = (espRows.rows as any[]).map((r) => String(r.detected_esp));
+
+    if (trackers.length === 0) {
+      return { items: [], total: 0, trackers, esps };
+    }
+
+    // Build WHERE clauses
+    const conds: any[] = [eq(capturedCompetitorEmails.userId, userId)];
+    if (filters.trackerIds && filters.trackerIds.length > 0) {
+      const valid = filters.trackerIds.filter((id) => ownedTrackerIds.has(id));
+      if (valid.length === 0) {
+        return { items: [], total: 0, trackers, esps };
+      }
+      conds.push(inArray(capturedCompetitorEmails.trackerId, valid));
+    }
+    if (filters.esp) {
+      conds.push(eq(capturedCompetitorEmails.detectedEsp, filters.esp));
+    }
+    if (filters.pinnedOnly) {
+      conds.push(eq(capturedCompetitorEmails.isPinned, true));
+    }
+    if (filters.from) {
+      conds.push(gte(capturedCompetitorEmails.receivedAt, filters.from));
+    }
+    if (filters.to) {
+      conds.push(lte(capturedCompetitorEmails.receivedAt, filters.to));
+    }
+    if (filters.search && filters.search.trim().length > 0) {
+      const q = `%${filters.search.trim().toLowerCase()}%`;
+      conds.push(
+        sql`(LOWER(${capturedCompetitorEmails.subject}) LIKE ${q}
+           OR LOWER(COALESCE(${capturedCompetitorEmails.fromName}, '')) LIKE ${q}
+           OR LOWER(COALESCE(${capturedCompetitorEmails.fromEmail}, '')) LIKE ${q})`,
+      );
+    }
+
+    const where = and(...conds);
+
+    const [{ value: totalCount } = { value: 0 }] = await db
+      .select({ value: count() })
+      .from(capturedCompetitorEmails)
+      .where(where);
+
+    const rows = await db
+      .select({
+        id: capturedCompetitorEmails.id,
+        trackerId: capturedCompetitorEmails.trackerId,
+        trackerName: competitorTrackers.name,
+        subject: capturedCompetitorEmails.subject,
+        fromName: capturedCompetitorEmails.fromName,
+        fromEmail: capturedCompetitorEmails.fromEmail,
+        fromDomain: capturedCompetitorEmails.fromDomain,
+        detectedEsp: capturedCompetitorEmails.detectedEsp,
+        receivedAt: capturedCompetitorEmails.receivedAt,
+        isPinned: capturedCompetitorEmails.isPinned,
+        bodyAvailable: capturedCompetitorEmails.bodyAvailable,
+        wordCount: capturedCompetitorEmails.wordCount,
+        linkCount: capturedCompetitorEmails.linkCount,
+        subjectHasEmoji: capturedCompetitorEmails.subjectHasEmoji,
+      })
+      .from(capturedCompetitorEmails)
+      .innerJoin(competitorTrackers, eq(capturedCompetitorEmails.trackerId, competitorTrackers.id))
+      .where(where)
+      .orderBy(desc(capturedCompetitorEmails.receivedAt))
+      .limit(limit);
+
+    return {
+      items: rows.map((r) => ({
+        id: r.id,
+        trackerId: r.trackerId,
+        trackerName: r.trackerName,
+        subject: r.subject,
+        fromName: r.fromName,
+        fromEmail: r.fromEmail,
+        fromDomain: r.fromDomain,
+        detectedEsp: r.detectedEsp,
+        receivedAt: r.receivedAt,
+        isPinned: r.isPinned,
+        bodyAvailable: r.bodyAvailable,
+        wordCount: r.wordCount,
+        linkCount: r.linkCount,
+        subjectHasEmoji: r.subjectHasEmoji,
+      })),
+      total: Number(totalCount) || 0,
+      trackers,
+      esps,
+    };
   }
 
   // Null-out HTML/plain bodies for non-pinned emails beyond the latest N.

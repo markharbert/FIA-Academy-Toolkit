@@ -5109,7 +5109,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const dkimResult = intel.parseDkim(req.body?.dkim);
       const dmarcResult = intel.parseDmarc(rawHeaders);
 
-      const detectedEsp = intel.detectEsp(rawHeaders);
+      const detectedEsp = intel.detectEsp(rawHeaders, bodyHtml);
       const listUnsubscribePresent = intel.hasListUnsubscribe(rawHeaders);
       const listUnsubscribePostPresent = intel.hasListUnsubscribePost(rawHeaders);
 
@@ -5240,6 +5240,49 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     } catch (err) {
       console.error("[inbox-intel] get tracker error:", err);
       res.status(500).json({ message: "Failed to load competitor" });
+    }
+  });
+
+  app.get("/api/inbox-intel/trackers/:id/analytics", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const trackerId = req.params.id;
+      const tracker = await storage.getCompetitorTracker(trackerId, userId);
+      if (!tracker) return res.status(404).json({ message: "Competitor not found" });
+      const analytics = await storage.getTrackerAnalytics(trackerId, userId);
+      res.json(analytics);
+    } catch (err) {
+      console.error("[inbox-intel] analytics error:", err);
+      res.status(500).json({ message: "Failed to load analytics" });
+    }
+  });
+
+  app.get("/api/inbox-intel/feed", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const q = req.query as Record<string, string | undefined>;
+      const trackerIds = q.trackerIds
+        ? q.trackerIds.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined;
+      const parseDate = (v?: string): Date | undefined => {
+        if (!v) return undefined;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? undefined : d;
+      };
+      const limitNum = q.limit ? parseInt(q.limit, 10) : 100;
+      const feed = await storage.getCapturedEmailsFeed(userId, {
+        trackerIds,
+        esp: q.esp || undefined,
+        search: q.search || undefined,
+        pinnedOnly: q.pinnedOnly === "true" || q.pinnedOnly === "1",
+        from: parseDate(q.from),
+        to: parseDate(q.to),
+        limit: Number.isFinite(limitNum) ? limitNum : 100,
+      });
+      res.json(feed);
+    } catch (err) {
+      console.error("[inbox-intel] feed error:", err);
+      res.status(500).json({ message: "Failed to load feed" });
     }
   });
 
