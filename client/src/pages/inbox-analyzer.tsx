@@ -1318,17 +1318,14 @@ function PlacementStatusBadge({ status }: { status: PlacementStatus }) {
 function MyAddressTab({
   inboxEmail,
   sendingFromAddress: initialSendingFrom,
-  seedInboxes,
   onSave,
 }: {
   inboxEmail: string;
   sendingFromAddress: string;
-  seedInboxes: PublicSeedInbox[];
   onSave: (addr: string) => void;
 }) {
   const [fromAddr, setFromAddr] = useState(initialSendingFrom || "");
   const [saved, setSaved] = useState(false);
-  const activeSeedInboxes = seedInboxes.filter(s => s.isActive);
 
   const handleSave = () => {
     onSave(fromAddr);
@@ -1336,7 +1333,6 @@ function MyAddressTab({
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const stepCount = activeSeedInboxes.length > 0 ? 5 : 4;
   let step = 0;
   const nextStep = () => { step += 1; return step; };
 
@@ -1359,36 +1355,6 @@ function MyAddressTab({
         </CardContent>
       </Card>
 
-      {/* Step 2 (optional): Add placement addresses */}
-      {activeSeedInboxes.length > 0 && (
-        <Card className="border-primary/20">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex gap-3 mb-3">
-              <StepNumber n={nextStep()} />
-              <div>
-                <p className="text-sm font-bold text-foreground">Add these placement addresses to your CRM</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  These are real inboxes we monitor. Adding them tells us exactly where your emails land — Primary, Promotions, Spam, or Junk.
-                </p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {activeSeedInboxes.map((inbox) => (
-                <div key={inbox.id}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <ProviderIcon provider={inbox.provider} />
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{inbox.label}</span>
-                  </div>
-                  {inbox.email
-                    ? <CopyField value={inbox.email} testId={`button-copy-seed-${inbox.id}`} />
-                    : <p className="text-sm text-muted-foreground italic">Contact your admin for this address</p>
-                  }
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Step 3: Enter sending From address */}
       <Card className="border-primary/20">
