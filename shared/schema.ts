@@ -963,3 +963,35 @@ export const dmoEntryDataSchema = createInsertSchema(dmoEntries).omit({
 });
 
 export type DmoEntryData = z.infer<typeof dmoEntryDataSchema>;
+
+// ── Sender Reputation (Google Postmaster Tools) ───────────────────────────────
+
+export const postmasterConnections = pgTable("postmaster_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  oauthAccessToken: text("oauth_access_token"),
+  oauthRefreshToken: text("oauth_refresh_token"),
+  oauthTokenExpiry: timestamp("oauth_token_expiry"),
+  connectedEmail: text("connected_email"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type PostmasterConnection = typeof postmasterConnections.$inferSelect;
+
+export const postmasterDomains = pgTable("postmaster_domains", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  domainName: text("domain_name").notNull(),
+  latestReputation: text("latest_reputation"),
+  latestSpamRate: real("latest_spam_rate"),
+  latestSpfRatio: real("latest_spf_ratio"),
+  latestDkimRatio: real("latest_dkim_ratio"),
+  latestDmarcRatio: real("latest_dmarc_ratio"),
+  latestEncryptionRatio: real("latest_encryption_ratio"),
+  trafficStats: jsonb("traffic_stats").$type<any[]>(),
+  lastFetchedAt: timestamp("last_fetched_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type PostmasterDomain = typeof postmasterDomains.$inferSelect;

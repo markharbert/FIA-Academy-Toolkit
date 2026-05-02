@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Mail, Inbox, ArrowRight, type LucideIcon } from "lucide-react";
+import { Mail, Inbox, ShieldCheck, ArrowRight, type LucideIcon } from "lucide-react";
 
 interface Tool {
   title: string;
@@ -24,6 +24,16 @@ const EMAIL_TOOLS: Tool[] = [
     iconBg: "bg-indigo-500/20",
     badge: "AI Powered",
     testId: "tool-inbox-analyzer",
+  },
+  {
+    title: "Sender Reputation",
+    description: "Track your domain health with Google",
+    detail: "Connect your Google Postmaster Tools account to monitor your domain reputation, spam complaint rate, and authentication scores directly from Gmail — the world's largest inbox provider.",
+    url: "/email-tools/sender-reputation",
+    icon: ShieldCheck,
+    gradient: "from-emerald-500 to-teal-600",
+    iconBg: "bg-emerald-500/20",
+    testId: "tool-sender-reputation",
   },
 ];
 

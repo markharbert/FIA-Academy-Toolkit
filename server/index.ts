@@ -106,6 +106,36 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS placement_confirmed_at timestamp
     `);
     console.log("[startup] email_analyses placement columns migration complete");
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS postmaster_connections (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        oauth_access_token TEXT,
+        oauth_refresh_token TEXT,
+        oauth_token_expiry TIMESTAMP,
+        connected_email TEXT,
+        last_synced_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS postmaster_domains (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        domain_name TEXT NOT NULL,
+        latest_reputation TEXT,
+        latest_spam_rate REAL,
+        latest_spf_ratio REAL,
+        latest_dkim_ratio REAL,
+        latest_dmarc_ratio REAL,
+        latest_encryption_ratio REAL,
+        traffic_stats JSONB,
+        last_fetched_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        UNIQUE(user_id, domain_name)
+      )
+    `);
+    console.log("[startup] postmaster tables migration complete");
 
     // One-time backfill: copy account-level confirmed placement results to the
     // individual email record so old confirmed emails show their result permanently.

@@ -22,6 +22,7 @@ import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
+import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
 import { startPlacementScheduler } from "./placementScheduler";
 import OpenAI from "openai";
 import {
@@ -5043,6 +5044,85 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       })();
     } catch (err) {
       console.error("[inbox-analyzer] inbound webhook error:", err);
+    }
+  });
+
+  // ── Sender Reputation (Google Postmaster Tools) ───────────────────────────
+
+  app.get("/api/sender-reputation/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getPostmasterConnection(userId);
+      if (!conn) {
+        return res.json({ connected: false, domains: [] });
+      }
+      const domains = await storage.getPostmasterDomains(userId);
+      const { oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...safeConn } = conn;
+      res.json({ connected: true, connectedEmail: safeConn.connectedEmail, lastSyncedAt: safeConn.lastSyncedAt, domains });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch status" });
+    }
+  });
+
+  app.get("/api/sender-reputation/connect", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const url = getPostmasterAuthUrl(userId);
+      res.redirect(url);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to initiate OAuth" });
+    }
+  });
+
+  app.get("/api/sender-reputation/callback", async (req: Request, res: Response) => {
+    const { code, state: userId, error } = req.query as Record<string, string>;
+    if (error || !code || !userId) {
+      return res.redirect("/email-tools/sender-reputation?error=oauth_failed");
+    }
+    try {
+      const { accessToken, refreshToken, expiry, email } = await exchangePostmasterCode(code);
+      await storage.upsertPostmasterConnection(userId, { oauthAccessToken: accessToken, oauthRefreshToken: refreshToken, oauthTokenExpiry: expiry, connectedEmail: email });
+      // Immediately sync domain data
+      try {
+        const domainData = await fetchPostmasterData(accessToken, refreshToken);
+        for (const d of domainData) {
+          await storage.upsertPostmasterDomain(userId, d.domainName, { latestReputation: d.latestReputation, latestSpamRate: d.latestSpamRate, latestSpfRatio: d.latestSpfRatio, latestDkimRatio: d.latestDkimRatio, latestDmarcRatio: d.latestDmarcRatio, latestEncryptionRatio: d.latestEncryptionRatio, trafficStats: d.trafficStats });
+        }
+        await storage.updatePostmasterLastSynced(userId);
+      } catch (syncErr) {
+        console.error("[Postmaster] Initial sync failed:", syncErr);
+      }
+      res.redirect("/email-tools/sender-reputation");
+    } catch (err) {
+      console.error("[Postmaster] OAuth callback error:", err);
+      res.redirect("/email-tools/sender-reputation?error=oauth_failed");
+    }
+  });
+
+  app.post("/api/sender-reputation/sync", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getPostmasterConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(400).json({ message: "Not connected" });
+      const domainData = await fetchPostmasterData(conn.oauthAccessToken, conn.oauthRefreshToken);
+      for (const d of domainData) {
+        await storage.upsertPostmasterDomain(userId, d.domainName, { latestReputation: d.latestReputation, latestSpamRate: d.latestSpamRate, latestSpfRatio: d.latestSpfRatio, latestDkimRatio: d.latestDkimRatio, latestDmarcRatio: d.latestDmarcRatio, latestEncryptionRatio: d.latestEncryptionRatio, trafficStats: d.trafficStats });
+      }
+      await storage.updatePostmasterLastSynced(userId);
+      res.json({ success: true, domainsUpdated: domainData.length });
+    } catch (err: any) {
+      console.error("[Postmaster] Sync error:", err);
+      res.status(500).json({ message: "Failed to sync Postmaster data" });
+    }
+  });
+
+  app.delete("/api/sender-reputation/disconnect", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      await storage.deletePostmasterConnection(userId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to disconnect" });
     }
   });
 

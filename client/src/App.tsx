@@ -25,6 +25,7 @@ import TopicPulseSavedPage from "@/pages/topic-pulse-saved";
 import VideoToolsPage from "@/pages/video-tools";
 import EmailToolsPage from "@/pages/email-tools";
 import InboxAnalyzerPage from "@/pages/inbox-analyzer";
+import SenderReputationPage from "@/pages/sender-reputation";
 import DmoTrackerPage from "@/pages/dmo-tracker";
 import CfLoginPage from "@/pages/cf-login";
 import HelpPage from "@/pages/help";
@@ -154,6 +155,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/email-tools/inbox-analyzer">
         {() => <ProtectedRoute component={InboxAnalyzerPage} />}
+      </Route>
+      <Route path="/email-tools/sender-reputation">
+        {() => <ProtectedRoute component={SenderReputationPage} />}
       </Route>
       <Route path="/dmo-tracker">
         {() => <ProtectedRoute component={DmoTrackerPage} />}

@@ -1,7 +1,7 @@
 import { 
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
-  dmoEntries, emailInboxAddresses, emailAnalyses, seedInboxes,
+  dmoEntries, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -20,6 +20,7 @@ import {
   type SavedOffer, type InsertSavedOffer,
   type DmoEntry, type InsertDmoEntry, type DmoEntryData,
   type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
+  type PostmasterConnection, type PostmasterDomain,
 } from "@shared/schema";
 import crypto from "crypto";
 import { db, pool } from "./db";
@@ -313,6 +314,14 @@ export interface IStorage {
   toggleSeedInbox(id: string, isActive: boolean): Promise<void>;
   storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void>;
   disconnectSeedInbox(id: string): Promise<void>;
+  // Sender Reputation (Postmaster)
+  getPostmasterConnection(userId: string): Promise<PostmasterConnection | null>;
+  upsertPostmasterConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<PostmasterConnection>;
+  updatePostmasterLastSynced(userId: string): Promise<void>;
+  deletePostmasterConnection(userId: string): Promise<void>;
+  getPostmasterDomains(userId: string): Promise<PostmasterDomain[]>;
+  upsertPostmasterDomain(userId: string, domainName: string, data: { latestReputation: string | null; latestSpamRate: number | null; latestSpfRatio: number | null; latestDkimRatio: number | null; latestDmarcRatio: number | null; latestEncryptionRatio: number | null; trafficStats: any[] }): Promise<void>;
+  deletePostmasterDomains(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1951,6 +1960,50 @@ export class DatabaseStorage implements IStorage {
       oauthTokenExpiry: null,
       isConnected: false,
     }).where(eq(seedInboxes.id, id));
+  }
+
+  // ── Postmaster ──────────────────────────────────────────────────────────────
+  async getPostmasterConnection(userId: string): Promise<PostmasterConnection | null> {
+    const [row] = await db.select().from(postmasterConnections).where(eq(postmasterConnections.userId, userId));
+    return row ?? null;
+  }
+
+  async upsertPostmasterConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<PostmasterConnection> {
+    const [row] = await db
+      .insert(postmasterConnections)
+      .values({ userId, ...data })
+      .onConflictDoUpdate({
+        target: postmasterConnections.userId,
+        set: { oauthAccessToken: data.oauthAccessToken, oauthRefreshToken: data.oauthRefreshToken, oauthTokenExpiry: data.oauthTokenExpiry, connectedEmail: data.connectedEmail },
+      })
+      .returning();
+    return row;
+  }
+
+  async updatePostmasterLastSynced(userId: string): Promise<void> {
+    await db.update(postmasterConnections).set({ lastSyncedAt: new Date() }).where(eq(postmasterConnections.userId, userId));
+  }
+
+  async deletePostmasterConnection(userId: string): Promise<void> {
+    await db.delete(postmasterConnections).where(eq(postmasterConnections.userId, userId));
+  }
+
+  async getPostmasterDomains(userId: string): Promise<PostmasterDomain[]> {
+    return db.select().from(postmasterDomains).where(eq(postmasterDomains.userId, userId)).orderBy(asc(postmasterDomains.domainName));
+  }
+
+  async upsertPostmasterDomain(userId: string, domainName: string, data: { latestReputation: string | null; latestSpamRate: number | null; latestSpfRatio: number | null; latestDkimRatio: number | null; latestDmarcRatio: number | null; latestEncryptionRatio: number | null; trafficStats: any[] }): Promise<void> {
+    await db
+      .insert(postmasterDomains)
+      .values({ userId, domainName, ...data, lastFetchedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [postmasterDomains.userId, postmasterDomains.domainName],
+        set: { ...data, lastFetchedAt: new Date() },
+      });
+  }
+
+  async deletePostmasterDomains(userId: string): Promise<void> {
+    await db.delete(postmasterDomains).where(eq(postmasterDomains.userId, userId));
   }
 }
 
