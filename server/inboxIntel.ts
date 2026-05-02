@@ -1,17 +1,152 @@
 import crypto from "crypto";
 
 export const INTEL_DOMAIN = "watch.fearlessmarketinglab.com";
+// Legacy prefix — kept so old seed addresses still resolve.
 export const SEED_TOKEN_PREFIX = "track-";
 
-const TOKEN_CHARS = "abcdefghijkmnpqrstuvwxyz23456789";
+// ── Organic seed-address generator ─────────────────────────────────────────
+// Real signups don't have random gibberish before the @. To keep our seed
+// addresses from looking robotic / spammy to ESPs and list owners, we generate
+// addresses that look like ordinary personal emails:
+//   sarah.thompson83 / mike.r.davis / jenniferlee47 / dmiller2024 / kate_brooks
+//
+// The token is the full local-part. We store it verbatim and look up by exact
+// match. Uniqueness is enforced by the DB + retry-on-collision in the route.
+
+const FIRST_NAMES = [
+  "alex","alice","amanda","amy","andrea","andrew","angela","anna","anthony","ashley",
+  "austin","ava","benjamin","beth","brandon","brian","brittany","brooke","caleb","cameron",
+  "carlos","carrie","casey","catherine","charles","chloe","chris","christina","claire","cody",
+  "colin","connor","courtney","craig","crystal","cynthia","dan","daniel","danielle","david",
+  "dawn","dean","derek","diana","dominic","donna","doug","dustin","dylan","edward","elaine",
+  "eli","elizabeth","ellen","emily","emma","eric","erica","ethan","evan","evelyn","faith",
+  "felix","frank","gabriel","gary","gavin","george","grace","grant","greg","hailey",
+  "hannah","harry","heather","helen","henry","holly","ian","isaac","isabella","jack",
+  "jackson","jacob","jake","james","jamie","jane","janet","jared","jason","jay","jeff",
+  "jen","jenna","jennifer","jeremy","jess","jessica","jill","jim","joanna","joe","joel",
+  "john","jon","jonathan","jordan","joseph","josh","julia","julie","justin","kaitlyn",
+  "karen","kate","katherine","kathy","katie","keith","kelly","kelsey","ken","kendall",
+  "kevin","kim","kimberly","kris","kristen","kyle","laura","lauren","leah","lee",
+  "leslie","lily","linda","lisa","logan","lori","louis","lucas","lucy","luke",
+  "lydia","madeline","madison","marc","marcus","maria","marie","mark","martha","mary",
+  "matt","matthew","megan","melanie","melissa","mia","michael","michelle","mike","molly",
+  "morgan","nancy","natalie","nathan","nick","nicole","noah","nora","olivia","owen",
+  "paige","pam","patrick","paul","peter","philip","rachel","randy","raymond","rebecca",
+  "richard","rick","robert","robin","ross","ryan","sam","samantha","samuel","sara",
+  "sarah","scott","sean","seth","shannon","shawn","sierra","simon","sophia","stacy",
+  "stephanie","steve","stewart","susan","tara","taylor","teresa","theresa","thomas","tim",
+  "tina","todd","tom","tony","tracy","travis","trevor","troy","tyler","valerie",
+  "vanessa","vince","walter","wendy","william","zach",
+];
+
+const LAST_NAMES = [
+  "adams","alexander","allen","anderson","bailey","baker","barnes","bell","bennett","brooks",
+  "brown","bryant","butler","campbell","carter","chapman","clark","cole","collins","cook",
+  "cooper","cox","crawford","cruz","davis","day","dean","diaz","dixon","dunn",
+  "edwards","ellis","evans","fisher","fleming","ford","foster","fox","franklin","freeman",
+  "garcia","gardner","gibson","gomez","gonzalez","gordon","graham","gray","green","griffin",
+  "hall","hamilton","harper","harris","harrison","hart","hayes","henderson","henry","hernandez",
+  "hill","holmes","howard","hughes","hunt","hunter","jackson","james","jenkins","jensen",
+  "johnson","jones","jordan","kelly","kennedy","king","knight","lane","lawson","lee",
+  "lewis","long","lopez","lynch","martin","martinez","mason","matthews","mccarthy","mcdonald",
+  "miller","mitchell","moore","morgan","morris","murphy","murray","nelson","newman","nichols",
+  "nguyen","oliver","owens","palmer","parker","patel","patterson","payne","perez","perry",
+  "peters","peterson","phillips","pierce","powell","price","ramirez","ramos","reed","reeves",
+  "reyes","reynolds","rhodes","rice","richards","richardson","riley","rivera","roberts","robinson",
+  "rodriguez","rogers","rose","ross","russell","ryan","sanchez","sanders","scott","shaw",
+  "simmons","simpson","smith","snyder","spencer","stevens","stewart","stone","sullivan","taylor",
+  "thomas","thompson","torres","turner","wagner","walker","wallace","walsh","ward","warren",
+  "washington","watson","webb","weber","wells","west","wheeler","white","wilcox","williams",
+  "wilson","wood","woods","wright","yates","young",
+];
+
+function pick<T>(arr: readonly T[]): T {
+  const idx = crypto.randomInt(0, arr.length);
+  return arr[idx];
+}
+
+function pickInt(maxExclusive: number): number {
+  return crypto.randomInt(0, maxExclusive);
+}
+
+// Common real-world name "shapes" the local-part can take. We always append a
+// short random alphanumeric tail (see TAIL_CHARS below) so the address has
+// enough entropy to be unguessable against the public inbound webhook —
+// mimicking how Gmail auto-suggests a unique handle when your preferred one
+// is taken (e.g. `sarah.thompson.k7n3p9`).
+const NAME_SHAPES: Array<{ build: (f: string, l: string) => string; weight: number }> = [
+  { build: (f, l) => `${f}.${l}`, weight: 22 },        // sarah.thompson
+  { build: (f, l) => `${f}${l}`, weight: 14 },         // sarahthompson
+  { build: (f, l) => `${f}_${l}`, weight: 10 },        // sarah_thompson
+  { build: (f, l) => `${f[0]}${l}`, weight: 10 },      // sthompson
+  { build: (f, l) => `${f[0]}.${l}`, weight: 8 },      // s.thompson
+  { build: (f, l) => `${f}.${l[0]}`, weight: 6 },      // sarah.t
+  {                                                     // sarah.r.thompson (random middle initial)
+    build: (f, l) => {
+      const mid = String.fromCharCode(97 + pickInt(26));
+      return `${f}.${mid}.${l}`;
+    },
+    weight: 6,
+  },
+];
+
+function pickShape(): (f: string, l: string) => string {
+  const total = NAME_SHAPES.reduce((s, p) => s + p.weight, 0);
+  let r = pickInt(total);
+  for (const p of NAME_SHAPES) {
+    if (r < p.weight) return p.build;
+    r -= p.weight;
+  }
+  return NAME_SHAPES[0].build;
+}
+
+// Lowercase alphanumeric — the unambiguous chars (no l/1, o/0 etc) keep tails
+// looking like the unique-handle hashes Gmail/Outlook generate for users.
+const TAIL_CHARS = "abcdefghjkmnpqrstuvwxyz23456789";
+
+function randomTail(len: number): string {
+  let out = "";
+  const bytes = crypto.randomBytes(len);
+  for (let i = 0; i < len; i++) out += TAIL_CHARS[bytes[i] % TAIL_CHARS.length];
+  return out;
+}
+
+// Tail variants — every token gets one. They look like real signup handles:
+//   .k7n3p9   .482917   2024kp7   .9k2n7p   etc.
+// Minimum 6 chars / ~30 bits of entropy from the tail alone.
+function buildTail(): string {
+  const r = pickInt(100);
+  if (r < 35) {
+    // dot + 6 alnum  e.g. ".k7n3p9"
+    return "." + randomTail(6);
+  } else if (r < 60) {
+    // 6 alnum  e.g. "k7n3p9"   (joined directly to name)
+    return randomTail(6);
+  } else if (r < 75) {
+    // dot + 7 alnum  e.g. ".4k7n3p9"
+    return "." + randomTail(7);
+  } else if (r < 88) {
+    // year + 6 alnum  e.g. "2024kp7nm3" — keeps a year-like opener for
+    // human plausibility while preserving ≥30 bits of tail entropy so the
+    // address remains hard to spray-enumerate against the public webhook.
+    return String(2018 + pickInt(8)) + randomTail(6);
+  } else {
+    // _ + 6 alnum  e.g. "_k7n3p9"
+    return "_" + randomTail(6);
+  }
+}
 
 export function generateSeedToken(): string {
-  let body = "";
-  const bytes = crypto.randomBytes(12);
-  for (let i = 0; i < 12; i++) {
-    body += TOKEN_CHARS[bytes[i] % TOKEN_CHARS.length];
-  }
-  return SEED_TOKEN_PREFIX + body;
+  const first = pick(FIRST_NAMES);
+  const last = pick(LAST_NAMES);
+  const namePart = pickShape()(first, last).toLowerCase();
+  const local = (namePart + buildTail()).toLowerCase();
+  // Safety: clamp length and strip anything not RFC-allowed (defensive).
+  const cleaned = local.replace(/[^a-z0-9._-]/g, "").slice(0, 40);
+  // Avoid leading/trailing dots and consecutive dots (RFC 5321 local-part rules).
+  return cleaned
+    .replace(/\.{2,}/g, ".")
+    .replace(/^\.+|\.+$/g, "") || `${first}.${last}.${randomTail(6)}`;
 }
 
 export function buildSeedAddress(token: string): string {
@@ -22,12 +157,14 @@ export function extractToken(toRaw: string): string | null {
   if (!toRaw) return null;
   const inAngle = toRaw.match(/<([^>]+)>/);
   const addr = inAngle ? inAngle[1].trim() : toRaw.trim();
-  const m = addr.match(/^([a-z0-9-]+)@([\w.-]+)$/i);
+  // Permissive local-part: dots, underscores, hyphens, digits, letters
+  // (covers both legacy `track-xxx` and new organic name-style tokens).
+  const m = addr.match(/^([a-z0-9._-]+)@([\w.-]+)$/i);
   if (!m) return null;
   const token = m[1].toLowerCase();
   const domain = m[2].toLowerCase();
   if (domain !== INTEL_DOMAIN) return null;
-  return token.startsWith(SEED_TOKEN_PREFIX) ? token : null;
+  return token;
 }
 
 export function parseFromField(fromRaw: string): { name?: string; email?: string; domain?: string } {

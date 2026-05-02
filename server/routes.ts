@@ -5207,12 +5207,19 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       // Auto-generate the first seed address so the user has something to use immediately
       try {
         const intel = await import("./inboxIntel");
-        for (let attempt = 0; attempt < 5; attempt++) {
+        // Insert-with-retry — the DB unique constraint on token is the source
+        // of truth, so we catch unique-violations and retry rather than relying
+        // on a non-atomic check-then-insert (which races under concurrency).
+        for (let attempt = 0; attempt < 8; attempt++) {
           const token = intel.generateSeedToken();
-          const existing = await storage.getCompetitorSeedByToken(token);
-          if (!existing) {
+          try {
             await storage.createCompetitorSeedAddress(userId, created.id, token);
             break;
+          } catch (insertErr: any) {
+            const code = insertErr?.code || insertErr?.cause?.code;
+            const isUnique = code === "23505" || /unique/i.test(insertErr?.message || "");
+            if (!isUnique || attempt === 7) throw insertErr;
+            // collision — try a fresh token
           }
         }
       } catch (seedErr) {
@@ -5382,12 +5389,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         return res.status(409).json({ message: `Limit reached: ${MAX_SEEDS_PER_TRACKER} seed addresses per competitor` });
       }
       const intel = await import("./inboxIntel");
-      let token = "";
       let saved: CompetitorSeedAddress | null = null;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        token = intel.generateSeedToken();
-        const existing = await storage.getCompetitorSeedByToken(token);
-        if (!existing) {
+      // Insert-with-retry on DB unique-violation (race-safe).
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const token = intel.generateSeedToken();
+        try {
           saved = await storage.createCompetitorSeedAddress(
             userId,
             trackerId,
@@ -5395,6 +5401,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             parsed.data.label || undefined,
           );
           break;
+        } catch (insertErr: any) {
+          const code = insertErr?.code || insertErr?.cause?.code;
+          const isUnique = code === "23505" || /unique/i.test(insertErr?.message || "");
+          if (!isUnique) throw insertErr;
+          // collision — try a fresh token
         }
       }
       if (!saved) {
