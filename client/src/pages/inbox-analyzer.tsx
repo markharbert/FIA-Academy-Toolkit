@@ -738,8 +738,15 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             <AuthBadge result={email.dkimResult} label="DKIM" />
             <AuthBadge result={email.dmarcResult} label="DMARC" />
           </div>
+          {email.spfResult && email.spfResult !== "pass" && email.dmarcResult === "pass" && email.dkimResult === "pass" && (
+            <div className="flex items-start gap-2 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">
+              <CircleCheck className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>SPF failed, but DMARC passes via DKIM alignment — email providers still recognize this message as authenticated. No action required.</span>
+            </div>
+          )}
           <Separator className="my-1" />
-          <p className="text-sm font-semibold text-muted-foreground">DNS Record Presence</p>
+          <p className="text-sm font-semibold text-muted-foreground">DNS Records Configured</p>
+          <p className="text-xs text-muted-foreground -mt-1 mb-1">Whether the sender's domain has these records set up in DNS — separate from the per-email authentication results above.</p>
           <div className="grid sm:grid-cols-2 gap-2">
             <DnsCheck exists={email.spfRecordExists} label="SPF record" />
             <DnsCheck exists={email.dkimRecordExists} label="DKIM record" />
