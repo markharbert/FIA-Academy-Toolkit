@@ -353,6 +353,7 @@ export interface IStorage {
   getUrgentTasksForUser(userId: string, hoursAhead?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
   getTaskComments(taskId: string, userId: string): Promise<Array<TaskComment & { authorName: string | null; authorEmail: string | null }>>;
   addTaskComment(taskId: string, userId: string, body: string): Promise<TaskComment>;
+  updateTaskComment(commentId: string, userId: string, body: string): Promise<TaskComment | undefined>;
   deleteTaskComment(commentId: string, userId: string): Promise<void>;
   getTaskActivity(taskId: string, userId: string): Promise<Array<TaskActivity & { authorName: string | null; authorEmail: string | null }>>;
 
@@ -2293,6 +2294,7 @@ export class DatabaseStorage implements IStorage {
         userId: taskComments.userId,
         body: taskComments.body,
         createdAt: taskComments.createdAt,
+        updatedAt: taskComments.updatedAt,
         authorName: users.displayName,
         authorEmail: users.email,
       })
@@ -2309,6 +2311,21 @@ export class DatabaseStorage implements IStorage {
     const [created] = await db.insert(taskComments).values({ taskId, userId, body }).returning();
     await this.logTaskActivity(taskId, userId, "comment_added", { commentId: created.id });
     return created;
+  }
+
+  async updateTaskComment(commentId: string, userId: string, body: string): Promise<TaskComment | undefined> {
+    // Only the comment author can edit their own comment.
+    const [existing] = await db.select().from(taskComments)
+      .where(and(eq(taskComments.id, commentId), eq(taskComments.userId, userId)));
+    if (!existing) return undefined;
+    const [updated] = await db.update(taskComments)
+      .set({ body, updatedAt: new Date() })
+      .where(and(eq(taskComments.id, commentId), eq(taskComments.userId, userId)))
+      .returning();
+    if (updated) {
+      await this.logTaskActivity(updated.taskId, userId, "comment_edited", { commentId: updated.id });
+    }
+    return updated;
   }
 
   async deleteTaskComment(commentId: string, userId: string): Promise<void> {

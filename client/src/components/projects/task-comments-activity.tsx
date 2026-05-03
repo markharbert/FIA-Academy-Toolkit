@@ -20,6 +20,7 @@ import {
   Link2,
   CornerDownRight,
   History,
+  X,
 } from "lucide-react";
 
 type CommentRow = TaskComment & { authorName: string | null; authorEmail: string | null };
@@ -91,6 +92,7 @@ function activityVisual(type: string): { icon: React.ReactNode; tone: string } {
     case "links_changed":   return { icon: <Link2 className="h-3.5 w-3.5" />,          tone: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400" };
     case "subtask_added":   return { icon: <CornerDownRight className="h-3.5 w-3.5" />,tone: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400" };
     case "comment_added":   return { icon: <MessageCircle className="h-3.5 w-3.5" />,  tone: "bg-pink-500/15 text-pink-600 dark:text-pink-400" };
+    case "comment_edited":  return { icon: <Pencil className="h-3.5 w-3.5" />,         tone: "bg-pink-500/15 text-pink-600 dark:text-pink-400" };
     default:                return { icon: <History className="h-3.5 w-3.5" />,        tone: "bg-muted text-muted-foreground" };
   }
 }
@@ -117,6 +119,8 @@ function describeActivity(row: ActivityRow): React.ReactNode {
       return <><strong>{author}</strong> added subtask <em className="not-italic font-medium">"{String(meta.title ?? "")}"</em></>;
     case "comment_added":
       return <><strong>{author}</strong> added a comment</>;
+    case "comment_edited":
+      return <><strong>{author}</strong> edited a comment</>;
     default:
       return <><strong>{author}</strong> {row.type.replace(/_/g, " ")}</>;
   }
@@ -125,6 +129,8 @@ function describeActivity(row: ActivityRow): React.ReactNode {
 export function TaskCommentsActivity({ taskId, currentUserId }: Props) {
   const { toast } = useToast();
   const [body, setBody] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState("");
 
   const commentsQ = useQuery<CommentRow[]>({
     queryKey: ["/api/tasks", taskId, "comments"],
@@ -155,6 +161,35 @@ export function TaskCommentsActivity({ taskId, currentUserId }: Props) {
     },
     onError: () => toast({ title: "Failed to delete comment", variant: "destructive" }),
   });
+
+  const editComment = useMutation({
+    mutationFn: async ({ commentId, body }: { commentId: string; body: string }) => {
+      const res = await apiRequest("PATCH", `/api/tasks/${taskId}/comments/${commentId}`, { body });
+      return res.json();
+    },
+    onSuccess: () => {
+      setEditingId(null);
+      setEditingBody("");
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks", taskId, "comments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks", taskId, "activity"] });
+    },
+    onError: () => toast({ title: "Failed to update comment", variant: "destructive" }),
+  });
+
+  const startEdit = (c: CommentRow) => {
+    setEditingId(c.id);
+    setEditingBody(c.body);
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingBody("");
+  };
+  const saveEdit = () => {
+    if (!editingId) return;
+    const t = editingBody.trim();
+    if (!t) return;
+    editComment.mutate({ commentId: editingId, body: t });
+  };
 
   const comments = commentsQ.data ?? [];
   const activity = activityQ.data ?? [];
@@ -191,6 +226,8 @@ export function TaskCommentsActivity({ taskId, currentUserId }: Props) {
             comments.map(c => {
               const author = authorDisplay(c);
               const mine = currentUserId && c.userId === currentUserId;
+              const isEditing = editingId === c.id;
+              const wasEdited = c.updatedAt && new Date(c.updatedAt).getTime() - new Date(c.createdAt).getTime() > 1000;
               return (
                 <div key={c.id} className="flex gap-2.5" data-testid={`comment-${c.id}`}>
                   <div className="h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white text-[10px] font-semibold flex items-center justify-center shrink-0 mt-0.5">
@@ -200,12 +237,59 @@ export function TaskCommentsActivity({ taskId, currentUserId }: Props) {
                     <div className="rounded-lg border border-border bg-card px-3 py-2">
                       <div className="flex items-baseline justify-between gap-2 mb-0.5">
                         <span className="text-xs font-semibold truncate">{author}</span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{relativeTime(c.createdAt)}</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          {relativeTime(c.createdAt)}
+                          {wasEdited && <span className="ml-1 italic opacity-80">(edited)</span>}
+                        </span>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap break-words">{c.body}</p>
+                      {isEditing ? (
+                        <div className="space-y-1.5 pt-1">
+                          <Textarea
+                            value={editingBody}
+                            onChange={e => setEditingBody(e.target.value)}
+                            onKeyDown={e => {
+                              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") saveEdit();
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                            rows={3}
+                            autoFocus
+                            className="min-h-[60px] text-sm resize-none"
+                            data-testid={`input-edit-comment-${c.id}`}
+                          />
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={cancelEdit}
+                              className="h-7 text-xs"
+                              data-testid={`button-cancel-edit-${c.id}`}
+                            >
+                              <X className="h-3 w-3 mr-1" /> Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={saveEdit}
+                              disabled={!editingBody.trim() || editingBody.trim() === c.body || editComment.isPending}
+                              className="h-7 text-xs"
+                              data-testid={`button-save-edit-${c.id}`}
+                            >
+                              {editComment.isPending ? "Saving…" : "Save"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap break-words">{c.body}</p>
+                      )}
                     </div>
-                    {mine && (
-                      <div className="flex justify-end mt-1">
+                    {mine && !isEditing && (
+                      <div className="flex justify-end mt-1 gap-3">
+                        <button
+                          onClick={() => startEdit(c)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                          data-testid={`button-edit-comment-${c.id}`}
+                        >
+                          <Pencil className="h-2.5 w-2.5" /> Edit
+                        </button>
                         <button
                           onClick={() => deleteComment.mutate(c.id)}
                           className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1"

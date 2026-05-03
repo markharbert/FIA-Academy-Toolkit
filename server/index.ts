@@ -269,6 +269,10 @@ async function runStartupMigrations() {
         ON task_comments(task_id, created_at ASC)
     `);
     await db.execute(sql`
+      ALTER TABLE task_comments
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    `);
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS task_activity (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         task_id VARCHAR NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,

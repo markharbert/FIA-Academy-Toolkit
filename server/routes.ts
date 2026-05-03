@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
@@ -5921,6 +5921,21 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       console.error("[projects] add comment error:", err);
       res.status(500).json({ message: "Failed to add comment" });
+    }
+  });
+
+  app.patch("/api/tasks/:taskId/comments/:commentId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.taskId, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Not found" });
+      const data = updateTaskCommentSchema.parse(req.body);
+      const updated = await storage.updateTaskComment(req.params.commentId, req.session.userId!, data.body);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[projects] update comment error:", err);
+      res.status(500).json({ message: "Failed to update comment" });
     }
   });
 

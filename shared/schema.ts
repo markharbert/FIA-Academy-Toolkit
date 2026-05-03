@@ -1429,6 +1429,7 @@ export const taskComments = pgTable("task_comments", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   body: text("body").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
 export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
@@ -1436,7 +1437,12 @@ export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
   userId: true,
   taskId: true,
   createdAt: true,
+  updatedAt: true,
 }).extend({
+  body: z.string().trim().min(1, "Comment cannot be empty").max(5000),
+});
+
+export const updateTaskCommentSchema = z.object({
   body: z.string().trim().min(1, "Comment cannot be empty").max(5000),
 });
 
