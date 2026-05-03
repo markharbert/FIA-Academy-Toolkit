@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { Footer } from "@/components/footer";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { Loader2, ExternalLink } from "lucide-react";
 
 import LandingPage from "@/pages/landing";
@@ -281,6 +282,7 @@ function AppLayout() {
                 <span>Back to Members Area</span>
               </a>
             </header>
+            <ImpersonationBanner />
             <main className="flex-1 overflow-auto">
               <div className="flex flex-col min-h-full">
                 <div className="flex-1">

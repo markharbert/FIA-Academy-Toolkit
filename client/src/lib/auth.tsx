@@ -1,5 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
+interface ImpersonatingInfo {
+  adminId: string;
+  adminDisplayName: string | null;
+  adminEmail: string | null;
+}
+
 interface AuthUser {
   id: string;
   email: string | null;
@@ -15,6 +21,7 @@ interface AuthUser {
   cfEnrolledAt?: string | null;
   cfRevokedAt?: string | null;
   timezone?: string | null;
+  impersonating?: ImpersonatingInfo | null;
 }
 
 interface AuthContextType {
@@ -24,6 +31,7 @@ interface AuthContextType {
   signup: (email: string, password: string, options?: { emailConsent?: boolean; firstName?: string; lastName?: string }) => Promise<void>;
   logout: () => Promise<void>;
   refetch: () => Promise<void>;
+  endImpersonation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -96,8 +104,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const endImpersonation = async () => {
+    const res = await fetch("/api/admin/impersonate/end", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.message || "Failed to end impersonation");
+    }
+    await refetch();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, refetch }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, refetch, endImpersonation }}>
       {children}
     </AuthContext.Provider>
   );

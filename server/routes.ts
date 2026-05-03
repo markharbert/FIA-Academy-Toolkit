@@ -88,6 +88,7 @@ const upload = multer({
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    impersonatingAdminId: string;
     gmailOAuthNonce: string;
     gmailOAuthInboxId: string;
   }
@@ -104,14 +105,18 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
       req.session.destroy(() => {});
       return res.status(401).json({ message: "Authentication required" });
     }
-    if (user.isDisabled) {
+    // When an admin is impersonating, bypass disabled/CF checks so they can
+    // freely navigate the impersonated user's account.
+    const isImpersonating = !!req.session.impersonatingAdminId;
+
+    if (!isImpersonating && user.isDisabled) {
       req.session.destroy(() => {});
       return res.status(403).json({ message: "Account is disabled" });
     }
     // When CF is configured, enforce active membership on every authenticated
     // request so revoked members are denied mid-session without waiting for
     // their session to naturally expire. Admins are always exempt.
-    if (process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
+    if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
       if (user.cfEnrolled !== true) {
         req.session.destroy(() => {});
         return res.status(403).json({
@@ -569,9 +574,12 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Account is disabled" });
     }
 
+    const isImpersonating = !!req.session.impersonatingAdminId;
+
     // When CF is configured, enforce active membership here too so the client
     // cannot stay in an authenticated-looking state after membership is revoked.
-    if (process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
+    // Skip this check when an admin is impersonating.
+    if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
       if (user.cfEnrolled !== true) {
         req.session.destroy(() => {});
         return res.status(403).json({
@@ -590,6 +598,19 @@ export async function registerRoutes(
       const hash = crypto.createHash("md5").update(normalizedEmail).digest("hex");
       gravatarUrl = `https://www.gravatar.com/avatar/${hash}?s=64&d=mp`;
     }
+
+    // If an admin is impersonating this user, include info about the real admin
+    let impersonating: { adminId: string; adminDisplayName: string | null; adminEmail: string | null } | null = null;
+    if (req.session.impersonatingAdminId) {
+      const adminUser = await storage.getUser(req.session.impersonatingAdminId);
+      if (adminUser) {
+        impersonating = {
+          adminId: adminUser.id,
+          adminDisplayName: adminUser.displayName,
+          adminEmail: adminUser.email,
+        };
+      }
+    }
     
     res.json({ 
       user: { 
@@ -607,6 +628,7 @@ export async function registerRoutes(
         cfEnrolledAt: user.cfEnrolledAt,
         cfRevokedAt: user.cfRevokedAt,
         timezone: user.timezone || "America/New_York",
+        impersonating,
       } 
     });
   });
@@ -1533,6 +1555,64 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Admin force logout error:", err);
       res.status(500).json({ message: "Failed to force logout user" });
+    }
+  });
+
+  // ── Admin Impersonation ──────────────────────────────────────────────────────
+  // NOTE: /end must be registered before /:userId so "end" is not captured as a userId.
+
+  app.post("/api/admin/impersonate/end", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const adminId = req.session.impersonatingAdminId;
+      if (!adminId) {
+        return res.status(400).json({ message: "Not currently impersonating" });
+      }
+
+      const adminUser = await storage.getUser(adminId);
+      if (!adminUser) {
+        req.session.destroy(() => {});
+        return res.status(401).json({ message: "Original admin account not found" });
+      }
+
+      req.session.userId = adminId;
+      delete req.session.impersonatingAdminId;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
+
+      console.log(`[impersonate] admin ${adminId} ended impersonation`);
+      res.json({ message: "Returned to admin account" });
+    } catch (err) {
+      console.error("[impersonate] end error:", err);
+      res.status(500).json({ message: "Failed to end impersonation" });
+    }
+  });
+
+  app.post("/api/admin/impersonate/:userId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const targetId = req.params.userId;
+      const adminId = req.session.userId!;
+
+      if (targetId === adminId) {
+        return res.status(400).json({ message: "Cannot impersonate yourself" });
+      }
+
+      const target = await storage.getUser(targetId);
+      if (!target) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      req.session.impersonatingAdminId = adminId;
+      req.session.userId = targetId;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
+
+      console.log(`[impersonate] admin ${adminId} is now impersonating ${targetId}`);
+      res.json({ message: "Now impersonating user", userId: targetId });
+    } catch (err) {
+      console.error("[impersonate] error:", err);
+      res.status(500).json({ message: "Failed to start impersonation" });
     }
   });
 

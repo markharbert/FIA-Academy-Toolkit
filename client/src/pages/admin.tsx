@@ -1043,6 +1043,35 @@ export default function AdminPage() {
     }
   };
 
+  const handleImpersonate = async (userId: string) => {
+    try {
+      setActionLoading(`impersonate-${userId}`);
+      const res = await fetch(`/api/admin/impersonate/${userId}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        // Reload the full app so the auth context refreshes with the new session
+        window.location.href = "/dashboard";
+      } else {
+        const error = await res.json();
+        toast({
+          title: "Error",
+          description: error.message || "Failed to impersonate user",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to impersonate user",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleForceLogout = async (userId: string) => {
     try {
       setActionLoading(`logout-${userId}`);
@@ -1567,6 +1596,25 @@ export default function AdminPage() {
                                     data-testid={`button-actions-user-${u.id}`}
                                   >
                                     <Info className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setConfirmDialog({
+                                      open: true,
+                                      title: "Log in as this user",
+                                      description: `You will be switched into ${u.email || "this user"}'s account. A banner will appear letting you return to your admin account at any time.`,
+                                      action: () => handleImpersonate(u.id),
+                                    })}
+                                    title="Log in as this user"
+                                    disabled={actionLoading === `impersonate-${u.id}`}
+                                    data-testid={`button-impersonate-${u.id}`}
+                                  >
+                                    {actionLoading === `impersonate-${u.id}` ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <LogIn className="h-4 w-4 text-violet-500" />
+                                    )}
                                   </Button>
                                   <Button
                                     variant="ghost"
@@ -2498,7 +2546,23 @@ export default function AdminPage() {
                     <LogOut className="mr-2 h-4 w-4" />
                     Force Logout
                   </Button>
-                  
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-950"
+                    onClick={() => setConfirmDialog({
+                      open: true,
+                      title: "Log in as this user",
+                      description: `You will be switched into ${userDetails.user.email || "this user"}'s account. A banner will appear at the top of every page letting you return to your admin account instantly.`,
+                      action: () => handleImpersonate(userDetails.user.id),
+                    })}
+                    disabled={actionLoading?.startsWith("impersonate")}
+                    data-testid="button-impersonate-user"
+                  >
+                    <LogIn className="mr-2 h-4 w-4" />
+                    Log in as this user
+                  </Button>
 
                 </div>
               </div>
