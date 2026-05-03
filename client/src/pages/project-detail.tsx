@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { TaskDetailSheet } from "@/components/projects/task-detail-sheet";
-import { ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight, CalendarClock, Flag, Loader2, ListChecks, Tag } from "lucide-react";
+import { ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight, CalendarClock, Flag, Loader2, ListChecks } from "lucide-react";
 
 const STATUS_GROUPS: Array<{ value: "todo" | "in_progress" | "done"; label: string; tone: string }> = [
   { value: "todo",        label: "To do",        tone: "text-muted-foreground" },
@@ -66,12 +66,6 @@ export default function ProjectDetailPage() {
       map[t.parentTaskId!] = arr;
     });
     return map;
-  }, [tasks]);
-
-  const allTags = useMemo(() => {
-    const s = new Set<string>();
-    tasks.forEach(t => t.tags?.forEach(tag => s.add(tag)));
-    return Array.from(s).sort();
   }, [tasks]);
 
   const groups = useMemo(() => {
@@ -172,7 +166,6 @@ export default function ProjectDetailPage() {
                       const subs = subtasksByParent[task.id] ?? [];
                       const isExpanded = expanded[task.id];
                       const due = task.dueDate ? new Date(task.dueDate) : null;
-                      const hasMeta = subs.length > 0 || (task.tags?.length ?? 0) > 0 || (task.links?.length ?? 0) > 0;
                       return (
                         <div key={task.id} data-testid={`task-row-${task.id}`}>
                           <div className="flex items-center gap-2 px-4 py-2 hover:bg-muted/30 group">
@@ -227,16 +220,6 @@ export default function ProjectDetailPage() {
                             </div>
                           </div>
 
-                          {hasMeta && (task.tags?.length ?? 0) > 0 && (
-                            <div className="px-12 pb-1.5 -mt-0.5 flex flex-wrap gap-1">
-                              {task.tags.map(t => (
-                                <Badge key={t} variant="secondary" className="text-[10px] gap-0.5">
-                                  <Tag className="h-2.5 w-2.5" /> {t}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-
                           {isExpanded && subs.length > 0 && (
                             <div className="bg-muted/20 border-t border-border">
                               {subs.map(st => (
@@ -286,7 +269,6 @@ export default function ProjectDetailPage() {
         subtasks={openSubs}
         open={!!openTaskId}
         onOpenChange={(o) => { if (!o) setOpenTaskId(null); }}
-        allTags={allTags}
       />
     </div>
   );

@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { RichTextEditor } from "./rich-text-editor";
-import { CalendarIcon, Trash2, X, Plus, Link2, ExternalLink, ListChecks, Tag, Flag, CheckCircle2 } from "lucide-react";
+import { CalendarIcon, Trash2, X, Plus, Link2, ExternalLink, ListChecks, Flag, CheckCircle2 } from "lucide-react";
 
 const STATUS_OPTIONS = [
   { value: "todo", label: "To do" },
@@ -35,18 +35,15 @@ interface Props {
   subtasks: ProjectTask[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  allTags: string[];
 }
 
-export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, allTags }: Props) {
+export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange }: Props) {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("todo");
   const [priority, setPriority] = useState("none");
   const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const [linkLabel, setLinkLabel] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
@@ -61,9 +58,7 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
       setStatus(task.status);
       setPriority(task.priority);
       setDueDate(task.dueDate ? new Date(task.dueDate) : null);
-      setTags(task.tags || []);
       setLinks(task.links || []);
-      setTagInput("");
       setLinkLabel("");
       setLinkUrl("");
       setNewSubtaskTitle("");
@@ -122,27 +117,7 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
     onSuccess: invalidateAll,
   });
 
-  const tagSuggestions = useMemo(
-    () => allTags.filter(t => !tags.includes(t) && t.toLowerCase().includes(tagInput.toLowerCase())).slice(0, 6),
-    [allTags, tags, tagInput],
-  );
-
   if (!task) return null;
-
-  const addTag = (raw: string) => {
-    const t = raw.trim().toLowerCase().slice(0, 40);
-    if (!t || tags.includes(t)) return;
-    const next = [...tags, t];
-    setTags(next);
-    updateMutation.mutate({ tags: next });
-    setTagInput("");
-  };
-
-  const removeTag = (t: string) => {
-    const next = tags.filter(x => x !== t);
-    setTags(next);
-    updateMutation.mutate({ tags: next });
-  };
 
   const addLink = () => {
     if (!linkLabel.trim() || !linkUrl.trim()) return;
@@ -332,43 +307,6 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
                   )}
                 </PopoverContent>
               </Popover>
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
-              <Tag className="h-3 w-3" /> Tags
-            </Label>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {tags.map(t => (
-                <Badge key={t} variant="secondary" className="text-xs gap-1 pr-1" data-testid={`tag-${t}`}>
-                  {t}
-                  <button onClick={() => removeTag(t)} className="hover-elevate rounded-sm p-0.5" aria-label={`Remove ${t}`}>
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </Badge>
-              ))}
-              <div className="relative">
-                <Input
-                  value={tagInput}
-                  onChange={e => setTagInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); if (tagInput.trim()) addTag(tagInput); }
-                    else if (e.key === "Backspace" && !tagInput && tags.length) { removeTag(tags[tags.length - 1]); }
-                  }}
-                  placeholder="Add tag…"
-                  className="h-7 text-xs w-32"
-                  data-testid="input-add-tag"
-                />
-                {tagInput && tagSuggestions.length > 0 && (
-                  <div className="absolute z-10 mt-1 left-0 rounded-md border border-border bg-popover shadow-md py-1 min-w-[120px]">
-                    {tagSuggestions.map(s => (
-                      <button key={s} onClick={() => addTag(s)} className="w-full text-left px-2 py-1 text-xs hover-elevate" data-testid={`suggest-tag-${s}`}>{s}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
