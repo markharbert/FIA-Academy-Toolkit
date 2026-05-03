@@ -177,7 +177,7 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-xl overflow-y-auto p-0" data-testid="sheet-task-detail">
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0" data-testid="sheet-task-detail">
         {/* Gradient header card */}
         <div className="relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(245_60%_28%)] via-[hsl(265_55%_35%)] to-[hsl(290_55%_38%)]" />
