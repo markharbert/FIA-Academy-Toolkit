@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Project, ProjectTask, ProjectLink } from "@shared/schema";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +50,8 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
   const [linkLabel, setLinkLabel] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [confirmDeleteTask, setConfirmDeleteTask] = useState(false);
+  const [confirmDeleteSubtask, setConfirmDeleteSubtask] = useState<ProjectTask | null>(null);
 
   useEffect(() => {
     if (task && open) {
@@ -360,7 +363,7 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
                         : <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40" />}
                     </button>
                     <span className={`text-sm flex-1 ${st.status === "done" ? "line-through text-muted-foreground" : ""}`}>{st.title}</span>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteSubtaskMutation.mutate(st.id)} aria-label="Delete subtask" data-testid={`button-delete-subtask-${st.id}`}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setConfirmDeleteSubtask(st)} aria-label="Delete subtask" data-testid={`button-delete-subtask-${st.id}`}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
@@ -388,12 +391,56 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
               Created {new Date(task.createdAt).toLocaleDateString()}
               {task.completedAt && <> · Completed {new Date(task.completedAt).toLocaleDateString()}</>}
             </p>
-            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => deleteMutation.mutate()} data-testid="button-delete-task">
+            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setConfirmDeleteTask(true)} data-testid="button-delete-task">
               <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete task
             </Button>
           </div>
         </div>
       </SheetContent>
+
+      <AlertDialog open={confirmDeleteTask} onOpenChange={setConfirmDeleteTask}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{task.title}</strong>
+              {subtasks.length > 0 && <> and its {subtasks.length} subtask{subtasks.length === 1 ? "" : "s"}</>}
+              {" "}will be permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-task">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { deleteMutation.mutate(); setConfirmDeleteTask(false); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-task"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmDeleteSubtask} onOpenChange={(open) => !open && setConfirmDeleteSubtask(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this subtask?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{confirmDeleteSubtask?.title}</strong> will be permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-subtask">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (confirmDeleteSubtask) { deleteSubtaskMutation.mutate(confirmDeleteSubtask.id); } setConfirmDeleteSubtask(null); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-subtask"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }
