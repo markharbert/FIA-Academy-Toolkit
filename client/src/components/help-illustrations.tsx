@@ -669,11 +669,11 @@ export function ProjectsDashboardIllustration() {
 
 export function DmoHubIllustration() {
   const annotations: Annotation[] = [
-    { x: 18.0, y: 13.6, w: 10.6, h: 4.4,  color: "red",    label: "1 Today / Journal tabs", labelPos: "outside-bottom" },
-    { x: 64.5, y: 9.8,  w: 13.5, h: 8.0,  color: "orange", label: "2 Points ring (X/25)",   labelPos: "tl" },
-    { x: 16.8, y: 21.7, w: 61.5, h: 5.8,  color: "amber",  label: "3 Streak banner",        labelPos: "tl" },
-    { x: 22.0, y: 71.4, w: 44.1, h: 24.0, color: "blue",   label: "4 Activity card",        labelPos: "tl" },
-    { x: 55.6, y: 71.4, w: 22.5, h: 24.0, color: "green",  label: "5 Today's stats",        labelPos: "tr" },
+    { x: 18.0, y: 14.0, w: 10.5, h: 3.8,  color: "red",    label: "1 Tabs",            labelPos: "inside-tl" },
+    { x: 64.5, y: 9.5,  w: 13.5, h: 8.2,  color: "orange", label: "2 Points ring",     labelPos: "inside-br" },
+    { x: 16.8, y: 21.7, w: 61.5, h: 5.8,  color: "amber",  label: "3 Streak banner",   labelPos: "inside-tl" },
+    { x: 22.0, y: 71.4, w: 44.1, h: 24.0, color: "blue",   label: "4 Activity card",   labelPos: "inside-tl" },
+    { x: 55.6, y: 71.4, w: 22.5, h: 24.0, color: "green",  label: "5 Today's stats",   labelPos: "inside-tr" },
   ];
   return (
     <AnnotatedScreenshot
@@ -686,11 +686,11 @@ export function DmoHubIllustration() {
 
 export function DmoCardIllustration() {
   const annotations: Annotation[] = [
-    { x: 3.7,  y: 10.8, w: 8.6,  h: 24.7, color: "red",    label: "1 Activity icon",         labelPos: "tl" },
-    { x: 15.3, y: 14.8, w: 37.5, h: 12.3, color: "orange", label: "2 Title + Goal badge",    labelPos: "tr" },
-    { x: 75.8, y: 14.8, w: 15.3, h: 17.2, color: "amber",  label: "3 Timer (live)",          labelPos: "tr" },
-    { x: 80.1, y: 41.9, w: 15.3, h: 14.8, color: "blue",   label: "4 Start the timer",       labelPos: "bl" },
-    { x: 3.7,  y: 76.4, w: 91.7, h: 14.7, color: "green",  label: "5 Reminder quote",        labelPos: "tl" },
+    { x: 3.7,  y: 10.8, w: 8.6,  h: 24.7, color: "red",    label: "1 Icon",             labelPos: "inside-bl" },
+    { x: 15.3, y: 10.8, w: 57.0, h: 16.0, color: "orange", label: "2 Title + Goal",     labelPos: "inside-tl" },
+    { x: 75.8, y: 10.8, w: 21.3, h: 21.5, color: "amber",  label: "3 Timer",            labelPos: "inside-tl" },
+    { x: 79.0, y: 38.0, w: 18.0, h: 18.0, color: "blue",   label: "4 Start",            labelPos: "inside-tl" },
+    { x: 3.7,  y: 74.0, w: 91.7, h: 18.0, color: "green",  label: "5 Quote",            labelPos: "inside-tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -703,11 +703,11 @@ export function DmoCardIllustration() {
 
 export function DmoCardRunningIllustration() {
   const annotations: Annotation[] = [
-    { x: 1.3,  y: 1.6,  w: 96.0, h: 81.6, color: "red",    label: "1 Pulsing ring",          labelPos: "tl" },
-    { x: 70.5, y: 17.6, w: 16.5, h: 17.6, color: "orange", label: "2 Live timer",            labelPos: "tr" },
-    { x: 70.5, y: 36.5, w: 16.5, h: 9.4,  color: "amber",  label: "3 Point dots (0–5)",      labelPos: "tr" },
-    { x: 70.5, y: 47.5, w: 24.5, h: 13.7, color: "blue",   label: "4 Pause + Done",          labelPos: "tl" },
-    { x: 1.6,  y: 73.7, w: 50.0, h: 11.0, color: "green",  label: "5 Timer running",         labelPos: "outside-bottom" },
+    { x: 1.3,  y: 1.6,  w: 96.0, h: 80.0, color: "red",    label: "1 Pulsing ring",     labelPos: "inside-tl" },
+    { x: 70.5, y: 17.6, w: 21.0, h: 17.6, color: "orange", label: "2 Live timer",       labelPos: "inside-tl" },
+    { x: 70.5, y: 36.5, w: 21.0, h: 9.4,  color: "amber",  label: "3 Point dots",       labelPos: "inside-tl" },
+    { x: 70.5, y: 47.5, w: 27.5, h: 14.0, color: "blue",   label: "4 Pause + Done",     labelPos: "inside-tl" },
+    { x: 1.6,  y: 74.0, w: 55.0, h: 12.0, color: "green",  label: "5 Running indicator",labelPos: "inside-tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -720,9 +720,9 @@ export function DmoCardRunningIllustration() {
 
 export function DmoStatsIllustration() {
   const annotations: Annotation[] = [
-    { x: 1.3, y: 0.5,  w: 97.5, h: 25.0, color: "red",    label: "1 Streak / Best / Total / Today", labelPos: "tr" },
-    { x: 1.3, y: 28.0, w: 97.5, h: 39.0, color: "orange", label: "2 Milestones (earned vs. locked)", labelPos: "tr" },
-    { x: 1.3, y: 69.0, w: 97.5, h: 30.5, color: "blue",   label: "3 The 5-Step DMO recap",          labelPos: "tr" },
+    { x: 1.3, y: 0.5,  w: 97.5, h: 25.0, color: "red",    label: "1 Streak / Best / Total / Today",  labelPos: "inside-tr" },
+    { x: 1.3, y: 28.0, w: 97.5, h: 39.0, color: "orange", label: "2 Milestones (earned vs. locked)",  labelPos: "inside-tr" },
+    { x: 1.3, y: 69.0, w: 97.5, h: 30.5, color: "blue",   label: "3 The 5-Step DMO recap",           labelPos: "inside-tr" },
   ];
   return (
     <AnnotatedScreenshot
@@ -735,10 +735,10 @@ export function DmoStatsIllustration() {
 
 export function DmoChartIllustration() {
   const annotations: Annotation[] = [
-    { x: 1.5,  y: 6.0,  w: 14.5, h: 14.5, color: "red",    label: "1 Points History",     labelPos: "tr" },
-    { x: 80.5, y: 5.5,  w: 16.5, h: 11.0, color: "orange", label: "2 Day-range select",   labelPos: "bl" },
-    { x: 4.5,  y: 21.0, w: 90.0, h: 63.0, color: "amber",  label: "3 One bar per day",    labelPos: "tl" },
-    { x: 27.5, y: 87.5, w: 45.0, h: 8.5,  color: "blue",   label: "4 Color legend",       labelPos: "tl" },
+    { x: 1.5,  y: 6.0,  w: 14.5, h: 14.5, color: "red",    label: "1 Points History",   labelPos: "inside-tl" },
+    { x: 80.5, y: 5.5,  w: 16.5, h: 11.0, color: "orange", label: "2 Day range",        labelPos: "inside-tl" },
+    { x: 4.5,  y: 21.0, w: 90.0, h: 63.0, color: "amber",  label: "3 One bar per day",  labelPos: "inside-tl" },
+    { x: 27.5, y: 87.5, w: 45.0, h: 8.5,  color: "blue",   label: "4 Legend",           labelPos: "inside-tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -751,9 +751,9 @@ export function DmoChartIllustration() {
 
 export function DmoNotesIllustration() {
   const annotations: Annotation[] = [
-    { x: 2.6, y: 4.8,  w: 13.8, h: 9.5,  color: "red",    label: "1 Daily Notes label",  labelPos: "tr" },
-    { x: 2.6, y: 19.0, w: 94.8, h: 52.4, color: "orange", label: "2 Free-form journal",  labelPos: "tr" },
-    { x: 2.6, y: 76.2, w: 15.5, h: 16.7, color: "amber",  label: "3 Save Notes",         labelPos: "outside-bottom" },
+    { x: 2.6, y: 4.8,  w: 13.8, h: 9.5,  color: "red",    label: "1 Daily Notes label",  labelPos: "inside-tl" },
+    { x: 2.6, y: 19.0, w: 94.8, h: 52.4, color: "orange", label: "2 Free-form journal",  labelPos: "inside-tl" },
+    { x: 2.6, y: 76.2, w: 15.5, h: 16.7, color: "amber",  label: "3 Save Notes",         labelPos: "inside-tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -766,11 +766,11 @@ export function DmoNotesIllustration() {
 
 export function DmoJournalIllustration() {
   const annotations: Annotation[] = [
-    { x: 23.4, y: 13.6, w: 5.1,  h: 4.4,  color: "red",    label: "1 Journal tab",          labelPos: "outside-bottom" },
-    { x: 16.8, y: 21.5, w: 61.3, h: 4.0,  color: "orange", label: "2 Filter & count",       labelPos: "tl" },
-    { x: 16.8, y: 25.5, w: 61.3, h: 7.0,  color: "amber",  label: "3 Month header",         labelPos: "tl" },
-    { x: 68.5, y: 32.5, w: 8.5,  h: 3.5,  color: "blue",   label: "4 AI Summary",           labelPos: "bl" },
-    { x: 19.0, y: 36.5, w: 59.1, h: 23.5, color: "green",  label: "5 Day rows + notes",     labelPos: "tl" },
+    { x: 23.4, y: 14.0, w: 5.1,  h: 3.8,  color: "red",    label: "1 Journal",          labelPos: "inside-tl" },
+    { x: 16.8, y: 21.5, w: 61.3, h: 4.0,  color: "orange", label: "2 Filter & count",   labelPos: "inside-tl" },
+    { x: 16.8, y: 25.5, w: 61.3, h: 7.0,  color: "amber",  label: "3 Month header",     labelPos: "inside-tl" },
+    { x: 68.5, y: 32.5, w: 8.5,  h: 3.5,  color: "blue",   label: "4 AI Summary",       labelPos: "inside-tl" },
+    { x: 19.0, y: 36.5, w: 59.1, h: 23.5, color: "green",  label: "5 Day rows + notes", labelPos: "inside-tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -783,10 +783,10 @@ export function DmoJournalIllustration() {
 
 export function DmoAiSummaryIllustration() {
   const annotations: Annotation[] = [
-    { x: 2.0,  y: 8.0,  w: 22.0, h: 14.0, color: "red",    label: "1 AI period header",      labelPos: "tl" },
-    { x: 62.0, y: 8.0,  w: 34.0, h: 14.0, color: "orange", label: "2 Mood + Performance",    labelPos: "tr" },
-    { x: 2.0,  y: 26.0, w: 96.0, h: 36.0, color: "amber",  label: "3 Week / month recap",    labelPos: "tr" },
-    { x: 2.0,  y: 66.0, w: 96.0, h: 30.0, color: "blue",   label: "4 Three actionable tips", labelPos: "tr" },
+    { x: 2.0,  y: 8.0,  w: 22.0, h: 14.0, color: "red",    label: "1 AI period header",      labelPos: "inside-tl" },
+    { x: 62.0, y: 8.0,  w: 34.0, h: 14.0, color: "orange", label: "2 Mood + Performance",    labelPos: "inside-tr" },
+    { x: 2.0,  y: 26.0, w: 96.0, h: 36.0, color: "amber",  label: "3 Week / month recap",    labelPos: "inside-tr" },
+    { x: 2.0,  y: 66.0, w: 96.0, h: 30.0, color: "blue",   label: "4 Three actionable tips", labelPos: "inside-tr" },
   ];
   return (
     <AnnotatedScreenshot

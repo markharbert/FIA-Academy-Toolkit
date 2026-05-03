@@ -7,7 +7,7 @@ export type Annotation = {
   h: number;
   color?: AnnotationColor;
   label?: string;
-  labelPos?: "tl" | "tr" | "bl" | "br" | "outside-top" | "outside-bottom";
+  labelPos?: "tl" | "tr" | "bl" | "br" | "outside-top" | "outside-bottom" | "inside-tl" | "inside-tr" | "inside-bl" | "inside-br";
 };
 
 const COLOR_CLASSES: Record<AnnotationColor, { box: string; chip: string }> = {
@@ -49,6 +49,14 @@ function chipPosClasses(pos: Annotation["labelPos"]) {
       return "top-0 left-1/2 -translate-x-1/2 -translate-y-[120%]";
     case "outside-bottom":
       return "bottom-0 left-1/2 -translate-x-1/2 translate-y-[120%]";
+    case "inside-tl":
+      return "top-1 left-1";
+    case "inside-tr":
+      return "top-1 right-1";
+    case "inside-bl":
+      return "bottom-1 left-1";
+    case "inside-br":
+      return "bottom-1 right-1";
     case "tl":
     default:
       return "top-0 left-0 -translate-y-1/2 -translate-x-1/4";
