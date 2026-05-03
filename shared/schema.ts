@@ -1388,6 +1388,7 @@ export const projectTasks = pgTable("project_tasks", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   parentTaskId: varchar("parent_task_id"), // nullable; one level deep
+  columnId: varchar("column_id"), // nullable; references project_columns(id)
   title: text("title").notNull(),
   notes: text("notes").default("").notNull(), // HTML from tiptap
   status: text("status").default("todo").notNull(), // 'todo' | 'in_progress' | 'done'
@@ -1421,6 +1422,7 @@ export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
 
 export const updateProjectTaskSchema = insertProjectTaskSchema.partial().extend({
   projectId: z.string().optional(), // do not allow changing
+  columnId: z.string().nullable().optional(),
 }).omit({ projectId: true });
 
 export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
@@ -1471,6 +1473,34 @@ export interface ProjectWithCounts extends Project {
   dueThisWeek: number;
   lastActivityAt: Date | null;
 }
+
+// ── Project Board Columns ─────────────────────────────────────────────────────
+
+export const projectColumns = pgTable("project_columns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  color: text("color"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertProjectColumnSchema = createInsertSchema(projectColumns).omit({
+  id: true,
+  userId: true,
+  projectId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().trim().min(1, "Name is required").max(80),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().nullable(),
+  sortOrder: z.number().int().optional(),
+});
+
+export type InsertProjectColumn = z.infer<typeof insertProjectColumnSchema>;
+export type ProjectColumn = typeof projectColumns.$inferSelect;
 
 // ── Project Templates ────────────────────────────────────────────────────────
 

@@ -27,10 +27,12 @@ import {
   type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
   type PostmasterConnection, type PostmasterDomain,
   projects, projectTasks, taskComments, taskActivity,
+  projectColumns,
   projectTemplates, projectTemplateTasks,
   type Project, type InsertProject, type ProjectWithCounts,
   type ProjectTask, type InsertProjectTask, type UpdateProjectTask,
   type TaskComment, type TaskActivity,
+  type ProjectColumn, type InsertProjectColumn,
   type ProjectTemplate, type InsertProjectTemplate, type ProjectTemplateWithCounts,
   type ProjectTemplateTask, type InsertProjectTemplateTask, type UpdateProjectTemplateTask,
 } from "@shared/schema";
@@ -358,6 +360,13 @@ export interface IStorage {
   updateTaskComment(taskId: string, commentId: string, userId: string, body: string): Promise<TaskComment | undefined>;
   deleteTaskComment(taskId: string, commentId: string, userId: string): Promise<boolean>;
   getTaskActivity(taskId: string, userId: string): Promise<Array<TaskActivity & { authorName: string | null; authorEmail: string | null }>>;
+
+  // Project Board Columns
+  getColumnsForProject(projectId: string, userId: string): Promise<ProjectColumn[]>;
+  createColumn(userId: string, projectId: string, data: InsertProjectColumn): Promise<ProjectColumn>;
+  updateColumn(id: string, userId: string, data: Partial<InsertProjectColumn>): Promise<ProjectColumn | undefined>;
+  deleteColumn(id: string, userId: string): Promise<void>;
+  seedColumnsForProject(projectId: string, userId: string): Promise<ProjectColumn[]>;
 
   // Project Templates
   getTemplatesForUser(userId: string): Promise<ProjectTemplateWithCounts[]>;
@@ -2201,6 +2210,7 @@ export class DatabaseStorage implements IStorage {
       userId,
       projectId,
       parentTaskId,
+      columnId: data.columnId ?? null,
       title: data.title,
       notes: data.notes ?? "",
       status: data.status ?? "todo",
@@ -2230,6 +2240,7 @@ export class DatabaseStorage implements IStorage {
     if (data.tags !== undefined) update.tags = data.tags;
     if (data.links !== undefined) update.links = data.links;
     if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
+    if (data.columnId !== undefined) update.columnId = data.columnId;
     if (data.status !== undefined) {
       update.status = data.status;
       if (data.status === "done" && existing.status !== "done") {
@@ -2379,6 +2390,95 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(taskActivity.createdAt))
       .limit(200);
     return rows;
+  }
+
+  // ── Project Board Columns ────────────────────────────────────────────────────
+
+  async getColumnsForProject(projectId: string, userId: string): Promise<ProjectColumn[]> {
+    return db.select().from(projectColumns)
+      .where(and(eq(projectColumns.projectId, projectId), eq(projectColumns.userId, userId)))
+      .orderBy(asc(projectColumns.sortOrder), asc(projectColumns.createdAt));
+  }
+
+  async createColumn(userId: string, projectId: string, data: InsertProjectColumn): Promise<ProjectColumn> {
+    const existing = await this.getColumnsForProject(projectId, userId);
+    const sortOrder = data.sortOrder ?? existing.length;
+    const [created] = await db.insert(projectColumns).values({
+      userId, projectId, name: data.name, color: data.color ?? null, sortOrder,
+    }).returning();
+    return created;
+  }
+
+  async updateColumn(id: string, userId: string, data: Partial<InsertProjectColumn>): Promise<ProjectColumn | undefined> {
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.name !== undefined) update.name = data.name;
+    if (data.color !== undefined) update.color = data.color;
+    if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
+    const [updated] = await db.update(projectColumns)
+      .set(update)
+      .where(and(eq(projectColumns.id, id), eq(projectColumns.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteColumn(id: string, userId: string): Promise<void> {
+    const [col] = await db.select().from(projectColumns)
+      .where(and(eq(projectColumns.id, id), eq(projectColumns.userId, userId)));
+    if (!col) return;
+    const remaining = await db.select().from(projectColumns)
+      .where(and(eq(projectColumns.projectId, col.projectId), eq(projectColumns.userId, userId)))
+      .orderBy(asc(projectColumns.sortOrder));
+    const others = remaining.filter(c => c.id !== id);
+    if (others.length > 0) {
+      await db.execute(sql`
+        UPDATE project_tasks SET column_id = ${others[0].id}
+        WHERE column_id = ${id} AND user_id = ${userId}
+      `);
+    } else {
+      await db.execute(sql`
+        UPDATE project_tasks SET column_id = NULL
+        WHERE column_id = ${id} AND user_id = ${userId}
+      `);
+    }
+    await db.delete(projectColumns)
+      .where(and(eq(projectColumns.id, id), eq(projectColumns.userId, userId)));
+  }
+
+  async seedColumnsForProject(projectId: string, userId: string): Promise<ProjectColumn[]> {
+    const existing = await this.getColumnsForProject(projectId, userId);
+    if (existing.length > 0) return existing;
+
+    const defaults = [
+      { name: "To do",       sortOrder: 0 },
+      { name: "In progress", sortOrder: 1 },
+      { name: "Done",        sortOrder: 2 },
+    ];
+    const created: ProjectColumn[] = [];
+    for (const d of defaults) {
+      const [col] = await db.insert(projectColumns).values({
+        userId, projectId, name: d.name, sortOrder: d.sortOrder,
+      }).returning();
+      created.push(col);
+    }
+
+    // Assign existing tasks to the matching column by status
+    await db.execute(sql`
+      UPDATE project_tasks SET column_id = ${created[0].id}
+      WHERE project_id = ${projectId} AND user_id = ${userId}
+        AND status = 'todo' AND column_id IS NULL
+    `);
+    await db.execute(sql`
+      UPDATE project_tasks SET column_id = ${created[1].id}
+      WHERE project_id = ${projectId} AND user_id = ${userId}
+        AND status = 'in_progress' AND column_id IS NULL
+    `);
+    await db.execute(sql`
+      UPDATE project_tasks SET column_id = ${created[2].id}
+      WHERE project_id = ${projectId} AND user_id = ${userId}
+        AND status = 'done' AND column_id IS NULL
+    `);
+
+    return created;
   }
 
   async getDashboardProjectsSummary(userId: string) {

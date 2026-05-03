@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz } from "@shared/datetime";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -5906,6 +5906,57 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     } catch (err) {
       console.error("[templates] snapshot error:", err);
       res.status(500).json({ message: "Failed to save as template" });
+    }
+  });
+
+  // ── Project Board Columns ─────────────────────────────────────────────────
+
+  app.get("/api/projects/:id/columns", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await storage.getProject(req.params.id, req.session.userId!);
+      if (!project) return res.status(404).json({ message: "Not found" });
+      const columns = await storage.seedColumnsForProject(req.params.id, req.session.userId!);
+      res.json(columns);
+    } catch (err) {
+      console.error("[columns] list error:", err);
+      res.status(500).json({ message: "Failed to load columns" });
+    }
+  });
+
+  app.post("/api/projects/:id/columns", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await storage.getProject(req.params.id, req.session.userId!);
+      if (!project) return res.status(404).json({ message: "Not found" });
+      const data = insertProjectColumnSchema.parse(req.body);
+      const created = await storage.createColumn(req.session.userId!, req.params.id, data);
+      res.status(201).json(created);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[columns] create error:", err);
+      res.status(500).json({ message: "Failed to create column" });
+    }
+  });
+
+  app.patch("/api/project-columns/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const data = insertProjectColumnSchema.partial().parse(req.body);
+      const updated = await storage.updateColumn(req.params.id, req.session.userId!, data);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[columns] update error:", err);
+      res.status(500).json({ message: "Failed to update column" });
+    }
+  });
+
+  app.delete("/api/project-columns/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteColumn(req.params.id, req.session.userId!);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[columns] delete error:", err);
+      res.status(500).json({ message: "Failed to delete column" });
     }
   });
 

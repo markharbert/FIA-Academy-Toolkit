@@ -11,7 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { dayDiffInTz, formatInTz } from "@shared/datetime";
 import { TaskDetailSheet } from "@/components/projects/task-detail-sheet";
-import { ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight, CalendarClock, Flag, Loader2, ListChecks, MoreVertical, FileText } from "lucide-react";
+import { KanbanBoard } from "@/components/projects/kanban-board";
+import { ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight, CalendarClock, Flag, Loader2, ListChecks, MoreVertical, FileText, LayoutList, LayoutGrid } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -87,6 +88,15 @@ export default function ProjectDetailPage() {
   const [quickAddInputs, setQuickAddInputs] = useState<Record<string, string>>({ todo: "", in_progress: "", done: "" });
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState("");
+  const [view, setView] = useState<"list" | "board">(() => {
+    try { return (localStorage.getItem(`project-view-${projectId}`) as "list" | "board") ?? "list"; }
+    catch { return "list"; }
+  });
+
+  const switchView = (v: "list" | "board") => {
+    setView(v);
+    try { localStorage.setItem(`project-view-${projectId}`, v); } catch {}
+  };
 
   const { data: project, isLoading: projectLoading } = useQuery<Project>({ queryKey: ["/api/projects", projectId] });
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<ProjectTask[]>({ queryKey: ["/api/projects", projectId, "tasks"] });
@@ -236,6 +246,23 @@ export default function ProjectDetailPage() {
               <Badge className={hdr.chip}>
                 {topLevel.filter(t => t.status === "done").length} done
               </Badge>
+              {/* View toggle */}
+              <div className="flex items-center rounded-md border border-white/20 overflow-hidden bg-white/10">
+                <button
+                  onClick={() => switchView("list")}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors ${view === "list" ? "bg-white/25 text-white" : "text-white/70 hover:text-white hover:bg-white/15"}`}
+                  data-testid="button-view-list"
+                >
+                  <LayoutList className="h-3.5 w-3.5" /> List
+                </button>
+                <button
+                  onClick={() => switchView("board")}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors ${view === "board" ? "bg-white/25 text-white" : "text-white/70 hover:text-white hover:bg-white/15"}`}
+                  data-testid="button-view-board"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" /> Board
+                </button>
+              </div>
               {project.status === "archived" ? (
                 <Button
                   size="sm"
@@ -281,7 +308,18 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+      {/* Board view */}
+      {view === "board" && (
+        <KanbanBoard
+          projectId={projectId}
+          tasks={tasks}
+          tz={tz}
+          onOpenTask={setOpenTaskId}
+        />
+      )}
+
+      {/* List view */}
+      <div className={`max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5 ${view === "board" ? "hidden" : ""}`}>
         {tasksLoading ? (
           <div className="text-center py-10 text-muted-foreground">Loading tasks…</div>
         ) : (

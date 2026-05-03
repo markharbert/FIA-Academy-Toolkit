@@ -335,6 +335,29 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] project templates migration complete");
 
+    // Kanban board columns
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS project_columns (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        project_id VARCHAR NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        color TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS project_columns_project_idx
+        ON project_columns(project_id, sort_order ASC)
+    `);
+    await db.execute(sql`
+      ALTER TABLE project_tasks
+        ADD COLUMN IF NOT EXISTS column_id VARCHAR REFERENCES project_columns(id) ON DELETE SET NULL
+    `);
+    console.log("[startup] project board columns migration complete");
+
     await db.execute(sql`
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/New_York'
