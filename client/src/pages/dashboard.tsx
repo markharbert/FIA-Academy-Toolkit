@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,15 +38,33 @@ type ReputationStatus = {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function timeGreeting() {
-  const h = new Date().getHours();
+function timeGreeting(tz?: string | null) {
+  let h: number;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz || undefined, hour: "numeric", hour12: false }).formatToParts(new Date());
+    h = parseInt(parts.find(p => p.type === "hour")?.value || "0", 10);
+  } catch {
+    h = new Date().getHours();
+  }
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
 }
 
-function todayLabel() {
-  return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+function todayLabel(tz?: string | null) {
+  try {
+    return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: tz || undefined });
+  } catch {
+    return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  }
+}
+
+function nowTimeLabel(tz?: string | null) {
+  try {
+    return new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz || undefined });
+  } catch {
+    return new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
 }
 
 function scoreColor(s: number | null | undefined) {
@@ -205,6 +223,14 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const firstName = user?.firstName || user?.displayName?.split(" ")[0] || "";
 
+  // Live clock that ticks once a minute in the user's saved time zone.
+  const [nowTime, setNowTime] = useState(() => nowTimeLabel(user?.timezone));
+  useEffect(() => {
+    setNowTime(nowTimeLabel(user?.timezone));
+    const id = setInterval(() => setNowTime(nowTimeLabel(user?.timezone)), 30_000);
+    return () => clearInterval(id);
+  }, [user?.timezone]);
+
   // ── data fetching ──────────────────────────────────────────────────────────
   const { data: streak } = useQuery<{ current: number; best: number; totalDays: number }>({
     queryKey: ["/api/dmo/streak"],
@@ -359,9 +385,13 @@ export default function DashboardPage() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div className="text-white">
-              <p className="text-xs font-medium tracking-wide uppercase text-white/70">{todayLabel()}</p>
+              <p className="text-xs font-medium tracking-wide uppercase text-white/70 flex items-center gap-2 flex-wrap">
+                <span data-testid="text-dashboard-date">{todayLabel(user?.timezone)}</span>
+                <span className="opacity-50">·</span>
+                <span className="tabular-nums" data-testid="text-dashboard-time">{nowTime}</span>
+              </p>
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mt-1" data-testid="text-dashboard-title">
-                {firstName ? `${timeGreeting()}, ${firstName}` : timeGreeting()}
+                {firstName ? `${timeGreeting(user?.timezone)}, ${firstName}` : timeGreeting(user?.timezone)}
               </h1>
               <p className="text-white/70 mt-1 text-sm">
                 Your private marketing command center.
