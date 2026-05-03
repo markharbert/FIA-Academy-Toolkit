@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { ProjectWithCounts, ProjectTask } from "@shared/schema";
+import type { ProjectWithCounts, ProjectTask, ProjectTemplateWithCounts } from "@shared/schema";
 
 type UrgentTask = ProjectTask & { projectName: string; projectColor: string };
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +16,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // dueDate is stored as UTC midnight representing a calendar day. Treat the stored
 // UTC Y/M/D as a local calendar date, then compare to the viewer's local "today".
@@ -69,6 +70,91 @@ const COLOR_PALETTE = [
   "#3b82f6", // blue
   "#64748b", // slate
 ];
+
+function TemplatesTab({
+  templates, isLoading, onCreate, onUse, onDuplicate, onDelete,
+}: {
+  templates: ProjectTemplateWithCounts[];
+  isLoading: boolean;
+  onCreate: () => void;
+  onUse: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onDelete: (t: ProjectTemplateWithCounts) => void;
+}) {
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-12 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>;
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold">Project templates</h2>
+          <p className="text-xs text-muted-foreground">Reusable blueprints with tasks, subtasks, notes, priorities, tags, and links. Pick one in “Start from” when you create a project.</p>
+        </div>
+        <Button onClick={onCreate} data-testid="button-create-template">
+          <Plus className="h-4 w-4 mr-1.5" /> New template
+        </Button>
+      </div>
+      {templates.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-10 text-center" data-testid="empty-templates">
+          <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+            <Layers className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <h3 className="font-semibold">No templates yet</h3>
+          <p className="text-sm text-muted-foreground mt-1 mb-4">Build a template from scratch, or save an existing project as a template from its menu.</p>
+          <Button onClick={onCreate} data-testid="button-empty-create-template">
+            <Plus className="h-4 w-4 mr-1.5" /> New template
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {templates.map(t => (
+            <Card key={t.id} className="overflow-hidden hover-elevate active-elevate-2" data-testid={`card-template-${t.id}`}>
+              <div className="h-1.5" style={{ background: t.color }} />
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <Link href={`/projects/templates/${t.id}`} className="flex-1 min-w-0">
+                    <h3 className="font-semibold truncate hover:underline" data-testid={`text-template-name-${t.id}`}>{t.name}</h3>
+                    {t.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>}
+                  </Link>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 -mr-1" data-testid={`menu-template-${t.id}`}>
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link href={`/projects/templates/${t.id}`} data-testid={`menu-template-edit-${t.id}`}>
+                          <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onDuplicate(t.id)} data-testid={`menu-template-duplicate-${t.id}`}>
+                        <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => onDelete(t)} className="text-destructive focus:text-destructive" data-testid={`menu-template-delete-${t.id}`}>
+                        <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <Badge variant="secondary" className="text-[11px] gap-1">
+                    <ListChecks className="h-3 w-3" /> {t.totalTasks} task{t.totalTasks === 1 ? "" : "s"}
+                  </Badge>
+                  <Button size="sm" variant="outline" onClick={() => onUse(t.id)} data-testid={`button-use-template-${t.id}`}>
+                    Use template
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ProjectCard({ p, onEdit, onArchive, onDelete }: { p: ProjectWithCounts; onEdit: (p: ProjectWithCounts) => void; onArchive: (p: ProjectWithCounts) => void; onDelete: (p: ProjectWithCounts) => void }) {
   const completionPct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
@@ -588,15 +674,21 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(COLOR_PALETTE[0]);
   const [showArchived, setShowArchived] = useState(false);
-  const [topTab, setTopTab] = useState<"overview" | "list" | "calendar">(() => {
+  const [topTab, setTopTab] = useState<"overview" | "list" | "calendar" | "templates">(() => {
     if (typeof window === "undefined") return "overview";
     const saved = localStorage.getItem("projects-top-tab");
-    return (saved === "list" || saved === "calendar" || saved === "overview") ? saved : "overview";
+    return (saved === "list" || saved === "calendar" || saved === "overview" || saved === "templates") ? saved : "overview";
   });
-  const setTopTabPersist = (t: "overview" | "list" | "calendar") => {
+  const setTopTabPersist = (t: "overview" | "list" | "calendar" | "templates") => {
     setTopTab(t);
     try { localStorage.setItem("projects-top-tab", t); } catch {}
   };
+  const [templateId, setTemplateId] = useState<string>("blank");
+  const [createTemplateOpen, setCreateTemplateOpen] = useState(false);
+  const [tplName, setTplName] = useState("");
+  const [tplDescription, setTplDescription] = useState("");
+  const [tplColor, setTplColor] = useState(COLOR_PALETTE[0]);
+  const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<ProjectTemplateWithCounts | null>(null);
   const [view, setView] = useState<"cards" | "list">(() => {
     if (typeof window === "undefined") return "cards";
     return (localStorage.getItem("projects-view") as "cards" | "list") || "cards";
@@ -627,25 +719,70 @@ export default function ProjectsPage() {
   const { data: urgentTasks = [] } = useQuery<UrgentTask[]>({ queryKey: ["/api/projects/urgent-tasks"] });
   const { data: allTasks = [], isLoading: tasksLoading } = useQuery<OpenTask[]>({
     queryKey: ["/api/projects/all-tasks"],
-    enabled: topTab !== "overview",
+    enabled: topTab === "list" || topTab === "calendar",
+  });
+  const { data: templates = [], isLoading: templatesLoading } = useQuery<ProjectTemplateWithCounts[]>({
+    queryKey: ["/api/project-templates"],
   });
 
   const createMutation = useMutation({
     mutationFn: async () => {
       const payload: Record<string, unknown> = { name, description, color };
       if (dueDate) payload.dueDate = `${dueDate}T00:00:00.000Z`;
+      if (templateId && templateId !== "blank") payload.templateId = templateId;
       const res = await apiRequest("POST", "/api/projects", payload);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
-      setName(""); setDescription(""); setColor(COLOR_PALETTE[0]); setDueDate("");
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+      setName(""); setDescription(""); setColor(COLOR_PALETTE[0]); setDueDate(""); setTemplateId("blank");
       setCreateOpen(false);
       toast({ title: "Project created" });
     },
     onError: (err: Error) => toast({ title: "Failed to create", description: err.message, variant: "destructive" }),
   });
+
+  const createTemplateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/project-templates", {
+        name: tplName.trim(),
+        description: tplDescription.trim(),
+        color: tplColor,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/project-templates"] });
+      setTplName(""); setTplDescription(""); setTplColor(COLOR_PALETTE[0]);
+      setCreateTemplateOpen(false);
+      toast({ title: "Template created" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to create template", description: err.message, variant: "destructive" }),
+  });
+
+  const duplicateTemplateMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("POST", `/api/project-templates/${id}/duplicate`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/project-templates"] });
+      toast({ title: "Template duplicated" });
+    },
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/project-templates/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/project-templates"] });
+      setDeleteTemplateTarget(null);
+      toast({ title: "Template deleted" });
+    },
+  });
+
+  const useTemplate = (id: string) => {
+    setTemplateId(id);
+    setCreateOpen(true);
+  };
 
   const archiveMutation = useMutation({
     mutationFn: async (p: ProjectWithCounts) => {
@@ -712,6 +849,22 @@ export default function ProjectsPage() {
                   <DialogTitle>New project</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
+                  <div>
+                    <Label htmlFor="proj-template">Start from</Label>
+                    <Select value={templateId} onValueChange={setTemplateId}>
+                      <SelectTrigger id="proj-template" className="mt-1.5" data-testid="select-project-template">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="blank">Blank project</SelectItem>
+                        {templates.map(t => (
+                          <SelectItem key={t.id} value={t.id} data-testid={`option-template-${t.id}`}>
+                            {t.name} · {t.totalTasks} task{t.totalTasks === 1 ? "" : "s"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div>
                     <Label htmlFor="proj-name">Name</Label>
                     <Input id="proj-name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. YouTube Channel Q3" data-testid="input-project-name" />
@@ -789,6 +942,13 @@ export default function ProjectsPage() {
                 data-testid="tab-calendar"
               >
                 <CalendarDays className="h-3 w-3 inline mr-1" /> Calendar
+              </button>
+              <button
+                onClick={() => setTopTabPersist("templates")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${topTab === "templates" ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+                data-testid="tab-templates"
+              >
+                <Layers className="h-3 w-3 inline mr-1" /> Templates · {templates.length}
               </button>
             </div>
             {topTab === "overview" && (
@@ -881,10 +1041,73 @@ export default function ProjectsPage() {
           )
         ) : topTab === "list" ? (
           <AllTasksList tasks={allTasks} isLoading={tasksLoading} />
-        ) : (
+        ) : topTab === "calendar" ? (
           <TasksCalendar tasks={allTasks} isLoading={tasksLoading} />
+        ) : (
+          <TemplatesTab
+            templates={templates}
+            isLoading={templatesLoading}
+            onCreate={() => setCreateTemplateOpen(true)}
+            onUse={useTemplate}
+            onDuplicate={(id) => duplicateTemplateMutation.mutate(id)}
+            onDelete={(t) => setDeleteTemplateTarget(t)}
+          />
         )}
       </div>
+
+      <Dialog open={createTemplateOpen} onOpenChange={setCreateTemplateOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-new-template">
+          <DialogHeader>
+            <DialogTitle>New template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="tpl-name-new">Name</Label>
+              <Input id="tpl-name-new" value={tplName} onChange={e => setTplName(e.target.value)} placeholder="e.g. YouTube video launch" data-testid="input-template-name" />
+            </div>
+            <div>
+              <Label htmlFor="tpl-desc-new">Description (optional)</Label>
+              <Textarea id="tpl-desc-new" rows={2} value={tplDescription} onChange={e => setTplDescription(e.target.value)} data-testid="input-template-description" />
+            </div>
+            <div>
+              <Label>Color</Label>
+              <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                {COLOR_PALETTE.map(c => (
+                  <button key={c} type="button" onClick={() => setTplColor(c)} className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background transition-all ${tplColor === c ? "ring-2 ring-foreground" : "hover:scale-110"}`} style={{ background: c }} aria-label={`Color ${c}`} data-testid={`tpl-color-${c.replace("#", "")}`} />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCreateTemplateOpen(false)}>Cancel</Button>
+            <Button onClick={() => createTemplateMutation.mutate()} disabled={!tplName.trim() || createTemplateMutation.isPending} data-testid="button-create-template">
+              {createTemplateMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Create template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteTemplateTarget} onOpenChange={(open) => !open && setDeleteTemplateTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{deleteTemplateTarget?.name}</strong> and all of its template tasks will be permanently deleted. Projects already created from this template are unaffected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTemplateTarget && deleteTemplateMutation.mutate(deleteTemplateTarget.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-template"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
         <DialogContent className="sm:max-w-md" data-testid="dialog-edit-project">

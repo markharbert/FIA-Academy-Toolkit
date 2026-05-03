@@ -292,6 +292,49 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] projects tables migration complete");
 
+    // Project templates
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS project_templates (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        color TEXT NOT NULL DEFAULT '#6366f1',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS project_templates_user_idx
+        ON project_templates(user_id, sort_order ASC, created_at DESC)
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS project_template_tasks (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        template_id VARCHAR NOT NULL REFERENCES project_templates(id) ON DELETE CASCADE,
+        parent_task_id VARCHAR,
+        title TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        priority TEXT NOT NULL DEFAULT 'none',
+        tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+        links JSONB NOT NULL DEFAULT '[]'::jsonb,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS project_template_tasks_template_idx
+        ON project_template_tasks(template_id, sort_order ASC, created_at ASC)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS project_template_tasks_parent_idx
+        ON project_template_tasks(parent_task_id)
+    `);
+    console.log("[startup] project templates migration complete");
+
     // One-time backfill: copy account-level confirmed placement results to the
     // individual email record so old confirmed emails show their result permanently.
     // Matches by message_id when available, otherwise picks the most-recently-received

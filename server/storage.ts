@@ -27,9 +27,12 @@ import {
   type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
   type PostmasterConnection, type PostmasterDomain,
   projects, projectTasks, taskComments, taskActivity,
+  projectTemplates, projectTemplateTasks,
   type Project, type InsertProject, type ProjectWithCounts,
   type ProjectTask, type InsertProjectTask, type UpdateProjectTask,
   type TaskComment, type TaskActivity,
+  type ProjectTemplate, type InsertProjectTemplate, type ProjectTemplateWithCounts,
+  type ProjectTemplateTask, type InsertProjectTemplateTask, type UpdateProjectTemplateTask,
 } from "@shared/schema";
 import crypto from "crypto";
 import { db, pool } from "./db";
@@ -357,6 +360,20 @@ export interface IStorage {
   updateTaskComment(taskId: string, commentId: string, userId: string, body: string): Promise<TaskComment | undefined>;
   deleteTaskComment(taskId: string, commentId: string, userId: string): Promise<boolean>;
   getTaskActivity(taskId: string, userId: string): Promise<Array<TaskActivity & { authorName: string | null; authorEmail: string | null }>>;
+
+  // Project Templates
+  getTemplatesForUser(userId: string): Promise<ProjectTemplateWithCounts[]>;
+  getTemplate(id: string, userId: string): Promise<ProjectTemplate | undefined>;
+  createTemplate(userId: string, data: InsertProjectTemplate): Promise<ProjectTemplate>;
+  updateTemplate(id: string, userId: string, data: Partial<InsertProjectTemplate>): Promise<ProjectTemplate | undefined>;
+  deleteTemplate(id: string, userId: string): Promise<void>;
+  duplicateTemplate(id: string, userId: string): Promise<ProjectTemplate | undefined>;
+  getTemplateTasks(templateId: string, userId: string): Promise<ProjectTemplateTask[]>;
+  createTemplateTask(userId: string, templateId: string, data: InsertProjectTemplateTask): Promise<ProjectTemplateTask>;
+  updateTemplateTask(id: string, userId: string, data: UpdateProjectTemplateTask): Promise<ProjectTemplateTask | undefined>;
+  deleteTemplateTask(id: string, userId: string): Promise<void>;
+  instantiateProjectFromTemplate(userId: string, templateId: string, project: Project): Promise<void>;
+  snapshotProjectAsTemplate(userId: string, projectId: string, name: string): Promise<ProjectTemplate>;
 
   // Inbox Analyzer
   getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
@@ -2456,6 +2473,276 @@ export class DatabaseStorage implements IStorage {
       projectName: r.project_name,
       projectColor: r.project_color,
     }));
+  }
+
+  // ── Project Templates ────────────────────────────────────────────────────
+
+  async getTemplatesForUser(userId: string): Promise<ProjectTemplateWithCounts[]> {
+    const rows = await db.execute(sql`
+      SELECT t.*, COALESCE(c.cnt, 0)::int AS total_tasks
+      FROM project_templates t
+      LEFT JOIN (
+        SELECT template_id, COUNT(*) AS cnt
+        FROM project_template_tasks
+        WHERE user_id = ${userId}
+        GROUP BY template_id
+      ) c ON c.template_id = t.id
+      WHERE t.user_id = ${userId}
+      ORDER BY t.sort_order ASC, t.created_at DESC
+    `);
+    return rows.rows.map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      name: r.name,
+      description: r.description ?? "",
+      color: r.color,
+      sortOrder: r.sort_order,
+      createdAt: new Date(r.created_at),
+      updatedAt: new Date(r.updated_at),
+      totalTasks: r.total_tasks,
+    }));
+  }
+
+  async getTemplate(id: string, userId: string): Promise<ProjectTemplate | undefined> {
+    const [row] = await db.select().from(projectTemplates)
+      .where(and(eq(projectTemplates.id, id), eq(projectTemplates.userId, userId)));
+    return row || undefined;
+  }
+
+  async createTemplate(userId: string, data: InsertProjectTemplate): Promise<ProjectTemplate> {
+    const [created] = await db.insert(projectTemplates).values({
+      userId,
+      name: data.name,
+      description: data.description ?? "",
+      color: data.color ?? "#6366f1",
+      sortOrder: data.sortOrder ?? 0,
+    }).returning();
+    return created;
+  }
+
+  async updateTemplate(id: string, userId: string, data: Partial<InsertProjectTemplate>): Promise<ProjectTemplate | undefined> {
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.name !== undefined) update.name = data.name;
+    if (data.description !== undefined) update.description = data.description;
+    if (data.color !== undefined) update.color = data.color;
+    if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
+    const [updated] = await db.update(projectTemplates)
+      .set(update)
+      .where(and(eq(projectTemplates.id, id), eq(projectTemplates.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteTemplate(id: string, userId: string): Promise<void> {
+    await db.delete(projectTemplates)
+      .where(and(eq(projectTemplates.id, id), eq(projectTemplates.userId, userId)));
+  }
+
+  async duplicateTemplate(id: string, userId: string): Promise<ProjectTemplate | undefined> {
+    const original = await this.getTemplate(id, userId);
+    if (!original) return undefined;
+    const [copy] = await db.insert(projectTemplates).values({
+      userId,
+      name: `${original.name} (copy)`,
+      description: original.description,
+      color: original.color,
+      sortOrder: original.sortOrder,
+    }).returning();
+    const tasks = await this.getTemplateTasks(id, userId);
+    const tops = tasks.filter(t => !t.parentTaskId);
+    const subs = tasks.filter(t => t.parentTaskId);
+    const idMap = new Map<string, string>();
+    for (const t of tops) {
+      const [created] = await db.insert(projectTemplateTasks).values({
+        userId,
+        templateId: copy.id,
+        parentTaskId: null,
+        title: t.title,
+        notes: t.notes,
+        priority: t.priority,
+        tags: t.tags,
+        links: t.links,
+        sortOrder: t.sortOrder,
+      }).returning();
+      idMap.set(t.id, created.id);
+    }
+    for (const s of subs) {
+      const newParent = idMap.get(s.parentTaskId!);
+      if (!newParent) continue;
+      await db.insert(projectTemplateTasks).values({
+        userId,
+        templateId: copy.id,
+        parentTaskId: newParent,
+        title: s.title,
+        notes: s.notes,
+        priority: s.priority,
+        tags: s.tags,
+        links: s.links,
+        sortOrder: s.sortOrder,
+      });
+    }
+    return copy;
+  }
+
+  async getTemplateTasks(templateId: string, userId: string): Promise<ProjectTemplateTask[]> {
+    return db.select().from(projectTemplateTasks)
+      .where(and(eq(projectTemplateTasks.templateId, templateId), eq(projectTemplateTasks.userId, userId)))
+      .orderBy(asc(projectTemplateTasks.sortOrder), asc(projectTemplateTasks.createdAt));
+  }
+
+  private async getTemplateTask(id: string, userId: string): Promise<ProjectTemplateTask | undefined> {
+    const [row] = await db.select().from(projectTemplateTasks)
+      .where(and(eq(projectTemplateTasks.id, id), eq(projectTemplateTasks.userId, userId)));
+    return row || undefined;
+  }
+
+  async createTemplateTask(userId: string, templateId: string, data: InsertProjectTemplateTask): Promise<ProjectTemplateTask> {
+    let parentTaskId: string | null = null;
+    if (data.parentTaskId) {
+      const parent = await this.getTemplateTask(data.parentTaskId, userId);
+      if (!parent || parent.templateId !== templateId) throw new Error("Invalid parent task");
+      if (parent.parentTaskId) throw new Error("Subtasks cannot have subtasks");
+      parentTaskId = parent.id;
+    }
+    const [created] = await db.insert(projectTemplateTasks).values({
+      userId,
+      templateId,
+      parentTaskId,
+      title: data.title,
+      notes: data.notes ?? "",
+      priority: data.priority ?? "none",
+      tags: data.tags ?? [],
+      links: data.links ?? [],
+      sortOrder: data.sortOrder ?? 0,
+    }).returning();
+    return created;
+  }
+
+  async updateTemplateTask(id: string, userId: string, data: UpdateProjectTemplateTask): Promise<ProjectTemplateTask | undefined> {
+    const existing = await this.getTemplateTask(id, userId);
+    if (!existing) return undefined;
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.title !== undefined) update.title = data.title;
+    if (data.notes !== undefined) update.notes = data.notes;
+    if (data.priority !== undefined) update.priority = data.priority;
+    if (data.tags !== undefined) update.tags = data.tags;
+    if (data.links !== undefined) update.links = data.links;
+    if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
+    if (data.parentTaskId !== undefined) {
+      if (data.parentTaskId === null) {
+        update.parentTaskId = null;
+      } else {
+        const parent = await this.getTemplateTask(data.parentTaskId, userId);
+        if (!parent || parent.templateId !== existing.templateId) throw new Error("Invalid parent task");
+        if (parent.parentTaskId) throw new Error("Subtasks cannot have subtasks");
+        if (parent.id === existing.id) throw new Error("Task cannot be its own parent");
+        const childCount = await db.select({ c: count() }).from(projectTemplateTasks)
+          .where(and(eq(projectTemplateTasks.parentTaskId, existing.id), eq(projectTemplateTasks.userId, userId)));
+        if ((childCount[0]?.c ?? 0) > 0) throw new Error("Cannot nest a task that already has subtasks");
+        update.parentTaskId = parent.id;
+      }
+    }
+    const [updated] = await db.update(projectTemplateTasks)
+      .set(update)
+      .where(and(eq(projectTemplateTasks.id, id), eq(projectTemplateTasks.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteTemplateTask(id: string, userId: string): Promise<void> {
+    await db.delete(projectTemplateTasks)
+      .where(and(eq(projectTemplateTasks.parentTaskId, id), eq(projectTemplateTasks.userId, userId)));
+    await db.delete(projectTemplateTasks)
+      .where(and(eq(projectTemplateTasks.id, id), eq(projectTemplateTasks.userId, userId)));
+  }
+
+  async instantiateProjectFromTemplate(userId: string, templateId: string, project: Project): Promise<void> {
+    const tasks = await this.getTemplateTasks(templateId, userId);
+    const tops = tasks.filter(t => !t.parentTaskId);
+    const subs = tasks.filter(t => t.parentTaskId);
+    const idMap = new Map<string, string>();
+    for (const t of tops) {
+      const [created] = await db.insert(projectTasks).values({
+        userId,
+        projectId: project.id,
+        parentTaskId: null,
+        title: t.title,
+        notes: t.notes,
+        status: "todo",
+        priority: t.priority,
+        dueDate: null,
+        tags: t.tags,
+        links: t.links,
+        sortOrder: t.sortOrder,
+      }).returning();
+      idMap.set(t.id, created.id);
+      await this.logTaskActivity(created.id, userId, "created", { title: created.title, fromTemplate: templateId });
+    }
+    for (const s of subs) {
+      const newParent = idMap.get(s.parentTaskId!);
+      if (!newParent) continue;
+      const [created] = await db.insert(projectTasks).values({
+        userId,
+        projectId: project.id,
+        parentTaskId: newParent,
+        title: s.title,
+        notes: s.notes,
+        status: "todo",
+        priority: s.priority,
+        dueDate: null,
+        tags: s.tags,
+        links: s.links,
+        sortOrder: s.sortOrder,
+      }).returning();
+      await this.logTaskActivity(created.id, userId, "created", { title: created.title, fromTemplate: templateId });
+      await this.logTaskActivity(newParent, userId, "subtask_added", { subtaskId: created.id, title: created.title });
+    }
+  }
+
+  async snapshotProjectAsTemplate(userId: string, projectId: string, name: string): Promise<ProjectTemplate> {
+    const project = await this.getProject(projectId, userId);
+    if (!project) throw new Error("Project not found");
+    const [tpl] = await db.insert(projectTemplates).values({
+      userId,
+      name: name.trim() || `${project.name} template`,
+      description: project.description,
+      color: project.color,
+      sortOrder: 0,
+    }).returning();
+    const tasks = await this.getTasksForProject(projectId, userId);
+    const tops = tasks.filter(t => !t.parentTaskId);
+    const subs = tasks.filter(t => t.parentTaskId);
+    const idMap = new Map<string, string>();
+    for (const t of tops) {
+      const [created] = await db.insert(projectTemplateTasks).values({
+        userId,
+        templateId: tpl.id,
+        parentTaskId: null,
+        title: t.title,
+        notes: t.notes,
+        priority: t.priority,
+        tags: t.tags,
+        links: t.links,
+        sortOrder: t.sortOrder,
+      }).returning();
+      idMap.set(t.id, created.id);
+    }
+    for (const s of subs) {
+      const newParent = idMap.get(s.parentTaskId!);
+      if (!newParent) continue;
+      await db.insert(projectTemplateTasks).values({
+        userId,
+        templateId: tpl.id,
+        parentTaskId: newParent,
+        title: s.title,
+        notes: s.notes,
+        priority: s.priority,
+        tags: s.tags,
+        links: s.links,
+        sortOrder: s.sortOrder,
+      });
+    }
+    return tpl;
   }
 
   // ── Inbox Analyzer ───────────────────────────────────────────────────────

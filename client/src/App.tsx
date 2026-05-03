@@ -36,6 +36,7 @@ import InboxIntelEmailPage from "@/pages/inbox-intel-email";
 import DmoTrackerPage from "@/pages/dmo-tracker";
 import ProjectsPage from "@/pages/projects";
 import ProjectDetailPage from "@/pages/project-detail";
+import TemplateDetailPage from "@/pages/template-detail";
 import CfLoginPage from "@/pages/cf-login";
 import HelpPage from "@/pages/help";
 import HelpCategoryPage from "@/pages/help-category";
@@ -192,6 +193,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/projects">
         {() => <ProtectedRoute component={ProjectsPage} />}
+      </Route>
+      <Route path="/projects/templates/:id">
+        {() => <ProtectedRoute component={TemplateDetailPage} />}
       </Route>
       <Route path="/projects/:id">
         {() => <ProtectedRoute component={ProjectDetailPage} />}

@@ -1469,3 +1469,72 @@ export interface ProjectWithCounts extends Project {
   dueThisWeek: number;
   lastActivityAt: Date | null;
 }
+
+// ── Project Templates ────────────────────────────────────────────────────────
+
+export const projectTemplates = pgTable("project_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").default("").notNull(),
+  color: text("color").default("#6366f1").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertProjectTemplateSchema = createInsertSchema(projectTemplates).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  description: z.string().max(1000).optional().default(""),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export type InsertProjectTemplate = z.infer<typeof insertProjectTemplateSchema>;
+export type ProjectTemplate = typeof projectTemplates.$inferSelect;
+
+export const projectTemplateTasks = pgTable("project_template_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateId: varchar("template_id").notNull().references(() => projectTemplates.id, { onDelete: "cascade" }),
+  parentTaskId: varchar("parent_task_id"), // nullable; one level deep
+  title: text("title").notNull(),
+  notes: text("notes").default("").notNull(),
+  priority: text("priority").default("none").notNull(),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`).notNull(),
+  links: jsonb("links").$type<ProjectLink[]>().default([]).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertProjectTemplateTaskSchema = createInsertSchema(projectTemplateTasks).omit({
+  id: true,
+  userId: true,
+  templateId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  title: z.string().trim().min(1, "Title is required").max(280),
+  notes: z.string().max(20000).optional().default(""),
+  priority: z.enum(["none", "low", "medium", "high", "urgent"]).optional(),
+  parentTaskId: z.string().nullable().optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  links: z.array(projectLinkSchema).max(20).optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export const updateProjectTemplateTaskSchema = insertProjectTemplateTaskSchema.partial();
+
+export type InsertProjectTemplateTask = z.infer<typeof insertProjectTemplateTaskSchema>;
+export type UpdateProjectTemplateTask = z.infer<typeof updateProjectTemplateTaskSchema>;
+export type ProjectTemplateTask = typeof projectTemplateTasks.$inferSelect;
+
+export interface ProjectTemplateWithCounts extends ProjectTemplate {
+  totalTasks: number;
+}

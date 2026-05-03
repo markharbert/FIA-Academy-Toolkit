@@ -9,7 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { TaskDetailSheet } from "@/components/projects/task-detail-sheet";
-import { ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight, CalendarClock, Flag, Loader2, ListChecks } from "lucide-react";
+import { ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight, CalendarClock, Flag, Loader2, ListChecks, MoreVertical, FileText } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 const STATUS_GROUPS: Array<{ value: "todo" | "in_progress" | "done"; label: string; tone: string }> = [
   { value: "todo",        label: "To do",        tone: "text-muted-foreground" },
@@ -53,6 +56,8 @@ export default function ProjectDetailPage() {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [quickAddInputs, setQuickAddInputs] = useState<Record<string, string>>({ todo: "", in_progress: "", done: "" });
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState("");
 
   const { data: project, isLoading: projectLoading } = useQuery<Project>({ queryKey: ["/api/projects", projectId] });
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<ProjectTask[]>({ queryKey: ["/api/projects", projectId, "tasks"] });
@@ -100,6 +105,20 @@ export default function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects/urgent-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
     },
+  });
+
+  const saveAsTemplateMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/save-as-template`, { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/project-templates"] });
+      setSaveTemplateOpen(false);
+      setSaveTemplateName("");
+      toast({ title: "Saved as template", description: "Find it under Projects → Templates." });
+    },
+    onError: (err: Error) => toast({ title: "Failed to save as template", description: err.message, variant: "destructive" }),
   });
 
   const submitQuickAdd = (status: string) => {
@@ -175,6 +194,21 @@ export default function ProjectDetailPage() {
               <Badge className="bg-white/15 text-white border-0">
                 {topLevel.filter(t => t.status === "done").length} done
               </Badge>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:text-white hover:bg-white/15" data-testid="button-project-menu">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => { setSaveTemplateName(`${project.name} template`); setSaveTemplateOpen(true); }}
+                    data-testid="menu-save-as-template"
+                  >
+                    <FileText className="h-3.5 w-3.5 mr-2" /> Save as template
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -297,6 +331,40 @@ export default function ProjectDetailPage() {
           })
         )}
       </div>
+
+      <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-save-as-template">
+          <DialogHeader>
+            <DialogTitle>Save project as template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Captures the current task list (titles, notes, priority, tags, links, and one-level subtasks). Due dates and statuses are not stored — pick those when you create a project from this template.
+            </p>
+            <div>
+              <Label htmlFor="save-tpl-name">Template name</Label>
+              <Input
+                id="save-tpl-name"
+                value={saveTemplateName}
+                onChange={e => setSaveTemplateName(e.target.value)}
+                placeholder="Template name"
+                data-testid="input-save-template-name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSaveTemplateOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => saveAsTemplateMutation.mutate(saveTemplateName.trim() || `${project.name} template`)}
+              disabled={saveAsTemplateMutation.isPending}
+              data-testid="button-confirm-save-template"
+            >
+              {saveAsTemplateMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Save template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <TaskDetailSheet
         project={project}

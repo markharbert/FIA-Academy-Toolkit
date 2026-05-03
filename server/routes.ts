@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
@@ -5795,13 +5795,149 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
-      const data = insertProjectSchema.parse(req.body);
+      const { templateId, ...rest } = req.body ?? {};
+      const data = insertProjectSchema.parse(rest);
       const created = await storage.createProject(req.session.userId!, data);
+      if (templateId && typeof templateId === "string") {
+        const tpl = await storage.getTemplate(templateId, req.session.userId!);
+        if (tpl) {
+          await storage.instantiateProjectFromTemplate(req.session.userId!, templateId, created);
+        }
+      }
       res.status(201).json(created);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       console.error("[projects] create error:", err);
       res.status(500).json({ message: "Failed to create project" });
+    }
+  });
+
+  // ── Project Templates ──────────────────────────────────────────────────────
+
+  app.get("/api/project-templates", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const list = await storage.getTemplatesForUser(req.session.userId!);
+      res.json(list);
+    } catch (err) {
+      console.error("[templates] list error:", err);
+      res.status(500).json({ message: "Failed to load templates" });
+    }
+  });
+
+  app.post("/api/project-templates", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const data = insertProjectTemplateSchema.parse(req.body);
+      const created = await storage.createTemplate(req.session.userId!, data);
+      res.status(201).json(created);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[templates] create error:", err);
+      res.status(500).json({ message: "Failed to create template" });
+    }
+  });
+
+  app.get("/api/project-templates/:id", requireAuth, async (req: Request, res: Response) => {
+    const tpl = await storage.getTemplate(req.params.id, req.session.userId!);
+    if (!tpl) return res.status(404).json({ message: "Not found" });
+    res.json(tpl);
+  });
+
+  app.patch("/api/project-templates/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const data = insertProjectTemplateSchema.partial().parse(req.body);
+      const updated = await storage.updateTemplate(req.params.id, req.session.userId!, data);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[templates] update error:", err);
+      res.status(500).json({ message: "Failed to update template" });
+    }
+  });
+
+  app.delete("/api/project-templates/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tpl = await storage.getTemplate(req.params.id, req.session.userId!);
+      if (!tpl) return res.status(404).json({ message: "Not found" });
+      await storage.deleteTemplate(req.params.id, req.session.userId!);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[templates] delete error:", err);
+      res.status(500).json({ message: "Failed to delete template" });
+    }
+  });
+
+  app.post("/api/project-templates/:id/duplicate", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const copy = await storage.duplicateTemplate(req.params.id, req.session.userId!);
+      if (!copy) return res.status(404).json({ message: "Not found" });
+      res.status(201).json(copy);
+    } catch (err) {
+      console.error("[templates] duplicate error:", err);
+      res.status(500).json({ message: "Failed to duplicate template" });
+    }
+  });
+
+  app.get("/api/project-templates/:id/tasks", requireAuth, async (req: Request, res: Response) => {
+    const tpl = await storage.getTemplate(req.params.id, req.session.userId!);
+    if (!tpl) return res.status(404).json({ message: "Not found" });
+    const tasks = await storage.getTemplateTasks(req.params.id, req.session.userId!);
+    res.json(tasks);
+  });
+
+  app.post("/api/project-templates/:id/tasks", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tpl = await storage.getTemplate(req.params.id, req.session.userId!);
+      if (!tpl) return res.status(404).json({ message: "Not found" });
+      const data = insertProjectTemplateTaskSchema.parse(req.body);
+      const created = await storage.createTemplateTask(req.session.userId!, req.params.id, data);
+      res.status(201).json(created);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      if (err?.message?.startsWith("Invalid parent") || err?.message?.startsWith("Subtasks")) {
+        return res.status(400).json({ message: err.message });
+      }
+      console.error("[templates] create task error:", err);
+      res.status(500).json({ message: "Failed to create template task" });
+    }
+  });
+
+  app.patch("/api/template-tasks/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const data = updateProjectTemplateTaskSchema.parse(req.body);
+      const updated = await storage.updateTemplateTask(req.params.id, req.session.userId!, data);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      if (err?.message?.startsWith("Invalid parent") || err?.message?.includes("subtask") || err?.message?.includes("own parent")) {
+        return res.status(400).json({ message: err.message });
+      }
+      console.error("[templates] update task error:", err);
+      res.status(500).json({ message: "Failed to update template task" });
+    }
+  });
+
+  app.delete("/api/template-tasks/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteTemplateTask(req.params.id, req.session.userId!);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[templates] delete task error:", err);
+      res.status(500).json({ message: "Failed to delete template task" });
+    }
+  });
+
+  app.post("/api/projects/:id/save-as-template", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await storage.getProject(req.params.id, req.session.userId!);
+      if (!project) return res.status(404).json({ message: "Not found" });
+      const name = typeof req.body?.name === "string" ? req.body.name : project.name;
+      const tpl = await storage.snapshotProjectAsTemplate(req.session.userId!, req.params.id, name);
+      res.status(201).json(tpl);
+    } catch (err) {
+      console.error("[templates] snapshot error:", err);
+      res.status(500).json({ message: "Failed to save as template" });
     }
   });
 
