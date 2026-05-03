@@ -1368,10 +1368,19 @@ export async function registerRoutes(
       
       // Destructure to exclude passwordHash from response
       const { passwordHash: _, ...safeUser } = userDetails.user;
-      
+
+      // Mirror the list-endpoint shape: include KW credits + total videos so the
+      // admin User Details panel shows real numbers instead of silent zeros.
+      const credits = await storage.getVideoTrendsCredits(id);
+
       res.json({
         ...userDetails,
-        user: safeUser,
+        user: {
+          ...safeUser,
+          totalVideos: userDetails.sessionCount,
+          keywordsCreditsThisMonth: credits.creditsUsed,
+          keywordsCreditsTotalUsed: credits.totalCreditsUsed || 0,
+        },
         providers,
         hasLocalPassword,
       });

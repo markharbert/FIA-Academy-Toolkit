@@ -150,6 +150,10 @@ interface AdminUser {
   cfEnrolled: boolean | null;
   cfEnrolledAt: string | null;
   cfRevokedAt: string | null;
+  cfContactId?: string | null;
+  role?: string | null;
+  themePreference?: string | null;
+  emailVerifiedAt?: string | null;
 }
 
 interface UserAction {
@@ -2234,117 +2238,250 @@ export default function AdminPage() {
             <div className="flex justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : userDetails ? (
-            <div className="mt-6 space-y-6">
-              <div className="space-y-3">
-                <h3 className="font-semibold">Basic Info</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">User ID:</span>
-                    <span className="font-mono text-xs">{userDetails.user.id}</span>
+          ) : !userDetails ? (
+            <p className="py-8 text-center text-muted-foreground">User not found</p>
+          ) : ((() => {
+            const u = userDetails.user;
+            const fullName = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
+            const displayName = u.displayName || fullName || u.email?.split("@")[0] || "Unknown User";
+            const initials = (fullName || u.displayName || u.email || "?")
+              .split(/\s+|@/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((s) => s[0]?.toUpperCase())
+              .join("") || "?";
+            const membershipBadge = u.cfEnrolled
+              ? { label: "Enrolled", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" }
+              : u.cfRevokedAt
+              ? { label: "Revoked", className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30" }
+              : { label: "Never enrolled", className: "bg-muted text-muted-foreground border-muted-foreground/30" };
+            return (
+            <div className="mt-6 space-y-5">
+              {/* HEADER CARD */}
+              <div className="rounded-xl border bg-gradient-to-br from-muted/40 to-muted/10 p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/80 to-primary text-primary-foreground text-lg font-semibold">
+                    {initials}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Display Name:</span>
-                    <span>{userDetails.user.displayName || "-"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">First Name:</span>
-                    <span>{userDetails.user.firstName || "-"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Last Name:</span>
-                    <span>{userDetails.user.lastName || "-"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Email:</span>
-                    <span>{userDetails.user.email || "-"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Role:</span>
-                    <Badge variant={userDetails.user.isAdmin ? "default" : "secondary"}>
-                      {userDetails.user.isAdmin ? "Admin" : "User"}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Status:</span>
-                    {userDetails.user.isDisabled ? (
-                      <Badge variant="destructive">Disabled</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-green-600 border-green-600">Active</Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-semibold truncate" data-testid="text-user-name">{displayName}</h3>
+                      {u.isAdmin && (
+                        <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/15">
+                          <Shield className="h-3 w-3 mr-1" /> Admin
+                        </Badge>
+                      )}
+                      {u.isDisabled && (
+                        <Badge variant="destructive">Disabled</Badge>
+                      )}
+                    </div>
+                    {u.email && (
+                      <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
+                        <Mail className="h-3.5 w-3.5" />
+                        <span className="truncate">{u.email}</span>
+                      </div>
                     )}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <Badge variant="outline" className={cn("gap-1", membershipBadge.className)}>
+                        <UserCheck className="h-3 w-3" /> {membershipBadge.label}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        Joined {format(new Date(u.createdAt), "MMM yyyy")}
+                      </Badge>
+                    </div>
                   </div>
-                  {userDetails.user.disabledReason && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Disabled Reason:</span>
-                      <span>{userDetails.user.disabledReason}</span>
+                </div>
+              </div>
+
+              {/* STATS GRID */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <FileVideo className="h-3.5 w-3.5" /> Video sessions
+                  </div>
+                  <div className="text-2xl font-semibold mt-1" data-testid="stat-sessions">{userDetails.sessionCount}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Key className="h-3.5 w-3.5" /> KW credits (mo / total)
+                  </div>
+                  <div className="text-2xl font-semibold mt-1" data-testid="stat-kw-credits">
+                    {u.keywordsCreditsThisMonth ?? 0}
+                    <span className="text-sm text-muted-foreground font-normal"> / {u.keywordsCreditsTotalUsed ?? 0}</span>
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LogIn className="h-3.5 w-3.5" /> Last login
+                  </div>
+                  <div className="text-sm font-medium mt-1">
+                    {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, yyyy") : "Never"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {u.lastLoginAt ? format(new Date(u.lastLoginAt), "h:mm a") : "—"}
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" /> Account age
+                  </div>
+                  <div className="text-sm font-medium mt-1">
+                    {Math.floor((Date.now() - new Date(u.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Since {format(new Date(u.createdAt), "MMM d, yyyy")}
+                  </div>
+                </div>
+              </div>
+
+              {/* MEMBERSHIP CARD */}
+              <div className="rounded-lg border p-4 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-emerald-500" />
+                  <h3 className="font-semibold text-sm">ClickFunnels Membership</h3>
+                </div>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Status</span>
+                    <Badge variant="outline" className={cn(membershipBadge.className)}>{membershipBadge.label}</Badge>
+                  </div>
+                  {u.cfEnrolledAt && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Enrolled</span>
+                      <span>{format(new Date(u.cfEnrolledAt), "MMM d, yyyy h:mm a")}</span>
+                    </div>
+                  )}
+                  {u.cfRevokedAt && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Revoked</span>
+                      <span>{format(new Date(u.cfRevokedAt), "MMM d, yyyy h:mm a")}</span>
+                    </div>
+                  )}
+                  {u.cfContactId && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">CF Contact ID</span>
+                      <span className="font-mono text-xs">{u.cfContactId}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <h3 className="font-semibold">Auth Identities</h3>
-                <div className="space-y-2">
+              {/* ACCOUNT IDENTITY CARD */}
+              <div className="rounded-lg border p-4 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <UserCog className="h-4 w-4 text-violet-500" />
+                  <h3 className="font-semibold text-sm">Account & Sign-in</h3>
+                </div>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">User ID</span>
+                    <button
+                      type="button"
+                      className="font-mono text-xs hover:underline truncate max-w-[200px]"
+                      onClick={() => { navigator.clipboard.writeText(u.id); toast({ title: "User ID copied" }); }}
+                      title={u.id}
+                      data-testid="button-copy-user-id"
+                    >
+                      {u.id}
+                    </button>
+                  </div>
+                  {u.firstName && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">First name</span>
+                      <span>{u.firstName}</span>
+                    </div>
+                  )}
+                  {u.lastName && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Last name</span>
+                      <span>{u.lastName}</span>
+                    </div>
+                  )}
+                  {u.themePreference && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Theme</span>
+                      <span className="capitalize">{u.themePreference}</span>
+                    </div>
+                  )}
+                  {u.disabledAt && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Disabled at</span>
+                      <span>{format(new Date(u.disabledAt), "MMM d, yyyy")}</span>
+                    </div>
+                  )}
+                  {u.disabledReason && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Reason</span>
+                      <span className="text-right">{u.disabledReason}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="pt-2 space-y-1.5">
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sign-in methods</div>
                   {userDetails.hasLocalPassword && (
-                    <div className="flex items-center justify-between rounded-lg border p-2">
-                      <span className="text-sm">Email/Password</span>
-                      <Badge variant="outline">Local</Badge>
+                    <div className="flex items-center justify-between rounded-md border p-2 text-sm">
+                      <span className="flex items-center gap-2"><Key className="h-3.5 w-3.5" /> Email & password</span>
+                      <Badge variant="outline" className="text-xs">Local</Badge>
                     </div>
                   )}
                   {userDetails.identities.map((id) => (
-                    <div key={id.id} className="flex items-center justify-between rounded-lg border p-2">
-                      <div className="text-sm">
-                        <div>{id.provider.charAt(0).toUpperCase() + id.provider.slice(1)}</div>
-                        <div className="text-xs text-muted-foreground">{id.emailFromProvider || id.providerUserId}</div>
+                    <div key={id.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                      <div>
+                        <div className="capitalize flex items-center gap-2">
+                          <UserCheck className="h-3.5 w-3.5" /> {id.provider}
+                        </div>
+                        {id.emailFromProvider && (
+                          <div className="text-xs text-muted-foreground">{id.emailFromProvider}</div>
+                        )}
                       </div>
-                      <Badge variant="outline">{format(new Date(id.createdAt), "MMM d, yyyy")}</Badge>
+                      <Badge variant="outline" className="text-xs">{format(new Date(id.createdAt), "MMM d, yyyy")}</Badge>
                     </div>
                   ))}
+                  {!userDetails.hasLocalPassword && userDetails.identities.length === 0 && (
+                    <div className="text-xs text-muted-foreground">No sign-in methods on file.</div>
+                  )}
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <h3 className="font-semibold">Consent & Marketing</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Email Consent:</span>
-                    <span>{userDetails.user.emailConsentAt ? format(new Date(userDetails.user.emailConsentAt), "MMM d, yyyy") : "No"}</span>
+              {/* RECENT SESSIONS */}
+              <div className="rounded-lg border p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileVideo className="h-4 w-4 text-emerald-500" />
+                    <h3 className="font-semibold text-sm">Recent Video Sessions</h3>
                   </div>
-
+                  <Badge variant="outline" className="text-xs">{userDetails.sessionCount} total</Badge>
                 </div>
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="font-semibold">Sessions ({userDetails.sessionCount})</h3>
                 {userDetails.sessions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No sessions yet</p>
+                  <p className="text-sm text-muted-foreground">No sessions yet.</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {userDetails.sessions.slice(0, 5).map((s) => (
-                      <div key={s.id} className="flex items-center justify-between rounded-lg border p-2 text-sm">
-                        <div>
-                          <div>{s.title || "Untitled"}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {format(new Date(s.createdAt), "MMM d, yyyy")}
-                          </div>
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setSelectedSessionId(s.id)}
+                        className="flex w-full items-center justify-between rounded-md border p-2 text-sm text-left hover:bg-accent"
+                        data-testid={`button-session-${s.id}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate">{s.title || "Untitled"}</div>
+                          <div className="text-xs text-muted-foreground">{format(new Date(s.createdAt), "MMM d, yyyy h:mm a")}</div>
                         </div>
-                        <div className="text-right">
-                          <div>{s.scoreJson?.totalScore ? `${s.scoreJson.totalScore}/100` : "-"}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {s.videoDeletedAt ? "Expired" : "Available"}
-                          </div>
+                        <div className="text-right ml-2 shrink-0">
+                          <div className="font-medium">{s.scoreJson?.totalScore != null ? `${s.scoreJson.totalScore}/100` : "—"}</div>
+                          <div className="text-xs text-muted-foreground">{s.videoDeletedAt ? "Expired" : "Available"}</div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                     {userDetails.sessionCount > 5 && (
-                      <p className="text-sm text-muted-foreground">
-                        ...and {userDetails.sessionCount - 5} more
-                      </p>
+                      <p className="text-xs text-muted-foreground pt-1">...and {userDetails.sessionCount - 5} more</p>
                     )}
                   </div>
                 )}
               </div>
 
+              {/* ADMIN ACTIONS */}
               <div className="space-y-3 border-t pt-4">
                 <h3 className="font-semibold">Admin Actions</h3>
                 <div className="flex flex-wrap gap-2">
@@ -2470,9 +2607,8 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
-          ) : (
-            <p className="py-8 text-center text-muted-foreground">User not found</p>
-          )}
+            );
+          })())}
         </SheetContent>
       </Sheet>
 
