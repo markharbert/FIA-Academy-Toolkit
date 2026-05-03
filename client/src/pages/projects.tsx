@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox } from "lucide-react";
 
 // dueDate is stored as UTC midnight representing a calendar day. Treat the stored
 // UTC Y/M/D as a local calendar date, then compare to the viewer's local "today".
@@ -337,6 +337,247 @@ function ProjectList({
   );
 }
 
+type OpenTask = ProjectTask & { projectName: string; projectColor: string };
+
+function priorityBadgeClasses(priority: string | null | undefined): string {
+  switch (priority) {
+    case "urgent": return "bg-rose-600 text-white";
+    case "high":   return "bg-orange-500 text-white";
+    case "medium": return "bg-amber-500 text-white";
+    case "low":    return "bg-sky-500 text-white";
+    default:       return "bg-muted text-muted-foreground";
+  }
+}
+
+function bucketTask(t: OpenTask): "overdue" | "today" | "week" | "later" | "none" {
+  if (!t.dueDate) return "none";
+  const due = new Date(t.dueDate);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dayMs = 86400000;
+  // Tasks with date-only (UTC midnight) get treated as that calendar day.
+  const dueLocal = (() => {
+    if (due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0) {
+      return new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
+    }
+    return due;
+  })();
+  if (dueLocal.getTime() < today.getTime()) {
+    // Same calendar day check (overdue if before today's start)
+    const sameDay = dueLocal.toDateString() === today.toDateString();
+    if (sameDay) return "today";
+    return "overdue";
+  }
+  if (dueLocal.toDateString() === today.toDateString()) return "today";
+  if (dueLocal.getTime() - today.getTime() <= 7 * dayMs) return "week";
+  return "later";
+}
+
+function formatTaskDue(due: Date): string {
+  const d = (due.getUTCHours() === 0 && due.getUTCMinutes() === 0)
+    ? new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate())
+    : due;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  const isToday = d.toDateString() === today.toDateString();
+  const isTomorrow = d.toDateString() === tomorrow.toDateString();
+  const hasTime = !(due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0);
+  const timeStr = hasTime ? ` ${due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
+  if (isToday) return `Today${timeStr}`;
+  if (isTomorrow) return `Tomorrow${timeStr}`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" }) + timeStr;
+}
+
+function TaskRow({ t }: { t: OpenTask }) {
+  const due = t.dueDate ? new Date(t.dueDate) : null;
+  const bucket = bucketTask(t);
+  const dueClasses =
+    bucket === "overdue" ? "text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/40" :
+    bucket === "today"   ? "text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40" :
+    bucket === "week"    ? "text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/40" :
+    "text-muted-foreground bg-muted";
+  return (
+    <Link href={`/projects/${t.projectId}`} className="flex items-center gap-3 px-4 py-2.5 hover-elevate transition-colors group" data-testid={`row-task-${t.id}`}>
+      <CircleDot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium truncate" data-testid={`text-task-title-${t.id}`}>{t.title}</p>
+        <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+          <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: t.projectColor }} aria-hidden="true" />
+          <p className="text-[11px] text-muted-foreground truncate">{t.projectName}</p>
+          {t.priority && t.priority !== "none" && (
+            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-3.5 leading-none uppercase tracking-wide shrink-0 border-0 ${priorityBadgeClasses(t.priority)}`}>
+              {t.priority}
+            </Badge>
+          )}
+        </div>
+      </div>
+      {due && (
+        <span className={`text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 rounded shrink-0 ${dueClasses}`}>
+          {formatTaskDue(due)}
+        </span>
+      )}
+      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+    </Link>
+  );
+}
+
+function AllTasksList({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
+      </div>
+    );
+  }
+  if (tasks.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border p-10 text-center" data-testid="empty-all-tasks">
+        <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+          <ListChecks className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <h3 className="font-semibold">No open tasks</h3>
+        <p className="text-sm text-muted-foreground mt-1">Tasks across all your active projects will appear here.</p>
+      </div>
+    );
+  }
+  const groups: Array<{ key: ReturnType<typeof bucketTask>; title: string; tone: string; items: OpenTask[] }> = [
+    { key: "overdue", title: "Overdue", tone: "text-rose-600 dark:text-rose-400", items: [] },
+    { key: "today",   title: "Today",   tone: "text-amber-600 dark:text-amber-400", items: [] },
+    { key: "week",    title: "This week", tone: "text-sky-600 dark:text-sky-400", items: [] },
+    { key: "later",   title: "Later",   tone: "text-foreground", items: [] },
+    { key: "none",    title: "No due date", tone: "text-muted-foreground", items: [] },
+  ];
+  for (const t of tasks) {
+    const b = bucketTask(t);
+    groups.find(g => g.key === b)!.items.push(t);
+  }
+  return (
+    <div className="space-y-4" data-testid="all-tasks-list">
+      {groups.filter(g => g.items.length > 0).map(g => (
+        <div key={g.key} className="rounded-lg border border-border overflow-hidden bg-card">
+          <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-border bg-muted/30">
+            <h3 className={`text-xs font-bold uppercase tracking-wide ${g.tone}`}>{g.title}</h3>
+            <Badge variant="outline" className="text-[10px]">{g.items.length}</Badge>
+          </div>
+          <ul className="divide-y divide-border">
+            {g.items.map(t => <li key={t.id}>{<TaskRow t={t} />}</li>)}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TasksCalendar({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: boolean }) {
+  const [cursor, setCursor] = useState(() => {
+    const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d;
+  });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  // Build 6-week grid starting Sunday for the cursor month.
+  const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+  const days: Date[] = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d;
+  });
+
+  // Index tasks by yyyy-mm-dd.
+  const tasksByDay = new Map<string, OpenTask[]>();
+  for (const t of tasks) {
+    if (!t.dueDate) continue;
+    const due = new Date(t.dueDate);
+    const dLocal = (due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0)
+      ? new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate())
+      : due;
+    const key = `${dLocal.getFullYear()}-${dLocal.getMonth()}-${dLocal.getDate()}`;
+    const arr = tasksByDay.get(key) || [];
+    arr.push(t);
+    tasksByDay.set(key, arr);
+  }
+
+  const monthLabel = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const goPrev = () => { const d = new Date(cursor); d.setMonth(d.getMonth() - 1); setCursor(d); };
+  const goNext = () => { const d = new Date(cursor); d.setMonth(d.getMonth() + 1); setCursor(d); };
+  const goToday = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); setCursor(d); };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
+      </div>
+    );
+  }
+
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="tasks-calendar">
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
+        <h3 className="text-sm font-semibold" data-testid="text-calendar-month">{monthLabel}</h3>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={goPrev} data-testid="button-cal-prev"><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" onClick={goToday} data-testid="button-cal-today">Today</Button>
+          <Button variant="ghost" size="sm" onClick={goNext} data-testid="button-cal-next"><ChevronRight className="h-4 w-4" /></Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 text-[10px] uppercase tracking-wide font-semibold text-muted-foreground border-b border-border">
+        {weekdayLabels.map(w => (
+          <div key={w} className="px-2 py-1.5 text-center">{w}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 grid-rows-6 auto-rows-fr">
+        {days.map((d, i) => {
+          const inMonth = d.getMonth() === cursor.getMonth();
+          const isToday = d.getTime() === today.getTime();
+          const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+          const dayTasks = tasksByDay.get(key) || [];
+          const overdue = d.getTime() < today.getTime();
+          return (
+            <div
+              key={i}
+              className={`border-r border-b border-border last:border-r-0 min-h-[96px] p-1.5 flex flex-col gap-1 ${inMonth ? "bg-card" : "bg-muted/20"}`}
+              data-testid={`cal-day-${key}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className={`inline-flex items-center justify-center text-[11px] tabular-nums ${
+                  isToday ? "h-5 w-5 rounded-full bg-primary text-primary-foreground font-bold" :
+                  inMonth ? "text-foreground font-medium" : "text-muted-foreground"
+                }`}>
+                  {d.getDate()}
+                </span>
+                {dayTasks.length > 0 && (
+                  <span className="text-[9px] text-muted-foreground tabular-nums">{dayTasks.length}</span>
+                )}
+              </div>
+              <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
+                {dayTasks.slice(0, 3).map(t => (
+                  <Link
+                    key={t.id}
+                    href={`/projects/${t.projectId}`}
+                    className={`text-[10px] leading-tight px-1.5 py-0.5 rounded truncate hover-elevate ${
+                      overdue && !isToday ? "bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200" :
+                      isToday ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200" :
+                      "bg-muted text-foreground"
+                    }`}
+                    title={`${t.title} · ${t.projectName}`}
+                    data-testid={`cal-task-${t.id}`}
+                  >
+                    <span className="inline-block h-1.5 w-1.5 rounded-full mr-1 align-middle" style={{ background: t.projectColor }} aria-hidden="true" />
+                    {t.title}
+                  </Link>
+                ))}
+                {dayTasks.length > 3 && (
+                  <span className="text-[9px] text-muted-foreground px-1.5">+{dayTasks.length - 3} more</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -347,6 +588,15 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(COLOR_PALETTE[0]);
   const [showArchived, setShowArchived] = useState(false);
+  const [topTab, setTopTab] = useState<"overview" | "list" | "calendar">(() => {
+    if (typeof window === "undefined") return "overview";
+    const saved = localStorage.getItem("projects-top-tab");
+    return (saved === "list" || saved === "calendar" || saved === "overview") ? saved : "overview";
+  });
+  const setTopTabPersist = (t: "overview" | "list" | "calendar") => {
+    setTopTab(t);
+    try { localStorage.setItem("projects-top-tab", t); } catch {}
+  };
   const [view, setView] = useState<"cards" | "list">(() => {
     if (typeof window === "undefined") return "cards";
     return (localStorage.getItem("projects-view") as "cards" | "list") || "cards";
@@ -375,6 +625,10 @@ export default function ProjectsPage() {
 
   const { data: projects = [], isLoading } = useQuery<ProjectWithCounts[]>({ queryKey: ["/api/projects"] });
   const { data: urgentTasks = [] } = useQuery<UrgentTask[]>({ queryKey: ["/api/projects/urgent-tasks"] });
+  const { data: allTasks = [], isLoading: tasksLoading } = useQuery<OpenTask[]>({
+    queryKey: ["/api/projects/all-tasks"],
+    enabled: topTab !== "overview",
+  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -512,90 +766,123 @@ export default function ProjectsPage() {
             </Dialog>
           </div>
 
-          {/* tabs + view toggle */}
+          {/* top tabs: Overview / List / Calendar */}
           <div className="mt-5 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5" role="tablist" aria-label="Projects view">
               <button
-                onClick={() => setShowArchived(false)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${!showArchived ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
-                data-testid="tab-active"
+                onClick={() => setTopTabPersist("overview")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${topTab === "overview" ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+                data-testid="tab-overview"
               >
-                <CircleDot className="h-3 w-3 inline mr-1" /> Active · {active.length}
+                <Briefcase className="h-3 w-3 inline mr-1" /> Overview · {active.length}
               </button>
               <button
-                onClick={() => setShowArchived(true)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${showArchived ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
-                data-testid="tab-archived"
+                onClick={() => setTopTabPersist("list")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${topTab === "list" ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+                data-testid="tab-list"
               >
-                <Archive className="h-3 w-3 inline mr-1" /> Archived · {archived.length}
-              </button>
-            </div>
-            <div className="inline-flex items-center rounded-full bg-white/10 p-0.5" role="tablist" aria-label="View mode">
-              <button
-                type="button"
-                onClick={() => setViewMode("cards")}
-                aria-pressed={view === "cards"}
-                title="Card view"
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${view === "cards" ? "bg-white text-[hsl(245_60%_30%)] shadow-sm" : "text-white/80 hover:text-white"}`}
-                data-testid="button-view-cards"
-              >
-                <LayoutGrid className="h-3.5 w-3.5" /> Cards
+                <ListChecks className="h-3 w-3 inline mr-1" /> List
               </button>
               <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                aria-pressed={view === "list"}
-                title="List view"
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${view === "list" ? "bg-white text-[hsl(245_60%_30%)] shadow-sm" : "text-white/80 hover:text-white"}`}
-                data-testid="button-view-list"
+                onClick={() => setTopTabPersist("calendar")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${topTab === "calendar" ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+                data-testid="tab-calendar"
               >
-                <List className="h-3.5 w-3.5" /> List
+                <CalendarDays className="h-3 w-3 inline mr-1" /> Calendar
               </button>
             </div>
+            {topTab === "overview" && (
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setShowArchived(false)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${!showArchived ? "bg-white/90 text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+                    data-testid="tab-active"
+                  >
+                    <CircleDot className="h-3 w-3 inline mr-1" /> Active · {active.length}
+                  </button>
+                  <button
+                    onClick={() => setShowArchived(true)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${showArchived ? "bg-white/90 text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+                    data-testid="tab-archived"
+                  >
+                    <Archive className="h-3 w-3 inline mr-1" /> Archived · {archived.length}
+                  </button>
+                </div>
+                <div className="inline-flex items-center rounded-full bg-white/10 p-0.5" role="tablist" aria-label="View mode">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("cards")}
+                    aria-pressed={view === "cards"}
+                    title="Card view"
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${view === "cards" ? "bg-white text-[hsl(245_60%_30%)] shadow-sm" : "text-white/80 hover:text-white"}`}
+                    data-testid="button-view-cards"
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" /> Cards
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("list")}
+                    aria-pressed={view === "list"}
+                    title="List view"
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${view === "list" ? "bg-white text-[hsl(245_60%_30%)] shadow-sm" : "text-white/80 hover:text-white"}`}
+                    data-testid="button-view-list"
+                  >
+                    <List className="h-3.5 w-3.5" /> List
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {urgentTasks.length > 0 && <UrgentTasksBanner tasks={urgentTasks} />}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border p-10 text-center" data-testid="empty-projects">
-            <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
-              <Briefcase className="h-6 w-6 text-muted-foreground" />
+        {topTab === "overview" && urgentTasks.length > 0 && <UrgentTasksBanner tasks={urgentTasks} />}
+        {topTab === "overview" ? (
+          isLoading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
             </div>
-            <h3 className="font-semibold">{showArchived ? "No archived projects" : "No projects yet"}</h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">
-              {showArchived ? "Archived projects show up here." : "Create your first project to start organizing tasks and notes."}
-            </p>
-            {!showArchived && (
-              <Button onClick={() => setCreateOpen(true)} data-testid="button-empty-create">
-                <Plus className="h-4 w-4 mr-1.5" /> New Project
-              </Button>
-            )}
-          </div>
-        ) : view === "cards" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {visible.map(p => (
-              <ProjectCard
-                key={p.id}
-                p={p}
-                onEdit={openEdit}
-                onArchive={(p) => archiveMutation.mutate(p)}
-                onDelete={(p) => setDeleteTarget(p)}
-              />
-            ))}
-          </div>
+          ) : visible.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border p-10 text-center" data-testid="empty-projects">
+              <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                <Briefcase className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="font-semibold">{showArchived ? "No archived projects" : "No projects yet"}</h3>
+              <p className="text-sm text-muted-foreground mt-1 mb-4">
+                {showArchived ? "Archived projects show up here." : "Create your first project to start organizing tasks and notes."}
+              </p>
+              {!showArchived && (
+                <Button onClick={() => setCreateOpen(true)} data-testid="button-empty-create">
+                  <Plus className="h-4 w-4 mr-1.5" /> New Project
+                </Button>
+              )}
+            </div>
+          ) : view === "cards" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visible.map(p => (
+                <ProjectCard
+                  key={p.id}
+                  p={p}
+                  onEdit={openEdit}
+                  onArchive={(p) => archiveMutation.mutate(p)}
+                  onDelete={(p) => setDeleteTarget(p)}
+                />
+              ))}
+            </div>
+          ) : (
+            <ProjectList
+              projects={visible}
+              onEdit={openEdit}
+              onArchive={(p) => archiveMutation.mutate(p)}
+              onDelete={(p) => setDeleteTarget(p)}
+            />
+          )
+        ) : topTab === "list" ? (
+          <AllTasksList tasks={allTasks} isLoading={tasksLoading} />
         ) : (
-          <ProjectList
-            projects={visible}
-            onEdit={openEdit}
-            onArchive={(p) => archiveMutation.mutate(p)}
-            onDelete={(p) => setDeleteTarget(p)}
-          />
+          <TasksCalendar tasks={allTasks} isLoading={tasksLoading} />
         )}
       </div>
 

@@ -82,6 +82,8 @@ export default function ProjectDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/urgent-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
     },
     onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
@@ -94,6 +96,8 @@ export default function ProjectDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/urgent-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
     },
   });

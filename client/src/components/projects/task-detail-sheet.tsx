@@ -79,6 +79,8 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/urgent-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
       if (task?.id) {
         queryClient.invalidateQueries({ queryKey: ["/api/tasks", task.id, "activity"] });
@@ -92,6 +94,8 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/urgent-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
       toast({ title: "Task deleted" });
       onOpenChange(false);
@@ -101,6 +105,8 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "tasks"] });
     queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/projects/urgent-tasks"] });
     queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
     if (task?.id) {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks", task.id, "activity"] });

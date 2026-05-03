@@ -5815,6 +5815,16 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.get("/api/projects/all-tasks", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tasks = await storage.getAllOpenTasksForUser(req.session.userId!);
+      res.json(tasks);
+    } catch (err) {
+      console.error("[projects] all-tasks error:", err);
+      res.status(500).json({ message: "Failed to load tasks" });
+    }
+  });
+
   app.get("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
     const project = await storage.getProject(req.params.id, req.session.userId!);
     if (!project) return res.status(404).json({ message: "Not found" });
