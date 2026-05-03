@@ -156,6 +156,24 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0" data-testid="sheet-task-detail">
+        {/* Breadcrumb bar (subtask only) */}
+        {parentTask && onOpenTask && (
+          <button
+            onClick={() => onOpenTask(parentTask.id)}
+            className="w-full sticky top-0 z-20 flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-100 via-amber-50 to-transparent dark:from-amber-500/20 dark:via-amber-500/10 dark:to-transparent border-b border-amber-300/40 dark:border-amber-500/30 hover:from-amber-200 hover:via-amber-100 dark:hover:from-amber-500/30 dark:hover:via-amber-500/20 transition-colors group text-left"
+            data-testid="button-breadcrumb-top"
+          >
+            <div className="h-7 w-7 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:bg-amber-600 transition-colors">
+              <ChevronLeft className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] uppercase tracking-wider text-amber-800/80 dark:text-amber-200/80 font-bold leading-tight">Back to parent task</p>
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 truncate leading-tight">{parentTask.title}</p>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-300 font-bold shrink-0 hidden sm:inline">Click to return</span>
+          </button>
+        )}
+
         {/* Gradient header card */}
         <div className="relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(245_60%_28%)] via-[hsl(265_55%_35%)] to-[hsl(290_55%_38%)]" />
@@ -412,6 +430,23 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Bottom breadcrumb (subtask only) */}
+          {parentTask && onOpenTask && (
+            <button
+              onClick={() => onOpenTask(parentTask.id)}
+              className="w-full flex items-center gap-2 px-4 py-3 rounded-lg bg-gradient-to-r from-amber-100 via-amber-50 to-transparent dark:from-amber-500/20 dark:via-amber-500/10 dark:to-transparent border border-amber-300/40 dark:border-amber-500/30 hover:from-amber-200 hover:via-amber-100 dark:hover:from-amber-500/30 dark:hover:via-amber-500/20 transition-colors group text-left"
+              data-testid="button-breadcrumb-bottom"
+            >
+              <div className="h-8 w-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:bg-amber-600 transition-colors">
+                <ChevronLeft className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase tracking-wider text-amber-800/80 dark:text-amber-200/80 font-bold leading-tight">Back to parent task</p>
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 truncate leading-tight">{parentTask.title}</p>
+              </div>
+            </button>
           )}
 
           {/* Footer actions */}
