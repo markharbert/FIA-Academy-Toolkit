@@ -5814,6 +5814,19 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       await storage.updatePostmasterLastSynced(userId);
       res.json({ success: true, domainsUpdated: domainData.length });
     } catch (err: any) {
+      const errMsg: string = err?.message || "";
+      const isInsufficientScopes =
+        errMsg.toLowerCase().includes("insufficient authentication scopes") ||
+        errMsg.toLowerCase().includes("insufficient scope") ||
+        err?.response?.status === 403 ||
+        err?.code === 403;
+      if (isInsufficientScopes) {
+        console.error("[Postmaster] Sync failed — token lacks postmaster.readonly scope:", err?.message);
+        return res.status(403).json({
+          needsReconnect: true,
+          message: "Your Google connection is missing the Postmaster permission. Please disconnect and reconnect to grant access.",
+        });
+      }
       console.error("[Postmaster] Sync error:", err);
       res.status(500).json({ message: "Failed to sync Postmaster data" });
     }

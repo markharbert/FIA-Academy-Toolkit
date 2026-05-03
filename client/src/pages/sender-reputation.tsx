@@ -1584,6 +1584,7 @@ export default function SenderReputationPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [selectedDomain, setSelectedDomain] = useState<string>("");
+  const [needsReconnect, setNeedsReconnect] = useState(false);
 
   const { data: status, isLoading } = useQuery<StatusResponse>({
     queryKey: ["/api/sender-reputation/status"],
@@ -1593,14 +1594,27 @@ export default function SenderReputationPage() {
   const syncMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/sender-reputation/sync"),
     onSuccess: () => {
+      setNeedsReconnect(false);
       queryClient.invalidateQueries({ queryKey: ["/api/sender-reputation/status"] });
       toast({ title: "Data refreshed from Google Postmaster" });
     },
-    onError: () => toast({
-      title: "Refresh failed",
-      description: "Could not fetch data from Google. Try disconnecting and reconnecting.",
-      variant: "destructive",
-    }),
+    onError: (err: any) => {
+      let body: any = {};
+      try {
+        const msg: string = err?.message || "";
+        const jsonStart = msg.indexOf("{");
+        if (jsonStart !== -1) body = JSON.parse(msg.slice(jsonStart));
+      } catch {}
+      if (body?.needsReconnect) {
+        setNeedsReconnect(true);
+      } else {
+        toast({
+          title: "Refresh failed",
+          description: "Could not fetch data from Google. Try disconnecting and reconnecting.",
+          variant: "destructive",
+        });
+      }
+    },
   });
 
   const disconnectMutation = useMutation({
@@ -1728,6 +1742,29 @@ export default function SenderReputationPage() {
         ) : (
           /* ── Connected ─────────────────────────────────────────────────── */
           <div className="space-y-6">
+            {needsReconnect && (
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30" data-testid="alert-needs-reconnect">
+                <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Google permission needs to be refreshed</p>
+                  <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5 leading-relaxed">
+                    Your Google account is connected, but the Postmaster Tools permission is missing or expired. This usually happens when you connected Google for login before Postmaster was added. Disconnect and reconnect to fix it — it only takes a few seconds.
+                  </p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button
+                      size="sm"
+                      className="bg-amber-500 hover:bg-amber-600 text-white border-0"
+                      onClick={() => disconnectMutation.mutate()}
+                      disabled={disconnectMutation.isPending}
+                      data-testid="button-reconnect-postmaster"
+                    >
+                      {disconnectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <PlugZap className="h-3.5 w-3.5 mr-1.5" />}
+                      Disconnect & Reconnect
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
             {status.domains.length === 0 ? (
               <Card>
                 <CardContent className="pt-8 pb-8 text-center space-y-3">
