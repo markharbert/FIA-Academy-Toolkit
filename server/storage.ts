@@ -160,6 +160,32 @@ export interface IStorage {
     }>;
     nextCursor: { createdAt: Date; id: string } | null;
   }>;
+
+  getAdminActivityFeed(options: {
+    page: number;
+    pageSize: number;
+    actionType?: string;
+    sinceMs?: number;
+  }): Promise<{
+    items: Array<{
+      id: string;
+      actionType: string;
+      actionLabel: string;
+      entityType: string | null;
+      entityId: string | null;
+      createdAt: Date;
+      ip: string | null;
+      userAgent: string | null;
+      user: {
+        id: string;
+        displayName: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        email: string | null;
+      };
+    }>;
+    total: number;
+  }>;
   
   // Admin: Duplicate Detection
   findDuplicateEmails(): Promise<Array<{
@@ -1026,6 +1052,94 @@ export class DatabaseStorage implements IStorage {
       session: result[0].session,
       user: result[0].user,
     };
+  }
+
+  async getAdminActivityFeed(options: {
+    page: number;
+    pageSize: number;
+    actionType?: string;
+    sinceMs?: number;
+  }): Promise<{
+    items: Array<{
+      id: string;
+      actionType: string;
+      actionLabel: string;
+      entityType: string | null;
+      entityId: string | null;
+      createdAt: Date;
+      ip: string | null;
+      userAgent: string | null;
+      user: {
+        id: string;
+        displayName: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        email: string | null;
+      };
+    }>;
+    total: number;
+  }> {
+    const page = Math.max(1, options.page);
+    const pageSize = Math.min(Math.max(1, options.pageSize), 100);
+    const offset = (page - 1) * pageSize;
+
+    const conditions: any[] = [];
+    if (options.actionType) {
+      conditions.push(eq(userActionLog.actionType, options.actionType as UserActionType));
+    }
+    if (options.sinceMs && options.sinceMs > 0) {
+      const cutoff = new Date(Date.now() - options.sinceMs);
+      conditions.push(gte(userActionLog.createdAt, cutoff));
+    }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [{ count: total }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userActionLog)
+      .where(whereClause as any);
+
+    const rows = await db
+      .select({
+        id: userActionLog.id,
+        actionType: userActionLog.actionType,
+        actionLabel: userActionLog.actionLabel,
+        entityType: userActionLog.entityType,
+        entityId: userActionLog.entityId,
+        createdAt: userActionLog.createdAt,
+        ip: userActionLog.ip,
+        userAgent: userActionLog.userAgent,
+        userId: users.id,
+        displayName: users.displayName,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      })
+      .from(userActionLog)
+      .innerJoin(users, eq(userActionLog.userId, users.id))
+      .where(whereClause as any)
+      .orderBy(desc(userActionLog.createdAt), desc(userActionLog.id))
+      .limit(pageSize)
+      .offset(offset);
+
+    const items = rows.map((r) => ({
+      id: r.id,
+      actionType: r.actionType as string,
+      actionLabel: r.actionLabel,
+      entityType: r.entityType,
+      entityId: r.entityId,
+      createdAt: r.createdAt,
+      ip: r.ip,
+      userAgent: r.userAgent,
+      user: {
+        id: r.userId,
+        displayName: r.displayName,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        email: r.email,
+      },
+    }));
+
+    return { items, total: Number(total) || 0 };
   }
 
   // User Action Log

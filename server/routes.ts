@@ -1137,33 +1137,32 @@ export async function registerRoutes(
   });
 
   // Admin activity feed with cursor pagination
+  // Admin: Member activity feed (page-based, all action types).
+  // Query: ?page=1&pageSize=20&actionType=login_success&since=24h|7d|30d|all
   app.get("/api/admin/overview/activity", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { limit = "20", cursor } = req.query;
-      const limitNum = Math.min(Math.max(1, parseInt(limit as string) || 20), 50);
-      
-      // Parse cursor from query string (format: createdAt|id)
-      let cursorObj: { createdAt: Date; id: string } | undefined;
-      if (cursor && typeof cursor === "string") {
-        const [createdAtStr, id] = cursor.split("|");
-        if (createdAtStr && id) {
-          const createdAt = new Date(createdAtStr);
-          if (!isNaN(createdAt.getTime())) {
-            cursorObj = { createdAt, id };
-          }
-        }
-      }
-      
-      const result = await storage.getActivityFeed({ limit: limitNum, cursor: cursorObj });
-      
-      // Convert nextCursor to string format for client
-      const nextCursorStr = result.nextCursor 
-        ? `${result.nextCursor.createdAt.toISOString()}|${result.nextCursor.id}`
-        : null;
-      
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(Math.max(1, parseInt(req.query.pageSize as string) || 20), 100);
+      const actionType = req.query.actionType && req.query.actionType !== "all"
+        ? String(req.query.actionType)
+        : undefined;
+      const sinceParam = String(req.query.since || "all");
+      const sinceMap: Record<string, number> = {
+        "24h": 24 * 60 * 60 * 1000,
+        "7d": 7 * 24 * 60 * 60 * 1000,
+        "30d": 30 * 24 * 60 * 60 * 1000,
+      };
+      const sinceMs = sinceMap[sinceParam];
+
+      const result = await storage.getAdminActivityFeed({ page, pageSize, actionType, sinceMs });
+      const totalPages = Math.max(1, Math.ceil(result.total / pageSize));
+
       res.json({
         items: result.items,
-        nextCursor: nextCursorStr,
+        page,
+        pageSize,
+        total: result.total,
+        totalPages,
       });
     } catch (err) {
       console.error("Admin activity feed error:", err);

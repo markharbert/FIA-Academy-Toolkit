@@ -200,6 +200,12 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] dmo_entries seconds migration complete");
 
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS user_action_log_created_at_desc_idx
+        ON user_action_log (created_at DESC);
+    `);
+    console.log("[startup] user_action_log index migration complete");
+
     // One-time backfill: copy account-level confirmed placement results to the
     // individual email record so old confirmed emails show their result permanently.
     // Matches by message_id when available, otherwise picks the most-recently-received

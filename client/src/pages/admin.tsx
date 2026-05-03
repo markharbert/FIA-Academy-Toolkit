@@ -44,9 +44,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Loader2, CheckCircle, AlertCircle,
   Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
-  CheckCircle2, LogOut, RefreshCw, Search, Mail, Eye, EyeOff, Info, Clock,
+  CheckCircle2, LogOut, LogIn, RefreshCw, Search, Mail, Eye, EyeOff, Info, Clock,
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
-  Key, Youtube, MessageSquare, XCircle, Trash2
+  Key, Youtube, MessageSquare, XCircle, Trash2,
+  Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
+  CircleAlert, RotateCw, UserCog, Activity
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -66,16 +68,66 @@ interface OverviewStats {
 
 interface ActivityItem {
   id: string;
-  type: "session_created";
-  sessionId: string;
-  sessionTitle: string | null;
-  sessionCreatedAt: string;
-  scoreTotal: number | null;
+  actionType: string;
+  actionLabel: string;
+  entityType: string | null;
+  entityId: string | null;
+  createdAt: string;
+  ip: string | null;
+  userAgent: string | null;
   user: {
     id: string;
     displayName: string | null;
+    firstName: string | null;
+    lastName: string | null;
     email: string | null;
   };
+}
+
+const ACTION_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "all", label: "All actions" },
+  { value: "login_success", label: "Login" },
+  { value: "logout", label: "Logout" },
+  { value: "account_updated", label: "Profile updated" },
+  { value: "video_uploaded", label: "Video uploaded" },
+  { value: "session_created", label: "Session created" },
+  { value: "session_deleted", label: "Session deleted" },
+  { value: "sessions_bulk_deleted", label: "Sessions bulk deleted" },
+  { value: "session_title_updated", label: "Session renamed" },
+  { value: "session_moved_to_folder", label: "Session moved" },
+  { value: "transcript_regenerated", label: "Transcript regenerated" },
+  { value: "processing_started", label: "Processing started" },
+  { value: "processing_completed", label: "Processing completed" },
+  { value: "processing_failed", label: "Processing failed" },
+  { value: "upload_failed", label: "Upload failed" },
+  { value: "file_validation_failed", label: "File validation failed" },
+  { value: "folder_created", label: "Folder created" },
+  { value: "folder_renamed", label: "Folder renamed" },
+  { value: "folder_deleted", label: "Folder deleted" },
+];
+
+function getActionVisual(actionType: string): { Icon: any; tone: string } {
+  const map: Record<string, { Icon: any; tone: string }> = {
+    login_success: { Icon: LogIn, tone: "text-blue-500" },
+    logout: { Icon: LogOut, tone: "text-muted-foreground" },
+    account_updated: { Icon: UserCog, tone: "text-violet-500" },
+    video_uploaded: { Icon: Upload, tone: "text-amber-500" },
+    upload_failed: { Icon: CircleAlert, tone: "text-red-500" },
+    session_created: { Icon: FileVideo, tone: "text-emerald-500" },
+    session_deleted: { Icon: Trash2, tone: "text-red-500" },
+    sessions_bulk_deleted: { Icon: Trash2, tone: "text-red-500" },
+    session_title_updated: { Icon: FilePenLine, tone: "text-sky-500" },
+    session_moved_to_folder: { Icon: FolderEdit, tone: "text-sky-500" },
+    transcript_regenerated: { Icon: RotateCw, tone: "text-indigo-500" },
+    processing_started: { Icon: Activity, tone: "text-cyan-500" },
+    processing_completed: { Icon: CheckCircle2, tone: "text-green-500" },
+    processing_failed: { Icon: XCircle, tone: "text-red-500" },
+    file_validation_failed: { Icon: CircleAlert, tone: "text-orange-500" },
+    folder_created: { Icon: FolderPlus, tone: "text-teal-500" },
+    folder_renamed: { Icon: FolderEdit, tone: "text-teal-500" },
+    folder_deleted: { Icon: FolderMinus, tone: "text-rose-500" },
+  };
+  return map[actionType] || { Icon: Activity, tone: "text-muted-foreground" };
 }
 
 interface AdminUser {
@@ -538,8 +590,12 @@ export default function AdminPage() {
   const [overviewStatsLoading, setOverviewStatsLoading] = useState(true);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
-  const [activityNextCursor, setActivityNextCursor] = useState<string | null>(null);
-  const [activityLoadingMore, setActivityLoadingMore] = useState(false);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityTotalPages, setActivityTotalPages] = useState(1);
+  const [activityTotal, setActivityTotal] = useState(0);
+  const [activityActionFilter, setActivityActionFilter] = useState("all");
+  const [activitySinceFilter, setActivitySinceFilter] = useState("all");
+  const ACTIVITY_PAGE_SIZE = 20;
   const [keStatus, setKeStatus] = useState<KeywordsEverywhereStatus | null>(null);
   const [keStatusLoading, setKeStatusLoading] = useState(true);
   const [cfStatus, setCfStatus] = useState<CfStatus | null>(null);
@@ -606,7 +662,6 @@ export default function AdminPage() {
       fetchKeStatus();
       fetchCfStatus();
       fetchOverviewStats();
-      fetchActivityFeed();
       fetchKeApiKeyData();
     }
   }, [user, authLoading, setLocation]);
@@ -641,40 +696,35 @@ export default function AdminPage() {
     }
   };
 
-  const fetchActivityFeed = async (cursor?: string, append = false) => {
+  const fetchActivityFeed = useCallback(async () => {
     try {
-      if (append) {
-        setActivityLoadingMore(true);
-      } else {
-        setActivityLoading(true);
-      }
-      
-      const params = new URLSearchParams({ limit: "20" });
-      if (cursor) params.set("cursor", cursor);
-      
+      setActivityLoading(true);
+      const params = new URLSearchParams({
+        page: String(activityPage),
+        pageSize: String(ACTIVITY_PAGE_SIZE),
+      });
+      if (activityActionFilter !== "all") params.set("actionType", activityActionFilter);
+      if (activitySinceFilter !== "all") params.set("since", activitySinceFilter);
+
       const res = await fetch(`/api/admin/overview/activity?${params}`, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        if (append) {
-          setActivityFeed(prev => [...prev, ...data.items]);
-        } else {
-          setActivityFeed(data.items);
-        }
-        setActivityNextCursor(data.nextCursor);
+        setActivityFeed(data.items || []);
+        setActivityTotalPages(data.totalPages || 1);
+        setActivityTotal(data.total || 0);
       }
     } catch (err) {
       console.error("Failed to fetch activity feed:", err);
     } finally {
       setActivityLoading(false);
-      setActivityLoadingMore(false);
     }
-  };
+  }, [activityPage, activityActionFilter, activitySinceFilter]);
 
-  const loadMoreActivity = () => {
-    if (activityNextCursor && !activityLoadingMore) {
-      fetchActivityFeed(activityNextCursor, true);
+  useEffect(() => {
+    if (user?.isAdmin) {
+      fetchActivityFeed();
     }
-  };
+  }, [user, fetchActivityFeed]);
 
   const formatRelativeTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -1252,8 +1302,53 @@ export default function AdminPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>See what users are creating</CardDescription>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle>Recent Activity</CardTitle>
+                  <CardDescription>
+                    Everything members do across the platform — login, uploads, scoring, folders, profile edits, and more.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={activityActionFilter}
+                    onValueChange={(v) => { setActivityActionFilter(v); setActivityPage(1); }}
+                  >
+                    <SelectTrigger className="w-[180px] h-9" data-testid="select-activity-action">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACTION_TYPE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={activitySinceFilter}
+                    onValueChange={(v) => { setActivitySinceFilter(v); setActivityPage(1); }}
+                  >
+                    <SelectTrigger className="w-[130px] h-9" data-testid="select-activity-since">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All time</SelectItem>
+                      <SelectItem value="24h">Last 24h</SelectItem>
+                      <SelectItem value="7d">Last 7 days</SelectItem>
+                      <SelectItem value="30d">Last 30 days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => fetchActivityFeed()}
+                    title="Refresh"
+                    data-testid="button-refresh-activity"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", activityLoading && "animate-spin")} />
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {activityLoading ? (
@@ -1262,68 +1357,76 @@ export default function AdminPage() {
                 </div>
               ) : activityFeed.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No activity yet. Once users create sessions, you'll see them here.
+                  No activity matches the current filters.
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {activityFeed.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-start justify-between gap-4 border-b pb-4 last:border-0 last:pb-0"
-                      data-testid={`activity-item-${item.id}`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">{getActivityUserName(item.user)}</span>
-                          <span className="text-muted-foreground">created</span>
-                          <span className="font-medium truncate">
-                            {item.sessionTitle || "Practice Session"}
-                          </span>
+                <div className="divide-y">
+                  {activityFeed.map((item) => {
+                    const { Icon, tone } = getActionVisual(item.actionType);
+                    const userName = item.user.displayName
+                      || [item.user.firstName, item.user.lastName].filter(Boolean).join(" ").trim()
+                      || item.user.email?.split("@")[0]
+                      || "Unknown user";
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+                        data-testid={`activity-item-${item.id}`}
+                      >
+                        <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted", tone)}>
+                          <Icon className="h-4 w-4" />
                         </div>
-                        <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                          <span title={format(new Date(item.sessionCreatedAt), "MMM d, yyyy h:mm a")}>
-                            {formatRelativeTime(item.sessionCreatedAt)}
-                          </span>
-                          {item.scoreTotal !== null && (
-                            <Badge variant="secondary" className="text-xs">
-                              Score: {item.scoreTotal}/100
-                            </Badge>
-                          )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-x-2">
+                            <button
+                              type="button"
+                              className="font-medium text-sm hover:underline"
+                              onClick={() => handleUserClick(item.user.id)}
+                              data-testid={`button-activity-user-${item.id}`}
+                            >
+                              {userName}
+                            </button>
+                            <span className="text-sm text-muted-foreground truncate">{item.actionLabel}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
+                            <span title={format(new Date(item.createdAt), "MMM d, yyyy h:mm:ss a")}>
+                              {formatRelativeTime(item.createdAt)}
+                            </span>
+                            {item.user.email && <span className="truncate">{item.user.email}</span>}
+                            {item.ip && <span className="font-mono">{item.ip}</span>}
+                          </div>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedSessionId(item.sessionId);
-                        }}
-                        data-testid={`button-view-activity-session-${item.id}`}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </Button>
-                    </div>
-                  ))}
-                  
-                  {activityNextCursor && (
-                    <div className="flex justify-center pt-4">
-                      <Button
-                        variant="outline"
-                        onClick={loadMoreActivity}
-                        disabled={activityLoadingMore}
-                        data-testid="button-load-more-activity"
-                      >
-                        {activityLoadingMore ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Loading...
-                          </>
-                        ) : (
-                          "Load More"
-                        )}
-                      </Button>
-                    </div>
-                  )}
+                    );
+                  })}
+                </div>
+              )}
+
+              {activityTotal > 0 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Page {activityPage} of {activityTotalPages} · {activityTotal.toLocaleString()} {activityTotal === 1 ? "event" : "events"}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                      disabled={activityPage <= 1 || activityLoading}
+                      data-testid="button-activity-prev"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setActivityPage((p) => Math.min(activityTotalPages, p + 1))}
+                      disabled={activityPage >= activityTotalPages || activityLoading}
+                      data-testid="button-activity-next"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
