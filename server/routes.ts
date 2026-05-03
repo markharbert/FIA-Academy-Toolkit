@@ -5805,6 +5805,16 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.get("/api/projects/urgent-tasks", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tasks = await storage.getUrgentTasksForUser(req.session.userId!, 48);
+      res.json(tasks);
+    } catch (err) {
+      console.error("[projects] urgent-tasks error:", err);
+      res.status(500).json({ message: "Failed to load urgent tasks" });
+    }
+  });
+
   app.get("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
     const project = await storage.getProject(req.params.id, req.session.userId!);
     if (!project) return res.status(404).json({ message: "Not found" });

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { ProjectWithCounts } from "@shared/schema";
+import type { ProjectWithCounts, ProjectTask } from "@shared/schema";
+
+type UrgentTask = ProjectTask & { projectName: string; projectColor: string };
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle } from "lucide-react";
 
 const COLOR_PALETTE = [
   "#6366f1", // indigo
@@ -99,6 +101,91 @@ function ProjectCard({ p, onEdit, onArchive, onDelete }: { p: ProjectWithCounts;
         </Link>
       </CardContent>
     </Card>
+  );
+}
+
+function formatDueLabel(due: Date): { text: string; tone: "overdue" | "soon" | "today" | "tomorrow" } {
+  const now = new Date();
+  const diffMs = due.getTime() - now.getTime();
+  const absMs = Math.abs(diffMs);
+  const minutes = Math.round(absMs / 60000);
+  const hours = Math.round(absMs / 3600000);
+
+  if (diffMs < 0) {
+    if (hours < 1) return { text: `${minutes}m overdue`, tone: "overdue" };
+    if (hours < 24) return { text: `${hours}h overdue`, tone: "overdue" };
+    return { text: `${Math.round(hours / 24)}d overdue`, tone: "overdue" };
+  }
+  const sameDay = due.toDateString() === now.toDateString();
+  const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow = due.toDateString() === tomorrow.toDateString();
+
+  if (hours < 1) return { text: `in ${minutes}m`, tone: "soon" };
+  if (sameDay) return { text: `today ${due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`, tone: "today" };
+  if (isTomorrow) return { text: `tomorrow ${due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`, tone: "tomorrow" };
+  return { text: `in ${hours}h`, tone: "soon" };
+}
+
+function UrgentTasksBanner({ tasks }: { tasks: UrgentTask[] }) {
+  const overdue = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
+  const upcoming = tasks.filter(t => t.dueDate && new Date(t.dueDate) >= new Date());
+
+  return (
+    <div className="rounded-xl border border-rose-500/20 bg-gradient-to-br from-rose-500/5 via-amber-500/5 to-rose-500/5 dark:from-rose-500/10 dark:via-amber-500/10 dark:to-rose-500/10 overflow-hidden" data-testid="card-urgent-tasks">
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-rose-500/15 bg-rose-500/5">
+        <div className="flex items-center gap-2">
+          <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-rose-500 to-amber-500 flex items-center justify-center shadow-sm">
+            <Flame className="h-3.5 w-3.5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold leading-tight" data-testid="text-urgent-tasks-title">Urgent — due in next 48 hours</h2>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              {overdue.length > 0 && <span className="text-rose-600 dark:text-rose-400 font-medium">{overdue.length} overdue</span>}
+              {overdue.length > 0 && upcoming.length > 0 && <span> · </span>}
+              {upcoming.length > 0 && <span>{upcoming.length} upcoming</span>}
+            </p>
+          </div>
+        </div>
+        <Badge variant="outline" className="bg-background/50 text-[10px]" data-testid="badge-urgent-count">
+          {tasks.length} task{tasks.length === 1 ? "" : "s"}
+        </Badge>
+      </div>
+      <ul className="divide-y divide-rose-500/10 max-h-[280px] overflow-auto">
+        {tasks.map(t => {
+          const due = t.dueDate ? new Date(t.dueDate) : null;
+          const label = due ? formatDueLabel(due) : null;
+          const toneClasses =
+            label?.tone === "overdue" ? "text-rose-700 dark:text-rose-400 bg-rose-500/10" :
+            label?.tone === "soon"    ? "text-amber-700 dark:text-amber-400 bg-amber-500/10" :
+            label?.tone === "today"   ? "text-amber-700 dark:text-amber-400 bg-amber-500/10" :
+            "text-foreground/80 bg-muted";
+          return (
+            <li key={t.id} data-testid={`urgent-task-${t.id}`}>
+              <Link href={`/projects/${t.projectId}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-rose-500/[0.04] transition-colors group">
+                {label?.tone === "overdue"
+                  ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+                  : <Clock className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                }
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{t.title}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: t.projectColor }} aria-hidden="true" />
+                    <p className="text-[11px] text-muted-foreground truncate">{t.projectName}</p>
+                    {t.priority && t.priority !== "none" && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 leading-none uppercase tracking-wide shrink-0">{t.priority}</Badge>
+                    )}
+                  </div>
+                </div>
+                {label && (
+                  <span className={`text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 rounded shrink-0 ${toneClasses}`}>{label.text}</span>
+                )}
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -216,6 +303,7 @@ export default function ProjectsPage() {
   };
 
   const { data: projects = [], isLoading } = useQuery<ProjectWithCounts[]>({ queryKey: ["/api/projects"] });
+  const { data: urgentTasks = [] } = useQuery<UrgentTask[]>({ queryKey: ["/api/projects/urgent-tasks"] });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -368,7 +456,8 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {urgentTasks.length > 0 && <UrgentTasksBanner tasks={urgentTasks} />}
         {isLoading ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…

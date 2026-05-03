@@ -349,6 +349,7 @@ export interface IStorage {
     totalDueThisWeek: number;
     totalOverdue: number;
   }>;
+  getUrgentTasksForUser(userId: string, hoursAhead?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
 
   // Inbox Analyzer
   getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
@@ -2260,6 +2261,40 @@ export class DatabaseStorage implements IStorage {
       totalDueThisWeek,
       totalOverdue,
     };
+  }
+
+  async getUrgentTasksForUser(userId: string, hoursAhead = 48): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>> {
+    const result = await db.execute(sql`
+      SELECT t.*, p.name AS project_name, p.color AS project_color
+      FROM project_tasks t
+      JOIN projects p ON p.id = t.project_id
+      WHERE t.user_id = ${userId}
+        AND t.status <> 'done'
+        AND t.due_date IS NOT NULL
+        AND p.status = 'active'
+        AND t.due_date <= NOW() + (${hoursAhead} || ' hours')::interval
+      ORDER BY t.due_date ASC
+      LIMIT 25
+    `);
+    return (result.rows as any[]).map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      projectId: r.project_id,
+      parentTaskId: r.parent_task_id,
+      title: r.title,
+      notes: r.notes,
+      status: r.status,
+      priority: r.priority,
+      dueDate: r.due_date ? new Date(r.due_date) : null,
+      completedAt: r.completed_at ? new Date(r.completed_at) : null,
+      tags: r.tags || [],
+      links: r.links || [],
+      sortOrder: r.sort_order,
+      createdAt: new Date(r.created_at),
+      updatedAt: new Date(r.updated_at),
+      projectName: r.project_name,
+      projectColor: r.project_color,
+    }));
   }
 
   // ── Inbox Analyzer ───────────────────────────────────────────────────────
