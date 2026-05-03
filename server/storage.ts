@@ -353,8 +353,8 @@ export interface IStorage {
   getUrgentTasksForUser(userId: string, hoursAhead?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
   getTaskComments(taskId: string, userId: string): Promise<Array<TaskComment & { authorName: string | null; authorEmail: string | null }>>;
   addTaskComment(taskId: string, userId: string, body: string): Promise<TaskComment>;
-  updateTaskComment(commentId: string, userId: string, body: string): Promise<TaskComment | undefined>;
-  deleteTaskComment(commentId: string, userId: string): Promise<void>;
+  updateTaskComment(taskId: string, commentId: string, userId: string, body: string): Promise<TaskComment | undefined>;
+  deleteTaskComment(taskId: string, commentId: string, userId: string): Promise<boolean>;
   getTaskActivity(taskId: string, userId: string): Promise<Array<TaskActivity & { authorName: string | null; authorEmail: string | null }>>;
 
   // Inbox Analyzer
@@ -2313,14 +2313,15 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateTaskComment(commentId: string, userId: string, body: string): Promise<TaskComment | undefined> {
-    // Only the comment author can edit their own comment.
-    const [existing] = await db.select().from(taskComments)
-      .where(and(eq(taskComments.id, commentId), eq(taskComments.userId, userId)));
-    if (!existing) return undefined;
+  async updateTaskComment(taskId: string, commentId: string, userId: string, body: string): Promise<TaskComment | undefined> {
+    // Only the comment author can edit, and only when the comment actually belongs to taskId.
     const [updated] = await db.update(taskComments)
       .set({ body, updatedAt: new Date() })
-      .where(and(eq(taskComments.id, commentId), eq(taskComments.userId, userId)))
+      .where(and(
+        eq(taskComments.id, commentId),
+        eq(taskComments.taskId, taskId),
+        eq(taskComments.userId, userId),
+      ))
       .returning();
     if (updated) {
       await this.logTaskActivity(updated.taskId, userId, "comment_edited", { commentId: updated.id });
@@ -2328,9 +2329,14 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async deleteTaskComment(commentId: string, userId: string): Promise<void> {
-    // Only the comment author can delete their own comment.
-    await db.delete(taskComments).where(and(eq(taskComments.id, commentId), eq(taskComments.userId, userId)));
+  async deleteTaskComment(taskId: string, commentId: string, userId: string): Promise<boolean> {
+    // Only the comment author can delete, scoped to the parent task.
+    const deleted = await db.delete(taskComments).where(and(
+      eq(taskComments.id, commentId),
+      eq(taskComments.taskId, taskId),
+      eq(taskComments.userId, userId),
+    )).returning({ id: taskComments.id });
+    return deleted.length > 0;
   }
 
   async getTaskActivity(taskId: string, userId: string) {

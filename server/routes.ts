@@ -5929,7 +5929,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const task = await storage.getTask(req.params.taskId, req.session.userId!);
       if (!task) return res.status(404).json({ message: "Not found" });
       const data = updateTaskCommentSchema.parse(req.body);
-      const updated = await storage.updateTaskComment(req.params.commentId, req.session.userId!, data.body);
+      const updated = await storage.updateTaskComment(req.params.taskId, req.params.commentId, req.session.userId!, data.body);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
     } catch (err: any) {
@@ -5943,7 +5943,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const task = await storage.getTask(req.params.taskId, req.session.userId!);
       if (!task) return res.status(404).json({ message: "Not found" });
-      await storage.deleteTaskComment(req.params.commentId, req.session.userId!);
+      const ok = await storage.deleteTaskComment(req.params.taskId, req.params.commentId, req.session.userId!);
+      if (!ok) return res.status(404).json({ message: "Not found" });
       res.json({ ok: true });
     } catch (err) {
       console.error("[projects] delete comment error:", err);
