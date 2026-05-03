@@ -153,7 +153,7 @@ export default function ProjectsPage() {
       if (!editTarget) return;
       await apiRequest("PATCH", `/api/projects/${editTarget.id}`, {
         name: editName.trim(),
-        description: editDescription.trim() || null,
+        description: editDescription.trim(),
         color: editColor,
         status: editStatus,
       });
