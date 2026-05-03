@@ -162,8 +162,11 @@ interface UserAction {
   actionLabel: string;
   entityType: string | null;
   entityId: string | null;
-  metadata: Record<string, any> | null;
+  metadata?: Record<string, any> | null;
+  metadataJson?: Record<string, any> | null;
   createdAt: string;
+  ip?: string | null;
+  userAgent?: string | null;
 }
 
 interface UserDetails {
@@ -653,6 +656,8 @@ export default function AdminPage() {
   const [actionsLoading, setActionsLoading] = useState(false);
   const [actionsNextCursor, setActionsNextCursor] = useState<string | null>(null);
   const [actionsLoadingMore, setActionsLoadingMore] = useState(false);
+  const [actionsTypeFilter, setActionsTypeFilter] = useState<string>("all");
+  const [expandedActionMeta, setExpandedActionMeta] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {
@@ -2613,82 +2618,259 @@ export default function AdminPage() {
       </Sheet>
 
       {/* User Actions History Sheet */}
-      <Sheet open={!!actionsUserId} onOpenChange={(open) => !open && setActionsUserId(null)}>
+      <Sheet
+        open={!!actionsUserId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActionsUserId(null);
+            setActionsTypeFilter("all");
+            setExpandedActionMeta(new Set());
+          }
+        }}
+      >
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Action History</SheetTitle>
             <SheetDescription>
-              {actionsUser ? (
-                <span>Activity log for {actionsUser.displayName || actionsUser.email || "Unknown User"}</span>
-              ) : (
-                <span>View user action history</span>
-              )}
+              Detailed activity timeline for this account
             </SheetDescription>
           </SheetHeader>
 
-          {actionsLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : userActions.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">No actions recorded for this user</p>
-          ) : (
-            <div className="mt-6 space-y-4">
-              {userActions.map((action) => (
-                <div 
-                  key={action.id} 
-                  className="flex items-start gap-3 border-b pb-3 last:border-b-0"
-                  data-testid={`action-item-${action.id}`}
-                >
-                  <div className="mt-0.5">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-sm">{action.actionLabel}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {action.actionType.replace(/_/g, " ")}
-                      </Badge>
+          {(() => {
+            const a = actionsUser;
+            const fullName = a ? [a.firstName, a.lastName].filter(Boolean).join(" ").trim() : "";
+            const displayName = a ? (a.displayName || fullName || a.email?.split("@")[0] || "Unknown User") : "";
+            const initials = a
+              ? ((fullName || a.displayName || a.email || "?")
+                  .split(/\s+|@/)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((s) => s[0]?.toUpperCase())
+                  .join("") || "?")
+              : "?";
+            const filtered = actionsTypeFilter === "all"
+              ? userActions
+              : userActions.filter((x) => x.actionType === actionsTypeFilter);
+            // Group by day
+            const groups = new Map<string, UserAction[]>();
+            for (const ua of filtered) {
+              const key = format(new Date(ua.createdAt), "yyyy-MM-dd");
+              if (!groups.has(key)) groups.set(key, []);
+              groups.get(key)!.push(ua);
+            }
+            const groupKeys = Array.from(groups.keys());
+            const today = format(new Date(), "yyyy-MM-dd");
+            const yesterday = format(new Date(Date.now() - 86400000), "yyyy-MM-dd");
+            const dayLabel = (k: string) => {
+              if (k === today) return "Today";
+              if (k === yesterday) return "Yesterday";
+              return format(new Date(k), "EEEE, MMM d, yyyy");
+            };
+            const toggleMeta = (id: string) => {
+              setExpandedActionMeta((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              });
+            };
+            const deviceFromUA = (ua?: string | null) => {
+              if (!ua) return null;
+              if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
+              if (/Android/i.test(ua)) return "Android";
+              if (/Macintosh|Mac OS X/i.test(ua)) return "Mac";
+              if (/Windows/i.test(ua)) return "Windows";
+              if (/Linux/i.test(ua)) return "Linux";
+              return "Other";
+            };
+            return (
+              <div className="mt-6 space-y-5">
+                {/* HEADER CARD */}
+                {a && (
+                  <div className="rounded-xl border bg-gradient-to-br from-muted/40 to-muted/10 p-4">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/80 to-violet-600 text-white text-base font-semibold">
+                        {initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold truncate" data-testid="text-actions-user-name">{displayName}</h3>
+                          {a.isAdmin && (
+                            <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/15 text-xs">
+                              <Shield className="h-3 w-3 mr-1" /> Admin
+                            </Badge>
+                          )}
+                        </div>
+                        {a.email && (
+                          <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+                            <Mail className="h-3 w-3" />
+                            <span className="truncate">{a.email}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 mt-2 text-xs">
+                          <Badge variant="outline" className="gap-1">
+                            <Activity className="h-3 w-3" />
+                            {userActions.length}{actionsNextCursor ? "+" : ""} loaded
+                          </Badge>
+                          {actionsTypeFilter !== "all" && (
+                            <Badge variant="outline" className="gap-1 bg-violet-500/10 border-violet-500/30 text-violet-700 dark:text-violet-300">
+                              {filtered.length} matching
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    {action.entityType && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {action.entityType}: {action.entityId?.slice(0, 8)}...
+                  </div>
+                )}
+
+                {/* FILTER BAR */}
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <Select value={actionsTypeFilter} onValueChange={setActionsTypeFilter}>
+                    <SelectTrigger className="h-9 text-sm" data-testid="select-actions-type-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACTION_TYPE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* TIMELINE */}
+                {actionsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : userActions.length === 0 ? (
+                  <div className="rounded-lg border border-dashed py-10 text-center">
+                    <Activity className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No actions recorded for this user yet.</p>
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="rounded-lg border border-dashed py-8 text-center">
+                    <p className="text-sm text-muted-foreground">No actions match this filter.</p>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => setActionsTypeFilter("all")}
+                      data-testid="button-clear-actions-filter"
+                    >
+                      Clear filter
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {groupKeys.map((dayKey) => {
+                      const items = groups.get(dayKey)!;
+                      return (
+                        <div key={dayKey} className="space-y-2">
+                          <div className="sticky top-0 -mx-1 px-1 py-1 bg-background/95 backdrop-blur-sm z-10">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                              <span>{dayLabel(dayKey)}</span>
+                              <span className="text-muted-foreground/50">·</span>
+                              <span>{items.length} {items.length === 1 ? "action" : "actions"}</span>
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            {items.map((action) => {
+                              const visual = getActionVisual(action.actionType);
+                              const meta = action.metadata || action.metadataJson;
+                              const hasMeta = meta && Object.keys(meta).length > 0;
+                              const isExpanded = expandedActionMeta.has(action.id);
+                              const device = deviceFromUA(action.userAgent);
+                              return (
+                                <div
+                                  key={action.id}
+                                  className="flex items-start gap-3 rounded-lg border p-3 hover:bg-accent/40 transition-colors"
+                                  data-testid={`action-item-${action.id}`}
+                                >
+                                  <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/60", visual.tone)}>
+                                    <visual.Icon className="h-4 w-4" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-sm font-medium truncate">{action.actionLabel}</div>
+                                        <div className="text-xs text-muted-foreground mt-0.5">
+                                          {format(new Date(action.createdAt), "h:mm a")}
+                                          {action.entityType && (
+                                            <>
+                                              <span className="mx-1.5">·</span>
+                                              <span className="capitalize">{action.entityType}</span>
+                                              {action.entityId && (
+                                                <span className="font-mono ml-1">{action.entityId.slice(0, 8)}</span>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {(device || action.ip) && (
+                                      <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                        {device && (
+                                          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5">
+                                            {device}
+                                          </span>
+                                        )}
+                                        {action.ip && (
+                                          <span className="font-mono">{action.ip}</span>
+                                        )}
+                                      </div>
+                                    )}
+                                    {hasMeta && (
+                                      <div className="mt-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleMeta(action.id)}
+                                          className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                                          data-testid={`button-toggle-meta-${action.id}`}
+                                        >
+                                          {isExpanded ? "Hide details" : "Show details"}
+                                          <ChevronRight className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-90")} />
+                                        </button>
+                                        {isExpanded && (
+                                          <pre className="mt-1.5 text-[11px] font-mono bg-muted/60 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+{JSON.stringify(meta, null, 2)}
+                                          </pre>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {actionsNextCursor && (
+                      <div className="pt-2 text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => actionsUserId && fetchUserActions(actionsUserId, actionsNextCursor)}
+                          disabled={actionsLoadingMore}
+                          data-testid="button-load-more-actions"
+                        >
+                          {actionsLoadingMore ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Loading...
+                            </>
+                          ) : (
+                            "Load older actions"
+                          )}
+                        </Button>
                       </div>
                     )}
-                    {action.metadata && Object.keys(action.metadata).length > 0 && (
-                      <div className="text-xs text-muted-foreground mt-1 font-mono bg-muted rounded px-2 py-1 overflow-x-auto">
-                        {JSON.stringify(action.metadata)}
-                      </div>
-                    )}
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {format(new Date(action.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                    </div>
                   </div>
-                </div>
-              ))}
-              
-              {actionsNextCursor && (
-                <div className="pt-4 text-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => actionsUserId && fetchUserActions(actionsUserId, actionsNextCursor)}
-                    disabled={actionsLoadingMore}
-                    data-testid="button-load-more-actions"
-                  >
-                    {actionsLoadingMore ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      "Load More"
-                    )}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
         </SheetContent>
       </Sheet>
 

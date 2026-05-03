@@ -1416,6 +1416,8 @@ export async function registerRoutes(
           entityId: item.entityId,
           metadata: item.metadataJson,
           createdAt: item.createdAt,
+          ip: item.ip,
+          userAgent: item.userAgent,
         })),
         nextCursor: result.nextCursor 
           ? `${result.nextCursor.createdAt.toISOString()}|${result.nextCursor.id}` 
