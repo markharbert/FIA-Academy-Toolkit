@@ -378,17 +378,6 @@ export default function AccountPage() {
                   Member since {formatDate(account.cfEnrolledAt || account.createdAt)}
                 </span>
               </div>
-              <a
-                href="https://academy.fearlessinfluencer.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex"
-              >
-                <Button variant="outline" size="sm" data-testid="link-manage-membership">
-                  Manage on ClickFunnels
-                  <ExternalLink className="h-3 w-3 ml-2" />
-                </Button>
-              </a>
             </div>
             {!isMember && (
               <p className="text-sm text-muted-foreground">
