@@ -6,19 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import {
-  Flame, Video, Mail, FileText, Search,
-  TrendingUp, TrendingDown, ArrowRight,
+  Flame, Video, Mail, FileText,
+  TrendingUp, TrendingDown,
   ChevronRight, Inbox, Trophy, Target,
   Eye, BookOpen, Zap, Users, Lightbulb,
   Plus, Activity, Radar, ShieldCheck, AlertTriangle,
-  Sparkles, BarChart3, GitCompare, Briefcase, CalendarClock, CircleAlert,
+  Sparkles, GitCompare, Briefcase, CalendarClock,
+  ListChecks, CircleDot,
 } from "lucide-react";
 import type {
-  Session, DmoEntry, EmailAnalysis, SavedTopic, Script, Topic,
+  Session, DmoEntry, EmailAnalysis, Script,
   InsightsResponse, AnomalyEvent, PostmasterDomain, ProjectWithCounts,
+  ProjectTask,
 } from "@shared/schema";
 
-type SavedTopicWithTopic = SavedTopic & { topic: Topic };
+type OpenTask = ProjectTask & { projectName: string; projectColor: string };
 
 type AddressResponse = {
   token: string;
@@ -100,15 +102,15 @@ const ANOMALY_META: Record<AnomalyEvent["type"], { icon: React.ComponentType<{ c
 
 // ─── tiny presentational pieces ──────────────────────────────────────────────
 
-/** A vivid, bordered tile with a top accent gradient bar. The cornerstone of the new look. */
-function GradientTile({
+/** Calm tile — neutral card, single-color top accent rule. */
+function Tile({
   accent,
   children,
   href,
   testId,
   className = "",
 }: {
-  accent: string; // tailwind gradient classes like "from-violet-500 to-fuchsia-500"
+  accent: string; // single tone like "bg-indigo-500"
   children: React.ReactNode;
   href?: string;
   testId?: string;
@@ -119,45 +121,82 @@ function GradientTile({
       className={`relative overflow-hidden border-card-border bg-card transition-all hover-elevate ${href ? "cursor-pointer" : ""} ${className}`}
       data-testid={testId}
     >
-      {/* top accent bar */}
-      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${accent}`} />
-      {/* corner glow */}
-      <div className={`pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full bg-gradient-to-br ${accent} opacity-10 blur-2xl`} />
-      <CardContent className="relative pt-5 pb-5">{children}</CardContent>
+      <div className={`absolute inset-x-0 top-0 h-0.5 ${accent}`} />
+      <CardContent className="relative pt-5 pb-5 h-full">{children}</CardContent>
     </Card>
   );
   return href ? <Link href={href}>{card}</Link> : card;
 }
 
-function TileTitle({ icon: Icon, title, accent, badge }: { icon: React.ComponentType<{ className?: string }>; title: string; accent: string; badge?: React.ReactNode }) {
+function TileTitle({
+  icon: Icon,
+  title,
+  accent,
+  badge,
+  right,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  accent: string; // e.g. "text-indigo-500 bg-indigo-500/10"
+  badge?: React.ReactNode;
+  right?: React.ReactNode;
+}) {
   return (
     <div className="flex items-center gap-2">
-      <div className={`h-7 w-7 rounded-lg bg-gradient-to-br ${accent} flex items-center justify-center shadow-sm`}>
-        <Icon className="h-4 w-4 text-white" />
+      <div className={`h-7 w-7 rounded-lg flex items-center justify-center ${accent}`}>
+        <Icon className="h-4 w-4" />
       </div>
       <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
       {badge}
+      {right && <div className="ml-auto">{right}</div>}
     </div>
   );
 }
 
-function GradientNumber({ children, accent, className = "" }: { children: React.ReactNode; accent: string; className?: string }) {
+function StatChip({ value, label, tone = "neutral" }: { value: number | string; label: string; tone?: "neutral" | "rose" | "amber" | "indigo" }) {
+  const toneClasses =
+    tone === "rose"   ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 ring-rose-500/20" :
+    tone === "amber"  ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/20" :
+    tone === "indigo" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 ring-indigo-500/20" :
+    "bg-muted text-foreground ring-border";
   return (
-    <span
-      className={`bg-gradient-to-br ${accent} bg-clip-text text-transparent tabular-nums font-bold ${className}`}
-    >
-      {children}
-    </span>
+    <div className={`rounded-lg ring-1 px-2.5 py-1.5 ${toneClasses}`}>
+      <p className="text-lg font-bold tabular-nums leading-none">{value}</p>
+      <p className="text-[10px] uppercase tracking-wide font-medium opacity-80 mt-0.5">{label}</p>
+    </div>
   );
 }
 
-function MiniStat({ value, label, accent }: { value: number | string; label: string; accent: string }) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <GradientNumber accent={accent} className="text-2xl">{value}</GradientNumber>
-      <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{label}</span>
-    </div>
-  );
+// Date helpers shared with task bucketing.
+function dueLocal(due: Date): Date {
+  if (due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0) {
+    return new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
+  }
+  return due;
+}
+
+function bucketTask(t: OpenTask): "overdue" | "today" | "week" | "later" | "none" {
+  if (!t.dueDate) return "none";
+  const due = dueLocal(new Date(t.dueDate));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dayMs = 86400000;
+  if (due.toDateString() === today.toDateString()) return "today";
+  if (due.getTime() < today.getTime()) return "overdue";
+  if (due.getTime() - today.getTime() <= 7 * dayMs) return "week";
+  return "later";
+}
+
+function formatTaskDue(due: Date): string {
+  const d = dueLocal(due);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+  if (d.getTime() < today.getTime()) {
+    const daysOverdue = Math.round((today.getTime() - d.getTime()) / 86400000);
+    return `${daysOverdue}d overdue`;
+  }
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 // ─── main component ──────────────────────────────────────────────────────────
@@ -179,9 +218,6 @@ export default function DashboardPage() {
   const { data: emails = [] } = useQuery<EmailAnalysis[]>({
     queryKey: ["/api/inbox-analyzer/emails"],
   });
-  const { data: savedTopics = [] } = useQuery<SavedTopicWithTopic[]>({
-    queryKey: ["/api/topic-pulse/saved-topics"],
-  });
   const { data: scripts = [] } = useQuery<Script[]>({
     queryKey: ["/api/topic-pulse/scripts"],
   });
@@ -194,23 +230,22 @@ export default function DashboardPage() {
   const { data: address } = useQuery<AddressResponse>({
     queryKey: ["/api/inbox-analyzer/address"],
   });
+  const { data: projectsSummary } = useQuery<{
+    projects: ProjectWithCounts[];
+    totalActive: number;
+    totalOpenTasks: number;
+    totalDueThisWeek: number;
+    totalOverdue: number;
+  }>({ queryKey: ["/api/dashboard/projects"] });
+  const { data: openTasks = [] } = useQuery<OpenTask[]>({
+    queryKey: ["/api/projects/all-tasks"],
+  });
 
   // ── derived values ─────────────────────────────────────────────────────────
   const todayEntry = dmoToday?.entry ?? null;
   const todayPts = dmoTotalPts(todayEntry);
   const currentStreak = streak?.current ?? 0;
   const bestStreak = streak?.best ?? 0;
-
-  const scoredSessions = useMemo(
-    () => sessions.filter(s => s.scoreJson != null && s.scoreStatus === "final").slice(0, 10),
-    [sessions]
-  );
-  const avgVideoScore = useMemo(() => {
-    if (scoredSessions.length === 0) return null;
-    const total = scoredSessions.reduce((s, sess) => s + (sess.scoreJson?.totalScore ?? 0), 0);
-    return Math.round(total / scoredSessions.length);
-  }, [scoredSessions]);
-  const latestSession = sessions[0] ?? null;
 
   const scoredEmails = emails.filter(e => e.overallScore != null).slice(0, 10);
   const avgEmailScore = useMemo(() => {
@@ -243,7 +278,7 @@ export default function DashboardPage() {
     return { primary, total: entries.length, checkedAt: address?.lastPlacementCheckedAt ?? null };
   }, [address]);
 
-  // ── recent activity (now includes inbox-intel anomalies) ───────────────────
+  // ── recent activity ────────────────────────────────────────────────────────
   type ActivityItem = {
     id: string;
     icon: React.ReactNode;
@@ -256,7 +291,7 @@ export default function DashboardPage() {
 
   const recentActivity = useMemo<ActivityItem[]>(() => {
     const items: ActivityItem[] = [];
-    sessions.slice(0, 4).forEach(s => {
+    sessions.slice(0, 3).forEach(s => {
       items.push({
         id: `session-${s.id}`,
         icon: <Video className="h-3.5 w-3.5 text-rose-500" />,
@@ -304,59 +339,39 @@ export default function DashboardPage() {
     return items.sort((a, b) => b.ts.getTime() - a.ts.getTime()).slice(0, 7);
   }, [sessions, emails, scripts, insights]);
 
-  // ── header status message ──────────────────────────────────────────────────
+  // ── header KPIs ────────────────────────────────────────────────────────────
   const headerKpis = useMemo(() => {
     return [
-      {
-        label: "DMO points today",
-        value: `${todayPts}/25`,
-        accent: "from-amber-500 to-orange-500",
-      },
-      {
-        label: "Videos scored",
-        value: scoredSessions.length,
-        accent: "from-rose-500 to-red-500",
-      },
-      {
-        label: "Competitor emails this week",
-        value: insights?.totalEmails7d ?? 0,
-        accent: "from-violet-500 to-fuchsia-500",
-      },
-      {
-        label: "New alerts",
-        value: insights?.anomalies?.length ?? 0,
-        accent: "from-sky-500 to-cyan-500",
-      },
+      { label: "DMO points today",     value: `${todayPts}/25` },
+      { label: "Open tasks",           value: projectsSummary?.totalOpenTasks ?? 0 },
+      { label: "Competitor emails 7d", value: insights?.totalEmails7d ?? 0 },
     ];
-  }, [todayPts, scoredSessions.length, insights]);
+  }, [todayPts, projectsSummary, insights]);
 
   // ── render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex-1 overflow-auto bg-background">
-      {/* ── Hero gradient header ─────────────────────────────────────────── */}
+      {/* ── Hero header — single calm gradient ───────────────────────────── */}
       <div className="relative overflow-hidden border-b border-border">
-        {/* layered gradient backdrop */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(230_75%_10%)] via-[hsl(230_60%_18%)] to-[hsl(203_54%_30%)]" />
-        <div className="absolute -top-24 -left-24 h-96 w-96 rounded-full bg-fuchsia-500/20 blur-3xl" />
-        <div className="absolute -bottom-32 -right-16 h-96 w-96 rounded-full bg-sky-500/25 blur-3xl" />
-        <div className="absolute top-1/3 right-1/3 h-64 w-64 rounded-full bg-rose-500/20 blur-3xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(230_70%_12%)] via-[hsl(230_55%_20%)] to-[hsl(230_45%_28%)]" />
+        <div className="absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-indigo-500/15 blur-3xl" />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div className="text-white">
               <p className="text-xs font-medium tracking-wide uppercase text-white/70">{todayLabel()}</p>
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mt-1" data-testid="text-dashboard-title">
                 {firstName ? `${timeGreeting()}, ${firstName}` : timeGreeting()}
               </h1>
-              <p className="text-white/80 mt-1 text-sm">
-                Your private marketing command center — every tool, one screen.
+              <p className="text-white/70 mt-1 text-sm">
+                Your private marketing command center.
               </p>
             </div>
             <div className="flex gap-2 shrink-0">
-              <Link href="/video-score-upload">
-                <Button size="sm" className="bg-white text-[hsl(230_75%_10%)] hover:bg-white/90 shadow-lg" data-testid="button-new-session">
-                  <Video className="h-4 w-4 mr-1.5" />
-                  Score Video
+              <Link href="/projects">
+                <Button size="sm" className="bg-white text-[hsl(230_70%_12%)] hover:bg-white/90 shadow-lg" data-testid="button-open-projects">
+                  <Briefcase className="h-4 w-4 mr-1.5" />
+                  Open Projects
                 </Button>
               </Link>
               <Link href="/dmo-tracker">
@@ -369,18 +384,17 @@ export default function DashboardPage() {
           </div>
 
           {/* KPI ribbon */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
             {headerKpis.map((k, i) => (
               <div
                 key={i}
-                className="rounded-xl bg-white/10 backdrop-blur-md ring-1 ring-white/15 px-4 py-3"
+                className="rounded-xl bg-white/8 backdrop-blur-md ring-1 ring-white/15 px-4 py-3"
                 data-testid={`kpi-${i}`}
               >
                 <p className="text-[10px] uppercase tracking-wider text-white/70 font-medium">{k.label}</p>
-                <p className={`mt-1 text-2xl font-bold tabular-nums text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.25)]`}>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-white">
                   {k.value}
                 </p>
-                <div className={`mt-1 h-0.5 w-8 rounded-full bg-gradient-to-r ${k.accent}`} />
               </div>
             ))}
           </div>
@@ -389,15 +403,29 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
 
-        {/* ── Row 1 — Daily signals (3 vivid tiles) ────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* ── Row 1 — Projects (hero) + Email Health ──────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <ProjectsHero
+            summary={projectsSummary}
+            tasks={openTasks}
+          />
+          <EmailHealthTile
+            reputation={reputation}
+            primaryDomain={primaryDomain}
+            repTone={repTone}
+            placement={placement}
+          />
+        </div>
+
+        {/* ── Row 2 — DMO Streak + Inbox Analyzer + Competitor Pulse ─────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
           {/* DMO Streak */}
-          <GradientTile accent="from-amber-500 to-orange-600" href="/dmo-tracker" testId="card-dmo-streak">
-            <TileTitle icon={Flame} title="DMO Streak" accent="from-amber-500 to-orange-600" />
+          <Tile accent="bg-amber-500" href="/dmo-tracker" testId="card-dmo-streak">
+            <TileTitle icon={Flame} title="DMO Streak" accent="bg-amber-500/10 text-amber-600 dark:text-amber-400" />
             <div className="mt-4 flex items-end gap-2">
-              <GradientNumber accent="from-amber-500 to-orange-600" className="text-5xl leading-none">{currentStreak}</GradientNumber>
-              <span className="text-muted-foreground text-sm mb-1.5">days</span>
+              <span className="text-4xl font-bold tabular-nums leading-none">{currentStreak}</span>
+              <span className="text-muted-foreground text-sm mb-1">days</span>
               {bestStreak > 0 && (
                 <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
                   <Trophy className="h-3 w-3" /> Best {bestStreak}
@@ -422,52 +450,21 @@ export default function DashboardPage() {
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">{todayPts === 0 ? "Log activities to keep your streak alive." : `${25 - todayPts} pts left for a perfect day.`}</p>
             )}
-          </GradientTile>
-
-          {/* Video Practice */}
-          <GradientTile accent="from-rose-500 to-red-600" href="/video-score" testId="card-video-stats">
-            <TileTitle icon={Video} title="Video Practice" accent="from-rose-500 to-red-600" />
-            <div className="mt-4 flex items-end gap-2">
-              <GradientNumber accent="from-rose-500 to-red-600" className="text-5xl leading-none">{sessions.length}</GradientNumber>
-              <span className="text-muted-foreground text-sm mb-1.5">sessions</span>
-              {avgVideoScore != null && (
-                <span className={`ml-auto text-xs font-bold mb-1.5 px-2 py-0.5 rounded-full bg-muted ${scoreColor(avgVideoScore)}`}>
-                  avg {avgVideoScore}
-                </span>
-              )}
-            </div>
-            <div className="mt-4 min-h-[34px]">
-              {latestSession ? (
-                <>
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Latest</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <p className="text-sm font-medium truncate flex-1">{latestSession.title || "Untitled session"}</p>
-                    {latestSession.scoreStatus === "final" && latestSession.scoreJson && (
-                      <span className={`text-xs font-bold shrink-0 ${scoreColor(latestSession.scoreJson.totalScore)}`}>
-                        {latestSession.scoreJson.totalScore}
-                      </span>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">No sessions yet — record your first video.</p>
-              )}
-            </div>
-          </GradientTile>
+          </Tile>
 
           {/* Inbox Analyzer */}
-          <GradientTile accent="from-sky-500 to-blue-600" href="/email-tools/inbox-analyzer" testId="card-inbox-health">
+          <Tile accent="bg-sky-500" href="/email-tools/inbox-analyzer" testId="card-inbox-analyzer">
             <TileTitle
               icon={Mail}
               title="Inbox Analyzer"
-              accent="from-sky-500 to-blue-600"
-              badge={hasNewEmail ? <Badge className="h-4 px-1.5 text-[10px] leading-none bg-sky-500 hover:bg-sky-500 text-white border-0 rounded-full ml-auto">New</Badge> : undefined}
+              accent="bg-sky-500/10 text-sky-600 dark:text-sky-400"
+              badge={hasNewEmail ? <Badge className="h-4 px-1.5 text-[10px] leading-none bg-sky-500 hover:bg-sky-500 text-white border-0 rounded-full">New</Badge> : undefined}
             />
             <div className="mt-4 flex items-end gap-2">
-              <GradientNumber accent="from-sky-500 to-blue-600" className="text-5xl leading-none">{emails.length}</GradientNumber>
-              <span className="text-muted-foreground text-sm mb-1.5">analyzed</span>
+              <span className="text-4xl font-bold tabular-nums leading-none">{emails.length}</span>
+              <span className="text-muted-foreground text-sm mb-1">analyzed</span>
               {avgEmailScore != null && (
-                <span className={`ml-auto text-xs font-bold mb-1.5 px-2 py-0.5 rounded-full bg-muted ${scoreColor(avgEmailScore)}`}>
+                <span className={`ml-auto text-xs font-bold mb-1 px-2 py-0.5 rounded-full bg-muted ${scoreColor(avgEmailScore)}`}>
                   avg {avgEmailScore}
                 </span>
               )}
@@ -489,52 +486,42 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground">No emails yet — send a test to your inbox address.</p>
               )}
             </div>
-          </GradientTile>
-        </div>
+          </Tile>
 
-        {/* ── Row 2 — Competitor Pulse + Email Health ──────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-          {/* Competitor Pulse (Inbox Intel) */}
-          <GradientTile accent="from-violet-500 via-fuchsia-500 to-pink-500" testId="card-competitor-pulse">
-            <div className="flex items-start justify-between gap-2">
-              <TileTitle icon={Radar} title="Competitor Pulse" accent="from-violet-500 to-fuchsia-500" />
-              <Link href="/email-tools/inbox-intel">
-                <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors" data-testid="link-pulse-open">
+          {/* Competitor Pulse */}
+          <Tile accent="bg-violet-500" testId="card-competitor-pulse">
+            <TileTitle
+              icon={Radar}
+              title="Competitor Pulse"
+              accent="bg-violet-500/10 text-violet-600 dark:text-violet-400"
+              right={
+                <Link
+                  href="/email-tools/inbox-intel"
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors"
+                  data-testid="link-pulse-open"
+                >
                   Open <ChevronRight className="h-3 w-3" />
-                </button>
-              </Link>
+                </Link>
+              }
+            />
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <StatChip value={insights?.activeTrackerCount ?? 0} label="Active" />
+              <StatChip value={insights?.totalEmails7d ?? 0} label="7-day" />
+              <StatChip value={insights?.totalEmails30d ?? 0} label="30-day" />
             </div>
-
-            {/* topline counts */}
-            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-              <MiniStat value={insights?.activeTrackerCount ?? 0} label="Active" accent="from-violet-500 to-fuchsia-500" />
-              <MiniStat value={insights?.totalEmails7d ?? 0} label="7-day" accent="from-fuchsia-500 to-pink-500" />
-              <MiniStat value={insights?.totalEmails30d ?? 0} label="30-day" accent="from-pink-500 to-rose-500" />
-              <Link href="/email-tools/inbox-intel/compare" className="ml-auto">
-                <Button size="sm" variant="outline" className="h-7 text-xs" data-testid="button-compare">
-                  <GitCompare className="h-3 w-3 mr-1" /> Compare
-                </Button>
-              </Link>
-            </div>
-
-            {/* anomalies */}
             <div className="mt-4">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Alerts</p>
               {insights?.anomalies && insights.anomalies.length > 0 ? (
                 <div className="space-y-1.5">
-                  {insights.anomalies.slice(0, 3).map(a => {
+                  {insights.anomalies.slice(0, 2).map(a => {
                     const meta = ANOMALY_META[a.type];
                     return (
                       <Link key={a.id} href={`/email-tools/inbox-intel/${a.trackerId}`}>
-                        <div className={`flex items-center gap-2.5 rounded-lg p-2 ring-1 ${meta.bg} ${meta.ring} hover:brightness-105 transition-all cursor-pointer`} data-testid={`anomaly-${a.id}`}>
-                          <meta.icon className={`h-4 w-4 shrink-0 ${meta.color}`} />
+                        <div className={`flex items-center gap-2 rounded-md p-1.5 ring-1 ${meta.bg} ${meta.ring} hover:brightness-105 transition-all cursor-pointer`} data-testid={`anomaly-${a.id}`}>
+                          <meta.icon className={`h-3.5 w-3.5 shrink-0 ${meta.color}`} />
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold truncate">{a.trackerName}</span>
-                              <span className={`text-[10px] uppercase tracking-wide font-bold ${meta.color}`}>{meta.label}</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate">{a.message}</p>
+                            <p className="text-xs font-semibold truncate">{a.trackerName}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{meta.label}</p>
                           </div>
                         </div>
                       </Link>
@@ -542,285 +529,358 @@ export default function DashboardPage() {
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground py-2">All quiet — no anomalies detected this week.</p>
+                <p className="text-xs text-muted-foreground py-1">All quiet this week.</p>
               )}
             </div>
-
-            {/* leaderboard */}
-            {insights?.leaderboard && insights.leaderboard.length > 0 && (
-              <div className="mt-4">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Top sends · last 7 days</p>
-                <div className="space-y-1">
-                  {insights.leaderboard.slice(0, 3).map((l, idx) => (
-                    <Link key={l.trackerId} href={`/email-tools/inbox-intel/${l.trackerId}`}>
-                      <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer" data-testid={`leader-${idx}`}>
-                        <span className={`h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center ${idx === 0 ? "bg-gradient-to-br from-amber-400 to-yellow-600 text-white" : idx === 1 ? "bg-muted text-foreground" : "bg-muted/60 text-muted-foreground"}`}>{idx + 1}</span>
-                        <span className="text-sm font-medium truncate flex-1">{l.trackerName}</span>
-                        <span className="text-sm font-bold tabular-nums">{l.count7d}</span>
-                        {l.pctChange != null && (
-                          <span className={`text-[11px] font-medium tabular-nums w-12 text-right ${l.pctChange > 0 ? "text-emerald-500" : l.pctChange < 0 ? "text-rose-500" : "text-muted-foreground"}`}>
-                            {l.pctChange > 0 ? "+" : ""}{l.pctChange}%
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {(insights?.totalTrackers ?? 0) === 0 && (
-              <div className="mt-4 rounded-lg border border-dashed border-violet-500/30 bg-violet-500/5 p-3 text-center">
-                <p className="text-xs text-muted-foreground mb-2">No trackers yet — set one up to start watching the competition.</p>
+              <div className="mt-3 rounded-md border border-dashed border-border p-2 text-center">
                 <Link href="/email-tools/inbox-intel">
-                  <Button size="sm" variant="outline" data-testid="button-create-tracker">
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Track a competitor
+                  <Button size="sm" variant="outline" className="h-7 text-xs" data-testid="button-create-tracker">
+                    <Plus className="h-3 w-3 mr-1" /> Track a competitor
                   </Button>
                 </Link>
               </div>
             )}
-          </GradientTile>
-
-          {/* Email Health (Reputation + Placement) */}
-          <GradientTile accent="from-emerald-500 via-teal-500 to-cyan-500" testId="card-email-health">
-            <div className="flex items-start justify-between gap-2">
-              <TileTitle icon={ShieldCheck} title="Email Health" accent="from-emerald-500 to-teal-500" />
-            </div>
-
-            {/* Sender Reputation block */}
-            <div className="mt-4 rounded-lg border border-border/60 bg-background/40 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${repTone.dot} ${reputation?.connected ? "animate-pulse" : ""}`} />
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Sender Reputation</p>
-                </div>
-                <Link href="/email-tools/sender-reputation">
-                  <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">
-                    Open <ChevronRight className="h-3 w-3" />
-                  </button>
-                </Link>
-              </div>
-              {reputation?.connected ? (
-                <div className="mt-2 flex items-end justify-between gap-3">
-                  <div>
-                    <p className={`text-2xl font-bold ${repTone.color}`}>{repTone.label}</p>
-                    {primaryDomain?.domainName && (
-                      <p className="text-xs text-muted-foreground truncate max-w-[200px]">{primaryDomain.domainName}</p>
-                    )}
-                  </div>
-                  <div className="text-right text-[11px] text-muted-foreground">
-                    {reputation.lastSyncedAt ? `Synced ${timeAgo(new Date(reputation.lastSyncedAt))}` : "Awaiting sync"}
-                    {(reputation.domains?.length ?? 0) > 1 && (
-                      <p className="mt-0.5">{reputation.domains.length} domains</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">Not connected. Link Google Postmaster to track domain trust.</p>
-                  <Link href="/email-tools/sender-reputation">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" data-testid="button-connect-postmaster">
-                      Connect
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {/* Placement block */}
-            <div className="mt-3 rounded-lg border border-border/60 bg-background/40 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Inbox className="h-3.5 w-3.5 text-cyan-500" />
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Inbox Placement</p>
-                </div>
-                <Link href="/email-tools/inbox-analyzer">
-                  <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">
-                    Open <ChevronRight className="h-3 w-3" />
-                  </button>
-                </Link>
-              </div>
-              {placement ? (
-                <div className="mt-2">
-                  <div className="flex items-end justify-between gap-3">
-                    <div>
-                      <p className="text-2xl font-bold tabular-nums">
-                        <GradientNumber accent="from-emerald-500 to-cyan-500">{placement.primary}</GradientNumber>
-                        <span className="text-muted-foreground text-base font-medium"> / {placement.total}</span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">landed in primary</p>
-                    </div>
-                    <div className="text-right text-[11px] text-muted-foreground">
-                      {placement.checkedAt ? `Tested ${timeAgo(new Date(placement.checkedAt))}` : "Never tested"}
-                    </div>
-                  </div>
-                  {/* mini bar */}
-                  <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all"
-                      style={{ width: `${placement.total > 0 ? (placement.primary / placement.total) * 100 : 0}%` }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-2">No placement test yet — run one from the Inbox Analyzer.</p>
-              )}
-            </div>
-          </GradientTile>
+          </Tile>
         </div>
 
-        {/* ── Row 3 — Recent Activity + Quick Actions ──────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-          {/* Recent Activity */}
-          <GradientTile accent="from-slate-400 to-slate-600" className="lg:col-span-2" testId="card-recent-activity">
-            <div className="flex items-center justify-between">
-              <TileTitle icon={Activity} title="Recent Activity" accent="from-slate-500 to-slate-700" />
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Last 7 events</span>
-            </div>
-            <div className="mt-3">
-              {recentActivity.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-center gap-2">
-                  <Sparkles className="h-6 w-6 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">No activity yet — dive into a tool to get started.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-border/50">
-                  {recentActivity.map(item => (
-                    <Link key={item.id} href={item.href}>
-                      <div className="flex items-center gap-3 py-2.5 px-1 hover:bg-muted/30 rounded transition-colors cursor-pointer group" data-testid={`activity-${item.id}`}>
-                        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                          {item.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{item.label}</p>
-                          <p className="text-xs text-muted-foreground truncate">{item.sub}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {item.score != null && (
-                            <span className={`text-xs font-bold tabular-nums ${scoreColor(item.score)}`}>{item.score}</span>
-                          )}
-                          <span className="text-xs text-muted-foreground tabular-nums">{timeAgo(item.ts)}</span>
-                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
+        {/* ── Row 3 — Recent Activity (full width) ─────────────────────────── */}
+        <Tile accent="bg-slate-400" testId="card-recent-activity">
+          <div className="flex items-center justify-between">
+            <TileTitle icon={Activity} title="Recent Activity" accent="bg-muted text-muted-foreground" />
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Last 7 events</span>
+          </div>
+          <div className="mt-3">
+            {recentActivity.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center gap-2">
+                <Sparkles className="h-6 w-6 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No activity yet — dive into a tool to get started.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {recentActivity.map(item => (
+                  <Link key={item.id} href={item.href}>
+                    <div className="flex items-center gap-3 py-2.5 px-1 hover:bg-muted/30 rounded transition-colors cursor-pointer group" data-testid={`activity-${item.id}`}>
+                      <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                        {item.icon}
                       </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </GradientTile>
-
-          {/* Projects */}
-          <ProjectsWidget />
-        </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.label}</p>
+                        <p className="text-xs text-muted-foreground truncate">{item.sub}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {item.score != null && (
+                          <span className={`text-xs font-bold tabular-nums ${scoreColor(item.score)}`}>{item.score}</span>
+                        )}
+                        <span className="text-xs text-muted-foreground tabular-nums">{timeAgo(item.ts)}</span>
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </Tile>
 
       </div>
     </div>
   );
 }
 
-// ─── Projects widget ──────────────────────────────────────────────────────────
-function ProjectsWidget() {
-  const { data } = useQuery<{
+// ─── Projects hero (large, lists tasks front and center) ─────────────────────
+function ProjectsHero({
+  summary,
+  tasks,
+}: {
+  summary: {
     projects: ProjectWithCounts[];
     totalActive: number;
     totalOpenTasks: number;
     totalDueThisWeek: number;
     totalOverdue: number;
-  }>({ queryKey: ["/api/dashboard/projects"] });
+  } | undefined;
+  tasks: OpenTask[];
+}) {
+  const s = summary ?? { projects: [], totalActive: 0, totalOpenTasks: 0, totalDueThisWeek: 0, totalOverdue: 0 };
 
-  const summary = data ?? { projects: [], totalActive: 0, totalOpenTasks: 0, totalDueThisWeek: 0, totalOverdue: 0 };
+  // Build prioritized "Up Next" list: overdue first, then today, then this week, then later, then no due date.
+  const grouped = useMemo(() => {
+    const overdue: OpenTask[] = [];
+    const today: OpenTask[] = [];
+    const week: OpenTask[] = [];
+    const later: OpenTask[] = [];
+    const none: OpenTask[] = [];
+    for (const t of tasks) {
+      const b = bucketTask(t);
+      if (b === "overdue") overdue.push(t);
+      else if (b === "today") today.push(t);
+      else if (b === "week") week.push(t);
+      else if (b === "later") later.push(t);
+      else none.push(t);
+    }
+    // Limit to ~8 total, prioritizing earlier groups.
+    const out: Array<{ section: string; tone: string; items: OpenTask[] }> = [];
+    let remaining = 8;
+    const push = (section: string, tone: string, items: OpenTask[]) => {
+      if (items.length === 0 || remaining <= 0) return;
+      const take = items.slice(0, remaining);
+      out.push({ section, tone, items: take });
+      remaining -= take.length;
+    };
+    push("Overdue", "text-rose-600 dark:text-rose-400", overdue);
+    push("Today", "text-amber-600 dark:text-amber-400", today);
+    push("This week", "text-sky-600 dark:text-sky-400", week);
+    push("Later", "text-muted-foreground", later);
+    push("No due date", "text-muted-foreground", none);
+    return out;
+  }, [tasks]);
+
+  const hasAnyTasks = grouped.some(g => g.items.length > 0);
+  const hasAnyProjects = s.totalActive > 0;
 
   return (
-    <GradientTile accent="from-indigo-500 via-violet-500 to-purple-600" testId="card-projects">
-      <div className="flex items-center justify-between">
-        <TileTitle icon={Briefcase} title="Projects" accent="from-indigo-500 to-violet-600" />
-        <Link href="/projects">
-          <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors" data-testid="link-projects-open">
-            Open <ChevronRight className="h-3 w-3" />
-          </button>
-        </Link>
-      </div>
-
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <MiniStat value={summary.totalActive} label="Active" accent="from-indigo-500 to-violet-500" />
-        <MiniStat value={summary.totalOpenTasks} label="Open" accent="from-violet-500 to-purple-500" />
-        <MiniStat value={summary.totalDueThisWeek} label="Due 7d" accent="from-purple-500 to-fuchsia-500" />
-      </div>
-
-      {summary.totalOverdue > 0 && (
-        <div className="mt-3 flex items-center gap-1.5 rounded-md bg-rose-500/10 ring-1 ring-rose-500/30 px-2 py-1.5">
-          <CircleAlert className="h-3.5 w-3.5 text-rose-500" />
-          <p className="text-xs font-medium text-rose-600 dark:text-rose-400">
-            {summary.totalOverdue} overdue task{summary.totalOverdue === 1 ? "" : "s"}
-          </p>
+    <Card
+      className="relative overflow-hidden border-card-border bg-card lg:col-span-2 hover-elevate transition-all"
+      data-testid="card-projects-hero"
+    >
+      <div className="absolute inset-x-0 top-0 h-0.5 bg-indigo-500" />
+      <CardContent className="relative pt-5 pb-5">
+        <div className="flex items-center justify-between gap-2">
+          <TileTitle icon={Briefcase} title="Projects" accent="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" />
+          <Link
+            href="/projects"
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors"
+            data-testid="link-projects-open"
+          >
+            Open all <ChevronRight className="h-3 w-3" />
+          </Link>
         </div>
-      )}
 
-      <div className="mt-3">
-        {summary.projects.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-violet-500/30 bg-violet-500/5 p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-2">No projects yet — start organizing your work.</p>
-            <Link href="/projects">
-              <Button size="sm" variant="outline" data-testid="button-create-first-project">
-                <Plus className="h-3.5 w-3.5 mr-1" /> New Project
-              </Button>
-            </Link>
+        {/* Summary chips */}
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <StatChip value={s.totalActive}      label="Projects" tone="indigo" />
+          <StatChip value={s.totalOpenTasks}   label="Open tasks" />
+          <StatChip value={s.totalDueThisWeek} label="Due 7d"   tone={s.totalDueThisWeek > 0 ? "amber" : "neutral"} />
+          <StatChip value={s.totalOverdue}     label="Overdue"  tone={s.totalOverdue > 0 ? "rose" : "neutral"} />
+        </div>
+
+        {/* Up Next task list */}
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold flex items-center gap-1.5">
+              <ListChecks className="h-3.5 w-3.5" /> Up Next
+            </p>
+            {hasAnyTasks && (
+              <Link
+                href="/projects"
+                className="text-[11px] text-muted-foreground hover:text-foreground"
+                data-testid="link-tasks-list"
+              >
+                See all tasks
+              </Link>
+            )}
           </div>
-        ) : (
-          <div className="space-y-1.5">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">Top projects</p>
-            {summary.projects.map(p => {
-              const pct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
-              return (
-                <Link key={p.id} href={`/projects/${p.id}`}>
-                  <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40 transition-colors cursor-pointer group" data-testid={`dashboard-project-${p.id}`}>
-                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: p.color }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{p.name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className="h-1 flex-1 rounded-full bg-muted overflow-hidden max-w-[100px]">
-                          <div className="h-full transition-all" style={{ width: `${pct}%`, background: p.color }} />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
-                          {p.openTasks} open{p.dueThisWeek > 0 && ` · ${p.dueThisWeek} due`}
-                        </span>
+
+          {!hasAnyTasks ? (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center" data-testid="empty-projects-tasks">
+              {hasAnyProjects ? (
+                <>
+                  <CircleDot className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-sm font-medium">No open tasks</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-3">All clear — add tasks to your projects to see them here.</p>
+                  <Link href="/projects">
+                    <Button size="sm" variant="outline" data-testid="button-open-projects-empty">
+                      Browse projects
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Briefcase className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-sm font-medium">No projects yet</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-3">Create your first project to start organizing your work.</p>
+                  <Link href="/projects">
+                    <Button size="sm" data-testid="button-create-first-project">
+                      <Plus className="h-3.5 w-3.5 mr-1" /> New Project
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border overflow-hidden bg-background/40">
+              {grouped.map((g, gi) => (
+                <div key={g.section}>
+                  <div className={`px-3 py-1.5 text-[10px] uppercase tracking-wide font-bold border-b border-border bg-muted/30 ${g.tone}`}>
+                    {g.section} · {g.items.length}
+                  </div>
+                  <ul className={`${gi < grouped.length - 1 ? "border-b border-border" : ""}`}>
+                    {g.items.map(t => {
+                      const due = t.dueDate ? new Date(t.dueDate) : null;
+                      const b = bucketTask(t);
+                      const dueClasses =
+                        b === "overdue" ? "text-rose-700 dark:text-rose-300 bg-rose-500/10" :
+                        b === "today"   ? "text-amber-700 dark:text-amber-300 bg-amber-500/10" :
+                        b === "week"    ? "text-sky-700 dark:text-sky-300 bg-sky-500/10" :
+                        "text-muted-foreground bg-muted";
+                      return (
+                        <li key={t.id} className="border-b border-border last:border-b-0">
+                          <Link href={`/projects/${t.projectId}`}>
+                            <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/40 transition-colors group" data-testid={`hero-task-${t.id}`}>
+                              <CircleDot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{t.title}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: t.projectColor }} aria-hidden="true" />
+                                  <p className="text-[11px] text-muted-foreground truncate">{t.projectName}</p>
+                                </div>
+                              </div>
+                              {due && (
+                                <span className={`text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 rounded shrink-0 ${dueClasses}`}>
+                                  <CalendarClock className="h-2.5 w-2.5 inline mr-0.5" />
+                                  {formatTaskDue(due)}
+                                </span>
+                              )}
+                              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                            </div>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Top projects strip */}
+        {s.projects.length > 0 && (
+          <div className="mt-4">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Top projects</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {s.projects.slice(0, 3).map(p => {
+                const pct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
+                return (
+                  <Link key={p.id} href={`/projects/${p.id}`}>
+                    <div className="rounded-md border border-border p-2.5 hover:bg-muted/40 transition-colors cursor-pointer group" data-testid={`hero-project-${p.id}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ background: p.color }} />
+                        <p className="text-sm font-medium truncate flex-1">{p.name}</p>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">{p.openTasks} open</span>
+                      </div>
+                      <div className="mt-2 h-1 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full transition-all" style={{ width: `${pct}%`, background: p.color }} />
                       </div>
                     </div>
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </Link>
-              );
-            })}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         )}
-      </div>
-    </GradientTile>
+      </CardContent>
+    </Card>
   );
 }
 
-// ─── small button row used inside Quick Actions ───────────────────────────────
-function QuickAction({
-  href, icon: Icon, label, iconClass, badge, testId,
+// ─── Email Health (Reputation + Placement) ───────────────────────────────────
+function EmailHealthTile({
+  reputation,
+  primaryDomain,
+  repTone,
+  placement,
 }: {
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  iconClass: string;
-  badge?: string;
-  testId?: string;
+  reputation: ReputationStatus | undefined;
+  primaryDomain: PostmasterDomain | null;
+  repTone: ReturnType<typeof reputationTone>;
+  placement: { primary: number; total: number; checkedAt: string | null } | null;
 }) {
   return (
-    <Link href={href} className="block">
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-background/40 px-3 py-2 hover-elevate cursor-pointer group" data-testid={testId}>
-        <Icon className={`h-4 w-4 ${iconClass}`} />
-        <span className="text-sm font-medium flex-1">{label}</span>
-        {badge && (
-          <span className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{badge}</span>
+    <Tile accent="bg-emerald-500" testId="card-email-health">
+      <TileTitle icon={ShieldCheck} title="Email Health" accent="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" />
+
+      {/* Sender Reputation */}
+      <div className="mt-4 rounded-lg border border-border bg-background/40 p-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${repTone.dot} ${reputation?.connected ? "animate-pulse" : ""}`} />
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Sender Reputation</p>
+          </div>
+          <Link
+            href="/email-tools/sender-reputation"
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+          >
+            Open <ChevronRight className="h-3 w-3" />
+          </Link>
+        </div>
+        {reputation?.connected ? (
+          <div className="mt-2 flex items-end justify-between gap-3">
+            <div>
+              <p className={`text-2xl font-bold ${repTone.color}`}>{repTone.label}</p>
+              {primaryDomain?.domainName && (
+                <p className="text-xs text-muted-foreground truncate max-w-[200px]">{primaryDomain.domainName}</p>
+              )}
+            </div>
+            <div className="text-right text-[11px] text-muted-foreground">
+              {reputation.lastSyncedAt ? `Synced ${timeAgo(new Date(reputation.lastSyncedAt))}` : "Awaiting sync"}
+              {(reputation.domains?.length ?? 0) > 1 && (
+                <p className="mt-0.5">{reputation.domains.length} domains</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">Not connected. Link Google Postmaster.</p>
+            <Link href="/email-tools/sender-reputation">
+              <Button size="sm" variant="outline" className="h-7 text-xs" data-testid="button-connect-postmaster">
+                Connect
+              </Button>
+            </Link>
+          </div>
         )}
-        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
-    </Link>
+
+      {/* Placement */}
+      <div className="mt-3 rounded-lg border border-border bg-background/40 p-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Inbox className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Inbox Placement</p>
+          </div>
+          <Link
+            href="/email-tools/inbox-analyzer"
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+          >
+            Open <ChevronRight className="h-3 w-3" />
+          </Link>
+        </div>
+        {placement ? (
+          <div className="mt-2">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-2xl font-bold tabular-nums">
+                  <span className="text-emerald-600 dark:text-emerald-400">{placement.primary}</span>
+                  <span className="text-muted-foreground text-base font-medium"> / {placement.total}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">landed in primary</p>
+              </div>
+              <div className="text-right text-[11px] text-muted-foreground">
+                {placement.checkedAt ? `Tested ${timeAgo(new Date(placement.checkedAt))}` : "Never tested"}
+              </div>
+            </div>
+            <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-emerald-500 transition-all"
+                style={{ width: `${placement.total > 0 ? (placement.primary / placement.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground mt-2">No placement test yet — run one from the Inbox Analyzer.</p>
+        )}
+      </div>
+    </Tile>
   );
 }
