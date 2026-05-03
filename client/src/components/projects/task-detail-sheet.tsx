@@ -214,7 +214,7 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
                   )}
                   {dueDate && (
                     <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
-                      <CalendarIcon className="h-2.5 w-2.5 mr-1" /> {dueDate.toLocaleDateString()}
+                      <CalendarIcon className="h-2.5 w-2.5 mr-1" /> {dueDate.toLocaleDateString()} · {dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                     </Badge>
                   )}
                   {subtasks.length > 0 && (
@@ -255,14 +255,56 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="mt-1 h-8 w-full justify-start text-xs font-normal" data-testid="button-due-date">
                     <CalendarIcon className="h-3 w-3 mr-1.5 shrink-0" />
-                    <span className="truncate">{dueDate ? dueDate.toLocaleDateString() : "None"}</span>
+                    <span className="truncate">
+                      {dueDate
+                        ? `${dueDate.toLocaleDateString()} · ${dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                        : "None"}
+                    </span>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-auto p-0">
-                  <Calendar mode="single" selected={dueDate ?? undefined} onSelect={(d) => { setDueDate(d ?? null); updateMutation.mutate({ dueDate: d ? d.toISOString() : null }); }} />
+                  <Calendar
+                    mode="single"
+                    selected={dueDate ?? undefined}
+                    onSelect={(d) => {
+                      if (!d) {
+                        setDueDate(null);
+                        updateMutation.mutate({ dueDate: null });
+                        return;
+                      }
+                      const next = new Date(d);
+                      if (dueDate) {
+                        next.setHours(dueDate.getHours(), dueDate.getMinutes(), 0, 0);
+                      } else {
+                        next.setHours(9, 0, 0, 0);
+                      }
+                      setDueDate(next);
+                      updateMutation.mutate({ dueDate: next.toISOString() });
+                    }}
+                  />
+                  <div className="p-2 border-t flex items-center gap-2">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold shrink-0">Time</Label>
+                    <Input
+                      type="time"
+                      value={dueDate ? `${String(dueDate.getHours()).padStart(2, "0")}:${String(dueDate.getMinutes()).padStart(2, "0")}` : ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (!v) return;
+                        const [h, m] = v.split(":").map(Number);
+                        const base = dueDate ? new Date(dueDate) : new Date();
+                        if (!dueDate) base.setSeconds(0, 0);
+                        base.setHours(h, m, 0, 0);
+                        setDueDate(base);
+                        updateMutation.mutate({ dueDate: base.toISOString() });
+                      }}
+                      disabled={!dueDate}
+                      className="h-7 text-xs flex-1"
+                      data-testid="input-due-time"
+                    />
+                  </div>
                   {dueDate && (
                     <div className="p-2 border-t">
-                      <Button variant="ghost" size="sm" className="w-full" onClick={() => { setDueDate(null); updateMutation.mutate({ dueDate: null }); }}>Clear date</Button>
+                      <Button variant="ghost" size="sm" className="w-full" onClick={() => { setDueDate(null); updateMutation.mutate({ dueDate: null }); }} data-testid="button-clear-due-date">Clear date</Button>
                     </div>
                   )}
                 </PopoverContent>
