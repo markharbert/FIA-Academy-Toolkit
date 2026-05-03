@@ -60,6 +60,15 @@ import projTemplateEditor from "@assets/help/proj-template-editor.jpg";
 import projNewDialog from "@assets/help/proj-new-dialog.jpg";
 import projDashboard from "@assets/help/proj-dashboard.jpg";
 
+import dmoHub from "@assets/help/dmo-hub.jpg";
+import dmoCard from "@assets/help/dmo-card.jpg";
+import dmoCardRunning from "@assets/help/dmo-card-running.jpg";
+import dmoStats from "@assets/help/dmo-stats.jpg";
+import dmoChart from "@assets/help/dmo-chart.jpg";
+import dmoNotes from "@assets/help/dmo-notes.jpg";
+import dmoJournal from "@assets/help/dmo-journal.jpg";
+import dmoAiSummary from "@assets/help/dmo-ai-summary.jpg";
+
 import { AnnotatedScreenshot, type Annotation } from "@/components/annotated-screenshot";
 
 function ScreenshotIllustration({ src, alt }: { src: string; alt: string }) {
@@ -658,6 +667,136 @@ export function ProjectsDashboardIllustration() {
   );
 }
 
+export function DmoHubIllustration() {
+  const annotations: Annotation[] = [
+    { x: 18.2, y: 13.8, w: 9.9,  h: 4.0,  color: "red",    label: "1 Today / Journal tabs", labelPos: "outside-bottom" },
+    { x: 63.7, y: 9.4,  w: 14.5, h: 8.3,  color: "orange", label: "2 Points ring (X/25)",   labelPos: "bl" },
+    { x: 16.8, y: 21.7, w: 61.9, h: 6.1,  color: "amber",  label: "3 Streak banner",        labelPos: "tl" },
+    { x: 16.8, y: 57.2, w: 37.1, h: 18.3, color: "blue",   label: "4 Activity card",        labelPos: "tl" },
+    { x: 55.5, y: 57.2, w: 22.3, h: 18.3, color: "green",  label: "5 Today's stats",        labelPos: "tr" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={dmoHub}
+      alt="DMO Tracker Today tab showing the Daily Method of Operation hero with Today/Journal tab switcher and a 0/25 points ring on the right, an amber 11-day streak banner with the next milestone (3 more days to 2-Week Warrior), the Points History bar chart for the last 7 days, the first activity card (Vision & Meditation, idle, 30-min goal) on the left, and the Streak/Best/Total Days/Today stat cards on the right."
+      annotations={annotations}
+    />
+  );
+}
+
+export function DmoCardIllustration() {
+  const annotations: Annotation[] = [
+    { x: 3.7,  y: 10.8, w: 8.6,  h: 24.7, color: "red",    label: "1 Activity icon",         labelPos: "tl" },
+    { x: 15.3, y: 14.8, w: 37.5, h: 12.3, color: "orange", label: "2 Title + Goal badge",    labelPos: "tr" },
+    { x: 75.8, y: 14.8, w: 15.3, h: 17.2, color: "amber",  label: "3 Timer (live)",          labelPos: "tr" },
+    { x: 80.1, y: 41.9, w: 15.3, h: 14.8, color: "blue",   label: "4 Start the timer",       labelPos: "bl" },
+    { x: 3.7,  y: 76.4, w: 91.7, h: 14.7, color: "green",  label: "5 Reminder quote",        labelPos: "tl" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={dmoCard}
+      alt="A single DMO activity card for Vision & Meditation in idle state, showing the violet eye icon, the title with a 'Goal: 30 min' badge, the tagline 'Get quiet. Visualise where you're going.' and a one-line description, a large 00:00 timer on the right, a violet Start button, and a Jim Rohn quote at the bottom."
+      annotations={annotations}
+    />
+  );
+}
+
+export function DmoCardRunningIllustration() {
+  const annotations: Annotation[] = [
+    { x: 1.3,  y: 1.6,  w: 96.0, h: 81.6, color: "red",    label: "1 Pulsing ring",          labelPos: "tl" },
+    { x: 70.5, y: 17.6, w: 16.5, h: 17.6, color: "orange", label: "2 Live timer",            labelPos: "tr" },
+    { x: 70.5, y: 36.5, w: 16.5, h: 9.4,  color: "amber",  label: "3 Point dots (0–5)",      labelPos: "tr" },
+    { x: 70.5, y: 47.5, w: 24.5, h: 13.7, color: "blue",   label: "4 Pause + Done",          labelPos: "tl" },
+    { x: 1.6,  y: 73.7, w: 50.0, h: 11.0, color: "green",  label: "5 Timer running",         labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={dmoCardRunning}
+      alt="The Vision & Meditation card in its running state — wrapped in a thick pulsing violet ring, the timer ticking at 00:17, a row of five empty point dots underneath, a Pause icon button and a green Done button on the right, and a 'Timer running — stay focused!' indicator with a pulsing dot at the bottom along with '1% of goal' on the right."
+      annotations={annotations}
+    />
+  );
+}
+
+export function DmoStatsIllustration() {
+  const annotations: Annotation[] = [
+    { x: 1.3, y: 0.5,  w: 97.5, h: 25.0, color: "red",    label: "1 Streak / Best / Total / Today", labelPos: "tr" },
+    { x: 1.3, y: 28.0, w: 97.5, h: 39.0, color: "orange", label: "2 Milestones (earned vs. locked)", labelPos: "tr" },
+    { x: 1.3, y: 69.0, w: 97.5, h: 30.5, color: "blue",   label: "3 The 5-Step DMO recap",          labelPos: "tr" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={dmoStats}
+      alt="Right rail of the DMO Tracker showing a 2x2 grid of stat cards (Streak 12 days, Best 22 days, Total Days 34 logged, Today 0/25 pts), the Streak Milestones card with 3-Day Spark and 7-Day Flame earned (amber-tinted) and 2-Week Warrior through 90-Day Elite still locked (greyed), and The 5-Step DMO sidebar card listing Vision & Meditation, Personal Development, Expand Your Skills, Execution, and Connect with People with their time targets."
+      annotations={annotations}
+    />
+  );
+}
+
+export function DmoChartIllustration() {
+  const annotations: Annotation[] = [
+    { x: 1.5,  y: 4.0,  w: 30.0, h: 22.0, color: "red",    label: "1 Points History",     labelPos: "tr" },
+    { x: 82.2, y: 3.1,  w: 15.3, h: 12.5, color: "orange", label: "2 Day-range select",   labelPos: "bl" },
+    { x: 4.0,  y: 17.2, w: 89.1, h: 64.1, color: "amber",  label: "3 One bar per day",    labelPos: "tl" },
+    { x: 27.2, y: 85.9, w: 44.1, h: 7.9,  color: "blue",   label: "4 Color legend",       labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={dmoChart}
+      alt="The Points History bar chart showing seven daily bars from Apr 27 through May 3 — green bars for perfect 25-pt days and orange bars for strong 21-24 pt days. The 'Last 7 days' Select dropdown sits in the top-right of the card, and a small color legend (1-5 / 6-10 / 11-15 / 16-20 / 21-24 / 25 🎉) runs across the bottom."
+      annotations={annotations}
+    />
+  );
+}
+
+export function DmoNotesIllustration() {
+  const annotations: Annotation[] = [
+    { x: 2.6, y: 4.8,  w: 13.8, h: 9.5,  color: "red",    label: "1 Daily Notes label",  labelPos: "tr" },
+    { x: 2.6, y: 19.0, w: 94.8, h: 52.4, color: "orange", label: "2 Free-form journal",  labelPos: "tr" },
+    { x: 2.6, y: 76.2, w: 15.5, h: 16.7, color: "amber",  label: "3 Save Notes",         labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={dmoNotes}
+      alt="The Daily Notes section under the activity cards, showing a textarea filled with 'Wins: shipped the new homepage today. Struggle: lost an hour after lunch to email. Tomorrow: deep-work block 9–11am, then prospecting 2–3pm.' and a Save Notes button that appeared after typing."
+      annotations={annotations}
+    />
+  );
+}
+
+export function DmoJournalIllustration() {
+  const annotations: Annotation[] = [
+    { x: 23.4, y: 14.4, w: 4.7,  h: 2.8,  color: "red",    label: "1 Journal tab",          labelPos: "outside-bottom" },
+    { x: 16.8, y: 22.8, w: 61.3, h: 4.5,  color: "orange", label: "2 Filter & count",       labelPos: "tr" },
+    { x: 16.8, y: 27.8, w: 61.3, h: 6.0,  color: "amber",  label: "3 Month header",         labelPos: "tl" },
+    { x: 68.4, y: 33.3, w: 8.5,  h: 3.0,  color: "blue",   label: "4 AI Summary",           labelPos: "bl" },
+    { x: 19.0, y: 36.7, w: 59.1, h: 23.3, color: "green",  label: "5 Day rows + notes",     labelPos: "tl" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={dmoJournal}
+      alt="The Journal tab showing 35 of 35 entries with a 'Notes only' filter pill, the May 2026 month header (3 days · 48 total pts · 1 perfect day) with a Monthly Summary button, and the most recent week (Apr 27 – May 3, 2026) expanded to reveal three day rows — Sun May 3 with no activity, Sat May 2 with a 25/25 perfect day plus notes, and Fri May 1 with 23/25 plus notes — followed by collapsed week rows under April 2026."
+      annotations={annotations}
+    />
+  );
+}
+
+export function DmoAiSummaryIllustration() {
+  const annotations: Annotation[] = [
+    { x: 1.5,  y: 5.0,  w: 19.5, h: 14.0, color: "red",    label: "1 AI period header",      labelPos: "outside-bottom" },
+    { x: 60.5, y: 5.0,  w: 32.0, h: 14.0, color: "orange", label: "2 Mood + Performance",    labelPos: "tl" },
+    { x: 1.5,  y: 25.0, w: 96.5, h: 38.0, color: "amber",  label: "3 Week / month recap",    labelPos: "tl" },
+    { x: 1.5,  y: 70.0, w: 96.5, h: 25.0, color: "blue",   label: "4 Three actionable tips", labelPos: "tl" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={dmoAiSummary}
+      alt="An AI Weekly Summary card with a violet border, sparkles icon and 'AI WEEKLY SUMMARY' label, Mood 8.4/10 and Performance 9.1/10 badges in the top-right, a paragraph recapping the week's pattern (five perfect days, deep morning vision sessions unlocking sharper afternoon creative output, doubled connect-with-people minutes), and a 'TIPS FOR NEXT WEEK' list with three numbered, actionable suggestions."
+      annotations={annotations}
+    />
+  );
+}
+
 export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "video-tools-hub": VideoToolsHubIllustration,
   "sessions-list": SessionsListIllustration,
@@ -713,4 +852,12 @@ export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "proj-template-editor": ProjectsTemplateEditorIllustration,
   "proj-new-dialog": ProjectsNewDialogIllustration,
   "proj-dashboard": ProjectsDashboardIllustration,
+  "dmo-hub": DmoHubIllustration,
+  "dmo-card": DmoCardIllustration,
+  "dmo-card-running": DmoCardRunningIllustration,
+  "dmo-stats": DmoStatsIllustration,
+  "dmo-chart": DmoChartIllustration,
+  "dmo-notes": DmoNotesIllustration,
+  "dmo-journal": DmoJournalIllustration,
+  "dmo-ai-summary": DmoAiSummaryIllustration,
 };

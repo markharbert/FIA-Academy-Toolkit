@@ -712,6 +712,102 @@ const projectsArticle: HelpArticle = {
   ],
 };
 
+const dmoTrackerArticle: HelpArticle = {
+  slug: "dmo-tracker",
+  title: "How to Use the DMO Tracker",
+  subtitle: "Build a daily method of operation that compounds — clock five core activities, earn points toward a perfect day, ride your streak, and review your habits in the journal.",
+  category: "DMO Tracker",
+  categorySlug: "dmo-tracker",
+  readMinutes: 5,
+  overview:
+    "The DMO Tracker (Daily Method of Operation) is a habit + focus tool. Each day you work through five activities — Vision & Meditation, Personal Development, Expand Your Skills, Execution, and Connect with People — using built-in timers. Each activity is worth up to 5 points, so 25 points = a perfect day. Your streak grows every day you log time, milestones unlock as you stack consecutive days, and a Journal tab plus AI weekly/monthly summaries help you spot what's working.",
+  steps: [
+    {
+      number: 1,
+      title: "Tour the Today tab",
+      body: [
+        'Click "DMO Tracker" in the left sidebar to open today\'s view. The hero shows the date, a Today / Journal tab switcher, and a points ring on the right that reads X/25 with a percentage — it fills up as you complete activities.',
+        'Below the hero, an amber Streak banner appears once you have a streak going (e.g. "11-day streak! 3 more days → 2-Week Warrior") to show your next milestone.',
+        "Underneath that you'll see the Points History chart, the five activity cards (your daily work), and the right rail with stat cards (Streak / Best / Total Days / Today), the milestones list, and a quick recap of the 5-Step DMO.",
+      ],
+      tip: "The points ring and the Today stat card both turn green and say '🎉 Perfect Day!' once you hit 25/25 — that's your daily target.",
+      illustrationKey: "dmo-hub",
+    },
+    {
+      number: 2,
+      title: "Understand a single activity card",
+      body: [
+        'Each of the five activities has the same card layout. The colored icon and title are on the left, alongside the "Goal: 30 min" or "Goal: 60 min" badge, the tagline ("Get quiet. Visualise where you\'re going."), and a one-line description of what counts.',
+        "On the right is the live timer and a Start button. When the activity is idle the timer reads 00:00 and the controls are quiet.",
+        'Underneath the card is a quote — a small reminder of why the activity matters. Vision & Meditation and Personal Development have a 30-minute goal; Expand Your Skills, Execution, and Connect with People have a 60-minute goal.',
+      ],
+      illustrationKey: "dmo-card",
+    },
+    {
+      number: 3,
+      title: "Run a timer — Pause, Done, Add More",
+      body: [
+        "Click Start to begin timing. The card lights up with a thick pulsing ring, the timer ticks every second, and a 'Timer running — stay focused!' indicator appears at the bottom along with the percentage of your goal completed.",
+        "A row of five point dots fills up as you cross point thresholds — 1 dot per fifth of the goal (so for a 30-min activity, every 6 minutes earns another point, up to 5).",
+        'Hit the Pause icon if you need to step away (the elapsed time stays put), Start again to resume, or hit the green Done button when you\'re finished — that locks the activity in for the day.',
+        'Already finished? The card shows your final point count and an "Add More" or "Keep Going" button — click it any time to add extra time on top of what\'s saved.',
+      ],
+      tip: "If your browser refreshes mid-session, the in-progress timer is restored from local storage as Paused so you don't lose your time. Auto-save also pushes the elapsed time to the server every 5 seconds while a timer is running.",
+      illustrationKey: "dmo-card-running",
+    },
+    {
+      number: 4,
+      title: "Read the Points History chart",
+      body: [
+        "The Points History card sits at the top of the Today tab and shows one bar per day — each bar's height is your daily total out of 25. Use the day-range Select in the top-right to switch between Last 7 / 30 / 60 / 90 / 180 days.",
+        "Bar colors map to score bands (1-5 violet, 6-10 blue, 11-15 teal, 16-20 amber, 21-24 orange, 25 green for a perfect day). The legend underneath the chart explains the scale, and hovering any bar shows the exact pts and a 🎉 marker on perfect days.",
+      ],
+      illustrationKey: "dmo-chart",
+    },
+    {
+      number: 5,
+      title: "Capture wins + struggles in Daily Notes",
+      body: [
+        "Underneath the activity cards there's a free-form Daily Notes textarea — use it to capture wins, struggles, decisions, or a quick plan for tomorrow. The text saves to the same daily entry as your activity time.",
+        'A "Save Notes" button appears as soon as you type. Click it (or it\'s also persisted with your next activity save) to lock in the day\'s notes.',
+      ],
+      tip: "Notes show up next to each day's score in the Journal tab, so a one-sentence reflection today becomes searchable history later.",
+      illustrationKey: "dmo-notes",
+    },
+    {
+      number: 6,
+      title: "Track your streak and milestones",
+      body: [
+        "The right rail shows four stat cards at a glance: Streak (current consecutive days with any activity logged), Best (your longest streak ever), Total Days (every day you've ever logged), and Today (your current 0-25 score).",
+        'Below those is the Streak Milestones card. Earned milestones are highlighted in amber (3-Day Spark ⚡, 7-Day Flame 🔥) and locked ones are greyed out (2-Week Warrior 💪, 21-Day Habit 🏆, 30-Day Champion 👑, 60-Day Legend 🌟, 90-Day Elite 💎). The Streak banner at the top of the page tells you exactly how many more days until the next one.',
+      ],
+      tip: "Your streak only requires logging some activity each day in your time zone — it doesn't require a perfect 25/25. Set your time zone in Account so the day boundary matches where you live.",
+      illustrationKey: "dmo-stats",
+    },
+    {
+      number: 7,
+      title: "Review your past in the Journal tab",
+      body: [
+        'Switch to the Journal tab from the hero. The journal groups every entry by month (newest first), and each month is broken into weeks. Click any week\'s chevron to expand its day rows — each row shows the day name + date, a row of small colored dots (one per activity, grey if you skipped it), the score badge (e.g. "25/25 pts" with a 🎉 for perfect days), and any notes you wrote that day.',
+        'Use the "Notes only" filter pill in the top-right to narrow the view to days where you actually journaled — handy for re-reading reflections without scrolling past empty rows.',
+        'Each month header shows totals (e.g. "30 days · 521 total pts · 4 perfect days") and has a "Monthly Summary" button. Each expanded week has an "AI Summary" button that appears on hover.',
+      ],
+      illustrationKey: "dmo-journal",
+    },
+    {
+      number: 8,
+      title: "Get an AI-generated summary",
+      body: [
+        'Click "AI Summary" on any week or "Monthly Summary" on any month and the toolkit reads through every entry in that period and writes a short, personalised recap.',
+        "The card shows the period label (AI Weekly Summary or AI Monthly Summary), Mood and Performance scores out of 10, a paragraph recapping what's been happening (your best days, repeated themes from your notes, trends in your time spent), and three numbered, actionable Tips for Next Week / Month.",
+        'Use the small refresh icon to regenerate if your week changes, or generate a fresh summary later in the period. Once generated, the summary is cached so reopening it is instant.',
+      ],
+      tip: "The summary leans heavily on your notes — even a one-line reflection per day makes the AI tips dramatically more specific to your business.",
+      illustrationKey: "dmo-ai-summary",
+    },
+  ],
+};
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const helpCategories: HelpCategory[] = [
@@ -734,7 +830,7 @@ export const helpCategories: HelpCategory[] = [
     title: "DMO Tracker",
     description: "Log your daily activities, track streaks, and build consistent habits.",
     icon: "Target",
-    articles: [],
+    articles: [dmoTrackerArticle],
   },
   {
     slug: "projects",
