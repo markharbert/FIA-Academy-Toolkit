@@ -619,7 +619,6 @@ export default function AdminPage() {
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
   const [consentFilter, setConsentFilter] = useState("all");
   const [membershipFilter, setMembershipFilter] = useState("all");
@@ -898,7 +897,6 @@ export default function AdminPage() {
       });
       if (searchQuery) params.set("search", searchQuery);
       if (roleFilter !== "all") params.set("role", roleFilter);
-      if (statusFilter !== "all") params.set("status", statusFilter);
       if (providerFilter !== "all") params.set("provider", providerFilter);
       if (consentFilter !== "all") params.set("consent", consentFilter);
       if (membershipFilter !== "all") params.set("membership", membershipFilter);
@@ -914,7 +912,7 @@ export default function AdminPage() {
     } finally {
       setUsersLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, roleFilter, statusFilter, providerFilter, consentFilter, membershipFilter, sortBy]);
+  }, [currentPage, pageSize, searchQuery, roleFilter, providerFilter, consentFilter, membershipFilter, sortBy]);
 
   useEffect(() => {
     if (user?.isAdmin) {
@@ -1464,16 +1462,6 @@ export default function AdminPage() {
                     <SelectItem value="user">User</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-[130px]" data-testid="select-status-filter">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="disabled">Disabled</SelectItem>
-                  </SelectContent>
-                </Select>
                 <Select value={membershipFilter} onValueChange={(v) => { setMembershipFilter(v); setCurrentPage(1); }}>
                   <SelectTrigger className="w-[150px]" data-testid="select-membership-filter">
                     <SelectValue placeholder="Membership" />
@@ -1512,14 +1500,13 @@ export default function AdminPage() {
                           <TableHead>Membership</TableHead>
                           <TableHead className="text-center">Scores</TableHead>
                           <TableHead className="text-center">KW Credits</TableHead>
-                          <TableHead>Status</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {users.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                               No users found
                             </TableCell>
                           </TableRow>
@@ -1566,13 +1553,6 @@ export default function AdminPage() {
                               </TableCell>
                               <TableCell className="text-center text-sm font-medium">
                                 {u.keywordsCreditsThisMonth || 0}/{u.keywordsCreditsTotalUsed || 0}
-                              </TableCell>
-                              <TableCell>
-                                {u.isDisabled ? (
-                                  <Badge variant="destructive">Disabled</Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-green-600 border-green-600">Active</Badge>
-                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center justify-end gap-1">
