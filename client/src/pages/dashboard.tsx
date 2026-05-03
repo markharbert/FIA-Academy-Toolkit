@@ -604,20 +604,17 @@ function ProjectsHero({
 }) {
   const s = summary ?? { projects: [], totalActive: 0, totalOpenTasks: 0, totalDueThisWeek: 0, totalOverdue: 0 };
 
-  // Build prioritized "Up Next" list: overdue first, then today, then this week, then later, then no due date.
+  // "Up Next" = tasks due this week only (overdue + today + this week).
+  // Tasks without a due date and tasks dated further out are intentionally hidden.
   const grouped = useMemo(() => {
     const overdue: OpenTask[] = [];
     const today: OpenTask[] = [];
     const week: OpenTask[] = [];
-    const later: OpenTask[] = [];
-    const none: OpenTask[] = [];
     for (const t of tasks) {
       const b = bucketTask(t);
       if (b === "overdue") overdue.push(t);
       else if (b === "today") today.push(t);
       else if (b === "week") week.push(t);
-      else if (b === "later") later.push(t);
-      else none.push(t);
     }
     // Limit to ~8 total, prioritizing earlier groups.
     const out: Array<{ section: string; tone: string; items: OpenTask[] }> = [];
@@ -631,8 +628,6 @@ function ProjectsHero({
     push("Overdue", "text-rose-600 dark:text-rose-400", overdue);
     push("Today", "text-amber-600 dark:text-amber-400", today);
     push("This week", "text-sky-600 dark:text-sky-400", week);
-    push("Later", "text-muted-foreground", later);
-    push("No due date", "text-muted-foreground", none);
     return out;
   }, [tasks]);
 
@@ -687,8 +682,8 @@ function ProjectsHero({
               {hasAnyProjects ? (
                 <>
                   <CircleDot className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
-                  <p className="text-sm font-medium">No open tasks</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 mb-3">All clear — add tasks to your projects to see them here.</p>
+                  <p className="text-sm font-medium">Nothing due this week</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-3">All clear — open Projects to see your full task list.</p>
                   <Link href="/projects">
                     <Button size="sm" variant="outline" data-testid="button-open-projects-empty">
                       Browse projects
