@@ -278,27 +278,29 @@ export function TaskCommentsActivity({ taskId, currentUserId }: Props) {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm whitespace-pre-wrap break-words">{c.body}</p>
+                        <>
+                          <p className="text-sm whitespace-pre-wrap break-words">{c.body}</p>
+                          {mine && (
+                            <div className="flex justify-end mt-1.5 pt-1.5 -mx-3 px-3 border-t border-border/60 gap-3">
+                              <button
+                                onClick={() => startEdit(c)}
+                                className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                                data-testid={`button-edit-comment-${c.id}`}
+                              >
+                                <Pencil className="h-2.5 w-2.5" /> Edit
+                              </button>
+                              <button
+                                onClick={() => deleteComment.mutate(c.id)}
+                                className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1"
+                                data-testid={`button-delete-comment-${c.id}`}
+                              >
+                                <Trash2 className="h-2.5 w-2.5" /> Delete
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
-                    {mine && !isEditing && (
-                      <div className="flex justify-end mt-1 gap-3">
-                        <button
-                          onClick={() => startEdit(c)}
-                          className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1"
-                          data-testid={`button-edit-comment-${c.id}`}
-                        >
-                          <Pencil className="h-2.5 w-2.5" /> Edit
-                        </button>
-                        <button
-                          onClick={() => deleteComment.mutate(c.id)}
-                          className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1"
-                          data-testid={`button-delete-comment-${c.id}`}
-                        >
-                          <Trash2 className="h-2.5 w-2.5" /> Delete
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               );
