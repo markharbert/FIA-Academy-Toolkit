@@ -295,9 +295,9 @@ export function ScriptsCtaIllustration() {
 export function InboxIntelHubIllustration() {
   const annotations: Annotation[] = [
     { x: 85.5, y: 35.5, w: 10.5, h: 4.0, color: "red", label: "1 Add competitor", labelPos: "outside-top" },
-    { x: 16.5, y: 41.5, w: 39.5, h: 15.5, color: "orange", label: "2 What's changed this week", labelPos: "outside-top" },
-    { x: 57.0, y: 41.5, w: 21.0, h: 15.5, color: "amber", label: "3 Top sends leaderboard", labelPos: "outside-top" },
-    { x: 16.5, y: 60.0, w: 61.5, h: 38.0, color: "blue", label: "4 Competitor tiles", labelPos: "outside-top" },
+    { x: 21.5, y: 41.5, w: 48.5, h: 15.5, color: "orange", label: "2 What's changed this week", labelPos: "outside-top" },
+    { x: 71.5, y: 41.5, w: 24.0, h: 15.5, color: "amber", label: "3 Top sends leaderboard", labelPos: "outside-top" },
+    { x: 21.5, y: 60.0, w: 74.0, h: 38.0, color: "blue", label: "4 Competitor tiles", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -310,10 +310,10 @@ export function InboxIntelHubIllustration() {
 
 export function InboxIntelTrackerEmailsIllustration() {
   const annotations: Annotation[] = [
-    { x: 51.5, y: 12.5, w: 44.5, h: 5.0, color: "red", label: "1 Tracker actions", labelPos: "outside-top" },
-    { x: 16.5, y: 28.0, w: 61.5, h: 30.5, color: "orange", label: "2 Private seed addresses", labelPos: "outside-top" },
-    { x: 17.5, y: 67.0, w: 29.0, h: 5.0, color: "amber", label: "3 Tab navigation", labelPos: "outside-top" },
-    { x: 17.5, y: 77.0, w: 61.5, h: 22.5, color: "blue", label: "4 Captured emails", labelPos: "outside-top" },
+    { x: 64.9, y: 12.5, w: 30.8, h: 5.0, color: "red", label: "1 Tracker actions", labelPos: "outside-top" },
+    { x: 21.5, y: 28.0, w: 74.0, h: 30.5, color: "orange", label: "2 Private seed addresses", labelPos: "outside-top" },
+    { x: 21.7, y: 67.0, w: 28.1, h: 5.0, color: "amber", label: "3 Tab navigation", labelPos: "outside-top" },
+    { x: 21.7, y: 77.0, w: 74.0, h: 22.5, color: "blue", label: "4 Captured emails", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -326,10 +326,10 @@ export function InboxIntelTrackerEmailsIllustration() {
 
 export function InboxIntelTrackerAnalyticsIllustration() {
   const annotations: Annotation[] = [
-    { x: 29.5, y: 67.0, w: 8.5, h: 5.0, color: "red", label: "1 Analytics tab", labelPos: "outside-top" },
-    { x: 16.5, y: 74.0, w: 61.5, h: 10.5, color: "orange", label: "2 Stat tiles", labelPos: "outside-top" },
-    { x: 16.5, y: 86.5, w: 30.5, h: 13.0, color: "amber", label: "3 Cadence heatmap", labelPos: "outside-top" },
-    { x: 47.5, y: 86.5, w: 30.0, h: 13.0, color: "blue", label: "4 Send volume chart", labelPos: "outside-top" },
+    { x: 34.7, y: 67.0, w: 7.6, h: 5.0, color: "red", label: "1 Analytics tab", labelPos: "outside-top" },
+    { x: 21.0, y: 74.0, w: 74.7, h: 10.5, color: "orange", label: "2 Stat tiles", labelPos: "outside-top" },
+    { x: 21.0, y: 86.5, w: 36.7, h: 13.0, color: "amber", label: "3 Cadence heatmap", labelPos: "outside-top" },
+    { x: 59.0, y: 86.5, w: 37.0, h: 13.0, color: "blue", label: "4 Send volume chart", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -342,9 +342,9 @@ export function InboxIntelTrackerAnalyticsIllustration() {
 
 export function InboxIntelTrackerFunnelIllustration() {
   const annotations: Annotation[] = [
-    { x: 37.0, y: 67.0, w: 7.5, h: 5.0, color: "red", label: "1 Funnel tab", labelPos: "outside-top" },
-    { x: 16.5, y: 75.0, w: 61.5, h: 8.5, color: "orange", label: "2 Verdict + confidence", labelPos: "outside-top" },
-    { x: 16.5, y: 86.0, w: 61.5, h: 7.0, color: "amber", label: "3 Auto vs broadcast counts", labelPos: "outside-top" },
+    { x: 43.4, y: 67.0, w: 6.4, h: 5.0, color: "red", label: "1 Funnel tab", labelPos: "outside-top" },
+    { x: 21.0, y: 75.0, w: 74.7, h: 8.5, color: "orange", label: "2 Verdict + confidence", labelPos: "outside-top" },
+    { x: 21.0, y: 86.0, w: 74.7, h: 7.0, color: "amber", label: "3 Auto vs broadcast counts", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -357,9 +357,9 @@ export function InboxIntelTrackerFunnelIllustration() {
 
 export function InboxIntelFeedIllustration() {
   const annotations: Annotation[] = [
-    { x: 17.0, y: 29.5, w: 61.0, h: 6.5, color: "red", label: "1 Filter bar", labelPos: "outside-top" },
-    { x: 78.0, y: 30.5, w: 11.0, h: 4.5, color: "orange", label: "2 Pinned only", labelPos: "outside-top" },
-    { x: 17.0, y: 41.0, w: 61.5, h: 58.0, color: "amber", label: "3 Day-grouped stream", labelPos: "outside-top" },
+    { x: 21.7, y: 29.5, w: 74.0, h: 6.5, color: "red", label: "1 Filter bar", labelPos: "outside-top" },
+    { x: 78.6, y: 30.5, w: 9.8, h: 4.5, color: "orange", label: "2 Pinned only", labelPos: "outside-top" },
+    { x: 21.7, y: 41.0, w: 74.0, h: 58.0, color: "amber", label: "3 Day-grouped stream", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
@@ -372,9 +372,9 @@ export function InboxIntelFeedIllustration() {
 
 export function InboxIntelCompareIllustration() {
   const annotations: Annotation[] = [
-    { x: 22.5, y: 30.5, w: 39.0, h: 4.5, color: "red", label: "1 Pick up to 4", labelPos: "outside-top" },
-    { x: 16.5, y: 40.0, w: 61.5, h: 59.0, color: "orange", label: "2 Side-by-side cards", labelPos: "outside-top" },
-    { x: 17.0, y: 75.0, w: 29.0, h: 16.0, color: "amber", label: "3 Activity & metrics", labelPos: "outside-top" },
+    { x: 23.4, y: 30.5, w: 38.2, h: 4.5, color: "red", label: "1 Pick up to 4", labelPos: "outside-top" },
+    { x: 21.0, y: 40.0, w: 74.7, h: 59.0, color: "orange", label: "2 Side-by-side cards", labelPos: "outside-top" },
+    { x: 21.7, y: 75.0, w: 36.0, h: 16.0, color: "amber", label: "3 Activity & metrics", labelPos: "outside-top" },
   ];
   return (
     <AnnotatedScreenshot
