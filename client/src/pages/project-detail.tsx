@@ -16,6 +16,34 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
+function hexToRgb(hex: string) {
+  const h = hex.replace("#", "");
+  return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+}
+function adjustBrightness(hex: string, amount: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  const c = (v: number) => Math.max(0, Math.min(255, v + amount));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+function relativeLuminance(hex: string): number {
+  const { r, g, b } = hexToRgb(hex);
+  const ch = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+}
+function getHeaderTheme(color: string) {
+  const lum = relativeLuminance(color);
+  const gradientStyle = {
+    background: `linear-gradient(135deg, ${adjustBrightness(color, -60)} 0%, ${adjustBrightness(color, -30)} 55%, ${color} 100%)`,
+  };
+  const useWhite = lum < 0.5;
+  return {
+    gradientStyle,
+    tx: useWhite ? "text-white" : "text-gray-900",
+    txSubtle: useWhite ? "text-white/80" : "text-gray-700",
+    chip: useWhite ? "bg-white/15 text-white border-0" : "bg-black/10 text-gray-800 border-0",
+  };
+}
+
 const STATUS_GROUPS: Array<{ value: "todo" | "in_progress" | "done"; label: string; tone: string }> = [
   { value: "todo",        label: "To do",        tone: "text-muted-foreground" },
   { value: "in_progress", label: "In progress",  tone: "text-sky-600 dark:text-sky-400" },
@@ -152,23 +180,28 @@ export default function ProjectDetailPage() {
 
   const openTask = openTaskId ? tasks.find(t => t.id === openTaskId) ?? null : null;
   const openSubs = openTask && !openTask.parentTaskId ? (subtasksByParent[openTask.id] ?? []) : [];
+
+  const hdr = getHeaderTheme(project.color);
   const openParent = openTask?.parentTaskId ? tasks.find(t => t.id === openTask.parentTaskId) ?? null : null;
 
   return (
     <div className="flex-1 overflow-auto bg-background">
       {/* Header */}
-      <div className="border-b border-border" style={{ background: `linear-gradient(135deg, ${project.color}E6, ${project.color}99)` }}>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 text-white">
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0" style={hdr.gradientStyle} />
+        <div className="absolute -top-16 -right-10 h-56 w-56 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-white/5 blur-2xl pointer-events-none" />
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-6">
           <Link href="/projects">
-            <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10 -ml-2 mb-2" data-testid="link-back-projects">
+            <Button variant="ghost" size="sm" className={`${hdr.txSubtle} hover:${hdr.tx} hover:bg-white/10 -ml-2 mb-2`} data-testid="link-back-projects">
               <ChevronLeft className="h-4 w-4 mr-1" /> All projects
             </Button>
           </Link>
           <div className="flex items-end justify-between gap-3 flex-wrap">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight" data-testid="text-project-detail-title">{project.name}</h1>
+              <h1 className={`text-3xl font-bold tracking-tight ${hdr.tx}`} data-testid="text-project-detail-title">{project.name}</h1>
               {project.description && (
-                <p className="mt-1 text-sm text-white/85 max-w-2xl">{project.description}</p>
+                <p className={`mt-1 text-sm ${hdr.txSubtle} max-w-2xl`}>{project.description}</p>
               )}
               {project.dueDate && (() => {
                 const due = new Date(project.dueDate);
@@ -186,7 +219,7 @@ export default function ProjectDetailPage() {
                     className={`mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full ${
                       isOverdue ? "bg-rose-500/30 text-white ring-1 ring-rose-200/40" :
                       isSoon ? "bg-amber-400/25 text-white ring-1 ring-amber-200/40" :
-                      "bg-white/15 text-white"
+                      hdr.chip
                     }`}
                     data-testid="badge-project-detail-due"
                     title={formatInTz(due, tz, "EEEE, MMMM d, yyyy")}
@@ -196,11 +229,11 @@ export default function ProjectDetailPage() {
                 );
               })()}
             </div>
-            <div className="flex items-center gap-2 text-sm text-white/85 flex-wrap">
-              <Badge className="bg-white/15 text-white border-0">
+            <div className="flex items-center gap-2 text-sm flex-wrap">
+              <Badge className={hdr.chip}>
                 {topLevel.filter(t => t.status !== "done").length} open
               </Badge>
-              <Badge className="bg-white/15 text-white border-0">
+              <Badge className={hdr.chip}>
                 {topLevel.filter(t => t.status === "done").length} done
               </Badge>
               {project.status === "archived" ? (
