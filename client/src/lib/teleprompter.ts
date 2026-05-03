@@ -58,6 +58,18 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);transition:.15s;
     }
     #resetBtn:hover{background:rgba(255,255,255,.18);color:#fff}
+    .font-btn{
+      font-family:Arial,sans-serif;font-size:13px;font-weight:700;
+      width:30px;height:28px;border-radius:999px;border:none;cursor:pointer;
+      background:rgba(255,255,255,.12);color:rgba(255,255,255,.75);transition:.15s;
+      display:inline-flex;align-items:center;justify-content:center;
+    }
+    .font-btn:hover{background:rgba(255,255,255,.22);color:#fff}
+    .font-btn:disabled{opacity:.3;cursor:not-allowed}
+    #fontLabel{
+      font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.55);
+      min-width:54px;text-align:center;white-space:nowrap;
+    }
     #scroller{
       position:fixed;top:54px;bottom:0;left:0;right:0;
       overflow-y:scroll;padding:40px 60px 0;
@@ -69,7 +81,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       font-family:Arial,sans-serif;font-size:11px;font-weight:700;
       letter-spacing:.18em;text-transform:uppercase;margin-bottom:20px;
     }
-    .section-text{font-size:32px;line-height:1.85;white-space:pre-wrap;color:#fff}
+    .section-text{font-size:var(--text-size,32px);line-height:1.85;white-space:pre-wrap;color:#fff}
     .bottom-pad{height:80vh}
     #hint{position:fixed;bottom:0;left:0;right:0;text-align:center;padding:4px;font-family:monospace;font-size:10px;color:#333;background:#0a0a0a}
     #countdown{
@@ -86,6 +98,9 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     <button class="speed-btn active" data-speed="28" onclick="setSpeed(this)">Slow</button>
     <button class="speed-btn"        data-speed="45" onclick="setSpeed(this)">Med</button>
     <button class="speed-btn"        data-speed="65" onclick="setSpeed(this)">Fast</button>
+    <button class="font-btn" id="fontDown" onclick="changeFont(-1)" title="Smaller text">A−</button>
+    <span id="fontLabel">Medium</span>
+    <button class="font-btn" id="fontUp"   onclick="changeFont(1)"  title="Larger text">A+</button>
     <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
     <button id="playBtn"  onclick="togglePlay()">▶ Play</button>
     <span id="countdown">Scrolling begins in <span id="cd-num">5</span></span>
@@ -94,7 +109,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     ${sectionsHtml}
     <div class="bottom-pad"></div>
   </div>
-  <div id="hint">Space = play/pause &nbsp;·&nbsp; S/M/F = speed</div>
+  <div id="hint">Space = play/pause &nbsp;·&nbsp; S/M/F = speed &nbsp;·&nbsp; +/− = font size</div>
   <script>
     var playing = false;
     var speed = 28;
@@ -106,6 +121,37 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     var playBtn   = document.getElementById('playBtn');
     var cdEl      = document.getElementById('countdown');
     var cdNumEl   = document.getElementById('cd-num');
+    var fontLabel = document.getElementById('fontLabel');
+    var fontDown  = document.getElementById('fontDown');
+    var fontUp    = document.getElementById('fontUp');
+
+    var FONT_SIZES = [
+      { px: 24, name: 'Small'    },
+      { px: 32, name: 'Medium'   },
+      { px: 44, name: 'Large'    },
+      { px: 56, name: 'X-Large'  },
+      { px: 72, name: 'XX-Large' }
+    ];
+    var fontIdx = 1;
+    try {
+      var saved = parseInt(localStorage.getItem('teleprompter:fontSizeIdx') || '', 10);
+      if (!isNaN(saved) && saved >= 0 && saved < FONT_SIZES.length) fontIdx = saved;
+    } catch(e) {}
+    function applyFont() {
+      var f = FONT_SIZES[fontIdx];
+      document.documentElement.style.setProperty('--text-size', f.px + 'px');
+      fontLabel.textContent = f.name;
+      fontDown.disabled = (fontIdx === 0);
+      fontUp.disabled   = (fontIdx === FONT_SIZES.length - 1);
+      try { localStorage.setItem('teleprompter:fontSizeIdx', String(fontIdx)); } catch(e) {}
+    }
+    function changeFont(delta) {
+      var next = fontIdx + delta;
+      if (next < 0 || next >= FONT_SIZES.length) return;
+      fontIdx = next;
+      applyFont();
+    }
+    applyFont();
 
     function setSpeed(btn) {
       speed = parseFloat(btn.dataset.speed);
@@ -175,6 +221,8 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       if (e.key === 'm' || e.key === 'M') setSpeed(document.querySelector('[data-speed="45"]'));
       if (e.key === 'f' || e.key === 'F') setSpeed(document.querySelector('[data-speed="65"]'));
       if (e.key === 'r' || e.key === 'R') resetScroll();
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); changeFont(1); }
+      if (e.key === '-' || e.key === '_') { e.preventDefault(); changeFont(-1); }
     });
   <\/script>
 </body>
