@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2 } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil } from "lucide-react";
 
 const COLOR_PALETTE = [
   "#6366f1", // indigo
@@ -27,7 +27,7 @@ const COLOR_PALETTE = [
   "#64748b", // slate
 ];
 
-function ProjectCard({ p, onArchive, onDelete }: { p: ProjectWithCounts; onArchive: (p: ProjectWithCounts) => void; onDelete: (p: ProjectWithCounts) => void }) {
+function ProjectCard({ p, onEdit, onArchive, onDelete }: { p: ProjectWithCounts; onEdit: (p: ProjectWithCounts) => void; onArchive: (p: ProjectWithCounts) => void; onDelete: (p: ProjectWithCounts) => void }) {
   const completionPct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
   return (
     <Card className="group relative overflow-hidden hover-elevate transition-all" data-testid={`card-project-${p.id}`}>
@@ -47,6 +47,9 @@ function ProjectCard({ p, onArchive, onDelete }: { p: ProjectWithCounts; onArchi
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEdit(p)} data-testid={`menu-edit-${p.id}`}>
+                <Pencil className="h-3.5 w-3.5 mr-2" /> Edit details
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onArchive(p)} data-testid={`menu-archive-${p.id}`}>
                 {p.status === "archived" ? <><ArchiveRestore className="h-3.5 w-3.5 mr-2" /> Unarchive</> : <><Archive className="h-3.5 w-3.5 mr-2" /> Archive</>}
               </DropdownMenuItem>
@@ -107,6 +110,19 @@ export default function ProjectsPage() {
   const [color, setColor] = useState(COLOR_PALETTE[0]);
   const [showArchived, setShowArchived] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProjectWithCounts | null>(null);
+  const [editTarget, setEditTarget] = useState<ProjectWithCounts | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editColor, setEditColor] = useState(COLOR_PALETTE[0]);
+  const [editStatus, setEditStatus] = useState<"active" | "archived">("active");
+
+  const openEdit = (p: ProjectWithCounts) => {
+    setEditTarget(p);
+    setEditName(p.name);
+    setEditDescription(p.description || "");
+    setEditColor(p.color);
+    setEditStatus(p.status === "archived" ? "archived" : "active");
+  };
 
   const { data: projects = [], isLoading } = useQuery<ProjectWithCounts[]>({ queryKey: ["/api/projects"] });
 
@@ -130,6 +146,25 @@ export default function ProjectsPage() {
       await apiRequest("PATCH", `/api/projects/${p.id}`, { status: p.status === "archived" ? "active" : "archived" });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/projects"] }),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async () => {
+      if (!editTarget) return;
+      await apiRequest("PATCH", `/api/projects/${editTarget.id}`, {
+        name: editName.trim(),
+        description: editDescription.trim() || null,
+        color: editColor,
+        status: editStatus,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      setEditTarget(null);
+      toast({ title: "Project updated" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to update", description: err.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -244,6 +279,7 @@ export default function ProjectsPage() {
               <ProjectCard
                 key={p.id}
                 p={p}
+                onEdit={openEdit}
                 onArchive={(p) => archiveMutation.mutate(p)}
                 onDelete={(p) => setDeleteTarget(p)}
               />
@@ -251,6 +287,60 @@ export default function ProjectsPage() {
           </div>
         )}
       </div>
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-edit-project">
+          <DialogHeader>
+            <DialogTitle>Edit project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="edit-proj-name">Name</Label>
+              <Input id="edit-proj-name" value={editName} onChange={e => setEditName(e.target.value)} data-testid="input-edit-project-name" />
+            </div>
+            <div>
+              <Label htmlFor="edit-proj-desc">Description (optional)</Label>
+              <Textarea id="edit-proj-desc" rows={3} value={editDescription} onChange={e => setEditDescription(e.target.value)} placeholder="What is this project about?" data-testid="input-edit-project-description" />
+            </div>
+            <div>
+              <Label>Color</Label>
+              <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                {COLOR_PALETTE.map(c => (
+                  <button key={c} type="button" onClick={() => setEditColor(c)} className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background transition-all ${editColor === c ? "ring-2 ring-foreground" : "hover:scale-110"}`} style={{ background: c }} aria-label={`Color ${c}`} data-testid={`edit-color-${c.replace("#", "")}`} />
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label>Status</Label>
+              <div className="mt-1.5 flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setEditStatus("active")}
+                  className={`flex-1 px-3 py-2 rounded-md text-xs font-semibold border transition-all ${editStatus === "active" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}
+                  data-testid="button-edit-status-active"
+                >
+                  <CircleDot className="h-3 w-3 inline mr-1" /> Active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditStatus("archived")}
+                  className={`flex-1 px-3 py-2 rounded-md text-xs font-semibold border transition-all ${editStatus === "archived" ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}
+                  data-testid="button-edit-status-archived"
+                >
+                  <Archive className="h-3 w-3 inline mr-1" /> Archived
+                </button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button onClick={() => editMutation.mutate()} disabled={!editName.trim() || editMutation.isPending} data-testid="button-save-edit-project">
+              {editMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
