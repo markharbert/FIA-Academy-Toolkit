@@ -48,7 +48,7 @@ import {
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
   Key, Youtube, MessageSquare, XCircle, Trash2,
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
-  CircleAlert, RotateCw, UserCog, Activity
+  CircleAlert, RotateCw, UserCog, Activity, Workflow
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -1789,6 +1789,31 @@ export default function AdminPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-md bg-muted/50" data-testid="api-status-clickfunnels">
+                <div className="flex items-center gap-3">
+                  <Workflow className="h-5 w-5 text-purple-500" />
+                  <div>
+                    <p className="font-medium">ClickFunnels API</p>
+                    <p className="text-sm text-muted-foreground">Membership enforcement & SSO</p>
+                  </div>
+                </div>
+                {cfStatusLoading ? (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Checking
+                  </Badge>
+                ) : cfStatus?.allConfigured ? (
+                  <Badge className="flex items-center gap-1 border-transparent bg-green-500/15 text-green-700 hover:bg-green-500/20 dark:text-green-400">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Connected
+                  </Badge>
+                ) : (
+                  <Badge variant="destructive" className="flex items-center gap-1">
+                    <XCircle className="h-3 w-3" />
+                    Required
+                  </Badge>
+                )}
+              </div>
               <div className="flex items-center justify-between p-3 rounded-md bg-muted/50" data-testid="api-status-youtube">
                 <div className="flex items-center gap-3">
                   <Youtube className="h-5 w-5 text-red-500" />
