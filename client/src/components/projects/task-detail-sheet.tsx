@@ -31,6 +31,44 @@ const PRIORITY_OPTIONS: { value: string; label: string; dot: string; badge: stri
   { value: "urgent", label: "Urgent", dot: "bg-rose-600 ring-2 ring-rose-400/40",     badge: "bg-rose-600 text-white" },
 ];
 
+function hexToRgb(hex: string) {
+  const h = hex.replace("#", "");
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+function adjustBrightness(hex: string, amount: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  const c = (v: number) => Math.max(0, Math.min(255, v + amount));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+
+function relativeLuminance(hex: string): number {
+  const { r, g, b } = hexToRgb(hex);
+  const ch = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+}
+
+function getHeaderTheme(color: string) {
+  const lum = relativeLuminance(color);
+  const gradientStyle = {
+    background: `linear-gradient(135deg, ${adjustBrightness(color, -60)} 0%, ${adjustBrightness(color, -30)} 55%, ${color} 100%)`,
+  };
+  const useWhite = lum < 0.5;
+  return {
+    gradientStyle,
+    tx: useWhite ? "text-white" : "text-gray-900",
+    txSubtle: useWhite ? "text-white/70" : "text-gray-700",
+    txFaint: useWhite ? "text-white/40" : "text-gray-400",
+    chip: useWhite ? "bg-white/15 text-white border-0" : "bg-black/10 text-gray-800 border-0",
+    ring: useWhite ? "ring-white/20" : "ring-black/15",
+    placeholder: useWhite ? "placeholder-white/40" : "placeholder-gray-400",
+  };
+}
+
 interface Props {
   project: Project;
   task: ProjectTask | null;
@@ -168,6 +206,8 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
 
   const initials = (project.name || "P").split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
 
+  const hdr = getHeaderTheme(project.color);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0" data-testid="sheet-task-detail">
@@ -189,15 +229,14 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
           </button>
         )}
 
-        {/* Gradient header card */}
+        {/* Gradient header card — uses project color */}
         <div className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(245_60%_28%)] via-[hsl(265_55%_35%)] to-[hsl(290_55%_38%)]" />
+          <div className="absolute inset-0" style={hdr.gradientStyle} />
           <div className="absolute -top-12 -right-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
           <SheetHeader className="relative px-6 pt-6 pb-5">
             <div className="flex items-start gap-3">
               <div
-                className="h-11 w-11 rounded-xl flex items-center justify-center text-white font-bold shrink-0 ring-2 ring-white/20 mt-0.5"
-                style={{ background: project.color }}
+                className={`h-11 w-11 rounded-xl flex items-center justify-center text-white font-bold shrink-0 ring-2 ${hdr.ring} mt-0.5 bg-black/20`}
               >
                 {initials}
               </div>
@@ -205,7 +244,7 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
                 {parentTask && onOpenTask ? (
                   <button
                     onClick={() => onOpenTask(parentTask.id)}
-                    className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-white/80 hover:text-white font-semibold group"
+                    className={`flex items-center gap-1 text-[10px] uppercase tracking-wider ${hdr.txSubtle} hover:${hdr.tx} font-semibold group`}
                     data-testid="button-back-to-parent"
                   >
                     <ChevronLeft className="h-3 w-3 -ml-0.5" />
@@ -214,7 +253,7 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
                     <span className="truncate max-w-[260px]">{parentTask.title}</span>
                   </button>
                 ) : (
-                  <p className="text-[10px] uppercase tracking-wider text-white/70 font-semibold">{project.name}</p>
+                  <p className={`text-[10px] uppercase tracking-wider ${hdr.txSubtle} font-semibold`}>{project.name}</p>
                 )}
                 <SheetTitle asChild>
                   <input
@@ -222,35 +261,35 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
                     onChange={e => setTitle(e.target.value)}
                     onBlur={saveTitle}
                     onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                    className="bg-transparent border-0 p-0 text-lg font-semibold text-white placeholder-white/40 focus:outline-none focus:ring-0 w-full"
+                    className={`bg-transparent border-0 p-0 text-lg font-semibold ${hdr.tx} ${hdr.placeholder} focus:outline-none focus:ring-0 w-full`}
                     placeholder="Task title…"
                     data-testid="input-task-title"
                   />
                 </SheetTitle>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {parentTask && (
-                    <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
+                    <Badge variant="secondary" className={`${hdr.chip} text-[10px]`}>
                       <CornerDownRight className="h-2.5 w-2.5 mr-1" /> Subtask
                     </Badge>
                   )}
-                  <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
+                  <Badge variant="secondary" className={`${hdr.chip} text-[10px]`}>
                     {STATUS_OPTIONS.find(s => s.value === status)?.label}
                   </Badge>
                   {priority !== "none" && (() => {
                     const opt = PRIORITY_OPTIONS.find(p => p.value === priority);
                     return (
-                      <Badge variant="secondary" className={`border-0 text-[10px] ${opt?.badge ?? "bg-white/15 text-white"}`}>
+                      <Badge variant="secondary" className={`border-0 text-[10px] ${opt?.badge ?? hdr.chip}`}>
                         <Flag className="h-2.5 w-2.5 mr-1" /> {opt?.label}
                       </Badge>
                     );
                   })()}
                   {dueDate && (
-                    <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
+                    <Badge variant="secondary" className={`${hdr.chip} text-[10px]`}>
                       <CalendarIcon className="h-2.5 w-2.5 mr-1" /> {dueDate.toLocaleDateString()} · {dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                     </Badge>
                   )}
                   {subtasks.length > 0 && (
-                    <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
+                    <Badge variant="secondary" className={`${hdr.chip} text-[10px]`}>
                       <ListChecks className="h-2.5 w-2.5 mr-1" /> {completedSubs}/{subtasks.length} subtasks
                     </Badge>
                   )}
