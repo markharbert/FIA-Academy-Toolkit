@@ -1,0 +1,51 @@
+{
+  "tabs": null,
+  "pointsRing": {
+    "x": 0,
+    "y": 0,
+    "w": 1280,
+    "h": 900
+  },
+  "streakBanner": {
+    "x": 0,
+    "y": 0,
+    "w": 1280,
+    "h": 900
+  },
+  "visionCard": {
+    "x": 282,
+    "y": 643,
+    "w": 565,
+    "h": 218
+  },
+  "pointsHistoryCard": {
+    "x": 280,
+    "y": 322,
+    "w": 961,
+    "h": 303
+  },
+  "dayRangeSelect": {
+    "x": 1076,
+    "y": 344,
+    "w": 144,
+    "h": 32
+  },
+  "dailyNotesTextarea": {
+    "x": 280,
+    "y": 1775,
+    "w": 569,
+    "h": 96
+  },
+  "streakMilestonesCard": {
+    "x": 881,
+    "y": 881,
+    "w": 360,
+    "h": 348
+  },
+  "fiveStepCard": {
+    "x": 881,
+    "y": 1249,
+    "w": 360,
+    "h": 240
+  }
+}

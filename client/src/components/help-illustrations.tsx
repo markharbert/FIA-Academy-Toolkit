@@ -669,11 +669,11 @@ export function ProjectsDashboardIllustration() {
 
 export function DmoHubIllustration() {
   const annotations: Annotation[] = [
-    { x: 18.2, y: 13.8, w: 9.9,  h: 4.0,  color: "red",    label: "1 Today / Journal tabs", labelPos: "outside-bottom" },
-    { x: 63.7, y: 9.4,  w: 14.5, h: 8.3,  color: "orange", label: "2 Points ring (X/25)",   labelPos: "bl" },
-    { x: 16.8, y: 21.7, w: 61.9, h: 6.1,  color: "amber",  label: "3 Streak banner",        labelPos: "tl" },
-    { x: 16.8, y: 57.2, w: 37.1, h: 18.3, color: "blue",   label: "4 Activity card",        labelPos: "tl" },
-    { x: 55.5, y: 57.2, w: 22.3, h: 18.3, color: "green",  label: "5 Today's stats",        labelPos: "tr" },
+    { x: 18.0, y: 13.6, w: 10.6, h: 4.4,  color: "red",    label: "1 Today / Journal tabs", labelPos: "outside-bottom" },
+    { x: 64.5, y: 9.8,  w: 13.5, h: 8.0,  color: "orange", label: "2 Points ring (X/25)",   labelPos: "tl" },
+    { x: 16.8, y: 21.7, w: 61.5, h: 5.8,  color: "amber",  label: "3 Streak banner",        labelPos: "tl" },
+    { x: 22.0, y: 71.4, w: 44.1, h: 24.0, color: "blue",   label: "4 Activity card",        labelPos: "tl" },
+    { x: 55.6, y: 71.4, w: 22.5, h: 24.0, color: "green",  label: "5 Today's stats",        labelPos: "tr" },
   ];
   return (
     <AnnotatedScreenshot
@@ -735,10 +735,10 @@ export function DmoStatsIllustration() {
 
 export function DmoChartIllustration() {
   const annotations: Annotation[] = [
-    { x: 1.5,  y: 4.0,  w: 30.0, h: 22.0, color: "red",    label: "1 Points History",     labelPos: "tr" },
-    { x: 82.2, y: 3.1,  w: 15.3, h: 12.5, color: "orange", label: "2 Day-range select",   labelPos: "bl" },
-    { x: 4.0,  y: 17.2, w: 89.1, h: 64.1, color: "amber",  label: "3 One bar per day",    labelPos: "tl" },
-    { x: 27.2, y: 85.9, w: 44.1, h: 7.9,  color: "blue",   label: "4 Color legend",       labelPos: "outside-bottom" },
+    { x: 1.5,  y: 6.0,  w: 14.5, h: 14.5, color: "red",    label: "1 Points History",     labelPos: "tr" },
+    { x: 80.5, y: 5.5,  w: 16.5, h: 11.0, color: "orange", label: "2 Day-range select",   labelPos: "bl" },
+    { x: 4.5,  y: 21.0, w: 90.0, h: 63.0, color: "amber",  label: "3 One bar per day",    labelPos: "tl" },
+    { x: 27.5, y: 87.5, w: 45.0, h: 8.5,  color: "blue",   label: "4 Color legend",       labelPos: "tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -766,11 +766,11 @@ export function DmoNotesIllustration() {
 
 export function DmoJournalIllustration() {
   const annotations: Annotation[] = [
-    { x: 23.4, y: 14.4, w: 4.7,  h: 2.8,  color: "red",    label: "1 Journal tab",          labelPos: "outside-bottom" },
-    { x: 16.8, y: 22.8, w: 61.3, h: 4.5,  color: "orange", label: "2 Filter & count",       labelPos: "tr" },
-    { x: 16.8, y: 27.8, w: 61.3, h: 6.0,  color: "amber",  label: "3 Month header",         labelPos: "tl" },
-    { x: 68.4, y: 33.3, w: 8.5,  h: 3.0,  color: "blue",   label: "4 AI Summary",           labelPos: "bl" },
-    { x: 19.0, y: 36.7, w: 59.1, h: 23.3, color: "green",  label: "5 Day rows + notes",     labelPos: "tl" },
+    { x: 23.4, y: 13.6, w: 5.1,  h: 4.4,  color: "red",    label: "1 Journal tab",          labelPos: "outside-bottom" },
+    { x: 16.8, y: 21.5, w: 61.3, h: 4.0,  color: "orange", label: "2 Filter & count",       labelPos: "tl" },
+    { x: 16.8, y: 25.5, w: 61.3, h: 7.0,  color: "amber",  label: "3 Month header",         labelPos: "tl" },
+    { x: 68.5, y: 32.5, w: 8.5,  h: 3.5,  color: "blue",   label: "4 AI Summary",           labelPos: "bl" },
+    { x: 19.0, y: 36.5, w: 59.1, h: 23.5, color: "green",  label: "5 Day rows + notes",     labelPos: "tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -783,10 +783,10 @@ export function DmoJournalIllustration() {
 
 export function DmoAiSummaryIllustration() {
   const annotations: Annotation[] = [
-    { x: 1.5,  y: 5.0,  w: 19.5, h: 14.0, color: "red",    label: "1 AI period header",      labelPos: "outside-bottom" },
-    { x: 60.5, y: 5.0,  w: 32.0, h: 14.0, color: "orange", label: "2 Mood + Performance",    labelPos: "tl" },
-    { x: 1.5,  y: 25.0, w: 96.5, h: 38.0, color: "amber",  label: "3 Week / month recap",    labelPos: "tl" },
-    { x: 1.5,  y: 70.0, w: 96.5, h: 25.0, color: "blue",   label: "4 Three actionable tips", labelPos: "tl" },
+    { x: 2.0,  y: 8.0,  w: 22.0, h: 14.0, color: "red",    label: "1 AI period header",      labelPos: "tl" },
+    { x: 62.0, y: 8.0,  w: 34.0, h: 14.0, color: "orange", label: "2 Mood + Performance",    labelPos: "tr" },
+    { x: 2.0,  y: 26.0, w: 96.0, h: 36.0, color: "amber",  label: "3 Week / month recap",    labelPos: "tr" },
+    { x: 2.0,  y: 66.0, w: 96.0, h: 30.0, color: "blue",   label: "4 Three actionable tips", labelPos: "tr" },
   ];
   return (
     <AnnotatedScreenshot
