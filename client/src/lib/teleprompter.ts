@@ -229,14 +229,34 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 </html>`;
 
   const twWidth = 960;
-  const twHeight = 520;
-  const twLeft = Math.round((screen.width - twWidth) / 2);
-  const twTop = 0;
-  const tw = window.open(
-    "",
-    "_blank",
-    `width=${twWidth},height=${twHeight},left=${twLeft},top=${twTop},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no`,
-  );
+  const twHeight = 600;
+  const twLeft = Math.max(0, Math.round((screen.availWidth - twWidth) / 2));
+  const twTop = Math.max(0, Math.round((screen.availHeight - twHeight) / 3));
+  // `popup=yes` is required by modern Chromium browsers; without it the
+  // browser opens a new full-size tab instead of a small popup window.
+  const features = [
+    "popup=yes",
+    `width=${twWidth}`,
+    `height=${twHeight}`,
+    `left=${twLeft}`,
+    `top=${twTop}`,
+    "resizable=yes",
+    "scrollbars=no",
+    "toolbar=no",
+    "menubar=no",
+    "location=no",
+    "status=no",
+    "noopener=no",
+  ].join(",");
+  const tw = window.open("", "teleprompter_window", features);
+  // Some browsers ignore size hints on the first open — if the popup ended up
+  // larger than requested (e.g. matching the parent), shrink and recenter it.
+  if (tw) {
+    try {
+      tw.resizeTo(twWidth, twHeight);
+      tw.moveTo(twLeft, twTop);
+    } catch (e) { /* noop — blocked in some browsers */ }
+  }
   if (tw) {
     tw.document.write(html);
     tw.document.close();
