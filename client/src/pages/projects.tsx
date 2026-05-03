@@ -1,0 +1,277 @@
+import { useState } from "react";
+import { Link } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { ProjectWithCounts } from "@shared/schema";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2 } from "lucide-react";
+
+const COLOR_PALETTE = [
+  "#6366f1", // indigo
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#ef4444", // red
+  "#f59e0b", // amber
+  "#10b981", // emerald
+  "#06b6d4", // cyan
+  "#3b82f6", // blue
+  "#64748b", // slate
+];
+
+function ProjectCard({ p, onArchive, onDelete }: { p: ProjectWithCounts; onArchive: (p: ProjectWithCounts) => void; onDelete: (p: ProjectWithCounts) => void }) {
+  const completionPct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
+  return (
+    <Card className="group relative overflow-hidden hover-elevate transition-all" data-testid={`card-project-${p.id}`}>
+      <div className="absolute inset-x-0 top-0 h-1.5" style={{ background: p.color }} />
+      <CardContent className="pt-5 pb-4">
+        <div className="flex items-start justify-between gap-2">
+          <Link href={`/projects/${p.id}`} className="flex-1 min-w-0">
+            <h3 className="font-semibold text-base leading-tight truncate" data-testid={`text-project-name-${p.id}`}>{p.name}</h3>
+            {p.description && (
+              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{p.description}</p>
+            )}
+          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 -mr-1 -mt-1 shrink-0" data-testid={`button-project-menu-${p.id}`}>
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onArchive(p)} data-testid={`menu-archive-${p.id}`}>
+                {p.status === "archived" ? <><ArchiveRestore className="h-3.5 w-3.5 mr-2" /> Unarchive</> : <><Archive className="h-3.5 w-3.5 mr-2" /> Archive</>}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onDelete(p)} className="text-destructive focus:text-destructive" data-testid={`menu-delete-${p.id}`}>
+                <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <Link href={`/projects/${p.id}`}>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-lg font-bold tabular-nums">{p.openTasks}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Open</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{p.doneTasks}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Done</p>
+            </div>
+            <div>
+              <p className={`text-lg font-bold tabular-nums ${p.dueThisWeek > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>{p.dueThisWeek}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Due 7d</p>
+            </div>
+          </div>
+
+          {p.totalTasks > 0 && (
+            <div className="mt-3">
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div className="h-full transition-all" style={{ width: `${completionPct}%`, background: p.color }} />
+              </div>
+              <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">{completionPct}% complete</p>
+            </div>
+          )}
+
+          <div className="mt-4 flex items-center justify-between">
+            {p.status === "archived" ? (
+              <Badge variant="secondary" className="text-[10px]">Archived</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px]">Active</Badge>
+            )}
+            <span className="inline-flex items-center text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+              Open <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+            </span>
+          </div>
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function ProjectsPage() {
+  const { toast } = useToast();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [color, setColor] = useState(COLOR_PALETTE[0]);
+  const [showArchived, setShowArchived] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectWithCounts | null>(null);
+
+  const { data: projects = [], isLoading } = useQuery<ProjectWithCounts[]>({ queryKey: ["/api/projects"] });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/projects", { name, description, color });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      setName(""); setDescription(""); setColor(COLOR_PALETTE[0]);
+      setCreateOpen(false);
+      toast({ title: "Project created" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to create", description: err.message, variant: "destructive" }),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (p: ProjectWithCounts) => {
+      await apiRequest("PATCH", `/api/projects/${p.id}`, { status: p.status === "archived" ? "active" : "archived" });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/projects"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/projects/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      setDeleteTarget(null);
+      toast({ title: "Project deleted" });
+    },
+  });
+
+  const active = projects.filter(p => p.status === "active");
+  const archived = projects.filter(p => p.status === "archived");
+  const visible = showArchived ? archived : active;
+
+  return (
+    <div className="flex-1 overflow-auto bg-background">
+      {/* Header */}
+      <div className="border-b border-border bg-gradient-to-br from-[hsl(230_60%_18%)] to-[hsl(245_60%_30%)] text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-7">
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2 text-white/70 text-xs uppercase tracking-wide font-medium">
+                <Briefcase className="h-3.5 w-3.5" /> Projects
+              </div>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight" data-testid="text-projects-title">Your Projects</h1>
+              <p className="mt-1 text-sm text-white/80">Plan, organize, and ship the work that runs your business.</p>
+            </div>
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-white text-[hsl(245_60%_30%)] hover:bg-white/90 shadow-lg" data-testid="button-new-project">
+                  <Plus className="h-4 w-4 mr-1.5" /> New Project
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md" data-testid="dialog-new-project">
+                <DialogHeader>
+                  <DialogTitle>New project</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <div>
+                    <Label htmlFor="proj-name">Name</Label>
+                    <Input id="proj-name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. YouTube Channel Q3" data-testid="input-project-name" />
+                  </div>
+                  <div>
+                    <Label htmlFor="proj-desc">Description (optional)</Label>
+                    <Textarea id="proj-desc" rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="What is this project about?" data-testid="input-project-description" />
+                  </div>
+                  <div>
+                    <Label>Color</Label>
+                    <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                      {COLOR_PALETTE.map(c => (
+                        <button key={c} type="button" onClick={() => setColor(c)} className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background transition-all ${color === c ? "ring-2 ring-foreground" : "hover:scale-110"}`} style={{ background: c }} aria-label={`Color ${c}`} data-testid={`color-${c.replace("#", "")}`} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</Button>
+                  <Button onClick={() => createMutation.mutate()} disabled={!name.trim() || createMutation.isPending} data-testid="button-create-project">
+                    {createMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                    Create
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {/* tabs */}
+          <div className="mt-5 flex gap-1.5">
+            <button
+              onClick={() => setShowArchived(false)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${!showArchived ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+              data-testid="tab-active"
+            >
+              <CircleDot className="h-3 w-3 inline mr-1" /> Active · {active.length}
+            </button>
+            <button
+              onClick={() => setShowArchived(true)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${showArchived ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+              data-testid="tab-archived"
+            >
+              <Archive className="h-3 w-3 inline mr-1" /> Archived · {archived.length}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-10 text-center" data-testid="empty-projects">
+            <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+              <Briefcase className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold">{showArchived ? "No archived projects" : "No projects yet"}</h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">
+              {showArchived ? "Archived projects show up here." : "Create your first project to start organizing tasks and notes."}
+            </p>
+            {!showArchived && (
+              <Button onClick={() => setCreateOpen(true)} data-testid="button-empty-create">
+                <Plus className="h-4 w-4 mr-1.5" /> New Project
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {visible.map(p => (
+              <ProjectCard
+                key={p.id}
+                p={p}
+                onArchive={(p) => archiveMutation.mutate(p)}
+                onDelete={(p) => setDeleteTarget(p)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{deleteTarget?.name}</strong> and all of its tasks will be permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-project"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

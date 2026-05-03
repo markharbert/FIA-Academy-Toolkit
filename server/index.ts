@@ -206,6 +206,57 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] user_action_log index migration complete");
 
+    // Projects feature tables
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS projects (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        color TEXT NOT NULL DEFAULT '#6366f1',
+        status TEXT NOT NULL DEFAULT 'active',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS projects_user_id_idx
+        ON projects(user_id, sort_order ASC, created_at DESC)
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS project_tasks (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        project_id VARCHAR NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        parent_task_id VARCHAR,
+        title TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'todo',
+        priority TEXT NOT NULL DEFAULT 'none',
+        due_date TIMESTAMP,
+        completed_at TIMESTAMP,
+        tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+        links JSONB NOT NULL DEFAULT '[]'::jsonb,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS project_tasks_project_idx
+        ON project_tasks(project_id, sort_order ASC, created_at ASC)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS project_tasks_user_idx
+        ON project_tasks(user_id, due_date ASC)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS project_tasks_parent_idx
+        ON project_tasks(parent_task_id)
+    `);
+    console.log("[startup] projects tables migration complete");
+
     // One-time backfill: copy account-level confirmed placement results to the
     // individual email record so old confirmed emails show their result permanently.
     // Matches by message_id when available, otherwise picks the most-recently-received

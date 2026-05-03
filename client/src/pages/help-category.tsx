@@ -1,9 +1,9 @@
 import { useLocation, useParams } from "wouter";
-import { Video, Mail, Target, Settings, ChevronRight, BookOpen, Clock, ArrowLeft } from "lucide-react";
+import { Video, Mail, Target, Settings, ChevronRight, BookOpen, Clock, ArrowLeft, Briefcase } from "lucide-react";
 import { findCategory } from "@/lib/help-content";
 
 const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  Video, Mail, Target, Settings,
+  Video, Mail, Target, Settings, Briefcase,
 };
 
 export default function HelpCategoryPage() {

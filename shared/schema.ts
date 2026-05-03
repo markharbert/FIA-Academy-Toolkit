@@ -1336,3 +1336,97 @@ export interface CompareTrackerSummary {
 export interface CompareResponse {
   trackers: CompareTrackerSummary[];
 }
+
+// ── Projects (Asana-lite project manager) ────────────────────────────────────
+
+export const projects = pgTable("projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").default("").notNull(),
+  color: text("color").default("#6366f1").notNull(), // hex
+  status: text("status").default("active").notNull(), // 'active' | 'archived'
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertProjectSchema = createInsertSchema(projects).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  description: z.string().max(1000).optional().default(""),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  status: z.enum(["active", "archived"]).optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type Project = typeof projects.$inferSelect;
+
+export const projectLinkSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  url: z.string().trim().url().max(500).refine(
+    (u) => {
+      try { const p = new URL(u).protocol; return p === "http:" || p === "https:"; }
+      catch { return false; }
+    },
+    { message: "URL must start with http:// or https://" },
+  ),
+});
+export type ProjectLink = z.infer<typeof projectLinkSchema>;
+
+export const projectTasks = pgTable("project_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  parentTaskId: varchar("parent_task_id"), // nullable; one level deep
+  title: text("title").notNull(),
+  notes: text("notes").default("").notNull(), // HTML from tiptap
+  status: text("status").default("todo").notNull(), // 'todo' | 'in_progress' | 'done'
+  priority: text("priority").default("none").notNull(), // 'none' | 'low' | 'medium' | 'high'
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`).notNull(),
+  links: jsonb("links").$type<ProjectLink[]>().default([]).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+}).extend({
+  title: z.string().trim().min(1, "Title is required").max(280),
+  notes: z.string().max(20000).optional().default(""),
+  status: z.enum(["todo", "in_progress", "done"]).optional(),
+  priority: z.enum(["none", "low", "medium", "high"]).optional(),
+  parentTaskId: z.string().nullable().optional(),
+  dueDate: z.coerce.date().nullable().optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  links: z.array(projectLinkSchema).max(20).optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export const updateProjectTaskSchema = insertProjectTaskSchema.partial().extend({
+  projectId: z.string().optional(), // do not allow changing
+}).omit({ projectId: true });
+
+export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
+export type UpdateProjectTask = z.infer<typeof updateProjectTaskSchema>;
+export type ProjectTask = typeof projectTasks.$inferSelect;
+
+export interface ProjectWithCounts extends Project {
+  totalTasks: number;
+  openTasks: number;
+  doneTasks: number;
+  dueThisWeek: number;
+  lastActivityAt: Date | null;
+}

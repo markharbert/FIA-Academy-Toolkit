@@ -595,6 +595,73 @@ const inboxAnalyzerArticle: HelpArticle = {
   ],
 };
 
+// ─── Projects Article ─────────────────────────────────────────────────────────
+
+const projectsArticle: HelpArticle = {
+  slug: "projects",
+  title: "How to Use Projects",
+  subtitle: "Plan, organize, and ship the work that runs your business — from a campaign launch to a YouTube channel — using projects, tasks, subtasks, tags, links, and rich notes.",
+  category: "Projects",
+  categorySlug: "projects",
+  readMinutes: 3,
+  overview:
+    "Projects is your lightweight project manager built into the Toolkit. Each project is a container for tasks; each task can have subtasks, a due date, a priority, tags, links, and rich notes. Use it to plan campaigns, coordinate launches, manage your content calendar, or track anything else that has multiple steps. Your top projects also surface on the Dashboard so you always know what's next.",
+  steps: [
+    {
+      number: 1,
+      title: "Create your first project",
+      body: [
+        'Click "Projects" in the left sidebar to open the hub. Hit the "New Project" button in the top-right of the page header.',
+        "Give it a clear name (for example, \"Q3 YouTube Channel\" or \"May Webinar Launch\"), an optional description, and pick a color so it's easy to spot at a glance.",
+        "After creating, click the project card to open its detail view where you'll add tasks.",
+      ],
+      tip: "The color you pick is reused everywhere — on the project card, the project header, the dashboard widget, and even on the task detail panel.",
+      illustrationKey: "projects-hub",
+    },
+    {
+      number: 2,
+      title: "Add tasks and subtasks",
+      body: [
+        "Inside a project, you'll see three lists: To do, In progress, and Done. At the bottom of each list there's a quick-add row — type a title and press Enter to create a task in that status.",
+        "Click any task to open the detail panel on the right. From there you can add subtasks (one level deep) — type into the \"Add subtask\" field at the bottom of the panel and press Enter.",
+        "Mark a task or subtask done by clicking the empty circle on the left. The completion progress on the project card and dashboard widget updates automatically.",
+      ],
+      note: "Subtasks can't have their own subtasks — keep the hierarchy shallow on purpose so projects stay easy to scan.",
+      illustrationKey: "projects-detail",
+    },
+    {
+      number: 3,
+      title: "Set priorities, due dates, tags, and links",
+      body: [
+        "In the task detail panel, use the Status, Priority, and Due dropdowns at the top to organize your work. Tasks due in the next 7 days appear in the \"Due 7d\" stat on each project card; overdue tasks bubble up to the dashboard widget.",
+        "Tags help you slice across projects (think #launch, #content, #recording). Type into the tag input and press Enter — or pick from suggestions auto-built from your other tasks.",
+        "Links let you attach reference material — a Google Doc, a Loom recording, a competitor URL — by pasting a label and URL.",
+      ],
+      tip: "Use a small, repeatable set of tags. They become much more useful for filtering when they're consistent across projects.",
+      illustrationKey: "projects-task-sheet",
+    },
+    {
+      number: 4,
+      title: "Capture details in rich notes",
+      body: [
+        "Each task has a Notes field powered by a full WYSIWYG editor. Use bold, italics, headings, bullet and numbered lists, quotes, code, and links to capture briefs, scripts, checklists, or research alongside the task.",
+        "Notes are saved automatically as you type, so you never have to hit Save.",
+      ],
+      illustrationKey: "projects-notes",
+    },
+    {
+      number: 5,
+      title: "Stay on top from the Dashboard",
+      body: [
+        "The Projects widget on the Dashboard shows your top three active projects with progress bars, plus your total Active / Open / Due-this-week counts and an alert if anything is overdue.",
+        "Click any project on the widget to jump straight into its detail view. Click \"Open\" in the widget header to see all of your projects.",
+      ],
+      tip: "Archive a project from its menu in the hub when you're done with it — it disappears from the active list and the dashboard widget but is preserved for reference under the Archived tab.",
+      illustrationKey: "projects-dashboard",
+    },
+  ],
+};
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const helpCategories: HelpCategory[] = [
@@ -618,6 +685,13 @@ export const helpCategories: HelpCategory[] = [
     description: "Log your daily activities, track streaks, and build consistent habits.",
     icon: "Target",
     articles: [],
+  },
+  {
+    slug: "projects",
+    title: "Projects",
+    description: "Plan campaigns, manage tasks, and ship your work with a lightweight project manager.",
+    icon: "Briefcase",
+    articles: [projectsArticle],
   },
   {
     slug: "account",

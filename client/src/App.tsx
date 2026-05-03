@@ -34,6 +34,8 @@ import InboxIntelComparePage from "@/pages/inbox-intel-compare";
 import InboxIntelTrackerPage from "@/pages/inbox-intel-tracker";
 import InboxIntelEmailPage from "@/pages/inbox-intel-email";
 import DmoTrackerPage from "@/pages/dmo-tracker";
+import ProjectsPage from "@/pages/projects";
+import ProjectDetailPage from "@/pages/project-detail";
 import CfLoginPage from "@/pages/cf-login";
 import HelpPage from "@/pages/help";
 import HelpCategoryPage from "@/pages/help-category";
@@ -187,6 +189,12 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/dmo-tracker">
         {() => <ProtectedRoute component={DmoTrackerPage} />}
+      </Route>
+      <Route path="/projects">
+        {() => <ProtectedRoute component={ProjectsPage} />}
+      </Route>
+      <Route path="/projects/:id">
+        {() => <ProtectedRoute component={ProjectDetailPage} />}
       </Route>
       <Route path="/help">
         {() => <ProtectedRoute component={HelpPage} />}

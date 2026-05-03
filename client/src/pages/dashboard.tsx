@@ -11,11 +11,11 @@ import {
   ChevronRight, Inbox, Trophy, Target,
   Eye, BookOpen, Zap, Users, Lightbulb,
   Plus, Activity, Radar, ShieldCheck, AlertTriangle,
-  Sparkles, BarChart3, GitCompare,
+  Sparkles, BarChart3, GitCompare, Briefcase, CalendarClock, CircleAlert,
 } from "lucide-react";
 import type {
   Session, DmoEntry, EmailAnalysis, SavedTopic, Script, Topic,
-  InsightsResponse, AnomalyEvent, PostmasterDomain,
+  InsightsResponse, AnomalyEvent, PostmasterDomain, ProjectWithCounts,
 } from "@shared/schema";
 
 type SavedTopicWithTopic = SavedTopic & { topic: Topic };
@@ -711,22 +711,92 @@ export default function DashboardPage() {
             </div>
           </GradientTile>
 
-          {/* Quick Actions */}
-          <GradientTile accent="from-yellow-400 to-amber-500" testId="card-quick-actions">
-            <TileTitle icon={Zap} title="Quick Actions" accent="from-yellow-400 to-amber-500" />
-            <div className="mt-3 space-y-2">
-              <QuickAction href="/video-score-upload" icon={Video} label="Score a Video" iconClass="text-rose-500" testId="action-score-video" />
-              <QuickAction href="/dmo-tracker" icon={Target} label="Log DMO" iconClass="text-amber-500" testId="action-log-dmo" />
-              <QuickAction href="/email-tools/inbox-intel" icon={Radar} label="Inbox Intel" iconClass="text-violet-500" badge={(insights?.totalTrackers ?? 0) > 0 ? String(insights?.totalTrackers ?? 0) : undefined} testId="action-inbox-intel" />
-              <QuickAction href="/email-tools/inbox-analyzer" icon={Mail} label="Inbox Analyzer" iconClass="text-sky-500" testId="action-inbox-analyzer" />
-              <QuickAction href="/video-trends" icon={Search} label="Research Topics" iconClass="text-teal-500" badge={savedTopics.length > 0 ? String(savedTopics.length) : undefined} testId="action-research-topics" />
-              <QuickAction href="/video-trends/scripts" icon={FileText} label="View Scripts" iconClass="text-emerald-500" badge={scripts.length > 0 ? String(scripts.length) : undefined} testId="action-scripts" />
-            </div>
-          </GradientTile>
+          {/* Projects */}
+          <ProjectsWidget />
         </div>
 
       </div>
     </div>
+  );
+}
+
+// ─── Projects widget ──────────────────────────────────────────────────────────
+function ProjectsWidget() {
+  const { data } = useQuery<{
+    projects: ProjectWithCounts[];
+    totalActive: number;
+    totalOpenTasks: number;
+    totalDueThisWeek: number;
+    totalOverdue: number;
+  }>({ queryKey: ["/api/dashboard/projects"] });
+
+  const summary = data ?? { projects: [], totalActive: 0, totalOpenTasks: 0, totalDueThisWeek: 0, totalOverdue: 0 };
+
+  return (
+    <GradientTile accent="from-indigo-500 via-violet-500 to-purple-600" testId="card-projects">
+      <div className="flex items-center justify-between">
+        <TileTitle icon={Briefcase} title="Projects" accent="from-indigo-500 to-violet-600" />
+        <Link href="/projects">
+          <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors" data-testid="link-projects-open">
+            Open <ChevronRight className="h-3 w-3" />
+          </button>
+        </Link>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <MiniStat value={summary.totalActive} label="Active" accent="from-indigo-500 to-violet-500" />
+        <MiniStat value={summary.totalOpenTasks} label="Open" accent="from-violet-500 to-purple-500" />
+        <MiniStat value={summary.totalDueThisWeek} label="Due 7d" accent="from-purple-500 to-fuchsia-500" />
+      </div>
+
+      {summary.totalOverdue > 0 && (
+        <div className="mt-3 flex items-center gap-1.5 rounded-md bg-rose-500/10 ring-1 ring-rose-500/30 px-2 py-1.5">
+          <CircleAlert className="h-3.5 w-3.5 text-rose-500" />
+          <p className="text-xs font-medium text-rose-600 dark:text-rose-400">
+            {summary.totalOverdue} overdue task{summary.totalOverdue === 1 ? "" : "s"}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-3">
+        {summary.projects.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-violet-500/30 bg-violet-500/5 p-3 text-center">
+            <p className="text-xs text-muted-foreground mb-2">No projects yet — start organizing your work.</p>
+            <Link href="/projects">
+              <Button size="sm" variant="outline" data-testid="button-create-first-project">
+                <Plus className="h-3.5 w-3.5 mr-1" /> New Project
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">Top projects</p>
+            {summary.projects.map(p => {
+              const pct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
+              return (
+                <Link key={p.id} href={`/projects/${p.id}`}>
+                  <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40 transition-colors cursor-pointer group" data-testid={`dashboard-project-${p.id}`}>
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: p.color }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{p.name}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="h-1 flex-1 rounded-full bg-muted overflow-hidden max-w-[100px]">
+                          <div className="h-full transition-all" style={{ width: `${pct}%`, background: p.color }} />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          {p.openTasks} open{p.dueThisWeek > 0 && ` · ${p.dueThisWeek} due`}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </GradientTile>
   );
 }
 

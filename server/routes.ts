@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
@@ -5778,6 +5778,123 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to disconnect" });
+    }
+  });
+
+  // ── Projects (Asana-lite project manager) ──────────────────────────────────
+
+  app.get("/api/projects", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const list = await storage.getProjectsForUser(req.session.userId!);
+      res.json(list);
+    } catch (err) {
+      console.error("[projects] list error:", err);
+      res.status(500).json({ message: "Failed to load projects" });
+    }
+  });
+
+  app.post("/api/projects", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const data = insertProjectSchema.parse(req.body);
+      const created = await storage.createProject(req.session.userId!, data);
+      res.status(201).json(created);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[projects] create error:", err);
+      res.status(500).json({ message: "Failed to create project" });
+    }
+  });
+
+  app.get("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
+    const project = await storage.getProject(req.params.id, req.session.userId!);
+    if (!project) return res.status(404).json({ message: "Not found" });
+    res.json(project);
+  });
+
+  app.patch("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const data = insertProjectSchema.partial().parse(req.body);
+      const updated = await storage.updateProject(req.params.id, req.session.userId!, data);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[projects] update error:", err);
+      res.status(500).json({ message: "Failed to update project" });
+    }
+  });
+
+  app.delete("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await storage.getProject(req.params.id, req.session.userId!);
+      if (!project) return res.status(404).json({ message: "Not found" });
+      await storage.deleteProject(req.params.id, req.session.userId!);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[projects] delete error:", err);
+      res.status(500).json({ message: "Failed to delete project" });
+    }
+  });
+
+  app.get("/api/projects/:id/tasks", requireAuth, async (req: Request, res: Response) => {
+    const project = await storage.getProject(req.params.id, req.session.userId!);
+    if (!project) return res.status(404).json({ message: "Not found" });
+    const tasks = await storage.getTasksForProject(req.params.id, req.session.userId!);
+    res.json(tasks);
+  });
+
+  app.post("/api/projects/:id/tasks", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await storage.getProject(req.params.id, req.session.userId!);
+      if (!project) return res.status(404).json({ message: "Not found" });
+      const data = insertProjectTaskSchema.parse({ ...req.body, projectId: req.params.id });
+      const created = await storage.createTask(req.session.userId!, req.params.id, data);
+      res.status(201).json(created);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      if (err?.message?.startsWith("Invalid parent") || err?.message?.startsWith("Subtasks")) {
+        return res.status(400).json({ message: err.message });
+      }
+      console.error("[projects] create task error:", err);
+      res.status(500).json({ message: "Failed to create task" });
+    }
+  });
+
+  app.patch("/api/tasks/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const data = updateProjectTaskSchema.parse(req.body);
+      const updated = await storage.updateTask(req.params.id, req.session.userId!, data);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      if (err?.message?.startsWith("Invalid parent") || err?.message?.includes("subtask") || err?.message?.includes("own parent")) {
+        return res.status(400).json({ message: err.message });
+      }
+      console.error("[projects] update task error:", err);
+      res.status(500).json({ message: "Failed to update task" });
+    }
+  });
+
+  app.delete("/api/tasks/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.id, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Not found" });
+      await storage.deleteTask(req.params.id, req.session.userId!);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[projects] delete task error:", err);
+      res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
+  app.get("/api/dashboard/projects", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const summary = await storage.getDashboardProjectsSummary(req.session.userId!);
+      res.json(summary);
+    } catch (err) {
+      console.error("[projects] dashboard summary error:", err);
+      res.status(500).json({ message: "Failed to load summary" });
     }
   });
 

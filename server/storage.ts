@@ -26,6 +26,9 @@ import {
   type DmoEntry, type InsertDmoEntry, type DmoEntryData,
   type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
   type PostmasterConnection, type PostmasterDomain,
+  projects, projectTasks,
+  type Project, type InsertProject, type ProjectWithCounts,
+  type ProjectTask, type InsertProjectTask, type UpdateProjectTask,
 } from "@shared/schema";
 import crypto from "crypto";
 import { db, pool } from "./db";
@@ -327,6 +330,25 @@ export interface IStorage {
   getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }>;
   getDmoSummary(userId: string, period: string): Promise<{ summary: string; tips: string[]; moodScore: number | null; performanceScore: number | null; generatedAt: Date } | null>;
   upsertDmoSummary(userId: string, period: string, periodType: string, summary: string, tips: string[], moodScore: number | null, performanceScore: number | null): Promise<void>;
+
+  // Projects
+  getProjectsForUser(userId: string): Promise<ProjectWithCounts[]>;
+  getProject(id: string, userId: string): Promise<Project | undefined>;
+  createProject(userId: string, data: InsertProject): Promise<Project>;
+  updateProject(id: string, userId: string, data: Partial<InsertProject>): Promise<Project | undefined>;
+  deleteProject(id: string, userId: string): Promise<void>;
+  getTasksForProject(projectId: string, userId: string): Promise<ProjectTask[]>;
+  getTask(id: string, userId: string): Promise<ProjectTask | undefined>;
+  createTask(userId: string, projectId: string, data: InsertProjectTask): Promise<ProjectTask>;
+  updateTask(id: string, userId: string, data: UpdateProjectTask): Promise<ProjectTask | undefined>;
+  deleteTask(id: string, userId: string): Promise<void>;
+  getDashboardProjectsSummary(userId: string): Promise<{
+    projects: ProjectWithCounts[];
+    totalActive: number;
+    totalOpenTasks: number;
+    totalDueThisWeek: number;
+    totalOverdue: number;
+  }>;
 
   // Inbox Analyzer
   getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
@@ -2028,6 +2050,216 @@ export class DatabaseStorage implements IStorage {
          generated_at = NOW()`,
       [userId, period, periodType, summary, tips, moodScore, performanceScore]
     );
+  }
+
+  // ── Projects ─────────────────────────────────────────────────────────────
+
+  async getProjectsForUser(userId: string): Promise<ProjectWithCounts[]> {
+    const rows = await db.execute(sql`
+      SELECT
+        p.*,
+        COALESCE(t.total, 0)::int           AS total_tasks,
+        COALESCE(t.open_count, 0)::int      AS open_tasks,
+        COALESCE(t.done_count, 0)::int      AS done_tasks,
+        COALESCE(t.due_week, 0)::int        AS due_this_week,
+        COALESCE(t.last_activity, p.updated_at) AS last_activity_at
+      FROM projects p
+      LEFT JOIN (
+        SELECT project_id,
+          COUNT(*)                                                  AS total,
+          COUNT(*) FILTER (WHERE status <> 'done')                  AS open_count,
+          COUNT(*) FILTER (WHERE status = 'done')                   AS done_count,
+          COUNT(*) FILTER (
+            WHERE status <> 'done'
+              AND due_date IS NOT NULL
+              AND due_date <= NOW() + INTERVAL '7 days'
+          ) AS due_week,
+          MAX(updated_at) AS last_activity
+        FROM project_tasks
+        WHERE user_id = ${userId}
+        GROUP BY project_id
+      ) t ON t.project_id = p.id
+      WHERE p.user_id = ${userId}
+      ORDER BY (p.status = 'archived') ASC, p.sort_order ASC, p.created_at DESC
+    `);
+    return rows.rows.map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      name: r.name,
+      description: r.description ?? "",
+      color: r.color,
+      status: r.status,
+      sortOrder: r.sort_order,
+      createdAt: new Date(r.created_at),
+      updatedAt: new Date(r.updated_at),
+      totalTasks: r.total_tasks,
+      openTasks: r.open_tasks,
+      doneTasks: r.done_tasks,
+      dueThisWeek: r.due_this_week,
+      lastActivityAt: r.last_activity_at ? new Date(r.last_activity_at) : null,
+    }));
+  }
+
+  async getProject(id: string, userId: string): Promise<Project | undefined> {
+    const [row] = await db.select().from(projects)
+      .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+    return row || undefined;
+  }
+
+  async createProject(userId: string, data: InsertProject): Promise<Project> {
+    const [created] = await db.insert(projects).values({
+      userId,
+      name: data.name,
+      description: data.description ?? "",
+      color: data.color ?? "#6366f1",
+      status: data.status ?? "active",
+      sortOrder: data.sortOrder ?? 0,
+    }).returning();
+    return created;
+  }
+
+  async updateProject(id: string, userId: string, data: Partial<InsertProject>): Promise<Project | undefined> {
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.name !== undefined) update.name = data.name;
+    if (data.description !== undefined) update.description = data.description;
+    if (data.color !== undefined) update.color = data.color;
+    if (data.status !== undefined) update.status = data.status;
+    if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
+    const [updated] = await db.update(projects)
+      .set(update)
+      .where(and(eq(projects.id, id), eq(projects.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteProject(id: string, userId: string): Promise<void> {
+    await db.delete(projects)
+      .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  }
+
+  async getTasksForProject(projectId: string, userId: string): Promise<ProjectTask[]> {
+    return db.select().from(projectTasks)
+      .where(and(eq(projectTasks.projectId, projectId), eq(projectTasks.userId, userId)))
+      .orderBy(asc(projectTasks.sortOrder), asc(projectTasks.createdAt));
+  }
+
+  async getTask(id: string, userId: string): Promise<ProjectTask | undefined> {
+    const [row] = await db.select().from(projectTasks)
+      .where(and(eq(projectTasks.id, id), eq(projectTasks.userId, userId)));
+    return row || undefined;
+  }
+
+  async createTask(userId: string, projectId: string, data: InsertProjectTask): Promise<ProjectTask> {
+    // If parentTaskId provided, validate it belongs to same project & user, and is itself top-level (one level deep)
+    let parentTaskId: string | null = null;
+    if (data.parentTaskId) {
+      const parent = await this.getTask(data.parentTaskId, userId);
+      if (!parent || parent.projectId !== projectId) {
+        throw new Error("Invalid parent task");
+      }
+      if (parent.parentTaskId) {
+        throw new Error("Subtasks cannot have subtasks");
+      }
+      parentTaskId = parent.id;
+    }
+    const [created] = await db.insert(projectTasks).values({
+      userId,
+      projectId,
+      parentTaskId,
+      title: data.title,
+      notes: data.notes ?? "",
+      status: data.status ?? "todo",
+      priority: data.priority ?? "none",
+      dueDate: data.dueDate ?? null,
+      tags: data.tags ?? [],
+      links: data.links ?? [],
+      sortOrder: data.sortOrder ?? 0,
+      completedAt: data.status === "done" ? new Date() : null,
+    }).returning();
+    return created;
+  }
+
+  async updateTask(id: string, userId: string, data: UpdateProjectTask): Promise<ProjectTask | undefined> {
+    const existing = await this.getTask(id, userId);
+    if (!existing) return undefined;
+
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.title !== undefined) update.title = data.title;
+    if (data.notes !== undefined) update.notes = data.notes;
+    if (data.priority !== undefined) update.priority = data.priority;
+    if (data.dueDate !== undefined) update.dueDate = data.dueDate;
+    if (data.tags !== undefined) update.tags = data.tags;
+    if (data.links !== undefined) update.links = data.links;
+    if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
+    if (data.status !== undefined) {
+      update.status = data.status;
+      if (data.status === "done" && existing.status !== "done") {
+        update.completedAt = new Date();
+      } else if (data.status !== "done") {
+        update.completedAt = null;
+      }
+    }
+    if (data.parentTaskId !== undefined) {
+      // Allow nulling out, or moving under another top-level task in same project
+      if (data.parentTaskId === null) {
+        update.parentTaskId = null;
+      } else {
+        const parent = await this.getTask(data.parentTaskId, userId);
+        if (!parent || parent.projectId !== existing.projectId) {
+          throw new Error("Invalid parent task");
+        }
+        if (parent.parentTaskId) throw new Error("Subtasks cannot have subtasks");
+        if (parent.id === existing.id) throw new Error("Task cannot be its own parent");
+        // Disallow turning a task with children into a subtask
+        const childCount = await db.select({ c: count() }).from(projectTasks)
+          .where(and(eq(projectTasks.parentTaskId, existing.id), eq(projectTasks.userId, userId)));
+        if ((childCount[0]?.c ?? 0) > 0) {
+          throw new Error("Cannot nest a task that already has subtasks");
+        }
+        update.parentTaskId = parent.id;
+      }
+    }
+    const [updated] = await db.update(projectTasks)
+      .set(update)
+      .where(and(eq(projectTasks.id, id), eq(projectTasks.userId, userId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteTask(id: string, userId: string): Promise<void> {
+    // Cascade: delete subtasks first
+    await db.delete(projectTasks)
+      .where(and(eq(projectTasks.parentTaskId, id), eq(projectTasks.userId, userId)));
+    await db.delete(projectTasks)
+      .where(and(eq(projectTasks.id, id), eq(projectTasks.userId, userId)));
+  }
+
+  async getDashboardProjectsSummary(userId: string) {
+    const all = await this.getProjectsForUser(userId);
+    const active = all.filter(p => p.status === "active");
+    const totalOpenTasks = active.reduce((s, p) => s + p.openTasks, 0);
+    const totalDueThisWeek = active.reduce((s, p) => s + p.dueThisWeek, 0);
+
+    const overdueRows = await db.execute(sql`
+      SELECT COUNT(*)::int AS c FROM project_tasks
+      WHERE user_id = ${userId}
+        AND status <> 'done'
+        AND due_date IS NOT NULL
+        AND due_date < NOW()
+    `);
+    const totalOverdue = Number((overdueRows.rows[0] as any)?.c ?? 0);
+
+    const top = [...active]
+      .sort((a, b) => (b.openTasks - a.openTasks) || ((b.lastActivityAt?.getTime() ?? 0) - (a.lastActivityAt?.getTime() ?? 0)))
+      .slice(0, 3);
+
+    return {
+      projects: top,
+      totalActive: active.length,
+      totalOpenTasks,
+      totalDueThisWeek,
+      totalOverdue,
+    };
   }
 
   // ── Inbox Analyzer ───────────────────────────────────────────────────────

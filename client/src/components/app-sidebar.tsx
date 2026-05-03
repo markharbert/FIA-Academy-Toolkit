@@ -24,6 +24,7 @@ import {
   Shield,
   Target,
   BookOpen,
+  Briefcase,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -43,6 +44,13 @@ const navItems = [
     url: "/dmo-tracker",
     icon: Target,
     testId: "nav-dmo-tracker",
+  },
+  {
+    title: "Projects",
+    url: "/projects",
+    icon: Briefcase,
+    testId: "nav-projects",
+    matchPaths: ["/projects"],
   },
   {
     title: "Video Tools",
