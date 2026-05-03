@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X } from "lucide-react";
 
 // dueDate is stored as UTC midnight representing a calendar day. Treat the stored
@@ -338,6 +339,9 @@ function ProjectList({
 
 export default function ProjectsPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const firstName = user?.firstName || user?.displayName?.split(" ")[0] || "";
+  const possessive = firstName ? `${firstName}${firstName.endsWith("s") ? "'" : "'s"}` : "Your";
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -440,7 +444,7 @@ export default function ProjectsPage() {
               <div className="flex items-center gap-2 text-white/70 text-xs uppercase tracking-wide font-medium">
                 <Briefcase className="h-3.5 w-3.5" /> Projects
               </div>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight" data-testid="text-projects-title">Your Projects</h1>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight" data-testid="text-projects-title">{possessive} Projects</h1>
               <p className="mt-1 text-sm text-white/80">Plan, organize, and ship the work that runs your business.</p>
             </div>
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
