@@ -227,17 +227,8 @@ interface CfUser {
   cfContactId: string | null;
 }
 
-function CfIntegrationTab({
-  onToggleCfAccess,
-  actionLoading,
-  setConfirmDialog,
-}: {
-  onToggleCfAccess: (userId: string, grant: boolean) => Promise<void>;
-  actionLoading: string | null;
-  setConfirmDialog: (d: any) => void;
-}) {
+function CfIntegrationTab() {
   const { toast } = useToast();
-  const [cfUserFilter, setCfUserFilter] = useState<string>("all");
   const [testEmail, setTestEmail] = useState("");
   const [testEvent, setTestEvent] = useState("courses/enrollment.created");
   const [testResult, setTestResult] = useState<{ action: string; email: string | null } | null>(null);
@@ -247,24 +238,12 @@ function CfIntegrationTab({
     queryKey: ["/api/admin/cf/status"],
   });
 
-  const { data: cfUsersData, isLoading: usersLoading, refetch: refetchUsers } = useQuery<{ users: CfUser[] }>({
-    queryKey: ["/api/admin/cf/users", cfUserFilter],
-    queryFn: () =>
-      fetch(`/api/admin/cf/users?filter=${cfUserFilter}`, { credentials: "include" }).then(r => r.json()),
-  });
-
   const webhookUrl = `${window.location.protocol}//${window.location.host}/api/webhooks/clickfunnels`;
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => {
       toast({ title: `${label} copied!` });
     });
-  };
-
-  const handleToggleAndRefresh = async (userId: string, grant: boolean) => {
-    await onToggleCfAccess(userId, grant);
-    refetchUsers();
-    refetchStatus();
   };
 
   const handleTestWebhook = async () => {
@@ -284,7 +263,6 @@ function CfIntegrationTab({
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed");
       setTestResult({ action: data.action, email: data.email });
-      refetchUsers();
       refetchStatus();
     } catch (err: any) {
       toast({ title: "Test failed", description: err.message, variant: "destructive" });
@@ -307,8 +285,6 @@ function CfIntegrationTab({
     { event: "subscription.cancelled", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
     { event: "subscription.churned", action: "Revokes access", icon: <UserX className="h-4 w-4 text-red-500" /> },
   ];
-
-  const cfUsers = cfUsersData?.users || [];
 
   return (
     <div className="space-y-6">
@@ -548,131 +524,6 @@ function CfIntegrationTab({
         </CardContent>
       </Card>
 
-      {/* Enrolled Users Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Member Access</CardTitle>
-              <CardDescription>View and manually manage ClickFunnels enrollment access per user.</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <select
-                className="text-sm border rounded px-2 py-1 bg-background"
-                value={cfUserFilter}
-                onChange={e => setCfUserFilter(e.target.value)}
-                data-testid="select-cf-filter"
-              >
-                <option value="all">All users</option>
-                <option value="enrolled">Enrolled only</option>
-                <option value="revoked">Revoked only</option>
-                <option value="never">Never enrolled</option>
-              </select>
-              <Button variant="ghost" size="sm" onClick={() => refetchUsers()}>
-                <RefreshCw className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {usersLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : cfUsers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              No users match this filter.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>CF Status</TableHead>
-                  <TableHead>Enrolled At</TableHead>
-                  <TableHead>Revoked At</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cfUsers.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell>
-                      <div>
-                        <p className="text-sm font-medium">{u.displayName || `${u.firstName || ""} ${u.lastName || ""}`.trim() || "—"}</p>
-                        <p className="text-xs text-muted-foreground">{u.email}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {u.cfEnrolled ? (
-                        <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400">
-                          <UserCheck className="h-3 w-3 mr-1" /> Enrolled
-                        </Badge>
-                      ) : u.cfRevokedAt ? (
-                        <Badge variant="outline" className="text-red-600 border-red-300 dark:text-red-400">
-                          <UserX className="h-3 w-3 mr-1" /> Revoked
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          <UserMinus className="h-3 w-3 mr-1" /> Never
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {u.cfEnrolledAt ? format(new Date(u.cfEnrolledAt), "MMM d, yyyy") : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {u.cfRevokedAt ? format(new Date(u.cfRevokedAt), "MMM d, yyyy") : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {u.cfEnrolled ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setConfirmDialog({
-                            open: true,
-                            title: "Revoke CF Access",
-                            description: `Remove ClickFunnels access for ${u.email}?`,
-                            action: () => handleToggleAndRefresh(u.id, false),
-                          })}
-                          disabled={actionLoading === `cf-${u.id}`}
-                          data-testid={`button-revoke-cf-${u.id}`}
-                        >
-                          {actionLoading === `cf-${u.id}` ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <><ShieldOff className="h-3.5 w-3.5 mr-1" /> Revoke</>
-                          )}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setConfirmDialog({
-                            open: true,
-                            title: "Grant CF Access",
-                            description: `Grant ClickFunnels enrollment access to ${u.email}?`,
-                            action: () => handleToggleAndRefresh(u.id, true),
-                          })}
-                          disabled={actionLoading === `cf-${u.id}`}
-                          data-testid={`button-grant-cf-${u.id}`}
-                        >
-                          {actionLoading === `cf-${u.id}` ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <><Shield className="h-3.5 w-3.5 mr-1" /> Grant</>
-                          )}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -691,6 +542,8 @@ export default function AdminPage() {
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [keStatus, setKeStatus] = useState<KeywordsEverywhereStatus | null>(null);
   const [keStatusLoading, setKeStatusLoading] = useState(true);
+  const [cfStatus, setCfStatus] = useState<CfStatus | null>(null);
+  const [cfStatusLoading, setCfStatusLoading] = useState(true);
   const [creditLimitInput, setCreditLimitInput] = useState<string>("");
   const [creditLimitSaving, setCreditLimitSaving] = useState(false);
   const [keApiKeyData, setKeApiKeyData] = useState<{ configured: boolean; keyLastFour: string | null; updatedAt: string | null } | null>(null);
@@ -713,6 +566,7 @@ export default function AdminPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
   const [consentFilter, setConsentFilter] = useState("all");
+  const [membershipFilter, setMembershipFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   
   // User drawer
@@ -750,6 +604,7 @@ export default function AdminPage() {
     if (user?.isAdmin) {
       fetchStats();
       fetchKeStatus();
+      fetchCfStatus();
       fetchOverviewStats();
       fetchActivityFeed();
       fetchKeApiKeyData();
@@ -893,6 +748,18 @@ export default function AdminPage() {
     }
   };
 
+  const fetchCfStatus = async () => {
+    try {
+      setCfStatusLoading(true);
+      const res = await fetch("/api/admin/cf/status", { credentials: "include" });
+      if (res.ok) setCfStatus(await res.json());
+    } catch (err) {
+      console.error("Failed to fetch CF status:", err);
+    } finally {
+      setCfStatusLoading(false);
+    }
+  };
+
   const fetchKeApiKeyData = async () => {
     try {
       setKeApiKeyDataLoading(true);
@@ -984,6 +851,7 @@ export default function AdminPage() {
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (providerFilter !== "all") params.set("provider", providerFilter);
       if (consentFilter !== "all") params.set("consent", consentFilter);
+      if (membershipFilter !== "all") params.set("membership", membershipFilter);
       
       const res = await fetch(`/api/admin/users?${params}`, { credentials: "include" });
       if (res.ok) {
@@ -996,7 +864,7 @@ export default function AdminPage() {
     } finally {
       setUsersLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, roleFilter, statusFilter, providerFilter, consentFilter, sortBy]);
+  }, [currentPage, pageSize, searchQuery, roleFilter, statusFilter, providerFilter, consentFilter, membershipFilter, sortBy]);
 
   useEffect(() => {
     if (user?.isAdmin) {
@@ -1236,12 +1104,11 @@ export default function AdminPage() {
         <TabsList>
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
-          <TabsTrigger value="keywords" data-testid="tab-keywords">Keywords Everywhere</TabsTrigger>
-          <TabsTrigger value="clickfunnels" data-testid="tab-clickfunnels">ClickFunnels</TabsTrigger>
+          <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -1253,6 +1120,21 @@ export default function AdminPage() {
                 ) : (
                   <div className="text-2xl font-bold" data-testid="stat-total-users">{overviewStats?.totalUsers || 0}</div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Members</CardTitle>
+                <UserCheck className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {cfStatusLoading ? (
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                ) : (
+                  <div className="text-2xl font-bold" data-testid="stat-active-members">{cfStatus?.enrolledCount ?? 0}</div>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">Enrolled in ClickFunnels</p>
               </CardContent>
             </Card>
 
@@ -1281,6 +1163,89 @@ export default function AdminPage() {
                 ) : (
                   <div className="text-2xl font-bold" data-testid="stat-new-users-30d">{overviewStats?.newUsersLast30Days || 0}</div>
                 )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Integration health strip */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card data-testid="health-clickfunnels">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Webhook className="h-4 w-4 text-muted-foreground" />
+                    ClickFunnels
+                  </CardTitle>
+                  {cfStatusLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : cfStatus?.allConfigured ? (
+                    <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400">
+                      <CheckCircle className="h-3 w-3 mr-1" /> Healthy
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-amber-600 border-amber-300 dark:text-amber-400">
+                      <AlertCircle className="h-3 w-3 mr-1" /> Setup Incomplete
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Enrolled members</span>
+                  <span className="font-medium">{cfStatus?.enrolledCount ?? "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Revoked / cancelled</span>
+                  <span className="font-medium">{cfStatus?.revokedCount ?? "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Secrets configured</span>
+                  <span className="font-medium">
+                    {cfStatus
+                      ? `${Object.values(cfStatus.configured).filter(Boolean).length}/4`
+                      : "—"}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card data-testid="health-keywords-everywhere">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    Keywords Everywhere
+                  </CardTitle>
+                  {keStatusLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : keStatus?.apiConfigured ? (
+                    <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400">
+                      <CheckCircle className="h-3 w-3 mr-1" /> Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-amber-600 border-amber-300 dark:text-amber-400">
+                      <AlertCircle className="h-3 w-3 mr-1" /> Not Configured
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">API credits remaining</span>
+                  <span className="font-medium">
+                    {keStatus?.accountCredits !== null && keStatus?.accountCredits !== undefined
+                      ? keStatus.accountCredits.toLocaleString()
+                      : "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Used (active windows)</span>
+                  <span className="font-medium">{keStatus?.totalCreditsUsedThisMonth?.toLocaleString() ?? "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Active users</span>
+                  <span className="font-medium">{keStatus?.activeUsersThisMonth ?? "—"}</span>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1406,16 +1371,15 @@ export default function AdminPage() {
                     <SelectItem value="disabled">Disabled</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={providerFilter} onValueChange={(v) => { setProviderFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-[140px]" data-testid="select-provider-filter">
-                    <SelectValue placeholder="Provider" />
+                <Select value={membershipFilter} onValueChange={(v) => { setMembershipFilter(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-[150px]" data-testid="select-membership-filter">
+                    <SelectValue placeholder="Membership" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Providers</SelectItem>
-                    <SelectItem value="local">Email</SelectItem>
-                    <SelectItem value="google">Google</SelectItem>
-                    <SelectItem value="facebook">Facebook</SelectItem>
-                    <SelectItem value="apple">Apple</SelectItem>
+                    <SelectItem value="all">All Memberships</SelectItem>
+                    <SelectItem value="enrolled">Enrolled</SelectItem>
+                    <SelectItem value="revoked">Revoked</SelectItem>
+                    <SelectItem value="never">Never enrolled</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setCurrentPage(1); }}>
@@ -1442,19 +1406,17 @@ export default function AdminPage() {
                         <TableRow>
                           <TableHead>User</TableHead>
                           <TableHead>Role</TableHead>
-                          <TableHead>Total Scores</TableHead>
-                          <TableHead>KW Credits</TableHead>
-                          <TableHead>Sign-up Method</TableHead>
-                          <TableHead>Consent</TableHead>
+                          <TableHead>Membership</TableHead>
+                          <TableHead className="text-center">Scores</TableHead>
+                          <TableHead className="text-center">KW Credits</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Created</TableHead>
-                          <TableHead>Actions</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {users.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                               No users found
                             </TableCell>
                           </TableRow>
@@ -1478,26 +1440,29 @@ export default function AdminPage() {
                                   </Badge>
                                 )}
                               </TableCell>
+                              <TableCell>
+                                {u.cfEnrolled ? (
+                                  <Badge variant="outline" className="text-green-600 border-green-300 dark:text-green-400 gap-1" title={u.cfEnrolledAt ? `Enrolled ${format(new Date(u.cfEnrolledAt), "MMM d, yyyy")}` : undefined}>
+                                    <UserCheck className="h-3 w-3" />
+                                    Enrolled
+                                  </Badge>
+                                ) : u.cfRevokedAt ? (
+                                  <Badge variant="outline" className="text-red-600 border-red-300 dark:text-red-400 gap-1" title={`Revoked ${format(new Date(u.cfRevokedAt), "MMM d, yyyy")}`}>
+                                    <UserX className="h-3 w-3" />
+                                    Revoked
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-muted-foreground gap-1">
+                                    <UserMinus className="h-3 w-3" />
+                                    Never
+                                  </Badge>
+                                )}
+                              </TableCell>
                               <TableCell className="text-center font-medium">
                                 {u.totalVideos || 0}
                               </TableCell>
                               <TableCell className="text-center text-sm font-medium">
                                 {u.keywordsCreditsThisMonth || 0}/{u.keywordsCreditsTotalUsed || 0}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                  {getProviderBadges(u.providers)}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {u.emailConsentAt ? (
-                                  <Badge variant="outline" className="gap-1">
-                                    <Mail className="h-3 w-3" />
-                                    Yes
-                                  </Badge>
-                                ) : (
-                                  <span className="text-muted-foreground">No</span>
-                                )}
                               </TableCell>
                               <TableCell>
                                 {u.isDisabled ? (
@@ -1506,11 +1471,49 @@ export default function AdminPage() {
                                   <Badge variant="outline" className="text-green-600 border-green-600">Active</Badge>
                                 )}
                               </TableCell>
-                              <TableCell className="text-sm text-muted-foreground">
-                                {format(new Date(u.createdAt), "MMM d, yyyy")}
-                              </TableCell>
                               <TableCell>
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center justify-end gap-1">
+                                  {u.cfEnrolled ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      title="Revoke ClickFunnels access"
+                                      onClick={() => setConfirmDialog({
+                                        open: true,
+                                        title: "Revoke CF Access",
+                                        description: `Remove ClickFunnels access for ${u.email}?`,
+                                        action: () => handleToggleCfAccess(u.id, false),
+                                      })}
+                                      disabled={actionLoading === `cf-${u.id}`}
+                                      data-testid={`button-revoke-cf-${u.id}`}
+                                    >
+                                      {actionLoading === `cf-${u.id}` ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <ShieldOff className="h-4 w-4 text-red-500" />
+                                      )}
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      title="Grant ClickFunnels access"
+                                      onClick={() => setConfirmDialog({
+                                        open: true,
+                                        title: "Grant CF Access",
+                                        description: `Grant ClickFunnels enrollment access to ${u.email}?`,
+                                        action: () => handleToggleCfAccess(u.id, true),
+                                      })}
+                                      disabled={actionLoading === `cf-${u.id}`}
+                                      data-testid={`button-grant-cf-${u.id}`}
+                                    >
+                                      {actionLoading === `cf-${u.id}` ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Shield className="h-4 w-4 text-green-600" />
+                                      )}
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -1572,7 +1575,7 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="keywords">
+        <TabsContent value="integrations" className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -1910,11 +1913,8 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
 
-        {/* ==================== CLICKFUNNELS TAB ==================== */}
-        <TabsContent value="clickfunnels" className="space-y-6">
-          <CfIntegrationTab onToggleCfAccess={handleToggleCfAccess} actionLoading={actionLoading} setConfirmDialog={setConfirmDialog} />
+          <CfIntegrationTab />
         </TabsContent>
 
       </Tabs>

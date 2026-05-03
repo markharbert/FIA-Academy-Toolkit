@@ -1295,7 +1295,7 @@ export async function registerRoutes(
   // List users with search, filter, sort, pagination
   app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { search, role, status, provider, consent, sort, page, pageSize } = req.query;
+      const { search, role, status, provider, consent, membership, sort, page, pageSize } = req.query;
       
       const result = await storage.getAllUsers({
         search: search as string,
@@ -1303,6 +1303,7 @@ export async function registerRoutes(
         status: status as string,
         provider: provider as string,
         consent: consent as string,
+        membership: membership as string,
         sort: sort as string,
         page: page ? parseInt(page as string) : undefined,
         pageSize: pageSize ? parseInt(pageSize as string) : undefined,

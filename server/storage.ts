@@ -105,6 +105,7 @@ export interface IStorage {
     status?: string;
     provider?: string;
     consent?: string;
+    membership?: string;
     sort?: string;
     page?: number;
     pageSize?: number;
@@ -536,11 +537,12 @@ export class DatabaseStorage implements IStorage {
     status?: string;
     provider?: string;
     consent?: string;
+    membership?: string;
     sort?: string;
     page?: number;
     pageSize?: number;
   }): Promise<{ users: (User & { totalVideos: number })[]; total: number }> {
-    const { search, role, status, provider, consent, sort = "newest", page = 1, pageSize = 25 } = options;
+    const { search, role, status, provider, consent, membership, sort = "newest", page = 1, pageSize = 25 } = options;
     
     const conditions: any[] = [];
     
@@ -571,6 +573,14 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`${users.emailConsentAt} IS NOT NULL`);
     } else if (consent === "no") {
       conditions.push(isNull(users.emailConsentAt));
+    }
+
+    if (membership === "enrolled") {
+      conditions.push(eq(users.cfEnrolled, true));
+    } else if (membership === "revoked") {
+      conditions.push(and(eq(users.cfEnrolled, false), sql`${users.cfRevokedAt} IS NOT NULL`)!);
+    } else if (membership === "never") {
+      conditions.push(and(eq(users.cfEnrolled, false), isNull(users.cfRevokedAt))!);
     }
     
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
