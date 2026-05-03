@@ -55,20 +55,20 @@ function scoreColor(s: number | null | undefined) {
 }
 
 const DMO_ACTIVITIES = [
-  { key: "visionMeditation" as const,    minutesKey: "visionMinutes" as const,     target: 30, label: "Vision & Meditation",  icon: Eye,       dot: "bg-violet-500",  ring: "ring-violet-400" },
-  { key: "personalDevelopment" as const, minutesKey: "personalMinutes" as const,   target: 30, label: "Personal Development", icon: BookOpen,  dot: "bg-blue-500",    ring: "ring-blue-400" },
-  { key: "expandSkills" as const,        minutesKey: "expandMinutes" as const,     target: 60, label: "Expand Your Skills",   icon: Lightbulb, dot: "bg-teal-500",    ring: "ring-teal-400" },
-  { key: "execution" as const,           minutesKey: "executionMinutes" as const,  target: 60, label: "Execution",            icon: Zap,       dot: "bg-amber-500",   ring: "ring-amber-400" },
-  { key: "connecting" as const,          minutesKey: "connectingMinutes" as const, target: 60, label: "Connect with People",  icon: Users,     dot: "bg-rose-500",    ring: "ring-rose-400" },
+  { key: "visionMeditation" as const,    secondsKey: "visionSeconds" as const,     target: 30, label: "Vision & Meditation",  icon: Eye,       dot: "bg-violet-500",  ring: "ring-violet-400" },
+  { key: "personalDevelopment" as const, secondsKey: "personalSeconds" as const,   target: 30, label: "Personal Development", icon: BookOpen,  dot: "bg-blue-500",    ring: "ring-blue-400" },
+  { key: "expandSkills" as const,        secondsKey: "expandSeconds" as const,     target: 60, label: "Expand Your Skills",   icon: Lightbulb, dot: "bg-teal-500",    ring: "ring-teal-400" },
+  { key: "execution" as const,           secondsKey: "executionSeconds" as const,  target: 60, label: "Execution",            icon: Zap,       dot: "bg-amber-500",   ring: "ring-amber-400" },
+  { key: "connecting" as const,          secondsKey: "connectingSeconds" as const, target: 60, label: "Connect with People",  icon: Users,     dot: "bg-rose-500",    ring: "ring-rose-400" },
 ];
 
-function calcActivityPts(minutes: number, target: number) {
-  return Math.min(5, Math.floor(minutes / (target / 5)));
+function calcActivityPts(seconds: number, targetMinutes: number) {
+  return Math.min(5, Math.floor((seconds / 60) / (targetMinutes / 5)));
 }
 
 function dmoTotalPts(entry: DmoEntry | null) {
   if (!entry) return 0;
-  return DMO_ACTIVITIES.reduce((sum, a) => sum + calcActivityPts((entry[a.minutesKey] as number) ?? 0, a.target), 0);
+  return DMO_ACTIVITIES.reduce((sum, a) => sum + calcActivityPts((entry[a.secondsKey] as number) ?? 0, a.target), 0);
 }
 
 function timeAgo(date: Date) {
@@ -406,7 +406,7 @@ export default function DashboardPage() {
             </div>
             <div className="mt-4 flex items-center gap-1.5">
               {DMO_ACTIVITIES.map(a => {
-                const pts = todayEntry ? calcActivityPts((todayEntry[a.minutesKey] as number) ?? 0, a.target) : 0;
+                const pts = todayEntry ? calcActivityPts((todayEntry[a.secondsKey] as number) ?? 0, a.target) : 0;
                 return (
                   <div
                     key={a.key}

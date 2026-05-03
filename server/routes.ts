@@ -4612,21 +4612,23 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
       // Build summary-friendly entry objects with calculated points
       const DMO_KEYS = [
-        { key: "visionMeditation" as const, minsKey: "visionMinutes" as const, label: "Vision & Meditation", target: 30 },
-        { key: "personalDevelopment" as const, minsKey: "personalMinutes" as const, label: "Personal Development", target: 30 },
-        { key: "expandSkills" as const, minsKey: "expandMinutes" as const, label: "Expand Skills", target: 60 },
-        { key: "execution" as const, minsKey: "executionMinutes" as const, label: "Execution", target: 60 },
-        { key: "connecting" as const, minsKey: "connectingMinutes" as const, label: "Connecting", target: 60 },
+        { key: "visionMeditation" as const, secsKey: "visionSeconds" as const, label: "Vision & Meditation", target: 30 },
+        { key: "personalDevelopment" as const, secsKey: "personalSeconds" as const, label: "Personal Development", target: 30 },
+        { key: "expandSkills" as const, secsKey: "expandSeconds" as const, label: "Expand Skills", target: 60 },
+        { key: "execution" as const, secsKey: "executionSeconds" as const, label: "Execution", target: 60 },
+        { key: "connecting" as const, secsKey: "connectingSeconds" as const, label: "Connecting", target: 60 },
       ];
 
-      const calcPts = (mins: number, target: number) => Math.min(5, Math.floor(mins / (target / 5)));
+      // Points: 0–5 based on seconds vs minute-target (target stays in minutes for display).
+      const calcPts = (seconds: number, targetMinutes: number) =>
+        Math.min(5, Math.floor((seconds / 60) / (targetMinutes / 5)));
 
       const entryData = periodEntries.map(e => {
         const activitiesCompleted: string[] = [];
         let totalPoints = 0;
         for (const a of DMO_KEYS) {
-          const mins = (e[a.minsKey] as number) ?? 0;
-          const pts = calcPts(mins, a.target);
+          const secs = (e[a.secsKey] as number) ?? 0;
+          const pts = calcPts(secs, a.target);
           totalPoints += pts;
           if (pts > 0) activitiesCompleted.push(a.label);
         }

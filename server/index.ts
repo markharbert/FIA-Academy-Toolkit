@@ -161,6 +161,45 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] teleprompter_scripts migration complete");
 
+    // DMO Tracker: switch storage from rounded minutes to exact seconds.
+    // Adds *_seconds columns alongside legacy *_minutes columns and backfills
+    // seconds = minutes * 60 only where seconds is still 0 (idempotent).
+    // Legacy *_minutes columns are left in place untouched as a safety net.
+    await db.execute(sql`
+      ALTER TABLE dmo_entries
+        ADD COLUMN IF NOT EXISTS vision_seconds    INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS personal_seconds  INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS expand_seconds    INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS execution_seconds INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS connecting_seconds INTEGER NOT NULL DEFAULT 0
+    `);
+    // Backfill is guarded: only runs if the legacy *_minutes columns still exist.
+    // On fresh DBs (or DBs where legacy columns were later dropped) the IF block is a no-op,
+    // so this whole migration step is safe to re-run in any schema state.
+    await db.execute(sql`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'dmo_entries' AND column_name = 'vision_minutes'
+        ) THEN
+          UPDATE dmo_entries SET
+            vision_seconds     = CASE WHEN vision_seconds     = 0 AND vision_minutes     > 0 THEN vision_minutes     * 60 ELSE vision_seconds     END,
+            personal_seconds   = CASE WHEN personal_seconds   = 0 AND personal_minutes   > 0 THEN personal_minutes   * 60 ELSE personal_seconds   END,
+            expand_seconds     = CASE WHEN expand_seconds     = 0 AND expand_minutes     > 0 THEN expand_minutes     * 60 ELSE expand_seconds     END,
+            execution_seconds  = CASE WHEN execution_seconds  = 0 AND execution_minutes  > 0 THEN execution_minutes  * 60 ELSE execution_seconds  END,
+            connecting_seconds = CASE WHEN connecting_seconds = 0 AND connecting_minutes > 0 THEN connecting_minutes * 60 ELSE connecting_seconds END
+          WHERE
+            (vision_seconds     = 0 AND vision_minutes     > 0) OR
+            (personal_seconds   = 0 AND personal_minutes   > 0) OR
+            (expand_seconds     = 0 AND expand_minutes     > 0) OR
+            (execution_seconds  = 0 AND execution_minutes  > 0) OR
+            (connecting_seconds = 0 AND connecting_minutes > 0);
+        END IF;
+      END $$;
+    `);
+    console.log("[startup] dmo_entries seconds migration complete");
+
     // One-time backfill: copy account-level confirmed placement results to the
     // individual email record so old confirmed emails show their result permanently.
     // Matches by message_id when available, otherwise picks the most-recently-received

@@ -42,7 +42,7 @@ import type { DmoEntry } from "@shared/schema";
 const DMO_ACTIVITIES = [
   {
     key: "visionMeditation" as const,
-    minutesKey: "visionMinutes" as const,
+    secondsKey: "visionSeconds" as const,
     label: "Vision & Meditation",
     tagline: "Get quiet. Visualise where you're going.",
     description: "Shut out the noise. Write your objectives, plan your strategy, see your future.",
@@ -58,7 +58,7 @@ const DMO_ACTIVITIES = [
   },
   {
     key: "personalDevelopment" as const,
-    minutesKey: "personalMinutes" as const,
+    secondsKey: "personalSeconds" as const,
     label: "Personal Development",
     tagline: "Read, listen, grow. Invest in yourself.",
     description: "Training audios, books, spiritual growth, live events, coaching.",
@@ -74,7 +74,7 @@ const DMO_ACTIVITIES = [
   },
   {
     key: "expandSkills" as const,
-    minutesKey: "expandMinutes" as const,
+    secondsKey: "expandSeconds" as const,
     label: "Expand Your Skills",
     tagline: "Self-education will make you a fortune.",
     description: "Traffic, ads, content creation, video marketing, prospecting, copywriting.",
@@ -90,7 +90,7 @@ const DMO_ACTIVITIES = [
   },
   {
     key: "execution" as const,
-    minutesKey: "executionMinutes" as const,
+    secondsKey: "executionSeconds" as const,
     label: "Execution",
     tagline: "After you consume — CREATE.",
     description: "Post, make a video, run an ad, write a podcast, do a webinar. Show up consistently.",
@@ -106,7 +106,7 @@ const DMO_ACTIVITIES = [
   },
   {
     key: "connecting" as const,
-    minutesKey: "connectingMinutes" as const,
+    secondsKey: "connectingSeconds" as const,
     label: "Connect with People",
     tagline: "This is your money activity.",
     description: "Messenger, DMs, Zoom, phone calls, comments on posts. Connect with your audience every day.",
@@ -140,10 +140,10 @@ function formatTimer(seconds: number): string {
   return `${m}:${s}`;
 }
 
-/** Returns 0–5 points earned based on minutes done vs target. */
-function calcPoints(minutes: number, target: number): number {
-  if (target <= 0) return 0;
-  return Math.min(5, Math.floor(minutes / (target / 5)));
+/** Returns 0–5 points earned based on seconds done vs minute-target. */
+function calcPoints(seconds: number, targetMinutes: number): number {
+  if (targetMinutes <= 0) return 0;
+  return Math.min(5, Math.floor((seconds / 60) / (targetMinutes / 5)));
 }
 
 /** Color for a bar based on total pts (0–25). */
@@ -303,22 +303,22 @@ function StartOverlay({
 
 interface ActivityCardProps {
   activity: typeof DMO_ACTIVITIES[number];
-  savedMinutes: number;
+  savedSeconds: number;
   savedChecked: boolean;
-  onSave: (minutes: number) => Promise<void>;
-  onAutoSave: (minutes: number) => void; // silent — no toast
+  onSave: (seconds: number) => Promise<void>;
+  onAutoSave: (seconds: number) => void; // silent — no toast
   isSaving: boolean;
 }
 
 const LS_KEY = (key: string) => `dmo-draft-${key}`;
 
-function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave, isSaving }: ActivityCardProps) {
+function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave, isSaving }: ActivityCardProps) {
   const Icon = activity.icon;
   const [showOverlay, setShowOverlay] = useState(false);
   const [timer, setTimer] = useState<TimerState>(() => {
     // If already saved/checked, start from that
-    if (savedChecked || savedMinutes > 0) {
-      return { status: "done", elapsed: savedMinutes * 60, startedAt: null };
+    if (savedChecked || savedSeconds > 0) {
+      return { status: "done", elapsed: savedSeconds, startedAt: null };
     }
     // Check localStorage for a mid-session draft (crash/refresh recovery)
     try {
@@ -366,8 +366,8 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
     const capturedStart = timer.startedAt;
     const id = setInterval(() => {
       const added = Math.floor((Date.now() - capturedStart) / 1000);
-      const totalMinutes = Math.round((capturedElapsed + added) / 60);
-      if (totalMinutes > 0) onAutoSave(totalMinutes);
+      const totalSeconds = capturedElapsed + added;
+      if (totalSeconds > 0) onAutoSave(totalSeconds);
     }, 5_000);
     return () => clearInterval(id);
   }, [timer.status, timer.startedAt, timer.elapsed, onAutoSave]);
@@ -389,23 +389,23 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
     });
   }, []);
 
-  // "Add More Time" — resume from where we left off (including already-saved minutes)
+  // "Add More Time" — resume from where we left off (including already-saved seconds)
   const handleAddMore = useCallback(() => {
     setTimer({
       status: "running",
-      elapsed: savedMinutes * 60, // anchor to what's already saved
+      elapsed: savedSeconds, // anchor to what's already saved
       startedAt: Date.now(),
     });
-  }, [savedMinutes]);
+  }, [savedSeconds]);
 
   const handleDone = useCallback(async () => {
     const added = timer.startedAt ? Math.floor((Date.now() - timer.startedAt) / 1000) : 0;
     const totalSeconds = timer.elapsed + added;
-    const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
     setTimer({ status: "done", elapsed: totalSeconds, startedAt: null });
     // Clear crash-recovery draft — session is now committed
     try { localStorage.removeItem(LS_KEY(activity.key)); } catch { /* ignore */ }
-    await onSave(totalMinutes);
+    // Save exact seconds (no rounding) — even a 20-second session is preserved truthfully.
+    await onSave(totalSeconds);
   }, [timer, onSave, activity.key]);
 
   const isDone = timer.status === "done";
@@ -416,8 +416,7 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
   const targetPct = Math.min(100, Math.round((liveSeconds / (activity.target * 60)) * 100));
 
   // Points: 0–5 based on live time vs target
-  const liveMinutes = liveSeconds / 60;
-  const pointsEarned = calcPoints(liveMinutes, activity.target);
+  const pointsEarned = calcPoints(liveSeconds, activity.target);
   const isFull = pointsEarned >= 5;
 
   return (
@@ -523,8 +522,8 @@ function ActivityCard({ activity, savedMinutes, savedChecked, onSave, onAutoSave
               }`}
               data-testid={`timer-display-${activity.key}`}
             >
-              {isDone && savedMinutes > 0 && timer.status === "done" && timer.elapsed === 0
-                ? `${savedMinutes.toString().padStart(2, "0")}:00`
+              {isDone && savedSeconds > 0 && timer.status === "done" && timer.elapsed === 0
+                ? formatTimer(savedSeconds)
                 : formatTimer(liveSeconds)}
             </div>
 
@@ -702,7 +701,7 @@ function getMonthBounds(month: string): { start: string; end: string; label: str
 }
 
 function calcEntryPts(entry: DmoEntry): number {
-  return DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints((entry[a.minutesKey] as number) ?? 0, a.target), 0);
+  return DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints((entry[a.secondsKey] as number) ?? 0, a.target), 0);
 }
 
 // ─── Journal entry card ────────────────────────────────────────────────────────
@@ -724,7 +723,7 @@ function JournalEntryCard({ entry }: { entry: DmoEntry }) {
         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
           <div className="flex gap-1" title="Activities completed">
             {DMO_ACTIVITIES.map(a => {
-              const p = calcPoints((entry[a.minutesKey] as number) ?? 0, a.target);
+              const p = calcPoints((entry[a.secondsKey] as number) ?? 0, a.target);
               return (
                 <div key={a.key} className={`h-2.5 w-2.5 rounded-full transition-all ${p > 0 ? `bg-gradient-to-br ${a.gradient}` : "bg-muted"}`} title={`${a.label}: ${p}/5 pts`} />
               );
@@ -1063,24 +1062,29 @@ export default function DmoTrackerPage() {
 
   const handleActivitySave = useCallback(async (
     key: typeof DMO_ACTIVITIES[number]["key"],
-    minutesKey: typeof DMO_ACTIVITIES[number]["minutesKey"],
-    minutes: number
+    secondsKey: typeof DMO_ACTIVITIES[number]["secondsKey"],
+    seconds: number
   ) => {
-    await saveMutation.mutateAsync({ [key]: true, [minutesKey]: minutes });
+    await saveMutation.mutateAsync({ [key]: true, [secondsKey]: seconds });
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    const display = mins > 0
+      ? `${mins} min${secs > 0 ? ` ${secs} sec` : ""}`
+      : `${secs} sec`;
     toast({
       title: "Activity saved! 🎯",
-      description: `${minutes} min logged. Keep it up!`,
+      description: `${display} logged. Keep it up!`,
     });
   }, [saveMutation, toast]);
 
   // Silent auto-save — no toast, just persist to DB
   const handleAutoSave = useCallback(async (
     key: typeof DMO_ACTIVITIES[number]["key"],
-    minutesKey: typeof DMO_ACTIVITIES[number]["minutesKey"],
-    minutes: number
+    secondsKey: typeof DMO_ACTIVITIES[number]["secondsKey"],
+    seconds: number
   ) => {
     try {
-      await saveMutation.mutateAsync({ [key]: true, [minutesKey]: minutes });
+      await saveMutation.mutateAsync({ [key]: true, [secondsKey]: seconds });
     } catch {
       // Silently ignore — will retry in 30 s
     }
@@ -1096,8 +1100,8 @@ export default function DmoTrackerPage() {
 
   // Point-based scoring: each activity worth 5 pts, 25 pts max
   const totalPoints = DMO_ACTIVITIES.reduce((sum, a) => {
-    const mins = entry?.[a.minutesKey] ?? 0;
-    return sum + calcPoints(mins, a.target);
+    const secs = entry?.[a.secondsKey] ?? 0;
+    return sum + calcPoints(secs, a.target);
   }, 0);
   const isPerfectDay = totalPoints >= 25;
   const completionPct = Math.round((totalPoints / 25) * 100);
@@ -1111,7 +1115,7 @@ export default function DmoTrackerPage() {
       const dateStr = d.toISOString().split("T")[0];
       const e = map.get(dateStr);
       const pts = e
-        ? DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints(e[a.minutesKey] ?? 0, a.target), 0)
+        ? DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints(e[a.secondsKey] ?? 0, a.target), 0)
         : 0;
       return { date: formatDisplayDate(dateStr), fullDate: dateStr, pts };
     });
@@ -1284,10 +1288,10 @@ export default function DmoTrackerPage() {
                   <ActivityCard
                     key={activity.key}
                     activity={activity}
-                    savedMinutes={entry?.[activity.minutesKey] ?? 0}
+                    savedSeconds={entry?.[activity.secondsKey] ?? 0}
                     savedChecked={entry?.[activity.key] ?? false}
-                    onSave={(minutes) => handleActivitySave(activity.key, activity.minutesKey, minutes)}
-                    onAutoSave={(minutes) => handleAutoSave(activity.key, activity.minutesKey, minutes)}
+                    onSave={(seconds) => handleActivitySave(activity.key, activity.secondsKey, seconds)}
+                    onAutoSave={(seconds) => handleAutoSave(activity.key, activity.secondsKey, seconds)}
                     isSaving={saveMutation.isPending}
                   />
                 ))}
