@@ -394,7 +394,7 @@ export default function TeleprompterPage() {
                       setDirty(true);
                     }}
                     placeholder="Paste your script here, or upload a .txt file below…"
-                    className="min-h-[360px] font-serif text-base leading-relaxed resize-y"
+                    className="min-h-[360px] font-serif text-xl leading-relaxed resize-y"
                     data-testid="input-content"
                   />
                 </div>
