@@ -48,6 +48,18 @@ import iaEmailOverview from "@assets/help/ia-email-overview.jpg";
 import iaPlacement from "@assets/help/ia-placement.jpg";
 import iaAuthentication from "@assets/help/ia-authentication.jpg";
 
+import projHub from "@assets/help/proj-hub.jpg";
+import projList from "@assets/help/proj-list.jpg";
+import projCalendar from "@assets/help/proj-calendar.jpg";
+import projTemplates from "@assets/help/proj-templates.jpg";
+import projDetail from "@assets/help/proj-detail.jpg";
+import projTaskSheet from "@assets/help/proj-task-sheet.jpg";
+import projComments from "@assets/help/proj-comments.jpg";
+import projActivity from "@assets/help/proj-activity.jpg";
+import projTemplateEditor from "@assets/help/proj-template-editor.jpg";
+import projNewDialog from "@assets/help/proj-new-dialog.jpg";
+import projDashboard from "@assets/help/proj-dashboard.jpg";
+
 import { AnnotatedScreenshot, type Annotation } from "@/components/annotated-screenshot";
 
 function ScreenshotIllustration({ src, alt }: { src: string; alt: string }) {
@@ -468,6 +480,184 @@ export function InboxAnalyzerAuthenticationIllustration() {
   );
 }
 
+// ─── Projects Illustrations ───────────────────────────────────────────────────
+
+export function ProjectsHubIllustration() {
+  const annotations: Annotation[] = [
+    { x: 21.9, y: 17.6, w: 30.9, h: 4.6, color: "red",    label: "1 Top-level tabs",            labelPos: "outside-top" },
+    { x: 81.8, y: 11.7, w: 14.5, h: 4.0, color: "orange", label: "2 New Project",               labelPos: "outside-top" },
+    { x: 21.0, y: 25.0, w: 75.0, h: 33.5, color: "amber", label: "3 Urgent — overdue + soon",   labelPos: "outside-top" },
+    { x: 21.0, y: 61.5, w: 75.0, h: 17.5, color: "blue",  label: "4 Project cards",             labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projHub}
+      alt="Projects hub on the Overview tab showing the four top-level tabs (Overview, List, Calendar, Templates), the New Project button in the top-right, an Urgent due-soon banner with three overdue tasks, and a row of three active project cards (May YouTube Channel Launch, Spring Webinar Funnel, Q2 Content Calendar) each with Open / Done / Due-7d stats and a progress bar"
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsListIllustration() {
+  const annotations: Annotation[] = [
+    { x: 31.5, y: 17.6, w: 5.7,  h: 4.6, color: "red",    label: "1 List tab",        labelPos: "outside-top" },
+    { x: 21.0, y: 25.0, w: 75.0, h: 11.5, color: "orange", label: "2 Overdue group",   labelPos: "outside-top" },
+    { x: 21.0, y: 36.7, w: 75.0, h: 17.0, color: "amber",  label: "3 Today group",     labelPos: "outside-top" },
+    { x: 21.0, y: 54.0, w: 75.0, h: 24.5, color: "blue",   label: "4 This week group", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projList}
+      alt="Projects List tab showing every open task across all active projects grouped by Overdue (1), Today (2), and This week (7). Each row has a project color dot, project name tag, priority badge, and a colored due pill (Today / Tomorrow / dated)."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsCalendarIllustration() {
+  const annotations: Annotation[] = [
+    { x: 37.7, y: 17.6, w: 5.9,  h: 4.6, color: "red",    label: "1 Calendar tab",       labelPos: "outside-top" },
+    { x: 22.9, y: 26.4, w: 73.0, h: 4.4, color: "orange", label: "2 Month nav + Today",  labelPos: "outside-top" },
+    { x: 21.5, y: 43.7, w: 10.0, h: 12.0, color: "amber", label: "3 Today's cell",       labelPos: "outside-top" },
+    { x: 87.3, y: 33.7, w: 9.5,  h: 11.0, color: "blue",  label: "4 Tasks on due date",  labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projCalendar}
+      alt="Projects Calendar tab showing a 6-week May 2026 grid with project tasks plotted on their due dates. Today (May 3) shows a red badge with 3 tasks queued; other cells across the month show single tasks colored by their parent project."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsTemplatesIllustration() {
+  const annotations: Annotation[] = [
+    { x: 44.9, y: 17.6, w: 9.5,  h: 4.6, color: "red",    label: "1 Templates tab",  labelPos: "outside-top" },
+    { x: 84.6, y: 25.5, w: 11.5, h: 4.4, color: "orange", label: "2 New template",   labelPos: "outside-top" },
+    { x: 21.0, y: 31.5, w: 75.0, h: 13.5, color: "amber",  label: "3 Template cards", labelPos: "outside-top" },
+    { x: 36.5, y: 41.0, w: 10.0, h: 4.5, color: "blue",   label: "4 Use template",   labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projTemplates}
+      alt="Projects Templates tab showing three template cards — YouTube Video Production (6 tasks), Webinar Launch (6 tasks), Email Newsletter Issue (4 tasks) — each with a colored top accent, description, task count, kebab menu, and a Use template button."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsDetailIllustration() {
+  const annotations: Annotation[] = [
+    { x: 21.0, y: 5.0,  w: 75.0, h: 17.0, color: "red",    label: "1 Project header",      labelPos: "outside-top" },
+    { x: 22.7, y: 17.5, w: 9.5,  h: 4.0, color: "orange", label: "2 Project due pill",    labelPos: "outside-bottom" },
+    { x: 21.0, y: 25.0, w: 75.0, h: 19.5, color: "amber",  label: "3 To do",               labelPos: "outside-top" },
+    { x: 21.0, y: 47.0, w: 75.0, h: 16.0, color: "blue",   label: "4 In progress",         labelPos: "outside-top" },
+    { x: 21.0, y: 65.5, w: 75.0, h: 14.0, color: "green",  label: "5 Done (struck through)", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projDetail}
+      alt="Project detail page for May YouTube Channel Launch showing the colored hero header with project title, description, due-date pill, and 5-open / 2-done badges, followed by three task lists — To do (3), In progress (2 with one task showing a 1/3 subtasks chip), and Done (2 with strike-through). Each list has a quick-add row at the bottom."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsTaskSheetIllustration() {
+  const annotations: Annotation[] = [
+    { x: 49.0, y: 0,    w: 49.5, h: 11.3, color: "red",    label: "1 Task header",            labelPos: "outside-bottom" },
+    { x: 49.0, y: 13.0, w: 49.5, h: 7.0, color: "orange", label: "2 Status / Priority / Due", labelPos: "outside-top" },
+    { x: 49.0, y: 21.5, w: 49.5, h: 11.5, color: "amber", label: "3 Links",                   labelPos: "outside-top" },
+    { x: 49.0, y: 34.0, w: 49.5, h: 40.0, color: "blue",  label: "4 Notes (WYSIWYG)",         labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projTaskSheet}
+      alt="Task side sheet open over the project page. The sheet header shows the parent project crumb, the task title 'Record video 1 — channel intro', and badges for status (In progress), priority (Urgent), due date (5/2/2026 12:00 AM), and 1/3 subtasks complete. Below are Status / Priority / Due dropdowns, a Links list with a Loom recording brief and an empty add-link row, and the Notes section rendered with rich-text formatting (Goal heading, Talking points bullet list, a quoted hook line, and a Wardrobe note)."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsCommentsIllustration() {
+  const annotations: Annotation[] = [
+    { x: 49.0, y: 14.0, w: 49.5, h: 22.5, color: "red",    label: "1 Subtasks (1 level deep)",   labelPos: "outside-top" },
+    { x: 49.0, y: 41.5, w: 26.5, h: 5.5,  color: "orange", label: "2 Comments tab",              labelPos: "outside-top" },
+    { x: 49.0, y: 49.0, w: 49.5, h: 23.5, color: "amber",  label: "3 Comment bubbles + Edit",    labelPos: "outside-top" },
+    { x: 49.0, y: 75.0, w: 49.5, h: 14.5, color: "blue",   label: "4 Cmd/Ctrl+Enter to send",    labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projComments}
+      alt="Task side sheet scrolled down to show the Subtasks list (Set up lighting + camera done, Run through script twice, Record A-roll + B-roll) and the Comments + Activity tabs section. The Comments tab shows two chat bubbles from Tele Test with relative timestamps, an (edited) marker, and Edit / Delete actions, followed by a 'Write a comment...' compose box with a Comment send button."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsActivityIllustration() {
+  const annotations: Annotation[] = [
+    { x: 75.5, y: 44.5, w: 22.5, h: 6.0,  color: "red",    label: "1 Activity tab",           labelPos: "outside-top" },
+    { x: 49.0, y: 51.5, w: 49.5, h: 26.0, color: "orange", label: "2 Auto-logged events",     labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projActivity}
+      alt="Activity tab inside the task side sheet showing five auto-logged events with color-coded icons and relative timestamps — Tele Test created this task (3 days ago), added subtask 'Set up lighting + camera' (2d), set priority to Urgent (2d), changed status from To do to In progress (1d), and added a comment (2h ago)."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsTemplateEditorIllustration() {
+  const annotations: Annotation[] = [
+    { x: 22.9, y: 11.5, w: 7.2,  h: 4.0,  color: "red",    label: "1 Template badge",     labelPos: "outside-top" },
+    { x: 21.0, y: 25.5, w: 75.0, h: 5.0,  color: "orange", label: "2 No due dates here",  labelPos: "outside-top" },
+    { x: 21.0, y: 32.5, w: 75.0, h: 35.0, color: "amber",  label: "3 Tasks (priority + tags only)", labelPos: "outside-top" },
+    { x: 21.0, y: 73.0, w: 75.0, h: 6.5,  color: "blue",   label: "4 Quick add to template", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projTemplateEditor}
+      alt="Template editor for the YouTube Video Production template showing the TEMPLATE badge in the hero, the explanatory banner ('Tasks in a template have no due date — pick dates after creating a project from this template'), and the 6 template tasks (Pick topic + outline, Write script, Record A-roll, Record B-roll, Edit + thumbnail, Schedule + write SEO desc) each showing a priority chip but no status or due date controls."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsNewDialogIllustration() {
+  const annotations: Annotation[] = [
+    { x: 34.6, y: 21.5, w: 30.5, h: 4.5, color: "red",    label: "1 Start from (Blank or template)", labelPos: "outside-top" },
+    { x: 34.6, y: 27.0, w: 30.5, h: 18.5, color: "orange", label: "2 Name + description",            labelPos: "outside-top" },
+    { x: 34.6, y: 46.0, w: 30.5, h: 7.0, color: "amber",  label: "3 Project color",                 labelPos: "outside-top" },
+    { x: 34.6, y: 53.5, w: 30.5, h: 8.0, color: "blue",   label: "4 Due date (optional)",           labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projNewDialog}
+      alt="The New Project dialog showing the Start from picker (set to 'Blank project'), Name and Description fields, a row of nine color swatches (indigo, violet, pink, red, amber, green, teal, blue, gray), an optional Due date field, and Cancel / Create buttons in the footer."
+      annotations={annotations}
+    />
+  );
+}
+
+export function ProjectsDashboardIllustration() {
+  const annotations: Annotation[] = [
+    { x: 21.0, y: 17.5, w: 75.0, h: 9.5, color: "red",    label: "1 Today's KPIs",       labelPos: "outside-top" },
+    { x: 21.0, y: 30.0, w: 51.0, h: 49.5, color: "orange", label: "2 Projects hero",      labelPos: "outside-top" },
+    { x: 23.9, y: 38.0, w: 46.0, h: 7.5, color: "amber",  label: "3 Project stat chips", labelPos: "outside-top" },
+    { x: 23.9, y: 47.0, w: 46.0, h: 32.5, color: "blue",  label: "4 Up Next this week",  labelPos: "outside-top" },
+    { x: 73.0, y: 30.0, w: 23.0, h: 27.0, color: "green", label: "5 Email Health",       labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={projDashboard}
+      alt="Dashboard hero showing the personalized greeting with Open Projects and Log DMO buttons, the 3-KPI ribbon (DMO points today 0/25, Open tasks 13, Competitor emails 7d 0), the Projects hero card with stat chips (3 Projects, 13 Open tasks, 10 Due 7d, 1 Overdue) and the Up Next list grouped Overdue / Today / This week, plus the Email Health tile on the right with Sender Reputation and Inbox Placement rows."
+      annotations={annotations}
+    />
+  );
+}
+
 export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "video-tools-hub": VideoToolsHubIllustration,
   "sessions-list": SessionsListIllustration,
@@ -512,4 +702,15 @@ export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "ia-email-overview": InboxAnalyzerEmailOverviewIllustration,
   "ia-placement": InboxAnalyzerPlacementIllustration,
   "ia-authentication": InboxAnalyzerAuthenticationIllustration,
+  "proj-hub": ProjectsHubIllustration,
+  "proj-list": ProjectsListIllustration,
+  "proj-calendar": ProjectsCalendarIllustration,
+  "proj-templates": ProjectsTemplatesIllustration,
+  "proj-detail": ProjectsDetailIllustration,
+  "proj-task-sheet": ProjectsTaskSheetIllustration,
+  "proj-comments": ProjectsCommentsIllustration,
+  "proj-activity": ProjectsActivityIllustration,
+  "proj-template-editor": ProjectsTemplateEditorIllustration,
+  "proj-new-dialog": ProjectsNewDialogIllustration,
+  "proj-dashboard": ProjectsDashboardIllustration,
 };
