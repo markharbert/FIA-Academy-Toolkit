@@ -114,7 +114,8 @@ export default function ProjectDetailPage() {
   }
 
   const openTask = openTaskId ? tasks.find(t => t.id === openTaskId) ?? null : null;
-  const openSubs = openTask ? (subtasksByParent[openTask.id] ?? []) : [];
+  const openSubs = openTask && !openTask.parentTaskId ? (subtasksByParent[openTask.id] ?? []) : [];
+  const openParent = openTask?.parentTaskId ? tasks.find(t => t.id === openTask.parentTaskId) ?? null : null;
 
   return (
     <div className="flex-1 overflow-auto bg-background">
@@ -266,9 +267,11 @@ export default function ProjectDetailPage() {
       <TaskDetailSheet
         project={project}
         task={openTask}
+        parentTask={openParent}
         subtasks={openSubs}
         open={!!openTaskId}
         onOpenChange={(o) => { if (!o) setOpenTaskId(null); }}
+        onOpenTask={(id) => setOpenTaskId(id)}
       />
     </div>
   );

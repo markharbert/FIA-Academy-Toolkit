@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { RichTextEditor } from "./rich-text-editor";
-import { CalendarIcon, Trash2, X, Plus, Link2, ExternalLink, ListChecks, Flag, CheckCircle2 } from "lucide-react";
+import { CalendarIcon, Trash2, X, Plus, Link2, ExternalLink, ListChecks, Flag, CheckCircle2, ChevronLeft, CornerDownRight } from "lucide-react";
 
 const STATUS_OPTIONS = [
   { value: "todo", label: "To do" },
@@ -32,12 +32,14 @@ const PRIORITY_OPTIONS: { value: string; label: string; dot: string; badge: stri
 interface Props {
   project: Project;
   task: ProjectTask | null;
+  parentTask?: ProjectTask | null;
   subtasks: ProjectTask[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenTask?: (id: string) => void;
 }
 
-export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange }: Props) {
+export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onOpenChange, onOpenTask }: Props) {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -167,7 +169,20 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange }:
                 {initials}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] uppercase tracking-wider text-white/70 font-semibold">{project.name}</p>
+                {parentTask && onOpenTask ? (
+                  <button
+                    onClick={() => onOpenTask(parentTask.id)}
+                    className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-white/80 hover:text-white font-semibold group"
+                    data-testid="button-back-to-parent"
+                  >
+                    <ChevronLeft className="h-3 w-3 -ml-0.5" />
+                    <span className="opacity-70">{project.name}</span>
+                    <span className="opacity-50">/</span>
+                    <span className="truncate max-w-[260px]">{parentTask.title}</span>
+                  </button>
+                ) : (
+                  <p className="text-[10px] uppercase tracking-wider text-white/70 font-semibold">{project.name}</p>
+                )}
                 <SheetTitle asChild>
                   <input
                     value={title}
@@ -180,6 +195,11 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange }:
                   />
                 </SheetTitle>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {parentTask && (
+                    <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
+                      <CornerDownRight className="h-2.5 w-2.5 mr-1" /> Subtask
+                    </Badge>
+                  )}
                   <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
                     {STATUS_OPTIONS.find(s => s.value === status)?.label}
                   </Badge>
@@ -365,7 +385,13 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange }:
                         ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                         : <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40" />}
                     </button>
-                    <span className={`text-sm flex-1 ${st.status === "done" ? "line-through text-muted-foreground" : ""}`}>{st.title}</span>
+                    <button
+                      onClick={() => onOpenTask?.(st.id)}
+                      className={`text-sm flex-1 text-left truncate hover:underline underline-offset-2 ${st.status === "done" ? "line-through text-muted-foreground" : ""}`}
+                      data-testid={`button-open-subtask-${st.id}`}
+                    >
+                      {st.title}
+                    </button>
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setConfirmDeleteSubtask(st)} aria-label="Delete subtask" data-testid={`button-delete-subtask-${st.id}`}>
                       <Trash2 className="h-3 w-3" />
                     </Button>
