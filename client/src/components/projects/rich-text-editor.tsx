@@ -43,7 +43,7 @@ export function RichTextEditor({ value, onChange, placeholder, testId }: Props) 
     const incoming = value || "";
     const normCurrent = current === "<p></p>" ? "" : current;
     if (normCurrent !== incoming) {
-      editor.commands.setContent(incoming || "", false);
+      editor.commands.setContent(incoming || "", { emitUpdate: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);

@@ -463,7 +463,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
   // Confirmed results live directly on the email record (written once, never overwritten).
   // These take full priority — no need for address-level monitoring state once confirmed.
   const confirmedResults = (email.placementResults as PlacementResult[] | null) ?? null;
-  const confirmedAt = email.placementConfirmedAt ? new Date(email.placementConfirmedAt as string) : null;
+  const confirmedAt = email.placementConfirmedAt ? new Date(email.placementConfirmedAt as unknown as string | number | Date) : null;
 
   // Derive auto-monitoring phase info (used only while confirmation is still pending)
   const now = Date.now();

@@ -2643,8 +2643,9 @@ export default function AdminPage() {
                   <div className="rounded-lg border border-dashed py-8 text-center">
                     <p className="text-sm text-muted-foreground">No actions match this filter.</p>
                     <Button
-                      variant="link"
+                      variant="ghost"
                       size="sm"
+                      className="text-primary hover:text-primary/80 underline-offset-4 hover:underline"
                       onClick={() => setActionsTypeFilter("all")}
                       data-testid="button-clear-actions-filter"
                     >

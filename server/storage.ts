@@ -89,10 +89,7 @@ export interface IStorage {
   createSession(session: InsertSession): Promise<Session>;
   updateSession(id: string, updates: Partial<Session>): Promise<Session | undefined>;
   deleteSession(id: string): Promise<void>;
-  
-  // Legacy cleanup (not used)
-  markVideoDeleted(id: string): Promise<void>;
-  
+
   // Password Reset Tokens
   createPasswordResetToken(token: InsertPasswordResetToken): Promise<PasswordResetToken>;
   getPasswordResetTokenByHash(tokenHash: string): Promise<PasswordResetToken | undefined>;
@@ -529,13 +526,6 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSession(id: string): Promise<void> {
     await db.delete(sessions).where(eq(sessions.id, id));
-  }
-
-  // Legacy cleanup (not used)
-  async markVideoDeleted(id: string): Promise<void> {
-    await db.update(sessions)
-      .set({ videoDeletedAt: new Date(), videoPath: null })
-      .where(eq(sessions.id, id));
   }
 
   // Password Reset Tokens
