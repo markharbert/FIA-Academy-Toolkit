@@ -484,10 +484,10 @@ export function InboxAnalyzerAuthenticationIllustration() {
 
 export function ProjectsHubIllustration() {
   const annotations: Annotation[] = [
-    { x: 21.9, y: 17.6, w: 30.9, h: 4.6, color: "red",    label: "1 Top-level tabs",            labelPos: "outside-top" },
-    { x: 81.8, y: 11.7, w: 14.5, h: 4.0, color: "orange", label: "2 New Project",               labelPos: "outside-top" },
-    { x: 21.0, y: 25.0, w: 75.0, h: 33.5, color: "amber", label: "3 Urgent — overdue + soon",   labelPos: "outside-top" },
-    { x: 21.0, y: 61.5, w: 75.0, h: 17.5, color: "blue",  label: "4 Project cards",             labelPos: "outside-top" },
+    { x: 21.9, y: 21.9, w: 32.6, h: 4.7,  color: "red",    label: "1 Top-level tabs",          labelPos: "outside-bottom" },
+    { x: 85.4, y: 15.3, w: 11.0, h: 4.4,  color: "orange", label: "2 New Project",             labelPos: "bl" },
+    { x: 21.0, y: 31.3, w: 75.4, h: 43.0, color: "amber",  label: "3 Urgent — overdue + soon", labelPos: "tl" },
+    { x: 21.0, y: 76.3, w: 75.4, h: 23.0, color: "blue",   label: "4 Project cards",           labelPos: "tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -500,10 +500,10 @@ export function ProjectsHubIllustration() {
 
 export function ProjectsListIllustration() {
   const annotations: Annotation[] = [
-    { x: 31.5, y: 17.6, w: 5.7,  h: 4.6, color: "red",    label: "1 List tab",        labelPos: "outside-top" },
-    { x: 21.0, y: 25.0, w: 75.0, h: 11.5, color: "orange", label: "2 Overdue group",   labelPos: "outside-top" },
-    { x: 21.0, y: 36.7, w: 75.0, h: 17.0, color: "amber",  label: "3 Today group",     labelPos: "outside-top" },
-    { x: 21.0, y: 54.0, w: 75.0, h: 24.5, color: "blue",   label: "4 This week group", labelPos: "outside-top" },
+    { x: 31.4, y: 21.9, w: 5.5,  h: 4.7,  color: "red",    label: "1 List tab",        labelPos: "outside-bottom" },
+    { x: 21.0, y: 32.5, w: 75.4, h: 12.5, color: "orange", label: "2 Overdue",         labelPos: "tr" },
+    { x: 21.0, y: 46.9, w: 75.4, h: 20.0, color: "amber",  label: "3 Today",           labelPos: "tr" },
+    { x: 21.0, y: 68.4, w: 75.4, h: 29.5, color: "blue",   label: "4 This week",       labelPos: "tr" },
   ];
   return (
     <AnnotatedScreenshot
@@ -516,10 +516,10 @@ export function ProjectsListIllustration() {
 
 export function ProjectsCalendarIllustration() {
   const annotations: Annotation[] = [
-    { x: 37.7, y: 17.6, w: 5.9,  h: 4.6, color: "red",    label: "1 Calendar tab",       labelPos: "outside-top" },
-    { x: 22.9, y: 26.4, w: 73.0, h: 4.4, color: "orange", label: "2 Month nav + Today",  labelPos: "outside-top" },
-    { x: 21.5, y: 43.7, w: 10.0, h: 12.0, color: "amber", label: "3 Today's cell",       labelPos: "outside-top" },
-    { x: 87.3, y: 33.7, w: 9.5,  h: 11.0, color: "blue",  label: "4 Tasks on due date",  labelPos: "outside-top" },
+    { x: 37.3, y: 21.9, w: 6.4,  h: 4.7,  color: "red",    label: "1 Calendar tab",      labelPos: "outside-bottom" },
+    { x: 22.9, y: 32.8, w: 73.5, h: 5.5,  color: "orange", label: "2 Month nav + Today", labelPos: "tr" },
+    { x: 21.0, y: 54.7, w: 10.5, h: 12.5, color: "amber",  label: "3 Today's cell",      labelPos: "bl" },
+    { x: 87.4, y: 43.0, w: 8.9,  h: 10.2, color: "blue",   label: "4 Tasks on due date", labelPos: "bl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -532,10 +532,10 @@ export function ProjectsCalendarIllustration() {
 
 export function ProjectsTemplatesIllustration() {
   const annotations: Annotation[] = [
-    { x: 44.9, y: 17.6, w: 9.5,  h: 4.6, color: "red",    label: "1 Templates tab",  labelPos: "outside-top" },
-    { x: 84.6, y: 25.5, w: 11.5, h: 4.4, color: "orange", label: "2 New template",   labelPos: "outside-top" },
-    { x: 21.0, y: 31.5, w: 75.0, h: 13.5, color: "amber",  label: "3 Template cards", labelPos: "outside-top" },
-    { x: 36.5, y: 41.0, w: 10.0, h: 4.5, color: "blue",   label: "4 Use template",   labelPos: "outside-bottom" },
+    { x: 44.7, y: 21.9, w: 9.8,  h: 4.7,  color: "red",    label: "1 Templates tab",  labelPos: "outside-bottom" },
+    { x: 84.6, y: 32.5, w: 11.9, h: 4.5,  color: "orange", label: "2 New template",   labelPos: "outside-bottom" },
+    { x: 21.0, y: 39.5, w: 75.0, h: 17.0, color: "amber",  label: "3 Template cards", labelPos: "tl" },
+    { x: 35.5, y: 52.3, w: 10.5, h: 4.7,  color: "blue",   label: "4 Use template",   labelPos: "outside-bottom" },
   ];
   return (
     <AnnotatedScreenshot
@@ -548,11 +548,11 @@ export function ProjectsTemplatesIllustration() {
 
 export function ProjectsDetailIllustration() {
   const annotations: Annotation[] = [
-    { x: 21.0, y: 5.0,  w: 75.0, h: 17.0, color: "red",    label: "1 Project header",      labelPos: "outside-top" },
-    { x: 22.7, y: 17.5, w: 9.5,  h: 4.0, color: "orange", label: "2 Project due pill",    labelPos: "outside-bottom" },
-    { x: 21.0, y: 25.0, w: 75.0, h: 19.5, color: "amber",  label: "3 To do",               labelPos: "outside-top" },
-    { x: 21.0, y: 47.0, w: 75.0, h: 16.0, color: "blue",   label: "4 In progress",         labelPos: "outside-top" },
-    { x: 21.0, y: 65.5, w: 75.0, h: 14.0, color: "green",  label: "5 Done (struck through)", labelPos: "outside-top" },
+    { x: 21.0, y: 4.7,  w: 75.4, h: 23.5, color: "red",    label: "1 Project header",       labelPos: "tr" },
+    { x: 22.7, y: 22.7, w: 9.6,  h: 4.0,  color: "orange", label: "2 Due pill",             labelPos: "bl" },
+    { x: 21.0, y: 32.0, w: 75.4, h: 26.0, color: "amber",  label: "3 To do",                labelPos: "tr" },
+    { x: 21.0, y: 60.0, w: 75.4, h: 20.3, color: "blue",   label: "4 In progress",          labelPos: "tr" },
+    { x: 21.0, y: 83.4, w: 75.4, h: 16.6, color: "green",  label: "5 Done (struck through)", labelPos: "tr" },
   ];
   return (
     <AnnotatedScreenshot
@@ -565,10 +565,10 @@ export function ProjectsDetailIllustration() {
 
 export function ProjectsTaskSheetIllustration() {
   const annotations: Annotation[] = [
-    { x: 49.0, y: 0,    w: 49.5, h: 11.3, color: "red",    label: "1 Task header",            labelPos: "outside-bottom" },
-    { x: 49.0, y: 13.0, w: 49.5, h: 7.0, color: "orange", label: "2 Status / Priority / Due", labelPos: "outside-top" },
-    { x: 49.0, y: 21.5, w: 49.5, h: 11.5, color: "amber", label: "3 Links",                   labelPos: "outside-top" },
-    { x: 49.0, y: 34.0, w: 49.5, h: 40.0, color: "blue",  label: "4 Notes (WYSIWYG)",         labelPos: "outside-top" },
+    { x: 49.3, y: 0.5,  w: 49.5, h: 11.5, color: "red",    label: "1 Task header",             labelPos: "bl" },
+    { x: 49.3, y: 14.1, w: 49.5, h: 7.5,  color: "orange", label: "2 Status / Priority / Due", labelPos: "tl" },
+    { x: 49.3, y: 21.8, w: 49.5, h: 12.0, color: "amber",  label: "3 Links",                   labelPos: "tr" },
+    { x: 49.3, y: 33.8, w: 49.5, h: 42.0, color: "blue",   label: "4 Notes (WYSIWYG)",         labelPos: "tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -581,10 +581,10 @@ export function ProjectsTaskSheetIllustration() {
 
 export function ProjectsCommentsIllustration() {
   const annotations: Annotation[] = [
-    { x: 49.0, y: 14.0, w: 49.5, h: 22.5, color: "red",    label: "1 Subtasks (1 level deep)",   labelPos: "outside-top" },
-    { x: 49.0, y: 41.5, w: 26.5, h: 5.5,  color: "orange", label: "2 Comments tab",              labelPos: "outside-top" },
-    { x: 49.0, y: 49.0, w: 49.5, h: 23.5, color: "amber",  label: "3 Comment bubbles + Edit",    labelPos: "outside-top" },
-    { x: 49.0, y: 75.0, w: 49.5, h: 14.5, color: "blue",   label: "4 Cmd/Ctrl+Enter to send",    labelPos: "outside-top" },
+    { x: 49.3, y: 18.6, w: 49.5, h: 22.3, color: "red",    label: "1 Subtasks (1 level deep)",   labelPos: "tl" },
+    { x: 49.0, y: 43.1, w: 26.4, h: 5.8,  color: "orange", label: "2 Comments tab",              labelPos: "bl" },
+    { x: 49.3, y: 49.2, w: 49.5, h: 23.4, color: "amber",  label: "3 Comment bubbles + Edit",    labelPos: "tl" },
+    { x: 49.3, y: 74.7, w: 49.5, h: 15.9, color: "blue",   label: "4 Cmd/Ctrl+Enter to send",    labelPos: "tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -597,8 +597,8 @@ export function ProjectsCommentsIllustration() {
 
 export function ProjectsActivityIllustration() {
   const annotations: Annotation[] = [
-    { x: 75.5, y: 44.5, w: 22.5, h: 6.0,  color: "red",    label: "1 Activity tab",           labelPos: "outside-top" },
-    { x: 49.0, y: 51.5, w: 49.5, h: 26.0, color: "orange", label: "2 Auto-logged events",     labelPos: "outside-top" },
+    { x: 75.2, y: 55.5, w: 21.5, h: 5.9,  color: "red",    label: "1 Activity tab",       labelPos: "bl" },
+    { x: 49.3, y: 62.5, w: 49.5, h: 25.8, color: "orange", label: "2 Auto-logged events", labelPos: "tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -611,10 +611,10 @@ export function ProjectsActivityIllustration() {
 
 export function ProjectsTemplateEditorIllustration() {
   const annotations: Annotation[] = [
-    { x: 22.9, y: 11.5, w: 7.2,  h: 4.0,  color: "red",    label: "1 Template badge",     labelPos: "outside-top" },
-    { x: 21.0, y: 25.5, w: 75.0, h: 5.0,  color: "orange", label: "2 No due dates here",  labelPos: "outside-top" },
-    { x: 21.0, y: 32.5, w: 75.0, h: 35.0, color: "amber",  label: "3 Tasks (priority + tags only)", labelPos: "outside-top" },
-    { x: 21.0, y: 73.0, w: 75.0, h: 6.5,  color: "blue",   label: "4 Quick add to template", labelPos: "outside-top" },
+    { x: 22.5, y: 14.4, w: 7.5,  h: 3.6,  color: "red",    label: "1 Template badge",                labelPos: "outside-bottom" },
+    { x: 21.0, y: 32.0, w: 75.4, h: 4.7,  color: "orange", label: "2 No due dates in templates",     labelPos: "tl" },
+    { x: 21.0, y: 39.8, w: 75.4, h: 35.5, color: "amber",  label: "3 Tasks (priority + tags only)",  labelPos: "tl" },
+    { x: 21.0, y: 75.0, w: 75.4, h: 4.7,  color: "blue",   label: "4 Quick add",                     labelPos: "tl" },
   ];
   return (
     <AnnotatedScreenshot
@@ -627,10 +627,10 @@ export function ProjectsTemplateEditorIllustration() {
 
 export function ProjectsNewDialogIllustration() {
   const annotations: Annotation[] = [
-    { x: 34.6, y: 21.5, w: 30.5, h: 4.5, color: "red",    label: "1 Start from (Blank or template)", labelPos: "outside-top" },
-    { x: 34.6, y: 27.0, w: 30.5, h: 18.5, color: "orange", label: "2 Name + description",            labelPos: "outside-top" },
-    { x: 34.6, y: 46.0, w: 30.5, h: 7.0, color: "amber",  label: "3 Project color",                 labelPos: "outside-top" },
-    { x: 34.6, y: 53.5, w: 30.5, h: 8.0, color: "blue",   label: "4 Due date (optional)",           labelPos: "outside-top" },
+    { x: 34.7, y: 25.0, w: 30.8, h: 7.0,  color: "red",    label: "1 Start from (Blank or template)", labelPos: "tr" },
+    { x: 34.7, y: 34.4, w: 30.8, h: 22.2, color: "orange", label: "2 Name + description",            labelPos: "tr" },
+    { x: 34.7, y: 58.6, w: 30.8, h: 7.3,  color: "amber",  label: "3 Project color",                 labelPos: "tr" },
+    { x: 34.7, y: 67.2, w: 30.8, h: 7.0,  color: "blue",   label: "4 Due date (optional)",           labelPos: "tr" },
   ];
   return (
     <AnnotatedScreenshot
@@ -643,11 +643,11 @@ export function ProjectsNewDialogIllustration() {
 
 export function ProjectsDashboardIllustration() {
   const annotations: Annotation[] = [
-    { x: 21.0, y: 17.5, w: 75.0, h: 9.5, color: "red",    label: "1 Today's KPIs",       labelPos: "outside-top" },
-    { x: 21.0, y: 30.0, w: 51.0, h: 49.5, color: "orange", label: "2 Projects hero",      labelPos: "outside-top" },
-    { x: 23.9, y: 38.0, w: 46.0, h: 7.5, color: "amber",  label: "3 Project stat chips", labelPos: "outside-top" },
-    { x: 23.9, y: 47.0, w: 46.0, h: 32.5, color: "blue",  label: "4 Up Next this week",  labelPos: "outside-top" },
-    { x: 73.0, y: 30.0, w: 23.0, h: 27.0, color: "green", label: "5 Email Health",       labelPos: "outside-top" },
+    { x: 21.0, y: 23.1, w: 75.4, h: 9.7,  color: "red",    label: "1 Today's KPIs",       labelPos: "tr" },
+    { x: 21.0, y: 36.7, w: 51.0, h: 62.5, color: "orange", label: "2 Projects hero",      labelPos: "tl" },
+    { x: 23.4, y: 46.6, w: 46.5, h: 7.8,  color: "amber",  label: "3 Project stat chips", labelPos: "tr" },
+    { x: 23.4, y: 59.4, w: 46.5, h: 39.0, color: "blue",   label: "4 Up Next this week",  labelPos: "tr" },
+    { x: 72.8, y: 36.7, w: 23.7, h: 34.7, color: "green",  label: "5 Email Health",       labelPos: "tr" },
   ];
   return (
     <AnnotatedScreenshot
