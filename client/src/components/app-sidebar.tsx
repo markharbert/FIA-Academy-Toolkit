@@ -26,6 +26,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
+import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 
 const VIDEO_TOOL_PATHS = ["/video-score", "/video-trends", "/video-trends/scripts", "/video-trends/explore", "/video-trends/saved", "/video-trends/settings", "/teleprompter"];
 const EMAIL_TOOL_PATHS = ["/email-tools/inbox-analyzer", "/email-tools/sender-reputation", "/email-tools/inbox-intel"];
@@ -93,13 +94,27 @@ export function AppSidebar() {
               size="lg"
               onClick={() => setLocation("/dashboard")}
               data-testid="link-logo"
-              className="flex items-center justify-start overflow-visible"
+              className={
+                state === "collapsed"
+                  ? "flex items-center justify-center overflow-visible"
+                  : "flex items-center justify-start overflow-visible"
+              }
             >
-              <img 
-                src={logoImage} 
-                alt="Academy Toolkit" 
-                className={state === "collapsed" ? "h-10 w-auto" : "h-12 w-auto"} 
-              />
+              {state === "collapsed" ? (
+                <img
+                  src={lionLogo}
+                  alt="Academy Toolkit"
+                  className="h-8 w-8"
+                  data-testid="img-logo-collapsed"
+                />
+              ) : (
+                <img
+                  src={logoImage}
+                  alt="Academy Toolkit"
+                  className="h-12 w-auto"
+                  data-testid="img-logo-expanded"
+                />
+              )}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
