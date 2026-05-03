@@ -108,6 +108,19 @@ export default function ProjectDetailPage() {
     },
   });
 
+  const completeProjectMutation = useMutation({
+    mutationFn: async (status: "active" | "archived") => {
+      await apiRequest("PATCH", `/api/projects/${projectId}`, { status });
+    },
+    onSuccess: (_data, status) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      toast({ title: status === "archived" ? "Project marked complete" : "Project reopened" });
+    },
+    onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
   const saveAsTemplateMutation = useMutation({
     mutationFn: async (name: string) => {
       const res = await apiRequest("POST", `/api/projects/${projectId}/save-as-template`, { name });
@@ -183,13 +196,38 @@ export default function ProjectDetailPage() {
                 );
               })()}
             </div>
-            <div className="flex items-center gap-3 text-sm text-white/85">
+            <div className="flex items-center gap-2 text-sm text-white/85 flex-wrap">
               <Badge className="bg-white/15 text-white border-0">
                 {topLevel.filter(t => t.status !== "done").length} open
               </Badge>
               <Badge className="bg-white/15 text-white border-0">
                 {topLevel.filter(t => t.status === "done").length} done
               </Badge>
+              {project.status === "archived" ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs font-semibold bg-white/10 text-white/80 hover:text-white hover:bg-white/20 border border-white/20"
+                  onClick={() => completeProjectMutation.mutate("active")}
+                  disabled={completeProjectMutation.isPending}
+                  data-testid="button-reopen-project"
+                >
+                  {completeProjectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                  Reopen project
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs font-semibold bg-emerald-500/20 text-white border border-emerald-300/30 hover:bg-emerald-500/35"
+                  onClick={() => completeProjectMutation.mutate("archived")}
+                  disabled={completeProjectMutation.isPending}
+                  data-testid="button-complete-project"
+                >
+                  {completeProjectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                  Complete project
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:text-white hover:bg-white/15" data-testid="button-project-menu">

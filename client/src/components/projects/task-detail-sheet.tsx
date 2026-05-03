@@ -261,6 +261,26 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
         </div>
 
         <div className="px-6 py-5 space-y-5">
+          {/* Complete / Reopen */}
+          {status === "done" ? (
+            <Button
+              variant="outline"
+              className="w-full border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+              onClick={() => { setStatus("todo"); updateMutation.mutate({ status: "todo" }); }}
+              data-testid="button-reopen-task"
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2 text-emerald-500" /> Completed — click to reopen
+            </Button>
+          ) : (
+            <Button
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              onClick={() => { setStatus("done"); updateMutation.mutate({ status: "done" }); }}
+              data-testid="button-complete-task"
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" /> Complete task
+            </Button>
+          )}
+
           {/* Status / Priority / Due */}
           <div className="grid grid-cols-3 gap-3">
             <div>
