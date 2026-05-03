@@ -31,62 +31,57 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { FeedResponse, FeedItem } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
+import { addDaysToKey, formatInTz, todayKeyInTz } from "@shared/datetime";
 
 type DatePreset = "all" | "today" | "7d" | "30d" | "90d";
 
-function presetToFromDate(preset: DatePreset): Date | null {
+function presetToFromDate(preset: DatePreset, tz: string): Date | null {
   if (preset === "all") return null;
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  if (preset === "today") return d;
-  if (preset === "7d") {
-    d.setDate(d.getDate() - 6);
-    return d;
-  }
-  if (preset === "30d") {
-    d.setDate(d.getDate() - 29);
-    return d;
-  }
-  if (preset === "90d") {
-    d.setDate(d.getDate() - 89);
-    return d;
-  }
-  return null;
+  // Resolve "today (start) in user's tz" then offset back N-1 calendar days.
+  const todayKey = todayKeyInTz(tz);
+  let startKey = todayKey;
+  if (preset === "7d") startKey = addDaysToKey(todayKey, -6);
+  else if (preset === "30d") startKey = addDaysToKey(todayKey, -29);
+  else if (preset === "90d") startKey = addDaysToKey(todayKey, -89);
+  // Use a UTC-anchored point that's safely before the start of that day in any tz.
+  const [y, m, d] = startKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
 }
 
-function formatDate(d: Date | string): string {
-  const date = new Date(d);
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function formatDate(d: Date | string, tz: string): string {
+  return formatInTz(new Date(d), tz, "MMM d");
 }
 
-function formatTime(d: Date | string): string {
-  return new Date(d).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+function formatTime(d: Date | string, tz: string): string {
+  return formatInTz(new Date(d), tz, "h:mm a");
 }
 
-function groupByDay(items: FeedItem[]): { date: string; label: string; items: FeedItem[] }[] {
+function groupByDay(items: FeedItem[], tz: string): { date: string; label: string; items: FeedItem[] }[] {
   const groups = new Map<string, FeedItem[]>();
   for (const item of items) {
-    const d = new Date(item.receivedAt);
-    const key = d.toISOString().slice(0, 10);
+    const key = formatInTz(new Date(item.receivedAt), tz, "yyyy-MM-dd");
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(item);
   }
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
+  const todayKey = todayKeyInTz(tz);
+  const yesterdayKey = addDaysToKey(todayKey, -1);
   return [...groups.entries()].map(([date, items]) => {
-    const d = new Date(date);
     let label: string;
-    if (d.getTime() === today.getTime()) label = "Today";
-    else if (d.getTime() === yesterday.getTime()) label = "Yesterday";
-    else label = d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+    if (date === todayKey) label = "Today";
+    else if (date === yesterdayKey) label = "Yesterday";
+    else {
+      const [y, m, d] = date.split("-").map(Number);
+      label = formatInTz(new Date(Date.UTC(y, m - 1, d, 12)), tz, "EEEE, MMMM d");
+    }
     return { date, label, items };
   });
 }
 
 export default function InboxIntelFeedPage() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const tz = user?.timezone || "America/New_York";
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [datePreset, setDatePreset] = useState<DatePreset>("30d");
@@ -102,7 +97,7 @@ export default function InboxIntelFeedPage() {
 
   const queryParams = useMemo(() => {
     const params: Record<string, string> = { limit: "200" };
-    const fromDate = presetToFromDate(datePreset);
+    const fromDate = presetToFromDate(datePreset, tz);
     if (fromDate) params.from = fromDate.toISOString();
     if (selectedTrackerIds.length > 0) params.trackerIds = selectedTrackerIds.join(",");
     if (selectedEsp && selectedEsp !== "all") params.esp = selectedEsp;
@@ -145,7 +140,7 @@ export default function InboxIntelFeedPage() {
     );
   };
 
-  const grouped = groupByDay(items);
+  const grouped = groupByDay(items, tz);
 
   const trackerLabel =
     selectedTrackerIds.length === 0
@@ -398,8 +393,8 @@ export default function InboxIntelFeedPage() {
                         </div>
                       </div>
                       <div className="hidden sm:flex flex-col items-end text-xs text-muted-foreground flex-shrink-0">
-                        <span>{formatDate(item.receivedAt)}</span>
-                        <span>{formatTime(item.receivedAt)}</span>
+                        <span>{formatDate(item.receivedAt, tz)}</span>
+                        <span>{formatTime(item.receivedAt, tz)}</span>
                       </div>
                     </button>
                   ))}

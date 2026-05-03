@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
+import { dayDiffInTz, formatInTz } from "@shared/datetime";
 import { TaskDetailSheet } from "@/components/projects/task-detail-sheet";
 import { ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight, CalendarClock, Flag, Loader2, ListChecks, MoreVertical, FileText } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -28,31 +30,30 @@ const PRIORITY_TONE: Record<string, string> = {
   urgent: "bg-rose-600 text-white dark:bg-rose-600 dark:text-white ring-1 ring-rose-300/60",
 };
 
-function dueDateTone(due: Date | null, status: string) {
+function dueDateTone(due: Date | null, status: string, tz: string) {
   if (!due || status === "done") return "text-muted-foreground bg-muted";
-  const now = new Date();
-  const diffDays = Math.floor((due.getTime() - now.setHours(0, 0, 0, 0)) / 86400000);
+  const diffDays = dayDiffInTz(due, tz);
   if (diffDays < 0) return "text-rose-700 bg-rose-100 dark:text-rose-300 dark:bg-rose-900/40";
   if (diffDays <= 1) return "text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/40";
   return "text-sky-700 bg-sky-100 dark:text-sky-300 dark:bg-sky-900/40";
 }
 
-function dueDateLabel(due: Date) {
-  const now = new Date(); now.setHours(0, 0, 0, 0);
-  const d = new Date(due); d.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((d.getTime() - now.getTime()) / 86400000);
+function dueDateLabel(due: Date, tz: string) {
+  const diffDays = dayDiffInTz(due, tz);
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Tomorrow";
   if (diffDays === -1) return "Yesterday";
   if (diffDays < 0) return `${-diffDays}d overdue`;
-  if (diffDays <= 6) return due.toLocaleDateString(undefined, { weekday: "short" });
-  return due.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (diffDays <= 6) return formatInTz(due, tz, "EEE");
+  return formatInTz(due, tz, "MMM d");
 }
 
 export default function ProjectDetailPage() {
   const params = useParams();
   const projectId = params.id!;
   const { toast } = useToast();
+  const { user } = useAuth();
+  const tz = user?.timezone || "America/New_York";
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [quickAddInputs, setQuickAddInputs] = useState<Record<string, string>>({ todo: "", in_progress: "", done: "" });
@@ -157,19 +158,14 @@ export default function ProjectDetailPage() {
                 <p className="mt-1 text-sm text-white/85 max-w-2xl">{project.description}</p>
               )}
               {project.dueDate && (() => {
-                // dueDate is stored as UTC midnight representing a calendar day; treat
-                // its UTC Y/M/D as a local date so the displayed day matches what the
-                // user picked regardless of viewer timezone.
                 const due = new Date(project.dueDate);
-                const dueMid = new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
-                const now = new Date(); now.setHours(0, 0, 0, 0);
-                const diffDays = Math.round((dueMid.getTime() - now.getTime()) / 86400000);
+                const diffDays = dayDiffInTz(due, tz);
                 let label: string;
                 if (diffDays < 0) label = `${-diffDays}d overdue`;
                 else if (diffDays === 0) label = "Due today";
                 else if (diffDays === 1) label = "Due tomorrow";
                 else if (diffDays <= 7) label = `Due in ${diffDays}d`;
-                else label = `Due ${dueMid.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+                else label = `Due ${formatInTz(due, tz, "MMM d, yyyy")}`;
                 const isOverdue = diffDays < 0;
                 const isSoon = diffDays >= 0 && diffDays <= 7;
                 return (
@@ -180,7 +176,7 @@ export default function ProjectDetailPage() {
                       "bg-white/15 text-white"
                     }`}
                     data-testid="badge-project-detail-due"
-                    title={dueMid.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                    title={formatInTz(due, tz, "EEEE, MMMM d, yyyy")}
                   >
                     <CalendarClock className="h-3 w-3" /> {label}
                   </span>
@@ -277,8 +273,8 @@ export default function ProjectDetailPage() {
                                 </Badge>
                               )}
                               {due && (
-                                <Badge className={`text-[10px] gap-0.5 px-1.5 py-0 ${dueDateTone(due, task.status)}`} variant="secondary">
-                                  <CalendarClock className="h-2.5 w-2.5" /> {dueDateLabel(due)}
+                                <Badge className={`text-[10px] gap-0.5 px-1.5 py-0 ${dueDateTone(due, task.status, tz)}`} variant="secondary">
+                                  <CalendarClock className="h-2.5 w-2.5" /> {dueDateLabel(due, tz)}
                                 </Badge>
                               )}
                               {subs.length > 0 && (

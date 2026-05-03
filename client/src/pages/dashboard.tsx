@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
+import { dayDiffInTz, formatInTz } from "@shared/datetime";
 import {
   Flame, Video, Mail, FileText,
   TrendingUp, TrendingDown,
@@ -193,28 +194,21 @@ function dueLocal(due: Date): Date {
   return due;
 }
 
-function bucketTask(t: OpenTask): "overdue" | "today" | "week" | "later" | "none" {
+function bucketTask(t: OpenTask, tz?: string | null): "overdue" | "today" | "week" | "later" | "none" {
   if (!t.dueDate) return "none";
-  const due = dueLocal(new Date(t.dueDate));
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const dayMs = 86400000;
-  if (due.toDateString() === today.toDateString()) return "today";
-  if (due.getTime() < today.getTime()) return "overdue";
-  if (due.getTime() - today.getTime() <= 7 * dayMs) return "week";
+  const diff = dayDiffInTz(new Date(t.dueDate), tz || "America/New_York");
+  if (diff === 0) return "today";
+  if (diff < 0) return "overdue";
+  if (diff <= 7) return "week";
   return "later";
 }
 
-function formatTaskDue(due: Date): string {
-  const d = dueLocal(due);
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-  if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow";
-  if (d.getTime() < today.getTime()) {
-    const daysOverdue = Math.round((today.getTime() - d.getTime()) / 86400000);
-    return `${daysOverdue}d overdue`;
-  }
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function formatTaskDue(due: Date, tz?: string | null): string {
+  const diff = dayDiffInTz(due, tz || "America/New_York");
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff < 0) return `${-diff}d overdue`;
+  return formatInTz(due, tz || "America/New_York", "MMM d");
 }
 
 // ─── main component ──────────────────────────────────────────────────────────
@@ -438,6 +432,7 @@ export default function DashboardPage() {
           <ProjectsHero
             summary={projectsSummary}
             tasks={openTasks}
+            tz={user?.timezone}
           />
           <EmailHealthTile
             reputation={reputation}
@@ -622,6 +617,7 @@ export default function DashboardPage() {
 function ProjectsHero({
   summary,
   tasks,
+  tz,
 }: {
   summary: {
     projects: ProjectWithCounts[];
@@ -631,6 +627,7 @@ function ProjectsHero({
     totalOverdue: number;
   } | undefined;
   tasks: OpenTask[];
+  tz?: string | null;
 }) {
   const s = summary ?? { projects: [], totalActive: 0, totalOpenTasks: 0, totalDueThisWeek: 0, totalOverdue: 0 };
 
@@ -641,7 +638,7 @@ function ProjectsHero({
     const today: OpenTask[] = [];
     const week: OpenTask[] = [];
     for (const t of tasks) {
-      const b = bucketTask(t);
+      const b = bucketTask(t, tz);
       if (b === "overdue") overdue.push(t);
       else if (b === "today") today.push(t);
       else if (b === "week") week.push(t);
@@ -743,7 +740,7 @@ function ProjectsHero({
                   <ul className={`${gi < grouped.length - 1 ? "border-b border-border" : ""}`}>
                     {g.items.map(t => {
                       const due = t.dueDate ? new Date(t.dueDate) : null;
-                      const b = bucketTask(t);
+                      const b = bucketTask(t, tz);
                       const dueClasses =
                         b === "overdue" ? "text-rose-700 dark:text-rose-300 bg-rose-500/10" :
                         b === "today"   ? "text-amber-700 dark:text-amber-300 bg-amber-500/10" :
@@ -764,7 +761,7 @@ function ProjectsHero({
                               {due && (
                                 <span className={`text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 rounded shrink-0 ${dueClasses}`}>
                                   <CalendarClock className="h-2.5 w-2.5 inline mr-0.5" />
-                                  {formatTaskDue(due)}
+                                  {formatTaskDue(due, tz)}
                                 </span>
                               )}
                               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />

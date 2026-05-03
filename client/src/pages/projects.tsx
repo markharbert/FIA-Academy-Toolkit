@@ -16,24 +16,18 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { dayDiffInTz, dueDateKey as dueDateKeyInTz, dueHasTime, formatInTz } from "@shared/datetime";
 import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// dueDate is stored as UTC midnight representing a calendar day. Treat the stored
-// UTC Y/M/D as a local calendar date, then compare to the viewer's local "today".
-function dueDateAsLocalMidnight(due: Date): Date {
-  return new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
-}
-
-function formatProjectDueLabel(due: Date): { text: string; tone: "overdue" | "soon" | "today" | "tomorrow" | "future" } {
-  const now = new Date(); now.setHours(0, 0, 0, 0);
-  const d = dueDateAsLocalMidnight(due);
-  const diffDays = Math.round((d.getTime() - now.getTime()) / 86400000);
+function formatProjectDueLabel(due: Date, tz?: string | null): { text: string; tone: "overdue" | "soon" | "today" | "tomorrow" | "future" } {
+  const z = tz || "America/New_York";
+  const diffDays = dayDiffInTz(due, z);
   if (diffDays < 0) return { text: `${-diffDays}d overdue`, tone: "overdue" };
   if (diffDays === 0) return { text: "Due today", tone: "today" };
   if (diffDays === 1) return { text: "Due tomorrow", tone: "tomorrow" };
   if (diffDays <= 7) return { text: `Due in ${diffDays}d`, tone: "soon" };
-  return { text: `Due ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`, tone: "future" };
+  return { text: `Due ${formatInTz(due, z, "MMM d")}`, tone: "future" };
 }
 
 function projectDueToneClasses(tone: "overdue" | "soon" | "today" | "tomorrow" | "future"): string {
@@ -156,7 +150,7 @@ function TemplatesTab({
   );
 }
 
-function ProjectCard({ p, onEdit, onArchive, onDelete }: { p: ProjectWithCounts; onEdit: (p: ProjectWithCounts) => void; onArchive: (p: ProjectWithCounts) => void; onDelete: (p: ProjectWithCounts) => void }) {
+function ProjectCard({ p, onEdit, onArchive, onDelete, tz }: { p: ProjectWithCounts; onEdit: (p: ProjectWithCounts) => void; onArchive: (p: ProjectWithCounts) => void; onDelete: (p: ProjectWithCounts) => void; tz?: string | null }) {
   const completionPct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
   return (
     <Card className="group relative overflow-hidden hover-elevate transition-all" data-testid={`card-project-${p.id}`}>
@@ -224,13 +218,12 @@ function ProjectCard({ p, onEdit, onArchive, onDelete }: { p: ProjectWithCounts;
               )}
               {p.dueDate && (() => {
                 const due = new Date(p.dueDate);
-                const label = formatProjectDueLabel(due);
-                const dLocal = dueDateAsLocalMidnight(due);
+                const label = formatProjectDueLabel(due, tz);
                 return (
                   <span
                     className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${projectDueToneClasses(label.tone)}`}
                     data-testid={`badge-project-due-${p.id}`}
-                    title={dLocal.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                    title={formatInTz(due, tz || "America/New_York", "EEEE, MMMM d, yyyy")}
                   >
                     <CalendarClock className="h-2.5 w-2.5" /> {label.text}
                   </span>
@@ -435,47 +428,30 @@ function priorityBadgeClasses(priority: string | null | undefined): string {
   }
 }
 
-function bucketTask(t: OpenTask): "overdue" | "today" | "week" | "later" | "none" {
+function bucketTask(t: OpenTask, tz?: string | null): "overdue" | "today" | "week" | "later" | "none" {
   if (!t.dueDate) return "none";
-  const due = new Date(t.dueDate);
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const dayMs = 86400000;
-  // Tasks with date-only (UTC midnight) get treated as that calendar day.
-  const dueLocal = (() => {
-    if (due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0) {
-      return new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
-    }
-    return due;
-  })();
-  if (dueLocal.getTime() < today.getTime()) {
-    // Same calendar day check (overdue if before today's start)
-    const sameDay = dueLocal.toDateString() === today.toDateString();
-    if (sameDay) return "today";
-    return "overdue";
-  }
-  if (dueLocal.toDateString() === today.toDateString()) return "today";
-  if (dueLocal.getTime() - today.getTime() <= 7 * dayMs) return "week";
+  const diff = dayDiffInTz(new Date(t.dueDate), tz || "America/New_York");
+  if (diff === 0) return "today";
+  if (diff < 0) return "overdue";
+  if (diff <= 7) return "week";
   return "later";
 }
 
-function formatTaskDue(due: Date): string {
-  const d = (due.getUTCHours() === 0 && due.getUTCMinutes() === 0)
-    ? new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate())
-    : due;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-  const isToday = d.toDateString() === today.toDateString();
-  const isTomorrow = d.toDateString() === tomorrow.toDateString();
-  const hasTime = !(due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0);
-  const timeStr = hasTime ? ` ${due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
-  if (isToday) return `Today${timeStr}`;
-  if (isTomorrow) return `Tomorrow${timeStr}`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" }) + timeStr;
+function formatTaskDue(due: Date, tz?: string | null): string {
+  const z = tz || "America/New_York";
+  const diff = dayDiffInTz(due, z);
+  const hasTime = dueHasTime(due);
+  const timeStr = hasTime ? ` ${formatInTz(due, z, "h:mm a")}` : "";
+  if (diff === 0) return `Today${timeStr}`;
+  if (diff === 1) return `Tomorrow${timeStr}`;
+  if (diff < 0) return `${-diff}d overdue`;
+  const sameYear = formatInTz(due, z, "yyyy") === formatInTz(new Date(), z, "yyyy");
+  return formatInTz(due, z, sameYear ? "MMM d" : "MMM d, yyyy") + timeStr;
 }
 
-function TaskRow({ t }: { t: OpenTask }) {
+function TaskRow({ t, tz }: { t: OpenTask; tz?: string | null }) {
   const due = t.dueDate ? new Date(t.dueDate) : null;
-  const bucket = bucketTask(t);
+  const bucket = bucketTask(t, tz);
   const dueClasses =
     bucket === "overdue" ? "text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/40" :
     bucket === "today"   ? "text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40" :
@@ -498,7 +474,7 @@ function TaskRow({ t }: { t: OpenTask }) {
       </div>
       {due && (
         <span className={`text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 rounded shrink-0 ${dueClasses}`}>
-          {formatTaskDue(due)}
+          {formatTaskDue(due, tz)}
         </span>
       )}
       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
@@ -506,7 +482,7 @@ function TaskRow({ t }: { t: OpenTask }) {
   );
 }
 
-function AllTasksList({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: boolean }) {
+function AllTasksList({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading: boolean; tz?: string | null }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -533,7 +509,7 @@ function AllTasksList({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: bool
     { key: "none",    title: "No due date", tone: "text-muted-foreground", items: [] },
   ];
   for (const t of tasks) {
-    const b = bucketTask(t);
+    const b = bucketTask(t, tz);
     groups.find(g => g.key === b)!.items.push(t);
   }
   return (
@@ -545,7 +521,7 @@ function AllTasksList({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: bool
             <Badge variant="outline" className="text-[10px]">{g.items.length}</Badge>
           </div>
           <ul className="divide-y divide-border">
-            {g.items.map(t => <li key={t.id}>{<TaskRow t={t} />}</li>)}
+            {g.items.map(t => <li key={t.id}>{<TaskRow t={t} tz={tz} />}</li>)}
           </ul>
         </div>
       ))}
@@ -553,11 +529,12 @@ function AllTasksList({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: bool
   );
 }
 
-function TasksCalendar({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: boolean }) {
+function TasksCalendar({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading: boolean; tz?: string | null }) {
+  const z = tz || "America/New_York";
   const [cursor, setCursor] = useState(() => {
     const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d;
   });
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayKey = formatInTz(new Date(), z, "yyyy-MM-dd");
 
   // Build 6-week grid starting Sunday for the cursor month.
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -567,15 +544,11 @@ function TasksCalendar({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: boo
     const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d;
   });
 
-  // Index tasks by yyyy-mm-dd.
+  // Index tasks by yyyy-mm-dd in user's tz.
   const tasksByDay = new Map<string, OpenTask[]>();
   for (const t of tasks) {
     if (!t.dueDate) continue;
-    const due = new Date(t.dueDate);
-    const dLocal = (due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0)
-      ? new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate())
-      : due;
-    const key = `${dLocal.getFullYear()}-${dLocal.getMonth()}-${dLocal.getDate()}`;
+    const key = dueDateKeyInTz(new Date(t.dueDate), z);
     const arr = tasksByDay.get(key) || [];
     arr.push(t);
     tasksByDay.set(key, arr);
@@ -614,10 +587,13 @@ function TasksCalendar({ tasks, isLoading }: { tasks: OpenTask[]; isLoading: boo
       <div className="grid grid-cols-7 grid-rows-6 auto-rows-fr">
         {days.map((d, i) => {
           const inMonth = d.getMonth() === cursor.getMonth();
-          const isToday = d.getTime() === today.getTime();
-          const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+          const yy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const dd = String(d.getDate()).padStart(2, "0");
+          const key = `${yy}-${mm}-${dd}`;
+          const isToday = key === todayKey;
           const dayTasks = tasksByDay.get(key) || [];
-          const overdue = d.getTime() < today.getTime();
+          const overdue = key < todayKey;
           return (
             <div
               key={i}
@@ -1028,6 +1004,7 @@ export default function ProjectsPage() {
                   onEdit={openEdit}
                   onArchive={(p) => archiveMutation.mutate(p)}
                   onDelete={(p) => setDeleteTarget(p)}
+                  tz={user?.timezone}
                 />
               ))}
             </div>
@@ -1040,9 +1017,9 @@ export default function ProjectsPage() {
             />
           )
         ) : topTab === "list" ? (
-          <AllTasksList tasks={allTasks} isLoading={tasksLoading} />
+          <AllTasksList tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} />
         ) : topTab === "calendar" ? (
-          <TasksCalendar tasks={allTasks} isLoading={tasksLoading} />
+          <TasksCalendar tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} />
         ) : (
           <TemplatesTab
             templates={templates}

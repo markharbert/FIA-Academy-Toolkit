@@ -36,6 +36,45 @@ export function startOfDayInTz(date: Date, tz: string): Date {
   return zoned;
 }
 
+// Resolve the "calendar day" YYYY-MM-DD a due date represents:
+// - If stored as UTC midnight (date-only field) -> use the picked Y/M/D as-is.
+// - Otherwise (real timestamp) -> resolve in the user's time zone.
+export function dueDateKey(due: Date | string | number, tz: string): string {
+  const d = due instanceof Date ? due : new Date(due);
+  if (
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0
+  ) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  return formatInTimeZone(d, safeTimezone(tz), "yyyy-MM-dd");
+}
+
+// Whole-day delta between a due date and "today in tz". Negative = overdue.
+export function dayDiffInTz(due: Date | string | number, tz: string, ref: Date = new Date()): number {
+  const dueKey = dueDateKey(due, tz);
+  const todayKey = todayKeyInTz(tz, ref);
+  const [y1, m1, d1] = dueKey.split("-").map(Number);
+  const [y2, m2, d2] = todayKey.split("-").map(Number);
+  return Math.round((Date.UTC(y1, m1 - 1, d1) - Date.UTC(y2, m2 - 1, d2)) / 86400000);
+}
+
+// True if the original due value carried a time-of-day (i.e. not stored at UTC midnight).
+export function dueHasTime(due: Date | string | number): boolean {
+  const d = due instanceof Date ? due : new Date(due);
+  return !(
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0
+  );
+}
+
 export function getCommonTimezones(): { value: string; label: string }[] {
   const commonZones = [
     "Pacific/Honolulu",
