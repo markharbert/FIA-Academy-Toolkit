@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { Footer } from "@/components/footer";
-import { Loader2 } from "lucide-react";
+import { Loader2, ExternalLink } from "lucide-react";
 
 import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
@@ -258,6 +258,16 @@ function AppLayout() {
           <SidebarInset>
             <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 bg-[hsl(230,45%,14%)] border-[hsl(230,45%,19%)]">
               <SidebarTrigger className="-ml-1 text-white hover:bg-white/10 hover:text-white" data-testid="button-sidebar-toggle" />
+              <a
+                href="https://www.fearlessmarketinglab.com/courses/fearless-influencer-academy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white/90 hover:text-white hover:bg-white/10 transition-colors"
+                data-testid="link-back-to-members-area"
+              >
+                <ExternalLink className="h-4 w-4" />
+                <span>Back to Members Area</span>
+              </a>
             </header>
             <main className="flex-1 overflow-auto">
               <div className="flex flex-col min-h-full">

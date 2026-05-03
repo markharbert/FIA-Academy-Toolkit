@@ -22,7 +22,6 @@ import {
   User,
   LogOut,
   Shield,
-  ExternalLink,
   Target,
   BookOpen,
 } from "lucide-react";
@@ -129,25 +128,6 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-        <SidebarGroup>
-          <SidebarGroupLabel>My Account</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  tooltip="Back to Dashboard"
-                  onClick={() => window.open("https://www.fearlessmarketinglab.com/courses/fearless-influencer-academy", "_blank", "noopener,noreferrer")}
-                  data-testid="nav-clickfunnels"
-                >
-                  <ExternalLink />
-                  <span>Back to Dashboard</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
