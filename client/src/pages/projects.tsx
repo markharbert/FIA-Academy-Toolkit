@@ -172,7 +172,15 @@ function UrgentTasksBanner({ tasks }: { tasks: UrgentTask[] }) {
                     <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: t.projectColor }} aria-hidden="true" />
                     <p className="text-[11px] text-muted-foreground truncate">{t.projectName}</p>
                     {t.priority && t.priority !== "none" && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 leading-none uppercase tracking-wide shrink-0">{t.priority}</Badge>
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] px-1 py-0 h-3.5 leading-none uppercase tracking-wide shrink-0 border-0 ${
+                          t.priority === "urgent" ? "bg-rose-600 text-white" :
+                          t.priority === "high"   ? "bg-orange-500 text-white" :
+                          t.priority === "medium" ? "bg-amber-500 text-white" :
+                          t.priority === "low"    ? "bg-sky-500 text-white" : ""
+                        }`}
+                      >{t.priority}</Badge>
                     )}
                   </div>
                 </div>

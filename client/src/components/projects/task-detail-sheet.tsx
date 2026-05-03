@@ -21,11 +21,12 @@ const STATUS_OPTIONS = [
   { value: "done", label: "Done" },
 ];
 
-const PRIORITY_OPTIONS = [
-  { value: "none", label: "None" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
+const PRIORITY_OPTIONS: { value: string; label: string; dot: string; badge: string }[] = [
+  { value: "none",   label: "None",   dot: "bg-muted-foreground/40",                 badge: "bg-white/15 text-white" },
+  { value: "low",    label: "Low",    dot: "bg-sky-500",                              badge: "bg-sky-500/90 text-white" },
+  { value: "medium", label: "Medium", dot: "bg-amber-500",                            badge: "bg-amber-500/90 text-white" },
+  { value: "high",   label: "High",   dot: "bg-orange-500",                           badge: "bg-orange-500/90 text-white" },
+  { value: "urgent", label: "Urgent", dot: "bg-rose-600 ring-2 ring-rose-400/40",     badge: "bg-rose-600 text-white" },
 ];
 
 interface Props {
@@ -207,11 +208,14 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
                   <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
                     {STATUS_OPTIONS.find(s => s.value === status)?.label}
                   </Badge>
-                  {priority !== "none" && (
-                    <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
-                      <Flag className="h-2.5 w-2.5 mr-1" /> {PRIORITY_OPTIONS.find(p => p.value === priority)?.label}
-                    </Badge>
-                  )}
+                  {priority !== "none" && (() => {
+                    const opt = PRIORITY_OPTIONS.find(p => p.value === priority);
+                    return (
+                      <Badge variant="secondary" className={`border-0 text-[10px] ${opt?.badge ?? "bg-white/15 text-white"}`}>
+                        <Flag className="h-2.5 w-2.5 mr-1" /> {opt?.label}
+                      </Badge>
+                    );
+                  })()}
                   {dueDate && (
                     <Badge variant="secondary" className="bg-white/15 text-white border-0 text-[10px]">
                       <CalendarIcon className="h-2.5 w-2.5 mr-1" /> {dueDate.toLocaleDateString()} · {dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -243,9 +247,28 @@ export function TaskDetailSheet({ project, task, subtasks, open, onOpenChange, a
             <div>
               <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Priority</Label>
               <Select value={priority} onValueChange={(v) => { setPriority(v); updateMutation.mutate({ priority: v }); }}>
-                <SelectTrigger className="mt-1 h-8 text-xs" data-testid="select-task-priority"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="mt-1 h-8 text-xs" data-testid="select-task-priority">
+                  <SelectValue>
+                    {(() => {
+                      const opt = PRIORITY_OPTIONS.find(p => p.value === priority);
+                      return (
+                        <span className="flex items-center gap-1.5">
+                          <span className={`inline-block h-2 w-2 rounded-full ${opt?.dot ?? "bg-muted"}`} />
+                          {opt?.label}
+                        </span>
+                      );
+                    })()}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
-                  {PRIORITY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  {PRIORITY_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>
+                      <span className="flex items-center gap-2">
+                        <span className={`inline-block h-2 w-2 rounded-full ${o.dot}`} />
+                        {o.label}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -18,10 +18,11 @@ const STATUS_GROUPS: Array<{ value: "todo" | "in_progress" | "done"; label: stri
 ];
 
 const PRIORITY_TONE: Record<string, string> = {
-  none: "",
-  low: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  none:   "",
+  low:    "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
   medium: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  high: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+  high:   "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+  urgent: "bg-rose-600 text-white dark:bg-rose-600 dark:text-white ring-1 ring-rose-300/60",
 };
 
 function dueDateTone(due: Date | null, status: string) {

@@ -1407,7 +1407,7 @@ export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
   title: z.string().trim().min(1, "Title is required").max(280),
   notes: z.string().max(20000).optional().default(""),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
-  priority: z.enum(["none", "low", "medium", "high"]).optional(),
+  priority: z.enum(["none", "low", "medium", "high", "urgent"]).optional(),
   parentTaskId: z.string().nullable().optional(),
   dueDate: z.coerce.date().nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
