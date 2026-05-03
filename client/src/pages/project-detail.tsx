@@ -133,6 +133,36 @@ export default function ProjectDetailPage() {
               {project.description && (
                 <p className="mt-1 text-sm text-white/85 max-w-2xl">{project.description}</p>
               )}
+              {project.dueDate && (() => {
+                // dueDate is stored as UTC midnight representing a calendar day; treat
+                // its UTC Y/M/D as a local date so the displayed day matches what the
+                // user picked regardless of viewer timezone.
+                const due = new Date(project.dueDate);
+                const dueMid = new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
+                const now = new Date(); now.setHours(0, 0, 0, 0);
+                const diffDays = Math.round((dueMid.getTime() - now.getTime()) / 86400000);
+                let label: string;
+                if (diffDays < 0) label = `${-diffDays}d overdue`;
+                else if (diffDays === 0) label = "Due today";
+                else if (diffDays === 1) label = "Due tomorrow";
+                else if (diffDays <= 7) label = `Due in ${diffDays}d`;
+                else label = `Due ${dueMid.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+                const isOverdue = diffDays < 0;
+                const isSoon = diffDays >= 0 && diffDays <= 7;
+                return (
+                  <span
+                    className={`mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full ${
+                      isOverdue ? "bg-rose-500/30 text-white ring-1 ring-rose-200/40" :
+                      isSoon ? "bg-amber-400/25 text-white ring-1 ring-amber-200/40" :
+                      "bg-white/15 text-white"
+                    }`}
+                    data-testid="badge-project-detail-due"
+                    title={dueMid.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                  >
+                    <CalendarClock className="h-3 w-3" /> {label}
+                  </span>
+                );
+              })()}
             </div>
             <div className="flex items-center gap-3 text-sm text-white/85">
               <Badge className="bg-white/15 text-white border-0">

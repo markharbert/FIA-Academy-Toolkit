@@ -1346,6 +1346,7 @@ export const projects = pgTable("projects", {
   description: text("description").default("").notNull(),
   color: text("color").default("#6366f1").notNull(), // hex
   status: text("status").default("active").notNull(), // 'active' | 'archived'
+  dueDate: timestamp("due_date"),
   sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -1361,6 +1362,7 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   description: z.string().max(1000).optional().default(""),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   status: z.enum(["active", "archived"]).optional(),
+  dueDate: z.coerce.date().nullable().optional(),
   sortOrder: z.number().int().optional(),
 });
 

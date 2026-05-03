@@ -2096,6 +2096,7 @@ export class DatabaseStorage implements IStorage {
       description: r.description ?? "",
       color: r.color,
       status: r.status,
+      dueDate: r.due_date ? new Date(r.due_date) : null,
       sortOrder: r.sort_order,
       createdAt: new Date(r.created_at),
       updatedAt: new Date(r.updated_at),
@@ -2120,6 +2121,7 @@ export class DatabaseStorage implements IStorage {
       description: data.description ?? "",
       color: data.color ?? "#6366f1",
       status: data.status ?? "active",
+      dueDate: data.dueDate ?? null,
       sortOrder: data.sortOrder ?? 0,
     }).returning();
     return created;
@@ -2131,6 +2133,7 @@ export class DatabaseStorage implements IStorage {
     if (data.description !== undefined) update.description = data.description;
     if (data.color !== undefined) update.color = data.color;
     if (data.status !== undefined) update.status = data.status;
+    if (data.dueDate !== undefined) update.dueDate = data.dueDate;
     if (data.sortOrder !== undefined) update.sortOrder = data.sortOrder;
     const [updated] = await db.update(projects)
       .set(update)

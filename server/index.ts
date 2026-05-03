@@ -225,6 +225,10 @@ async function runStartupMigrations() {
         ON projects(user_id, sort_order ASC, created_at DESC)
     `);
     await db.execute(sql`
+      ALTER TABLE projects
+        ADD COLUMN IF NOT EXISTS due_date TIMESTAMP
+    `);
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS project_tasks (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,

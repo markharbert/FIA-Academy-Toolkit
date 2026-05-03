@@ -15,7 +15,47 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X } from "lucide-react";
+
+// dueDate is stored as UTC midnight representing a calendar day. Treat the stored
+// UTC Y/M/D as a local calendar date, then compare to the viewer's local "today".
+function dueDateAsLocalMidnight(due: Date): Date {
+  return new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
+}
+
+function formatProjectDueLabel(due: Date): { text: string; tone: "overdue" | "soon" | "today" | "tomorrow" | "future" } {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const d = dueDateAsLocalMidnight(due);
+  const diffDays = Math.round((d.getTime() - now.getTime()) / 86400000);
+  if (diffDays < 0) return { text: `${-diffDays}d overdue`, tone: "overdue" };
+  if (diffDays === 0) return { text: "Due today", tone: "today" };
+  if (diffDays === 1) return { text: "Due tomorrow", tone: "tomorrow" };
+  if (diffDays <= 7) return { text: `Due in ${diffDays}d`, tone: "soon" };
+  return { text: `Due ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`, tone: "future" };
+}
+
+function projectDueToneClasses(tone: "overdue" | "soon" | "today" | "tomorrow" | "future"): string {
+  switch (tone) {
+    case "overdue":  return "text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/40";
+    case "today":    return "text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40";
+    case "tomorrow": return "text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40";
+    case "soon":     return "text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/40";
+    default:         return "text-muted-foreground bg-muted";
+  }
+}
+
+// Convert a stored Date / ISO string (UTC midnight calendar day) into a yyyy-mm-dd
+// value usable by <input type="date">. Uses UTC components so a date selected in any
+// timezone always round-trips as the same calendar date.
+function dateToInputValue(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (isNaN(date.getTime())) return "";
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 const COLOR_PALETTE = [
   "#6366f1", // indigo
@@ -88,13 +128,29 @@ function ProjectCard({ p, onEdit, onArchive, onDelete }: { p: ProjectWithCounts;
             </div>
           )}
 
-          <div className="mt-4 flex items-center justify-between">
-            {p.status === "archived" ? (
-              <Badge variant="secondary" className="text-[10px]">Archived</Badge>
-            ) : (
-              <Badge variant="outline" className="text-[10px]">Active</Badge>
-            )}
-            <span className="inline-flex items-center text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {p.status === "archived" ? (
+                <Badge variant="secondary" className="text-[10px]">Archived</Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px]">Active</Badge>
+              )}
+              {p.dueDate && (() => {
+                const due = new Date(p.dueDate);
+                const label = formatProjectDueLabel(due);
+                const dLocal = dueDateAsLocalMidnight(due);
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${projectDueToneClasses(label.tone)}`}
+                    data-testid={`badge-project-due-${p.id}`}
+                    title={dLocal.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                  >
+                    <CalendarClock className="h-2.5 w-2.5" /> {label.text}
+                  </span>
+                );
+              })()}
+            </div>
+            <span className="inline-flex items-center text-xs text-muted-foreground group-hover:text-foreground transition-colors shrink-0">
               Open <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
             </span>
           </div>
@@ -301,6 +357,8 @@ export default function ProjectsPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editColor, setEditColor] = useState(COLOR_PALETTE[0]);
   const [editStatus, setEditStatus] = useState<"active" | "archived">("active");
+  const [dueDate, setDueDate] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
 
   const openEdit = (p: ProjectWithCounts) => {
     setEditTarget(p);
@@ -308,6 +366,7 @@ export default function ProjectsPage() {
     setEditDescription(p.description || "");
     setEditColor(p.color);
     setEditStatus(p.status === "archived" ? "archived" : "active");
+    setEditDueDate(dateToInputValue(p.dueDate));
   };
 
   const { data: projects = [], isLoading } = useQuery<ProjectWithCounts[]>({ queryKey: ["/api/projects"] });
@@ -315,13 +374,15 @@ export default function ProjectsPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/projects", { name, description, color });
+      const payload: Record<string, unknown> = { name, description, color };
+      if (dueDate) payload.dueDate = `${dueDate}T00:00:00.000Z`;
+      const res = await apiRequest("POST", "/api/projects", payload);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
-      setName(""); setDescription(""); setColor(COLOR_PALETTE[0]);
+      setName(""); setDescription(""); setColor(COLOR_PALETTE[0]); setDueDate("");
       setCreateOpen(false);
       toast({ title: "Project created" });
     },
@@ -343,6 +404,7 @@ export default function ProjectsPage() {
         description: editDescription.trim(),
         color: editColor,
         status: editStatus,
+        dueDate: editDueDate ? `${editDueDate}T00:00:00.000Z` : null,
       });
     },
     onSuccess: () => {
@@ -406,6 +468,32 @@ export default function ProjectsPage() {
                       {COLOR_PALETTE.map(c => (
                         <button key={c} type="button" onClick={() => setColor(c)} className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background transition-all ${color === c ? "ring-2 ring-foreground" : "hover:scale-110"}`} style={{ background: c }} aria-label={`Color ${c}`} data-testid={`color-${c.replace("#", "")}`} />
                       ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="proj-due">Due date (optional)</Label>
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <Input
+                        id="proj-due"
+                        type="date"
+                        value={dueDate}
+                        onChange={e => setDueDate(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-project-due-date"
+                      />
+                      {dueDate && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 shrink-0"
+                          onClick={() => setDueDate("")}
+                          aria-label="Clear due date"
+                          data-testid="button-clear-project-due-date"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -527,6 +615,32 @@ export default function ProjectsPage() {
                 {COLOR_PALETTE.map(c => (
                   <button key={c} type="button" onClick={() => setEditColor(c)} className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background transition-all ${editColor === c ? "ring-2 ring-foreground" : "hover:scale-110"}`} style={{ background: c }} aria-label={`Color ${c}`} data-testid={`edit-color-${c.replace("#", "")}`} />
                 ))}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="edit-proj-due">Due date (optional)</Label>
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <Input
+                  id="edit-proj-due"
+                  type="date"
+                  value={editDueDate}
+                  onChange={e => setEditDueDate(e.target.value)}
+                  className="flex-1"
+                  data-testid="input-edit-project-due-date"
+                />
+                {editDueDate && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => setEditDueDate("")}
+                    aria-label="Clear due date"
+                    data-testid="button-clear-edit-project-due-date"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
             <div>
