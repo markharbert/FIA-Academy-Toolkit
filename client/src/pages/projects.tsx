@@ -150,7 +150,7 @@ function TemplatesTab({
   );
 }
 
-function ProjectCard({ p, onEdit, onArchive, onDelete, tz }: { p: ProjectWithCounts; onEdit: (p: ProjectWithCounts) => void; onArchive: (p: ProjectWithCounts) => void; onDelete: (p: ProjectWithCounts) => void; tz?: string | null }) {
+function ProjectCard({ p, onEdit, onArchive, onDelete, onSaveAsTemplate, tz }: { p: ProjectWithCounts; onEdit: (p: ProjectWithCounts) => void; onArchive: (p: ProjectWithCounts) => void; onDelete: (p: ProjectWithCounts) => void; onSaveAsTemplate: (p: ProjectWithCounts) => void; tz?: string | null }) {
   const completionPct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
   return (
     <Card className="group relative overflow-hidden hover-elevate transition-all" data-testid={`card-project-${p.id}`}>
@@ -175,6 +175,9 @@ function ProjectCard({ p, onEdit, onArchive, onDelete, tz }: { p: ProjectWithCou
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onArchive(p)} data-testid={`menu-archive-${p.id}`}>
                 {p.status === "archived" ? <><ArchiveRestore className="h-3.5 w-3.5 mr-2" /> Unarchive</> : <><Archive className="h-3.5 w-3.5 mr-2" /> Archive</>}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSaveAsTemplate(p)} data-testid={`menu-save-as-template-${p.id}`}>
+                <FileText className="h-3.5 w-3.5 mr-2" /> Save as template
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onDelete(p)} className="text-destructive focus:text-destructive" data-testid={`menu-delete-${p.id}`}>
@@ -338,11 +341,13 @@ function ProjectList({
   onEdit,
   onArchive,
   onDelete,
+  onSaveAsTemplate,
 }: {
   projects: ProjectWithCounts[];
   onEdit: (p: ProjectWithCounts) => void;
   onArchive: (p: ProjectWithCounts) => void;
   onDelete: (p: ProjectWithCounts) => void;
+  onSaveAsTemplate: (p: ProjectWithCounts) => void;
 }) {
   return (
     <div className="rounded-lg border border-border overflow-hidden bg-card" data-testid="list-projects">
@@ -401,6 +406,9 @@ function ProjectList({
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onArchive(p)} data-testid={`menu-list-archive-${p.id}`}>
                     {p.status === "archived" ? <><ArchiveRestore className="h-3.5 w-3.5 mr-2" /> Unarchive</> : <><Archive className="h-3.5 w-3.5 mr-2" /> Archive</>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onSaveAsTemplate(p)} data-testid={`menu-list-save-as-template-${p.id}`}>
+                    <FileText className="h-3.5 w-3.5 mr-2" /> Save as template
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onDelete(p)} className="text-destructive focus:text-destructive" data-testid={`menu-list-delete-${p.id}`}>
@@ -674,6 +682,8 @@ export default function ProjectsPage() {
     try { localStorage.setItem("projects-view", v); } catch {}
   };
   const [deleteTarget, setDeleteTarget] = useState<ProjectWithCounts | null>(null);
+  const [saveAsTemplateTarget, setSaveAsTemplateTarget] = useState<ProjectWithCounts | null>(null);
+  const [saveTemplateName, setSaveTemplateName] = useState("");
   const [editTarget, setEditTarget] = useState<ProjectWithCounts | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -759,6 +769,20 @@ export default function ProjectsPage() {
     setTemplateId(id);
     setCreateOpen(true);
   };
+
+  const saveAsTemplateMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const res = await apiRequest("POST", `/api/projects/${id}/save-as-template`, { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/project-templates"] });
+      setSaveAsTemplateTarget(null);
+      setSaveTemplateName("");
+      toast({ title: "Template saved", description: "Your project has been saved as a reusable template." });
+    },
+    onError: (err: Error) => toast({ title: "Failed to save template", description: err.message, variant: "destructive" }),
+  });
 
   const archiveMutation = useMutation({
     mutationFn: async (p: ProjectWithCounts) => {
@@ -1004,6 +1028,7 @@ export default function ProjectsPage() {
                   onEdit={openEdit}
                   onArchive={(p) => archiveMutation.mutate(p)}
                   onDelete={(p) => setDeleteTarget(p)}
+                  onSaveAsTemplate={(p) => { setSaveAsTemplateTarget(p); setSaveTemplateName(`${p.name} template`); }}
                   tz={user?.timezone}
                 />
               ))}
@@ -1014,6 +1039,7 @@ export default function ProjectsPage() {
               onEdit={openEdit}
               onArchive={(p) => archiveMutation.mutate(p)}
               onDelete={(p) => setDeleteTarget(p)}
+              onSaveAsTemplate={(p) => { setSaveAsTemplateTarget(p); setSaveTemplateName(`${p.name} template`); }}
             />
           )
         ) : topTab === "list" ? (
@@ -1161,6 +1187,39 @@ export default function ProjectsPage() {
             <Button onClick={() => editMutation.mutate()} disabled={!editName.trim() || editMutation.isPending} data-testid="button-save-edit-project">
               {editMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!saveAsTemplateTarget} onOpenChange={(open) => { if (!open) { setSaveAsTemplateTarget(null); setSaveTemplateName(""); } }}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-save-as-template">
+          <DialogHeader>
+            <DialogTitle>Save as template</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            A new template will be created with all tasks from <strong>{saveAsTemplateTarget?.name}</strong>. Due dates and statuses are not copied.
+          </p>
+          <div className="py-1">
+            <Label htmlFor="save-tpl-name">Template name</Label>
+            <Input
+              id="save-tpl-name"
+              className="mt-1.5"
+              value={saveTemplateName}
+              onChange={e => setSaveTemplateName(e.target.value)}
+              placeholder="e.g. YouTube video launch"
+              data-testid="input-save-template-name"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setSaveAsTemplateTarget(null); setSaveTemplateName(""); }}>Cancel</Button>
+            <Button
+              onClick={() => saveAsTemplateTarget && saveAsTemplateMutation.mutate({ id: saveAsTemplateTarget.id, name: saveTemplateName.trim() || `${saveAsTemplateTarget.name} template` })}
+              disabled={saveAsTemplateMutation.isPending}
+              data-testid="button-confirm-save-as-template"
+            >
+              {saveAsTemplateMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Save template
             </Button>
           </DialogFooter>
         </DialogContent>
