@@ -42,6 +42,12 @@ import iiTrackerFunnel from "@assets/help/ii-tracker-funnel.jpg";
 import iiFeed from "@assets/help/ii-feed.jpg";
 import iiCompare from "@assets/help/ii-compare.jpg";
 
+import iaHub from "@assets/help/ia-hub.jpg";
+import iaMyAddress from "@assets/help/ia-my-address.jpg";
+import iaEmailOverview from "@assets/help/ia-email-overview.jpg";
+import iaPlacement from "@assets/help/ia-placement.jpg";
+import iaAuthentication from "@assets/help/ia-authentication.jpg";
+
 import { AnnotatedScreenshot, type Annotation } from "@/components/annotated-screenshot";
 
 function ScreenshotIllustration({ src, alt }: { src: string; alt: string }) {
@@ -385,6 +391,83 @@ export function InboxIntelCompareIllustration() {
   );
 }
 
+// ─── Inbox Analyzer Illustrations ─────────────────────────────────────────────
+
+export function InboxAnalyzerHubIllustration() {
+  const annotations: Annotation[] = [
+    { x: 22.5, y: 19.5, w: 30.0, h: 4.5, color: "red", label: "1 Your private scoring address", labelPos: "outside-top" },
+    { x: 48.5, y: 30.5, w: 26.0, h: 5.0, color: "orange", label: "2 Emails / My Address tabs", labelPos: "outside-top" },
+    { x: 21.5, y: 47.5, w: 75.0, h: 8.5, color: "amber", label: "3 Click row to expand full report", labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iaHub}
+      alt="Inbox Analyzer hub showing the page header with the user's unique scoring address (iahelp7k2x9q@email.fearlessmarketinglab.com), the Emails / My Address tab switcher, and a captured email row '🔥 LIMITED TIME — Act now to make money fast!!!' from Sarah Mitchell with an Overall Score of 42 and a Pending status badge"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxAnalyzerMyAddressIllustration() {
+  const annotations: Annotation[] = [
+    { x: 34.5, y: 37.0, w: 54.0, h: 17.0, color: "red", label: "1 Scoring address — paste into your CRM's BCC / seed field", labelPos: "outside-top" },
+    { x: 34.5, y: 55.5, w: 54.0, h: 37.0, color: "orange", label: "2 Placement addresses — add as real subscribers", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iaMyAddress}
+      alt="My Address tab of Inbox Analyzer showing Step 1 'Add your scoring address to your CRM' with the unique fearlessmarketinglab.com address and a Copy button, and Step 2 'Add these placement addresses to your CRM' listing three Gmail seed inboxes (Gmail A, B, C) each with their own Copy button"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxAnalyzerEmailOverviewIllustration() {
+  const annotations: Annotation[] = [
+    { x: 22.5, y: 58.5, w: 32.5, h: 40.0, color: "red", label: "1 Sender + technical metadata", labelPos: "outside-top" },
+    { x: 58.5, y: 57.5, w: 38.0, h: 9.5, color: "orange", label: "2 Overall Score", labelPos: "outside-top" },
+    { x: 59.5, y: 70.5, w: 37.0, h: 11.5, color: "amber", label: "3 6-category breakdown", labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iaEmailOverview}
+      alt="Expanded email report showing the sender metadata column (Subject, From, Reply-To, sending server academytoolkit.demo with IP 149.72.142.18, received timestamp, and Message-ID) on the left, and the Overall Score panel on the right with the headline score 42 'Based on 6 categories below' followed by the six category rings — Auth 100, Trust 100, Spam 38, Technical 50, Content 0, CAN-SPAM 50 — and the weighted breakdown caption underneath"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxAnalyzerPlacementIllustration() {
+  const annotations: Annotation[] = [
+    { x: 58.5, y: 12.0, w: 39.0, h: 5.5, color: "red", label: "1 Inbox Placement panel", labelPos: "outside-top" },
+    { x: 58.5, y: 18.5, w: 39.0, h: 24.0, color: "orange", label: "2 Per-inbox results", labelPos: "outside-top" },
+    { x: 86.5, y: 19.5, w: 9.5, h: 21.0, color: "amber", label: "3 Promotions / Spam / Junk badges", labelPos: "outside-bottom" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iaPlacement}
+      alt="Inbox Placement panel for the captured email showing a placement score of 67/100 and three result rows — Gmail A placement.a@gmail.com landed in Promotions, Gmail B placement.b@gmail.com landed in Spam, and Gmail C placement.c@gmail.com landed in Promotions — with a 'Confirmed May 2 at 1:12 AM' timestamp underneath"
+      annotations={annotations}
+    />
+  );
+}
+
+export function InboxAnalyzerAuthenticationIllustration() {
+  const annotations: Annotation[] = [
+    { x: 58.5, y: 11.5, w: 39.0, h: 12.5, color: "red", label: "1 SPF / DKIM / DMARC results", labelPos: "outside-top" },
+    { x: 58.5, y: 26.0, w: 39.0, h: 17.0, color: "orange", label: "2 DNS records present at domain", labelPos: "outside-top" },
+    { x: 58.5, y: 46.0, w: 39.0, h: 21.0, color: "amber", label: "3 Sender Trust — blocklist + spoofing checks", labelPos: "outside-top" },
+    { x: 58.5, y: 69.5, w: 39.0, h: 30.0, color: "violet", label: "4 Spammy Language Analysis", labelPos: "outside-top" },
+  ];
+  return (
+    <AnnotatedScreenshot
+      src={iaAuthentication}
+      alt="Authentication, Sender Trust, and Spammy Language panels for the captured email — Email Authentication shows SPF, DKIM, and DMARC all PASS with a 100/100 score; DNS Records Configured shows SPF, DKIM, and DMARC records all Found; Sender Trust shows IP not on any blocklists, display name matches sending domain, and Reply-To matches From domain (100/100); and the start of Spammy Language Analysis with a 38/100 score and chips for HIGH RISK phrases (act now, free money, SUBJ make money fast, get rich) and MEDIUM RISK phrases"
+      annotations={annotations}
+    />
+  );
+}
+
 export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "video-tools-hub": VideoToolsHubIllustration,
   "sessions-list": SessionsListIllustration,
@@ -424,4 +507,9 @@ export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
   "ii-tracker-funnel": InboxIntelTrackerFunnelIllustration,
   "ii-feed": InboxIntelFeedIllustration,
   "ii-compare": InboxIntelCompareIllustration,
+  "ia-hub": InboxAnalyzerHubIllustration,
+  "ia-my-address": InboxAnalyzerMyAddressIllustration,
+  "ia-email-overview": InboxAnalyzerEmailOverviewIllustration,
+  "ia-placement": InboxAnalyzerPlacementIllustration,
+  "ia-authentication": InboxAnalyzerAuthenticationIllustration,
 };

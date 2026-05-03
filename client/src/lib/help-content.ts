@@ -526,6 +526,75 @@ const inboxIntelArticle: HelpArticle = {
   ],
 };
 
+// ─── Inbox Analyzer Article ───────────────────────────────────────────────────
+
+const inboxAnalyzerArticle: HelpArticle = {
+  slug: "inbox-analyzer",
+  title: "How to Use the Inbox Analyzer",
+  subtitle: "BCC every campaign you send to one private address and get an instant deliverability + copy report — authentication, sender trust, spammy language, technical health, CAN-SPAM, and where it actually landed across real Gmail inboxes.",
+  category: "Email Tools",
+  categorySlug: "email-tools",
+  readMinutes: 5,
+  overview:
+    "The Inbox Analyzer turns every email you send into a permanent, scored deliverability report. Each member gets one private scoring address on email.fearlessmarketinglab.com plus a set of real Gmail placement seed addresses. Add the scoring address to your CRM and the placement addresses as real subscribers, and from then on every campaign you send is captured, parsed, and analyzed automatically — Overall Score plus six category sub-scores (Auth, Trust, Spam, Technical, Content, CAN-SPAM), with a separate Inbox Placement panel that confirms whether each test inbox saw the email in Primary, Promotions, Spam, or Junk.",
+  steps: [
+    {
+      number: 1,
+      title: "Open the Inbox Analyzer",
+      body: [
+        "Open Email Tools from the sidebar and click Inbox Analyzer. The hub shows your private scoring address at the top of the hero — that single address is how every email you send gets pulled in for analysis.",
+        "Use the Emails tab to see every captured campaign with its Overall Score and status, and the My Address tab to copy the addresses you need to wire up in your CRM.",
+        "Click any email row to expand its full report inline — Overall Score, the six category rings, Inbox Placement, Email Authentication, DNS records, Sender Trust, Spammy Language Analysis, and the email body itself.",
+      ],
+      tip: "Your scoring address is unique to your account — never share it publicly. Anyone who emails it will create a scored row in your account.",
+      illustrationKey: "ia-hub",
+    },
+    {
+      number: 2,
+      title: "Wire up your scoring + placement addresses",
+      body: [
+        "Switch to the My Address tab. Step 1 is your single scoring address — copy it and add it to your CRM as a permanent BCC, seed, or hidden test recipient on every broadcast you send.",
+        "Step 2 is the real Gmail placement inboxes that we monitor for you. Copy each one and add them to your CRM as if they were real subscribers (e.g. add them to your main list). When you send a broadcast, we check each inbox to see exactly where the message landed.",
+        "Step 3 (scroll further down the My Address tab) lets you set the From address you actually send from — we use it to match incoming emails to placement results.",
+      ],
+      note: "Adding the placement addresses as real subscribers is what powers the Inbox Placement panel. Without them you'll still get an Overall Score and a copy report, but you won't see Primary / Promotions / Spam confirmations.",
+      illustrationKey: "ia-my-address",
+    },
+    {
+      number: 3,
+      title: "Read the Overall Score and 6-category breakdown",
+      body: [
+        "Click an email row to expand it. The left column lists the technical metadata we parsed from the email — Subject, From, Reply-To, sending server domain and IP, received timestamp, and Message-ID — so you can immediately see who and what infrastructure sent it.",
+        "On the right, the Overall Score is a weighted blend of six sub-scores: Auth (SPF/DKIM/DMARC), Trust (blocklists + spoofing), Spam (risky language), Technical (HTML health, image-to-text ratio, link count), Content (subject + preview quality), and CAN-SPAM (physical address + unsubscribe).",
+        "The breakdown caption underneath the rings shows the exact weighted contribution of each category so you can see which one is dragging the score down — in the example, Spam 28 and Content 7 are the biggest drags on the 42 overall.",
+      ],
+      tip: "Pending status means the placement inboxes haven't all confirmed yet — the Overall Score updates automatically once enough seed inboxes have reported in.",
+      illustrationKey: "ia-email-overview",
+    },
+    {
+      number: 4,
+      title: "Confirm where it actually landed in Inbox Placement",
+      body: [
+        "Scroll down the expanded report to the Inbox Placement panel. The headline number on the right (e.g. 67/100) is a per-email placement score that rewards Primary placements and penalises Promotions, Spam, and Junk.",
+        "Each row shows one of your monitored Gmail placement inboxes and the badge that inbox actually assigned the email — Primary, Promotions, Updates, Social, Spam, or Junk. The Confirmed timestamp tells you when the last seed inbox checked in.",
+        "If you see Spam on any row, that's a deliverability problem you can fix — usually a Spam, Trust, or Authentication issue elsewhere on the report.",
+      ],
+      illustrationKey: "ia-placement",
+    },
+    {
+      number: 5,
+      title: "Diagnose authentication, trust, and spammy language",
+      body: [
+        "The Email Authentication panel shows the per-email SPF, DKIM, and DMARC results parsed straight from the message headers. All three should say PASS — any FAIL is a deliverability red flag mailbox providers will hold against you.",
+        "DNS Records Configured separately checks whether your sending domain has SPF, DKIM, and DMARC records published in DNS at all — independent of any single email — so you can tell apart 'wrong record' from 'no record'. Sender Trust runs blocklist checks (Spamhaus, Barracuda, SpamCop) on the sending IP and confirms your display name and Reply-To match the From domain.",
+        "Spammy Language Analysis (further down) flags risky words and phrases bucketed into HIGH / MEDIUM / LOW risk, with chips marked SUBJ when the phrase appeared in the subject line (subject-line spam triggers hurt deliverability much more than body triggers).",
+      ],
+      note: "The whole report regenerates whenever a new copy of the same email is captured — re-send the campaign after fixing an issue and the score will update automatically.",
+      illustrationKey: "ia-authentication",
+    },
+  ],
+};
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const helpCategories: HelpCategory[] = [
@@ -541,7 +610,7 @@ export const helpCategories: HelpCategory[] = [
     title: "Email Tools",
     description: "Analyze your emails for spam triggers, authentication, and inbox placement.",
     icon: "Mail",
-    articles: [googlePostmasterSetupArticle, senderReputationDashboardArticle, inboxIntelArticle],
+    articles: [googlePostmasterSetupArticle, senderReputationDashboardArticle, inboxAnalyzerArticle, inboxIntelArticle],
   },
   {
     slug: "dmo-tracker",
