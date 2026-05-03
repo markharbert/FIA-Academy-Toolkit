@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, CalendarClock, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List } from "lucide-react";
 
 const COLOR_PALETTE = [
   "#6366f1", // indigo
@@ -102,6 +102,89 @@ function ProjectCard({ p, onEdit, onArchive, onDelete }: { p: ProjectWithCounts;
   );
 }
 
+function ProjectList({
+  projects,
+  onEdit,
+  onArchive,
+  onDelete,
+}: {
+  projects: ProjectWithCounts[];
+  onEdit: (p: ProjectWithCounts) => void;
+  onArchive: (p: ProjectWithCounts) => void;
+  onDelete: (p: ProjectWithCounts) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border overflow-hidden bg-card" data-testid="list-projects">
+      {/* header (md+) */}
+      <div className="hidden md:grid grid-cols-[1fr_80px_80px_80px_140px_40px] items-center gap-3 px-4 py-2.5 border-b border-border bg-muted/30 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
+        <div>Project</div>
+        <div className="text-center">Open</div>
+        <div className="text-center">Done</div>
+        <div className="text-center">Due 7d</div>
+        <div>Progress</div>
+        <div></div>
+      </div>
+      <ul className="divide-y divide-border">
+        {projects.map(p => {
+          const completionPct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
+          return (
+            <li key={p.id} className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_80px_80px_80px_140px_40px] items-center gap-3 px-4 py-3 hover-elevate transition-colors group" data-testid={`row-project-${p.id}`}>
+              <Link href={`/projects/${p.id}`} className="flex items-center gap-3 min-w-0">
+                <span className="h-3 w-3 rounded-full shrink-0" style={{ background: p.color }} aria-hidden="true" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm truncate" data-testid={`text-list-project-name-${p.id}`}>{p.name}</p>
+                    {p.status === "archived" && (
+                      <Badge variant="secondary" className="text-[10px] shrink-0">Archived</Badge>
+                    )}
+                  </div>
+                  {p.description && (
+                    <p className="text-xs text-muted-foreground truncate">{p.description}</p>
+                  )}
+                  {/* mobile-only meta */}
+                  <div className="flex md:hidden items-center gap-3 mt-1 text-[11px] text-muted-foreground tabular-nums">
+                    <span>{p.openTasks} open</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">{p.doneTasks} done</span>
+                    {p.dueThisWeek > 0 && <span className="text-amber-600 dark:text-amber-400">{p.dueThisWeek} due</span>}
+                  </div>
+                </div>
+              </Link>
+              <div className="hidden md:block text-center text-sm tabular-nums">{p.openTasks}</div>
+              <div className="hidden md:block text-center text-sm tabular-nums text-emerald-600 dark:text-emerald-400">{p.doneTasks}</div>
+              <div className={`hidden md:block text-center text-sm tabular-nums ${p.dueThisWeek > 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground"}`}>{p.dueThisWeek}</div>
+              <div className="hidden md:flex items-center gap-2">
+                <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full transition-all" style={{ width: `${completionPct}%`, background: p.color }} />
+                </div>
+                <span className="text-[10px] text-muted-foreground tabular-nums w-8 text-right">{completionPct}%</span>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" data-testid={`button-list-project-menu-${p.id}`}>
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onEdit(p)} data-testid={`menu-list-edit-${p.id}`}>
+                    <Pencil className="h-3.5 w-3.5 mr-2" /> Edit details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onArchive(p)} data-testid={`menu-list-archive-${p.id}`}>
+                    {p.status === "archived" ? <><ArchiveRestore className="h-3.5 w-3.5 mr-2" /> Unarchive</> : <><Archive className="h-3.5 w-3.5 mr-2" /> Archive</>}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => onDelete(p)} className="text-destructive focus:text-destructive" data-testid={`menu-list-delete-${p.id}`}>
+                    <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
   const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
@@ -109,6 +192,14 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(COLOR_PALETTE[0]);
   const [showArchived, setShowArchived] = useState(false);
+  const [view, setView] = useState<"cards" | "list">(() => {
+    if (typeof window === "undefined") return "cards";
+    return (localStorage.getItem("projects-view") as "cards" | "list") || "cards";
+  });
+  const setViewMode = (v: "cards" | "list") => {
+    setView(v);
+    try { localStorage.setItem("projects-view", v); } catch {}
+  };
   const [deleteTarget, setDeleteTarget] = useState<ProjectWithCounts | null>(null);
   const [editTarget, setEditTarget] = useState<ProjectWithCounts | null>(null);
   const [editName, setEditName] = useState("");
@@ -233,22 +324,46 @@ export default function ProjectsPage() {
             </Dialog>
           </div>
 
-          {/* tabs */}
-          <div className="mt-5 flex gap-1.5">
-            <button
-              onClick={() => setShowArchived(false)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${!showArchived ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
-              data-testid="tab-active"
-            >
-              <CircleDot className="h-3 w-3 inline mr-1" /> Active · {active.length}
-            </button>
-            <button
-              onClick={() => setShowArchived(true)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${showArchived ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
-              data-testid="tab-archived"
-            >
-              <Archive className="h-3 w-3 inline mr-1" /> Archived · {archived.length}
-            </button>
+          {/* tabs + view toggle */}
+          <div className="mt-5 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setShowArchived(false)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${!showArchived ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+                data-testid="tab-active"
+              >
+                <CircleDot className="h-3 w-3 inline mr-1" /> Active · {active.length}
+              </button>
+              <button
+                onClick={() => setShowArchived(true)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${showArchived ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
+                data-testid="tab-archived"
+              >
+                <Archive className="h-3 w-3 inline mr-1" /> Archived · {archived.length}
+              </button>
+            </div>
+            <div className="inline-flex items-center rounded-full bg-white/10 p-0.5" role="tablist" aria-label="View mode">
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                aria-pressed={view === "cards"}
+                title="Card view"
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${view === "cards" ? "bg-white text-[hsl(245_60%_30%)] shadow-sm" : "text-white/80 hover:text-white"}`}
+                data-testid="button-view-cards"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" /> Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                aria-pressed={view === "list"}
+                title="List view"
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${view === "list" ? "bg-white text-[hsl(245_60%_30%)] shadow-sm" : "text-white/80 hover:text-white"}`}
+                data-testid="button-view-list"
+              >
+                <List className="h-3.5 w-3.5" /> List
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -273,7 +388,7 @@ export default function ProjectsPage() {
               </Button>
             )}
           </div>
-        ) : (
+        ) : view === "cards" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {visible.map(p => (
               <ProjectCard
@@ -285,6 +400,13 @@ export default function ProjectsPage() {
               />
             ))}
           </div>
+        ) : (
+          <ProjectList
+            projects={visible}
+            onEdit={openEdit}
+            onArchive={(p) => archiveMutation.mutate(p)}
+            onDelete={(p) => setDeleteTarget(p)}
+          />
         )}
       </div>
 
