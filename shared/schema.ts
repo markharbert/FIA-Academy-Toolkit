@@ -149,7 +149,6 @@ export const updateAccountSchema = z.object({
   displayName: z.string().max(40, "Display name must be 40 characters or less").optional().nullable(),
   firstName: z.string().max(40, "First name must be 40 characters or less").optional().nullable(),
   lastName: z.string().max(40, "Last name must be 40 characters or less").optional().nullable(),
-  email: z.string().email("Please enter a valid email address").optional(),
   themePreference: z.enum(["light", "dark", "system"]).optional(),
 });
 

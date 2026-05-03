@@ -1641,6 +1641,10 @@ export async function registerRoutes(
       const connectedProviders = identities.map((i) => i.provider);
       const hasPassword = !!user.passwordHash;
 
+      const gravatarHash = user.email
+        ? crypto.createHash("md5").update(user.email.trim().toLowerCase()).digest("hex")
+        : null;
+
       res.json({
         id: user.id,
         email: user.email,
@@ -1653,10 +1657,35 @@ export async function registerRoutes(
         connectedProviders,
         hasPassword,
         themePreference: user.themePreference || "system",
+        cfEnrolled: !!user.cfEnrolled,
+        cfEnrolledAt: user.cfEnrolledAt,
+        cfRevokedAt: user.cfRevokedAt,
+        lastLoginAt: user.lastLoginAt,
+        gravatarHash,
       });
     } catch (err) {
       console.error("Get account error:", err);
       res.status(500).json({ message: "Failed to fetch account" });
+    }
+  });
+
+  // Recent activity for the current user (newest first, capped at 10)
+  app.get("/api/account/activity", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const result = await storage.getUserActionLogs({ userId: req.session.userId!, limit: 10 });
+      res.json({
+        items: result.items.map((item) => ({
+          id: item.id,
+          actionType: item.actionType,
+          actionLabel: item.actionLabel,
+          createdAt: item.createdAt,
+          ip: item.ip,
+          userAgent: item.userAgent,
+        })),
+      });
+    } catch (err) {
+      console.error("Get account activity error:", err);
+      res.status(500).json({ message: "Failed to fetch activity" });
     }
   });
 
@@ -1673,24 +1702,14 @@ export async function registerRoutes(
         return res.status(404).json({ message: "User not found" });
       }
 
-      const { displayName, firstName, lastName, email, themePreference } = parsed.data;
+      const { displayName, firstName, lastName, themePreference } = parsed.data;
       const updates: any = { updatedAt: new Date() };
 
       if (displayName !== undefined) updates.displayName = displayName;
       if (firstName !== undefined) updates.firstName = firstName;
       if (lastName !== undefined) updates.lastName = lastName;
       if (themePreference !== undefined) updates.themePreference = themePreference;
-
-      // Handle email change
-      if (email && email !== user.email) {
-        // Check if email is already taken
-        const existingUser = await storage.getUserByEmail(email.toLowerCase());
-        if (existingUser && existingUser.id !== user.id) {
-          return res.status(400).json({ message: "Email already in use" });
-        }
-        updates.email = email.toLowerCase();
-        updates.emailVerifiedAt = null; // Reset verification when email changes
-      }
+      // Email is tied to ClickFunnels membership and cannot be changed via this endpoint.
 
       const updatedUser = await storage.updateUser(user.id, updates);
       if (!updatedUser) {
