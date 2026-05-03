@@ -35,6 +35,7 @@ export const users = pgTable("users", {
   disabledReason: text("disabled_reason"),
   lastLoginAt: timestamp("last_login_at"),
   themePreference: text("theme_preference").default("system").$type<ThemePreference>(),
+  timezone: text("timezone").default("America/New_York").notNull(),
   cfEnrolled: boolean("cf_enrolled").default(false),
   cfContactId: text("cf_contact_id"),
   cfEnrolledAt: timestamp("cf_enrolled_at"),
@@ -150,6 +151,7 @@ export const updateAccountSchema = z.object({
   firstName: z.string().max(40, "First name must be 40 characters or less").optional().nullable(),
   lastName: z.string().max(40, "Last name must be 40 characters or less").optional().nullable(),
   themePreference: z.enum(["light", "dark", "system"]).optional(),
+  timezone: z.string().min(1).max(64).optional(),
 });
 
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;

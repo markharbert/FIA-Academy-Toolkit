@@ -335,6 +335,12 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] project templates migration complete");
 
+    await db.execute(sql`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/New_York'
+    `);
+    console.log("[startup] users timezone column migration complete");
+
     // One-time backfill: copy account-level confirmed placement results to the
     // individual email record so old confirmed emails show their result permanently.
     // Matches by message_id when available, otherwise picks the most-recently-received

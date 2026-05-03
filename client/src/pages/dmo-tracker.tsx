@@ -36,6 +36,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { DmoEntry } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
 
 // ─── Activity definitions ────────────────────────────────────────────────────
 
@@ -166,8 +167,19 @@ const BAR_LEGEND = [
   { label: "25 🎉", pts: 25 },
 ];
 
-function getTodayString(): string {
-  return new Date().toISOString().split("T")[0];
+function getTodayString(tz?: string | null): string {
+  try {
+    const zone = tz || "America/New_York";
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    return fmt.format(new Date()); // en-CA gives YYYY-MM-DD
+  } catch {
+    return new Date().toISOString().split("T")[0];
+  }
 }
 
 function formatDisplayDate(dateStr: string): string {
@@ -920,7 +932,8 @@ function JournalTab({ entries }: { entries: DmoEntry[] }) {
 
 export default function DmoTrackerPage() {
   const { toast } = useToast();
-  const today = getTodayString();
+  const { user } = useAuth();
+  const today = getTodayString(user?.timezone);
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
   const [activeTab, setActiveTab] = useState<"today" | "journal">("today");

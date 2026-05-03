@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema } from "@shared/schema";
+import { safeTimezone, todayKeyInTz } from "@shared/datetime";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
@@ -285,6 +286,7 @@ export async function registerRoutes(
           role: user.role || (user.isAdmin ? "admin" : "user"),
           isDisabled: user.isDisabled,
           gravatarUrl,
+          timezone: user.timezone || "America/New_York",
           cfEnrolled: cfSignupInfo?.enrolled ?? user.cfEnrolled,
           cfEnrolledAt: cfSignupInfo?.enrolled ? new Date() : user.cfEnrolledAt,
           cfRevokedAt: cfSignupInfo?.enrolled ? null : user.cfRevokedAt,
@@ -377,6 +379,7 @@ export async function registerRoutes(
           role: user.role || (user.isAdmin ? "admin" : "user"),
           isDisabled: user.isDisabled,
           gravatarUrl,
+          timezone: user.timezone || "America/New_York",
           cfEnrolled: user.cfEnrolled,
           cfEnrolledAt: user.cfEnrolledAt,
           cfRevokedAt: user.cfRevokedAt,
@@ -603,6 +606,7 @@ export async function registerRoutes(
         cfEnrolled: user.cfEnrolled,
         cfEnrolledAt: user.cfEnrolledAt,
         cfRevokedAt: user.cfRevokedAt,
+        timezone: user.timezone || "America/New_York",
       } 
     });
   });
@@ -1668,6 +1672,7 @@ export async function registerRoutes(
         connectedProviders,
         hasPassword,
         themePreference: user.themePreference || "system",
+        timezone: user.timezone || "America/New_York",
         cfEnrolled: !!user.cfEnrolled,
         cfEnrolledAt: user.cfEnrolledAt,
         cfRevokedAt: user.cfRevokedAt,
@@ -1713,13 +1718,21 @@ export async function registerRoutes(
         return res.status(404).json({ message: "User not found" });
       }
 
-      const { displayName, firstName, lastName, themePreference } = parsed.data;
+      const { displayName, firstName, lastName, themePreference, timezone } = parsed.data;
       const updates: any = { updatedAt: new Date() };
 
       if (displayName !== undefined) updates.displayName = displayName;
       if (firstName !== undefined) updates.firstName = firstName;
       if (lastName !== undefined) updates.lastName = lastName;
       if (themePreference !== undefined) updates.themePreference = themePreference;
+      if (timezone !== undefined) {
+        try {
+          new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+          updates.timezone = timezone;
+        } catch {
+          return res.status(400).json({ message: "Invalid timezone" });
+        }
+      }
       // Email is tied to ClickFunnels membership and cannot be changed via this endpoint.
 
       const updatedUser = await storage.updateUser(user.id, updates);
@@ -1752,6 +1765,7 @@ export async function registerRoutes(
         connectedProviders,
         hasPassword: !!updatedUser.passwordHash,
         themePreference: updatedUser.themePreference || "system",
+        timezone: updatedUser.timezone || "America/New_York",
       });
     } catch (err) {
       console.error("Update account error:", err);
@@ -4540,7 +4554,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.get("/api/dmo/today", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const today = new Date().toISOString().split("T")[0];
+      const u = await storage.getUser(userId);
+      const today = todayKeyInTz(safeTimezone(u?.timezone));
       const entry = await storage.getDmoEntry(userId, today);
       res.json({ entry: entry ?? null, date: today });
     } catch (err) {
@@ -4551,7 +4566,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.post("/api/dmo/entry", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const today = new Date().toISOString().split("T")[0];
+      const u = await storage.getUser(userId);
+      const today = todayKeyInTz(safeTimezone(u?.timezone));
       const date: string = typeof req.body.date === "string" ? req.body.date : today;
       const parsed = dmoEntryDataSchema.safeParse(req.body);
       if (!parsed.success) {

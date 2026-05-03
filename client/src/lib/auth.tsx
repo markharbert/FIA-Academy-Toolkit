@@ -14,6 +14,7 @@ interface AuthUser {
   cfEnrolled?: boolean;
   cfEnrolledAt?: string | null;
   cfRevokedAt?: string | null;
+  timezone?: string | null;
 }
 
 interface AuthContextType {

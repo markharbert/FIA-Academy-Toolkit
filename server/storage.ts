@@ -34,6 +34,7 @@ import {
   type ProjectTemplate, type InsertProjectTemplate, type ProjectTemplateWithCounts,
   type ProjectTemplateTask, type InsertProjectTemplateTask, type UpdateProjectTemplateTask,
 } from "@shared/schema";
+import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
 import { db, pool } from "./db";
 import { eq, and, lt, lte, gte, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
@@ -2012,18 +2013,23 @@ export class DatabaseStorage implements IStorage {
     const dates = entries.map(e => e.date).sort().reverse();
     const totalDays = dates.length;
 
+    // Resolve "today" / "yesterday" in the user's timezone so the streak doesn't
+    // flip a day at UTC midnight for users far from UTC.
+    const user = await this.getUser(userId);
+    const tz = safeTimezone(user?.timezone);
+    const today = todayKeyInTz(tz);
+    const yesterday = addDaysToKey(today, -1);
+
     // Calculate current streak
     let current = 0;
-    const today = new Date().toISOString().split("T")[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
     let checkDate = dates[0] === today || dates[0] === yesterday ? dates[0] : null;
 
     if (checkDate) {
       const dateSet = new Set(dates);
-      let d = new Date(checkDate);
-      while (dateSet.has(d.toISOString().split("T")[0])) {
+      let cursor = checkDate;
+      while (dateSet.has(cursor)) {
         current++;
-        d = new Date(d.getTime() - 86400000);
+        cursor = addDaysToKey(cursor, -1);
       }
     }
 
@@ -2080,6 +2086,8 @@ export class DatabaseStorage implements IStorage {
   // ── Projects ─────────────────────────────────────────────────────────────
 
   async getProjectsForUser(userId: string): Promise<ProjectWithCounts[]> {
+    const user = await this.getUser(userId);
+    const tz = safeTimezone(user?.timezone);
     const rows = await db.execute(sql`
       SELECT
         p.*,
@@ -2097,7 +2105,8 @@ export class DatabaseStorage implements IStorage {
           COUNT(*) FILTER (
             WHERE status <> 'done'
               AND due_date IS NOT NULL
-              AND due_date <= NOW() + INTERVAL '7 days'
+              AND (due_date AT TIME ZONE ${tz})::date
+                <= ((NOW() AT TIME ZONE ${tz})::date + INTERVAL '7 days')
           ) AS due_week,
           MAX(updated_at) AS last_activity
         FROM project_tasks
@@ -2388,12 +2397,14 @@ export class DatabaseStorage implements IStorage {
     const totalOpenTasks = active.reduce((s, p) => s + p.openTasks, 0);
     const totalDueThisWeek = active.reduce((s, p) => s + p.dueThisWeek, 0);
 
+    const userForTz = await this.getUser(userId);
+    const tz = safeTimezone(userForTz?.timezone);
     const overdueRows = await db.execute(sql`
       SELECT COUNT(*)::int AS c FROM project_tasks
       WHERE user_id = ${userId}
         AND status <> 'done'
         AND due_date IS NOT NULL
-        AND due_date < NOW()
+        AND (due_date AT TIME ZONE ${tz})::date < (NOW() AT TIME ZONE ${tz})::date
     `);
     const totalOverdue = Number((overdueRows.rows[0] as any)?.c ?? 0);
 

@@ -30,7 +30,12 @@ import {
   CheckCircle2,
   XCircle,
   Settings as SettingsIcon,
+  Globe2,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { getCommonTimezones } from "@shared/datetime";
+import { useMemo } from "react";
 
 interface AccountData {
   id: string;
@@ -48,6 +53,7 @@ interface AccountData {
   cfRevokedAt: string | null;
   lastLoginAt: string | null;
   gravatarHash: string | null;
+  timezone?: string | null;
 }
 
 interface ActivityItem {
@@ -182,6 +188,30 @@ export default function AccountPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Couldn't save", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const timezoneOptions = useMemo(() => getCommonTimezones(), []);
+  const browserTz = useMemo(() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; }
+  }, []);
+
+  const updateTimezoneMutation = useMutation({
+    mutationFn: async (timezone: string) => {
+      const response = await apiRequest("PATCH", "/api/account", { timezone });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/account"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/streak"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      toast({ title: "Time zone saved", description: "Your dates and streaks now use this zone." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Couldn't save time zone", description: error.message, variant: "destructive" });
     },
   });
 
@@ -340,6 +370,58 @@ export default function AccountPage() {
                 </Button>
               </form>
             </Form>
+          </CardContent>
+        </GradientCard>
+
+        {/* ─── Time Zone ─────────────────────────────────────── */}
+        <GradientCard accentClass="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe2 className="h-5 w-5 text-emerald-500" />
+              Time zone
+            </CardTitle>
+            <CardDescription>
+              Used for "today / this week" everywhere in the app — DMO streaks, project task due dates, dashboard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="select-timezone-trigger">Your time zone</Label>
+              <Select
+                value={account.timezone || "America/New_York"}
+                onValueChange={(value) => updateTimezoneMutation.mutate(value)}
+                disabled={updateTimezoneMutation.isPending}
+              >
+                <SelectTrigger id="select-timezone-trigger" data-testid="select-timezone" className="w-full">
+                  <SelectValue placeholder="Select your time zone" />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {timezoneOptions.map((opt) => (
+                    <SelectItem
+                      key={opt.value}
+                      value={opt.value}
+                      data-testid={`option-timezone-${opt.value}`}
+                    >
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {browserTz && browserTz !== (account.timezone || "America/New_York") && (
+              <button
+                type="button"
+                className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+                onClick={() => updateTimezoneMutation.mutate(browserTz)}
+                disabled={updateTimezoneMutation.isPending}
+                data-testid="button-use-browser-tz"
+              >
+                Use my browser time zone ({browserTz})
+              </button>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Currently set to <span className="font-mono" data-testid="text-current-timezone">{account.timezone || "America/New_York"}</span>.
+            </p>
           </CardContent>
         </GradientCard>
 
