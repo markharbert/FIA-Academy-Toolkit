@@ -145,6 +145,21 @@ async function runStartupMigrations() {
       )
     `);
     console.log("[startup] postmaster tables migration complete");
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS teleprompter_scripts (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS teleprompter_scripts_user_id_idx
+        ON teleprompter_scripts(user_id, updated_at DESC)
+    `);
+    console.log("[startup] teleprompter_scripts migration complete");
 
     // One-time backfill: copy account-level confirmed placement results to the
     // individual email record so old confirmed emails show their result permanently.

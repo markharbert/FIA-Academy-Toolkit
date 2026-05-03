@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Video, TrendingUp, FileText, ArrowRight, type LucideIcon } from "lucide-react";
+import { Video, TrendingUp, FileText, MonitorPlay, ArrowRight, type LucideIcon } from "lucide-react";
 
 interface Tool {
   title: string;
@@ -45,6 +45,16 @@ const VIDEO_TOOLS: Tool[] = [
     gradient: "from-teal-500 to-emerald-600",
     iconBg: "bg-teal-500/20",
     testId: "tool-scripts",
+  },
+  {
+    title: "Teleprompter",
+    description: "Scroll any script you've written",
+    detail: "Already wrote your own script? Paste it in or upload a .txt file and roll through it with our distraction-free teleprompter — adjustable speed, countdown, and keyboard controls. Saved scripts live in your account.",
+    url: "/teleprompter",
+    icon: MonitorPlay,
+    gradient: "from-slate-500 to-zinc-700",
+    iconBg: "bg-slate-500/20",
+    testId: "tool-teleprompter",
   },
 ];
 

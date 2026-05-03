@@ -701,6 +701,30 @@ export const insertScriptSchema = createInsertSchema(scripts).omit({
 export type InsertScript = z.infer<typeof insertScriptSchema>;
 export type Script = typeof scripts.$inferSelect;
 
+// Standalone teleprompter scripts — plain text scripts uploaded by the user
+export const teleprompterScripts = pgTable("teleprompter_scripts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertTeleprompterScriptSchema = createInsertSchema(teleprompterScripts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const upsertTeleprompterScriptSchema = z.object({
+  title: z.string().trim().min(1, "Title is required").max(120, "Title must be 120 characters or less"),
+  content: z.string().min(1, "Script content is required").max(100000, "Script is too long (max 100,000 characters)"),
+});
+
+export type InsertTeleprompterScript = z.infer<typeof insertTeleprompterScriptSchema>;
+export type TeleprompterScript = typeof teleprompterScripts.$inferSelect;
+
 // Link placeholders for affiliate links
 export const linkPlaceholders = pgTable("link_placeholders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

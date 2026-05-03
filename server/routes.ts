@@ -4147,6 +4147,70 @@ export async function registerRoutes(
     }
   });
 
+  // ── Standalone teleprompter scripts ──
+  app.get("/api/teleprompter/scripts", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const list = await storage.getTeleprompterScriptsByUser(req.session.userId!);
+      res.json(list);
+    } catch (err) {
+      console.error("[Teleprompter] Get scripts error:", err);
+      res.status(500).json({ message: "Failed to get scripts" });
+    }
+  });
+
+  app.get("/api/teleprompter/scripts/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const script = await storage.getTeleprompterScript(req.params.id, req.session.userId!);
+      if (!script) return res.status(404).json({ message: "Script not found" });
+      res.json(script);
+    } catch (err) {
+      console.error("[Teleprompter] Get script error:", err);
+      res.status(500).json({ message: "Failed to get script" });
+    }
+  });
+
+  app.post("/api/teleprompter/scripts", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { upsertTeleprompterScriptSchema } = await import("@shared/schema");
+      const parsed = upsertTeleprompterScriptSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid input" });
+      }
+      const script = await storage.createTeleprompterScript(req.session.userId!, parsed.data);
+      res.status(201).json(script);
+    } catch (err) {
+      console.error("[Teleprompter] Create script error:", err);
+      res.status(500).json({ message: "Failed to create script" });
+    }
+  });
+
+  app.patch("/api/teleprompter/scripts/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { upsertTeleprompterScriptSchema } = await import("@shared/schema");
+      const parsed = upsertTeleprompterScriptSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid input" });
+      }
+      const script = await storage.updateTeleprompterScript(req.params.id, req.session.userId!, parsed.data);
+      if (!script) return res.status(404).json({ message: "Script not found" });
+      res.json(script);
+    } catch (err) {
+      console.error("[Teleprompter] Update script error:", err);
+      res.status(500).json({ message: "Failed to update script" });
+    }
+  });
+
+  app.delete("/api/teleprompter/scripts/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const ok = await storage.deleteTeleprompterScript(req.params.id, req.session.userId!);
+      if (!ok) return res.status(404).json({ message: "Script not found" });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[Teleprompter] Delete script error:", err);
+      res.status(500).json({ message: "Failed to delete script" });
+    }
+  });
+
   app.get("/api/topic-pulse/links", requireAuth, async (req: Request, res: Response) => {
     try {
       const links = await storage.getLinkPlaceholdersByUser(req.session.userId!);

@@ -3,6 +3,7 @@ import {
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
   dmoEntries, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
+  teleprompterScripts, type TeleprompterScript, type InsertTeleprompterScript,
   type CompetitorTracker, type InsertCompetitorTracker, type CompetitorTrackerWithStats,
   type CompetitorSeedAddress, type CapturedCompetitorEmail, type CapturedCompetitorEmailLink,
   type TrackerAnalytics, type FeedResponse, type ScreenshotStatus,
@@ -254,7 +255,14 @@ export interface IStorage {
   getScriptsByUser(userId: string): Promise<(Script & { topic?: Topic })[]>;
   updateScript(id: string, userId: string, updates: Partial<Script>): Promise<Script | undefined>;
   deleteScript(id: string, userId: string): Promise<boolean>;
-  
+
+  // Standalone teleprompter scripts
+  getTeleprompterScriptsByUser(userId: string): Promise<TeleprompterScript[]>;
+  getTeleprompterScript(id: string, userId: string): Promise<TeleprompterScript | undefined>;
+  createTeleprompterScript(userId: string, data: { title: string; content: string }): Promise<TeleprompterScript>;
+  updateTeleprompterScript(id: string, userId: string, data: { title?: string; content?: string }): Promise<TeleprompterScript | undefined>;
+  deleteTeleprompterScript(id: string, userId: string): Promise<boolean>;
+
   // Topic Pulse Finder: Link Placeholders
   createLinkPlaceholder(link: InsertLinkPlaceholder): Promise<LinkPlaceholder>;
   getLinkPlaceholdersByUser(userId: string): Promise<LinkPlaceholder[]>;
@@ -1401,7 +1409,45 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return !!result;
   }
-  
+
+  // Standalone teleprompter scripts
+  async getTeleprompterScriptsByUser(userId: string): Promise<TeleprompterScript[]> {
+    return db.select().from(teleprompterScripts)
+      .where(eq(teleprompterScripts.userId, userId))
+      .orderBy(desc(teleprompterScripts.updatedAt));
+  }
+
+  async getTeleprompterScript(id: string, userId: string): Promise<TeleprompterScript | undefined> {
+    const [result] = await db.select().from(teleprompterScripts)
+      .where(and(eq(teleprompterScripts.id, id), eq(teleprompterScripts.userId, userId)));
+    return result || undefined;
+  }
+
+  async createTeleprompterScript(userId: string, data: { title: string; content: string }): Promise<TeleprompterScript> {
+    const [result] = await db.insert(teleprompterScripts)
+      .values({ userId, title: data.title, content: data.content })
+      .returning();
+    return result;
+  }
+
+  async updateTeleprompterScript(id: string, userId: string, data: { title?: string; content?: string }): Promise<TeleprompterScript | undefined> {
+    const updates: Partial<TeleprompterScript> = { updatedAt: new Date() };
+    if (data.title !== undefined) updates.title = data.title;
+    if (data.content !== undefined) updates.content = data.content;
+    const [result] = await db.update(teleprompterScripts)
+      .set(updates)
+      .where(and(eq(teleprompterScripts.id, id), eq(teleprompterScripts.userId, userId)))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteTeleprompterScript(id: string, userId: string): Promise<boolean> {
+    const [result] = await db.delete(teleprompterScripts)
+      .where(and(eq(teleprompterScripts.id, id), eq(teleprompterScripts.userId, userId)))
+      .returning();
+    return !!result;
+  }
+
   // Topic Pulse Finder: Link Placeholders
   async createLinkPlaceholder(link: InsertLinkPlaceholder): Promise<LinkPlaceholder> {
     const [result] = await db.insert(linkPlaceholders).values(link).returning();
