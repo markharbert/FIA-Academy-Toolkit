@@ -26,9 +26,10 @@ import {
   type DmoEntry, type InsertDmoEntry, type DmoEntryData,
   type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
   type PostmasterConnection, type PostmasterDomain,
-  projects, projectTasks,
+  projects, projectTasks, taskComments, taskActivity,
   type Project, type InsertProject, type ProjectWithCounts,
   type ProjectTask, type InsertProjectTask, type UpdateProjectTask,
+  type TaskComment, type TaskActivity,
 } from "@shared/schema";
 import crypto from "crypto";
 import { db, pool } from "./db";
@@ -350,6 +351,10 @@ export interface IStorage {
     totalOverdue: number;
   }>;
   getUrgentTasksForUser(userId: string, hoursAhead?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
+  getTaskComments(taskId: string, userId: string): Promise<Array<TaskComment & { authorName: string | null; authorEmail: string | null }>>;
+  addTaskComment(taskId: string, userId: string, body: string): Promise<TaskComment>;
+  deleteTaskComment(commentId: string, userId: string): Promise<void>;
+  getTaskActivity(taskId: string, userId: string): Promise<Array<TaskActivity & { authorName: string | null; authorEmail: string | null }>>;
 
   // Inbox Analyzer
   getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
@@ -2150,6 +2155,14 @@ export class DatabaseStorage implements IStorage {
     return row || undefined;
   }
 
+  private async logTaskActivity(taskId: string, userId: string, type: string, meta: Record<string, unknown> = {}) {
+    try {
+      await db.insert(taskActivity).values({ taskId, userId, type, meta });
+    } catch (err) {
+      console.error("[projects] failed to log task activity:", err);
+    }
+  }
+
   async createTask(userId: string, projectId: string, data: InsertProjectTask): Promise<ProjectTask> {
     // If parentTaskId provided, validate it belongs to same project & user, and is itself top-level (one level deep)
     let parentTaskId: string | null = null;
@@ -2177,6 +2190,10 @@ export class DatabaseStorage implements IStorage {
       sortOrder: data.sortOrder ?? 0,
       completedAt: data.status === "done" ? new Date() : null,
     }).returning();
+    await this.logTaskActivity(created.id, userId, "created", { title: created.title });
+    if (parentTaskId) {
+      await this.logTaskActivity(parentTaskId, userId, "subtask_added", { subtaskId: created.id, title: created.title });
+    }
     return created;
   }
 
@@ -2224,6 +2241,37 @@ export class DatabaseStorage implements IStorage {
       .set(update)
       .where(and(eq(projectTasks.id, id), eq(projectTasks.userId, userId)))
       .returning();
+    if (updated) {
+      if (data.title !== undefined && data.title !== existing.title) {
+        await this.logTaskActivity(id, userId, "title_changed", { from: existing.title, to: updated.title });
+      }
+      if (data.status !== undefined && data.status !== existing.status) {
+        await this.logTaskActivity(id, userId, "status_changed", { from: existing.status, to: updated.status });
+      }
+      if (data.priority !== undefined && data.priority !== existing.priority) {
+        await this.logTaskActivity(id, userId, "priority_changed", { from: existing.priority, to: updated.priority });
+      }
+      if (data.dueDate !== undefined) {
+        const before = existing.dueDate ? new Date(existing.dueDate).getTime() : null;
+        const after = updated.dueDate ? new Date(updated.dueDate).getTime() : null;
+        if (before !== after) {
+          await this.logTaskActivity(id, userId, "due_changed", {
+            from: existing.dueDate,
+            to: updated.dueDate,
+          });
+        }
+      }
+      if (data.notes !== undefined && (data.notes ?? "") !== (existing.notes ?? "")) {
+        await this.logTaskActivity(id, userId, "notes_changed", {});
+      }
+      if (data.links !== undefined) {
+        const beforeCount = (existing.links || []).length;
+        const afterCount = (updated.links || []).length;
+        if (beforeCount !== afterCount) {
+          await this.logTaskActivity(id, userId, "links_changed", { from: beforeCount, to: afterCount });
+        }
+      }
+    }
     return updated || undefined;
   }
 
@@ -2233,6 +2281,61 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(projectTasks.parentTaskId, id), eq(projectTasks.userId, userId)));
     await db.delete(projectTasks)
       .where(and(eq(projectTasks.id, id), eq(projectTasks.userId, userId)));
+  }
+
+  async getTaskComments(taskId: string, userId: string) {
+    const task = await this.getTask(taskId, userId);
+    if (!task) return [];
+    const rows = await db
+      .select({
+        id: taskComments.id,
+        taskId: taskComments.taskId,
+        userId: taskComments.userId,
+        body: taskComments.body,
+        createdAt: taskComments.createdAt,
+        authorName: users.displayName,
+        authorEmail: users.email,
+      })
+      .from(taskComments)
+      .leftJoin(users, eq(users.id, taskComments.userId))
+      .where(eq(taskComments.taskId, taskId))
+      .orderBy(asc(taskComments.createdAt));
+    return rows;
+  }
+
+  async addTaskComment(taskId: string, userId: string, body: string): Promise<TaskComment> {
+    const task = await this.getTask(taskId, userId);
+    if (!task) throw new Error("Task not found");
+    const [created] = await db.insert(taskComments).values({ taskId, userId, body }).returning();
+    await this.logTaskActivity(taskId, userId, "comment_added", { commentId: created.id });
+    return created;
+  }
+
+  async deleteTaskComment(commentId: string, userId: string): Promise<void> {
+    // Only the comment author can delete their own comment.
+    await db.delete(taskComments).where(and(eq(taskComments.id, commentId), eq(taskComments.userId, userId)));
+  }
+
+  async getTaskActivity(taskId: string, userId: string) {
+    const task = await this.getTask(taskId, userId);
+    if (!task) return [];
+    const rows = await db
+      .select({
+        id: taskActivity.id,
+        taskId: taskActivity.taskId,
+        userId: taskActivity.userId,
+        type: taskActivity.type,
+        meta: taskActivity.meta,
+        createdAt: taskActivity.createdAt,
+        authorName: users.displayName,
+        authorEmail: users.email,
+      })
+      .from(taskActivity)
+      .leftJoin(users, eq(users.id, taskActivity.userId))
+      .where(eq(taskActivity.taskId, taskId))
+      .orderBy(desc(taskActivity.createdAt))
+      .limit(200);
+    return rows;
   }
 
   async getDashboardProjectsSummary(userId: string) {

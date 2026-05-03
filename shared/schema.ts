@@ -1423,6 +1423,37 @@ export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
 export type UpdateProjectTask = z.infer<typeof updateProjectTaskSchema>;
 export type ProjectTask = typeof projectTasks.$inferSelect;
 
+export const taskComments = pgTable("task_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => projectTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
+  id: true,
+  userId: true,
+  taskId: true,
+  createdAt: true,
+}).extend({
+  body: z.string().trim().min(1, "Comment cannot be empty").max(5000),
+});
+
+export type InsertTaskComment = z.infer<typeof insertTaskCommentSchema>;
+export type TaskComment = typeof taskComments.$inferSelect;
+
+export const taskActivity = pgTable("task_activity", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => projectTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  meta: jsonb("meta").$type<Record<string, unknown>>().default({}).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type TaskActivity = typeof taskActivity.$inferSelect;
+
 export interface ProjectWithCounts extends Project {
   totalTasks: number;
   openTasks: number;

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
@@ -5895,6 +5895,56 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     } catch (err) {
       console.error("[projects] delete task error:", err);
       res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
+  app.get("/api/tasks/:id/comments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.id, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Not found" });
+      const comments = await storage.getTaskComments(req.params.id, req.session.userId!);
+      res.json(comments);
+    } catch (err) {
+      console.error("[projects] list comments error:", err);
+      res.status(500).json({ message: "Failed to load comments" });
+    }
+  });
+
+  app.post("/api/tasks/:id/comments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.id, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Not found" });
+      const data = insertTaskCommentSchema.parse(req.body);
+      const created = await storage.addTaskComment(req.params.id, req.session.userId!, data.body);
+      res.status(201).json(created);
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[projects] add comment error:", err);
+      res.status(500).json({ message: "Failed to add comment" });
+    }
+  });
+
+  app.delete("/api/tasks/:taskId/comments/:commentId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.taskId, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Not found" });
+      await storage.deleteTaskComment(req.params.commentId, req.session.userId!);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[projects] delete comment error:", err);
+      res.status(500).json({ message: "Failed to delete comment" });
+    }
+  });
+
+  app.get("/api/tasks/:id/activity", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.id, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Not found" });
+      const activity = await storage.getTaskActivity(req.params.id, req.session.userId!);
+      res.json(activity);
+    } catch (err) {
+      console.error("[projects] list activity error:", err);
+      res.status(500).json({ message: "Failed to load activity" });
     }
   });
 

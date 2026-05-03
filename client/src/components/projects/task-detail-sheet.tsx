@@ -13,6 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { RichTextEditor } from "./rich-text-editor";
+import { TaskCommentsActivity } from "./task-comments-activity";
+import { useAuth } from "@/lib/auth";
 import { CalendarIcon, Trash2, X, Plus, Link2, ExternalLink, ListChecks, Flag, CheckCircle2, ChevronLeft, CornerDownRight } from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -41,6 +43,7 @@ interface Props {
 
 export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onOpenChange, onOpenTask }: Props) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("todo");
@@ -77,6 +80,9 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
       queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      if (task?.id) {
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks", task.id, "activity"] });
+      }
     },
     onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
@@ -96,6 +102,9 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
     queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "tasks"] });
     queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
     queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+    if (task?.id) {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks", task.id, "activity"] });
+    }
   };
 
   const addSubtaskMutation = useMutation({
@@ -431,6 +440,11 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
               </div>
             </div>
           )}
+
+          {/* Comments + Activity */}
+          <div className="pt-1">
+            <TaskCommentsActivity taskId={task.id} currentUserId={user?.id} />
+          </div>
 
           {/* Bottom breadcrumb (subtask only) */}
           {parentTask && onOpenTask && (

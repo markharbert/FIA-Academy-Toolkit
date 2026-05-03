@@ -255,6 +255,33 @@ async function runStartupMigrations() {
       CREATE INDEX IF NOT EXISTS project_tasks_parent_idx
         ON project_tasks(parent_task_id)
     `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS task_comments (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_id VARCHAR NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS task_comments_task_idx
+        ON task_comments(task_id, created_at ASC)
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS task_activity (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_id VARCHAR NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS task_activity_task_idx
+        ON task_activity(task_id, created_at DESC)
+    `);
     console.log("[startup] projects tables migration complete");
 
     // One-time backfill: copy account-level confirmed placement results to the
