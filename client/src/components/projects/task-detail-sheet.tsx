@@ -194,9 +194,9 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(245_60%_28%)] via-[hsl(265_55%_35%)] to-[hsl(290_55%_38%)]" />
           <div className="absolute -top-12 -right-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
           <SheetHeader className="relative px-6 pt-6 pb-5">
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               <div
-                className="h-11 w-11 rounded-xl flex items-center justify-center text-white font-bold shrink-0 ring-2 ring-white/20"
+                className="h-11 w-11 rounded-xl flex items-center justify-center text-white font-bold shrink-0 ring-2 ring-white/20 mt-0.5"
                 style={{ background: project.color }}
               >
                 {initials}
@@ -256,31 +256,34 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
                   )}
                 </div>
               </div>
+              {/* Compact complete button — sits in the header, below the sheet's X close button */}
+              <div className="shrink-0 mr-8 mt-1">
+                {status === "done" ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs font-semibold border border-emerald-400/40 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20 hover:text-white"
+                    onClick={() => { setStatus("todo"); updateMutation.mutate({ status: "todo" }); }}
+                    data-testid="button-reopen-task"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-emerald-300" /> Reopen
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-white border-0 shadow-sm"
+                    onClick={() => { setStatus("done"); updateMutation.mutate({ status: "done" }); }}
+                    data-testid="button-complete-task"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Complete
+                  </Button>
+                )}
+              </div>
             </div>
           </SheetHeader>
         </div>
 
         <div className="px-6 py-5 space-y-5">
-          {/* Complete / Reopen */}
-          {status === "done" ? (
-            <Button
-              variant="outline"
-              className="w-full border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
-              onClick={() => { setStatus("todo"); updateMutation.mutate({ status: "todo" }); }}
-              data-testid="button-reopen-task"
-            >
-              <CheckCircle2 className="h-4 w-4 mr-2 text-emerald-500" /> Completed — click to reopen
-            </Button>
-          ) : (
-            <Button
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-              onClick={() => { setStatus("done"); updateMutation.mutate({ status: "done" }); }}
-              data-testid="button-complete-task"
-            >
-              <CheckCircle2 className="h-4 w-4 mr-2" /> Complete task
-            </Button>
-          )}
-
           {/* Status / Priority / Due */}
           <div className="grid grid-cols-3 gap-3">
             <div>
