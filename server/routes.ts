@@ -5251,7 +5251,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
       const spfResult = intel.parseSpf(req.body?.SPF || req.body?.spf);
       const dkimResult = intel.parseDkim(req.body?.dkim);
-      const dmarcResult = intel.parseDmarc(rawHeaders);
+      const dmarcResult = intel.parseDmarc(rawHeaders, fromEmail, dkimResult, spfResult);
 
       const detectedEsp = intel.detectEsp(rawHeaders, bodyHtml);
       const listUnsubscribePresent = intel.hasListUnsubscribe(rawHeaders);

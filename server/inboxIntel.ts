@@ -233,10 +233,53 @@ export function parseDkim(dkim: string | undefined): string {
   return "unknown";
 }
 
-export function parseDmarc(headers: string | undefined): string {
-  if (!headers) return "unknown";
-  const m = headers.match(/dmarc=(\w+)/i);
-  return m ? m[1].toLowerCase() : "unknown";
+export function parseDmarc(
+  headers: string | undefined,
+  fromEmail?: string,
+  dkimResult?: string,
+  spfResult?: string,
+): string {
+  // 1. Explicit dmarc= in Authentication-Results or ARC-Authentication-Results
+  if (headers) {
+    const m = headers.match(/dmarc=(\w+)/i);
+    if (m) return m[1].toLowerCase();
+  }
+
+  // 2. DKIM identifier alignment — DMARC passes if DKIM passes and the signing
+  //    domain aligns with the From domain (exact or organizational match).
+  if (dkimResult === "pass" && fromEmail && headers) {
+    const fromDomain = fromEmail.match(/@([\w.-]+)/)?.[1]?.toLowerCase() || "";
+    const dkimSigMatch = headers.match(/^DKIM-Signature:[^\n]*(?:\n[ \t][^\n]*)*/im);
+    if (dkimSigMatch) {
+      const dkimBlock = dkimSigMatch[0].replace(/\r?\n[ \t]/g, " ");
+      const dDomain = dkimBlock.match(/\bd=([\w.-]+)/i)?.[1]?.toLowerCase() || "";
+      if (dDomain && fromDomain) {
+        const aligned =
+          dDomain === fromDomain ||
+          fromDomain.endsWith("." + dDomain) ||
+          dDomain.endsWith("." + fromDomain);
+        if (aligned) return "pass";
+      }
+    }
+  }
+
+  // 3. SPF alignment — envelope-from domain aligns with the From domain.
+  if (spfResult === "pass" && fromEmail && headers) {
+    const fromDomain = fromEmail.match(/@([\w.-]+)/)?.[1]?.toLowerCase() || "";
+    const envMatch =
+      headers.match(/Received-SPF:[^\n]*envelope-from=\S*@([\w.-]+)/i) ||
+      headers.match(/smtp\.(?:mailfrom|envfrom)=([\w.-]+)/i);
+    if (envMatch) {
+      const envDomain = envMatch[1].toLowerCase();
+      const aligned =
+        envDomain === fromDomain ||
+        fromDomain.endsWith("." + envDomain) ||
+        envDomain.endsWith("." + fromDomain);
+      if (aligned) return "pass";
+    }
+  }
+
+  return "unknown";
 }
 
 // Extract preheader from <head>/inline preheader span (common ESP pattern)
@@ -364,9 +407,19 @@ export function detectEsp(headers: string, html?: string): string | undefined {
   const h = (headers || "").toLowerCase();
   const body = (html || "").toLowerCase();
 
-  // ── Header signals (high confidence) ──
+  // ── Extract DKIM signing domain for additional fingerprinting ──
+  // The d= tag in DKIM-Signature tells us who signed the email, which is a
+  // strong indicator of the actual sending platform (not the relay infrastructure).
+  let dkimSigningDomain = "";
+  const dkimSigMatch = h.match(/dkim-signature:[^\n]*(?:\n[ \t][^\n]*)*/);
+  if (dkimSigMatch) {
+    const block = dkimSigMatch[0].replace(/\n[ \t]/g, " ");
+    dkimSigningDomain = block.match(/\bd=([\w.-]+)/i)?.[1]?.toLowerCase() || "";
+  }
+
+  // ── Header signals — specific proprietary headers (highest confidence) ──
+  // These are headers that only a given ESP adds. Checked before anything else.
   if (h.includes("x-mailer: mailchimp") || h.includes("mandrillapp.com") || (h.includes("list-id:") && h.includes("mailchimp"))) return "Mailchimp";
-  if (h.includes("x-sg-eid") || h.includes("sendgrid.net")) return "SendGrid";
   if (h.includes("x-klaviyo") || h.includes("klaviyomail.com")) return "Klaviyo";
   if (h.includes("x-aws-ses") || h.includes("amazonses.com")) return "Amazon SES";
   if (h.includes("x-mc-user") || h.includes("mailerlite.com")) return "MailerLite";
@@ -392,6 +445,31 @@ export function detectEsp(headers: string, html?: string): string | undefined {
   if (h.includes("returnpath.net") || h.includes("salesforce.com") || h.includes("exacttarget.com") || h.includes("marketingcloud")) return "Salesforce Marketing Cloud";
   if (h.includes("eloqua.com")) return "Oracle Eloqua";
   if (h.includes("pardot.com")) return "Pardot";
+  // X-SG-EID is a SendGrid outbound-sending header (not added by inbound relay).
+  // Checked last among header signals because some platforms proxy through SendGrid.
+  if (h.includes("x-sg-eid")) return "SendGrid";
+
+  // ── DKIM signing domain (high confidence, platform-specific domains) ──
+  if (dkimSigningDomain) {
+    if (dkimSigningDomain.includes("mailchimpapp.com") || dkimSigningDomain.includes("mcsv.net")) return "Mailchimp";
+    if (dkimSigningDomain.includes("klaviyomail.com")) return "Klaviyo";
+    if (dkimSigningDomain.includes("amazonses.com")) return "Amazon SES";
+    if (dkimSigningDomain.includes("activehosted.com") || dkimSigningDomain.includes("acemlna.com")) return "ActiveCampaign";
+    if (dkimSigningDomain.includes("convertkit") || dkimSigningDomain.includes("ck.page")) return "ConvertKit";
+    if (dkimSigningDomain.includes("hubspot.com") || dkimSigningDomain.includes("hubspotemail.net")) return "HubSpot";
+    if (dkimSigningDomain.includes("mailerlite.com")) return "MailerLite";
+    if (dkimSigningDomain.includes("sendgrid.net")) return "SendGrid";
+    if (dkimSigningDomain.includes("constantcontact.com") || dkimSigningDomain.includes("ccsend.com")) return "Constant Contact";
+    if (dkimSigningDomain.includes("beehiiv.com")) return "beehiiv";
+    if (dkimSigningDomain.includes("substack.com")) return "Substack";
+    if (dkimSigningDomain.includes("flodesk.com")) return "Flodesk";
+    if (dkimSigningDomain.includes("brevo.com") || dkimSigningDomain.includes("sendinblue.com")) return "Brevo";
+    if (dkimSigningDomain.includes("mailgun.org") || dkimSigningDomain.includes("mailgun.net")) return "Mailgun";
+    if (dkimSigningDomain.includes("infusionsoft.com") || dkimSigningDomain.includes("keap")) return "Keap";
+    if (dkimSigningDomain.includes("aweber.com")) return "AWeber";
+    if (dkimSigningDomain.includes("getresponse.com")) return "GetResponse";
+    if (dkimSigningDomain.includes("ontraport")) return "Ontraport";
+  }
 
   // ── HTML body fingerprint signals (medium confidence) ──
   // Tracking link / open-pixel host patterns are the most reliable HTML clue.
@@ -419,7 +497,7 @@ export function detectEsp(headers: string, html?: string): string | undefined {
   if (body.includes("exct.net") || body.includes("cl.exct") || body.includes("et.salesforce")) return "Salesforce Marketing Cloud";
   if (body.includes("pardot.com/r/") || body.includes("go.pardot")) return "Pardot";
   if (body.includes("eloqua.com/e/") || body.includes("s.eloqua")) return "Oracle Eloqua";
-  if (body.includes("sendgrid.net/wf/")) return "SendGrid";
+  if (body.includes("sendgrid.net/wf/") || body.includes("sendgrid.net/ls/")) return "SendGrid";
 
   return undefined;
 }
