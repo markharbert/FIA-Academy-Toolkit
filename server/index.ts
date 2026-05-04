@@ -404,6 +404,19 @@ async function runStartupMigrations() {
       if ((fallback.rowCount ?? 0) > 0) backfilled++;
     }
     if (backfilled > 0) console.log(`[startup] backfilled placement_results onto ${backfilled} email record(s)`);
+
+    // Fix any placement_results that were stored as a bare object instead of an array.
+    // This happened for one email where last_placement_results was a single PlacementResult
+    // object rather than the expected array, and was copied as-is by the backfill above.
+    const fixedObjects = await db.execute(sql`
+      UPDATE email_analyses
+      SET placement_results = jsonb_build_array(placement_results)
+      WHERE placement_results IS NOT NULL
+        AND jsonb_typeof(placement_results) = 'object'
+    `);
+    if ((fixedObjects.rowCount ?? 0) > 0) {
+      console.log(`[startup] fixed ${fixedObjects.rowCount} email_analyses row(s) where placement_results was a bare object`);
+    }
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

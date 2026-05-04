@@ -242,7 +242,7 @@ function computeContentScore(cq: ContentQuality | null): number | null {
 }
 
 function computePlacementScore(results: PlacementResult[] | null): number | null {
-  if (!results || results.length === 0) return null;
+  if (!results || !Array.isArray(results) || results.length === 0) return null;
   const definitive = results.filter(r => ["primary", "promotions", "social", "updates", "forums", "spam"].includes(r.status));
   if (definitive.length === 0) return null;
   const inboxCount = definitive.filter(r => r.status !== "spam").length;
@@ -431,7 +431,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
   placementAutoCheckUntil?: string | null;
   isActivePlacementEmail?: boolean;
 }) {
-  const flags = (email.spamFlags as SpamFlag[] | null) || [];
+  const flags = Array.isArray(email.spamFlags) ? (email.spamFlags as SpamFlag[]) : [];
   const th = email.technicalHealth as TechnicalHealth | null;
   const st = email.senderTrust as SenderTrust | null;
   const cq = email.contentQuality as ContentQuality | null;
@@ -462,7 +462,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
   // Confirmed results live directly on the email record (written once, never overwritten).
   // These take full priority — no need for address-level monitoring state once confirmed.
-  const confirmedResults = (email.placementResults as PlacementResult[] | null) ?? null;
+  const confirmedResults = Array.isArray(email.placementResults) ? (email.placementResults as PlacementResult[]) : null;
   const confirmedAt = email.placementConfirmedAt ? new Date(email.placementConfirmedAt as unknown as string | number | Date) : null;
 
   // Derive auto-monitoring phase info (used only while confirmation is still pending)
