@@ -693,16 +693,16 @@ export function computeOverallScore(params: {
   }
   // max 10
 
-  // Content quality: 7 pts (personalization 3 + word count 3 + P.S. 1)
-  let contentPoints = 4; // default
+  // Content quality: 10 pts (word count 8 + personalization 1 + P.S. 1)
+  let contentPoints = 5; // default
   if (params.contentQuality) {
     const cq = params.contentQuality;
     contentPoints = 0;
-    if (cq.hasPersonalization) contentPoints += 3;
-    if (cq.wordCount >= 50 && cq.wordCount <= 600) contentPoints += 3;
+    if (cq.wordCount >= 100 && cq.wordCount <= 500) contentPoints += 8;
+    if (cq.hasPersonalization) contentPoints += 1;
     if (cq.hasPs) contentPoints += 1;
   }
-  // max 7
+  // max 10
 
   // CAN-SPAM Compliance: 10 pts (physical address 4 + unsubscribe 4 + honest subject 2)
   let canSpamPoints = 5; // default when not yet analyzed
