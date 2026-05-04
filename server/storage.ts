@@ -2851,8 +2851,9 @@ export class DatabaseStorage implements IStorage {
   async getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress> {
     const [existing] = await db.select().from(emailInboxAddresses).where(eq(emailInboxAddresses.userId, userId));
     if (existing) return existing;
-    const { generateToken } = await import("./inboxAnalyzer");
-    const token = generateToken();
+    const { generateNamedToken } = await import("./inboxAnalyzer");
+    const user = await this.getUser(userId);
+    const token = generateNamedToken(user?.firstName, user?.lastName);
     const [created] = await db.insert(emailInboxAddresses).values({ userId, token }).returning();
     return created;
   }

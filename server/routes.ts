@@ -5351,11 +5351,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       // Auto-generate the first seed address so the user has something to use immediately
       try {
         const intel = await import("./inboxIntel");
+        const creator = await storage.getUser(userId);
         // Insert-with-retry — the DB unique constraint on token is the source
         // of truth, so we catch unique-violations and retry rather than relying
         // on a non-atomic check-then-insert (which races under concurrency).
         for (let attempt = 0; attempt < 8; attempt++) {
-          const token = intel.generateSeedToken();
+          const token = attempt === 0
+            ? intel.generateMemberSeedToken(creator?.firstName, creator?.lastName)
+            : intel.generateSeedToken();
           try {
             await storage.createCompetitorSeedAddress(userId, created.id, token);
             break;
@@ -5674,10 +5677,13 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         return res.status(409).json({ message: `Limit reached: ${MAX_SEEDS_PER_TRACKER} seed addresses per competitor` });
       }
       const intel = await import("./inboxIntel");
+      const creator = await storage.getUser(userId);
       let saved: CompetitorSeedAddress | null = null;
       // Insert-with-retry on DB unique-violation (race-safe).
       for (let attempt = 0; attempt < 8; attempt++) {
-        const token = intel.generateSeedToken();
+        const token = attempt === 0
+          ? intel.generateMemberSeedToken(creator?.firstName, creator?.lastName)
+          : intel.generateSeedToken();
         try {
           saved = await storage.createCompetitorSeedAddress(
             userId,

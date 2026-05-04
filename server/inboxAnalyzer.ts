@@ -18,6 +18,15 @@ export function generateToken(): string {
   return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
+export function generateNamedToken(firstName?: string | null, lastName?: string | null): string {
+  const namePart = `${firstName || ""}${lastName || ""}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 20);
+  const suffix = String(Math.floor(1000 + Math.random() * 9000));
+  return namePart.length >= 2 ? `${namePart}${suffix}` : generateToken();
+}
+
 export function stripTrackingPixels(html: string): string {
   if (!html) return html;
   return html.replace(/<img\b[^>]*>/gi, (tag) => {

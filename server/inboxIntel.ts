@@ -136,6 +136,15 @@ function buildTail(): string {
   }
 }
 
+export function generateMemberSeedToken(firstName?: string | null, lastName?: string | null): string {
+  const namePart = `${firstName || ""}${lastName || ""}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 20);
+  const suffix = String(Math.floor(1000 + Math.random() * 9000));
+  return namePart.length >= 2 ? `${namePart}${suffix}` : generateSeedToken();
+}
+
 export function generateSeedToken(): string {
   const first = pick(FIRST_NAMES);
   const last = pick(LAST_NAMES);
