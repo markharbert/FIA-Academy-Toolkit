@@ -870,95 +870,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
           </SectionPanel>
         )}
 
-        {/* Spam Language Analysis */}
-        <SectionPanel title="Spammy Language Analysis" icon={AlertTriangle} score={email.spamScore}>
-          {flags.length === 0 ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
-              <CircleCheck className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-              <p className="text-sm text-green-700 dark:text-green-400 font-medium">No spam triggers detected — great clean copy!</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Trigger word pills grouped by severity */}
-              {(["high", "medium", "low"] as const).map(sev => {
-                const sevFlags = flags.filter(f => f.severity === sev && (f.category === "trigger_word" || f.category === "subject_trigger") && f.matches && f.matches.length > 0);
-                if (sevFlags.length === 0) return null;
-                const allMatches = Array.from(new Set(sevFlags.flatMap(f => f.matches || [])));
-                const isSubject = (word: string) => flags.some(f => f.category === "subject_trigger" && f.matches?.includes(word));
-                const colorClass = sev === "high"
-                  ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 border-red-200 dark:border-red-800"
-                  : sev === "medium"
-                  ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 border-orange-200 dark:border-orange-800"
-                  : "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800";
-                const label = sev === "high" ? "High Risk" : sev === "medium" ? "Medium Risk" : "Low Risk";
-                return (
-                  <div key={sev}>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{label} Phrases</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {allMatches.map(word => {
-                        const alts = PHRASE_ALTERNATIVES[word.toLowerCase()];
-                        const pill = (
-                          <span
-                            className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${colorClass} ${alts ? "cursor-pointer hover:opacity-80 active:opacity-60 transition-opacity" : ""}`}
-                          >
-                            {isSubject(word) && <span className="font-bold opacity-70 text-[10px] uppercase tracking-wider">SUBJ</span>}
-                            {word}
-                            {alts && <span className="opacity-50 text-[9px] ml-0.5">▾</span>}
-                          </span>
-                        );
-                        if (!alts) return <span key={word}>{pill}</span>;
-                        return (
-                          <Popover key={word}>
-                            <PopoverTrigger asChild>{pill}</PopoverTrigger>
-                            <PopoverContent side="top" align="start" className="w-72 p-3">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                                Try instead of <span className="text-foreground normal-case font-mono">"{word}"</span>
-                              </p>
-                              <div className="flex flex-col gap-1.5">
-                                {alts.map(alt => (
-                                  <AltChip key={alt} text={alt} />
-                                ))}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Structural / pattern flags */}
-              {(() => {
-                const structuralFlags = flags.filter(f => f.category === "structural" || f.category === "pattern");
-                if (structuralFlags.length === 0) return null;
-                return (
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Structure & Patterns</p>
-                    <div className="space-y-1.5">
-                      {structuralFlags.map((f, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <span className={`mt-0.5 flex-shrink-0 h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            f.severity === "high" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
-                            : f.severity === "medium" ? "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
-                            : "bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400"
-                          }`}>!</span>
-                          <div className="flex-1">
-                            <p className="text-sm text-foreground leading-snug">{f.label}</p>
-                            {f.matches && f.matches.length > 0 && (
-                              <p className="text-xs text-muted-foreground mt-0.5 font-mono">{f.matches.slice(0, 6).join(", ")}{f.matches.length > 6 ? `… +${f.matches.length - 6}` : ""}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-        </SectionPanel>
-
         {/* Technical Health */}
         {th && (
           <SectionPanel title="Technical Health" icon={Zap} score={computeTechScore(th)}>
@@ -1057,6 +968,95 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             </div>
           </SectionPanel>
         )}
+
+        {/* Spammy Language Analysis */}
+        <SectionPanel title="Spammy Language Analysis" icon={AlertTriangle} score={email.spamScore}>
+          {flags.length === 0 ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
+              <CircleCheck className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+              <p className="text-sm text-green-700 dark:text-green-400 font-medium">No spam triggers detected — great clean copy!</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Trigger word pills grouped by severity */}
+              {(["high", "medium", "low"] as const).map(sev => {
+                const sevFlags = flags.filter(f => f.severity === sev && (f.category === "trigger_word" || f.category === "subject_trigger") && f.matches && f.matches.length > 0);
+                if (sevFlags.length === 0) return null;
+                const allMatches = Array.from(new Set(sevFlags.flatMap(f => f.matches || [])));
+                const isSubject = (word: string) => flags.some(f => f.category === "subject_trigger" && f.matches?.includes(word));
+                const colorClass = sev === "high"
+                  ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 border-red-200 dark:border-red-800"
+                  : sev === "medium"
+                  ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 border-orange-200 dark:border-orange-800"
+                  : "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800";
+                const label = sev === "high" ? "High Risk" : sev === "medium" ? "Medium Risk" : "Low Risk";
+                return (
+                  <div key={sev}>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{label} Phrases</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allMatches.map(word => {
+                        const alts = PHRASE_ALTERNATIVES[word.toLowerCase()];
+                        const pill = (
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${colorClass} ${alts ? "cursor-pointer hover:opacity-80 active:opacity-60 transition-opacity" : ""}`}
+                          >
+                            {isSubject(word) && <span className="font-bold opacity-70 text-[10px] uppercase tracking-wider">SUBJ</span>}
+                            {word}
+                            {alts && <span className="opacity-50 text-[9px] ml-0.5">▾</span>}
+                          </span>
+                        );
+                        if (!alts) return <span key={word}>{pill}</span>;
+                        return (
+                          <Popover key={word}>
+                            <PopoverTrigger asChild>{pill}</PopoverTrigger>
+                            <PopoverContent side="top" align="start" className="w-72 p-3">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                                Try instead of <span className="text-foreground normal-case font-mono">"{word}"</span>
+                              </p>
+                              <div className="flex flex-col gap-1.5">
+                                {alts.map(alt => (
+                                  <AltChip key={alt} text={alt} />
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Structural / pattern flags */}
+              {(() => {
+                const structuralFlags = flags.filter(f => f.category === "structural" || f.category === "pattern");
+                if (structuralFlags.length === 0) return null;
+                return (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Structure & Patterns</p>
+                    <div className="space-y-1.5">
+                      {structuralFlags.map((f, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className={`mt-0.5 flex-shrink-0 h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            f.severity === "high" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
+                            : f.severity === "medium" ? "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
+                            : "bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          }`}>!</span>
+                          <div className="flex-1">
+                            <p className="text-sm text-foreground leading-snug">{f.label}</p>
+                            {f.matches && f.matches.length > 0 && (
+                              <p className="text-xs text-muted-foreground mt-0.5 font-mono">{f.matches.slice(0, 6).join(", ")}{f.matches.length > 6 ? `… +${f.matches.length - 6}` : ""}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </SectionPanel>
 
         {/* CAN-SPAM Compliance */}
         {cs && (
