@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-export const INTEL_DOMAIN = "watch.fearlesspromos.com";
+export const INTEL_DOMAIN = "watch.fearlesspromo.com";
 // Legacy prefix — kept so old seed addresses still resolve.
 export const SEED_TOKEN_PREFIX = "track-";
 

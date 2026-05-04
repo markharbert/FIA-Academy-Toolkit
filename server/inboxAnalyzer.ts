@@ -7,7 +7,7 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
 });
 
-const INBOX_DOMAIN = "score.fearlesspromos.com";
+const INBOX_DOMAIN = "score.fearlesspromo.com";
 
 export function getInboxAddress(token: string): string {
   return `${token}@${INBOX_DOMAIN}`;
