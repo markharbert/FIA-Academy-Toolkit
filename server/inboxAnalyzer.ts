@@ -698,7 +698,12 @@ export function computeOverallScore(params: {
   if (params.contentQuality) {
     const cq = params.contentQuality;
     contentPoints = 0;
-    if (cq.wordCount >= 100 && cq.wordCount <= 600) contentPoints += 8;
+    const wc = cq.wordCount;
+    if (wc >= 100 && wc <= 400) contentPoints += 8;
+    else if (wc >= 401 && wc <= 500) contentPoints += 6;
+    else if (wc >= 501 && wc <= 600) contentPoints += 4;
+    else if (wc >= 601 && wc <= 700) contentPoints += 2;
+    else if (wc >= 701 && wc <= 800) contentPoints += 1;
     if (cq.hasPersonalization) contentPoints += 1;
     if (cq.hasPs) contentPoints += 1;
   }

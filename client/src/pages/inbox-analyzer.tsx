@@ -232,10 +232,18 @@ function computeTechScore(th: TechnicalHealth | null): number | null {
   return Math.round((pts / 10) * 100);
 }
 
+function wordCountPts(wc: number): number {
+  if (wc >= 100 && wc <= 400) return 8;
+  if (wc >= 401 && wc <= 500) return 6;
+  if (wc >= 501 && wc <= 600) return 4;
+  if (wc >= 601 && wc <= 700) return 2;
+  if (wc >= 701 && wc <= 800) return 1;
+  return 0;
+}
+
 function computeContentScore(cq: ContentQuality | null): number | null {
   if (!cq) return null;
-  let pts = 0;
-  if (cq.wordCount >= 100 && cq.wordCount <= 600) pts += 8;
+  let pts = wordCountPts(cq.wordCount);
   if (cq.hasPersonalization) pts += 1;
   if (cq.hasPs) pts += 1;
   return Math.round((pts / 10) * 100);
@@ -660,8 +668,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 return Math.round((p / 10) * 100);
               })() : null },
               { label: "Content", score: cq ? (() => {
-                let p = 0;
-                if (cq.wordCount >= 100 && cq.wordCount <= 600) p += 8;
+                let p = wordCountPts(cq.wordCount);
                 if (cq.hasPersonalization) p += 1;
                 if (cq.hasPs) p += 1;
                 return Math.round((p / 10) * 100);
@@ -912,10 +919,18 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
           <SectionPanel title="Content Quality" icon={BookOpen} score={computeContentScore(cq)}>
             <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
               <CheckRow
-                pass={cq.wordCount >= 100 && cq.wordCount <= 600}
-                warn={cq.wordCount > 0 && (cq.wordCount < 100 || cq.wordCount > 600)}
+                pass={cq.wordCount >= 100 && cq.wordCount <= 400}
+                warn={cq.wordCount >= 401 && cq.wordCount <= 800}
                 label={`${cq.wordCount} words`}
-                detail={cq.wordCount < 100 ? "too short" : cq.wordCount > 600 ? "may be too long" : "ideal range 100–600"}
+                detail={
+                  cq.wordCount < 100 ? "too short — below minimum" :
+                  cq.wordCount <= 400 ? "sweet spot — 8/8 pts" :
+                  cq.wordCount <= 500 ? "good — 6/8 pts" :
+                  cq.wordCount <= 600 ? "acceptable — 4/8 pts" :
+                  cq.wordCount <= 700 ? "long — 2/8 pts" :
+                  cq.wordCount <= 800 ? "very long — 1/8 pts" :
+                  "over limit — 0/8 pts"
+                }
               />
               <CheckRow
                 pass={cq.hasPersonalization}
@@ -932,7 +947,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             </div>
 
             {/* Per-item guidance for anything missing */}
-            {(!cq.hasPs || !cq.hasPersonalization || cq.wordCount < 100 || cq.wordCount > 600) && (
+            {(!cq.hasPs || !cq.hasPersonalization || cq.wordCount < 100 || cq.wordCount > 400) && (
               <div className="space-y-2 pt-1">
                 {!cq.hasPs && (
                   <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
@@ -952,10 +967,16 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                     <span><strong>Very short email.</strong> Extremely brief emails can occasionally raise spam filter flags because they lack context, but this varies by provider. Consider adding more value or explanation to your message if you are seeing placement issues.</span>
                   </div>
                 )}
-                {cq.wordCount > 600 && (
+                {cq.wordCount > 400 && cq.wordCount <= 800 && (
                   <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
                     <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                    <span><strong>Long email.</strong> Word count alone does not hurt deliverability, but reader engagement tends to drop in longer emails. Consider breaking very long content into a series of shorter emails, or adding clear section headers to help readers scan.</span>
+                    <span><strong>Email length doesn't directly hurt deliverability</strong>, but shorter emails generally drive better engagement. The more concise your message, the more likely readers are to read and click through. Generally, emails under 400 words tend to see the highest engagement rates.</span>
+                  </div>
+                )}
+                {cq.wordCount > 800 && (
+                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                    <span><strong>Email length doesn't directly hurt deliverability</strong>, but shorter emails generally drive better engagement. At over 800 words, reader drop-off is significant. Consider trimming your message or breaking it into a series of shorter emails.</span>
                   </div>
                 )}
               </div>
@@ -1469,7 +1490,7 @@ function MyAddressTab({
               { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist checks across Spamhaus, Barracuda & SpamCop; display name / domain match; Reply-To alignment." },
               { icon: AlertTriangle, label: "Spammy Language (35 pts)", desc: "Comprehensive scan for 100+ high / medium / low-risk trigger phrases in both subject and body — grouped by severity with highlighted matches." },
               { icon: Zap, label: "Technical Health (10 pts)", desc: "HTML/text version, preheader, email size, missing ALT text, tracking pixels, and external domains." },
-              { icon: BookOpen, label: "Content Quality (10 pts)", desc: "Word count in the ideal 100–600 word range (80% of score), plus P.S. section and personalization detection (10% each)." },
+              { icon: BookOpen, label: "Content Quality (10 pts)", desc: "Word count scored on a tiered scale: 100–400 words = 8 pts, 401–500 = 6 pts, 501–600 = 4 pts, 601–700 = 2 pts, 701–800 = 1 pt, outside range = 0 pts. Plus P.S. section and personalization (1 pt each)." },
             ].map((item) => (
               <div key={item.label} className="flex gap-3 p-3 rounded-lg bg-muted/40">
                 <item.icon className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
