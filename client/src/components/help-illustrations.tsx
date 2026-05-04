@@ -345,7 +345,7 @@ export function InboxIntelTrackerEmailsIllustration() {
   return (
     <AnnotatedScreenshot
       src={iiTrackerEmails}
-      alt="Brennan Dunn tracker detail page on the Captured emails tab showing the Refresh preview, CSV, Edit, and Remove action buttons, the Seed addresses block listing three personal-looking seed mailboxes on watch.fearlessmarketinglab.com with received counts and last-received dates, the Captured emails / Analytics / Funnel tabs, and the first three captured email rows"
+      alt="Brennan Dunn tracker detail page on the Captured emails tab showing the Refresh preview, CSV, Edit, and Remove action buttons, the Seed addresses block listing three personal-looking seed mailboxes on watch.fearlesspromos.com with received counts and last-received dates, the Captured emails / Analytics / Funnel tabs, and the first three captured email rows"
       annotations={annotations}
     />
   );
@@ -423,7 +423,7 @@ export function InboxAnalyzerHubIllustration() {
   return (
     <AnnotatedScreenshot
       src={iaHub}
-      alt="Inbox Analyzer hub showing the page header with the user's unique scoring address (iahelp7k2x9q@email.fearlessmarketinglab.com), the Emails / My Address tab switcher, and a captured email row '🔥 LIMITED TIME — Act now to make money fast!!!' from Sarah Mitchell with an Overall Score of 42 and a Pending status badge"
+      alt="Inbox Analyzer hub showing the page header with the user's unique scoring address (iahelp7k2x9q@score.fearlesspromos.com), the Emails / My Address tab switcher, and a captured email row '🔥 LIMITED TIME — Act now to make money fast!!!' from Sarah Mitchell with an Overall Score of 42 and a Pending status badge"
       annotations={annotations}
     />
   );
@@ -437,7 +437,7 @@ export function InboxAnalyzerMyAddressIllustration() {
   return (
     <AnnotatedScreenshot
       src={iaMyAddress}
-      alt="My Address tab of Inbox Analyzer showing Step 1 'Add your scoring address to your CRM' with the unique fearlessmarketinglab.com address and a Copy button, and Step 2 'Add these placement addresses to your CRM' listing three Gmail seed inboxes (Gmail A, B, C) each with their own Copy button"
+      alt="My Address tab of Inbox Analyzer showing Step 1 'Add your scoring address to your CRM' with the unique score.fearlesspromos.com address and a Copy button, and Step 2 'Add these placement addresses to your CRM' listing three Gmail seed inboxes (Gmail A, B, C) each with their own Copy button"
       annotations={annotations}
     />
   );

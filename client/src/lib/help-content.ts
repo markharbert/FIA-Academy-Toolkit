@@ -456,7 +456,7 @@ const inboxIntelArticle: HelpArticle = {
   categorySlug: "email-tools",
   readMinutes: 6,
   overview:
-    "Inbox Intel turns your competitors' email lists into a permanent, searchable swipe file. You add a competitor, generate up to 5 unique private seed addresses on watch.fearlessmarketinglab.com, use those addresses to opt in to their lists, and from then on every email they send you is captured, parsed, and stored. The platform tells you which messages are part of an automated welcome funnel vs a one-off broadcast, what email-sending platform they use, when they send, and how their cadence is changing — across all of your tracked competitors at once.",
+    "Inbox Intel turns your competitors' email lists into a permanent, searchable swipe file. You add a competitor, generate up to 5 unique private seed addresses on watch.fearlesspromos.com, use those addresses to opt in to their lists, and from then on every email they send you is captured, parsed, and stored. The platform tells you which messages are part of an automated welcome funnel vs a one-off broadcast, what email-sending platform they use, when they send, and how their cadence is changing — across all of your tracked competitors at once.",
   steps: [
     {
       number: 1,
@@ -473,7 +473,7 @@ const inboxIntelArticle: HelpArticle = {
       number: 2,
       title: "Get your private seed addresses and subscribe",
       body: [
-        "Open the tracker and you'll see up to 5 personal-looking seed addresses on watch.fearlessmarketinglab.com (e.g. sarah.thompson83@..., mike.r.davis@...). They're designed to look like real personal mailboxes so opt-in forms accept them.",
+        "Open the tracker and you'll see up to 5 personal-looking seed addresses on watch.fearlesspromos.com (e.g. sarah.thompson83@..., mike.r.davis@...). They're designed to look like real personal mailboxes so opt-in forms accept them.",
         "Copy a seed address and use it to subscribe to the competitor's list — sign up for their lead magnet, newsletter, or free training the way a normal subscriber would.",
         "Click + Generate seed (with an optional label like 'Homepage opt-in' or 'Webinar') to create additional seeds. Using multiple seeds across different opt-in points helps Inbox Intel detect automated welcome series with high confidence by cross-checking what arrives at each one.",
       ],
@@ -536,7 +536,7 @@ const inboxAnalyzerArticle: HelpArticle = {
   categorySlug: "email-tools",
   readMinutes: 5,
   overview:
-    "The Inbox Analyzer turns every email you send into a permanent, scored deliverability report. Each member gets one private scoring address on email.fearlessmarketinglab.com plus a set of real Gmail placement seed addresses. Add the scoring address to your CRM and the placement addresses as real subscribers, and from then on every campaign you send is captured, parsed, and analyzed automatically — Overall Score plus six category sub-scores (Auth, Trust, Spam, Technical, Content, CAN-SPAM), with a separate Inbox Placement panel that confirms whether each test inbox saw the email in Primary, Promotions, Spam, or Junk.",
+    "The Inbox Analyzer turns every email you send into a permanent, scored deliverability report. Each member gets one private scoring address on score.fearlesspromos.com plus a set of real Gmail placement seed addresses. Add the scoring address to your CRM and the placement addresses as real subscribers, and from then on every campaign you send is captured, parsed, and analyzed automatically — Overall Score plus six category sub-scores (Auth, Trust, Spam, Technical, Content, CAN-SPAM), with a separate Inbox Placement panel that confirms whether each test inbox saw the email in Primary, Promotions, Spam, or Junk.",
   steps: [
     {
       number: 1,
