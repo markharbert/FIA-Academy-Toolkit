@@ -607,6 +607,22 @@ export default function AdminPage() {
   const [keStatusLoading, setKeStatusLoading] = useState(true);
   const [cfStatus, setCfStatus] = useState<CfStatus | null>(null);
   const [cfStatusLoading, setCfStatusLoading] = useState(true);
+  const [resetEmailsConfirmOpen, setResetEmailsConfirmOpen] = useState(false);
+
+  const resetEmailAddressesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/reset-email-addresses", { confirm: "RESET_CONFIRMED" });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setResetEmailsConfirmOpen(false);
+      toast({
+        title: "Email addresses wiped",
+        description: `Deleted ${data.analyzerAddressesDeleted} Inbox Analyzer address${data.analyzerAddressesDeleted !== 1 ? "es" : ""} and ${data.intelSeedsDeleted} Inbox Intel seed${data.intelSeedsDeleted !== 1 ? "s" : ""}. Members will get fresh name-based addresses on next visit.`,
+      });
+    },
+    onError: (err: Error) => toast({ title: "Reset failed", description: err.message, variant: "destructive" }),
+  });
   const [creditLimitInput, setCreditLimitInput] = useState<string>("");
   const [creditLimitSaving, setCreditLimitSaving] = useState(false);
   const [topicApiStatus, setTopicApiStatus] = useState<{ youtube: boolean; openai: boolean; reddit: boolean; keywordsEverywhere: boolean } | null>(null);
@@ -1288,6 +1304,34 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* System Tools */}
+          <Card data-testid="card-system-tools">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-muted-foreground" /> System Tools
+              </CardTitle>
+              <CardDescription>One-time admin operations. These actions affect all members.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between gap-4 py-2">
+                <div>
+                  <p className="text-sm font-medium">Reset all email seed addresses</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Wipes every Inbox Analyzer and Inbox Intel seed address. Members get fresh name-based addresses on next visit. Captured email data is untouched.
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setResetEmailsConfirmOpen(true)}
+                  data-testid="button-reset-email-addresses"
+                >
+                  Reset addresses
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
@@ -2829,6 +2873,29 @@ export default function AdminPage() {
           })()}
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={resetEmailsConfirmOpen} onOpenChange={setResetEmailsConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Wipe all email seed addresses?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete every Inbox Analyzer address and every Inbox Intel seed address for all members. Captured emails and analyses are <strong>not</strong> deleted. Each member will receive a fresh, name-based address the next time they visit those tools.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetEmailAddressesMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => resetEmailAddressesMutation.mutate()}
+              disabled={resetEmailAddressesMutation.isPending}
+              data-testid="button-confirm-reset-email-addresses"
+            >
+              {resetEmailAddressesMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Yes, wipe all addresses
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmDialog?.open} onOpenChange={(open) => !open && setConfirmDialog(null)}>
         <AlertDialogContent>
