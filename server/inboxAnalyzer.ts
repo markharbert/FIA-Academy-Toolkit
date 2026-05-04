@@ -74,13 +74,14 @@ export function parseDmarcResult(
   }
 
   // Second: derive from DKIM identifier alignment (DMARC aligned pass)
-  // DMARC passes if DKIM passes AND the DKIM signing domain aligns with the From domain
+  // DMARC passes if DKIM passes AND the DKIM signing domain aligns with the From domain.
+  // Emails sent via ESPs often have multiple DKIM-Signature headers (one for the platform,
+  // one for the sender domain). We must check ALL of them — not just the first.
   if (dkimResult === "pass" && fromAddress && headersRaw) {
     const fromDomain = fromAddress.match(/@([\w.-]+)/)?.[1]?.toLowerCase() || "";
-    // Find the DKIM-Signature d= tag (can span multiple lines due to header folding)
-    const dkimSigMatch = headersRaw.match(/^DKIM-Signature:[^\n]*(?:\n[ \t][^\n]*)*/im);
-    if (dkimSigMatch) {
-      const dkimBlock = dkimSigMatch[0].replace(/\r?\n[ \t]/g, " ");
+    const dkimSigMatches = [...headersRaw.matchAll(/^DKIM-Signature:[^\n]*(?:\n[ \t][^\n]*)*/gim)];
+    for (const m of dkimSigMatches) {
+      const dkimBlock = m[0].replace(/\r?\n[ \t]/g, " ");
       const dDomain = dkimBlock.match(/\bd=([\w.-]+)/i)?.[1]?.toLowerCase() || "";
       if (dDomain && fromDomain) {
         // Allow exact match or organizational domain match (e.g. mail.example.com vs example.com)
