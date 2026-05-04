@@ -1720,6 +1720,22 @@ export async function registerRoutes(
     }
   });
 
+  // ONE-TIME: reset all email addresses so members get fresh name-based ones
+  app.post("/api/admin/reset-email-addresses", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { confirm } = req.body;
+      if (confirm !== "RESET_CONFIRMED") {
+        return res.status(400).json({ message: "Pass confirm: 'RESET_CONFIRMED'" });
+      }
+      const result = await storage.resetAllEmailAddresses();
+      console.log("[admin] reset-email-addresses:", result);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      console.error("[admin] reset-email-addresses error:", err);
+      res.status(500).json({ message: "Failed to reset addresses" });
+    }
+  });
+
   // ===================
   // ACCOUNT ROUTES
   // ===================

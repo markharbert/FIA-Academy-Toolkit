@@ -383,6 +383,7 @@ export interface IStorage {
   snapshotProjectAsTemplate(userId: string, projectId: string, name: string): Promise<ProjectTemplate>;
 
   // Inbox Analyzer
+  resetAllEmailAddresses(): Promise<{ analyzerAddressesDeleted: number; intelSeedsDeleted: number }>;
   getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress>;
   getInboxAddressByToken(token: string): Promise<EmailInboxAddress | undefined>;
   updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void>;
@@ -2847,6 +2848,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Inbox Analyzer ───────────────────────────────────────────────────────
+
+  async resetAllEmailAddresses(): Promise<{ analyzerAddressesDeleted: number; intelSeedsDeleted: number }> {
+    const [a] = await db.select({ count: sql<number>`count(*)::int` }).from(emailInboxAddresses);
+    const [b] = await db.select({ count: sql<number>`count(*)::int` }).from(competitorSeedAddresses);
+    await db.delete(emailInboxAddresses);
+    await db.delete(competitorSeedAddresses);
+    return { analyzerAddressesDeleted: a.count, intelSeedsDeleted: b.count };
+  }
 
   async getOrCreateInboxAddress(userId: string): Promise<EmailInboxAddress> {
     const [existing] = await db.select().from(emailInboxAddresses).where(eq(emailInboxAddresses.userId, userId));
