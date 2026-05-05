@@ -284,8 +284,12 @@ export default function DashboardPage() {
     return new Date(String(latestEmail.receivedAt)) > new Date(inboxLastVisited);
   }, [latestEmail, inboxLastVisited]);
 
-  // Sender reputation: pick "best" / first domain
-  const primaryDomain = useMemo(() => reputation?.domains?.[0] ?? null, [reputation]);
+  // Sender reputation: respect the user's saved default domain preference
+  const primaryDomain = useMemo(() => {
+    const saved = localStorage.getItem("postmaster_default_domain");
+    const domains = reputation?.domains ?? [];
+    return (saved && domains.find(d => d.domainName === saved)) || domains[0] || null;
+  }, [reputation]);
   const repTone = reputationTone(primaryDomain?.latestReputation);
 
   // Inbox placement: count primaries from last test
