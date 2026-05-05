@@ -5993,7 +5993,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           dueDate,
           tags,
           links: [],
-          sortOrder: card.pos ?? 0,
+          sortOrder: Math.round(card.pos ?? 0),
         });
         cardToTaskId.set(card.id as string, task.id);
       }
@@ -6015,7 +6015,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             notes: "",
             tags: [],
             links: [],
-            sortOrder: item.pos ?? 0,
+            sortOrder: Math.round(item.pos ?? 0),
           });
         }
       }
