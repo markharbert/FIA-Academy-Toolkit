@@ -3,10 +3,12 @@ import {
   DndContext,
   DragEndEvent,
   DragStartEvent,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragOverlay,
+  defaultDropAnimationSideEffects,
   useDroppable,
   useDraggable,
 } from "@dnd-kit/core";
@@ -77,14 +79,21 @@ function TaskCard({ task, subtaskCount, doneSubtaskCount, tz, onOpen, isDragOver
 
   const style = isDragOverlay
     ? {}
-    : { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.25 : 1, touchAction: "none" as const };
+    : {
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.18 : 1,
+        transition: isDragging ? "opacity 120ms ease" : "opacity 200ms ease",
+        touchAction: "none" as const,
+      };
 
   return (
     <div
       ref={isDragOverlay ? undefined : setNodeRef}
       style={style}
       className={`rounded-lg border border-border bg-card shadow-sm select-none ${
-        isDragOverlay ? "shadow-xl ring-2 ring-primary/30 rotate-1 scale-105" : "hover:shadow-md transition-shadow"
+        isDragOverlay
+          ? "shadow-2xl ring-2 ring-primary/40 rotate-[1.5deg] scale-[1.04] transition-transform duration-150"
+          : "hover:shadow-md transition-shadow"
       } ${isDragging ? "cursor-grabbing" : ""}`}
       data-testid={`kanban-card-${task.id}`}
     >
@@ -346,12 +355,14 @@ export interface KanbanBoardProps {
 export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardProps) {
   const { toast } = useToast();
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
   const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
   );
 
   const { data: columns = [], isLoading: columnsLoading } = useQuery<ProjectColumn[]>({
@@ -374,7 +385,7 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
     columns.forEach(c => { map[c.id] = []; });
     const firstColId = columns[0]?.id;
     topLevelTasks.forEach(t => {
-      const colId = t.columnId ?? firstColId;
+      const colId = optimisticMoves[t.id] ?? t.columnId ?? firstColId;
       if (colId && map[colId] !== undefined) {
         map[colId].push(t);
       } else if (firstColId) {
@@ -382,7 +393,7 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
       }
     });
     return map;
-  }, [topLevelTasks, columns]);
+  }, [topLevelTasks, columns, optimisticMoves]);
 
   const activeDragTask = activeDragId ? tasks.find(t => t.id === activeDragId) : null;
 
@@ -440,8 +451,13 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
     const taskId = active.id as string;
     const targetColumnId = over.id as string;
     const task = tasks.find(t => t.id === taskId);
-    if (task && task.columnId !== targetColumnId) {
-      moveTaskMutation.mutate({ taskId, columnId: targetColumnId });
+    const currentColId = optimisticMoves[taskId] ?? task?.columnId;
+    if (task && currentColId !== targetColumnId) {
+      setOptimisticMoves(prev => ({ ...prev, [taskId]: targetColumnId }));
+      moveTaskMutation.mutate({ taskId, columnId: targetColumnId }, {
+        onSuccess: () => setOptimisticMoves(prev => { const n = { ...prev }; delete n[taskId]; return n; }),
+        onError: () => setOptimisticMoves(prev => { const n = { ...prev }; delete n[taskId]; return n; }),
+      });
     }
   };
 
@@ -519,7 +535,11 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
           </div>
         </div>
 
-        <DragOverlay dropAnimation={null}>
+        <DragOverlay dropAnimation={{
+          duration: 180,
+          easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+          sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0.18" } } }),
+        }}>
           {activeDragTask && (() => {
             const subs = subtasksByParent[activeDragTask.id] ?? [];
             return (
