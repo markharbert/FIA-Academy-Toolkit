@@ -176,6 +176,42 @@ function shortDate(dateStr: string) {
   return dateStr.slice(5); // MM-DD
 }
 
+function parseFeedbackId(id: string): { listId: string; accountId: string; broadcastId: string; shortId: string } | null {
+  const parts = id.split(":");
+  if (parts.length >= 3) {
+    return { listId: parts[0], accountId: parts[1], broadcastId: parts[2], shortId: parts[3] ?? "" };
+  }
+  return null;
+}
+
+const SPAM_REASONS = [
+  {
+    title: "They forgot who you are",
+    detail: "If someone signed up a while ago and you haven't emailed them recently, they may not remember you. When your name pops up, they hit spam instead of bothering to unsubscribe.",
+    fix: "Start every email with a quick reminder of who you are and why you're emailing them. Something like: 'Hey, it's Mark — you signed up when you downloaded [X].' Do this especially after any gap in sending.",
+  },
+  {
+    title: "The unsubscribe button is too hard to find",
+    detail: "When people want out and can't easily unsubscribe, they hit the spam button instead. That's the quickest way to make your emails stop. Every spam complaint counts against your reputation.",
+    fix: "Put your unsubscribe link near the top of every email, not just buried at the bottom. Make it one click — never make people type their email address or jump through hoops. ClickFunnels includes this automatically, but make sure it's easy to see.",
+  },
+  {
+    title: "Your emails don't match what people signed up for",
+    detail: "Someone signed up to learn about one thing, but you're emailing them about something else. That bait-and-switch feeling makes people angry — and they hit spam.",
+    fix: "Re-read the page or form where people originally signed up. What did you promise them? Make sure every email connects back to that promise. If your content focus has changed, send an email explaining the shift and give people an easy way to opt out.",
+  },
+  {
+    title: "You're emailing people who stopped paying attention",
+    detail: "If someone hasn't opened one of your emails in 6 months, they've moved on. Emailing them anyway increases your spam rate because they're more likely to report you than engage.",
+    fix: "Every 90 days, move anyone who hasn't opened or clicked anything into an 'Inactive' segment. Run a short 2–3 email re-engagement sequence asking if they still want to hear from you. If they don't respond, stop emailing them. A smaller, engaged list always beats a big, unresponsive one.",
+  },
+  {
+    title: "Your subject lines feel like clickbait or a sales pitch",
+    detail: "Subject lines like 'You won't believe this...' or 'URGENT: Open now!!!' make people feel tricked when the email doesn't deliver. That frustration turns into spam complaints.",
+    fix: "Write subject lines that are honest and specific about what's inside. 'The 3 steps I used to get my first client' gets fewer spam complaints than 'This changed everything.' People reward honesty with engagement — and punish tricks with the spam button.",
+  },
+];
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function ReputationBadge({ reputation }: { reputation: string | null }) {
@@ -898,6 +934,20 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
 
   // Spam rate
   const latestSpam = latest.find(s => s.spamRate != null)?.spamRate ?? null;
+  // Feedback loop detection (for action plan item)
+  const fbActionMap: Record<string, { total: number; count: number }> = {};
+  for (const s of filtered) {
+    for (const f of (s.feedbackLoops ?? [])) {
+      if (!fbActionMap[f.id]) fbActionMap[f.id] = { total: 0, count: 0 };
+      fbActionMap[f.id].total += f.spamRatio;
+      fbActionMap[f.id].count += 1;
+    }
+  }
+  const highFeedbackLoops = Object.entries(fbActionMap)
+    .map(([id, v]) => ({ id, avg: v.total / v.count, parsed: parseFeedbackId(id) }))
+    .filter(f => f.avg >= 0.001)
+    .sort((a, b) => b.avg - a.avg);
+
   if (latestSpam != null && latestSpam >= 0.003) {
     items.push({
       id: "spam-critical",
@@ -905,13 +955,15 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
       title: `Too many people are marking your emails as spam (${(latestSpam * 100).toFixed(3)}%)`,
       what: "More than 3 out of every 1,000 Gmail users are hitting the spam button on your emails. Google's limit is 1 out of every 1,000. At this level, Gmail will start blocking your emails automatically. This needs to be fixed today.",
       steps: [
-        "Stop sending bulk emails immediately. Every email you send right now makes the problem worse.",
-        "Log in to your email platform and create a segment called 'Active — last 60 days' containing only people who have opened or clicked an email in the last 60 days. Only send to this segment for now. Everyone else gets moved to a separate segment to be re-engaged later.",
-        "Move any contacts from purchased lists or lead lists you got from someone else into their own segment and stop emailing them with your regular campaigns. These people never opted in to hear from you and are the most likely to hit spam. A special re-permission campaign will be needed before you email them again.",
-        "Look at your last 10 emails. Were the subject lines honest and clear? Did the emails match what you promised when people signed up? If not, that is why people are complaining.",
-        "Make sure every email has a one-click unsubscribe link that is easy to see. Put it near the top of the email too, not just at the bottom.",
-        "Send a short re-permission email to your active segment saying something like: 'I want to make sure you still want to hear from me. Click here to confirm you're in.' Move everyone who does not click within 7 days into an 'Unconfirmed' segment and stop sending regular emails to them. You can try to re-engage them later with a different approach.",
-        "Wait 1 week after cleaning your list, then send a test email to mail-tester.com to check your score before sending to your real list again.",
+        "Stop sending bulk emails immediately. Every email you send right now makes the problem worse. Set a pause in ClickFunnels by deactivating your active broadcast sequences until you have cleaned your list.",
+        "In ClickFunnels, go to Contacts → Segments and create a new segment called 'Active — Last 60 Days'. Set the filter to: opened any email OR clicked any link in the last 60 days. This is your safe sending list going forward. Do not email anyone outside this segment until your spam rate drops below 0.10%.",
+        "Create a second segment called 'Purchased or Unverified Contacts' and move any contacts into it that came from a purchased list, a lead list from a third party, a giveaway, or a list swap. Stop emailing this group with your regular broadcasts — they never gave you permission and are the most likely source of your spam complaints.",
+        "Check the Spam Intelligence tab on this page. If Google has identified specific campaign IDs with high complaint rates, go to ClickFunnels → Email → Broadcasts and search for those Broadcast IDs. Read those emails and ask yourself: did the subject line match what was inside? Did the content match what people signed up for?",
+        "Look at your last 10 subject lines. Did any of them use words like FREE, URGENT, GUARANTEED, ACT NOW, or lots of exclamation points? Those trigger both Gmail's filters and reader frustration. Rewrite your next 5 emails with honest, specific subject lines that describe exactly what's inside.",
+        "Make sure every email has a one-click unsubscribe link that is easy to see — put one near the top too, not just at the bottom. In ClickFunnels, check your email template and confirm the unsubscribe link is prominent. When people can easily opt out, they use the unsubscribe button instead of the spam button.",
+        "Send a short re-permission email to your active 60-day segment saying something like: 'I want to make sure you still want to hear from me — click here to confirm you're in.' Move anyone who does not click within 7 days into an 'Unconfirmed' segment and stop regular broadcasts to them.",
+        "After cleaning your list, wait one full week before resuming sends. Then go to mail-tester.com, send them a copy of your next email, and make sure your score is 8 out of 10 or higher before sending to your real list.",
+        "Check this dashboard daily for the next 2 weeks. Your spam rate should start dropping within 3–5 days of cleaning your list. If it does not, the problem is in your email content — go back to step 5.",
       ],
     });
   } else if (latestSpam != null && latestSpam >= 0.001) {
@@ -921,11 +973,33 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
       title: `Your spam complaint rate is getting close to Google's limit (${(latestSpam * 100).toFixed(3)}%)`,
       what: "Right now 1–3 out of every 1,000 Gmail recipients are marking your emails as spam. Google's warning threshold is 1 per 1,000. You have not crossed it yet, but you are getting close. If you do nothing, your inbox placement will start dropping.",
       steps: [
-        "Log in to your email platform and create a segment called 'Inactive — 90 days' for anyone who has not opened or clicked anything in the last 90 days. Move them out of your active sending list for now — you can re-engage them later with a dedicated campaign.",
-        "Look at your last 5 subject lines. Were they honest and interesting, or did they feel like clickbait? Gmail users hit spam when they feel tricked. Write subject lines that clearly describe what is inside the email.",
-        "Make sure your unsubscribe link is easy to find and works immediately. If people cannot find the unsubscribe button, they hit the spam button instead.",
-        "Send a re-engagement email to your inactive segment asking if they still want to hear from you. Move anyone who does not respond within 7 days into a 'Cold' segment and stop sending your regular emails to them. They are not gone forever — just paused until you have a specific re-engagement plan for them.",
-        "Visit mail-tester.com and send them a test email to see if anything in your emails is being flagged as spammy.",
+        "In ClickFunnels, go to Contacts → Segments and create a segment called 'Inactive — 90 Days' for anyone who has not opened or clicked anything in the last 90 days. Exclude this segment from your regular broadcasts immediately. You can run a dedicated re-engagement campaign for them later, but keep them out of your main sends for now.",
+        "Check the Spam Intelligence tab on this page. If any specific campaigns are showing elevated complaint rates, click into those broadcasts in ClickFunnels (Email → Broadcasts → find by Broadcast ID). Look at who received it, what list it went to, and whether the subject line and content matched what people expected.",
+        "Look at your last 5 subject lines. Were they honest and specific, or did they feel like clickbait? Gmail users hit spam when they feel tricked or deceived. Write subject lines that clearly tell people what is inside the email.",
+        "Check that your unsubscribe link is easy to find. Open one of your own emails on your phone and see how hard it is to find the unsubscribe link. If it takes more than a few seconds to find, it is too hidden. When people cannot unsubscribe easily, they hit spam instead.",
+        "In ClickFunnels, look at your broadcast analytics. Any email with an open rate below 15% is being sent to people who have tuned you out. Those are the people most likely to hit spam. Identify those contacts and move them to your inactive segment.",
+        "Send a re-engagement email to your 90-day inactive segment: 'Still want to hear from me? Click here to stay on my list.' Anyone who does not click within 7 days goes into a 'Cold' segment — stop regular sends to them. They are not deleted, just paused.",
+        "Visit mail-tester.com before your next broadcast. Send them a test copy of your email and check your score. If it is below 8 out of 10, fix the issues they flag before sending to your real list.",
+      ],
+    });
+  }
+
+  // Feedback loop action item
+  if (highFeedbackLoops.length > 0) {
+    const worst = highFeedbackLoops[0];
+    const worstParsed = worst.parsed;
+    items.push({
+      id: "feedback-loops",
+      severity: worst.avg >= 0.003 ? "critical" : "warning",
+      title: `Google has identified ${highFeedbackLoops.length} specific campaign${highFeedbackLoops.length > 1 ? "s" : ""} with elevated spam complaints`,
+      what: `This data comes from the Feedback-ID header that ClickFunnels automatically adds to your emails. Google matched complaints back to specific campaigns. ${worstParsed ? `The worst offender is Broadcast ID ${worstParsed.broadcastId} on List ${worstParsed.listId}, with a ${(worst.avg * 100).toFixed(3)}% spam rate.` : `The worst offender had a ${(worst.avg * 100).toFixed(3)}% spam rate.`} This is good news — it means the problem is not your whole domain, it is coming from specific sends you can identify and fix.`,
+      steps: [
+        `Log in to ClickFunnels and go to Email → Broadcasts. Search for the Broadcast ID "${worstParsed?.broadcastId ?? worst.id}". Open that broadcast and read it from start to finish.`,
+        "Ask yourself these questions about that broadcast: Did the subject line honestly describe what was inside? Did the content match what people signed up for? Was it sent to a purchased list or an unverified list? Did it have a clear, easy-to-find unsubscribe link?",
+        "Check the stats for that broadcast in ClickFunnels. What was the open rate? If it was below 15%, that means you were emailing people who had already checked out — they are the most likely to hit spam. What was the click rate? A click rate below 1% on a broadcast with spam complaints means the content was not what people expected.",
+        `${worstParsed ? `Look at List ID ${worstParsed.listId} in ClickFunnels.` : "Look at the list this broadcast was sent to."} How did people get on this list? If they came from a lead magnet, a giveaway, a list swap, or a purchase — those contacts are far more likely to complain. Consider moving them to a separate segment and running a re-permission campaign before sending them regular content again.`,
+        "For all the other high-complaint campaigns shown in the Spam Intelligence tab, repeat the same review process. Look for patterns: Is it always a certain type of subject line? A certain list? A certain topic? The pattern tells you what to change.",
+        "After fixing the content and list hygiene issues, monitor your spam rate daily in this dashboard for the next 2 weeks. Campaign-specific feedback data should start improving within 3–5 days of your next clean send.",
       ],
     });
   }
@@ -1299,6 +1373,348 @@ function ActionPlanSection({ domain, filtered }: { domain: PostmasterDomainData;
   );
 }
 
+// ── Spam Intelligence Tab ──────────────────────────────────────────────────────
+
+function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
+  const sortedByDate = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
+  const latestSpamIdx = sortedByDate.findIndex(s => s.spamRate != null);
+  const latestSpamStat = latestSpamIdx >= 0 ? sortedByDate[latestSpamIdx] : null;
+  const prevSpamStat = sortedByDate.slice(latestSpamIdx + 1).find(s => s.spamRate != null) ?? null;
+  const latestSpam = latestSpamStat?.spamRate ?? null;
+  const prevSpam = prevSpamStat?.spamRate ?? null;
+  const spamChange = latestSpam != null && prevSpam != null ? latestSpam - prevSpam : null;
+  const spamChangePct = spamChange != null && prevSpam != null && prevSpam > 0 ? (spamChange / prevSpam) * 100 : null;
+
+  const hasRange = filtered.some(s => s.spamRateLow != null && s.spamRateHigh != null);
+  const chartData = [...filtered]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .filter(s => s.spamRate != null || s.spamRateLow != null)
+    .map(s => ({
+      date: shortDate(s.date),
+      rate: s.spamRate != null ? +(s.spamRate * 100).toFixed(5) : null,
+      low: s.spamRateLow != null ? +(s.spamRateLow * 100).toFixed(5) : null,
+      high: s.spamRateHigh != null ? +(s.spamRateHigh * 100).toFixed(5) : null,
+    }));
+
+  // Feedback loops aggregated
+  const feedbackMap: Record<string, { total: number; count: number }> = {};
+  for (const s of filtered) {
+    for (const f of (s.feedbackLoops ?? [])) {
+      if (!feedbackMap[f.id]) feedbackMap[f.id] = { total: 0, count: 0 };
+      feedbackMap[f.id].total += f.spamRatio;
+      feedbackMap[f.id].count += 1;
+    }
+  }
+  const feedbackLoops = Object.entries(feedbackMap)
+    .map(([id, v]) => ({ id, avgSpamRatio: v.total / v.count, parsed: parseFeedbackId(id) }))
+    .sort((a, b) => b.avgSpamRatio - a.avgSpamRatio);
+
+  // SPAM_DETECTED delivery errors
+  const spamDetectedRatios: number[] = [];
+  for (const s of filtered) {
+    const e = s.deliveryErrors.find(e => e.errorType === "SPAM_DETECTED");
+    if (e && e.errorRatio > 0) spamDetectedRatios.push(e.errorRatio);
+  }
+  const avgSpamDetected = spamDetectedRatios.length > 0
+    ? spamDetectedRatios.reduce((a, b) => a + b, 0) / spamDetectedRatios.length : null;
+  const maxSpamDetected = spamDetectedRatios.length > 0 ? Math.max(...spamDetectedRatios) : null;
+
+  // Status config
+  const statusConfig = latestSpam == null
+    ? { bg: "bg-muted/40", border: "border-border", Icon: CircleDashed, iconClass: "text-muted-foreground", label: "No spam rate data yet", msg: "Google needs to see 200 or more emails per day to your Gmail recipients before it shows spam data. Keep sending and check back in a day or two." }
+    : latestSpam < 0.001
+    ? { bg: "bg-emerald-500/10", border: "border-emerald-500/30", Icon: ShieldCheck, iconClass: "text-emerald-600 dark:text-emerald-400", label: "You're in great shape", msg: `Your spam complaint rate is ${(latestSpam * 100).toFixed(4)}% — well under Google's 0.10% warning line. Most of your emails are landing in the inbox. Keep doing what you're doing.` }
+    : latestSpam < 0.003
+    ? { bg: "bg-amber-500/10", border: "border-amber-500/30", Icon: CircleAlert, iconClass: "text-amber-600 dark:text-amber-400", label: "Getting close to the danger zone", msg: `Your spam complaint rate is ${(latestSpam * 100).toFixed(4)}%. Google's warning line is 0.10%. You haven't crossed the critical threshold yet, but you're getting closer. Take action now before your inbox placement starts to drop.` }
+    : { bg: "bg-red-500/10", border: "border-red-500/30", Icon: CircleX, iconClass: "text-red-600 dark:text-red-400", label: "Take action today", msg: `Your spam complaint rate is ${(latestSpam * 100).toFixed(4)}% — above Google's 0.30% critical limit. At this level, Gmail will start filtering your emails to spam automatically. Stop sending to unengaged contacts right now and work through the Action Plan tab.` };
+
+  if (filtered.length === 0) {
+    return (
+      <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40 border border-border">
+        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium">No data in this time range</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Try a wider range, or click Refresh to pull the latest data from Google.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { Icon: StatusIcon } = statusConfig;
+
+  return (
+    <div className="space-y-5">
+
+      {/* ── Status Banner ── */}
+      <div className={`flex items-start gap-4 p-4 rounded-xl border ${statusConfig.bg} ${statusConfig.border}`}>
+        <StatusIcon className={`h-6 w-6 flex-shrink-0 mt-0.5 ${statusConfig.iconClass}`} />
+        <div className="flex-1 min-w-0">
+          <p className={`font-semibold text-sm ${statusConfig.iconClass}`}>{statusConfig.label}</p>
+          <p className="text-sm text-foreground mt-1 leading-relaxed">{statusConfig.msg}</p>
+          {spamChange != null && (
+            <div className="flex items-center gap-1.5 mt-2">
+              {spamChange > 0
+                ? <TrendingUp className="h-3.5 w-3.5 text-red-500" />
+                : spamChange < 0
+                ? <TrendingDown className="h-3.5 w-3.5 text-emerald-500" />
+                : <Minus className="h-3.5 w-3.5 text-muted-foreground" />}
+              <span className={`text-xs font-medium ${spamChange > 0 ? "text-red-600 dark:text-red-400" : spamChange < 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                {spamChange > 0 ? "Up" : spamChange < 0 ? "Down" : "No change"} from previous day with data
+                {spamChangePct != null && ` (${Math.abs(spamChangePct).toFixed(0)}%)`}
+              </span>
+            </div>
+          )}
+        </div>
+        {latestSpam != null && (
+          <div className="text-right flex-shrink-0">
+            <p className={`text-2xl font-bold tabular-nums ${statusConfig.iconClass}`}>{(latestSpam * 100).toFixed(4)}%</p>
+            <p className="text-[10px] text-muted-foreground">spam rate</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Spam Rate Chart with Confidence Band ── */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Activity className="h-4 w-4 text-amber-500" />
+            Spam Complaint Rate Over Time
+          </CardTitle>
+          {hasRange && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              The shaded band shows the range Google reported (low to high estimate). The line is the midpoint.
+            </p>
+          )}
+        </CardHeader>
+        <CardContent className="px-5 pb-4">
+          {chartData.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No spam rate data in this period</div>
+          ) : (
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="siLineGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="siBandGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.04} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0]?.payload;
+                      return (
+                        <div className="bg-card border border-border rounded-lg px-3 py-2 text-xs shadow space-y-1">
+                          <p className="font-semibold text-foreground">{d.date}</p>
+                          {d.rate != null && <p className="text-foreground">Midpoint: <span className="font-bold tabular-nums">{d.rate.toFixed(5)}%</span></p>}
+                          {d.low != null && <p className="text-muted-foreground">Low estimate: <span className="tabular-nums">{d.low.toFixed(5)}%</span></p>}
+                          {d.high != null && <p className="text-muted-foreground">High estimate: <span className="tabular-nums">{d.high.toFixed(5)}%</span></p>}
+                          {d.low != null && d.high != null && <p className="text-[10px] text-muted-foreground/70 mt-0.5">Range = Google's confidence interval</p>}
+                        </div>
+                      );
+                    }}
+                  />
+                  <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5}
+                    label={{ value: "0.1% — Warning", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" }} />
+                  <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5}
+                    label={{ value: "0.3% — Critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" }} />
+                  {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#siBandGrad)" legendType="none" />}
+                  {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.6} legendType="none" />}
+                  <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#siLineGrad)" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">0.1% Warning Line</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Above this, Gmail starts watching your domain more closely. Inbox placement may start to dip.</p>
+            </div>
+            <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
+              <p className="text-xs font-semibold text-red-700 dark:text-red-400">0.3% Critical Line</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Above this, Gmail automatically starts sending your emails to spam folders.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Google-Blocked Spam (SPAM_DETECTED) ── */}
+      {(avgSpamDetected != null || maxSpamDetected != null) && (
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-red-500" />
+              Emails Blocked by Google's Own Spam Filter
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 space-y-3">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              This is <strong className="text-foreground">different</strong> from users hitting the spam button. Google's own automated filters read your emails and decided they look like spam — before any human even saw them. These emails never reached anyone's inbox.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-muted/40 border border-border px-4 py-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Average Rate</p>
+                <p className="text-xl font-bold tabular-nums text-red-600 dark:text-red-400 mt-0.5">
+                  {avgSpamDetected != null ? `${(avgSpamDetected * 100).toFixed(2)}%` : "—"}
+                </p>
+                <p className="text-[11px] text-muted-foreground">of sends blocked by filters</p>
+              </div>
+              <div className="rounded-lg bg-muted/40 border border-border px-4 py-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Worst Day</p>
+                <p className="text-xl font-bold tabular-nums text-red-600 dark:text-red-400 mt-0.5">
+                  {maxSpamDetected != null ? `${(maxSpamDetected * 100).toFixed(2)}%` : "—"}
+                </p>
+                <p className="text-[11px] text-muted-foreground">in selected period</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-muted/30 border border-border">
+              <Info className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                The most common causes are spam-trigger words in your subject line or email body (like FREE, ACT NOW, GUARANTEED), a missing or broken unsubscribe link, or a history of sending to unengaged recipients. See the Action Plan tab for step-by-step fixes.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Feedback Loop Breakdown ── */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-purple-500" />
+            Which Specific Emails Are Getting Complaints
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Powered by the Feedback-ID header in your ClickFunnels emails — this shows which campaigns or lists triggered complaints with Gmail.
+          </p>
+        </CardHeader>
+        <CardContent className="px-5 pb-4">
+          {feedbackLoops.length === 0 ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 py-4 text-sm text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4" />
+                No elevated-complaint campaigns detected in this period.
+              </div>
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/30 border border-border">
+                <Info className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Google only reports campaign-level feedback data when complaint volumes are high enough. If specific broadcasts start generating notable complaints, they'll appear here ranked by spam rate. Your ClickFunnels emails already include the Feedback-ID header needed for this tracking — no setup required on your end.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                {feedbackLoops.slice(0, 10).map((f) => {
+                  const sev = f.avgSpamRatio >= 0.003 ? "critical" : f.avgSpamRatio >= 0.001 ? "warning" : "ok";
+                  const colors = {
+                    critical: { bg: "bg-red-500/10", border: "border-red-500/25", text: "text-red-600 dark:text-red-400", label: "Above 0.30% — Gmail is filtering these emails" },
+                    warning: { bg: "bg-amber-500/10", border: "border-amber-500/25", text: "text-amber-600 dark:text-amber-400", label: "Above 0.10% — approaching the complaint threshold" },
+                    ok: { bg: "bg-muted/40", border: "border-border", text: "text-muted-foreground", label: "Below warning threshold" },
+                  }[sev];
+                  return (
+                    <div key={f.id} className={`rounded-lg border px-4 py-3 ${colors.bg} ${colors.border}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          {f.parsed ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mb-2">
+                              <div>
+                                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">List ID</p>
+                                <p className="text-xs font-mono font-semibold text-foreground">{f.parsed.listId}</p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Account</p>
+                                <p className="text-xs font-mono font-semibold text-foreground">{f.parsed.accountId}</p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Broadcast ID</p>
+                                <p className="text-xs font-mono font-semibold text-foreground">{f.parsed.broadcastId}</p>
+                              </div>
+                              {f.parsed.shortId && (
+                                <div>
+                                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Key</p>
+                                  <p className="text-xs font-mono font-semibold text-foreground">{f.parsed.shortId}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs font-mono text-foreground mb-1">{f.id}</p>
+                          )}
+                          <p className={`text-[11px] font-medium ${colors.text}`}>{colors.label}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className={`text-xl font-bold tabular-nums ${colors.text}`}>
+                            {(f.avgSpamRatio * 100).toFixed(3)}%
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">avg spam rate</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/30 border border-border">
+                <Info className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  To find a specific broadcast in ClickFunnels: log in → go to <strong className="text-foreground">Email → Broadcasts</strong> → use the Broadcast ID shown above to find the exact campaign that triggered the complaints. From there you can check who it went to, what the subject line was, and what list it targeted.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Why People Hit Spam ── */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Info className="h-4 w-4 text-blue-500" />
+            Why Do People Hit the Spam Button?
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            The 5 most common reasons — and exactly what to do about each one.
+          </p>
+        </CardHeader>
+        <CardContent className="px-5 pb-4 space-y-3">
+          {SPAM_REASONS.map((reason, i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-muted border border-border text-[11px] font-bold text-muted-foreground flex items-center justify-center flex-shrink-0 mt-0.5">
+                  {i + 1}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">{reason.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{reason.detail}</p>
+                  <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide mb-1">The Fix</p>
+                    <p className="text-xs text-foreground leading-relaxed">{reason.fix}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-muted/40 border border-border">
+        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Google Postmaster data is always 24–48 hours delayed. Campaign-level feedback data only appears when specific broadcasts trigger enough complaints for Google to report. Spam rate data only shows when your domain sends 200+ emails per day to Gmail users.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Domain Dashboard ────────────────────────────────────────────────────────────
+
 function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, lastSyncedAt, onSync, isSyncing }: {
   domain: PostmasterDomainData;
   domains: PostmasterDomainData[];
@@ -1404,6 +1820,9 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
                 </span>
               )}
             </span>
+          </TabsTrigger>
+          <TabsTrigger value="spam-intelligence" className="text-xs px-4 rounded-lg" data-testid="tab-spam-intelligence">
+            Spam Intelligence
           </TabsTrigger>
           <TabsTrigger value="infrastructure" className="text-xs px-4 rounded-lg" data-testid="tab-infrastructure">
             Infrastructure
@@ -1525,6 +1944,11 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
               </div>
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Spam Intelligence tab ── */}
+        <TabsContent value="spam-intelligence" className="mt-4 space-y-5">
+          <SpamIntelligenceTab filtered={filtered.length > 0 ? filtered : domain.trafficStats} />
         </TabsContent>
 
         {/* ── Infrastructure tab ── */}
