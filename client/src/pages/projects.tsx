@@ -675,16 +675,16 @@ export default function ProjectsPage() {
         // Strip UTF-8 BOM (U+FEFF) that some systems prepend to JSON exports
         if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
         const data = JSON.parse(text.trim());
-        if (!data || typeof data !== "object" || (!Array.isArray(data.lists) && !Array.isArray(data.cards))) {
-          throw new Error("Not a Trello board export");
+        if (!data || typeof data !== "object" || Array.isArray(data)) {
+          throw new Error("Not a JSON object");
         }
         setImportParsed(data);
-        setImportName(data.name || "");
+        setImportName((data.name as string) || "");
         const activeLists = Array.isArray(data.lists) ? data.lists.filter((l: any) => !l.closed).length : 0;
         const activeCards = Array.isArray(data.cards) ? data.cards.filter((c: any) => !c.closed).length : 0;
         setImportStats({ lists: activeLists, cards: activeCards });
       } catch {
-        toast({ title: "Invalid file", description: "That doesn't look like a valid Trello board export. Make sure you export the board as JSON from Trello (Board Menu → Share → Export JSON).", variant: "destructive" });
+        toast({ title: "Invalid file", description: "Could not read the file as JSON. Make sure you downloaded the board export from Trello (Board Menu → Share → Export as JSON).", variant: "destructive" });
         setImportFile(null);
         setImportParsed(null);
         setImportStats(null);
