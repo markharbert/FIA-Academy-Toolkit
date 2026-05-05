@@ -14,7 +14,7 @@ import {
   Loader2, AlertTriangle, CheckCircle2, XCircle, Globe, Lock, Mail,
   ArrowLeft, PlugZap, Unplug, Info, TrendingUp, TrendingDown, Minus,
   Server, Wifi, Activity, ClipboardList, ChevronDown, ChevronUp,
-  BadgeCheck, CircleAlert, CircleX, CircleDashed, Megaphone,
+  BadgeCheck, CircleAlert, CircleX, CircleDashed, Megaphone, Star,
 } from "lucide-react";
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -1715,11 +1715,13 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
 
 // ── Domain Dashboard ────────────────────────────────────────────────────────────
 
-function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, lastSyncedAt, onSync, isSyncing }: {
+function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, defaultDomain, onSetDefault, lastSyncedAt, onSync, isSyncing }: {
   domain: PostmasterDomainData;
   domains: PostmasterDomainData[];
   selectedDomain: string;
   onSelectDomain: (d: string) => void;
+  defaultDomain: string;
+  onSetDefault: (d: string) => void;
   lastSyncedAt: string | null | undefined;
   onSync: () => void;
   isSyncing: boolean;
@@ -1760,11 +1762,26 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
                 <SelectContent>
                   {domains.map(d => (
                     <SelectItem key={d.domainName} value={d.domainName} className="text-xs" data-testid={`option-domain-${d.domainName}`}>
-                      {d.domainName}
+                      <span className="flex items-center gap-1.5">
+                        {d.domainName}
+                        {d.domainName === defaultDomain && (
+                          <Star className="h-3 w-3 fill-amber-400 text-amber-400 flex-shrink-0" />
+                        )}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title={`Set "${selectedDomain || domains[0].domainName}" as default`}
+                data-testid="button-set-default-domain"
+                onClick={() => onSetDefault(selectedDomain || domains[0].domainName)}
+              >
+                <Star className={`h-3.5 w-3.5 ${(selectedDomain || domains[0].domainName) === defaultDomain ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+              </Button>
               <span className="text-border">|</span>
             </>
           )}
@@ -2007,7 +2024,18 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, last
 export default function SenderReputationPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [selectedDomain, setSelectedDomain] = useState<string>("");
+  const [selectedDomain, setSelectedDomain] = useState<string>(
+    () => localStorage.getItem("postmaster_default_domain") ?? ""
+  );
+  const [defaultDomain, setDefaultDomain] = useState<string>(
+    () => localStorage.getItem("postmaster_default_domain") ?? ""
+  );
+
+  function handleSetDefault(domain: string) {
+    localStorage.setItem("postmaster_default_domain", domain);
+    setDefaultDomain(domain);
+    toast({ title: `"${domain}" set as your default domain` });
+  }
   const [needsReconnect, setNeedsReconnect] = useState(false);
 
   const { data: status, isLoading } = useQuery<StatusResponse>({
@@ -2215,6 +2243,8 @@ export default function SenderReputationPage() {
                   domains={status.domains}
                   selectedDomain={selectedDomain || status.domains[0]?.domainName || ""}
                   onSelectDomain={setSelectedDomain}
+                  defaultDomain={defaultDomain}
+                  onSetDefault={handleSetDefault}
                   lastSyncedAt={status.lastSyncedAt}
                   onSync={() => syncMutation.mutate()}
                   isSyncing={syncMutation.isPending}
