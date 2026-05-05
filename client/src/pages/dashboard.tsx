@@ -847,7 +847,7 @@ function EmailHealthTile({
               {reputation.lastSyncedAt ? `Synced ${timeAgo(new Date(reputation.lastSyncedAt))}` : "Awaiting sync"}
             </p>
             <div className="space-y-1.5">
-              {(reputation.domains ?? []).slice(0, 3).map(d => {
+              {(reputation.domains ?? []).slice(0, 10).map(d => {
                 const tone = reputationTone(d.latestReputation);
                 const isDefault = d.domainName === localStorage.getItem("postmaster_default_domain");
                 return (
@@ -862,13 +862,13 @@ function EmailHealthTile({
                 );
               })}
             </div>
-            {(reputation.domains?.length ?? 0) > 3 && (
+            {(reputation.domains?.length ?? 0) > 10 && (
               <Link
                 href="/email-tools/sender-reputation"
                 className="text-[11px] text-muted-foreground hover:text-foreground mt-2 block"
                 data-testid="link-more-domains"
               >
-                +{reputation.domains.length - 3} more domain{reputation.domains.length - 3 !== 1 ? "s" : ""} →
+                +{reputation.domains.length - 10} more domain{reputation.domains.length - 10 !== 1 ? "s" : ""} →
               </Link>
             )}
           </div>
