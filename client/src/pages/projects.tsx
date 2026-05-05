@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "wouter";
+import { useState, useRef } from "react";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { ProjectWithCounts, ProjectTask, ProjectTemplateWithCounts } from "@shared/schema";
@@ -17,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { dayDiffInTz, dueDateKey as dueDateKeyInTz, dueHasTime, formatInTz } from "@shared/datetime";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function formatProjectDueLabel(due: Date, tz?: string | null): { text: string; tone: "overdue" | "soon" | "today" | "tomorrow" | "future" } {
@@ -651,9 +651,66 @@ function TasksCalendar({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading:
 export default function ProjectsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const [, navigate] = useLocation();
   const firstName = user?.firstName || user?.displayName?.split(" ")[0] || "";
   const possessive = firstName ? `${firstName}${firstName.endsWith("s") ? "'" : "'s"}` : "Your";
   const [createOpen, setCreateOpen] = useState(false);
+
+  // Trello import state
+  const [importOpen, setImportOpen] = useState(false);
+  const [importName, setImportName] = useState("");
+  const [importColor, setImportColor] = useState(COLOR_PALETTE[0]);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importParsed, setImportParsed] = useState<any>(null);
+  const [importStats, setImportStats] = useState<{ lists: number; cards: number } | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFile = (file: File | null) => {
+    if (!file) return;
+    setImportFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        setImportParsed(data);
+        setImportName(data.name || "");
+        const activeLists = Array.isArray(data.lists) ? data.lists.filter((l: any) => !l.closed).length : 0;
+        const activeCards = Array.isArray(data.cards) ? data.cards.filter((c: any) => !c.closed).length : 0;
+        setImportStats({ lists: activeLists, cards: activeCards });
+      } catch {
+        toast({ title: "Invalid file", description: "That doesn't look like a valid Trello JSON export.", variant: "destructive" });
+        setImportFile(null);
+        setImportParsed(null);
+        setImportStats(null);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/projects/import/trello", {
+        trelloData: importParsed,
+        name: importName.trim() || importParsed?.name || "Imported Board",
+        color: importColor,
+      });
+      return res.json() as Promise<{ projectId: string; name: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+      setImportOpen(false);
+      setImportFile(null);
+      setImportParsed(null);
+      setImportStats(null);
+      setImportName("");
+      setImportColor(COLOR_PALETTE[0]);
+      toast({ title: "Board imported!", description: `"${data.name}" is ready.` });
+      navigate(`/projects/${data.projectId}`);
+    },
+    onError: (err: Error) => toast({ title: "Import failed", description: err.message, variant: "destructive" }),
+  });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(COLOR_PALETTE[0]);
@@ -838,7 +895,16 @@ export default function ProjectsPage() {
               <h1 className="mt-1 text-3xl font-bold tracking-tight" data-testid="text-projects-title">{possessive} Projects</h1>
               <p className="mt-1 text-sm text-white/80">Plan, organize, and ship the work that runs your business.</p>
             </div>
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                className="bg-white/10 text-white hover:bg-white/20 border border-white/20"
+                onClick={() => setImportOpen(true)}
+                data-testid="button-import-trello"
+              >
+                <Upload className="h-4 w-4 mr-1.5" /> Import from Trello
+              </Button>
+              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-white text-[hsl(245_60%_30%)] hover:bg-white/90 shadow-lg" data-testid="button-new-project">
                   <Plus className="h-4 w-4 mr-1.5" /> New Project
@@ -916,7 +982,8 @@ export default function ProjectsPage() {
                   </Button>
                 </DialogFooter>
               </DialogContent>
-            </Dialog>
+              </Dialog>
+            </div>
           </div>
 
           {/* top tabs: Overview / List / Calendar */}
@@ -1220,6 +1287,98 @@ export default function ProjectsPage() {
             >
               {saveAsTemplateMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Save template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trello Import Dialog */}
+      <Dialog open={importOpen} onOpenChange={(open) => {
+        if (!open) {
+          setImportOpen(false);
+          setImportFile(null);
+          setImportParsed(null);
+          setImportStats(null);
+          setImportName("");
+          setImportColor(COLOR_PALETTE[0]);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-import-trello">
+          <DialogHeader>
+            <DialogTitle>Import from Trello</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Export your Trello board as JSON (Board → Show Menu → More → Print and Export → Export as JSON), then upload it here.
+            </p>
+            <div>
+              <Label>Trello export file</Label>
+              <div className="mt-1.5">
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  data-testid="input-trello-file"
+                  onChange={e => handleImportFile(e.target.files?.[0] ?? null)}
+                />
+                <button
+                  type="button"
+                  onClick={() => importFileRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-border rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                  data-testid="button-choose-trello-file"
+                >
+                  <Upload className="h-4 w-4" />
+                  {importFile ? importFile.name : "Choose JSON file…"}
+                </button>
+              </div>
+              {importStats && (
+                <p className="mt-1.5 text-xs text-muted-foreground" data-testid="text-import-stats">
+                  Found <strong>{importStats.lists}</strong> list{importStats.lists !== 1 ? "s" : ""} and <strong>{importStats.cards}</strong> card{importStats.cards !== 1 ? "s" : ""}
+                </p>
+              )}
+            </div>
+            {importParsed && (
+              <>
+                <div>
+                  <Label htmlFor="import-name">Project name</Label>
+                  <Input
+                    id="import-name"
+                    className="mt-1.5"
+                    value={importName}
+                    onChange={e => setImportName(e.target.value)}
+                    placeholder="Project name"
+                    data-testid="input-import-project-name"
+                  />
+                </div>
+                <div>
+                  <Label>Color</Label>
+                  <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                    {COLOR_PALETTE.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setImportColor(c)}
+                        className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background transition-all ${importColor === c ? "ring-2 ring-foreground" : "hover:scale-110"}`}
+                        style={{ background: c }}
+                        aria-label={`Color ${c}`}
+                        data-testid={`import-color-${c.replace("#", "")}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setImportOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => importMutation.mutate()}
+              disabled={!importParsed || importMutation.isPending}
+              data-testid="button-confirm-import-trello"
+            >
+              {importMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Import board
             </Button>
           </DialogFooter>
         </DialogContent>

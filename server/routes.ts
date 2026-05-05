@@ -5922,6 +5922,126 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   // ── Projects (Asana-lite project manager) ──────────────────────────────────
 
+  app.post("/api/projects/import/trello", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { trelloData, name: overrideName, color, description } = req.body ?? {};
+      if (!trelloData || typeof trelloData !== "object") {
+        return res.status(400).json({ message: "Missing or invalid trelloData" });
+      }
+
+      const boardName = ((overrideName as string) || (trelloData.name as string) || "Imported Board").trim();
+      const boardColor = (color as string) || "#6366f1";
+      const boardDesc = (description as string) || (trelloData.desc as string) || "";
+
+      const lists: any[] = Array.isArray(trelloData.lists) ? trelloData.lists : [];
+      const cards: any[] = Array.isArray(trelloData.cards) ? trelloData.cards : [];
+      const checklists: any[] = Array.isArray(trelloData.checklists) ? trelloData.checklists : [];
+      const labels: any[] = Array.isArray(trelloData.labels) ? trelloData.labels : [];
+      const actions: any[] = Array.isArray(trelloData.actions) ? trelloData.actions : [];
+
+      const userId = req.session.userId!;
+
+      // 1. Create project
+      const project = await storage.createProject(userId, {
+        name: boardName,
+        description: boardDesc,
+        color: boardColor,
+        status: "active",
+      });
+
+      // 2. Create columns from non-closed lists sorted by pos
+      const activeLists = lists
+        .filter((l: any) => !l.closed)
+        .sort((a: any, b: any) => (a.pos ?? 0) - (b.pos ?? 0));
+
+      const listToColumnId = new Map<string, string>();
+      for (let i = 0; i < activeLists.length; i++) {
+        const list = activeLists[i];
+        const col = await storage.createColumn(userId, project.id, { name: list.name, sortOrder: i });
+        listToColumnId.set(list.id, col.id);
+      }
+
+      // 3. Build label name lookup
+      const labelById = new Map<string, string>();
+      for (const label of labels) {
+        const labelName = (label.name as string)?.trim() || (label.color as string) || "";
+        if (labelName) labelById.set(label.id as string, labelName);
+      }
+
+      // 4. Create tasks from non-closed/non-archived cards
+      const activeCards = cards
+        .filter((c: any) => !c.closed)
+        .sort((a: any, b: any) => (a.pos ?? 0) - (b.pos ?? 0));
+
+      const cardToTaskId = new Map<string, string>();
+      for (const card of activeCards) {
+        const columnId = card.idList ? listToColumnId.get(card.idList as string) ?? null : null;
+        const tags: string[] = Array.isArray(card.idLabels)
+          ? (card.idLabels as string[]).map((lid) => labelById.get(lid) ?? "").filter(Boolean)
+          : [];
+        let dueDate: Date | null = null;
+        if (card.due) {
+          const d = new Date(card.due as string);
+          if (!isNaN(d.getTime())) dueDate = d;
+        }
+        const task = await storage.createTask(userId, project.id, {
+          title: (card.name as string) || "Untitled",
+          notes: (card.desc as string) || "",
+          status: card.dueComplete ? "done" : "todo",
+          priority: "none",
+          columnId,
+          dueDate,
+          tags,
+          links: [],
+          sortOrder: card.pos ?? 0,
+        });
+        cardToTaskId.set(card.id as string, task.id);
+      }
+
+      // 5. Create subtasks from checklist items
+      for (const checklist of checklists) {
+        const parentTaskId = checklist.idCard ? cardToTaskId.get(checklist.idCard as string) : undefined;
+        if (!parentTaskId) continue;
+        const items: any[] = Array.isArray(checklist.checkItems)
+          ? [...checklist.checkItems].sort((a: any, b: any) => (a.pos ?? 0) - (b.pos ?? 0))
+          : [];
+        for (const item of items) {
+          await storage.createTask(userId, project.id, {
+            title: (item.name as string) || "Untitled",
+            status: item.state === "complete" ? "done" : "todo",
+            priority: "none",
+            parentTaskId,
+            columnId: null,
+            notes: "",
+            tags: [],
+            links: [],
+            sortOrder: item.pos ?? 0,
+          });
+        }
+      }
+
+      // 6. Import card comments from actions
+      const commentActions = actions.filter((a: any) => a.type === "commentCard");
+      for (const action of commentActions) {
+        const cardId = action.data?.card?.id as string | undefined;
+        const text = action.data?.text as string | undefined;
+        if (!cardId || !text) continue;
+        const taskId = cardToTaskId.get(cardId);
+        if (!taskId) continue;
+        try {
+          await storage.addTaskComment(taskId, userId, text);
+        } catch {
+          // best-effort — skip if fails
+        }
+      }
+
+      res.status(201).json({ projectId: project.id, name: project.name });
+    } catch (err: any) {
+      console.error("[projects] trello import error:", err);
+      res.status(500).json({ message: "Failed to import Trello board" });
+    }
+  });
+
   app.get("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
       const list = await storage.getProjectsForUser(req.session.userId!);
