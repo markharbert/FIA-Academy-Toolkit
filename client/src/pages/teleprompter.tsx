@@ -453,7 +453,7 @@ export default function TeleprompterPage() {
               </h3>
               <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
                 <li>Clicking <strong>Open Teleprompter</strong> auto-saves your script first.</li>
-                <li>Inside the teleprompter use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">Space</kbd> to play/pause and <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">S</kbd>/<kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">M</kbd>/<kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">F</kbd> to change scroll speed.</li>
+                <li>Inside the teleprompter use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">Space</kbd> to play/pause, <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">[</kbd>/<kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">]</kbd> to adjust scroll speed, and the slider in the toolbar for fine control.</li>
                 <li>Pop-ups must be allowed for this site so the teleprompter window can open.</li>
               </ul>
             </div>

@@ -39,13 +39,17 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       padding:10px 18px;background:#111;border-bottom:1px solid #333;
     }
     #controls .title{font-family:Arial,sans-serif;font-size:12px;color:#555;margin-right:6px;white-space:nowrap;overflow:hidden;max-width:200px}
-    .speed-btn{
-      font-family:Arial,sans-serif;font-size:12px;padding:5px 14px;
-      border-radius:999px;border:none;cursor:pointer;
-      background:rgba(255,255,255,.12);color:rgba(255,255,255,.6);transition:.15s;
+    #speedWrap{
+      display:flex;flex-direction:column;align-items:center;gap:3px;
     }
-    .speed-btn.active{background:#fff;color:#000;font-weight:700}
-    .speed-btn:hover:not(.active){background:rgba(255,255,255,.22);color:#fff}
+    #speedLabel{
+      font-family:Arial,sans-serif;font-size:10px;color:rgba(255,255,255,.4);
+      letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;
+    }
+    #speedSlider{
+      width:120px;cursor:pointer;accent-color:#fff;
+      height:4px;border-radius:2px;
+    }
     #playBtn{
       font-family:Arial,sans-serif;font-size:13px;font-weight:700;
       padding:7px 22px;border-radius:999px;border:none;cursor:pointer;
@@ -71,7 +75,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       min-width:54px;text-align:center;white-space:nowrap;
     }
     #scroller{
-      position:fixed;top:54px;bottom:0;left:0;right:0;
+      position:fixed;top:64px;bottom:0;left:0;right:0;
       overflow-y:scroll;padding:40px 60px 0;
       scrollbar-width:none;
     }
@@ -95,9 +99,10 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 <body>
   <div id="controls">
     <span class="title">${esc(title)}</span>
-    <button class="speed-btn active" data-speed="28" onclick="setSpeed(this)">Slow</button>
-    <button class="speed-btn"        data-speed="45" onclick="setSpeed(this)">Med</button>
-    <button class="speed-btn"        data-speed="65" onclick="setSpeed(this)">Fast</button>
+    <div id="speedWrap">
+      <span id="speedLabel">Scroll Speed</span>
+      <input type="range" id="speedSlider" min="1" max="8" value="3" step="1">
+    </div>
     <button class="font-btn" id="fontDown" onclick="changeFont(-1)" title="Smaller text">A−</button>
     <span id="fontLabel">Medium</span>
     <button class="font-btn" id="fontUp"   onclick="changeFont(1)"  title="Larger text">A+</button>
@@ -109,10 +114,11 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     ${sectionsHtml}
     <div class="bottom-pad"></div>
   </div>
-  <div id="hint">Space = play/pause &nbsp;·&nbsp; S/M/F = speed &nbsp;·&nbsp; +/− = font size</div>
+  <div id="hint">Space = play/pause &nbsp;·&nbsp; [ / ] = slower / faster &nbsp;·&nbsp; +/− = font size</div>
   <script>
+    var SPEEDS = [6, 12, 20, 28, 38, 50, 65, 85];
     var playing = false;
-    var speed = 28;
+    var speed = SPEEDS[2];
     var lastTime = null;
     var raf = null;
     var scrollAccum = 0;
@@ -124,6 +130,29 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     var fontLabel = document.getElementById('fontLabel');
     var fontDown  = document.getElementById('fontDown');
     var fontUp    = document.getElementById('fontUp');
+    var speedSlider = document.getElementById('speedSlider');
+
+    // Restore saved speed level
+    try {
+      var savedSpeed = parseInt(localStorage.getItem('teleprompter:speedLevel') || '', 10);
+      if (!isNaN(savedSpeed) && savedSpeed >= 1 && savedSpeed <= 8) {
+        speedSlider.value = savedSpeed;
+        speed = SPEEDS[savedSpeed - 1];
+      }
+    } catch(e) {}
+
+    speedSlider.addEventListener('input', function() {
+      var level = parseInt(this.value, 10);
+      speed = SPEEDS[level - 1];
+      try { localStorage.setItem('teleprompter:speedLevel', String(level)); } catch(e) {}
+    });
+
+    function stepSpeed(delta) {
+      var next = Math.min(8, Math.max(1, parseInt(speedSlider.value, 10) + delta));
+      speedSlider.value = next;
+      speed = SPEEDS[next - 1];
+      try { localStorage.setItem('teleprompter:speedLevel', String(next)); } catch(e) {}
+    }
 
     var FONT_SIZES = [
       { px: 24, name: 'Small'    },
@@ -153,11 +182,6 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     }
     applyFont();
 
-    function setSpeed(btn) {
-      speed = parseFloat(btn.dataset.speed);
-      document.querySelectorAll('.speed-btn').forEach(function(b){ b.classList.remove('active'); });
-      btn.classList.add('active');
-    }
     function hideCountdown() {
       if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
       cdEl.style.display = 'none';
@@ -216,10 +240,10 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       raf = requestAnimationFrame(tick);
     }
     document.addEventListener('keydown', function(e) {
+      if (e.target === speedSlider) return;
       if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-      if (e.key === 's' || e.key === 'S') setSpeed(document.querySelector('[data-speed="28"]'));
-      if (e.key === 'm' || e.key === 'M') setSpeed(document.querySelector('[data-speed="45"]'));
-      if (e.key === 'f' || e.key === 'F') setSpeed(document.querySelector('[data-speed="65"]'));
+      if (e.key === '[' || e.key === ',') { e.preventDefault(); stepSpeed(-1); }
+      if (e.key === ']' || e.key === '.') { e.preventDefault(); stepSpeed(1); }
       if (e.key === 'r' || e.key === 'R') resetScroll();
       if (e.key === '+' || e.key === '=') { e.preventDefault(); changeFont(1); }
       if (e.key === '-' || e.key === '_') { e.preventDefault(); changeFont(-1); }
