@@ -6470,6 +6470,24 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     res.json(tasks);
   });
 
+  app.post("/api/projects/:id/tasks/reorder", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const project = await storage.getProject(req.params.id, req.session.userId!);
+      if (!project) return res.status(404).json({ message: "Not found" });
+      const updates = z.array(z.object({
+        id: z.string(),
+        columnId: z.string(),
+        sortOrder: z.number().int(),
+      })).parse(req.body);
+      await storage.reorderTasks(req.params.id, req.session.userId!, updates);
+      res.json({ ok: true });
+    } catch (err: any) {
+      if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
+      console.error("[projects] reorder error:", err);
+      res.status(500).json({ message: "Failed to reorder tasks" });
+    }
+  });
+
   app.post("/api/projects/:id/tasks", requireAuth, async (req: Request, res: Response) => {
     try {
       const project = await storage.getProject(req.params.id, req.session.userId!);

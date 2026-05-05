@@ -1,17 +1,24 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   DndContext,
   DragEndEvent,
   DragStartEvent,
+  DragOverEvent,
   MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
   DragOverlay,
   defaultDropAnimationSideEffects,
+  closestCenter,
   useDroppable,
-  useDraggable,
 } from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -74,15 +81,15 @@ interface TaskCardProps {
 }
 
 function TaskCard({ task, subtaskCount, doneSubtaskCount, tz, onOpen, isDragOverlay }: TaskCardProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const due = task.dueDate ? new Date(task.dueDate) : null;
 
   const style = isDragOverlay
     ? {}
     : {
-        transform: CSS.Translate.toString(transform),
+        transform: CSS.Transform.toString(transform),
+        transition,
         opacity: isDragging ? 0.18 : 1,
-        transition: isDragging ? "opacity 120ms ease" : "opacity 200ms ease",
         touchAction: "none" as const,
       };
 
@@ -92,7 +99,7 @@ function TaskCard({ task, subtaskCount, doneSubtaskCount, tz, onOpen, isDragOver
       style={style}
       className={`rounded-lg border border-border bg-card shadow-sm select-none ${
         isDragOverlay
-          ? "shadow-2xl ring-2 ring-primary/40 rotate-[1.5deg] scale-[1.04] transition-transform duration-150"
+          ? "shadow-2xl ring-2 ring-primary/40 rotate-[1.5deg] scale-[1.04]"
           : "hover:shadow-md transition-shadow"
       } ${isDragging ? "cursor-grabbing" : ""}`}
       data-testid={`kanban-card-${task.id}`}
@@ -174,6 +181,7 @@ function KanbanColumn({
         title,
         status: "todo",
         columnId: column.id,
+        sortOrder: tasks.length * 1000,
       });
       return res.json();
     },
@@ -207,7 +215,6 @@ function KanbanColumn({
 
   return (
     <div
-      ref={setNodeRef}
       className={`flex flex-col w-72 flex-shrink-0 rounded-xl border-2 transition-colors duration-150 ${
         isOver ? "border-primary/50 bg-primary/5" : "border-transparent bg-muted/40"
       }`}
@@ -271,24 +278,30 @@ function KanbanColumn({
         </DropdownMenu>
       </div>
 
-      {/* Tasks */}
-      <div className="flex-1 px-2 pb-1 space-y-2 overflow-y-auto" style={{ maxHeight: "calc(100vh - 280px)", minHeight: 80 }}>
-        {tasks.length === 0 && (
-          <p className="px-2 py-4 text-xs text-muted-foreground text-center italic">No tasks here</p>
-        )}
-        {tasks.map(task => {
-          const subs = subtasksByParent[task.id] ?? [];
-          return (
-            <TaskCard
-              key={task.id}
-              task={task}
-              subtaskCount={subs.length}
-              doneSubtaskCount={subs.filter(s => s.status === "done").length}
-              tz={tz}
-              onOpen={onOpenTask}
-            />
-          );
-        })}
+      {/* Tasks list with sortable context */}
+      <div
+        ref={setNodeRef}
+        className="flex-1 px-2 pb-1 space-y-2 overflow-y-auto"
+        style={{ maxHeight: "calc(100vh - 280px)", minHeight: 80 }}
+      >
+        <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+          {tasks.length === 0 && (
+            <p className="px-2 py-4 text-xs text-muted-foreground text-center italic">No tasks here</p>
+          )}
+          {tasks.map(task => {
+            const subs = subtasksByParent[task.id] ?? [];
+            return (
+              <TaskCard
+                key={task.id}
+                task={task}
+                subtaskCount={subs.length}
+                doneSubtaskCount={subs.filter(s => s.status === "done").length}
+                tz={tz}
+                onOpen={onOpenTask}
+              />
+            );
+          })}
+        </SortableContext>
       </div>
 
       {/* Quick add */}
@@ -355,7 +368,8 @@ export interface KanbanBoardProps {
 export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardProps) {
   const { toast } = useToast();
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({});
+  const [isDraggingActive, setIsDraggingActive] = useState(false);
+  const [localOrder, setLocalOrder] = useState<Record<string, ProjectTask[]>>({});
   const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
@@ -380,12 +394,13 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
     return map;
   }, [tasks]);
 
-  const tasksByColumn = useMemo(() => {
+  // Server-derived task-by-column map (source of truth when not dragging)
+  const serverTasksByColumn = useMemo(() => {
     const map: Record<string, ProjectTask[]> = {};
     columns.forEach(c => { map[c.id] = []; });
     const firstColId = columns[0]?.id;
     topLevelTasks.forEach(t => {
-      const colId = optimisticMoves[t.id] ?? t.columnId ?? firstColId;
+      const colId = t.columnId ?? firstColId;
       if (colId && map[colId] !== undefined) {
         map[colId].push(t);
       } else if (firstColId) {
@@ -393,18 +408,46 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
       }
     });
     return map;
-  }, [topLevelTasks, columns, optimisticMoves]);
+  }, [topLevelTasks, columns]);
+
+  // Sync local order from server whenever we're not mid-drag
+  useEffect(() => {
+    if (!isDraggingActive) {
+      setLocalOrder(serverTasksByColumn);
+    }
+  }, [serverTasksByColumn, isDraggingActive]);
+
+  // Stable ref so drag handlers always see latest localOrder
+  const localOrderRef = useRef(localOrder);
+  localOrderRef.current = localOrder;
+
+  // Find which column contains a given id (task id or column id)
+  const findColId = (id: string): string | undefined => {
+    if (localOrderRef.current[id] !== undefined) return id; // it IS a column id
+    for (const [colId, colTasks] of Object.entries(localOrderRef.current)) {
+      if (colTasks.some(t => t.id === id)) return colId;
+    }
+    return undefined;
+  };
 
   const activeDragTask = activeDragId ? tasks.find(t => t.id === activeDragId) : null;
 
-  const moveTaskMutation = useMutation({
-    mutationFn: async ({ taskId, columnId }: { taskId: string; columnId: string }) => {
-      await apiRequest("PATCH", `/api/tasks/${taskId}`, { columnId });
+  // ── mutations ──────────────────────────────────────────────────────────────
+
+  const reorderMutation = useMutation({
+    mutationFn: async (updates: { id: string; columnId: string; sortOrder: number }[]) => {
+      await apiRequest("POST", `/api/projects/${projectId}/tasks/reorder`, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/urgent-tasks"] });
     },
-    onError: (err: Error) => toast({ title: "Failed to move task", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      toast({ title: "Failed to save order", description: err.message, variant: "destructive" });
+      setLocalOrder(serverTasksByColumn);
+    },
   });
 
   const renameColumnMutation = useMutation({
@@ -440,26 +483,86 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
     onError: (err: Error) => toast({ title: "Failed to create column", description: err.message, variant: "destructive" }),
   });
 
+  // ── drag handlers ──────────────────────────────────────────────────────────
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveDragId(event.active.id as string);
+    setIsDraggingActive(true);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    const activeColId = findColId(activeId);
+    const overColId = findColId(overId);
+
+    if (!activeColId || !overColId || activeColId === overColId) return;
+
+    // Move item between columns in local state for live preview
+    setLocalOrder(prev => {
+      const sourceItems = [...(prev[activeColId] ?? [])];
+      const destItems = [...(prev[overColId] ?? [])];
+
+      const activeIdx = sourceItems.findIndex(t => t.id === activeId);
+      if (activeIdx === -1) return prev;
+
+      const [movedTask] = sourceItems.splice(activeIdx, 1);
+
+      const overIdx = destItems.findIndex(t => t.id === overId);
+      if (overIdx === -1) {
+        destItems.push(movedTask);
+      } else {
+        destItems.splice(overIdx, 0, movedTask);
+      }
+
+      return { ...prev, [activeColId]: sourceItems, [overColId]: destItems };
+    });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    setIsDraggingActive(false);
     setActiveDragId(null);
-    if (!over) return;
-    const taskId = active.id as string;
-    const targetColumnId = over.id as string;
-    const task = tasks.find(t => t.id === taskId);
-    const currentColId = optimisticMoves[taskId] ?? task?.columnId;
-    if (task && currentColId !== targetColumnId) {
-      setOptimisticMoves(prev => ({ ...prev, [taskId]: targetColumnId }));
-      moveTaskMutation.mutate({ taskId, columnId: targetColumnId }, {
-        onSuccess: () => setOptimisticMoves(prev => { const n = { ...prev }; delete n[taskId]; return n; }),
-        onError: () => setOptimisticMoves(prev => { const n = { ...prev }; delete n[taskId]; return n; }),
-      });
+
+    if (!over) {
+      // Cancelled — reset to server state
+      setLocalOrder(serverTasksByColumn);
+      return;
     }
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    const colId = findColId(activeId);
+    if (!colId) return;
+
+    // Handle within-column reorder (dragOver doesn't fire for same-column moves)
+    const colTasks = localOrderRef.current[colId] ?? [];
+    const activeIdx = colTasks.findIndex(t => t.id === activeId);
+    const overIdx = colTasks.findIndex(t => t.id === overId);
+
+    let finalOrder = localOrderRef.current;
+    if (activeIdx !== -1 && overIdx !== -1 && activeIdx !== overIdx) {
+      finalOrder = { ...finalOrder, [colId]: arrayMove(colTasks, activeIdx, overIdx) };
+      setLocalOrder(finalOrder);
+    }
+
+    // Persist — send all tasks in all columns with new sortOrders
+    const updates: { id: string; columnId: string; sortOrder: number }[] = [];
+    Object.entries(finalOrder).forEach(([cId, cTasks]) => {
+      cTasks.forEach((t, idx) => {
+        updates.push({ id: t.id, columnId: cId, sortOrder: idx * 1000 });
+      });
+    });
+
+    reorderMutation.mutate(updates);
   };
+
+  // ── render ─────────────────────────────────────────────────────────────────
 
   if (columnsLoading) {
     return (
@@ -474,25 +577,31 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
 
   return (
     <div className="flex-1 overflow-auto min-h-0">
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
         <div className="flex gap-3 p-4 pb-10 items-start min-h-[400px]">
           {columns.map(col => (
             <KanbanColumn
               key={col.id}
               column={col}
-              tasks={tasksByColumn[col.id] ?? []}
+              tasks={localOrder[col.id] ?? []}
               subtasksByParent={subtasksByParent}
               tz={tz}
               projectId={projectId}
               onOpenTask={onOpenTask}
               onRenameColumn={(id, name) => renameColumnMutation.mutate({ id, name })}
-              onDeleteColumn={id => setDeleteColumnId(id)}
+              onDeleteColumn={(id) => setDeleteColumnId(id)}
               isOnly={columns.length === 1}
             />
           ))}
 
           {/* Add column */}
-          <div className="w-72 flex-shrink-0">
+          <div className="flex-shrink-0 w-60">
             {addingColumn ? (
               <div className="rounded-xl border-2 border-dashed border-border bg-muted/20 p-3 space-y-2">
                 <Input
@@ -500,24 +609,24 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
                   value={newColumnName}
                   onChange={e => setNewColumnName(e.target.value)}
                   onKeyDown={e => {
-                    if (e.key === "Enter") { const n = newColumnName.trim(); if (n) createColumnMutation.mutate(n); }
+                    if (e.key === "Enter" && newColumnName.trim()) createColumnMutation.mutate(newColumnName.trim());
                     if (e.key === "Escape") { setAddingColumn(false); setNewColumnName(""); }
                   }}
                   placeholder="Column name…"
-                  className="h-8 text-sm"
+                  className="h-7 text-sm"
                   data-testid="input-new-column-name"
                 />
                 <div className="flex gap-1.5">
                   <Button
                     size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => { const n = newColumnName.trim(); if (n) createColumnMutation.mutate(n); }}
+                    className="h-6 text-xs px-2"
+                    onClick={() => newColumnName.trim() && createColumnMutation.mutate(newColumnName.trim())}
                     disabled={createColumnMutation.isPending}
-                    data-testid="button-confirm-add-column"
+                    data-testid="button-confirm-new-column"
                   >
                     {createColumnMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add column"}
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAddingColumn(false); setNewColumnName(""); }}>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setAddingColumn(false); setNewColumnName(""); }}>
                     Cancel
                   </Button>
                 </div>
@@ -525,11 +634,12 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
             ) : (
               <Button
                 variant="outline"
-                className="w-full h-10 border-dashed text-muted-foreground hover:text-foreground gap-2"
+                size="sm"
+                className="w-full h-8 text-xs text-muted-foreground border-dashed"
                 onClick={() => setAddingColumn(true)}
                 data-testid="button-add-column"
               >
-                <Plus className="h-4 w-4" /> Add column
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Add column
               </Button>
             )}
           </div>
@@ -572,9 +682,9 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => deleteColumnId && deleteColumnMutation.mutate(deleteColumnId)}
-              data-testid="button-confirm-delete-column"
+              disabled={deleteColumnMutation.isPending}
             >
-              {deleteColumnMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              {deleteColumnMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
               Delete column
             </AlertDialogAction>
           </AlertDialogFooter>

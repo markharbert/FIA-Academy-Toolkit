@@ -345,6 +345,7 @@ export interface IStorage {
   getTask(id: string, userId: string): Promise<ProjectTask | undefined>;
   createTask(userId: string, projectId: string, data: InsertProjectTask): Promise<ProjectTask>;
   updateTask(id: string, userId: string, data: UpdateProjectTask): Promise<ProjectTask | undefined>;
+  reorderTasks(projectId: string, userId: string, updates: { id: string; columnId: string; sortOrder: number }[]): Promise<void>;
   deleteTask(id: string, userId: string): Promise<void>;
   getDashboardProjectsSummary(userId: string): Promise<{
     projects: ProjectWithCounts[];
@@ -2312,6 +2313,14 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return updated || undefined;
+  }
+
+  async reorderTasks(projectId: string, userId: string, updates: { id: string; columnId: string; sortOrder: number }[]): Promise<void> {
+    await Promise.all(updates.map(({ id, columnId, sortOrder }) =>
+      db.update(projectTasks)
+        .set({ columnId, sortOrder, updatedAt: new Date() })
+        .where(and(eq(projectTasks.id, id), eq(projectTasks.userId, userId), eq(projectTasks.projectId, projectId)))
+    ));
   }
 
   async deleteTask(id: string, userId: string): Promise<void> {
