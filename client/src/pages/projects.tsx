@@ -1006,22 +1006,25 @@ export default function ProjectsPage() {
               <p className="mt-1 text-sm text-white/80">Plan, organize, and ship the work that runs your business.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                className="bg-white/10 text-white hover:bg-white/20 border border-white/20"
-                onClick={() => setImportOpen(true)}
-                data-testid="button-import-trello"
-              >
-                <Upload className="h-4 w-4 mr-1.5" /> Import from Trello
-              </Button>
-              <Button
-                variant="ghost"
-                className="bg-white/10 text-white hover:bg-white/20 border border-white/20"
-                onClick={() => setAsanaOpen(true)}
-                data-testid="button-import-asana"
-              >
-                <Upload className="h-4 w-4 mr-1.5" /> Import from Asana
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="bg-white/10 text-white hover:bg-white/20 border border-white/20"
+                    data-testid="button-import-dropdown"
+                  >
+                    <Upload className="h-4 w-4 mr-1.5" /> Import
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setImportOpen(true)} data-testid="button-import-trello">
+                    Import from Trello
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAsanaOpen(true)} data-testid="button-import-asana">
+                    Import from Asana
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-white text-[hsl(245_60%_30%)] hover:bg-white/90 shadow-lg" data-testid="button-new-project">
