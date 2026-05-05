@@ -389,7 +389,7 @@ export interface IStorage {
   updateInboxSendingFrom(userId: string, sendingFromAddress: string): Promise<void>;
   saveLastPlacementResults(userId: string, results: unknown[]): Promise<void>;
   setPlacementAutoCheckWindow(userId: string, until: Date | null, emailContext?: { receivedAt: Date; subject: string; messageId?: string }): Promise<void>;
-  getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>>;
+  getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; effectiveSenderAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>>;
   saveEmailPlacementResults(messageId: string, userId: string, results: unknown[]): Promise<void>;
   createEmailAnalysis(data: {
     userId: string; fromAddress: string; fromName?: string; replyTo?: string; messageId?: string; subject: string;
@@ -2948,24 +2948,33 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
-  async getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>> {
-    const rows = await db.select({
-      userId: emailInboxAddresses.userId,
-      sendingFromAddress: emailInboxAddresses.sendingFromAddress,
-      lastPlacementCheckedAt: emailInboxAddresses.lastPlacementCheckedAt,
-      placementAutoCheckUntil: emailInboxAddresses.placementAutoCheckUntil,
-      lastPlacementResults: emailInboxAddresses.lastPlacementResults,
-      placementCheckReceivedAt: emailInboxAddresses.placementCheckReceivedAt,
-      placementCheckSubject: emailInboxAddresses.placementCheckSubject,
-      placementCheckMessageId: emailInboxAddresses.placementCheckMessageId,
-    })
-    .from(emailInboxAddresses)
-    .where(
-      sql`${emailInboxAddresses.placementAutoCheckUntil} > ${now}
-        AND ${emailInboxAddresses.sendingFromAddress} IS NOT NULL
-        AND ${emailInboxAddresses.sendingFromAddress} != ''`
-    );
-    return rows.filter(r => r.placementAutoCheckUntil != null) as Array<{ userId: string; sendingFromAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>;
+  async getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; effectiveSenderAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>> {
+    // LEFT JOIN email_analyses so we can fall back to the actual from_address of the
+    // pinned email when the user hasn't set their sendingFromAddress yet.
+    const rows = await db.execute(sql`
+      SELECT
+        eia.user_id                    AS "userId",
+        eia.sending_from_address       AS "sendingFromAddress",
+        COALESCE(
+          NULLIF(eia.sending_from_address, ''),
+          ea.from_address,
+          ''
+        )                              AS "effectiveSenderAddress",
+        eia.last_placement_checked_at  AS "lastPlacementCheckedAt",
+        eia.placement_auto_check_until AS "placementAutoCheckUntil",
+        eia.last_placement_results     AS "lastPlacementResults",
+        eia.placement_check_received_at AS "placementCheckReceivedAt",
+        eia.placement_check_subject    AS "placementCheckSubject",
+        eia.placement_check_message_id AS "placementCheckMessageId"
+      FROM email_inbox_addresses eia
+      LEFT JOIN email_analyses ea
+        ON ea.message_id = eia.placement_check_message_id
+       AND ea.user_id    = eia.user_id
+      WHERE eia.placement_auto_check_until > ${now}
+    `);
+    return (rows.rows as Array<{ userId: string; sendingFromAddress: string | null; effectiveSenderAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>)
+      .filter(r => r.placementAutoCheckUntil != null)
+      .map(r => ({ ...r, sendingFromAddress: r.sendingFromAddress ?? "" })) as Array<{ userId: string; sendingFromAddress: string; effectiveSenderAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>;
   }
 
   async getSeedInboxes(activeOnly = false): Promise<SeedInbox[]> {

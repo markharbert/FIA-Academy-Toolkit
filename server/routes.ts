@@ -4897,9 +4897,22 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     const userId = req.session!.userId!;
     try {
       const address = await storage.getOrCreateInboxAddress(userId);
-      const sendingFrom = address?.sendingFromAddress;
-      if (!sendingFrom) {
-        return res.status(400).json({ message: "Set your sending From address in My Address first" });
+
+      // Resolve the effective sender address: prefer user-configured sendingFromAddress,
+      // fall back to the actual from_address on the pinned email analysis record so
+      // placement checks still work when the user hasn't set their sending address yet.
+      let sendingFrom = address?.sendingFromAddress || "";
+      if (!sendingFrom && address?.placementCheckMessageId) {
+        const { db } = await import("./db");
+        const { emailAnalyses } = await import("../shared/schema");
+        const { eq, and } = await import("drizzle-orm");
+        const [pinnedEmail] = await db.select({ fromAddress: emailAnalyses.fromAddress })
+          .from(emailAnalyses)
+          .where(and(
+            eq(emailAnalyses.messageId, address.placementCheckMessageId),
+            eq(emailAnalyses.userId, userId)
+          ));
+        sendingFrom = pinnedEmail?.fromAddress || "";
       }
 
       const allInboxes = await storage.getSeedInboxes(true); // active only

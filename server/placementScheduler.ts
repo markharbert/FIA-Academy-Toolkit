@@ -101,7 +101,7 @@ export function startPlacementScheduler(storage: IStorage): void {
       await runPlacementCheckForUser(
         storage,
         user.userId,
-        user.sendingFromAddress,
+        user.effectiveSenderAddress,
         user.lastPlacementResults,
         { messageId: user.placementCheckMessageId, receivedAt: user.placementCheckReceivedAt, subject: user.placementCheckSubject }
       );
