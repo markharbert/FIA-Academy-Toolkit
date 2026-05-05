@@ -671,14 +671,20 @@ export default function ProjectsPage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string);
+        let text = e.target?.result as string;
+        // Strip UTF-8 BOM (U+FEFF) that some systems prepend to JSON exports
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        const data = JSON.parse(text.trim());
+        if (!data || typeof data !== "object" || (!Array.isArray(data.lists) && !Array.isArray(data.cards))) {
+          throw new Error("Not a Trello board export");
+        }
         setImportParsed(data);
         setImportName(data.name || "");
         const activeLists = Array.isArray(data.lists) ? data.lists.filter((l: any) => !l.closed).length : 0;
         const activeCards = Array.isArray(data.cards) ? data.cards.filter((c: any) => !c.closed).length : 0;
         setImportStats({ lists: activeLists, cards: activeCards });
       } catch {
-        toast({ title: "Invalid file", description: "That doesn't look like a valid Trello JSON export.", variant: "destructive" });
+        toast({ title: "Invalid file", description: "That doesn't look like a valid Trello board export. Make sure you export the board as JSON from Trello (Board Menu → Share → Export JSON).", variant: "destructive" });
         setImportFile(null);
         setImportParsed(null);
         setImportStats(null);
@@ -694,6 +700,10 @@ export default function ProjectsPage() {
         name: importName.trim() || importParsed?.name || "Imported Board",
         color: importColor,
       });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.message || `Import failed (${res.status})`);
+      }
       return res.json() as Promise<{ projectId: string; name: string }>;
     },
     onSuccess: (data) => {
