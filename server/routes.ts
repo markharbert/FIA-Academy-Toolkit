@@ -6443,6 +6443,18 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const project = await storage.getProject(req.params.id, req.session.userId!);
       if (!project) return res.status(404).json({ message: "Not found" });
+      // Clean up all attachment files from cloud storage before DB cascade removes records
+      try {
+        const allTasks = await storage.getTasksForProject(req.params.id, req.session.userId!);
+        for (const task of allTasks) {
+          const atts = await storage.getTaskAttachments(task.id, req.session.userId!);
+          for (const att of atts) {
+            try { await objectStorageService.deleteObject(att.objectPath); } catch {}
+          }
+        }
+      } catch (cleanupErr) {
+        console.warn("[projects] attachment cleanup error (non-fatal):", cleanupErr);
+      }
       await storage.deleteProject(req.params.id, req.session.userId!);
       res.json({ ok: true });
     } catch (err) {
@@ -6495,6 +6507,20 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const task = await storage.getTask(req.params.id, req.session.userId!);
       if (!task) return res.status(404).json({ message: "Not found" });
+      // Clean up attachment files from cloud storage for this task and its subtasks
+      try {
+        const allTaskIds = [req.params.id];
+        const allTasks = await storage.getTasksForProject(task.projectId, req.session.userId!);
+        allTasks.filter(t => t.parentTaskId === req.params.id).forEach(st => allTaskIds.push(st.id));
+        for (const tid of allTaskIds) {
+          const atts = await storage.getTaskAttachments(tid, req.session.userId!);
+          for (const att of atts) {
+            try { await objectStorageService.deleteObject(att.objectPath); } catch {}
+          }
+        }
+      } catch (cleanupErr) {
+        console.warn("[projects] task attachment cleanup error (non-fatal):", cleanupErr);
+      }
       await storage.deleteTask(req.params.id, req.session.userId!);
       res.json({ ok: true });
     } catch (err) {
