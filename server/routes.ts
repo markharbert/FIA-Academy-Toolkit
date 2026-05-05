@@ -5082,10 +5082,13 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
               const connectedInboxes = allInboxes.filter(i => i.isConnected && i.provider === "gmail");
               if (connectedInboxes.length > 0 && senderForPlacement) {
                 const { checkGmailPlacement } = await import("./gmailOAuth");
+                // Always use THIS specific email's own identifiers, not the address-level
+                // pinned context (which points to the most recent email and would send
+                // the Gmail search after the wrong message for any older email).
                 const emailCtx = {
-                  messageId: addr?.placementCheckMessageId ?? analysis.messageId ?? null,
-                  receivedAt: addr?.placementCheckReceivedAt ?? null,
-                  subject: addr?.placementCheckSubject ?? analysis.subject ?? null,
+                  messageId: analysis.messageId ?? null,
+                  receivedAt: analysis.receivedAt ? new Date(analysis.receivedAt as unknown as string) : null,
+                  subject: analysis.subject ?? null,
                 };
                 const placementResults = await Promise.all(
                   connectedInboxes.map(inbox =>
