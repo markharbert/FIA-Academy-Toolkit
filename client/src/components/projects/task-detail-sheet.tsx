@@ -396,17 +396,33 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
         </div>
 
         <div className="px-6 py-5 space-y-5">
-          {/* Status / Priority / Due / Section */}
+          {/* Section / Priority / Due */}
           <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Status</Label>
-              <Select value={status} onValueChange={(v) => { setStatus(v); updateMutation.mutate({ status: v }); }}>
-                <SelectTrigger className="mt-1 h-8 text-xs" data-testid="select-task-status"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {columns.length > 0 ? (
+              <div>
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Section</Label>
+                <Select
+                  value={columnId || "__none__"}
+                  onValueChange={(v) => {
+                    const next = v === "__none__" ? "" : v;
+                    setColumnId(next);
+                    updateMutation.mutate({ columnId: next || null });
+                  }}
+                >
+                  <SelectTrigger className="mt-1 h-8 text-xs" data-testid="select-task-section">
+                    <SelectValue placeholder="No section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No section</SelectItem>
+                    {columns.map(col => (
+                      <SelectItem key={col.id} value={col.id}>{col.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div />
+            )}
             <div>
               <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Priority</Label>
               <Select value={priority} onValueChange={(v) => { setPriority(v); updateMutation.mutate({ priority: v }); }}>
@@ -496,29 +512,6 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
                 </PopoverContent>
               </Popover>
             </div>
-            {columns.length > 0 && (
-              <div className="col-span-3">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Section</Label>
-                <Select
-                  value={columnId || "__none__"}
-                  onValueChange={(v) => {
-                    const next = v === "__none__" ? "" : v;
-                    setColumnId(next);
-                    updateMutation.mutate({ columnId: next || null });
-                  }}
-                >
-                  <SelectTrigger className="mt-1 h-8 text-xs" data-testid="select-task-section">
-                    <SelectValue placeholder="No section" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">No section</SelectItem>
-                    {columns.map(col => (
-                      <SelectItem key={col.id} value={col.id}>{col.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
 
           {/* Links */}
