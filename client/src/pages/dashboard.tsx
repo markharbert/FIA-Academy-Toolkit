@@ -13,7 +13,7 @@ import {
   Eye, BookOpen, Zap, Users, Lightbulb,
   Plus, Activity, Radar, ShieldCheck, AlertTriangle,
   Sparkles, GitCompare, Briefcase, CalendarClock,
-  ListChecks, CircleDot,
+  ListChecks, CircleDot, Star,
 } from "lucide-react";
 import type {
   Session, DmoEntry, EmailAnalysis, Script,
@@ -842,19 +842,35 @@ function EmailHealthTile({
           </Link>
         </div>
         {reputation?.connected ? (
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <div>
-              <p className={`text-2xl font-bold ${repTone.color}`}>{repTone.label}</p>
-              {primaryDomain?.domainName && (
-                <p className="text-xs text-muted-foreground truncate max-w-[200px]">{primaryDomain.domainName}</p>
-              )}
-            </div>
-            <div className="text-right text-[11px] text-muted-foreground">
+          <div className="mt-2">
+            <p className="text-[11px] text-muted-foreground mb-2">
               {reputation.lastSyncedAt ? `Synced ${timeAgo(new Date(reputation.lastSyncedAt))}` : "Awaiting sync"}
-              {(reputation.domains?.length ?? 0) > 1 && (
-                <p className="mt-0.5">{reputation.domains.length} domains</p>
-              )}
+            </p>
+            <div className="space-y-1.5">
+              {(reputation.domains ?? []).slice(0, 3).map(d => {
+                const tone = reputationTone(d.latestReputation);
+                const isDefault = d.domainName === localStorage.getItem("postmaster_default_domain");
+                return (
+                  <div key={d.domainName} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`h-2 w-2 rounded-full flex-shrink-0 ${tone.dot}`} />
+                      <span className="text-xs text-foreground truncate">{d.domainName}</span>
+                      {isDefault && <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400 flex-shrink-0" />}
+                    </div>
+                    <span className={`text-xs font-semibold flex-shrink-0 ${tone.color}`}>{tone.label}</span>
+                  </div>
+                );
+              })}
             </div>
+            {(reputation.domains?.length ?? 0) > 3 && (
+              <Link
+                href="/email-tools/sender-reputation"
+                className="text-[11px] text-muted-foreground hover:text-foreground mt-2 block"
+                data-testid="link-more-domains"
+              >
+                +{reputation.domains.length - 3} more domain{reputation.domains.length - 3 !== 1 ? "s" : ""} →
+              </Link>
+            )}
           </div>
         ) : (
           <div className="mt-2 flex items-center justify-between gap-3">
