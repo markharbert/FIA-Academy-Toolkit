@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Project, ProjectTask } from "@shared/schema";
+import type { Project, ProjectTask, ProjectColumn } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,13 @@ import { useAuth } from "@/lib/auth";
 import { dayDiffInTz, formatInTz } from "@shared/datetime";
 import { TaskDetailSheet } from "@/components/projects/task-detail-sheet";
 import { KanbanBoard } from "@/components/projects/kanban-board";
-import { ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight, CalendarClock, Flag, Loader2, ListChecks, MoreVertical, FileText, LayoutList, LayoutGrid } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight,
+  CalendarClock, Flag, Loader2, ListChecks, MoreHorizontal,
+  MoreVertical, Pencil, Trash2, FileText, LayoutList, LayoutGrid,
+} from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
@@ -44,12 +49,6 @@ function getHeaderTheme(color: string) {
     chip: useWhite ? "bg-white/15 text-white border-0" : "bg-black/10 text-gray-800 border-0",
   };
 }
-
-const STATUS_GROUPS: Array<{ value: "todo" | "in_progress" | "done"; label: string; tone: string }> = [
-  { value: "todo",        label: "To do",        tone: "text-muted-foreground" },
-  { value: "in_progress", label: "In progress",  tone: "text-sky-600 dark:text-sky-400" },
-  { value: "done",        label: "Done",         tone: "text-emerald-600 dark:text-emerald-400" },
-];
 
 const PRIORITY_TONE: Record<string, string> = {
   none:   "",
@@ -85,13 +84,20 @@ export default function ProjectDetailPage() {
   const tz = user?.timezone || "America/New_York";
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [quickAddInputs, setQuickAddInputs] = useState<Record<string, string>>({ todo: "", in_progress: "", done: "" });
+  const [quickAddInputs, setQuickAddInputs] = useState<Record<string, string>>({});
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState("");
   const [view, setView] = useState<"list" | "board">(() => {
     try { return (localStorage.getItem(`project-view-${projectId}`) as "list" | "board") ?? "list"; }
     catch { return "list"; }
   });
+
+  // Column management state (list view)
+  const [renamingColId, setRenamingColId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState("");
+  const [deleteColId, setDeleteColId] = useState<string | null>(null);
+  const [addingSection, setAddingSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState("");
 
   const switchView = (v: "list" | "board") => {
     setView(v);
@@ -100,6 +106,7 @@ export default function ProjectDetailPage() {
 
   const { data: project, isLoading: projectLoading } = useQuery<Project>({ queryKey: ["/api/projects", projectId] });
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<ProjectTask[]>({ queryKey: ["/api/projects", projectId, "tasks"] });
+  const { data: columns = [], isLoading: columnsLoading } = useQuery<ProjectColumn[]>({ queryKey: ["/api/projects", projectId, "columns"] });
 
   const topLevel = useMemo(() => tasks.filter(t => !t.parentTaskId), [tasks]);
   const subtasksByParent = useMemo(() => {
@@ -112,15 +119,24 @@ export default function ProjectDetailPage() {
     return map;
   }, [tasks]);
 
-  const groups = useMemo(() => {
-    const out: Record<string, ProjectTask[]> = { todo: [], in_progress: [], done: [] };
-    topLevel.forEach(t => { (out[t.status] ?? out.todo).push(t); });
-    return out;
-  }, [topLevel]);
+  const tasksByColumn = useMemo(() => {
+    const map: Record<string, ProjectTask[]> = {};
+    columns.forEach(c => { map[c.id] = []; });
+    const firstColId = columns[0]?.id;
+    topLevel.forEach(t => {
+      const colId = t.columnId ?? firstColId;
+      if (colId && map[colId] !== undefined) {
+        map[colId].push(t);
+      } else if (firstColId) {
+        map[firstColId].push(t);
+      }
+    });
+    return map;
+  }, [topLevel, columns]);
 
   const createTaskMutation = useMutation({
-    mutationFn: async ({ title, status }: { title: string; status: string }) => {
-      const res = await apiRequest("POST", `/api/projects/${projectId}/tasks`, { title, status });
+    mutationFn: async ({ title, columnId }: { title: string; columnId: string }) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/tasks`, { title, columnId });
       return res.json();
     },
     onSuccess: () => {
@@ -173,11 +189,56 @@ export default function ProjectDetailPage() {
     onError: (err: Error) => toast({ title: "Failed to save as template", description: err.message, variant: "destructive" }),
   });
 
-  const submitQuickAdd = (status: string) => {
-    const title = quickAddInputs[status]?.trim();
+  const createColumnMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/columns`, { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "columns"] });
+      setAddingSection(false);
+      setNewSectionName("");
+    },
+    onError: (err: Error) => toast({ title: "Failed to create section", description: err.message, variant: "destructive" }),
+  });
+
+  const renameColumnMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      await apiRequest("PATCH", `/api/project-columns/${id}`, { name });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "columns"] });
+      setRenamingColId(null);
+    },
+    onError: (err: Error) => toast({ title: "Failed to rename section", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteColumnMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/project-columns/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "columns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
+      setDeleteColId(null);
+    },
+    onError: (err: Error) => toast({ title: "Failed to delete section", description: err.message, variant: "destructive" }),
+  });
+
+  const submitQuickAdd = (columnId: string) => {
+    const title = quickAddInputs[columnId]?.trim();
     if (!title) return;
-    createTaskMutation.mutate({ title, status });
-    setQuickAddInputs(prev => ({ ...prev, [status]: "" }));
+    createTaskMutation.mutate({ title, columnId });
+    setQuickAddInputs(prev => ({ ...prev, [columnId]: "" }));
+  };
+
+  const finishRename = (colId: string) => {
+    const name = renameText.trim();
+    if (name && name !== columns.find(c => c.id === colId)?.name) {
+      renameColumnMutation.mutate({ id: colId, name });
+    } else {
+      setRenamingColId(null);
+    }
   };
 
   if (projectLoading || !project) {
@@ -193,6 +254,7 @@ export default function ProjectDetailPage() {
 
   const hdr = getHeaderTheme(project.color);
   const openParent = openTask?.parentTaskId ? tasks.find(t => t.id === openTask.parentTaskId) ?? null : null;
+  const colToDelete = columns.find(c => c.id === deleteColId);
 
   return (
     <div className="flex-1 overflow-auto bg-background">
@@ -319,123 +381,251 @@ export default function ProjectDetailPage() {
       )}
 
       {/* List view */}
-      <div className={`max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5 ${view === "board" ? "hidden" : ""}`}>
-        {tasksLoading ? (
+      <div className={`max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4 ${view === "board" ? "hidden" : ""}`}>
+        {(tasksLoading || columnsLoading) ? (
           <div className="text-center py-10 text-muted-foreground">Loading tasks…</div>
         ) : (
-          STATUS_GROUPS.map(group => {
-            const items = groups[group.value] ?? [];
-            return (
-              <Card key={group.value} className="overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
-                    <h2 className={`text-xs uppercase tracking-wider font-semibold ${group.tone}`}>{group.label}</h2>
-                    <span className="text-xs text-muted-foreground tabular-nums">· {items.length}</span>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {items.length === 0 && (
-                      <p className="px-4 py-3 text-xs text-muted-foreground italic">No tasks here yet.</p>
-                    )}
-                    {items.map(task => {
-                      const subs = subtasksByParent[task.id] ?? [];
-                      const isExpanded = expanded[task.id];
-                      const due = task.dueDate ? new Date(task.dueDate) : null;
-                      return (
-                        <div key={task.id} data-testid={`task-row-${task.id}`}>
-                          <div className="flex items-center gap-2 px-4 py-2 hover:bg-muted/30 group">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleStatusMutation.mutate({ id: task.id, status: task.status === "done" ? "todo" : "done" }); }}
-                              className="shrink-0"
-                              aria-label={task.status === "done" ? "Mark not done" : "Mark done"}
-                              data-testid={`button-toggle-${task.id}`}
-                            >
-                              {task.status === "done"
-                                ? <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                                : <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 hover:border-foreground transition-colors" />}
-                            </button>
-
-                            {subs.length > 0 ? (
-                              <button
-                                onClick={() => setExpanded(p => ({ ...p, [task.id]: !p[task.id] }))}
-                                className="shrink-0 text-muted-foreground hover:text-foreground"
-                                aria-label={isExpanded ? "Collapse" : "Expand"}
-                                data-testid={`button-expand-${task.id}`}
-                              >
-                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                              </button>
-                            ) : (
-                              <span className="w-4 shrink-0" />
-                            )}
-
-                            <button
-                              onClick={() => setOpenTaskId(task.id)}
-                              className="flex-1 min-w-0 text-left"
-                              data-testid={`button-open-task-${task.id}`}
-                            >
-                              <span className={`text-sm ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>{task.title}</span>
-                            </button>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {task.priority !== "none" && (
-                                <Badge className={`text-[10px] gap-0.5 px-1.5 py-0 ${PRIORITY_TONE[task.priority]}`} variant="secondary">
-                                  <Flag className="h-2.5 w-2.5" /> {task.priority}
-                                </Badge>
-                              )}
-                              {due && (
-                                <Badge className={`text-[10px] gap-0.5 px-1.5 py-0 ${dueDateTone(due, task.status, tz)}`} variant="secondary">
-                                  <CalendarClock className="h-2.5 w-2.5" /> {dueDateLabel(due, tz)}
-                                </Badge>
-                              )}
-                              {subs.length > 0 && (
-                                <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0">
-                                  <ListChecks className="h-2.5 w-2.5" /> {subs.filter(s => s.status === "done").length}/{subs.length}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-
-                          {isExpanded && subs.length > 0 && (
-                            <div className="bg-muted/20 border-t border-border">
-                              {subs.map(st => (
-                                <div key={st.id} className="flex items-center gap-2 pl-12 pr-4 py-1.5 hover:bg-muted/30" data-testid={`subtask-row-${st.id}`}>
-                                  <button
-                                    onClick={() => toggleStatusMutation.mutate({ id: st.id, status: st.status === "done" ? "todo" : "done" })}
-                                    className="shrink-0"
-                                    aria-label="Toggle"
-                                  >
-                                    {st.status === "done"
-                                      ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                                      : <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40" />}
-                                  </button>
-                                  <button onClick={() => setOpenTaskId(st.id)} className="text-sm text-left flex-1 min-w-0">
-                                    <span className={st.status === "done" ? "line-through text-muted-foreground" : ""}>{st.title}</span>
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {/* Quick add */}
-                    <div className="flex items-center gap-2 px-4 py-2 bg-muted/10">
-                      <Plus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <Input
-                        value={quickAddInputs[group.value] ?? ""}
-                        onChange={e => setQuickAddInputs(prev => ({ ...prev, [group.value]: e.target.value }))}
-                        onKeyDown={e => { if (e.key === "Enter") submitQuickAdd(group.value); }}
-                        placeholder={`Add a task to ${group.label.toLowerCase()}…`}
-                        className="h-7 text-sm border-0 shadow-none px-1 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
-                        data-testid={`input-quick-add-${group.value}`}
+          <>
+            {columns.map(col => {
+              const items = tasksByColumn[col.id] ?? [];
+              const isRenaming = renamingColId === col.id;
+              return (
+                <Card key={col.id} className="overflow-hidden" data-testid={`section-${col.id}`}>
+                  <CardContent className="p-0">
+                    {/* Section header */}
+                    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
+                      <div
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: col.color ?? "hsl(var(--muted-foreground) / 0.5)" }}
                       />
+                      {isRenaming ? (
+                        <input
+                          autoFocus
+                          value={renameText}
+                          onChange={e => setRenameText(e.target.value)}
+                          onBlur={() => finishRename(col.id)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") finishRename(col.id);
+                            if (e.key === "Escape") setRenamingColId(null);
+                          }}
+                          className="flex-1 text-xs uppercase tracking-wider font-semibold bg-transparent border-b border-primary outline-none text-foreground min-w-0"
+                          data-testid={`input-rename-section-${col.id}`}
+                        />
+                      ) : (
+                        <h2
+                          className="flex-1 text-xs uppercase tracking-wider font-semibold text-foreground min-w-0 truncate cursor-default select-none"
+                          onDoubleClick={() => { setRenamingColId(col.id); setRenameText(col.name); }}
+                          data-testid={`text-section-name-${col.id}`}
+                        >
+                          {col.name}
+                        </h2>
+                      )}
+                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">· {items.length}</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0"
+                            data-testid={`button-section-menu-${col.id}`}
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => { setRenamingColId(col.id); setRenameText(col.name); }}
+                            data-testid={`menu-rename-section-${col.id}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5 mr-2" /> Rename section
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => setDeleteColId(col.id)}
+                            disabled={columns.length === 1}
+                            data-testid={`menu-delete-section-${col.id}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-2" />
+                            {columns.length === 1 ? "Can't delete only section" : "Delete section"}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
+
+                    {/* Tasks */}
+                    <div className="divide-y divide-border">
+                      {items.length === 0 && (
+                        <p className="px-4 py-3 text-xs text-muted-foreground italic">No tasks here yet.</p>
+                      )}
+                      {items.map(task => {
+                        const subs = subtasksByParent[task.id] ?? [];
+                        const isExpanded = expanded[task.id];
+                        const due = task.dueDate ? new Date(task.dueDate) : null;
+                        return (
+                          <div key={task.id} data-testid={`task-row-${task.id}`}>
+                            <div className="flex items-center gap-2 px-4 py-2 hover:bg-muted/30 group">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleStatusMutation.mutate({ id: task.id, status: task.status === "done" ? "todo" : "done" }); }}
+                                className="shrink-0"
+                                aria-label={task.status === "done" ? "Mark not done" : "Mark done"}
+                                data-testid={`button-toggle-${task.id}`}
+                              >
+                                {task.status === "done"
+                                  ? <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                  : <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 hover:border-foreground transition-colors" />}
+                              </button>
+
+                              {subs.length > 0 ? (
+                                <button
+                                  onClick={() => setExpanded(p => ({ ...p, [task.id]: !p[task.id] }))}
+                                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                                  aria-label={isExpanded ? "Collapse" : "Expand"}
+                                  data-testid={`button-expand-${task.id}`}
+                                >
+                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </button>
+                              ) : (
+                                <span className="w-4 shrink-0" />
+                              )}
+
+                              <button
+                                onClick={() => setOpenTaskId(task.id)}
+                                className="flex-1 min-w-0 text-left"
+                                data-testid={`button-open-task-${task.id}`}
+                              >
+                                <span className={`text-sm ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>{task.title}</span>
+                              </button>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {task.priority !== "none" && (
+                                  <Badge className={`text-[10px] gap-0.5 px-1.5 py-0 ${PRIORITY_TONE[task.priority]}`} variant="secondary">
+                                    <Flag className="h-2.5 w-2.5" /> {task.priority}
+                                  </Badge>
+                                )}
+                                {due && (
+                                  <Badge className={`text-[10px] gap-0.5 px-1.5 py-0 ${dueDateTone(due, task.status, tz)}`} variant="secondary">
+                                    <CalendarClock className="h-2.5 w-2.5" /> {dueDateLabel(due, tz)}
+                                  </Badge>
+                                )}
+                                {subs.length > 0 && (
+                                  <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0">
+                                    <ListChecks className="h-2.5 w-2.5" /> {subs.filter(s => s.status === "done").length}/{subs.length}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            {isExpanded && subs.length > 0 && (
+                              <div className="bg-muted/20 border-t border-border">
+                                {subs.map(st => (
+                                  <div key={st.id} className="flex items-center gap-2 pl-12 pr-4 py-1.5 hover:bg-muted/30" data-testid={`subtask-row-${st.id}`}>
+                                    <button
+                                      onClick={() => toggleStatusMutation.mutate({ id: st.id, status: st.status === "done" ? "todo" : "done" })}
+                                      className="shrink-0"
+                                      aria-label="Toggle"
+                                    >
+                                      {st.status === "done"
+                                        ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                        : <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40" />}
+                                    </button>
+                                    <button onClick={() => setOpenTaskId(st.id)} className="text-sm text-left flex-1 min-w-0">
+                                      <span className={st.status === "done" ? "line-through text-muted-foreground" : ""}>{st.title}</span>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Quick add */}
+                      <div className="flex items-center gap-2 px-4 py-2 bg-muted/10">
+                        <Plus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <Input
+                          value={quickAddInputs[col.id] ?? ""}
+                          onChange={e => setQuickAddInputs(prev => ({ ...prev, [col.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter") submitQuickAdd(col.id); }}
+                          placeholder={`Add a task to ${col.name}…`}
+                          className="h-7 text-sm border-0 shadow-none px-1 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
+                          data-testid={`input-quick-add-${col.id}`}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {/* Add section */}
+            {addingSection ? (
+              <Card className="overflow-hidden border-dashed">
+                <CardContent className="p-3 space-y-2">
+                  <Input
+                    autoFocus
+                    value={newSectionName}
+                    onChange={e => setNewSectionName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") { const n = newSectionName.trim(); if (n) createColumnMutation.mutate(n); }
+                      if (e.key === "Escape") { setAddingSection(false); setNewSectionName(""); }
+                    }}
+                    placeholder="Section name…"
+                    className="h-8 text-sm"
+                    data-testid="input-new-section-name"
+                  />
+                  <div className="flex gap-1.5">
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => { const n = newSectionName.trim(); if (n) createColumnMutation.mutate(n); }}
+                      disabled={createColumnMutation.isPending}
+                      data-testid="button-confirm-add-section"
+                    >
+                      {createColumnMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add section"}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAddingSection(false); setNewSectionName(""); }}>
+                      Cancel
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
-            );
-          })
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full border-dashed text-muted-foreground hover:text-foreground gap-2"
+                onClick={() => setAddingSection(true)}
+                data-testid="button-add-section"
+              >
+                <Plus className="h-4 w-4" /> Add section
+              </Button>
+            )}
+          </>
         )}
       </div>
+
+      {/* Delete section confirmation */}
+      <AlertDialog open={!!deleteColId} onOpenChange={o => !o && setDeleteColId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{colToDelete?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tasks in this section will be moved to the first remaining section. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteColId && deleteColumnMutation.mutate(deleteColId)}
+              data-testid="button-confirm-delete-section"
+            >
+              {deleteColumnMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Delete section
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
         <DialogContent className="sm:max-w-md" data-testid="dialog-save-as-template">
