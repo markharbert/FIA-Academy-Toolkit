@@ -734,6 +734,93 @@ export default function ProjectsPage() {
     },
     onError: (err: Error) => toast({ title: "Import failed", description: err.message, variant: "destructive" }),
   });
+
+  // Asana import state
+  const [asanaOpen, setAsanaOpen] = useState(false);
+  const [asanaName, setAsanaName] = useState("");
+  const [asanaColor, setAsanaColor] = useState(COLOR_PALETTE[0]);
+  const [asanaFile, setAsanaFile] = useState<File | null>(null);
+  const [asanaCsvText, setAsanaCsvText] = useState("");
+  const [asanaStats, setAsanaStats] = useState<{ tasks: number; subtasks: number; sections: number } | null>(null);
+  const asanaFileRef = useRef<HTMLInputElement>(null);
+
+  const handleAsanaFile = (file: File | null) => {
+    if (!file) return;
+    setAsanaFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        let text = e.target?.result as string;
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        const lines = text.trim().split(/\r?\n/);
+        if (lines.length < 2) throw new Error("Empty");
+        const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
+        const iName = headers.indexOf("task name");
+        if (iName === -1) throw new Error("No Task Name column");
+        const iParent = headers.indexOf("parent task");
+        const iSection = headers.indexOf("section/column");
+        let tasks = 0, subtasks = 0;
+        const sections = new Set<string>();
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          const fields: string[] = [];
+          let field = "", inQ = false;
+          for (const ch of line + ",") {
+            if (ch === '"') { inQ = !inQ; }
+            else if (ch === ',' && !inQ) { fields.push(field); field = ""; }
+            else { field += ch; }
+          }
+          if (iParent >= 0 && fields[iParent]?.trim()) { subtasks++; }
+          else {
+            tasks++;
+            if (iSection >= 0) {
+              const sec = (fields[iSection] || "").trim().replace(/:$/, "");
+              if (sec) sections.add(sec);
+            }
+          }
+        }
+        setAsanaCsvText(text);
+        setAsanaStats({ tasks, subtasks, sections: sections.size });
+      } catch {
+        toast({ title: "Invalid file", description: "That doesn't look like an Asana CSV export. In Asana: open your project → click the ⋯ menu → Export/Print → Export as CSV.", variant: "destructive" });
+        setAsanaFile(null);
+        setAsanaCsvText("");
+        setAsanaStats(null);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const asanaMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/projects/import/asana", {
+        csvText: asanaCsvText,
+        name: asanaName.trim() || "Imported from Asana",
+        color: asanaColor,
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.message || `Import failed (${res.status})`);
+      }
+      return res.json() as Promise<{ projectId: string; name: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
+      setAsanaOpen(false);
+      setAsanaFile(null);
+      setAsanaCsvText("");
+      setAsanaStats(null);
+      setAsanaName("");
+      setAsanaColor(COLOR_PALETTE[0]);
+      toast({ title: "Project imported!", description: `"${data.name}" is ready.` });
+      navigate(`/projects/${data.projectId}`);
+    },
+    onError: (err: Error) => toast({ title: "Import failed", description: err.message, variant: "destructive" }),
+  });
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(COLOR_PALETTE[0]);
@@ -926,6 +1013,14 @@ export default function ProjectsPage() {
                 data-testid="button-import-trello"
               >
                 <Upload className="h-4 w-4 mr-1.5" /> Import from Trello
+              </Button>
+              <Button
+                variant="ghost"
+                className="bg-white/10 text-white hover:bg-white/20 border border-white/20"
+                onClick={() => setAsanaOpen(true)}
+                data-testid="button-import-asana"
+              >
+                <Upload className="h-4 w-4 mr-1.5" /> Import from Asana
               </Button>
               <Dialog open={createOpen} onOpenChange={setCreateOpen}>
               <DialogTrigger asChild>
@@ -1410,6 +1505,107 @@ export default function ProjectsPage() {
             >
               {importMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Import board
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Asana Import Dialog */}
+      <Dialog open={asanaOpen} onOpenChange={(open) => {
+        if (!open) {
+          setAsanaOpen(false);
+          setAsanaFile(null);
+          setAsanaCsvText("");
+          setAsanaStats(null);
+          setAsanaName("");
+          setAsanaColor(COLOR_PALETTE[0]);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-import-asana">
+          <DialogHeader>
+            <DialogTitle>Import from Asana</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="text-sm text-muted-foreground space-y-1.5">
+              <p>Follow these steps in Asana to get the export file:</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>Open your project in Asana</li>
+                <li>Click the <strong>⋯ menu</strong> next to the project name</li>
+                <li>Click <strong>Export/Print</strong></li>
+                <li>Click <strong>CSV</strong></li>
+                <li>Upload that <code>.csv</code> file here</li>
+              </ol>
+            </div>
+            <div>
+              <Label>Asana export file</Label>
+              <div className="mt-1.5">
+                <input
+                  ref={asanaFileRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  data-testid="input-asana-file"
+                  onChange={e => handleAsanaFile(e.target.files?.[0] ?? null)}
+                />
+                <button
+                  type="button"
+                  onClick={() => asanaFileRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-border rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                  data-testid="button-choose-asana-file"
+                >
+                  <Upload className="h-4 w-4" />
+                  {asanaFile ? asanaFile.name : "Choose CSV file…"}
+                </button>
+              </div>
+              {asanaStats && (
+                <p className="mt-1.5 text-xs text-muted-foreground" data-testid="text-asana-stats">
+                  Found <strong>{asanaStats.tasks}</strong> task{asanaStats.tasks !== 1 ? "s" : ""}
+                  {asanaStats.subtasks > 0 && <>, <strong>{asanaStats.subtasks}</strong> subtask{asanaStats.subtasks !== 1 ? "s" : ""}</>}
+                  {asanaStats.sections > 0 && <> across <strong>{asanaStats.sections}</strong> section{asanaStats.sections !== 1 ? "s" : ""}</>}
+                </p>
+              )}
+            </div>
+            {asanaCsvText && (
+              <>
+                <div>
+                  <Label htmlFor="asana-name">Project name</Label>
+                  <Input
+                    id="asana-name"
+                    className="mt-1.5"
+                    value={asanaName}
+                    onChange={e => setAsanaName(e.target.value)}
+                    placeholder="Project name"
+                    data-testid="input-asana-project-name"
+                  />
+                </div>
+                <div>
+                  <Label>Color</Label>
+                  <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                    {COLOR_PALETTE.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setAsanaColor(c)}
+                        className={`h-7 w-7 rounded-full ring-offset-2 ring-offset-background transition-all ${asanaColor === c ? "ring-2 ring-foreground" : "hover:scale-110"}`}
+                        style={{ background: c }}
+                        aria-label={`Color ${c}`}
+                        data-testid={`asana-color-${c.replace("#", "")}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAsanaOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => asanaMutation.mutate()}
+              disabled={!asanaCsvText || asanaMutation.isPending}
+              data-testid="button-confirm-import-asana"
+            >
+              {asanaMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Import project
             </Button>
           </DialogFooter>
         </DialogContent>

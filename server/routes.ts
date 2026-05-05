@@ -6042,6 +6042,155 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ── Asana CSV import ─────────────────────────────────────────────────────────
+
+  function parseAsanaCSV(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = "";
+    let inQuotes = false;
+    const src = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (inQuotes) {
+        if (ch === '"' && src[i + 1] === '"') { field += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { field += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { row.push(field); field = ""; }
+        else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ""; }
+        else { field += ch; }
+      }
+    }
+    if (field || row.length > 0) { row.push(field); rows.push(row); }
+    return rows;
+  }
+
+  app.post("/api/projects/import/asana", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { csvText, name: overrideName, color } = req.body ?? {};
+      if (!csvText || typeof csvText !== "string") {
+        return res.status(400).json({ message: "Missing csvText" });
+      }
+
+      const rows = parseAsanaCSV(csvText);
+      if (rows.length < 2) {
+        return res.status(400).json({ message: "CSV appears to be empty" });
+      }
+
+      const headers = rows[0].map((h: string) => h.trim().toLowerCase());
+      const idx = (...names: string[]) => {
+        for (const n of names) { const i = headers.indexOf(n); if (i !== -1) return i; }
+        return -1;
+      };
+
+      const iName = idx("task name", "name");
+      const iSection = idx("section/column", "section", "column");
+      const iNotes = idx("notes", "description");
+      const iDueDate = idx("due date", "due_date");
+      const iTags = idx("tags", "tag");
+      const iParent = idx("parent task", "parent_task", "parent");
+      const iCompletedAt = idx("completed at", "completed_at", "completed");
+      const iPriority = idx("priority");
+
+      if (iName === -1) {
+        return res.status(400).json({ message: 'CSV is missing a "Task Name" column. Make sure this is an Asana export (project ⋯ → Export/Print → CSV).' });
+      }
+
+      const userId = req.session.userId!;
+      const project = await storage.createProject(userId, {
+        name: ((overrideName as string) || "Imported from Asana").trim(),
+        description: "",
+        color: (color as string) || "#f59e0b",
+        status: "active",
+      });
+
+      const dataRows = rows.slice(1).filter((r: string[]) => r.some((c: string) => c.trim()));
+
+      // Collect unique sections in appearance order (top-level tasks only)
+      const sectionOrder: string[] = [];
+      const seenSections = new Set<string>();
+      for (const row of dataRows) {
+        const isSubtask = iParent >= 0 && row[iParent]?.trim();
+        if (!isSubtask && iSection >= 0) {
+          const sec = (row[iSection] || "").trim().replace(/:$/, "");
+          if (sec && !seenSections.has(sec)) { seenSections.add(sec); sectionOrder.push(sec); }
+        }
+      }
+
+      const sectionToColId = new Map<string, string>();
+      for (let i = 0; i < sectionOrder.length; i++) {
+        const col = await storage.createColumn(userId, project.id, { name: sectionOrder[i], sortOrder: i });
+        sectionToColId.set(sectionOrder[i], col.id);
+      }
+
+      const parsePriority = (raw: string) => {
+        const p = (raw || "").trim().toLowerCase();
+        return p === "high" ? "high" : p === "medium" ? "medium" : p === "low" ? "low" : "none";
+      };
+      const parseDue = (raw: string): Date | null => {
+        if (!raw?.trim()) return null;
+        const d = new Date(raw.trim());
+        return isNaN(d.getTime()) ? null : d;
+      };
+
+      const parentRows = dataRows.filter((r: string[]) => !(iParent >= 0 && r[iParent]?.trim()));
+      const subtaskRows = dataRows.filter((r: string[]) => iParent >= 0 && r[iParent]?.trim());
+
+      const taskNameToId = new Map<string, string>();
+      for (let i = 0; i < parentRows.length; i++) {
+        const row = parentRows[i];
+        const title = (row[iName] || "").trim();
+        if (!title) continue;
+        const sec = iSection >= 0 ? (row[iSection] || "").trim().replace(/:$/, "") : "";
+        const columnId = sec ? (sectionToColId.get(sec) ?? null) : null;
+        const tags = iTags >= 0 ? (row[iTags] || "").split(",").map((t: string) => t.trim()).filter(Boolean) : [];
+        const status = iCompletedAt >= 0 && row[iCompletedAt]?.trim() ? "done" : "todo";
+        const task = await storage.createTask(userId, project.id, {
+          title,
+          notes: iNotes >= 0 ? (row[iNotes] || "") : "",
+          status,
+          priority: iPriority >= 0 ? parsePriority(row[iPriority]) : "none",
+          columnId,
+          dueDate: iDueDate >= 0 ? parseDue(row[iDueDate]) : null,
+          tags,
+          links: [],
+          sortOrder: i,
+        });
+        taskNameToId.set(title.toLowerCase(), task.id);
+      }
+
+      for (let i = 0; i < subtaskRows.length; i++) {
+        const row = subtaskRows[i];
+        const title = (row[iName] || "").trim();
+        if (!title) continue;
+        const parentName = (row[iParent] || "").trim().toLowerCase();
+        const parentTaskId = taskNameToId.get(parentName);
+        if (!parentTaskId) continue;
+        const tags = iTags >= 0 ? (row[iTags] || "").split(",").map((t: string) => t.trim()).filter(Boolean) : [];
+        const status = iCompletedAt >= 0 && row[iCompletedAt]?.trim() ? "done" : "todo";
+        await storage.createTask(userId, project.id, {
+          title,
+          notes: iNotes >= 0 ? (row[iNotes] || "") : "",
+          status,
+          priority: iPriority >= 0 ? parsePriority(row[iPriority]) : "none",
+          parentTaskId,
+          columnId: null,
+          dueDate: iDueDate >= 0 ? parseDue(row[iDueDate]) : null,
+          tags,
+          links: [],
+          sortOrder: i,
+        });
+      }
+
+      res.status(201).json({ projectId: project.id, name: project.name });
+    } catch (err: any) {
+      console.error("[projects] asana import error:", err);
+      res.status(500).json({ message: "Failed to import Asana project" });
+    }
+  });
+
   app.get("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
       const list = await storage.getProjectsForUser(req.session.userId!);
