@@ -5070,6 +5070,46 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             canSpamCompliance,
             status: "complete",
           });
+
+          // If placement hasn't been confirmed yet, trigger a placement check now.
+          // We skip this when placementResults is already set (confirmed by the scheduler).
+          if (!analysis.placementResults) {
+            try {
+              const addr = await storage.getOrCreateInboxAddress(userId);
+              // Prefer user-configured sendingFromAddress; fall back to the email's actual from address.
+              const senderForPlacement = addr?.sendingFromAddress || fromAddress;
+              const allInboxes = await storage.getSeedInboxes(true);
+              const connectedInboxes = allInboxes.filter(i => i.isConnected && i.provider === "gmail");
+              if (connectedInboxes.length > 0 && senderForPlacement) {
+                const { checkGmailPlacement } = await import("./gmailOAuth");
+                const emailCtx = {
+                  messageId: addr?.placementCheckMessageId ?? analysis.messageId ?? null,
+                  receivedAt: addr?.placementCheckReceivedAt ?? null,
+                  subject: addr?.placementCheckSubject ?? analysis.subject ?? null,
+                };
+                const placementResults = await Promise.all(
+                  connectedInboxes.map(inbox =>
+                    checkGmailPlacement(
+                      {
+                        id: inbox.id,
+                        label: inbox.label,
+                        email: inbox.email,
+                        provider: inbox.provider,
+                        oauthAccessToken: inbox.oauthAccessToken,
+                        oauthRefreshToken: inbox.oauthRefreshToken,
+                      },
+                      senderForPlacement,
+                      emailCtx
+                    )
+                  )
+                );
+                await storage.saveLastPlacementResults(userId, placementResults);
+                console.log(`[inbox-analyzer] reanalyze also ran placement check for email ${emailId}`);
+              }
+            } catch (placementErr: any) {
+              console.error("[inbox-analyzer] reanalyze placement check error:", placementErr?.message);
+            }
+          }
         } catch (err) {
           console.error("[inbox-analyzer] reanalyze pipeline error:", err);
           await storage.updateEmailAnalysis(emailId, { status: "failed" });

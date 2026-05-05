@@ -1800,20 +1800,6 @@ export default function InboxAnalyzerPage() {
     localStorage.setItem("inbox_analyzer_last_visited", new Date().toISOString());
   }, []);
 
-  const { data: addressData, isLoading: addressLoading } = useQuery<{
-    email: string; token: string; sendingFromAddress: string;
-    lastPlacementResults: PlacementResult[] | null;
-    lastPlacementCheckedAt: string | null;
-    placementAutoCheckUntil: string | null;
-    placementCheckMessageId: string | null;
-  }>({
-    queryKey: ["/api/inbox-analyzer/address"],
-    refetchInterval: (query) => {
-      const until = (query.state.data as any)?.placementAutoCheckUntil;
-      return until && new Date(until) > new Date() ? 60_000 : false;
-    },
-  });
-
   const { data: seedInboxes = [] } = useQuery<SeedInbox[]>({
     queryKey: ["/api/inbox-analyzer/seed-inboxes"],
   });
@@ -1824,6 +1810,24 @@ export default function InboxAnalyzerPage() {
       const data = query.state.data as EmailAnalysis[] | undefined;
       const hasPending = data?.some((e) => e.status === "processing" || e.status === "pending");
       return hasPending ? 4000 : false;
+    },
+  });
+
+  const { data: addressData, isLoading: addressLoading } = useQuery<{
+    email: string; token: string; sendingFromAddress: string;
+    lastPlacementResults: PlacementResult[] | null;
+    lastPlacementCheckedAt: string | null;
+    placementAutoCheckUntil: string | null;
+    placementCheckMessageId: string | null;
+  }>({
+    queryKey: ["/api/inbox-analyzer/address"],
+    refetchInterval: (query) => {
+      // Poll quickly while an email is being reanalyzed (placement check fires at the end of reanalyze).
+      const anyProcessing = emails.some(e => e.status === "processing" || e.status === "pending");
+      if (anyProcessing) return 4000;
+      // Poll moderately while the 24-hour placement monitoring window is open.
+      const until = (query.state.data as any)?.placementAutoCheckUntil;
+      return until && new Date(until) > new Date() ? 60_000 : false;
     },
   });
 
@@ -1855,6 +1859,7 @@ export default function InboxAnalyzerPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/address"] });
       toast({ title: "Re-analysis started", description: "Your email is being analyzed again." });
     },
     onError: () => {
