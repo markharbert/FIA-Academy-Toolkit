@@ -666,6 +666,7 @@ export default function ProjectDetailPage() {
 
       <TaskDetailSheet
         project={project}
+        columns={columns}
         task={openTask}
         parentTask={openParent}
         subtasks={openSubs}

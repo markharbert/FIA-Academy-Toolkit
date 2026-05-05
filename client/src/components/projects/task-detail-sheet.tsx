@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Project, ProjectTask, ProjectLink, TaskAttachment } from "@shared/schema";
+import type { Project, ProjectTask, ProjectColumn, ProjectLink, TaskAttachment } from "@shared/schema";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,7 @@ function getHeaderTheme(color: string) {
 
 interface Props {
   project: Project;
+  columns?: ProjectColumn[];
   task: ProjectTask | null;
   parentTask?: ProjectTask | null;
   subtasks: ProjectTask[];
@@ -87,13 +88,14 @@ interface Props {
   onOpenTask?: (id: string) => void;
 }
 
-export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onOpenChange, onOpenTask }: Props) {
+export function TaskDetailSheet({ project, columns = [], task, parentTask, subtasks, open, onOpenChange, onOpenTask }: Props) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("todo");
   const [priority, setPriority] = useState("none");
+  const [columnId, setColumnId] = useState<string>("");
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [links, setLinks] = useState<ProjectLink[]>([]);
   const [linkLabel, setLinkLabel] = useState("");
