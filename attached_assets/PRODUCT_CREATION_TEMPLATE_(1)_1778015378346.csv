@@ -1,0 +1,56 @@
+﻿Task ID,Created At,Completed At,Last Modified,Name,Section/Column,Assignee,Assignee Email,Start Date,Due Date,Tags,Notes,Projects,Parent task,Blocked By (Dependencies),Blocking (Dependencies),Priority
+"1204179748600217",2023-03-14,,2023-07-30,"Course Name, Subtitle and Module Information",COURSE INFORMATION,,,,,,"Name: 
+
+Subtitle:
+
+PRICE: 
+
+MODULE & LESSON NAMES
+
+
+
+",PRODUCT CREATION TEMPLATE,,,,
+"1204179748724264",2023-03-14,,2023-03-14,,,,,,,,,,"Course Name, Subtitle and Module Information",,,
+"1204179750884213",2023-03-14,,2023-07-30,Graphics For Course,COURSE INFORMATION,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179748724270",2023-03-14,,2023-04-18,Create Product In Keap,KEAP PRODUCT SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179751079783",2023-03-14,,2023-03-14,Set Price,,,,,,,,,Create Product In Keap,,,
+"1204179751079787",2023-03-14,,2023-03-14,Set Category,,,,,,,,,Create Product In Keap,,,
+"1204179908375751",2023-03-14,,2023-03-14,Product Description,,,,,,,,,Create Product In Keap,,,
+"1204179908375755",2023-03-14,,2023-03-14,Product Image,,,,,,,,,Create Product In Keap,,,
+"1204179748724278",2023-03-14,,2023-04-18,Payment Plan (If Needed),KEAP PRODUCT SETUP,,,,,,"
+
+",PRODUCT CREATION TEMPLATE,,,,
+"1204179748724286",2023-03-14,,2023-04-18,Create an Order Form in Keap,KEAP PRODUCT SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179908375763",2023-03-14,,2023-03-14,Set Merchant,,,,,,,,,Create an Order Form in Keap,,,
+"1204179908375767",2023-03-14,,2023-03-14,Email Notification,,,,,,,,,Create an Order Form in Keap,,,
+"1204179910575637",2023-03-14,,2023-03-14,"Promo Code (If needed, hide if NO)",,,,,,,,,Create an Order Form in Keap,,,
+"1204179910575641",2023-03-14,,2023-03-14,Set To Active,,,,,,,,,Create an Order Form in Keap,,,
+"1204179751079773",2023-03-14,,2023-04-18,Setup Gospiffy Form,KEAP PRODUCT SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179910110850",2023-03-14,,2023-03-14,Set Image,,,,,,,,,Setup Gospiffy Form,,,
+"1204179910110854",2023-03-14,,2023-03-14,Set Bullet Points,,,,,,,,,Setup Gospiffy Form,,,
+"1204179910110858",2023-03-14,,2023-03-14,Set Code in Keap order Form HTML Area,,,,,,,,,Setup Gospiffy Form,,,
+"1205167727930816",2023-07-30,,2023-07-30,Commission Structure For Affiliates,KEAP PRODUCT SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179910817562",2023-03-14,,2023-04-18,Setup Product Membership Tag,MEMBERSHIP SITE SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179910817570",2023-03-14,,2023-04-18,Setup Product PAYF Tag ,MEMBERSHIP SITE SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179910817578",2023-03-14,,2023-04-18,Setup Membership Level,MEMBERSHIP SITE SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179910703422",2023-03-14,,2023-03-14,Set Product Access,,,,,,,,,Setup Membership Level,,,
+"1204179910703426",2023-03-14,,2023-03-14,Set PAYF Tag,,,,,,,,,Setup Membership Level,,,
+"1204179910817586",2023-03-14,,2023-04-18,Setup LearnDash Course,MEMBERSHIP SITE SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179910703432",2023-03-14,,2023-03-14,Set Course Settings,,,,,,,,,Setup LearnDash Course,,,
+"1204179910703436",2023-03-14,,2023-03-14,Set Tag IDs,,,,,,,,,Setup LearnDash Course,,,
+"1204179910703440",2023-03-14,,2023-03-14,Set To Open,,,,,,,,,Setup LearnDash Course,,,
+"1204179784957914",2023-03-14,,2023-03-14,Set To FreeForm,,,,,,,,,Setup LearnDash Course,,,
+"1204179784957918",2023-03-14,,2023-03-14,Set Memberium Protection,,,,,,,,,Setup LearnDash Course,,,
+"1204179784957922",2023-03-14,,2023-03-14,Set Protection for Course,,,,,,,,,Set Memberium Protection,,,
+"1204179784957926",2023-03-14,,2023-03-14,Set Protection for Course ID,,,,,,,,,Set Memberium Protection,,,
+"1204179784957930",2023-03-14,,2023-03-14,LearnDash memberium Integration,,,,,,,,,Set Memberium Protection,,,
+"1204179784957934",2023-03-14,,2023-03-14,Set Security For Each Lesson Page,,,,,,,,,Setup LearnDash Course,,,
+"1204179910996454",2023-03-14,,2023-04-18,Setup Lessons In Each Module,MEMBERSHIP SITE SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179787402659",2023-03-14,,2023-04-18,Setup Keap Purchase Sequence,KEAP CAMPAIGN SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179787402667",2023-03-14,,2023-04-18,Setup Billing Automation (Payment Plans ONLY),KEAP CAMPAIGN SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179787402675",2023-03-14,,2023-04-18,Setup Zoom Auto Registration,KEAP CAMPAIGN SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179751569041",2023-03-14,,2023-03-14,Setup PlusThis integration,,,,,,,,,Setup Zoom Auto Registration,,,
+"1204179751569045",2023-03-14,,2023-04-18,Setup Sales Page,SALES PAGE/FUNNEL SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179751569053",2023-03-14,,2023-04-18,Setup Upsell Pages,SALES PAGE/FUNNEL SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179751569061",2023-03-14,,2023-04-18,Setup Rocket One Click,SALES PAGE/FUNNEL SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,
+"1204179752410617",2023-03-14,,2023-04-18,Test Funnel,SALES PAGE/FUNNEL SETUP,,,,,,,PRODUCT CREATION TEMPLATE,,,,

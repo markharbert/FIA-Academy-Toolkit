@@ -755,8 +755,8 @@ export default function ProjectsPage() {
         const lines = text.trim().split(/\r?\n/);
         if (lines.length < 2) throw new Error("Empty");
         const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
-        const iName = headers.indexOf("task name");
-        if (iName === -1) throw new Error("No Task Name column");
+        const iName = headers.indexOf("task name") !== -1 ? headers.indexOf("task name") : headers.indexOf("name");
+        if (iName === -1) throw new Error("No Name column");
         const iParent = headers.indexOf("parent task");
         const iSection = headers.indexOf("section/column");
         let tasks = 0, subtasks = 0;
