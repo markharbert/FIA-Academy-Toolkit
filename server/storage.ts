@@ -26,12 +26,12 @@ import {
   type DmoEntry, type InsertDmoEntry, type DmoEntryData,
   type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
   type PostmasterConnection, type PostmasterDomain,
-  projects, projectTasks, taskComments, taskActivity,
+  projects, projectTasks, taskComments, taskActivity, taskAttachments,
   projectColumns,
   projectTemplates, projectTemplateTasks,
   type Project, type InsertProject, type ProjectWithCounts,
   type ProjectTask, type InsertProjectTask, type UpdateProjectTask,
-  type TaskComment, type TaskActivity,
+  type TaskComment, type TaskActivity, type TaskAttachment,
   type ProjectColumn, type InsertProjectColumn,
   type ProjectTemplate, type InsertProjectTemplate, type ProjectTemplateWithCounts,
   type ProjectTemplateTask, type InsertProjectTemplateTask, type UpdateProjectTemplateTask,
@@ -360,6 +360,12 @@ export interface IStorage {
   updateTaskComment(taskId: string, commentId: string, userId: string, body: string): Promise<TaskComment | undefined>;
   deleteTaskComment(taskId: string, commentId: string, userId: string): Promise<boolean>;
   getTaskActivity(taskId: string, userId: string): Promise<Array<TaskActivity & { authorName: string | null; authorEmail: string | null }>>;
+
+  // Task Attachments
+  getTaskAttachments(taskId: string, userId: string): Promise<TaskAttachment[]>;
+  getTaskAttachment(id: string, userId: string): Promise<TaskAttachment | undefined>;
+  createTaskAttachment(taskId: string, userId: string, data: { objectPath: string; filename: string; mimeType: string; size: number }): Promise<TaskAttachment>;
+  deleteTaskAttachment(id: string, userId: string): Promise<TaskAttachment | undefined>;
 
   // Project Board Columns
   getColumnsForProject(projectId: string, userId: string): Promise<ProjectColumn[]>;
@@ -2391,6 +2397,44 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(taskActivity.createdAt))
       .limit(200);
     return rows;
+  }
+
+  // ── Task Attachments ─────────────────────────────────────────────────────────
+
+  async getTaskAttachments(taskId: string, userId: string): Promise<TaskAttachment[]> {
+    const task = await this.getTask(taskId, userId);
+    if (!task) return [];
+    return db.select().from(taskAttachments)
+      .where(eq(taskAttachments.taskId, taskId))
+      .orderBy(asc(taskAttachments.createdAt));
+  }
+
+  async getTaskAttachment(id: string, userId: string): Promise<TaskAttachment | undefined> {
+    const [att] = await db.select().from(taskAttachments)
+      .where(and(eq(taskAttachments.id, id), eq(taskAttachments.userId, userId)));
+    return att ?? undefined;
+  }
+
+  async createTaskAttachment(
+    taskId: string,
+    userId: string,
+    data: { objectPath: string; filename: string; mimeType: string; size: number }
+  ): Promise<TaskAttachment> {
+    const [created] = await db.insert(taskAttachments).values({
+      taskId, userId,
+      objectPath: data.objectPath,
+      filename: data.filename,
+      mimeType: data.mimeType,
+      size: data.size,
+    }).returning();
+    return created;
+  }
+
+  async deleteTaskAttachment(id: string, userId: string): Promise<TaskAttachment | undefined> {
+    const [deleted] = await db.delete(taskAttachments)
+      .where(and(eq(taskAttachments.id, id), eq(taskAttachments.userId, userId)))
+      .returning();
+    return deleted ?? undefined;
   }
 
   // ── Project Board Columns ────────────────────────────────────────────────────

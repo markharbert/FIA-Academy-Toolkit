@@ -1570,3 +1570,18 @@ export type ProjectTemplateTask = typeof projectTemplateTasks.$inferSelect;
 export interface ProjectTemplateWithCounts extends ProjectTemplate {
   totalTasks: number;
 }
+
+// ── Task Attachments ────────────────────────────────────────────────────────
+
+export const taskAttachments = pgTable("task_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => projectTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  objectPath: text("object_path").notNull(),
+  filename: text("filename").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type TaskAttachment = typeof taskAttachments.$inferSelect;

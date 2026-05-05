@@ -6420,6 +6420,124 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ── Task Attachments ────────────────────────────────────────────────────────
+
+  const ATTACHMENT_MAX_SIZE = 25 * 1024 * 1024; // 25 MB
+  const ATTACHMENT_MAX_COUNT = 10;
+  const ATTACHMENT_ALLOWED_TYPES = new Set([
+    "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/plain", "text/csv",
+  ]);
+
+  app.post("/api/tasks/:id/attachments/request-url", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.id, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      const { filename, mimeType, size } = req.body ?? {};
+      if (!filename || !mimeType || !size) {
+        return res.status(400).json({ message: "filename, mimeType, and size are required" });
+      }
+      if (Number(size) > ATTACHMENT_MAX_SIZE) {
+        return res.status(400).json({ message: "File too large. Maximum is 25 MB." });
+      }
+      if (!ATTACHMENT_ALLOWED_TYPES.has(String(mimeType))) {
+        return res.status(400).json({ message: "File type not allowed." });
+      }
+      const existing = await storage.getTaskAttachments(req.params.id, req.session.userId!);
+      if (existing.length >= ATTACHMENT_MAX_COUNT) {
+        return res.status(400).json({ message: `Maximum ${ATTACHMENT_MAX_COUNT} attachments per task.` });
+      }
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      res.json({ uploadUrl: uploadURL, objectPath });
+    } catch (err: any) {
+      console.error("[attachments] request-url error:", err);
+      res.status(500).json({ message: "Failed to generate upload URL" });
+    }
+  });
+
+  app.post("/api/tasks/:id/attachments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.id, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      const { objectPath, filename, mimeType, size } = req.body ?? {};
+      if (!objectPath || !filename || !mimeType || !size) {
+        return res.status(400).json({ message: "objectPath, filename, mimeType, and size are required" });
+      }
+      if (!String(objectPath).startsWith("/objects/")) {
+        return res.status(400).json({ message: "Invalid objectPath" });
+      }
+      if (Number(size) > ATTACHMENT_MAX_SIZE) {
+        return res.status(400).json({ message: "File too large." });
+      }
+      if (!ATTACHMENT_ALLOWED_TYPES.has(String(mimeType))) {
+        return res.status(400).json({ message: "File type not allowed." });
+      }
+      const existing = await storage.getTaskAttachments(req.params.id, req.session.userId!);
+      if (existing.length >= ATTACHMENT_MAX_COUNT) {
+        return res.status(400).json({ message: `Maximum ${ATTACHMENT_MAX_COUNT} attachments per task.` });
+      }
+      const attachment = await storage.createTaskAttachment(req.params.id, req.session.userId!, {
+        objectPath: String(objectPath),
+        filename: String(filename).slice(0, 255),
+        mimeType: String(mimeType).slice(0, 100),
+        size: Number(size),
+      });
+      res.status(201).json(attachment);
+    } catch (err: any) {
+      console.error("[attachments] confirm error:", err);
+      res.status(500).json({ message: "Failed to save attachment" });
+    }
+  });
+
+  app.get("/api/tasks/:id/attachments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const task = await storage.getTask(req.params.id, req.session.userId!);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      const list = await storage.getTaskAttachments(req.params.id, req.session.userId!);
+      res.json(list);
+    } catch (err) {
+      console.error("[attachments] list error:", err);
+      res.status(500).json({ message: "Failed to load attachments" });
+    }
+  });
+
+  app.get("/api/attachments/:id/download", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const att = await storage.getTaskAttachment(req.params.id, req.session.userId!);
+      if (!att) return res.status(404).json({ message: "Not found" });
+      res.setHeader("Content-Disposition", `attachment; filename="${att.filename.replace(/"/g, '\\"')}"`);
+      const objectFile = await objectStorageService.getObjectEntityFile(att.objectPath);
+      await objectStorageService.downloadObject(objectFile, res, 0);
+    } catch (err) {
+      console.error("[attachments] download error:", err);
+      if (!res.headersSent) res.status(500).json({ message: "Failed to download" });
+    }
+  });
+
+  app.delete("/api/attachments/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteTaskAttachment(req.params.id, req.session.userId!);
+      if (!deleted) return res.status(404).json({ message: "Not found" });
+      try {
+        await objectStorageService.deleteObject(deleted.objectPath);
+      } catch (e) {
+        console.warn("[attachments] GCS delete failed (non-fatal):", e);
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[attachments] delete error:", err);
+      res.status(500).json({ message: "Failed to delete attachment" });
+    }
+  });
+
   app.get("/api/dashboard/projects", requireAuth, async (req: Request, res: Response) => {
     try {
       const summary = await storage.getDashboardProjectsSummary(req.session.userId!);

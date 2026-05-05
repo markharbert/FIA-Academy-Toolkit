@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Project, ProjectTask, ProjectLink } from "@shared/schema";
+import type { Project, ProjectTask, ProjectLink, TaskAttachment } from "@shared/schema";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -15,13 +15,21 @@ import { useToast } from "@/hooks/use-toast";
 import { RichTextEditor } from "./rich-text-editor";
 import { TaskCommentsActivity } from "./task-comments-activity";
 import { useAuth } from "@/lib/auth";
-import { CalendarIcon, Trash2, X, Plus, Link2, ExternalLink, ListChecks, Flag, CheckCircle2, ChevronLeft, CornerDownRight } from "lucide-react";
+import { CalendarIcon, Trash2, X, Plus, Link2, ExternalLink, ListChecks, Flag, CheckCircle2, ChevronLeft, CornerDownRight, Paperclip, Download, FileImage, FileText, Loader2 } from "lucide-react";
 
 const STATUS_OPTIONS = [
   { value: "todo", label: "To do" },
   { value: "in_progress", label: "In progress" },
   { value: "done", label: "Done" },
 ];
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const ATTACHMENT_MAX_COUNT = 10;
 
 const PRIORITY_OPTIONS: { value: string; label: string; dot: string; badge: string }[] = [
   { value: "none",   label: "None",   dot: "bg-muted-foreground/40",                 badge: "bg-white/15 text-white" },
@@ -93,6 +101,68 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(false);
   const [confirmDeleteSubtask, setConfirmDeleteSubtask] = useState<ProjectTask | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const attachInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: attachments = [] } = useQuery<TaskAttachment[]>({
+    queryKey: ["/api/tasks", task?.id, "attachments"],
+    queryFn: () => apiRequest("GET", `/api/tasks/${task!.id}/attachments`).then(r => r.json()),
+    enabled: !!task && open,
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/attachments/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks", task?.id, "attachments"] });
+      toast({ title: "Attachment removed" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to remove", description: err.message, variant: "destructive" }),
+  });
+
+  const handleAttachFile = async (file: File | null) => {
+    if (!file || !task) return;
+    const MAX = 25 * 1024 * 1024;
+    const ALLOWED = new Set([
+      "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "text/plain", "text/csv",
+    ]);
+    if (file.size > MAX) {
+      toast({ title: "File too large", description: "Maximum file size is 25 MB.", variant: "destructive" });
+      return;
+    }
+    if (!ALLOWED.has(file.type)) {
+      toast({ title: "File type not allowed", description: "Please upload images, PDFs, or Office documents.", variant: "destructive" });
+      return;
+    }
+    setUploadingAttachment(true);
+    try {
+      const urlRes = await apiRequest("POST", `/api/tasks/${task.id}/attachments/request-url`, {
+        filename: file.name, mimeType: file.type, size: file.size,
+      });
+      if (!urlRes.ok) { const e = await urlRes.json(); throw new Error(e.message || "Failed to get upload URL"); }
+      const { uploadUrl, objectPath } = await urlRes.json();
+      const putRes = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!putRes.ok) throw new Error("Upload to storage failed");
+      const confirmRes = await apiRequest("POST", `/api/tasks/${task.id}/attachments`, {
+        objectPath, filename: file.name, mimeType: file.type, size: file.size,
+      });
+      if (!confirmRes.ok) { const e = await confirmRes.json(); throw new Error(e.message || "Failed to confirm upload"); }
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks", task.id, "attachments"] });
+      toast({ title: "File attached" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingAttachment(false);
+      if (attachInputRef.current) attachInputRef.current.value = "";
+    }
+  };
 
   useEffect(() => {
     if (task && open) {
@@ -458,6 +528,75 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
             <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Notes</Label>
             <div className="mt-1.5">
               <RichTextEditor value={notes} onChange={saveNotes} testId="editor-task-notes" />
+            </div>
+          </div>
+
+          {/* Attachments */}
+          <div>
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+              <Paperclip className="h-3 w-3" /> Attachments
+              {attachments.length > 0 && (
+                <span className="font-normal normal-case tracking-normal">({attachments.length}/{ATTACHMENT_MAX_COUNT})</span>
+              )}
+            </Label>
+            <div className="mt-1.5 space-y-1.5">
+              {attachments.map(att => (
+                <div key={att.id} className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5" data-testid={`attachment-${att.id}`}>
+                  <div className="shrink-0 h-7 w-7 rounded bg-muted flex items-center justify-center">
+                    {att.mimeType.startsWith("image/")
+                      ? <FileImage className="h-3.5 w-3.5 text-muted-foreground" />
+                      : <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate leading-tight">{att.filename}</p>
+                    <p className="text-xs text-muted-foreground leading-tight">{formatFileSize(att.size)}</p>
+                  </div>
+                  <a
+                    href={`/api/attachments/${att.id}/download`}
+                    download={att.filename}
+                    className="h-6 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                    data-testid={`button-download-attachment-${att.id}`}
+                    aria-label="Download"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </a>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => deleteAttachmentMutation.mutate(att.id)}
+                    disabled={deleteAttachmentMutation.isPending}
+                    aria-label="Remove attachment"
+                    data-testid={`button-delete-attachment-${att.id}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+              {attachments.length < ATTACHMENT_MAX_COUNT && (
+                <>
+                  <input
+                    ref={attachInputRef}
+                    type="file"
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                    className="hidden"
+                    data-testid="input-attachment-file"
+                    onChange={e => { handleAttachFile(e.target.files?.[0] ?? null); }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-full text-xs"
+                    onClick={() => attachInputRef.current?.click()}
+                    disabled={uploadingAttachment}
+                    data-testid="button-add-attachment"
+                  >
+                    {uploadingAttachment
+                      ? <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Uploading…</>
+                      : <><Plus className="h-3 w-3 mr-1.5" /> Add attachment</>}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 

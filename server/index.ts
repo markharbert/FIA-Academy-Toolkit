@@ -365,6 +365,24 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] users timezone column migration complete");
 
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS task_attachments (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_id VARCHAR NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        object_path TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS task_attachments_task_idx
+        ON task_attachments(task_id, created_at ASC)
+    `);
+    console.log("[startup] task_attachments migration complete");
+
     // One-time backfill: copy account-level confirmed placement results to the
     // individual email record so old confirmed emails show their result permanently.
     // Matches by message_id when available, otherwise picks the most-recently-received
