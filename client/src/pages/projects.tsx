@@ -1115,7 +1115,7 @@ export default function ProjectsPage() {
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${topTab === "overview" ? "bg-white text-[hsl(245_60%_30%)]" : "bg-white/10 text-white/80 hover:bg-white/15"}`}
                 data-testid="tab-overview"
               >
-                <Briefcase className="h-3 w-3 inline mr-1" /> Overview · {active.length}
+                <Briefcase className="h-3 w-3 inline mr-1" /> All Projects · {active.length}
               </button>
               <button
                 onClick={() => setTopTabPersist("list")}
