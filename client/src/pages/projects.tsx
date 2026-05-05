@@ -674,7 +674,20 @@ export default function ProjectsPage() {
         let text = e.target?.result as string;
         // Strip UTF-8 BOM (U+FEFF) that some systems prepend to JSON exports
         if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-        const data = JSON.parse(text.trim());
+        const trimmed = text.trim();
+        // Detect HTML page — user likely saved the Trello board page instead of exporting JSON
+        if (trimmed.toLowerCase().startsWith("<!doctype") || trimmed.toLowerCase().startsWith("<html")) {
+          toast({
+            title: "That's a web page, not an export file",
+            description: "This looks like the Trello board page saved from your browser. To get the JSON export: open your board in Trello → click the board menu (⋯) at the top right → Share → Export as JSON → then download that file.",
+            variant: "destructive",
+          });
+          setImportFile(null);
+          setImportParsed(null);
+          setImportStats(null);
+          return;
+        }
+        const data = JSON.parse(trimmed);
         if (!data || typeof data !== "object" || Array.isArray(data)) {
           throw new Error("Not a JSON object");
         }
@@ -684,7 +697,7 @@ export default function ProjectsPage() {
         const activeCards = Array.isArray(data.cards) ? data.cards.filter((c: any) => !c.closed).length : 0;
         setImportStats({ lists: activeLists, cards: activeCards });
       } catch {
-        toast({ title: "Invalid file", description: "Could not read the file as JSON. Make sure you downloaded the board export from Trello (Board Menu → Share → Export as JSON).", variant: "destructive" });
+        toast({ title: "Invalid file", description: "Could not read the file as JSON. Make sure you use Trello's Export as JSON option (board menu ⋯ → Share → Export as JSON).", variant: "destructive" });
         setImportFile(null);
         setImportParsed(null);
         setImportStats(null);
@@ -1318,9 +1331,17 @@ export default function ProjectsPage() {
             <DialogTitle>Import from Trello</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Export your Trello board as JSON (Board → Show Menu → More → Print and Export → Export as JSON), then upload it here.
-            </p>
+            <div className="text-sm text-muted-foreground space-y-1.5">
+              <p>Follow these steps in Trello to get the export file:</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>Open your board in Trello</li>
+                <li>Click the <strong>⋯ board menu</strong> button (top right)</li>
+                <li>Click <strong>Share</strong></li>
+                <li>Click <strong>Export as JSON</strong></li>
+                <li>Download and upload that <code>.json</code> file here</li>
+              </ol>
+              <p className="text-xs text-amber-600 dark:text-amber-400">⚠️ Do not save the Trello page from your browser — use Trello's Export option.</p>
+            </div>
             <div>
               <Label>Trello export file</Label>
               <div className="mt-1.5">
