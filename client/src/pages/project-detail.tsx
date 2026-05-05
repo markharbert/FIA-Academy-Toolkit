@@ -15,7 +15,7 @@ import { KanbanBoard } from "@/components/projects/kanban-board";
 import {
   ChevronLeft, Plus, CheckCircle2, ChevronDown, ChevronRight,
   CalendarClock, Flag, Loader2, ListChecks, MoreHorizontal,
-  MoreVertical, Pencil, Trash2, FileText, LayoutList, LayoutGrid,
+  MoreVertical, Pencil, Trash2, FileText, LayoutList, LayoutGrid, X,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -87,6 +87,8 @@ export default function ProjectDetailPage() {
   const [quickAddInputs, setQuickAddInputs] = useState<Record<string, string>>({});
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState("");
+  const [dueDateOpen, setDueDateOpen] = useState(false);
+  const [dueDateInput, setDueDateInput] = useState("");
   const [view, setView] = useState<"list" | "board">(() => {
     try { return (localStorage.getItem(`project-view-${projectId}`) as "list" | "board") ?? "list"; }
     catch { return "list"; }
@@ -189,6 +191,25 @@ export default function ProjectDetailPage() {
     onError: (err: Error) => toast({ title: "Failed to save as template", description: err.message, variant: "destructive" }),
   });
 
+  const updateDueDateMutation = useMutation({
+    mutationFn: async (dueDate: string | null) => {
+      await apiRequest("PATCH", `/api/projects/${projectId}`, { dueDate });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      setDueDateOpen(false);
+    },
+    onError: (err: Error) => toast({ title: "Failed to update due date", description: err.message, variant: "destructive" }),
+  });
+
+  const openDueDatePicker = () => {
+    const iso = project?.dueDate ? new Date(project.dueDate).toISOString().slice(0, 10) : "";
+    setDueDateInput(iso);
+    setDueDateOpen(true);
+  };
+
   const createColumnMutation = useMutation({
     mutationFn: async (name: string) => {
       const res = await apiRequest("POST", `/api/projects/${projectId}/columns`, { name });
@@ -275,31 +296,88 @@ export default function ProjectDetailPage() {
               {project.description && (
                 <p className={`mt-1 text-sm ${hdr.txSubtle} max-w-2xl`}>{project.description}</p>
               )}
-              {project.dueDate && (() => {
-                const due = new Date(project.dueDate);
-                const diffDays = dayDiffInTz(due, tz);
-                let label: string;
-                if (diffDays < 0) label = `${-diffDays}d overdue`;
-                else if (diffDays === 0) label = "Due today";
-                else if (diffDays === 1) label = "Due tomorrow";
-                else if (diffDays <= 7) label = `Due in ${diffDays}d`;
-                else label = `Due ${formatInTz(due, tz, "MMM d, yyyy")}`;
-                const isOverdue = diffDays < 0;
-                const isSoon = diffDays >= 0 && diffDays <= 7;
-                return (
-                  <span
-                    className={`mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full ${
-                      isOverdue ? "bg-rose-500/30 text-white ring-1 ring-rose-200/40" :
-                      isSoon ? "bg-amber-400/25 text-white ring-1 ring-amber-200/40" :
-                      hdr.chip
-                    }`}
-                    data-testid="badge-project-detail-due"
-                    title={formatInTz(due, tz, "EEEE, MMMM d, yyyy")}
+              {/* Due date — clickable badge / add button + inline picker */}
+              <div className="relative mt-2">
+                {project.dueDate ? (() => {
+                  const due = new Date(project.dueDate);
+                  const diffDays = dayDiffInTz(due, tz);
+                  let label: string;
+                  if (diffDays < 0) label = `${-diffDays}d overdue`;
+                  else if (diffDays === 0) label = "Due today";
+                  else if (diffDays === 1) label = "Due tomorrow";
+                  else if (diffDays <= 7) label = `Due in ${diffDays}d`;
+                  else label = `Due ${formatInTz(due, tz, "MMM d, yyyy")}`;
+                  const isOverdue = diffDays < 0;
+                  const isSoon = diffDays >= 0 && diffDays <= 7;
+                  return (
+                    <button
+                      onClick={openDueDatePicker}
+                      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full transition-opacity hover:opacity-80 ${
+                        isOverdue ? "bg-rose-500/30 text-white ring-1 ring-rose-200/40" :
+                        isSoon ? "bg-amber-400/25 text-white ring-1 ring-amber-200/40" :
+                        hdr.chip
+                      }`}
+                      data-testid="badge-project-detail-due"
+                      title="Click to edit due date"
+                    >
+                      <CalendarClock className="h-3 w-3" /> {label}
+                    </button>
+                  );
+                })() : (
+                  <button
+                    onClick={openDueDatePicker}
+                    className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full transition-opacity hover:opacity-80 ${hdr.chip} opacity-70`}
+                    data-testid="button-add-project-due-date"
                   >
-                    <CalendarClock className="h-3 w-3" /> {label}
-                  </span>
-                );
-              })()}
+                    <CalendarClock className="h-3 w-3" /> Add due date
+                  </button>
+                )}
+
+                {/* Inline date picker panel */}
+                {dueDateOpen && (
+                  <div
+                    className="absolute left-0 top-8 z-50 bg-popover border border-border rounded-xl shadow-xl p-4 w-64 space-y-3"
+                    data-testid="panel-due-date-picker"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-foreground">Project due date</span>
+                      <button onClick={() => setDueDateOpen(false)} className="text-muted-foreground hover:text-foreground">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <input
+                      type="date"
+                      value={dueDateInput}
+                      onChange={e => setDueDateInput(e.target.value)}
+                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      data-testid="input-project-due-date"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 h-7 text-xs"
+                        onClick={() => updateDueDateMutation.mutate(dueDateInput || null)}
+                        disabled={updateDueDateMutation.isPending}
+                        data-testid="button-save-project-due-date"
+                      >
+                        {updateDueDateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                      </Button>
+                      {project.dueDate && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                          onClick={() => updateDueDateMutation.mutate(null)}
+                          disabled={updateDueDateMutation.isPending}
+                          data-testid="button-clear-project-due-date"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2 text-sm flex-wrap">
               <Badge className={hdr.chip}>
