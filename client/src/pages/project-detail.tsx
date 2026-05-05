@@ -608,9 +608,12 @@ export default function ProjectDetailPage() {
       <AlertDialog open={!!deleteColId} onOpenChange={o => !o && setDeleteColId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{colToDelete?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tasks in this section will be moved to the first remaining section. This cannot be undone.
+            <AlertDialogTitle>Permanently delete "{colToDelete?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>All tasks in this section will be moved to the first remaining section, then the section will be permanently deleted.</p>
+                <p className="font-semibold text-destructive">This is permanent. There is no way to get it back.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

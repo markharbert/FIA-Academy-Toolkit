@@ -686,11 +686,16 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
       <AlertDialog open={confirmDeleteTask} onOpenChange={setConfirmDeleteTask}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{task.title}</strong>
-              {subtasks.length > 0 && <> and its {subtasks.length} subtask{subtasks.length === 1 ? "" : "s"}</>}
-              {" "}will be permanently deleted. This cannot be undone.
+            <AlertDialogTitle>Permanently delete this task?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  <strong>{task.title}</strong>
+                  {subtasks.length > 0 && <> and its <strong>{subtasks.length} subtask{subtasks.length === 1 ? "" : "s"}</strong></>}
+                  {" "}will be permanently deleted, including all notes, comments, and attachments.
+                </p>
+                <p className="font-semibold text-destructive">This is permanent. There is no way to get it back.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -709,9 +714,12 @@ export function TaskDetailSheet({ project, task, parentTask, subtasks, open, onO
       <AlertDialog open={!!confirmDeleteSubtask} onOpenChange={(open) => !open && setConfirmDeleteSubtask(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this subtask?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{confirmDeleteSubtask?.title}</strong> will be permanently deleted. This cannot be undone.
+            <AlertDialogTitle>Permanently delete this subtask?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p><strong>{confirmDeleteSubtask?.title}</strong> will be permanently deleted.</p>
+                <p className="font-semibold text-destructive">This is permanent. There is no way to get it back.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1282,9 +1282,12 @@ export default function ProjectsPage() {
       <AlertDialog open={!!deleteTemplateTarget} onOpenChange={(open) => !open && setDeleteTemplateTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this template?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{deleteTemplateTarget?.name}</strong> and all of its template tasks will be permanently deleted. Projects already created from this template are unaffected.
+            <AlertDialogTitle>Permanently delete this template?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p><strong>{deleteTemplateTarget?.name}</strong> and all of its template tasks will be permanently deleted. Projects already created from this template are not affected.</p>
+                <p className="font-semibold text-destructive">This is permanent. There is no way to get it back.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1617,9 +1620,12 @@ export default function ProjectsPage() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{deleteTarget?.name}</strong> and all of its tasks will be permanently deleted. This cannot be undone.
+            <AlertDialogTitle>Permanently delete this project?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p><strong>{deleteTarget?.name}</strong> and everything inside it — all tasks, sections, comments, and attachments — will be permanently deleted.</p>
+                <p className="font-semibold text-destructive">This is permanent. There is no way to get it back.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

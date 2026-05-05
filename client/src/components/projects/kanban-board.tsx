@@ -539,9 +539,12 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
       <AlertDialog open={!!deleteColumnId} onOpenChange={o => !o && setDeleteColumnId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{colToDelete?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tasks in this column will be moved to the first remaining column. This cannot be undone.
+            <AlertDialogTitle>Permanently delete "{colToDelete?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>All tasks in this column will be moved to the first remaining column, then the column will be permanently deleted.</p>
+                <p className="font-semibold text-destructive">This is permanent. There is no way to get it back.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
