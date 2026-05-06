@@ -12,6 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
@@ -137,21 +138,6 @@ const ACTION_ICONS: Record<string, { Icon: typeof Activity; tone: string }> = {
   folder_deleted: { Icon: Trash2, tone: "text-red-500" },
 };
 
-function GradientCard({
-  children,
-  accentClass,
-}: {
-  children: React.ReactNode;
-  accentClass: string;
-}) {
-  return (
-    <Card className="relative overflow-hidden">
-      <div className={`absolute inset-x-0 top-0 h-1 ${accentClass}`} />
-      {children}
-    </Card>
-  );
-}
-
 export default function AccountPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -200,6 +186,25 @@ export default function AccountPage() {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; }
   }, []);
 
+  const updateTimezoneMutation = useMutation({
+    mutationFn: async (timezone: string) => {
+      const response = await apiRequest("PATCH", "/api/account", { timezone });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/account"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/streak"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
+      toast({ title: "Time zone saved", description: "Your dates and streaks now use this zone." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Couldn't save time zone", description: error.message, variant: "destructive" });
+    },
+  });
+
   const { data: notifPrefs, isLoading: isNotifLoading } = useQuery<{ allEnabled: boolean; preferences: NotificationPreferences }>({
     queryKey: ["/api/account/notification-preferences"],
     enabled: !!user,
@@ -224,10 +229,7 @@ export default function AccountPage() {
     saveNotifMutation.mutate({ allEnabled: value, preferences: notifPrefs.preferences });
   }
 
-  function togglePref<K extends keyof NotificationPreferences>(
-    key: K,
-    value: boolean,
-  ) {
+  function togglePref<K extends keyof NotificationPreferences>(key: K, value: boolean) {
     if (!notifPrefs) return;
     saveNotifMutation.mutate({
       allEnabled: notifPrefs.allEnabled,
@@ -237,25 +239,6 @@ export default function AccountPage() {
       },
     });
   }
-
-  const updateTimezoneMutation = useMutation({
-    mutationFn: async (timezone: string) => {
-      const response = await apiRequest("PATCH", "/api/account", { timezone });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/account"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dmo/today"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dmo/streak"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/projects"] });
-      toast({ title: "Time zone saved", description: "Your dates and streaks now use this zone." });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Couldn't save time zone", description: error.message, variant: "destructive" });
-    },
-  });
 
   const refreshGravatar = () => {
     setGravatarKey(Date.now());
@@ -283,202 +266,258 @@ export default function AccountPage() {
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8" data-testid="text-account-title">Account</h1>
+      {/* Page header with avatar */}
+      <div className="flex items-center gap-4 mb-8">
+        <Avatar className="h-14 w-14 shrink-0">
+          <AvatarImage
+            src={`${getGravatarUrl(account.gravatarHash)}&v=${gravatarKey}`}
+            alt={account.displayName || "Profile"}
+          />
+          <AvatarFallback>
+            <User className="h-6 w-6" />
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold leading-tight truncate" data-testid="text-account-title">
+            {account.displayName || account.firstName || "Account"}
+          </h1>
+          <p className="text-sm text-muted-foreground truncate" data-testid="text-profile-email">
+            {account.email || "No email on file"}
+          </p>
+        </div>
+        {isMember && (
+          <Badge
+            variant="secondary"
+            className="ml-auto shrink-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1"
+            data-testid="badge-membership-status"
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            Active member
+          </Badge>
+        )}
+      </div>
 
-      <div className="space-y-6">
-        {/* ─── Profile ───────────────────────────────────────── */}
-        <GradientCard accentClass="bg-gradient-to-r from-violet-500 via-fuchsia-500 to-rose-500">
-          <CardHeader className="flex flex-row items-start gap-4 pb-4">
-            <Avatar className="h-20 w-20">
-              <AvatarImage
-                src={`${getGravatarUrl(account.gravatarHash)}&v=${gravatarKey}`}
-                alt={account.displayName || "Profile"}
-              />
-              <AvatarFallback>
-                <User className="h-8 w-8" />
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <CardTitle data-testid="text-profile-name" className="truncate">
-                {account.displayName || account.firstName || "Your Profile"}
-              </CardTitle>
-              <CardDescription className="mt-1 truncate" data-testid="text-profile-email">
-                {account.email || "No email on file"}
-              </CardDescription>
-              <div className="flex items-center gap-2 mt-3 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={refreshGravatar}
-                  data-testid="button-refresh-gravatar"
-                >
-                  <RefreshCw className="h-3 w-3 mr-2" />
-                  Refresh image
-                </Button>
-                <a
-                  href="https://gravatar.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex"
-                >
-                  <Button variant="ghost" size="sm" data-testid="link-gravatar">
-                    Change on Gravatar
-                    <ExternalLink className="h-3 w-3 ml-2" />
-                  </Button>
-                </a>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Your avatar comes from gravatar.com — sign up there with this email to change it.
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Form {...profileForm}>
-              <form
-                onSubmit={profileForm.handleSubmit((data) => updateProfileMutation.mutate(data))}
-                className="space-y-4"
-              >
-                <FormField
-                  control={profileForm.control}
-                  name="displayName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Display name</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="How you want to be called"
-                          data-testid="input-display-name"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={profileForm.control}
-                    name="firstName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>First name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="John" data-testid="input-first-name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+      <Tabs defaultValue="profile">
+        <TabsList className="w-full grid grid-cols-5 mb-6" data-testid="tabs-account">
+          <TabsTrigger value="profile" data-testid="tab-profile">
+            <User className="h-3.5 w-3.5 mr-1.5" />
+            Profile
+          </TabsTrigger>
+          <TabsTrigger value="timezone" data-testid="tab-timezone">
+            <Globe2 className="h-3.5 w-3.5 mr-1.5" />
+            Time Zone
+          </TabsTrigger>
+          <TabsTrigger value="membership" data-testid="tab-membership">
+            <Crown className="h-3.5 w-3.5 mr-1.5" />
+            Membership
+          </TabsTrigger>
+          <TabsTrigger value="notifications" data-testid="tab-notifications">
+            <Bell className="h-3.5 w-3.5 mr-1.5" />
+            Emails
+          </TabsTrigger>
+          <TabsTrigger value="activity" data-testid="tab-activity">
+            <Activity className="h-3.5 w-3.5 mr-1.5" />
+            Activity
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ─── Profile Tab ─────────────────────────────────────── */}
+        <TabsContent value="profile">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile</CardTitle>
+              <CardDescription>Your name and avatar displayed across the toolkit.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Avatar section */}
+              <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/30 border border-border">
+                <Avatar className="h-16 w-16 shrink-0">
+                  <AvatarImage
+                    src={`${getGravatarUrl(account.gravatarHash)}&v=${gravatarKey}`}
+                    alt={account.displayName || "Profile"}
                   />
-                  <FormField
-                    control={profileForm.control}
-                    name="lastName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Last name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Doe" data-testid="input-last-name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <FormLabel>Email</FormLabel>
-                  <Input
-                    value={account.email || ""}
-                    readOnly
-                    disabled
-                    data-testid="input-email-readonly"
-                    className="bg-muted/40"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Tied to your Fearless Influencer Academy membership — contact support to change.
+                  <AvatarFallback>
+                    <User className="h-7 w-7" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium mb-1">Profile photo</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Powered by Gravatar — sign up at gravatar.com with your email to set a photo.
                   </p>
-                </div>
-                <Button
-                  type="submit"
-                  disabled={updateProfileMutation.isPending}
-                  data-testid="button-save-profile"
-                >
-                  {updateProfileMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save changes"
-                  )}
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-        </GradientCard>
-
-        {/* ─── Time Zone ─────────────────────────────────────── */}
-        <GradientCard accentClass="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe2 className="h-5 w-5 text-emerald-500" />
-              Time zone
-            </CardTitle>
-            <CardDescription>
-              Used for "today / this week" everywhere in the app — DMO streaks, project task due dates, dashboard.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="select-timezone-trigger">Your time zone</Label>
-              <Select
-                value={account.timezone || "America/New_York"}
-                onValueChange={(value) => updateTimezoneMutation.mutate(value)}
-                disabled={updateTimezoneMutation.isPending}
-              >
-                <SelectTrigger id="select-timezone-trigger" data-testid="select-timezone" className="w-full">
-                  <SelectValue placeholder="Select your time zone" />
-                </SelectTrigger>
-                <SelectContent className="max-h-80">
-                  {timezoneOptions.map((opt) => (
-                    <SelectItem
-                      key={opt.value}
-                      value={opt.value}
-                      data-testid={`option-timezone-${opt.value}`}
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={refreshGravatar}
+                      data-testid="button-refresh-gravatar"
                     >
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {browserTz && browserTz !== (account.timezone || "America/New_York") && (
-              <button
-                type="button"
-                className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
-                onClick={() => updateTimezoneMutation.mutate(browserTz)}
-                disabled={updateTimezoneMutation.isPending}
-                data-testid="button-use-browser-tz"
-              >
-                Use my browser time zone ({browserTz})
-              </button>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Currently set to <span className="font-mono" data-testid="text-current-timezone">{account.timezone || "America/New_York"}</span>.
-            </p>
-          </CardContent>
-        </GradientCard>
+                      <RefreshCw className="h-3 w-3 mr-2" />
+                      Refresh
+                    </Button>
+                    <a href="https://gravatar.com" target="_blank" rel="noopener noreferrer">
+                      <Button variant="ghost" size="sm" data-testid="link-gravatar">
+                        gravatar.com
+                        <ExternalLink className="h-3 w-3 ml-1.5" />
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              </div>
 
-        {/* ─── Membership ────────────────────────────────────── */}
-        <GradientCard accentClass="bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-amber-500" />
-              Membership
-            </CardTitle>
-            <CardDescription>Fearless Influencer Academy</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
+              {/* Profile form */}
+              <Form {...profileForm}>
+                <form
+                  onSubmit={profileForm.handleSubmit((data) => updateProfileMutation.mutate(data))}
+                  className="space-y-4"
+                >
+                  <FormField
+                    control={profileForm.control}
+                    name="displayName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Display name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="How you want to be called"
+                            data-testid="input-display-name"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={profileForm.control}
+                      name="firstName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>First name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="John" data-testid="input-first-name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={profileForm.control}
+                      name="lastName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Last name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Doe" data-testid="input-last-name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FormLabel>Email</FormLabel>
+                    <Input
+                      value={account.email || ""}
+                      readOnly
+                      disabled
+                      data-testid="input-email-readonly"
+                      className="bg-muted/40"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Tied to your Fearless Influencer Academy membership — contact support to change.
+                    </p>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={updateProfileMutation.isPending}
+                    data-testid="button-save-profile"
+                  >
+                    {updateProfileMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save changes"
+                    )}
+                  </Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── Time Zone Tab ───────────────────────────────────── */}
+        <TabsContent value="timezone">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe2 className="h-5 w-5 text-emerald-500" />
+                Time zone
+              </CardTitle>
+              <CardDescription>
+                Controls "today / this week" across the entire app — DMO streaks, task due dates, and dashboard.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="select-timezone-trigger">Your time zone</Label>
+                <Select
+                  value={account.timezone || "America/New_York"}
+                  onValueChange={(value) => updateTimezoneMutation.mutate(value)}
+                  disabled={updateTimezoneMutation.isPending}
+                >
+                  <SelectTrigger id="select-timezone-trigger" data-testid="select-timezone" className="w-full">
+                    <SelectValue placeholder="Select your time zone" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-80">
+                    {timezoneOptions.map((opt) => (
+                      <SelectItem
+                        key={opt.value}
+                        value={opt.value}
+                        data-testid={`option-timezone-${opt.value}`}
+                      >
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {browserTz && browserTz !== (account.timezone || "America/New_York") && (
+                <button
+                  type="button"
+                  className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+                  onClick={() => updateTimezoneMutation.mutate(browserTz)}
+                  disabled={updateTimezoneMutation.isPending}
+                  data-testid="button-use-browser-tz"
+                >
+                  Use my browser time zone ({browserTz})
+                </button>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Currently set to{" "}
+                <span className="font-mono" data-testid="text-current-timezone">
+                  {account.timezone || "America/New_York"}
+                </span>.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── Membership Tab ──────────────────────────────────── */}
+        <TabsContent value="membership">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Crown className="h-5 w-5 text-amber-500" />
+                Membership
+              </CardTitle>
+              <CardDescription>Fearless Influencer Academy</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3 flex-wrap">
                 {isMember ? (
                   <Badge
                     variant="secondary"
@@ -502,209 +541,199 @@ export default function AccountPage() {
                   Member since {formatDate(account.cfEnrolledAt || account.createdAt)}
                 </span>
               </div>
-            </div>
-            {!isMember && (
-              <p className="text-sm text-muted-foreground">
-                Your membership isn't active. If you believe this is a mistake, please contact support.
-              </p>
-            )}
-          </CardContent>
-        </GradientCard>
-
-        {/* ─── Notifications ────────────────────────────────── */}
-        <GradientCard accentClass="bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-violet-500" />
-              Email notifications
-            </CardTitle>
-            <CardDescription>
-              Choose which emails you receive from Academy Toolkit. All emails are sent to <span className="font-medium">{account.email}</span>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {isNotifLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : notifPrefs ? (
-              <>
-                {/* Master toggle */}
-                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    {notifPrefs.allEnabled ? (
-                      <Bell className="h-4 w-4 text-violet-500" />
-                    ) : (
-                      <BellOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <span className="text-sm font-semibold">
-                      {notifPrefs.allEnabled ? "All notifications on" : "All notifications off"}
-                    </span>
-                  </div>
-                  <Switch
-                    checked={notifPrefs.allEnabled}
-                    onCheckedChange={toggleAllEnabled}
-                    disabled={saveNotifMutation.isPending}
-                    data-testid="switch-all-notifications"
-                  />
+              {isMember ? (
+                <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 px-4 py-3">
+                  <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                    Your membership is active and in good standing. You have full access to all Academy Toolkit features.
+                  </p>
                 </div>
-
-                {/* Individual toggles — grouped */}
-                <div className={notifPrefs.allEnabled ? "" : "pointer-events-none opacity-40"}>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projects &amp; Tasks</p>
-                  <div className="space-y-3 rounded-lg border border-border divide-y divide-border">
-                    {([
-                      { key: "taskDueReminders", label: "Task due reminders", desc: "Sent when tasks are due within your lead time." },
-                      { key: "overdueAlerts", label: "Overdue task alerts", desc: "Daily reminder when you have tasks past their due date." },
-                      { key: "projectDueReminders", label: "Project due reminders", desc: "Alerts 3 days and 1 day before a project's due date." },
-                      { key: "weeklyProjectDigest", label: "Weekly project digest", desc: "A summary of open tasks and project status each week." },
-                    ] as const).map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{label}</p>
-                          <p className="text-xs text-muted-foreground">{desc}</p>
-                        </div>
-                        <Switch
-                          checked={notifPrefs.preferences[key]?.enabled ?? false}
-                          onCheckedChange={(v) => togglePref(key, v)}
-                          disabled={saveNotifMutation.isPending}
-                          data-testid={`switch-notif-${key}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Daily Method of Operation</p>
-                  <div className="space-y-3 rounded-lg border border-border divide-y divide-border">
-                    {([
-                      { key: "dmoStreakAtRisk", label: "Streak at-risk reminder", desc: "Evening nudge when you haven't logged your DMO yet today." },
-                      { key: "dmoMilestone", label: "Streak milestone celebrations", desc: "Email when you hit a streak milestone (7, 30, 60, 90 days…)." },
-                      { key: "weeklyDmoSummary", label: "Weekly DMO summary", desc: "Your weekly points, streak, and activity recap." },
-                    ] as const).map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{label}</p>
-                          <p className="text-xs text-muted-foreground">{desc}</p>
-                        </div>
-                        <Switch
-                          checked={notifPrefs.preferences[key]?.enabled ?? false}
-                          onCheckedChange={(v) => togglePref(key, v)}
-                          disabled={saveNotifMutation.isPending}
-                          data-testid={`switch-notif-${key}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Video Coaching</p>
-                  <div className="space-y-3 rounded-lg border border-border divide-y divide-border">
-                    {([
-                      { key: "videoScoringComplete", label: "Video scoring complete", desc: "Notified as soon as your video analysis finishes." },
-                      { key: "videoPracticeReminder", label: "Weekly practice reminder", desc: "Friday nudge if you haven't uploaded a practice video this week." },
-                    ] as const).map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{label}</p>
-                          <p className="text-xs text-muted-foreground">{desc}</p>
-                        </div>
-                        <Switch
-                          checked={notifPrefs.preferences[key]?.enabled ?? false}
-                          onCheckedChange={(v) => togglePref(key, v)}
-                          disabled={saveNotifMutation.isPending}
-                          data-testid={`switch-notif-${key}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email Health</p>
-                  <div className="space-y-3 rounded-lg border border-border divide-y divide-border">
-                    {([
-                      { key: "reputationDropAlert", label: "Sender reputation drop", desc: "Instant alert when your Google Postmaster reputation drops." },
-                      { key: "weeklyInboxReport", label: "Weekly inbox report", desc: "Inbox placement rate and spam rate summary for the week." },
-                    ] as const).map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{label}</p>
-                          <p className="text-xs text-muted-foreground">{desc}</p>
-                        </div>
-                        <Switch
-                          checked={notifPrefs.preferences[key]?.enabled ?? false}
-                          onCheckedChange={(v) => togglePref(key, v)}
-                          disabled={saveNotifMutation.isPending}
-                          data-testid={`switch-notif-${key}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
+              ) : (
+                <div className="rounded-lg bg-red-500/5 border border-red-500/20 px-4 py-3">
+                  <p className="text-sm text-red-700 dark:text-red-400">
+                    Your membership isn't active. If you believe this is a mistake, please contact support.
+                  </p>
                 </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground py-4 text-center">Could not load notification preferences.</p>
-            )}
-          </CardContent>
-        </GradientCard>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        {/* ─── Recent Activity ──────────────────────────────── */}
-        <GradientCard accentClass="bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-sky-500" />
-              Recent activity
-            </CardTitle>
-            <CardDescription>Your last 10 actions inside the toolkit</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isActivityLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : items.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center" data-testid="text-no-activity">
-                No recent activity yet — start by scoring your first video.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border" data-testid="list-activity">
-                {items.map((item) => {
-                  const meta = ACTION_ICONS[item.actionType] ?? {
-                    Icon: Activity,
-                    tone: "text-muted-foreground",
-                  };
-                  const Icon = meta.Icon;
-                  const device = shortDevice(item.userAgent);
-                  return (
-                    <li
-                      key={item.id}
-                      className="flex items-start gap-3 py-3"
-                      data-testid={`activity-row-${item.id}`}
-                    >
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                        <Icon className={`h-4 w-4 ${meta.tone}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate" data-testid={`activity-label-${item.id}`}>
-                          {item.actionLabel}
-                        </p>
-                        {(device || item.ip) && (
-                          <p className="text-xs text-muted-foreground truncate">
-                            {[device, item.ip].filter(Boolean).join(" · ")}
-                          </p>
-                        )}
-                      </div>
-                      <span
-                        className="text-xs text-muted-foreground shrink-0 whitespace-nowrap"
-                        data-testid={`activity-time-${item.id}`}
-                      >
-                        {formatRelative(item.createdAt)}
+        {/* ─── Notifications Tab ───────────────────────────────── */}
+        <TabsContent value="notifications">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-violet-500" />
+                Email notifications
+              </CardTitle>
+              <CardDescription>
+                Choose which emails you receive. All notifications go to{" "}
+                <span className="font-medium text-foreground">{account.email}</span>.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {isNotifLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : notifPrefs ? (
+                <>
+                  {/* Master toggle */}
+                  <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {notifPrefs.allEnabled ? (
+                        <Bell className="h-4 w-4 text-violet-500" />
+                      ) : (
+                        <BellOff className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="text-sm font-semibold">
+                        {notifPrefs.allEnabled ? "All notifications on" : "All notifications off"}
                       </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </GradientCard>
-      </div>
+                    </div>
+                    <Switch
+                      checked={notifPrefs.allEnabled}
+                      onCheckedChange={toggleAllEnabled}
+                      disabled={saveNotifMutation.isPending}
+                      data-testid="switch-all-notifications"
+                    />
+                  </div>
+
+                  {/* Individual toggles */}
+                  <div className={notifPrefs.allEnabled ? "" : "pointer-events-none opacity-40"}>
+                    {[
+                      {
+                        group: "Projects & Tasks",
+                        items: [
+                          { key: "taskDueReminders" as const, label: "Task due reminders", desc: "Sent when tasks are due within your lead time." },
+                          { key: "overdueAlerts" as const, label: "Overdue task alerts", desc: "Daily reminder when you have tasks past their due date." },
+                          { key: "projectDueReminders" as const, label: "Project due reminders", desc: "Alerts 3 days and 1 day before a project's due date." },
+                          { key: "weeklyProjectDigest" as const, label: "Weekly project digest", desc: "A summary of open tasks and project status each week." },
+                        ],
+                      },
+                      {
+                        group: "Daily Method of Operation",
+                        items: [
+                          { key: "dmoStreakAtRisk" as const, label: "Streak at-risk reminder", desc: "Evening nudge when you haven't logged your DMO yet today." },
+                          { key: "dmoMilestone" as const, label: "Streak milestone celebrations", desc: "Email when you hit a streak milestone (7, 30, 60, 90 days…)." },
+                          { key: "weeklyDmoSummary" as const, label: "Weekly DMO summary", desc: "Your weekly points, streak, and activity recap." },
+                        ],
+                      },
+                      {
+                        group: "Video Coaching",
+                        items: [
+                          { key: "videoScoringComplete" as const, label: "Video scoring complete", desc: "Notified as soon as your video analysis finishes." },
+                          { key: "videoPracticeReminder" as const, label: "Weekly practice reminder", desc: "Friday nudge if you haven't uploaded a practice video this week." },
+                        ],
+                      },
+                      {
+                        group: "Email Health",
+                        items: [
+                          { key: "reputationDropAlert" as const, label: "Sender reputation drop", desc: "Instant alert when your Google Postmaster reputation drops." },
+                          { key: "weeklyInboxReport" as const, label: "Weekly inbox report", desc: "Inbox placement rate and spam rate summary for the week." },
+                        ],
+                      },
+                    ].map(({ group, items }) => (
+                      <div key={group} className="mb-5">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {group}
+                        </p>
+                        <div className="rounded-lg border border-border divide-y divide-border">
+                          {items.map(({ key, label, desc }) => (
+                            <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">{label}</p>
+                                <p className="text-xs text-muted-foreground">{desc}</p>
+                              </div>
+                              <Switch
+                                checked={notifPrefs.preferences[key]?.enabled ?? false}
+                                onCheckedChange={(v) => togglePref(key, v)}
+                                disabled={saveNotifMutation.isPending}
+                                data-testid={`switch-notif-${key}`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  Could not load notification preferences.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── Activity Tab ────────────────────────────────────── */}
+        <TabsContent value="activity">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-sky-500" />
+                Recent activity
+              </CardTitle>
+              <CardDescription>Your last 10 actions inside the toolkit.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isActivityLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : items.length === 0 ? (
+                <p
+                  className="text-sm text-muted-foreground py-8 text-center"
+                  data-testid="text-no-activity"
+                >
+                  No recent activity yet — start by scoring your first video.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border" data-testid="list-activity">
+                  {items.map((item) => {
+                    const meta = ACTION_ICONS[item.actionType] ?? {
+                      Icon: Activity,
+                      tone: "text-muted-foreground",
+                    };
+                    const Icon = meta.Icon;
+                    const device = shortDevice(item.userAgent);
+                    return (
+                      <li
+                        key={item.id}
+                        className="flex items-start gap-3 py-3"
+                        data-testid={`activity-row-${item.id}`}
+                      >
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                          <Icon className={`h-4 w-4 ${meta.tone}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className="text-sm font-medium truncate"
+                            data-testid={`activity-label-${item.id}`}
+                          >
+                            {item.actionLabel}
+                          </p>
+                          {(device || item.ip) && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {[device, item.ip].filter(Boolean).join(" · ")}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className="text-xs text-muted-foreground shrink-0 whitespace-nowrap"
+                          data-testid={`activity-time-${item.id}`}
+                        >
+                          {formatRelative(item.createdAt)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
