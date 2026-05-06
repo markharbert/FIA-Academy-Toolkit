@@ -61,7 +61,7 @@ function wrap(title: string, body: string, resources: EmailResourceLink[] = []):
         <td style="background:#fff;padding:0 32px 24px;border-radius:0 0 12px 12px;border-top:1px solid #f1f5f9;">
           <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;">
             You're receiving this because you have notifications enabled in your Academy Toolkit account.<br/>
-            <a href="${BASE_URL}/account" style="color:#3f92cc;text-decoration:none;">Manage email notification preferences</a>
+            <a href="${BASE_URL}/account" target="_blank" rel="noopener noreferrer" style="color:#3f92cc;text-decoration:none;">Manage email notification preferences</a>
           </p>
           <p style="margin:10px 0 0;font-size:11px;color:#cbd5e1;line-height:1.6;">
             Uplevel Marketing LLC &mdash; PO Box 734, Tipp City OH 45371
@@ -76,7 +76,7 @@ function wrap(title: string, body: string, resources: EmailResourceLink[] = []):
 }
 
 function btn(label: string, href: string): string {
-  return `<a href="${href}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#da0010;color:#fff;font-size:14px;font-weight:600;border-radius:8px;text-decoration:none;">${label}</a>`;
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#da0010;color:#fff;font-size:14px;font-weight:600;border-radius:8px;text-decoration:none;">${label}</a>`;
 }
 
 function stat(label: string, value: string | number, color = "#3f92cc"): string {
