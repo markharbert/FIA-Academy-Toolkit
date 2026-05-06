@@ -1,9 +1,30 @@
 // ─── Base URL ─────────────────────────────────────────────────────────────────
 const BASE_URL = (process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com").replace(/\/$/, "");
 
+// ─── Resource link type ───────────────────────────────────────────────────────
+export interface EmailResourceLink {
+  description: string;
+  url: string;
+  anchorText: string;
+}
+
 // ─── Shared HTML wrapper ──────────────────────────────────────────────────────
 
-function wrap(title: string, body: string): string {
+function wrap(title: string, body: string, resources: EmailResourceLink[] = []): string {
+  const resourcesBlock = resources.length > 0 ? `
+      <!-- Recommended Resources -->
+      <tr>
+        <td style="background:#fff;padding:0 32px 24px;">
+          <p style="margin:0 0 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#94a3b8;border-top:1px solid #f1f5f9;padding-top:22px;">Recommended Resources</p>
+          ${resources.map(r =>
+            `<div style="margin-bottom:14px;">
+              <p style="margin:0 0 3px;font-size:14px;color:#334155;">${r.description}</p>
+              <a href="${r.url}" style="font-size:14px;color:#3f92cc;text-decoration:none;font-weight:500;">${r.anchorText}</a>
+            </div>`
+          ).join("")}
+        </td>
+      </tr>` : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,6 +58,7 @@ function wrap(title: string, body: string): string {
           ${body}
         </td>
       </tr>
+      ${resourcesBlock}
       <!-- Footer -->
       <tr>
         <td style="background:#fff;padding:0 32px 24px;border-radius:0 0 12px 12px;border-top:1px solid #f1f5f9;">
@@ -72,7 +94,7 @@ function stat(label: string, value: string | number, color = "#3f92cc"): string 
 export function taskDueReminderEmail(params: {
   firstName: string | null;
   tasks: Array<{ title: string; projectName: string; dueDate: string }>;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const count = params.tasks.length;
   const subject = count === 1
@@ -96,13 +118,13 @@ export function taskDueReminderEmail(params: {
 
   const text = `Hey ${name},\n\nYou have ${count} task(s) due soon:\n${params.tasks.map(t => `- ${t.title} (${t.projectName}) - Due ${t.dueDate}`).join("\n")}\n\nView at ${BASE_URL}/projects`;
 
-  return { subject, html: wrap(subject, body), text };
+  return { subject, html: wrap(subject, body, resources), text };
 }
 
 export function overdueAlertEmail(params: {
   firstName: string | null;
   tasks: Array<{ title: string; projectName: string; daysOverdue: number }>;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const count = params.tasks.length;
   const subject = `${count} overdue task${count > 1 ? "s" : ""} need your attention`;
@@ -122,7 +144,7 @@ export function overdueAlertEmail(params: {
 
   const text = `Hey ${name},\n\nOverdue tasks:\n${params.tasks.map(t => `- ${t.title} (${t.projectName}) — ${t.daysOverdue}d overdue`).join("\n")}\n\n${BASE_URL}/projects`;
 
-  return { subject, html: wrap(subject, body), text };
+  return { subject, html: wrap(subject, body, resources), text };
 }
 
 export function projectDueReminderEmail(params: {
@@ -130,7 +152,7 @@ export function projectDueReminderEmail(params: {
   projectName: string;
   daysLeft: number;
   dueDate: string;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = `Project "${params.projectName}" is due in ${params.daysLeft} day${params.daysLeft !== 1 ? "s" : ""}`;
   const body = `
@@ -140,7 +162,7 @@ export function projectDueReminderEmail(params: {
     </p>
     ${btn("View project", `${BASE_URL}/projects`)}`;
   const text = `Hey ${name},\n\nYour project "${params.projectName}" is due on ${params.dueDate} (${params.daysLeft} day(s) away).\n\n${BASE_URL}/projects`;
-  return { subject, html: wrap(subject, body), text };
+  return { subject, html: wrap(subject, body, resources), text };
 }
 
 export function weeklyProjectDigestEmail(params: {
@@ -149,7 +171,7 @@ export function weeklyProjectDigestEmail(params: {
   doneTasks: number;
   overdueCount: number;
   projects: Array<{ name: string; openTasks: number }>;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = "Your weekly project digest";
   const statsRow = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0;">
@@ -171,13 +193,13 @@ export function weeklyProjectDigestEmail(params: {
     ${statsRow}${projectList}
     ${btn("View all projects", `${BASE_URL}/projects`)}`;
   const text = `Hey ${name},\n\nWeekly project digest:\nOpen: ${params.openTasks} | Done: ${params.doneTasks} | Overdue: ${params.overdueCount}\n\n${BASE_URL}/projects`;
-  return { subject, html: wrap(subject, body), text };
+  return { subject, html: wrap(subject, body, resources), text };
 }
 
 export function dmoStreakAtRiskEmail(params: {
   firstName: string | null;
   streakCount: number;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = `🔥 Don't break your ${params.streakCount}-day streak!`;
   const body = `
@@ -188,13 +210,13 @@ export function dmoStreakAtRiskEmail(params: {
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">Log in before midnight to keep your streak alive!</p>
     ${btn("Log my DMO", `${BASE_URL}/dmo-tracker`)}`;
   const text = `Hey ${name},\n\nYou have a ${params.streakCount}-day streak and haven't logged today yet. Keep it going!\n\n${BASE_URL}/dmo-tracker`;
-  return { subject, html: wrap("Keep Your Streak Alive!", body), text };
+  return { subject, html: wrap("Keep Your Streak Alive!", body, resources), text };
 }
 
 export function dmoMilestoneEmail(params: {
   firstName: string | null;
   streakCount: number;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = `🎉 ${params.streakCount}-day streak milestone!`;
   const body = `
@@ -209,13 +231,13 @@ export function dmoMilestoneEmail(params: {
     </p>
     ${btn("View my DMO", `${BASE_URL}/dmo-tracker`)}`;
   const text = `Hey ${name},\n\nCongratulations on your ${params.streakCount}-day DMO streak! Keep it up!\n\n${BASE_URL}/dmo-tracker`;
-  return { subject, html: wrap(`${params.streakCount}-Day Streak Milestone!`, body), text };
+  return { subject, html: wrap(`${params.streakCount}-Day Streak Milestone!`, body, resources), text };
 }
 
 export function dmoStreakBrokenEmail(params: {
   firstName: string | null;
   streakCount: number;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = `Your ${params.streakCount}-day streak ended — start fresh today`;
   const body = `
@@ -226,7 +248,7 @@ export function dmoStreakBrokenEmail(params: {
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">Every pro has missed a day. What matters is getting back up.</p>
     ${btn("Start a new streak", `${BASE_URL}/dmo-tracker`)}`;
   const text = `Hey ${name},\n\nYour ${params.streakCount}-day streak ended. Start fresh today!\n\n${BASE_URL}/dmo-tracker`;
-  return { subject, html: wrap("Start Fresh Today", body), text };
+  return { subject, html: wrap("Start Fresh Today", body, resources), text };
 }
 
 export function weeklyDmoSummaryEmail(params: {
@@ -234,7 +256,7 @@ export function weeklyDmoSummaryEmail(params: {
   points: number;
   currentStreak: number;
   activitiesLogged: number;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = "Your weekly DMO summary";
   const statsRow = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0;">
@@ -247,7 +269,7 @@ export function weeklyDmoSummaryEmail(params: {
     ${statsRow}
     ${btn("View full DMO tracker", `${BASE_URL}/dmo-tracker`)}`;
   const text = `Hey ${name},\n\nWeekly DMO summary:\nPoints: ${params.points} | Streak: ${params.currentStreak} days | Days logged: ${params.activitiesLogged}\n\n${BASE_URL}/dmo-tracker`;
-  return { subject, html: wrap("Weekly DMO Summary", body), text };
+  return { subject, html: wrap("Weekly DMO Summary", body, resources), text };
 }
 
 export function videoScoringCompleteEmail(params: {
@@ -255,7 +277,7 @@ export function videoScoringCompleteEmail(params: {
   videoTitle: string;
   score: number | null;
   sessionId: string;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = `Your video "${params.videoTitle}" has been scored`;
   const scoreDisplay = params.score !== null
@@ -270,12 +292,12 @@ export function videoScoringCompleteEmail(params: {
     ${scoreDisplay}
     ${btn("View my results", `${BASE_URL}/video-score-upload/${params.sessionId}`)}`;
   const text = `Hey ${name},\n\nYour video "${params.videoTitle}" has been scored${params.score !== null ? ` — ${params.score}/100` : ""}.\n\nView results: ${BASE_URL}/video-score-upload/${params.sessionId}`;
-  return { subject, html: wrap("Your Video Results Are Ready", body), text };
+  return { subject, html: wrap("Your Video Results Are Ready", body, resources), text };
 }
 
 export function videoPracticeReminderEmail(params: {
   firstName: string | null;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = "This week's video practice is waiting for you";
   const body = `
@@ -285,7 +307,7 @@ export function videoPracticeReminderEmail(params: {
     </p>
     ${btn("Upload a video", `${BASE_URL}/video-score-upload`)}`;
   const text = `Hey ${name},\n\nYou haven't uploaded a practice video this week yet. Keep the habit going!\n\n${BASE_URL}/video-score-upload`;
-  return { subject, html: wrap("Time for Your Weekly Video Practice", body), text };
+  return { subject, html: wrap("Time for Your Weekly Video Practice", body, resources), text };
 }
 
 export function reputationDropAlertEmail(params: {
@@ -293,7 +315,7 @@ export function reputationDropAlertEmail(params: {
   domain: string;
   score: string;
   previousScore: string;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = `⚠️ Sender reputation drop detected for ${params.domain}`;
   const body = `
@@ -306,7 +328,7 @@ export function reputationDropAlertEmail(params: {
     </p>
     ${btn("Check sender reputation", `${BASE_URL}/email-tools/sender-reputation`)}`;
   const text = `Hey ${name},\n\nSender reputation drop for ${params.domain}: ${params.previousScore} → ${params.score}.\n\n${BASE_URL}/email-tools/sender-reputation`;
-  return { subject, html: wrap("Sender Reputation Drop Detected", body), text };
+  return { subject, html: wrap("Sender Reputation Drop Detected", body, resources), text };
 }
 
 export function weeklyInboxReportEmail(params: {
@@ -314,7 +336,7 @@ export function weeklyInboxReportEmail(params: {
   inboxRate: number;
   spamRate: number;
   emailsAnalyzed: number;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = "Your weekly inbox placement report";
   const statsRow = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0;">
@@ -327,13 +349,13 @@ export function weeklyInboxReportEmail(params: {
     ${statsRow}
     ${btn("View inbox analyzer", `${BASE_URL}/email-tools/inbox-analyzer`)}`;
   const text = `Hey ${name},\n\nWeekly inbox report:\nInbox: ${params.inboxRate}% | Spam: ${params.spamRate}% | Analyzed: ${params.emailsAnalyzed}\n\n${BASE_URL}/email-tools/inbox-analyzer`;
-  return { subject, html: wrap("Weekly Inbox Placement Report", body), text };
+  return { subject, html: wrap("Weekly Inbox Placement Report", body, resources), text };
 }
 
 export function welcomeEmail(params: {
   firstName: string | null;
   email: string;
-}): { subject: string; html: string; text: string } {
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const subject = "Welcome to Academy Toolkit!";
   const body = `
@@ -349,5 +371,5 @@ export function welcomeEmail(params: {
     </ul>
     ${btn("Go to your dashboard", `${BASE_URL}/dashboard`)}`;
   const text = `Hey ${name}, welcome to Academy Toolkit!\n\nYour account is active. Get started at ${BASE_URL}/dashboard`;
-  return { subject, html: wrap("Welcome to Academy Toolkit!", body), text };
+  return { subject, html: wrap("Welcome to Academy Toolkit!", body, resources), text };
 }

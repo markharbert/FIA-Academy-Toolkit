@@ -57,7 +57,7 @@ import {
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
   Key, Youtube, MessageSquare, XCircle, Trash2,
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
-  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send
+  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -636,6 +636,16 @@ function EmailTemplatesTab() {
   const [testEmail, setTestEmail] = useState("");
   const [sendTestPending, setSendTestPending] = useState(false);
 
+  // Main tab: templates or resources
+  const [mainTab, setMainTab] = useState<"templates" | "resources">("templates");
+
+  // Resource link dialog
+  const [resDialogOpen, setResDialogOpen] = useState(false);
+  const [editingRes, setEditingRes] = useState<{ id: string; description: string; url: string; anchorText: string; sortOrder: number; isActive: boolean } | null>(null);
+  const [resDesc, setResDesc] = useState("");
+  const [resUrl, setResUrl] = useState("");
+  const [resAnchor, setResAnchor] = useState("");
+
   const { data: overridesData } = useQuery<{ overrides: Array<{ templateKey: string; subjectOverride: string | null; updatedAt: string }> }>({
     queryKey: ["/api/admin/email-templates"],
   });
@@ -702,6 +712,60 @@ function EmailTemplatesTab() {
     },
     onError: () => toast({ title: "Failed to reset template", variant: "destructive" }),
   });
+
+  // Resource links queries + mutations
+  type ResLink = { id: string; description: string; url: string; anchorText: string; sortOrder: number; isActive: boolean };
+  const { data: resLinks = [], isLoading: resLoading } = useQuery<ResLink[]>({
+    queryKey: ["/api/admin/email-resources"],
+  });
+
+  const createResMutation = useMutation({
+    mutationFn: async (data: { description: string; url: string; anchorText: string; sortOrder: number }) => {
+      const res = await apiRequest("POST", "/api/admin/email-resources", data);
+      return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/email-resources"] }); setResDialogOpen(false); toast({ title: "Resource added" }); },
+    onError: () => toast({ title: "Failed to add resource", variant: "destructive" }),
+  });
+
+  const updateResMutation = useMutation({
+    mutationFn: async ({ id, ...data }: Partial<ResLink> & { id: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/email-resources/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/email-resources"] }); setResDialogOpen(false); toast({ title: "Resource updated" }); },
+    onError: () => toast({ title: "Failed to update resource", variant: "destructive" }),
+  });
+
+  const deleteResMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/email-resources/${id}`);
+      return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/email-resources"] }); toast({ title: "Resource deleted" }); },
+    onError: () => toast({ title: "Failed to delete resource", variant: "destructive" }),
+  });
+
+  function openAddRes() {
+    setEditingRes(null);
+    setResDesc(""); setResUrl(""); setResAnchor("");
+    setResDialogOpen(true);
+  }
+
+  function openEditRes(r: ResLink) {
+    setEditingRes(r);
+    setResDesc(r.description); setResUrl(r.url); setResAnchor(r.anchorText);
+    setResDialogOpen(true);
+  }
+
+  function saveRes() {
+    if (!resDesc.trim() || !resUrl.trim() || !resAnchor.trim()) return;
+    if (editingRes) {
+      updateResMutation.mutate({ id: editingRes.id, description: resDesc.trim(), url: resUrl.trim(), anchorText: resAnchor.trim() });
+    } else {
+      createResMutation.mutate({ description: resDesc.trim(), url: resUrl.trim(), anchorText: resAnchor.trim(), sortOrder: resLinks.length });
+    }
+  }
 
   const selectedTemplate = EMAIL_TEMPLATES.find((t) => t.key === selectedKey);
   const hasOverride = overrideKeys.has(selectedKey);
@@ -794,16 +858,182 @@ function EmailTemplatesTab() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Resource add/edit dialog ── */}
+      <Dialog open={resDialogOpen} onOpenChange={setResDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingRes ? "Edit resource link" : "Add resource link"}</DialogTitle>
+            <DialogDescription>
+              This link will appear in the "Recommended Resources" section of every notification email.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Description</label>
+              <Input
+                placeholder="e.g. Learn how to grow your practice fast"
+                value={resDesc}
+                onChange={(e) => setResDesc(e.target.value)}
+                data-testid="input-res-description"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">URL</label>
+              <Input
+                placeholder="https://example.com/resource"
+                value={resUrl}
+                onChange={(e) => setResUrl(e.target.value)}
+                data-testid="input-res-url"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Anchor text (link label)</label>
+              <Input
+                placeholder="e.g. Read the guide →"
+                value={resAnchor}
+                onChange={(e) => setResAnchor(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveRes()}
+                data-testid="input-res-anchor"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={saveRes}
+              disabled={!resDesc.trim() || !resUrl.trim() || !resAnchor.trim() || createResMutation.isPending || updateResMutation.isPending}
+              data-testid="button-save-resource"
+            >
+              {(createResMutation.isPending || updateResMutation.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingRes ? "Save changes" : "Add resource"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card className="overflow-hidden">
         <CardHeader className="border-b">
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5 text-violet-500" />
-            Email Templates
-          </CardTitle>
-          <CardDescription>
-            Preview and customise the notification emails sent to members. Edits take effect immediately for future sends.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-violet-500" />
+                Email Templates
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {mainTab === "templates"
+                  ? "Preview and customise the notification emails sent to members. Edits take effect immediately for future sends."
+                  : "Manage resource links that appear in every email below the main message."}
+              </CardDescription>
+            </div>
+            <div className="flex rounded-md border overflow-hidden text-xs shrink-0">
+              <button
+                onClick={() => setMainTab("templates")}
+                className={cn(
+                  "px-3 py-1.5 font-medium transition-colors",
+                  mainTab === "templates" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"
+                )}
+                data-testid="tab-email-templates"
+              >
+                Templates
+              </button>
+              <button
+                onClick={() => setMainTab("resources")}
+                className={cn(
+                  "px-3 py-1.5 font-medium transition-colors",
+                  mainTab === "resources" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted text-muted-foreground"
+                )}
+                data-testid="tab-email-resources"
+              >
+                Resources
+              </button>
+            </div>
+          </div>
         </CardHeader>
+
+        {mainTab === "resources" ? (
+          <div className="p-6" style={{ minHeight: "640px" }}>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-muted-foreground">
+                {resLinks.length === 0 ? "No resources yet." : `${resLinks.length} resource${resLinks.length !== 1 ? "s" : ""} — active ones appear in every email.`}
+              </p>
+              <Button size="sm" onClick={openAddRes} data-testid="button-add-resource">
+                <Plus className="h-4 w-4 mr-1.5" />
+                Add resource
+              </Button>
+            </div>
+
+            {resLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : resLinks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
+                <Link className="h-10 w-10 opacity-20" />
+                <p className="text-sm">Add resource links to include them in all notification emails.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {resLinks.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex items-start gap-3 p-3 rounded-lg border bg-card"
+                    data-testid={`resource-row-${r.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{r.description}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs text-primary font-medium truncate">{r.anchorText}</span>
+                        <span className="text-xs text-muted-foreground">·</span>
+                        <a
+                          href={r.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-muted-foreground hover:text-foreground truncate max-w-[260px]"
+                          data-testid={`link-res-url-${r.id}`}
+                        >
+                          {r.url}
+                        </a>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => updateResMutation.mutate({ id: r.id, isActive: !r.isActive })}
+                        className={cn(
+                          "text-[10px] font-bold px-2 py-1 rounded-full border transition-colors",
+                          r.isActive
+                            ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                            : "bg-muted text-muted-foreground border-border"
+                        )}
+                        data-testid={`toggle-res-active-${r.id}`}
+                      >
+                        {r.isActive ? "Active" : "Inactive"}
+                      </button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => openEditRes(r)}
+                        data-testid={`button-edit-res-${r.id}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => deleteResMutation.mutate(r.id)}
+                        disabled={deleteResMutation.isPending}
+                        data-testid={`button-delete-res-${r.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="flex" style={{ height: "680px" }}>
           {/* ── Sidebar ── */}
           <div className="w-52 shrink-0 border-r overflow-y-auto p-2 space-y-3">
@@ -1042,6 +1272,7 @@ function EmailTemplatesTab() {
             )}
           </div>
         </div>
+        )}
       </Card>
     </>
   );

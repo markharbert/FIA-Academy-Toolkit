@@ -467,6 +467,17 @@ async function runStartupMigrations() {
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS email_resource_links (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        description TEXT NOT NULL,
+        url TEXT NOT NULL,
+        anchor_text TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     console.log("[startup] notification tables migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);

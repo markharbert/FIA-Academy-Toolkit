@@ -1002,7 +1002,7 @@ export async function registerRoutes(
 
   // ─── Email Template Helpers ───────────────────────────────────────────────────
 
-  function buildDefaultTemplateMap(): Record<string, () => { subject: string; html: string; text: string }> {
+  function buildDefaultTemplateMap(resources: emailTemplates.EmailResourceLink[] = []): Record<string, () => { subject: string; html: string; text: string }> {
     const sample = { firstName: "Mark", email: "mark@example.com" };
     return {
       taskDueReminders: () => emailTemplates.taskDueReminderEmail({
@@ -1011,20 +1011,20 @@ export async function registerRoutes(
           { title: "Record intro video", projectName: "Video Project", dueDate: "Tomorrow" },
           { title: "Write email sequence", projectName: "Blog project", dueDate: "In 2 days" },
         ],
-      }),
+      }, resources),
       overdueAlerts: () => emailTemplates.overdueAlertEmail({
         firstName: sample.firstName,
         tasks: [
           { title: "Review analytics", projectName: "Blog project", daysOverdue: 3 },
           { title: "Update lead magnet", projectName: "Video Project", daysOverdue: 1 },
         ],
-      }),
+      }, resources),
       projectDueReminders: () => emailTemplates.projectDueReminderEmail({
         firstName: sample.firstName,
         projectName: "Video Project",
         daysLeft: 3,
         dueDate: "Friday, May 9",
-      }),
+      }, resources),
       weeklyProjectDigest: () => emailTemplates.weeklyProjectDigestEmail({
         firstName: sample.firstName,
         openTasks: 8,
@@ -1034,24 +1034,24 @@ export async function registerRoutes(
           { name: "Video Project", openTasks: 5 },
           { name: "Blog project", openTasks: 3 },
         ],
-      }),
-      dmoStreakAtRisk: () => emailTemplates.dmoStreakAtRiskEmail({ firstName: sample.firstName, streakCount: 14 }),
-      dmoMilestone: () => emailTemplates.dmoMilestoneEmail({ firstName: sample.firstName, streakCount: 30 }),
-      dmoBroken: () => emailTemplates.dmoStreakBrokenEmail({ firstName: sample.firstName, streakCount: 14 }),
+      }, resources),
+      dmoStreakAtRisk: () => emailTemplates.dmoStreakAtRiskEmail({ firstName: sample.firstName, streakCount: 14 }, resources),
+      dmoMilestone: () => emailTemplates.dmoMilestoneEmail({ firstName: sample.firstName, streakCount: 30 }, resources),
+      dmoBroken: () => emailTemplates.dmoStreakBrokenEmail({ firstName: sample.firstName, streakCount: 14 }, resources),
       weeklyDmoSummary: () => emailTemplates.weeklyDmoSummaryEmail({
         firstName: sample.firstName, points: 340, currentStreak: 21, activitiesLogged: 6,
-      }),
+      }, resources),
       videoScoringComplete: () => emailTemplates.videoScoringCompleteEmail({
         firstName: sample.firstName, videoTitle: "How I Got 10 Clients in 30 Days", score: 78, sessionId: "demo-session-id",
-      }),
-      videoPracticeReminder: () => emailTemplates.videoPracticeReminderEmail({ firstName: sample.firstName }),
+      }, resources),
+      videoPracticeReminder: () => emailTemplates.videoPracticeReminderEmail({ firstName: sample.firstName }, resources),
       reputationDropAlert: () => emailTemplates.reputationDropAlertEmail({
         firstName: sample.firstName, domain: "fearlessmarketinglab.com", score: "LOW", previousScore: "HIGH",
-      }),
+      }, resources),
       weeklyInboxReport: () => emailTemplates.weeklyInboxReportEmail({
         firstName: sample.firstName, inboxRate: 87, spamRate: 4, emailsAnalyzed: 23,
-      }),
-      welcome: () => emailTemplates.welcomeEmail({ firstName: sample.firstName, email: sample.email }),
+      }, resources),
+      welcome: () => emailTemplates.welcomeEmail({ firstName: sample.firstName, email: sample.email }, resources),
     };
   }
 
@@ -1072,7 +1072,8 @@ export async function registerRoutes(
         res.setHeader("Content-Type", "text/html");
         return res.send(rewriteForPreview(override.htmlOverride));
       }
-      const fn = buildDefaultTemplateMap()[template];
+      const resources = await storage.getActiveEmailResources();
+      const fn = buildDefaultTemplateMap(resources)[template];
       if (!fn) {
         const available = Object.keys(buildDefaultTemplateMap()).join("\n");
         return res.status(404).send(`<pre>Unknown template "${template}".\n\nAvailable:\n${available}</pre>`);
@@ -1098,7 +1099,8 @@ export async function registerRoutes(
   app.get("/api/admin/email-templates/:key/source", requireAdmin, async (req: Request, res: Response) => {
     const { key } = req.params;
     try {
-      const templateMap = buildDefaultTemplateMap();
+      const resources = await storage.getActiveEmailResources();
+      const templateMap = buildDefaultTemplateMap(resources);
       const fn = templateMap[key];
       if (!fn) return res.status(404).json({ message: "Unknown template" });
       const defaultRendered = fn();
@@ -1133,7 +1135,8 @@ export async function registerRoutes(
   app.post("/api/admin/email-templates/:key/send-test", requireAdmin, async (req: Request, res: Response) => {
     const { key } = req.params;
     try {
-      const templateMap = buildDefaultTemplateMap();
+      const resources = await storage.getActiveEmailResources();
+      const templateMap = buildDefaultTemplateMap(resources);
       const fn = templateMap[key];
       if (!fn) return res.status(404).json({ message: "Unknown template" });
 
@@ -1164,6 +1167,48 @@ export async function registerRoutes(
       res.json({ message: "Template reset to default" });
     } catch (err) {
       res.status(500).json({ message: "Failed to reset template" });
+    }
+  });
+
+  // Admin: Email resource links CRUD
+  app.get("/api/admin/email-resources", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const links = await storage.getAllEmailResources();
+      res.json(links);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to load email resources" });
+    }
+  });
+
+  app.post("/api/admin/email-resources", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { description, url, anchorText, sortOrder } = req.body;
+      if (!description || !url || !anchorText) return res.status(400).json({ message: "description, url, and anchorText are required" });
+      const result = await storage.createEmailResource({ description, url, anchorText, sortOrder: sortOrder ?? 0 });
+      res.status(201).json(result);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create email resource" });
+    }
+  });
+
+  app.patch("/api/admin/email-resources/:id", requireAdmin, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const { description, url, anchorText, sortOrder, isActive } = req.body;
+      await storage.updateEmailResource(id, { description, url, anchorText, sortOrder, isActive });
+      res.json({ message: "Updated" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update email resource" });
+    }
+  });
+
+  app.delete("/api/admin/email-resources/:id", requireAdmin, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      await storage.deleteEmailResource(id);
+      res.json({ message: "Deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete email resource" });
     }
   });
 

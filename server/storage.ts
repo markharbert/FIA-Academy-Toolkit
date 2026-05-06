@@ -438,6 +438,13 @@ export interface IStorage {
   upsertEmailTemplateOverride(key: string, subjectOverride: string | null, htmlOverride: string | null): Promise<void>;
   deleteEmailTemplateOverride(key: string): Promise<void>;
 
+  // Email resource links
+  getActiveEmailResources(): Promise<Array<{ id: string; description: string; url: string; anchorText: string; sortOrder: number }>>;
+  getAllEmailResources(): Promise<Array<{ id: string; description: string; url: string; anchorText: string; sortOrder: number; isActive: boolean }>>;
+  createEmailResource(data: { description: string; url: string; anchorText: string; sortOrder: number }): Promise<{ id: string }>;
+  updateEmailResource(id: string, data: Partial<{ description: string; url: string; anchorText: string; sortOrder: number; isActive: boolean }>): Promise<void>;
+  deleteEmailResource(id: string): Promise<void>;
+
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
   getCompetitorTracker(id: string, userId: string): Promise<CompetitorTracker | undefined>;
@@ -3704,6 +3711,46 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEmailTemplateOverride(key: string): Promise<void> {
     await pool.query('DELETE FROM email_template_overrides WHERE template_key = $1', [key]);
+  }
+
+  async getActiveEmailResources(): Promise<Array<{ id: string; description: string; url: string; anchorText: string; sortOrder: number }>> {
+    const result = await pool.query(
+      'SELECT id, description, url, anchor_text, sort_order FROM email_resource_links WHERE is_active = TRUE ORDER BY sort_order ASC, created_at ASC'
+    );
+    return result.rows.map((r: any) => ({ id: r.id, description: r.description, url: r.url, anchorText: r.anchor_text, sortOrder: r.sort_order }));
+  }
+
+  async getAllEmailResources(): Promise<Array<{ id: string; description: string; url: string; anchorText: string; sortOrder: number; isActive: boolean }>> {
+    const result = await pool.query(
+      'SELECT id, description, url, anchor_text, sort_order, is_active FROM email_resource_links ORDER BY sort_order ASC, created_at ASC'
+    );
+    return result.rows.map((r: any) => ({ id: r.id, description: r.description, url: r.url, anchorText: r.anchor_text, sortOrder: r.sort_order, isActive: r.is_active }));
+  }
+
+  async createEmailResource(data: { description: string; url: string; anchorText: string; sortOrder: number }): Promise<{ id: string }> {
+    const result = await pool.query(
+      'INSERT INTO email_resource_links (description, url, anchor_text, sort_order) VALUES ($1, $2, $3, $4) RETURNING id',
+      [data.description, data.url, data.anchorText, data.sortOrder]
+    );
+    return { id: result.rows[0].id };
+  }
+
+  async updateEmailResource(id: string, data: Partial<{ description: string; url: string; anchorText: string; sortOrder: number; isActive: boolean }>): Promise<void> {
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+    if (data.description !== undefined) { setClauses.push(`description = $${idx++}`); values.push(data.description); }
+    if (data.url !== undefined) { setClauses.push(`url = $${idx++}`); values.push(data.url); }
+    if (data.anchorText !== undefined) { setClauses.push(`anchor_text = $${idx++}`); values.push(data.anchorText); }
+    if (data.sortOrder !== undefined) { setClauses.push(`sort_order = $${idx++}`); values.push(data.sortOrder); }
+    if (data.isActive !== undefined) { setClauses.push(`is_active = $${idx++}`); values.push(data.isActive); }
+    if (setClauses.length === 0) return;
+    values.push(id);
+    await pool.query(`UPDATE email_resource_links SET ${setClauses.join(", ")} WHERE id = $${idx}`, values);
+  }
+
+  async deleteEmailResource(id: string): Promise<void> {
+    await pool.query('DELETE FROM email_resource_links WHERE id = $1', [id]);
   }
 
   async getDmoEntriesForWeek(userId: string, tz: string): Promise<import("@shared/schema").DmoEntry[]> {

@@ -31,7 +31,10 @@ function todayStringInTz(tz: string): string {
 
 async function tick() {
   try {
-    const users = await storage.getAllUsersForNotifications();
+    const [users, resources] = await Promise.all([
+      storage.getAllUsersForNotifications(),
+      storage.getActiveEmailResources(),
+    ]);
 
     await Promise.allSettled(users.map(async (user) => {
       if (!user.email) return;
@@ -71,7 +74,7 @@ async function tick() {
                   ? new Date(t.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                   : "",
               })),
-            });
+            }, resources);
             await sendEmail({ to: user.email, ...tpl });
             await storage.logNotification(user.id, "task_due_reminder", "batch");
           }
@@ -95,7 +98,7 @@ async function tick() {
                 projectName: (t as any).projectName ?? "Unknown project",
                 daysOverdue: Math.round((Date.now() - new Date(t.dueDate!).getTime()) / 86_400_000),
               })),
-            });
+            }, resources);
             await sendEmail({ to: user.email, ...tpl });
             await storage.logNotification(user.id, "overdue_alert", "batch");
           }
@@ -116,7 +119,7 @@ async function tick() {
               projectName: project.name,
               daysLeft,
               dueDate: new Date(project.dueDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-            });
+            }, resources);
             await sendEmail({ to: user.email, ...tpl });
             await storage.logNotification(user.id, "project_due_reminder", `${project.id}:${daysLeft}`);
           }
@@ -143,7 +146,7 @@ async function tick() {
                 name: pr.name,
                 openTasks: allTasks.filter(t => (t as any).projectId === pr.id && t.status !== "done" && !t.parentTaskId).length,
               })),
-            });
+            }, resources);
             await sendEmail({ to: user.email, ...tpl });
             await storage.logNotification(user.id, "weekly_project_digest", todayStr);
           }
@@ -159,7 +162,7 @@ async function tick() {
             const dmoResult = await storage.getDmoStreak(user.id);
             const todayEntry = await storage.getDmoEntry(user.id, todayStr);
             if (!todayEntry && dmoResult.current > 0) {
-              const tpl = dmoStreakAtRiskEmail({ firstName: user.firstName, streakCount: dmoResult.current });
+              const tpl = dmoStreakAtRiskEmail({ firstName: user.firstName, streakCount: dmoResult.current }, resources);
               await sendEmail({ to: user.email, ...tpl });
               await storage.logNotification(user.id, "dmo_streak_at_risk", todayStr);
             }
@@ -181,7 +184,7 @@ async function tick() {
               points: totalPoints,
               currentStreak: dmoResult.current,
               activitiesLogged: weekEntries.length,
-            });
+            }, resources);
             await sendEmail({ to: user.email, ...tpl });
             await storage.logNotification(user.id, "weekly_dmo_summary", todayStr);
           }
@@ -199,7 +202,7 @@ async function tick() {
             const sessions = await storage.getSessionsByUser(user.id);
             const hasUploadThisWeek = sessions.some(s => new Date(s.createdAt) >= weekStart);
             if (!hasUploadThisWeek) {
-              const tpl = videoPracticeReminderEmail({ firstName: user.firstName });
+              const tpl = videoPracticeReminderEmail({ firstName: user.firstName }, resources);
               await sendEmail({ to: user.email, ...tpl });
               await storage.logNotification(user.id, "video_practice_reminder", todayStr);
             }
