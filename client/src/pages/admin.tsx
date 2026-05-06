@@ -49,7 +49,7 @@ import {
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
   Key, Youtube, MessageSquare, XCircle, Trash2,
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
-  CircleAlert, RotateCw, UserCog, Activity, Workflow
+  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -615,6 +615,7 @@ function EmailTemplatesTab() {
   const [subjectDraft, setSubjectDraft] = useState("");
   const [htmlDraft, setHtmlDraft] = useState("");
   const [previewVersion, setPreviewVersion] = useState(0);
+  const [sendTestPending, setSendTestPending] = useState(false);
 
   const { data: overridesData } = useQuery<{ overrides: Array<{ templateKey: string; subjectOverride: string | null; updatedAt: string }> }>({
     queryKey: ["/api/admin/email-templates"],
@@ -666,6 +667,19 @@ function EmailTemplatesTab() {
 
   const selectedTemplate = EMAIL_TEMPLATES.find((t) => t.key === selectedKey);
   const hasOverride = overrideKeys.has(selectedKey);
+
+  async function sendTestEmail() {
+    setSendTestPending(true);
+    try {
+      const res = await apiRequest("POST", `/api/admin/email-templates/${selectedKey}/send-test`, {});
+      const data = await res.json();
+      toast({ title: "Test email sent", description: `Delivered to ${data.to}` });
+    } catch {
+      toast({ title: "Failed to send test email", variant: "destructive" });
+    } finally {
+      setSendTestPending(false);
+    }
+  }
 
   function selectTemplate(key: string) {
     setSelectedKey(key);
@@ -802,6 +816,21 @@ function EmailTemplatesTab() {
                   >
                     <RefreshCw className="h-3 w-3 mr-1.5" />
                     Refresh
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                    onClick={sendTestEmail}
+                    disabled={sendTestPending}
+                    data-testid="button-send-test-email"
+                  >
+                    {sendTestPending ? (
+                      <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3 mr-1.5" />
+                    )}
+                    Send test email
                   </Button>
                   <Button
                     size="sm"

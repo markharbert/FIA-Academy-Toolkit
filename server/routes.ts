@@ -1129,6 +1129,31 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Send a test email for a template to the logged-in admin's own address
+  app.post("/api/admin/email-templates/:key/send-test", requireAdmin, async (req: Request, res: Response) => {
+    const { key } = req.params;
+    try {
+      const templateMap = buildDefaultTemplateMap();
+      const fn = templateMap[key];
+      if (!fn) return res.status(404).json({ message: "Unknown template" });
+
+      const override = await storage.getEmailTemplateOverride(key);
+      const subject = override?.subjectOverride ?? fn().subject;
+      const html    = override?.htmlOverride   ?? fn().html;
+      const text    = fn().text;
+
+      const adminUser = await storage.getUser(req.session.userId!);
+      if (!adminUser?.email) return res.status(400).json({ message: "Admin user has no email address" });
+
+      const { sendEmail } = await import("./email-sendgrid");
+      await sendEmail({ to: adminUser.email, subject: `[TEST] ${subject}`, html, text });
+      res.json({ message: "Test email sent", to: adminUser.email });
+    } catch (err: any) {
+      console.error("[email-templates] send-test error:", err);
+      res.status(500).json({ message: err?.message ?? "Failed to send test email" });
+    }
+  });
+
   // Admin: Reset template to default
   app.delete("/api/admin/email-templates/:key", requireAdmin, async (req: Request, res: Response) => {
     const { key } = req.params;
