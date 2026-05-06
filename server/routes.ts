@@ -7205,6 +7205,31 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.get("/api/v1/projects/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const project = await storage.getProject(req.params.id, user.id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      res.json({ project });
+    } catch (err) {
+      console.error("[v1] project get error:", err);
+      res.status(500).json({ message: "Failed to load project" });
+    }
+  });
+
+  app.get("/api/v1/projects/:id/tasks", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const project = await storage.getProject(req.params.id, user.id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const tasks = await storage.getTasksForProject(req.params.id, user.id);
+      res.json({ tasks });
+    } catch (err) {
+      console.error("[v1] project tasks error:", err);
+      res.status(500).json({ message: "Failed to load tasks" });
+    }
+  });
+
   app.post("/api/v1/projects", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
@@ -7246,6 +7271,18 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   });
 
   // ─── v1 Tasks write access ────────────────────────────────────────────────
+
+  app.get("/api/v1/tasks/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const task = await storage.getTask(req.params.id, user.id);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      res.json({ task });
+    } catch (err) {
+      console.error("[v1] task get error:", err);
+      res.status(500).json({ message: "Failed to load task" });
+    }
+  });
 
   app.post("/api/v1/tasks", requireApiKey, async (req: Request, res: Response) => {
     try {
