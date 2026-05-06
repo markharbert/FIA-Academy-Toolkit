@@ -17,10 +17,7 @@ function wrap(title: string, body: string, resources: EmailResourceLink[] = []):
         <td style="background:#fff;padding:0 32px 24px;">
           <p style="margin:0 0 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#94a3b8;border-top:1px solid #f1f5f9;padding-top:22px;">Recommended Resources</p>
           ${resources.map(r =>
-            `<div style="margin-bottom:14px;">
-              <p style="margin:0 0 3px;font-size:14px;color:#334155;">${r.description}</p>
-              <a href="${r.url}" style="font-size:14px;color:#3f92cc;text-decoration:none;font-weight:500;">${r.anchorText}</a>
-            </div>`
+            `<div style="margin-bottom:12px;font-size:14px;color:#334155;line-height:1.5;">${r.description} <a href="${r.url}" style="color:#3f92cc;text-decoration:none;font-weight:500;white-space:nowrap;">${r.anchorText}</a></div>`
           ).join("")}
         </td>
       </tr>` : "";
