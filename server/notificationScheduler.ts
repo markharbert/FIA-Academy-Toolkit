@@ -1,0 +1,223 @@
+import { storage } from "./storage";
+import { sendEmail } from "./email-sendgrid";
+import {
+  taskDueReminderEmail,
+  overdueAlertEmail,
+  projectDueReminderEmail,
+  weeklyProjectDigestEmail,
+  dmoStreakAtRiskEmail,
+  weeklyDmoSummaryEmail,
+  videoPracticeReminderEmail,
+} from "./email-templates";
+import type { NotificationPreferences } from "@shared/schema";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function nowInTz(tz: string): Date {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+}
+
+function startOfTodayInTz(tz: string): Date {
+  const d = nowInTz(tz);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function todayStringInTz(tz: string): string {
+  return nowInTz(tz).toISOString().slice(0, 10);
+}
+
+// ── Tick ─────────────────────────────────────────────────────────────────────
+
+async function tick() {
+  try {
+    const users = await storage.getAllUsersForNotifications();
+
+    await Promise.allSettled(users.map(async (user) => {
+      if (!user.email) return;
+
+      const prefs = await storage.getNotificationPrefs(user.id);
+      if (!prefs.allEnabled) return;
+      const p: NotificationPreferences = prefs.preferences;
+
+      const tz = user.timezone || "America/New_York";
+      const nowLocal = nowInTz(tz);
+      const currentHour = nowLocal.getHours();
+      const currentDow = nowLocal.getDay(); // 0 = Sunday
+      const todayStr = todayStringInTz(tz);
+
+      // ── Task due reminders ────────────────────────────────────────────────
+      if (p.taskDueReminders?.enabled) {
+        const leadMs = (p.taskDueReminders.leadTimeDays ?? 1) * 86_400_000;
+        const windowEnd = Date.now() + leadMs + 86_400_000;
+        const windowStart = Date.now();
+
+        const allTasks = await storage.getAllOpenTasksForUser(user.id);
+        const dueSoon = allTasks.filter(t => {
+          if (!t.dueDate || t.status === "done") return false;
+          const d = new Date(t.dueDate).getTime();
+          return d >= windowStart && d <= windowEnd;
+        });
+
+        if (dueSoon.length > 0) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "task_due_reminder", "batch", startOfTodayInTz(tz));
+          if (!alreadySent) {
+            const tpl = taskDueReminderEmail({
+              firstName: user.firstName,
+              tasks: dueSoon.map(t => ({
+                title: t.title,
+                projectName: (t as any).projectName ?? "Unknown project",
+                dueDate: t.dueDate
+                  ? new Date(t.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                  : "",
+              })),
+            });
+            await sendEmail({ to: user.email, ...tpl });
+            await storage.logNotification(user.id, "task_due_reminder", "batch");
+          }
+        }
+      }
+
+      // ── Overdue alerts ────────────────────────────────────────────────────
+      if (p.overdueAlerts?.enabled) {
+        const allTasks = await storage.getAllOpenTasksForUser(user.id);
+        const overdue = allTasks.filter(t => {
+          if (!t.dueDate || t.status === "done" || t.parentTaskId) return false;
+          return new Date(t.dueDate) < new Date();
+        });
+        if (overdue.length > 0) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "overdue_alert", "batch", startOfTodayInTz(tz));
+          if (!alreadySent) {
+            const tpl = overdueAlertEmail({
+              firstName: user.firstName,
+              tasks: overdue.map(t => ({
+                title: t.title,
+                projectName: (t as any).projectName ?? "Unknown project",
+                daysOverdue: Math.round((Date.now() - new Date(t.dueDate!).getTime()) / 86_400_000),
+              })),
+            });
+            await sendEmail({ to: user.email, ...tpl });
+            await storage.logNotification(user.id, "overdue_alert", "batch");
+          }
+        }
+      }
+
+      // ── Project due date reminders ────────────────────────────────────────
+      if (p.projectDueReminders?.enabled) {
+        const projects = await storage.getProjectsForUser(user.id);
+        for (const project of projects) {
+          if (!project.dueDate || project.status !== "active") continue;
+          const daysLeft = Math.ceil((new Date(project.dueDate).getTime() - Date.now()) / 86_400_000);
+          if (daysLeft !== 3 && daysLeft !== 1) continue;
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "project_due_reminder", `${project.id}:${daysLeft}`, startOfTodayInTz(tz));
+          if (!alreadySent) {
+            const tpl = projectDueReminderEmail({
+              firstName: user.firstName,
+              projectName: project.name,
+              daysLeft,
+              dueDate: new Date(project.dueDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+            });
+            await sendEmail({ to: user.email, ...tpl });
+            await storage.logNotification(user.id, "project_due_reminder", `${project.id}:${daysLeft}`);
+          }
+        }
+      }
+
+      // ── Weekly project digest ─────────────────────────────────────────────
+      if (p.weeklyProjectDigest?.enabled) {
+        const { dayOfWeek = 1, hour = 8 } = p.weeklyProjectDigest;
+        if (currentDow === dayOfWeek && currentHour === hour) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "weekly_project_digest", todayStr, startOfTodayInTz(tz));
+          if (!alreadySent) {
+            const projects = await storage.getProjectsForUser(user.id);
+            const allTasks = await storage.getAllOpenTasksForUser(user.id);
+            const openTasks = allTasks.filter(t => t.status !== "done" && !t.parentTaskId).length;
+            const doneTasks = 0;
+            const overdueCount = allTasks.filter(t => t.status !== "done" && t.dueDate && new Date(t.dueDate) < new Date() && !t.parentTaskId).length;
+            const tpl = weeklyProjectDigestEmail({
+              firstName: user.firstName,
+              openTasks,
+              doneTasks,
+              overdueCount,
+              projects: projects.filter(pr => pr.status === "active").map(pr => ({
+                name: pr.name,
+                openTasks: allTasks.filter(t => (t as any).projectId === pr.id && t.status !== "done" && !t.parentTaskId).length,
+              })),
+            });
+            await sendEmail({ to: user.email, ...tpl });
+            await storage.logNotification(user.id, "weekly_project_digest", todayStr);
+          }
+        }
+      }
+
+      // ── DMO streak at risk ────────────────────────────────────────────────
+      if (p.dmoStreakAtRisk?.enabled) {
+        const atRiskHour = p.dmoStreakAtRisk.hour ?? 19;
+        if (currentHour === atRiskHour) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "dmo_streak_at_risk", todayStr, startOfTodayInTz(tz));
+          if (!alreadySent) {
+            const dmoResult = await storage.getDmoStreak(user.id);
+            const todayEntry = await storage.getDmoEntry(user.id, todayStr);
+            if (!todayEntry && dmoResult.current > 0) {
+              const tpl = dmoStreakAtRiskEmail({ firstName: user.firstName, streakCount: dmoResult.current });
+              await sendEmail({ to: user.email, ...tpl });
+              await storage.logNotification(user.id, "dmo_streak_at_risk", todayStr);
+            }
+          }
+        }
+      }
+
+      // ── Weekly DMO summary ────────────────────────────────────────────────
+      if (p.weeklyDmoSummary?.enabled) {
+        const { dayOfWeek = 0, hour = 18 } = p.weeklyDmoSummary;
+        if (currentDow === dayOfWeek && currentHour === hour) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "weekly_dmo_summary", todayStr, startOfTodayInTz(tz));
+          if (!alreadySent) {
+            const dmoResult = await storage.getDmoStreak(user.id);
+            const weekEntries = await storage.getDmoEntriesForWeek(user.id, tz);
+            const totalPoints = weekEntries.reduce((sum, e) => sum + (e.totalPoints ?? 0), 0);
+            const tpl = weeklyDmoSummaryEmail({
+              firstName: user.firstName,
+              points: totalPoints,
+              currentStreak: dmoResult.current,
+              activitiesLogged: weekEntries.length,
+            });
+            await sendEmail({ to: user.email, ...tpl });
+            await storage.logNotification(user.id, "weekly_dmo_summary", todayStr);
+          }
+        }
+      }
+
+      // ── Video practice reminder (Friday afternoon if no upload this week) ──
+      if (p.videoPracticeReminder?.enabled) {
+        if (currentDow === 5 && currentHour === 14) {
+          const alreadySent = await storage.hasNotificationBeenSent(user.id, "video_practice_reminder", todayStr, startOfTodayInTz(tz));
+          if (!alreadySent) {
+            const weekStart = new Date(nowLocal);
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+            weekStart.setHours(0, 0, 0, 0);
+            const sessions = await storage.getSessionsByUser(user.id);
+            const hasUploadThisWeek = sessions.some(s => new Date(s.createdAt) >= weekStart);
+            if (!hasUploadThisWeek) {
+              const tpl = videoPracticeReminderEmail({ firstName: user.firstName });
+              await sendEmail({ to: user.email, ...tpl });
+              await storage.logNotification(user.id, "video_practice_reminder", todayStr);
+            }
+          }
+        }
+      }
+    }));
+  } catch (err) {
+    console.error("[notificationScheduler] tick error:", err);
+  }
+}
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+
+export function startNotificationScheduler() {
+  console.log("[notificationScheduler] starting (runs every hour)");
+  setTimeout(() => {
+    tick();
+    setInterval(tick, 60 * 60 * 1000);
+  }, 60_000);
+}

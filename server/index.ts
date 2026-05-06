@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { bootstrapSuperAdmins } from "./storage";
+import { startNotificationScheduler } from "./notificationScheduler";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
@@ -436,6 +437,29 @@ async function runStartupMigrations() {
     if ((fixedObjects.rowCount ?? 0) > 0) {
       console.log(`[startup] fixed ${fixedObjects.rowCount} email_analyses row(s) where placement_results was a bare object`);
     }
+    // Notification system tables
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS notification_preferences (
+        user_id VARCHAR PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        all_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS notification_log (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        ref_id TEXT,
+        sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS notification_log_lookup_idx
+        ON notification_log(user_id, type, ref_id, sent_at DESC)
+    `);
+    console.log("[startup] notification tables migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }
@@ -479,6 +503,8 @@ async function runStartupMigrations() {
       
       // Bootstrap super admins from environment
       await bootstrapSuperAdmins();
+      // Start email notification scheduler
+      startNotificationScheduler();
     },
   );
 })();

@@ -424,6 +424,14 @@ export interface IStorage {
   upsertPostmasterDomain(userId: string, domainName: string, data: { latestReputation: string | null; latestSpamRate: number | null; latestSpfRatio: number | null; latestDkimRatio: number | null; latestDmarcRatio: number | null; latestEncryptionRatio: number | null; trafficStats: any[] }): Promise<void>;
   deletePostmasterDomains(userId: string): Promise<void>;
 
+  // Notifications
+  getNotificationPrefs(userId: string): Promise<{ allEnabled: boolean; preferences: import("@shared/schema").NotificationPreferences }>;
+  upsertNotificationPrefs(userId: string, allEnabled: boolean, preferences: import("@shared/schema").NotificationPreferences): Promise<void>;
+  hasNotificationBeenSent(userId: string, type: string, refId: string, since: Date): Promise<boolean>;
+  logNotification(userId: string, type: string, refId: string | null): Promise<void>;
+  getAllUsersForNotifications(): Promise<Array<{ id: string; email: string | null; displayName: string | null; firstName: string | null; timezone: string }>>;
+  getDmoEntriesForWeek(userId: string, tz: string): Promise<import("@shared/schema").DmoEntry[]>;
+
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
   getCompetitorTracker(id: string, userId: string): Promise<CompetitorTracker | undefined>;
@@ -3604,6 +3612,78 @@ export class DatabaseStorage implements IStorage {
       )
     `);
     return (result as any).rowCount || 0;
+  }
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+
+  async getNotificationPrefs(userId: string): Promise<{ allEnabled: boolean; preferences: import("@shared/schema").NotificationPreferences }> {
+    const result = await pool.query(
+      `SELECT all_enabled, preferences FROM notification_preferences WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    );
+    if (!result.rows.length) {
+      const { DEFAULT_NOTIFICATION_PREFERENCES } = await import("@shared/schema");
+      return { allEnabled: true, preferences: DEFAULT_NOTIFICATION_PREFERENCES };
+    }
+    const { DEFAULT_NOTIFICATION_PREFERENCES } = await import("@shared/schema");
+    return {
+      allEnabled: result.rows[0].all_enabled,
+      preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES, ...result.rows[0].preferences },
+    };
+  }
+
+  async upsertNotificationPrefs(userId: string, allEnabled: boolean, preferences: import("@shared/schema").NotificationPreferences): Promise<void> {
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, all_enabled, preferences, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (user_id) DO UPDATE
+       SET all_enabled = EXCLUDED.all_enabled, preferences = EXCLUDED.preferences, updated_at = NOW()`,
+      [userId, allEnabled, JSON.stringify(preferences)]
+    );
+  }
+
+  async hasNotificationBeenSent(userId: string, type: string, refId: string, since: Date): Promise<boolean> {
+    const result = await pool.query(
+      `SELECT 1 FROM notification_log WHERE user_id = $1 AND type = $2 AND ref_id = $3 AND sent_at >= $4 LIMIT 1`,
+      [userId, type, refId, since]
+    );
+    return result.rows.length > 0;
+  }
+
+  async logNotification(userId: string, type: string, refId: string | null): Promise<void> {
+    await pool.query(
+      `INSERT INTO notification_log (id, user_id, type, ref_id, sent_at) VALUES (gen_random_uuid(), $1, $2, $3, NOW())`,
+      [userId, type, refId]
+    );
+  }
+
+  async getAllUsersForNotifications(): Promise<Array<{ id: string; email: string | null; displayName: string | null; firstName: string | null; timezone: string }>> {
+    const result = await pool.query(
+      `SELECT id, email, display_name, first_name, timezone FROM users WHERE is_disabled = false OR is_disabled IS NULL ORDER BY created_at ASC`
+    );
+    return result.rows.map((r: any) => ({
+      id: r.id,
+      email: r.email,
+      displayName: r.display_name,
+      firstName: r.first_name,
+      timezone: r.timezone || "America/New_York",
+    }));
+  }
+
+  async getDmoEntriesForWeek(userId: string, tz: string): Promise<import("@shared/schema").DmoEntry[]> {
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startKey = startOfWeek.toISOString().slice(0, 10);
+    const endKey = now.toISOString().slice(0, 10);
+    return db.select().from(dmoEntries)
+      .where(and(
+        eq(dmoEntries.userId, userId),
+        sql`${dmoEntries.date} >= ${startKey}`,
+        sql`${dmoEntries.date} <= ${endKey}`
+      ))
+      .orderBy(desc(dmoEntries.date));
   }
 }
 

@@ -1969,6 +1969,34 @@ export async function registerRoutes(
     }
   });
 
+  // ── Notification Preferences ──────────────────────────────────────────────
+
+  app.get("/api/account/notification-preferences", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const prefs = await storage.getNotificationPrefs(userId);
+      res.json(prefs);
+    } catch (err) {
+      console.error("Get notification prefs error:", err);
+      res.status(500).json({ message: "Failed to get notification preferences" });
+    }
+  });
+
+  app.put("/api/account/notification-preferences", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { allEnabled, preferences } = req.body;
+      if (typeof allEnabled !== "boolean" || typeof preferences !== "object" || !preferences) {
+        return res.status(400).json({ message: "Invalid request body" });
+      }
+      await storage.upsertNotificationPrefs(userId, allEnabled, preferences);
+      res.json({ message: "Notification preferences saved" });
+    } catch (err) {
+      console.error("Update notification prefs error:", err);
+      res.status(500).json({ message: "Failed to save notification preferences" });
+    }
+  });
+
   // ===================
   // SESSION ROUTES
   // ===================

@@ -31,6 +31,7 @@ Preferred communication style: Simple, everyday language.
 - **Help Documentation**: In-app hub with illustrated guides for all features, including detailed DMO Tracker functionality and AI weekly/monthly summaries.
 - **Projects**: A lightweight Asana-style project manager with List and Board (Kanban) views. It supports custom columns, task management with subtasks, comments, activity tracking, and project templates for reusability. Projects also include Calendar view and an "All tasks" list across projects.
 - **Inbox Intel**: A competitor email intelligence tool that captures, parses, and stores incoming emails from unique seed addresses, providing detailed analytics on sending cadence, send volume, subject line stats, ESP fingerprinting, authentication audits, and content patterns.
+- **Email Notifications**: Full SendGrid email notification system with user-controlled preferences. 12 notification types across Projects/Tasks, DMO, Video Coaching, and Email Health categories. Preferences stored per-user in `notification_preferences` table. Hourly scheduler (`server/notificationScheduler.ts`) handles all scheduled sends with deduplication via `notification_log`. UI card on Account page with master on/off toggle and per-type switches. Sender: `notifications@fearlesspromo.com` via `SENDGRID_API_TOKEN`.
 
 ## External Dependencies
 
@@ -43,7 +44,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Email Services
 - **SMTP**: For sending password reset emails and system notifications.
-- **SendGrid**: For receiving inbound parsed emails for the Inbox Analyzer.
+- **SendGrid**: For receiving inbound parsed emails for the Inbox Analyzer, and for sending outbound notification emails (via `SENDGRID_API_TOKEN`).
 
 ### OAuth Providers
 - **Google OAuth**: For user authentication, Google Postmaster Tools integration, and Inbox Placement Monitoring (Gmail access).

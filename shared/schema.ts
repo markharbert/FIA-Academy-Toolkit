@@ -1585,3 +1585,35 @@ export const taskAttachments = pgTable("task_attachments", {
 });
 
 export type TaskAttachment = typeof taskAttachments.$inferSelect;
+
+// ── Notification Preferences ────────────────────────────────────────────────
+
+export interface NotificationPreferences {
+  taskDueReminders: { enabled: boolean; leadTimeDays: number };
+  overdueAlerts: { enabled: boolean };
+  projectDueReminders: { enabled: boolean };
+  weeklyProjectDigest: { enabled: boolean; dayOfWeek: number; hour: number };
+  dmoStreakAtRisk: { enabled: boolean; hour: number };
+  dmoMilestone: { enabled: boolean };
+  dmoBroken: { enabled: boolean };
+  weeklyDmoSummary: { enabled: boolean; dayOfWeek: number; hour: number };
+  videoScoringComplete: { enabled: boolean };
+  videoPracticeReminder: { enabled: boolean };
+  reputationDropAlert: { enabled: boolean };
+  weeklyInboxReport: { enabled: boolean; dayOfWeek: number; hour: number };
+}
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  taskDueReminders: { enabled: true, leadTimeDays: 1 },
+  overdueAlerts: { enabled: true },
+  projectDueReminders: { enabled: true },
+  weeklyProjectDigest: { enabled: false, dayOfWeek: 1, hour: 8 },
+  dmoStreakAtRisk: { enabled: true, hour: 19 },
+  dmoMilestone: { enabled: true },
+  dmoBroken: { enabled: false },
+  weeklyDmoSummary: { enabled: false, dayOfWeek: 0, hour: 18 },
+  videoScoringComplete: { enabled: true },
+  videoPracticeReminder: { enabled: false },
+  reputationDropAlert: { enabled: true },
+  weeklyInboxReport: { enabled: false, dayOfWeek: 1, hour: 8 },
+};

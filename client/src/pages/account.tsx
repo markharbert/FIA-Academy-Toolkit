@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
@@ -31,11 +32,14 @@ import {
   XCircle,
   Settings as SettingsIcon,
   Globe2,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { getCommonTimezones } from "@shared/datetime";
 import { useMemo } from "react";
+import type { NotificationPreferences } from "@shared/schema";
 
 interface AccountData {
   id: string;
@@ -195,6 +199,44 @@ export default function AccountPage() {
   const browserTz = useMemo(() => {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; }
   }, []);
+
+  const { data: notifPrefs, isLoading: isNotifLoading } = useQuery<{ allEnabled: boolean; preferences: NotificationPreferences }>({
+    queryKey: ["/api/account/notification-preferences"],
+    enabled: !!user,
+  });
+
+  const saveNotifMutation = useMutation({
+    mutationFn: async (payload: { allEnabled: boolean; preferences: NotificationPreferences }) => {
+      const res = await apiRequest("PUT", "/api/account/notification-preferences", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/account/notification-preferences"] });
+      toast({ title: "Notification preferences saved" });
+    },
+    onError: () => {
+      toast({ title: "Couldn't save preferences", variant: "destructive" });
+    },
+  });
+
+  function toggleAllEnabled(value: boolean) {
+    if (!notifPrefs) return;
+    saveNotifMutation.mutate({ allEnabled: value, preferences: notifPrefs.preferences });
+  }
+
+  function togglePref<K extends keyof NotificationPreferences>(
+    key: K,
+    value: boolean,
+  ) {
+    if (!notifPrefs) return;
+    saveNotifMutation.mutate({
+      allEnabled: notifPrefs.allEnabled,
+      preferences: {
+        ...notifPrefs.preferences,
+        [key]: { ...(notifPrefs.preferences[key] as any), enabled: value },
+      },
+    });
+  }
 
   const updateTimezoneMutation = useMutation({
     mutationFn: async (timezone: string) => {
@@ -465,6 +507,140 @@ export default function AccountPage() {
               <p className="text-sm text-muted-foreground">
                 Your membership isn't active. If you believe this is a mistake, please contact support.
               </p>
+            )}
+          </CardContent>
+        </GradientCard>
+
+        {/* ─── Notifications ────────────────────────────────── */}
+        <GradientCard accentClass="bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-violet-500" />
+              Email notifications
+            </CardTitle>
+            <CardDescription>
+              Choose which emails you receive from Academy Toolkit. All emails are sent to <span className="font-medium">{account.email}</span>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {isNotifLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : notifPrefs ? (
+              <>
+                {/* Master toggle */}
+                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    {notifPrefs.allEnabled ? (
+                      <Bell className="h-4 w-4 text-violet-500" />
+                    ) : (
+                      <BellOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span className="text-sm font-semibold">
+                      {notifPrefs.allEnabled ? "All notifications on" : "All notifications off"}
+                    </span>
+                  </div>
+                  <Switch
+                    checked={notifPrefs.allEnabled}
+                    onCheckedChange={toggleAllEnabled}
+                    disabled={saveNotifMutation.isPending}
+                    data-testid="switch-all-notifications"
+                  />
+                </div>
+
+                {/* Individual toggles — grouped */}
+                <div className={notifPrefs.allEnabled ? "" : "pointer-events-none opacity-40"}>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projects &amp; Tasks</p>
+                  <div className="space-y-3 rounded-lg border border-border divide-y divide-border">
+                    {([
+                      { key: "taskDueReminders", label: "Task due reminders", desc: "Sent when tasks are due within your lead time." },
+                      { key: "overdueAlerts", label: "Overdue task alerts", desc: "Daily reminder when you have tasks past their due date." },
+                      { key: "projectDueReminders", label: "Project due reminders", desc: "Alerts 3 days and 1 day before a project's due date." },
+                      { key: "weeklyProjectDigest", label: "Weekly project digest", desc: "A summary of open tasks and project status each week." },
+                    ] as const).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{label}</p>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs.preferences[key]?.enabled ?? false}
+                          onCheckedChange={(v) => togglePref(key, v)}
+                          disabled={saveNotifMutation.isPending}
+                          data-testid={`switch-notif-${key}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Daily Method of Operation</p>
+                  <div className="space-y-3 rounded-lg border border-border divide-y divide-border">
+                    {([
+                      { key: "dmoStreakAtRisk", label: "Streak at-risk reminder", desc: "Evening nudge when you haven't logged your DMO yet today." },
+                      { key: "dmoMilestone", label: "Streak milestone celebrations", desc: "Email when you hit a streak milestone (7, 30, 60, 90 days…)." },
+                      { key: "weeklyDmoSummary", label: "Weekly DMO summary", desc: "Your weekly points, streak, and activity recap." },
+                    ] as const).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{label}</p>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs.preferences[key]?.enabled ?? false}
+                          onCheckedChange={(v) => togglePref(key, v)}
+                          disabled={saveNotifMutation.isPending}
+                          data-testid={`switch-notif-${key}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Video Coaching</p>
+                  <div className="space-y-3 rounded-lg border border-border divide-y divide-border">
+                    {([
+                      { key: "videoScoringComplete", label: "Video scoring complete", desc: "Notified as soon as your video analysis finishes." },
+                      { key: "videoPracticeReminder", label: "Weekly practice reminder", desc: "Friday nudge if you haven't uploaded a practice video this week." },
+                    ] as const).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{label}</p>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs.preferences[key]?.enabled ?? false}
+                          onCheckedChange={(v) => togglePref(key, v)}
+                          disabled={saveNotifMutation.isPending}
+                          data-testid={`switch-notif-${key}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email Health</p>
+                  <div className="space-y-3 rounded-lg border border-border divide-y divide-border">
+                    {([
+                      { key: "reputationDropAlert", label: "Sender reputation drop", desc: "Instant alert when your Google Postmaster reputation drops." },
+                      { key: "weeklyInboxReport", label: "Weekly inbox report", desc: "Inbox placement rate and spam rate summary for the week." },
+                    ] as const).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between px-4 py-3 gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{label}</p>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
+                        <Switch
+                          checked={notifPrefs.preferences[key]?.enabled ?? false}
+                          onCheckedChange={(v) => togglePref(key, v)}
+                          disabled={saveNotifMutation.isPending}
+                          data-testid={`switch-notif-${key}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">Could not load notification preferences.</p>
             )}
           </CardContent>
         </GradientCard>
