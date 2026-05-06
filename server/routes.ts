@@ -7364,7 +7364,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.patch("/api/v1/tasks/:id", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
-      const parsed = updateProjectTaskSchema.safeParse(req.body);
+      // Normalize mobile-friendly status aliases to internal values
+      const body = { ...req.body };
+      if (body.status === "completed") body.status = "done";
+      if (body.status === "open") body.status = "todo";
+      const parsed = updateProjectTaskSchema.safeParse(body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
       const task = await storage.updateTask(req.params.id, user.id, parsed.data);
       if (!task) return res.status(404).json({ message: "Task not found" });
