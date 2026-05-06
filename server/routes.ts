@@ -19,6 +19,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
 import { logUserAction, ActionLabels } from "./userActionLog";
+import * as emailTemplates from "./email-templates";
 import { processSession, subscribeToSession } from "./processing";
 import { generateSessionPdfBuffer } from "./pdf";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
@@ -990,6 +991,98 @@ export async function registerRoutes(
       console.error("[CF SSO] Error:", err);
       res.status(500).json({ message: "Failed to generate SSO link" });
     }
+  });
+
+  // Admin: Email template preview
+  app.get("/api/admin/email-preview/:template", requireAdmin, (req: Request, res: Response) => {
+    const { template } = req.params;
+    const sampleUser = { firstName: "Mark", email: "mark@example.com" };
+
+    const previews: Record<string, () => { subject: string; html: string; text: string }> = {
+      taskDueReminders: () => emailTemplates.taskDueReminderEmail({
+        firstName: sampleUser.firstName,
+        tasks: [
+          { title: "Record intro video", projectName: "Video Project", dueDate: "Tomorrow" },
+          { title: "Write email sequence", projectName: "Blog project", dueDate: "In 2 days" },
+        ],
+      }),
+      overdueAlerts: () => emailTemplates.overdueAlertEmail({
+        firstName: sampleUser.firstName,
+        tasks: [
+          { title: "Review analytics", projectName: "Blog project", daysOverdue: 3 },
+          { title: "Update lead magnet", projectName: "Video Project", daysOverdue: 1 },
+        ],
+      }),
+      projectDueReminders: () => emailTemplates.projectDueReminderEmail({
+        firstName: sampleUser.firstName,
+        projectName: "Video Project",
+        daysLeft: 3,
+        dueDate: "Friday, May 9",
+      }),
+      weeklyProjectDigest: () => emailTemplates.weeklyProjectDigestEmail({
+        firstName: sampleUser.firstName,
+        openTasks: 8,
+        doneTasks: 5,
+        overdueCount: 2,
+        projects: [
+          { name: "Video Project", openTasks: 5 },
+          { name: "Blog project", openTasks: 3 },
+        ],
+      }),
+      dmoStreakAtRisk: () => emailTemplates.dmoStreakAtRiskEmail({
+        firstName: sampleUser.firstName,
+        streakCount: 14,
+      }),
+      dmoMilestone: () => emailTemplates.dmoMilestoneEmail({
+        firstName: sampleUser.firstName,
+        streakCount: 30,
+      }),
+      dmoBroken: () => emailTemplates.dmoStreakBrokenEmail({
+        firstName: sampleUser.firstName,
+        streakCount: 14,
+      }),
+      weeklyDmoSummary: () => emailTemplates.weeklyDmoSummaryEmail({
+        firstName: sampleUser.firstName,
+        points: 340,
+        currentStreak: 21,
+        activitiesLogged: 6,
+      }),
+      videoScoringComplete: () => emailTemplates.videoScoringCompleteEmail({
+        firstName: sampleUser.firstName,
+        videoTitle: "How I Got 10 Clients in 30 Days",
+        score: 78,
+        sessionId: "demo-session-id",
+      }),
+      videoPracticeReminder: () => emailTemplates.videoPracticeReminderEmail({
+        firstName: sampleUser.firstName,
+      }),
+      reputationDropAlert: () => emailTemplates.reputationDropAlertEmail({
+        firstName: sampleUser.firstName,
+        domain: "fearlessmarketinglab.com",
+        score: "LOW",
+        previousScore: "HIGH",
+      }),
+      weeklyInboxReport: () => emailTemplates.weeklyInboxReportEmail({
+        firstName: sampleUser.firstName,
+        inboxRate: 87,
+        spamRate: 4,
+        emailsAnalyzed: 23,
+      }),
+      welcome: () => emailTemplates.welcomeEmail({
+        firstName: sampleUser.firstName,
+        email: sampleUser.email,
+      }),
+    };
+
+    const fn = previews[template];
+    if (!fn) {
+      const available = Object.keys(previews).join(", ");
+      return res.status(404).send(`<pre>Unknown template "${template}".\n\nAvailable:\n${available.split(", ").join("\n")}</pre>`);
+    }
+
+    const { html } = fn();
+    res.setHeader("Content-Type", "text/html");
+    res.send(html);
   });
 
   // Admin: CF integration status & config
