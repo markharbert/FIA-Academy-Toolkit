@@ -42,7 +42,7 @@ function wrap(title: string, body: string): string {
 }
 
 function btn(label: string, href: string): string {
-  return `<a href="${href}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#3f92cc;color:#fff;font-size:14px;font-weight:600;border-radius:8px;text-decoration:none;">${label}</a>`;
+  return `<a href="${href}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#da0010;color:#fff;font-size:14px;font-weight:600;border-radius:8px;text-decoration:none;">${label}</a>`;
 }
 
 function stat(label: string, value: string | number, color = "#3f92cc"): string {
@@ -186,7 +186,7 @@ export function dmoMilestoneEmail(params: {
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
     <div style="text-align:center;padding:24px 0;">
       <p style="margin:0;font-size:64px;">🔥</p>
-      <p style="margin:8px 0 0;font-size:36px;font-weight:800;color:#7c3aed;">${params.streakCount} days</p>
+      <p style="margin:8px 0 0;font-size:36px;font-weight:800;color:#3f92cc;">${params.streakCount} days</p>
       <p style="margin:4px 0 0;font-size:15px;color:#64748b;">DMO streak milestone</p>
     </div>
     <p style="margin:16px 0 20px;font-size:15px;color:#334155;text-align:center;">
@@ -223,7 +223,7 @@ export function weeklyDmoSummaryEmail(params: {
   const name = params.firstName || "there";
   const subject = "Your weekly DMO summary";
   const statsRow = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0;">
-    ${stat("Points", params.points, "#7c3aed")}
+    ${stat("Points", params.points, "#3f92cc")}
     ${stat("Day streak", params.currentStreak, "#f59e0b")}
     ${stat("Days logged", params.activitiesLogged, "#0ea5e9")}
   </div>`;
@@ -245,7 +245,7 @@ export function videoScoringCompleteEmail(params: {
   const subject = `Your video "${params.videoTitle}" has been scored`;
   const scoreDisplay = params.score !== null
     ? `<div style="text-align:center;padding:20px 0;">
-        <p style="margin:0;font-size:56px;font-weight:800;color:#7c3aed;">${params.score}<span style="font-size:24px;color:#94a3b8;">/100</span></p>
+        <p style="margin:0;font-size:56px;font-weight:800;color:#3f92cc;">${params.score}<span style="font-size:24px;color:#94a3b8;">/100</span></p>
         <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Video Formula Score</p>
       </div>`
     : `<p style="margin:16px 0;font-size:15px;color:#334155;">Your transcript has been processed and feedback is ready.</p>`;

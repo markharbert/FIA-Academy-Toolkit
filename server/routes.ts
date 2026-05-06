@@ -1052,6 +1052,8 @@ export async function registerRoutes(
   app.get("/api/admin/email-preview/:template", requireAdmin, async (req: Request, res: Response) => {
     const { template } = req.params;
     try {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
       const override = await storage.getEmailTemplateOverride(template);
       if (override?.htmlOverride) {
         res.setHeader("Content-Type", "text/html");
