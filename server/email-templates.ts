@@ -14,8 +14,8 @@ function wrap(title: string, body: string): string {
     <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
       <!-- Header -->
       <tr>
-        <td style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 60%,#4c1d95 100%);padding:28px 32px;border-radius:12px 12px 0 0;">
-          <p style="margin:0;color:#c4b5fd;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;">Fearless Marketing Lab</p>
+        <td style="background:linear-gradient(135deg,#06092a 0%,#0c1a4d 60%,#132660 100%);padding:28px 32px;border-radius:12px 12px 0 0;">
+          <p style="margin:0;color:#7ab5d9;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;">Fearless Marketing Lab</p>
           <p style="margin:6px 0 0;color:#fff;font-size:20px;font-weight:700;line-height:1.3;">${title}</p>
         </td>
       </tr>
@@ -30,7 +30,7 @@ function wrap(title: string, body: string): string {
         <td style="background:#fff;padding:0 32px 24px;border-radius:0 0 12px 12px;border-top:1px solid #f1f5f9;">
           <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;">
             You're receiving this because you have notifications enabled in your Academy Toolkit account.<br/>
-            <a href="https://fearlessmarketinglab.com/account" style="color:#7c3aed;text-decoration:none;">Manage notification preferences</a>
+            <a href="https://fearlessmarketinglab.com/account" style="color:#3f92cc;text-decoration:none;">Manage notification preferences</a>
           </p>
         </td>
       </tr>
@@ -42,10 +42,10 @@ function wrap(title: string, body: string): string {
 }
 
 function btn(label: string, href: string): string {
-  return `<a href="${href}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#7c3aed;color:#fff;font-size:14px;font-weight:600;border-radius:8px;text-decoration:none;">${label}</a>`;
+  return `<a href="${href}" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#3f92cc;color:#fff;font-size:14px;font-weight:600;border-radius:8px;text-decoration:none;">${label}</a>`;
 }
 
-function stat(label: string, value: string | number, color = "#7c3aed"): string {
+function stat(label: string, value: string | number, color = "#3f92cc"): string {
   return `<div style="flex:1;background:#f8fafc;border-radius:8px;padding:16px;text-align:center;min-width:100px;">
     <p style="margin:0;font-size:28px;font-weight:800;color:${color};">${value}</p>
     <p style="margin:4px 0 0;font-size:12px;color:#64748b;">${label}</p>
