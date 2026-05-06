@@ -155,6 +155,20 @@ export default function ProjectDetailPage() {
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       await apiRequest("PATCH", `/api/tasks/${id}`, { status });
     },
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
+      const prev = queryClient.getQueryData<ProjectTask[]>(["/api/projects", projectId, "tasks"]);
+      if (prev) {
+        queryClient.setQueryData<ProjectTask[]>(
+          ["/api/projects", projectId, "tasks"],
+          prev.map(t => t.id === id ? { ...t, status, completedAt: status === "done" ? new Date() as any : null } : t)
+        );
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, context: any) => {
+      if (context?.prev) queryClient.setQueryData(["/api/projects", projectId, "tasks"], context.prev);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
@@ -496,17 +510,17 @@ export default function ProjectDetailPage() {
                         const isExpanded = expanded[task.id];
                         const due = task.dueDate ? new Date(task.dueDate) : null;
                         return (
-                          <div key={task.id} data-testid={`task-row-${task.id}`}>
-                            <div className="flex items-center gap-2 px-4 py-2 hover:bg-muted/30 group">
+                          <div key={task.id} data-testid={`task-row-${task.id}`} className="transition-opacity duration-200">
+                            <div className={`flex items-center gap-2 px-4 py-2 hover:bg-muted/30 group transition-colors duration-150 ${task.status === "done" ? "opacity-60" : ""}`}>
                               <button
                                 onClick={(e) => { e.stopPropagation(); toggleStatusMutation.mutate({ id: task.id, status: task.status === "done" ? "todo" : "done" }); }}
-                                className="shrink-0"
+                                className="shrink-0 transition-transform duration-150 active:scale-90"
                                 aria-label={task.status === "done" ? "Mark not done" : "Mark done"}
                                 data-testid={`button-toggle-${task.id}`}
                               >
                                 {task.status === "done"
-                                  ? <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                                  : <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 hover:border-foreground transition-colors" />}
+                                  ? <CheckCircle2 className="h-5 w-5 text-emerald-500 transition-colors duration-150" />
+                                  : <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors duration-150" />}
                               </button>
 
                               {subs.length > 0 ? (

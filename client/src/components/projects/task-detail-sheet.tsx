@@ -105,6 +105,8 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
   const [confirmDeleteSubtask, setConfirmDeleteSubtask] = useState<ProjectTask | null>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const attachInputRef = useRef<HTMLInputElement>(null);
+  const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [notesSaving, setNotesSaving] = useState(false);
 
   const { data: attachments = [] } = useQuery<TaskAttachment[]>({
     queryKey: ["/api/tasks", task?.id, "attachments"],
@@ -168,6 +170,9 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
 
   useEffect(() => {
     if (task && open) {
+      // Flush any pending notes save for the previous task before switching
+      if (notesTimerRef.current) { clearTimeout(notesTimerRef.current); notesTimerRef.current = null; }
+      setNotesSaving(false);
       setTitle(task.title);
       setNotes(task.notes || "");
       setStatus(task.status);
@@ -181,11 +186,30 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
     }
   }, [task, open]);
 
+  // Flush pending notes timer on unmount
+  useEffect(() => () => { if (notesTimerRef.current) clearTimeout(notesTimerRef.current); }, []);
+
   const updateMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
       if (!task) return null;
       const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, data);
       return res.json();
+    },
+    onMutate: async (data) => {
+      if (!task) return;
+      await queryClient.cancelQueries({ queryKey: ["/api/projects", project.id, "tasks"] });
+      const prev = queryClient.getQueryData<ProjectTask[]>(["/api/projects", project.id, "tasks"]);
+      if (prev) {
+        queryClient.setQueryData<ProjectTask[]>(
+          ["/api/projects", project.id, "tasks"],
+          prev.map(t => t.id === task.id ? { ...t, ...(data as Partial<ProjectTask>) } : t)
+        );
+      }
+      return { prev };
+    },
+    onError: (err: Error, _data, context: any) => {
+      if (context?.prev) queryClient.setQueryData(["/api/projects", project.id, "tasks"], context.prev);
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "tasks"] });
@@ -197,7 +221,6 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
         queryClient.invalidateQueries({ queryKey: ["/api/tasks", task.id, "activity"] });
       }
     },
-    onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -272,7 +295,12 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
 
   const saveNotes = (html: string) => {
     setNotes(html);
-    updateMutation.mutate({ notes: html });
+    setNotesSaving(true);
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
+    notesTimerRef.current = setTimeout(() => {
+      setNotesSaving(false);
+      updateMutation.mutate({ notes: html });
+    }, 600);
   };
 
   const completedSubs = subtasks.filter(s => s.status === "done").length;
@@ -544,7 +572,14 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
 
           {/* Notes (WYSIWYG) */}
           <div>
-            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Notes</Label>
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+              Notes
+              {notesSaving && (
+                <span className="normal-case tracking-normal font-normal text-muted-foreground/60 flex items-center gap-1">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" /> Saving…
+                </span>
+              )}
+            </Label>
             <div className="mt-1.5">
               <RichTextEditor value={notes} onChange={saveNotes} testId="editor-task-notes" />
             </div>
