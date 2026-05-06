@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   Select,
@@ -587,6 +588,291 @@ function CfIntegrationTab() {
   );
 }
 
+// ─── Email Templates Tab ─────────────────────────────────────────────────────
+
+const EMAIL_TEMPLATES = [
+  { key: "welcome", label: "Welcome", group: "General" },
+  { key: "taskDueReminders", label: "Task due reminders", group: "Projects & Tasks" },
+  { key: "overdueAlerts", label: "Overdue task alerts", group: "Projects & Tasks" },
+  { key: "projectDueReminders", label: "Project due reminders", group: "Projects & Tasks" },
+  { key: "weeklyProjectDigest", label: "Weekly project digest", group: "Projects & Tasks" },
+  { key: "dmoStreakAtRisk", label: "Streak at-risk reminder", group: "DMO" },
+  { key: "dmoMilestone", label: "Streak milestone", group: "DMO" },
+  { key: "dmoBroken", label: "Streak broken", group: "DMO" },
+  { key: "weeklyDmoSummary", label: "Weekly DMO summary", group: "DMO" },
+  { key: "videoScoringComplete", label: "Video scoring complete", group: "Video" },
+  { key: "videoPracticeReminder", label: "Practice reminder", group: "Video" },
+  { key: "reputationDropAlert", label: "Reputation drop alert", group: "Email Health" },
+  { key: "weeklyInboxReport", label: "Weekly inbox report", group: "Email Health" },
+];
+
+const EMAIL_TEMPLATE_GROUPS = ["General", "Projects & Tasks", "DMO", "Video", "Email Health"];
+
+function EmailTemplatesTab() {
+  const { toast } = useToast();
+  const [selectedKey, setSelectedKey] = useState("welcome");
+  const [isEditing, setIsEditing] = useState(false);
+  const [subjectDraft, setSubjectDraft] = useState("");
+  const [htmlDraft, setHtmlDraft] = useState("");
+  const [previewVersion, setPreviewVersion] = useState(0);
+
+  const { data: overridesData } = useQuery<{ overrides: Array<{ templateKey: string; subjectOverride: string | null; updatedAt: string }> }>({
+    queryKey: ["/api/admin/email-templates"],
+  });
+  const overrideKeys = new Set((overridesData?.overrides ?? []).map((o) => o.templateKey));
+
+  const { data: source, isLoading: sourceLoading } = useQuery<{
+    subject: string; html: string; defaultSubject: string; defaultHtml: string; hasOverride: boolean;
+  }>({
+    queryKey: ["/api/admin/email-templates", selectedKey, "source"],
+  });
+
+  useEffect(() => {
+    if (source) {
+      setSubjectDraft(source.subject);
+      setHtmlDraft(source.html);
+    }
+  }, [source, selectedKey]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/admin/email-templates/${selectedKey}`, { subject: subjectDraft, html: htmlDraft });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/email-templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/email-templates", selectedKey, "source"] });
+      setPreviewVersion((v) => v + 1);
+      setIsEditing(false);
+      toast({ title: "Template saved" });
+    },
+    onError: () => toast({ title: "Failed to save template", variant: "destructive" }),
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/admin/email-templates/${selectedKey}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/email-templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/email-templates", selectedKey, "source"] });
+      setPreviewVersion((v) => v + 1);
+      setIsEditing(false);
+      toast({ title: "Template reset to default" });
+    },
+    onError: () => toast({ title: "Failed to reset template", variant: "destructive" }),
+  });
+
+  const selectedTemplate = EMAIL_TEMPLATES.find((t) => t.key === selectedKey);
+  const hasOverride = overrideKeys.has(selectedKey);
+
+  function selectTemplate(key: string) {
+    setSelectedKey(key);
+    setIsEditing(false);
+  }
+
+  function startEditing() {
+    if (source) {
+      setSubjectDraft(source.subject);
+      setHtmlDraft(source.html);
+    }
+    setIsEditing(true);
+  }
+
+  function restoreDefault() {
+    if (source) {
+      setSubjectDraft(source.defaultSubject);
+      setHtmlDraft(source.defaultHtml);
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="border-b">
+        <CardTitle className="flex items-center gap-2">
+          <Mail className="h-5 w-5 text-violet-500" />
+          Email Templates
+        </CardTitle>
+        <CardDescription>
+          Preview and customise the notification emails sent to members. Edits take effect immediately for future sends.
+        </CardDescription>
+      </CardHeader>
+      <div className="flex" style={{ height: "680px" }}>
+        {/* ── Sidebar ── */}
+        <div className="w-52 shrink-0 border-r overflow-y-auto p-2 space-y-3">
+          {EMAIL_TEMPLATE_GROUPS.map((group) => (
+            <div key={group}>
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                {group}
+              </p>
+              {EMAIL_TEMPLATES.filter((t) => t.group === group).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => selectTemplate(t.key)}
+                  className={cn(
+                    "w-full text-left px-2.5 py-1.5 rounded-md text-sm flex items-center justify-between gap-1 transition-colors",
+                    selectedKey === t.key
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted text-foreground"
+                  )}
+                  data-testid={`btn-template-${t.key}`}
+                >
+                  <span className="truncate">{t.label}</span>
+                  {overrideKeys.has(t.key) && (
+                    <span className={cn(
+                      "shrink-0 text-[9px] font-bold px-1 py-0.5 rounded",
+                      selectedKey === t.key
+                        ? "bg-white/20 text-white"
+                        : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
+                    )}>
+                      CUSTOM
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* ── Right panel ── */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/20 gap-3 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-medium text-sm truncate">{selectedTemplate?.label}</span>
+              {hasOverride && !isEditing && (
+                <Badge variant="secondary" className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                  Custom
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {isEditing ? (
+                <>
+                  {source?.hasOverride && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs text-muted-foreground"
+                      onClick={() => resetMutation.mutate()}
+                      disabled={resetMutation.isPending}
+                      data-testid="button-reset-template"
+                    >
+                      {resetMutation.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                      Reset to default
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                    onClick={restoreDefault}
+                    disabled={saveMutation.isPending}
+                  >
+                    Restore original text
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                    onClick={() => setIsEditing(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => saveMutation.mutate()}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-template"
+                  >
+                    {saveMutation.isPending && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
+                    Save template
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs"
+                    onClick={() => setPreviewVersion((v) => v + 1)}
+                    data-testid="button-refresh-preview"
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1.5" />
+                    Refresh
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="text-xs"
+                    onClick={startEditing}
+                    data-testid="button-edit-template"
+                  >
+                    Edit template
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Content */}
+          {isEditing ? (
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Subject line
+                </label>
+                <Input
+                  value={subjectDraft}
+                  onChange={(e) => setSubjectDraft(e.target.value)}
+                  className="font-mono text-sm"
+                  placeholder="Email subject"
+                  data-testid="input-template-subject"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  HTML body
+                </label>
+                <Textarea
+                  value={htmlDraft}
+                  onChange={(e) => setHtmlDraft(e.target.value)}
+                  className="font-mono text-xs leading-relaxed resize-y"
+                  style={{ minHeight: "460px" }}
+                  spellCheck={false}
+                  data-testid="textarea-template-html"
+                />
+                <p className="text-xs text-muted-foreground">
+                  This is the full HTML email. Edit carefully — invalid HTML may break rendering. Use "Restore original text" to reset the editor to the saved version.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 relative bg-slate-100 dark:bg-slate-900">
+              {sourceLoading ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <iframe
+                  key={`${selectedKey}-${previewVersion}`}
+                  src={`/api/admin/email-preview/${selectedKey}`}
+                  className="absolute inset-0 w-full h-full border-0"
+                  title={`Email preview: ${selectedTemplate?.label}`}
+                  data-testid="iframe-template-preview"
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -1144,6 +1430,10 @@ export default function AdminPage() {
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="email-templates" data-testid="tab-email-templates">
+            <Mail className="h-3.5 w-3.5 mr-1.5" />
+            Email Templates
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -1946,6 +2236,10 @@ export default function AdminPage() {
           </Card>
 
           <CfIntegrationTab />
+        </TabsContent>
+
+        <TabsContent value="email-templates" className="space-y-6">
+          <EmailTemplatesTab />
         </TabsContent>
 
       </Tabs>

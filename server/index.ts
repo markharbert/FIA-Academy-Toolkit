@@ -459,6 +459,14 @@ async function runStartupMigrations() {
       CREATE INDEX IF NOT EXISTS notification_log_lookup_idx
         ON notification_log(user_id, type, ref_id, sent_at DESC)
     `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS email_template_overrides (
+        template_key TEXT PRIMARY KEY,
+        subject_override TEXT,
+        html_override TEXT,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     console.log("[startup] notification tables migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);

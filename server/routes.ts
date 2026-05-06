@@ -993,34 +993,33 @@ export async function registerRoutes(
     }
   });
 
-  // Admin: Email template preview
-  app.get("/api/admin/email-preview/:template", requireAdmin, (req: Request, res: Response) => {
-    const { template } = req.params;
-    const sampleUser = { firstName: "Mark", email: "mark@example.com" };
+  // ─── Email Template Helpers ───────────────────────────────────────────────────
 
-    const previews: Record<string, () => { subject: string; html: string; text: string }> = {
+  function buildDefaultTemplateMap(): Record<string, () => { subject: string; html: string; text: string }> {
+    const sample = { firstName: "Mark", email: "mark@example.com" };
+    return {
       taskDueReminders: () => emailTemplates.taskDueReminderEmail({
-        firstName: sampleUser.firstName,
+        firstName: sample.firstName,
         tasks: [
           { title: "Record intro video", projectName: "Video Project", dueDate: "Tomorrow" },
           { title: "Write email sequence", projectName: "Blog project", dueDate: "In 2 days" },
         ],
       }),
       overdueAlerts: () => emailTemplates.overdueAlertEmail({
-        firstName: sampleUser.firstName,
+        firstName: sample.firstName,
         tasks: [
           { title: "Review analytics", projectName: "Blog project", daysOverdue: 3 },
           { title: "Update lead magnet", projectName: "Video Project", daysOverdue: 1 },
         ],
       }),
       projectDueReminders: () => emailTemplates.projectDueReminderEmail({
-        firstName: sampleUser.firstName,
+        firstName: sample.firstName,
         projectName: "Video Project",
         daysLeft: 3,
         dueDate: "Friday, May 9",
       }),
       weeklyProjectDigest: () => emailTemplates.weeklyProjectDigestEmail({
-        firstName: sampleUser.firstName,
+        firstName: sample.firstName,
         openTasks: 8,
         doneTasks: 5,
         overdueCount: 2,
@@ -1029,60 +1028,101 @@ export async function registerRoutes(
           { name: "Blog project", openTasks: 3 },
         ],
       }),
-      dmoStreakAtRisk: () => emailTemplates.dmoStreakAtRiskEmail({
-        firstName: sampleUser.firstName,
-        streakCount: 14,
-      }),
-      dmoMilestone: () => emailTemplates.dmoMilestoneEmail({
-        firstName: sampleUser.firstName,
-        streakCount: 30,
-      }),
-      dmoBroken: () => emailTemplates.dmoStreakBrokenEmail({
-        firstName: sampleUser.firstName,
-        streakCount: 14,
-      }),
+      dmoStreakAtRisk: () => emailTemplates.dmoStreakAtRiskEmail({ firstName: sample.firstName, streakCount: 14 }),
+      dmoMilestone: () => emailTemplates.dmoMilestoneEmail({ firstName: sample.firstName, streakCount: 30 }),
+      dmoBroken: () => emailTemplates.dmoStreakBrokenEmail({ firstName: sample.firstName, streakCount: 14 }),
       weeklyDmoSummary: () => emailTemplates.weeklyDmoSummaryEmail({
-        firstName: sampleUser.firstName,
-        points: 340,
-        currentStreak: 21,
-        activitiesLogged: 6,
+        firstName: sample.firstName, points: 340, currentStreak: 21, activitiesLogged: 6,
       }),
       videoScoringComplete: () => emailTemplates.videoScoringCompleteEmail({
-        firstName: sampleUser.firstName,
-        videoTitle: "How I Got 10 Clients in 30 Days",
-        score: 78,
-        sessionId: "demo-session-id",
+        firstName: sample.firstName, videoTitle: "How I Got 10 Clients in 30 Days", score: 78, sessionId: "demo-session-id",
       }),
-      videoPracticeReminder: () => emailTemplates.videoPracticeReminderEmail({
-        firstName: sampleUser.firstName,
-      }),
+      videoPracticeReminder: () => emailTemplates.videoPracticeReminderEmail({ firstName: sample.firstName }),
       reputationDropAlert: () => emailTemplates.reputationDropAlertEmail({
-        firstName: sampleUser.firstName,
-        domain: "fearlessmarketinglab.com",
-        score: "LOW",
-        previousScore: "HIGH",
+        firstName: sample.firstName, domain: "fearlessmarketinglab.com", score: "LOW", previousScore: "HIGH",
       }),
       weeklyInboxReport: () => emailTemplates.weeklyInboxReportEmail({
-        firstName: sampleUser.firstName,
-        inboxRate: 87,
-        spamRate: 4,
-        emailsAnalyzed: 23,
+        firstName: sample.firstName, inboxRate: 87, spamRate: 4, emailsAnalyzed: 23,
       }),
-      welcome: () => emailTemplates.welcomeEmail({
-        firstName: sampleUser.firstName,
-        email: sampleUser.email,
-      }),
+      welcome: () => emailTemplates.welcomeEmail({ firstName: sample.firstName, email: sample.email }),
     };
+  }
 
-    const fn = previews[template];
-    if (!fn) {
-      const available = Object.keys(previews).join(", ");
-      return res.status(404).send(`<pre>Unknown template "${template}".\n\nAvailable:\n${available.split(", ").join("\n")}</pre>`);
+  // Admin: Email template preview (checks DB override first)
+  app.get("/api/admin/email-preview/:template", requireAdmin, async (req: Request, res: Response) => {
+    const { template } = req.params;
+    try {
+      const override = await storage.getEmailTemplateOverride(template);
+      if (override?.htmlOverride) {
+        res.setHeader("Content-Type", "text/html");
+        return res.send(override.htmlOverride);
+      }
+      const fn = buildDefaultTemplateMap()[template];
+      if (!fn) {
+        const available = Object.keys(buildDefaultTemplateMap()).join("\n");
+        return res.status(404).send(`<pre>Unknown template "${template}".\n\nAvailable:\n${available}</pre>`);
+      }
+      res.setHeader("Content-Type", "text/html");
+      res.send(fn().html);
+    } catch (err) {
+      res.status(500).send("<pre>Error rendering template</pre>");
     }
+  });
 
-    const { html } = fn();
-    res.setHeader("Content-Type", "text/html");
-    res.send(html);
+  // Admin: List all templates with override status
+  app.get("/api/admin/email-templates", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const overrides = await storage.getAllEmailTemplateOverrides();
+      res.json({ overrides });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to load template overrides" });
+    }
+  });
+
+  // Admin: Get current source (subject + html) for a template
+  app.get("/api/admin/email-templates/:key/source", requireAdmin, async (req: Request, res: Response) => {
+    const { key } = req.params;
+    try {
+      const templateMap = buildDefaultTemplateMap();
+      const fn = templateMap[key];
+      if (!fn) return res.status(404).json({ message: "Unknown template" });
+      const defaultRendered = fn();
+      const override = await storage.getEmailTemplateOverride(key);
+      res.json({
+        subject: override?.subjectOverride ?? defaultRendered.subject,
+        html: override?.htmlOverride ?? defaultRendered.html,
+        defaultSubject: defaultRendered.subject,
+        defaultHtml: defaultRendered.html,
+        hasOverride: !!(override?.htmlOverride),
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to load template source" });
+    }
+  });
+
+  // Admin: Save template override
+  app.put("/api/admin/email-templates/:key", requireAdmin, async (req: Request, res: Response) => {
+    const { key } = req.params;
+    const { subject, html } = req.body;
+    try {
+      if (!buildDefaultTemplateMap()[key]) return res.status(404).json({ message: "Unknown template" });
+      if (!subject || !html) return res.status(400).json({ message: "subject and html are required" });
+      await storage.upsertEmailTemplateOverride(key, subject, html);
+      res.json({ message: "Template saved" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save template" });
+    }
+  });
+
+  // Admin: Reset template to default
+  app.delete("/api/admin/email-templates/:key", requireAdmin, async (req: Request, res: Response) => {
+    const { key } = req.params;
+    try {
+      await storage.deleteEmailTemplateOverride(key);
+      res.json({ message: "Template reset to default" });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to reset template" });
+    }
   });
 
   // Admin: CF integration status & config

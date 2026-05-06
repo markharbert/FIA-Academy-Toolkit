@@ -432,6 +432,12 @@ export interface IStorage {
   getAllUsersForNotifications(): Promise<Array<{ id: string; email: string | null; displayName: string | null; firstName: string | null; timezone: string }>>;
   getDmoEntriesForWeek(userId: string, tz: string): Promise<import("@shared/schema").DmoEntry[]>;
 
+  // Email template overrides
+  getEmailTemplateOverride(key: string): Promise<{ subjectOverride: string | null; htmlOverride: string | null } | null>;
+  getAllEmailTemplateOverrides(): Promise<Array<{ templateKey: string; subjectOverride: string | null; updatedAt: Date }>>;
+  upsertEmailTemplateOverride(key: string, subjectOverride: string | null, htmlOverride: string | null): Promise<void>;
+  deleteEmailTemplateOverride(key: string): Promise<void>;
+
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
   getCompetitorTracker(id: string, userId: string): Promise<CompetitorTracker | undefined>;
@@ -3668,6 +3674,36 @@ export class DatabaseStorage implements IStorage {
       firstName: r.first_name,
       timezone: r.timezone || "America/New_York",
     }));
+  }
+
+  async getEmailTemplateOverride(key: string): Promise<{ subjectOverride: string | null; htmlOverride: string | null } | null> {
+    const result = await pool.query(
+      'SELECT subject_override, html_override FROM email_template_overrides WHERE template_key = $1',
+      [key]
+    );
+    if (!result.rows[0]) return null;
+    return { subjectOverride: result.rows[0].subject_override, htmlOverride: result.rows[0].html_override };
+  }
+
+  async getAllEmailTemplateOverrides(): Promise<Array<{ templateKey: string; subjectOverride: string | null; updatedAt: Date }>> {
+    const result = await pool.query(
+      'SELECT template_key, subject_override, updated_at FROM email_template_overrides ORDER BY template_key'
+    );
+    return result.rows.map((r: any) => ({ templateKey: r.template_key, subjectOverride: r.subject_override, updatedAt: new Date(r.updated_at) }));
+  }
+
+  async upsertEmailTemplateOverride(key: string, subjectOverride: string | null, htmlOverride: string | null): Promise<void> {
+    await pool.query(
+      `INSERT INTO email_template_overrides (template_key, subject_override, html_override, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (template_key) DO UPDATE
+       SET subject_override = EXCLUDED.subject_override, html_override = EXCLUDED.html_override, updated_at = NOW()`,
+      [key, subjectOverride, htmlOverride]
+    );
+  }
+
+  async deleteEmailTemplateOverride(key: string): Promise<void> {
+    await pool.query('DELETE FROM email_template_overrides WHERE template_key = $1', [key]);
   }
 
   async getDmoEntriesForWeek(userId: string, tz: string): Promise<import("@shared/schema").DmoEntry[]> {
