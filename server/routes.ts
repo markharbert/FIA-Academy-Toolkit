@@ -7229,7 +7229,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const project = await storage.getProject(req.params.id, user.id);
       if (!project) return res.status(404).json({ message: "Project not found" });
       const tasks = await storage.getTasksForProject(req.params.id, user.id);
-      res.json({ tasks });
+      res.json({ tasks: tasks.map(t => ({ ...t, parentId: t.parentTaskId ?? null })) });
     } catch (err) {
       console.error("[v1] project tasks error:", err);
       res.status(500).json({ message: "Failed to load tasks" });
