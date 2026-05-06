@@ -44,6 +44,9 @@ function wrap(title: string, body: string): string {
             You're receiving this because you have notifications enabled in your Academy Toolkit account.<br/>
             <a href="${BASE_URL}/account" style="color:#3f92cc;text-decoration:none;">Manage notification preferences</a>
           </p>
+          <p style="margin:10px 0 0;font-size:11px;color:#cbd5e1;line-height:1.6;">
+            Fearless Influencer Academy &mdash; PO Box 734, Tipp City OH 45371
+          </p>
         </td>
       </tr>
     </table>
