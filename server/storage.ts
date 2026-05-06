@@ -2727,6 +2727,7 @@ export class DatabaseStorage implements IStorage {
       WHERE t.user_id = ${userId}
         AND t.status <> 'done'
         AND p.status = 'active'
+        AND t.parent_task_id IS NULL
       ORDER BY (t.due_date IS NULL) ASC, t.due_date ASC, t.created_at ASC
     `);
     return (result.rows as any[]).map(r => ({
