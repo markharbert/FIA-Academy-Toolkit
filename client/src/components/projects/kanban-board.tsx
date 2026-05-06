@@ -525,11 +525,11 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setIsDraggingActive(false);
     setActiveDragId(null);
 
     if (!over) {
       // Cancelled — reset to server state
+      setIsDraggingActive(false);
       setLocalOrder(serverTasksByColumn);
       return;
     }
@@ -538,7 +538,7 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
     const overId = over.id as string;
 
     const colId = findColId(activeId);
-    if (!colId) return;
+    if (!colId) { setIsDraggingActive(false); return; }
 
     // Handle within-column reorder (dragOver doesn't fire for same-column moves)
     const colTasks = localOrderRef.current[colId] ?? [];
@@ -548,7 +548,6 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
     let finalOrder = localOrderRef.current;
     if (activeIdx !== -1 && overIdx !== -1 && activeIdx !== overIdx) {
       finalOrder = { ...finalOrder, [colId]: arrayMove(colTasks, activeIdx, overIdx) };
-      setLocalOrder(finalOrder);
     }
 
     // Persist — send all tasks in all columns with new sortOrders
@@ -558,6 +557,24 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
         updates.push({ id: t.id, columnId: cId, sortOrder: idx * 1000 });
       });
     });
+
+    // ── Optimistic cache update ────────────────────────────────────────────────
+    // Update the query cache immediately so that when isDraggingActive goes false
+    // (which triggers the useEffect that syncs localOrder from serverTasksByColumn),
+    // serverTasksByColumn already reflects the new positions — no flash.
+    const updateMap = new Map(updates.map(u => [u.id, u]));
+    queryClient.setQueryData<ProjectTask[]>(
+      ["/api/projects", projectId, "tasks"],
+      (old) => old
+        ? old.map(t => {
+            const u = updateMap.get(t.id);
+            return u ? { ...t, columnId: u.columnId, sortOrder: u.sortOrder } : t;
+          })
+        : old,
+    );
+
+    // Now safe to end the drag — serverTasksByColumn is already updated above
+    setIsDraggingActive(false);
 
     reorderMutation.mutate(updates);
   };
