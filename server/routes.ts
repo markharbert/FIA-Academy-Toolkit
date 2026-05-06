@@ -7276,6 +7276,61 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── v1 Project Sections (Columns) ───────────────────────────────────────
+
+  app.get("/api/v1/projects/:id/sections", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const project = await storage.getProject(req.params.id, user.id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const sections = await storage.seedColumnsForProject(req.params.id, user.id);
+      res.json({ sections });
+    } catch (err) {
+      console.error("[v1] sections list error:", err);
+      res.status(500).json({ message: "Failed to load sections" });
+    }
+  });
+
+  app.post("/api/v1/projects/:id/sections", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const project = await storage.getProject(req.params.id, user.id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const parsed = insertProjectColumnSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const section = await storage.createColumn(user.id, req.params.id, parsed.data);
+      res.status(201).json({ section });
+    } catch (err) {
+      console.error("[v1] section create error:", err);
+      res.status(500).json({ message: "Failed to create section" });
+    }
+  });
+
+  app.patch("/api/v1/sections/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const parsed = insertProjectColumnSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const section = await storage.updateColumn(req.params.id, user.id, parsed.data);
+      if (!section) return res.status(404).json({ message: "Section not found" });
+      res.json({ section });
+    } catch (err) {
+      console.error("[v1] section update error:", err);
+      res.status(500).json({ message: "Failed to update section" });
+    }
+  });
+
+  app.delete("/api/v1/sections/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      await storage.deleteColumn(req.params.id, user.id);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[v1] section delete error:", err);
+      res.status(500).json({ message: "Failed to delete section" });
+    }
+  });
+
   // ─── v1 Tasks write access ────────────────────────────────────────────────
 
   app.get("/api/v1/tasks/:id", requireApiKey, async (req: Request, res: Response) => {
