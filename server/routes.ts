@@ -27,6 +27,7 @@ import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
 import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
 import { startPlacementScheduler } from "./placementScheduler";
+import { fireWebhooks } from "./webhooks";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -4873,6 +4874,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const entry = await storage.upsertDmoEntry(userId, date, parsed.data);
       const streak = await storage.getDmoStreak(userId);
       res.json({ entry, streak });
+      fireWebhooks(userId, "dmo.updated", { entry, streak });
     } catch (err) {
       res.status(500).json({ message: "Failed to save DMO entry" });
     }
@@ -6681,6 +6683,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const updated = await storage.updateProject(req.params.id, req.session.userId!, data);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
+      fireWebhooks(req.session.userId!, "project.updated", updated);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       console.error("[projects] update error:", err);
@@ -6706,6 +6709,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
       await storage.deleteProject(req.params.id, req.session.userId!);
       res.json({ ok: true });
+      fireWebhooks(req.session.userId!, "project.deleted", { id: req.params.id });
     } catch (err) {
       console.error("[projects] delete error:", err);
       res.status(500).json({ message: "Failed to delete project" });
@@ -6760,6 +6764,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const updated = await storage.updateTask(req.params.id, req.session.userId!, data);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
+      fireWebhooks(req.session.userId!, "task.updated", updated);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       if (err?.message?.startsWith("Invalid parent") || err?.message?.includes("subtask") || err?.message?.includes("own parent")) {
@@ -6790,6 +6795,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
       await storage.deleteTask(req.params.id, req.session.userId!);
       res.json({ ok: true });
+      fireWebhooks(req.session.userId!, "task.deleted", { id: req.params.id });
     } catch (err) {
       console.error("[projects] delete task error:", err);
       res.status(500).json({ message: "Failed to delete task" });
@@ -7293,6 +7299,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!project) return res.status(404).json({ message: "Project not found" });
       const task = await storage.createTask(user.id, parsed.data.projectId, parsed.data);
       res.status(201).json({ task });
+      fireWebhooks(user.id, "task.created", task);
     } catch (err) {
       console.error("[v1] task create error:", err);
       res.status(500).json({ message: "Failed to create task" });
@@ -7307,6 +7314,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const task = await storage.updateTask(req.params.id, user.id, parsed.data);
       if (!task) return res.status(404).json({ message: "Task not found" });
       res.json({ task });
+      fireWebhooks(user.id, "task.updated", task);
     } catch (err) {
       console.error("[v1] task update error:", err);
       res.status(500).json({ message: "Failed to update task" });
@@ -7320,6 +7328,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!existing) return res.status(404).json({ message: "Task not found" });
       await storage.deleteTask(req.params.id, user.id);
       res.json({ ok: true });
+      fireWebhooks(user.id, "task.deleted", { id: req.params.id });
     } catch (err) {
       console.error("[v1] task delete error:", err);
       res.status(500).json({ message: "Failed to delete task" });
@@ -7339,6 +7348,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
       const entry = await storage.upsertDmoEntry(user.id, date, parsed.data);
       res.json({ entry });
+      fireWebhooks(user.id, "dmo.updated", { entry });
     } catch (err) {
       console.error("[v1] dmo save error:", err);
       res.status(500).json({ message: "Failed to save DMO entry" });
@@ -7485,6 +7495,69 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     } catch (err) {
       console.error("[v1] teleprompter delete error:", err);
       res.status(500).json({ message: "Failed to delete script" });
+    }
+  });
+
+  // ─── v1 Webhooks (register / list / delete) ──────────────────────────────
+
+  const VALID_EVENTS = ["*", "task.created", "task.updated", "task.deleted", "project.created", "project.updated", "project.deleted", "dmo.updated"];
+
+  app.get("/api/v1/webhooks", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const list = await storage.getWebhooksForUser(user.id);
+      // Never return the secret in list view
+      res.json({ webhooks: list.map(({ secret: _s, ...rest }) => rest) });
+    } catch (err) {
+      console.error("[v1] webhooks list error:", err);
+      res.status(500).json({ message: "Failed to load webhooks" });
+    }
+  });
+
+  app.post("/api/v1/webhooks", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { url, label, events } = req.body;
+      if (!url || typeof url !== "string" || !/^https?:\/\/.+/.test(url)) {
+        return res.status(400).json({ message: "A valid url is required" });
+      }
+      if (events !== undefined && (!Array.isArray(events) || events.some((e: string) => !VALID_EVENTS.includes(e)))) {
+        return res.status(400).json({ message: `events must be an array of: ${VALID_EVENTS.join(", ")}` });
+      }
+      const { webhook, secret } = await storage.createWebhook(user.id, { url, label, events });
+      // Return secret only on creation — not retrievable again
+      res.status(201).json({ webhook: { ...webhook, secret } });
+    } catch (err) {
+      console.error("[v1] webhooks create error:", err);
+      res.status(500).json({ message: "Failed to create webhook" });
+    }
+  });
+
+  app.patch("/api/v1/webhooks/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { active, label, events } = req.body;
+      if (events !== undefined && (!Array.isArray(events) || events.some((e: string) => !VALID_EVENTS.includes(e)))) {
+        return res.status(400).json({ message: `events must be an array of: ${VALID_EVENTS.join(", ")}` });
+      }
+      const updated = await storage.updateWebhook(req.params.id, user.id, { active, label, events });
+      if (!updated) return res.status(404).json({ message: "Webhook not found" });
+      const { secret: _s, ...rest } = updated;
+      res.json({ webhook: rest });
+    } catch (err) {
+      console.error("[v1] webhooks update error:", err);
+      res.status(500).json({ message: "Failed to update webhook" });
+    }
+  });
+
+  app.delete("/api/v1/webhooks/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      await storage.deleteWebhook(req.params.id, user.id);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[v1] webhooks delete error:", err);
+      res.status(500).json({ message: "Failed to delete webhook" });
     }
   });
 

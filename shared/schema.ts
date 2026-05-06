@@ -1631,3 +1631,18 @@ export const publicApiKeys = pgTable("public_api_keys", {
 });
 
 export type PublicApiKey = typeof publicApiKeys.$inferSelect;
+
+// ─── Outbound Webhooks ────────────────────────────────────────────────────────
+export const webhooks = pgTable("webhooks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  secret: text("secret").notNull(),
+  label: text("label"),
+  events: text("events").array().notNull().default(sql`ARRAY['*']::text[]`),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type Webhook = typeof webhooks.$inferSelect;
+export type InsertWebhook = typeof webhooks.$inferInsert;

@@ -1,7 +1,7 @@
 import { 
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
-  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys,
-  type PublicApiKey,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks,
+  type PublicApiKey, type Webhook,
   dmoEntries, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
   teleprompterScripts, type TeleprompterScript, type InsertTeleprompterScript,
@@ -336,6 +336,12 @@ export interface IStorage {
   revokeUserPublicApiKey(userId: string): Promise<void>;
   getUserByPublicApiKeyHash(keyHash: string): Promise<User | undefined>;
   touchPublicApiKey(keyHash: string, cfChecked?: boolean): Promise<void>;
+
+  // Webhooks
+  getWebhooksForUser(userId: string): Promise<Webhook[]>;
+  createWebhook(userId: string, data: { url: string; label?: string; events?: string[] }): Promise<{ webhook: Webhook; secret: string }>;
+  updateWebhook(id: string, userId: string, data: { active?: boolean; label?: string; events?: string[] }): Promise<Webhook | undefined>;
+  deleteWebhook(id: string, userId: string): Promise<void>;
 
   // DMO Tracker
   getDmoEntry(userId: string, date: string): Promise<DmoEntry | undefined>;
@@ -2054,6 +2060,39 @@ export class DatabaseStorage implements IStorage {
     const updates: Partial<typeof publicApiKeys.$inferSelect> = { lastUsedAt: now };
     if (cfChecked) updates.cfLastCheckedAt = now;
     await db.update(publicApiKeys).set(updates).where(eq(publicApiKeys.keyHash, keyHash));
+  }
+
+  // Webhooks
+  async getWebhooksForUser(userId: string): Promise<Webhook[]> {
+    return db.select().from(webhooks).where(eq(webhooks.userId, userId)).orderBy(desc(webhooks.createdAt));
+  }
+
+  async createWebhook(userId: string, data: { url: string; label?: string; events?: string[] }): Promise<{ webhook: Webhook; secret: string }> {
+    const secret = crypto.randomBytes(24).toString("hex");
+    const events = data.events && data.events.length > 0 ? data.events : ["*"];
+    const [webhook] = await db.insert(webhooks).values({
+      userId,
+      url: data.url,
+      secret,
+      label: data.label || null,
+      events,
+      active: true,
+    }).returning();
+    return { webhook, secret };
+  }
+
+  async updateWebhook(id: string, userId: string, data: { active?: boolean; label?: string; events?: string[] }): Promise<Webhook | undefined> {
+    const updates: Partial<typeof webhooks.$inferSelect> = {};
+    if (data.active !== undefined) updates.active = data.active;
+    if (data.label !== undefined) updates.label = data.label;
+    if (data.events !== undefined) updates.events = data.events;
+    const [row] = await db.update(webhooks).set(updates)
+      .where(and(eq(webhooks.id, id), eq(webhooks.userId, userId))).returning();
+    return row || undefined;
+  }
+
+  async deleteWebhook(id: string, userId: string): Promise<void> {
+    await db.delete(webhooks).where(and(eq(webhooks.id, id), eq(webhooks.userId, userId)));
   }
 
   // DMO Tracker
