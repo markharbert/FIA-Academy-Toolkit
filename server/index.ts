@@ -479,6 +479,24 @@ async function runStartupMigrations() {
       )
     `);
     console.log("[startup] notification tables migration complete");
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS public_api_keys (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        key_hash TEXT NOT NULL UNIQUE,
+        key_prefix TEXT NOT NULL,
+        label TEXT,
+        last_used_at TIMESTAMP,
+        cf_last_checked_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS public_api_keys_user_id_idx
+        ON public_api_keys(user_id)
+    `);
+    console.log("[startup] public_api_keys migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

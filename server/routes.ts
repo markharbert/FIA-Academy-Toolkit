@@ -6990,6 +6990,208 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── Admin: API Access Toggle ─────────────────────────────────────────────
+  app.get("/api/admin/settings/api-access", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const enabled = await storage.getApiAccessEnabled();
+      res.json({ enabled });
+    } catch (err) {
+      console.error("[api-access] get error:", err);
+      res.status(500).json({ message: "Failed to get API access setting" });
+    }
+  });
+
+  app.put("/api/admin/settings/api-access", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { enabled } = req.body as { enabled: boolean };
+      if (typeof enabled !== "boolean") {
+        return res.status(400).json({ message: "enabled must be a boolean" });
+      }
+      await storage.setApiAccessEnabled(enabled);
+      res.json({ enabled });
+    } catch (err) {
+      console.error("[api-access] set error:", err);
+      res.status(500).json({ message: "Failed to update API access setting" });
+    }
+  });
+
+  // ─── User: Public API Key Management ─────────────────────────────────────
+  app.get("/api/account/api-key", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const [record, accessEnabled, user] = await Promise.all([
+        storage.getUserPublicApiKey(req.session.userId!),
+        storage.getApiAccessEnabled(),
+        storage.getUser(req.session.userId!),
+      ]);
+      res.json({
+        accessEnabled: accessEnabled || user?.isAdmin,
+        record: record ? { id: record.id, keyPrefix: record.keyPrefix, label: record.label, createdAt: record.createdAt, lastUsedAt: record.lastUsedAt } : null,
+      });
+    } catch (err) {
+      console.error("[api-key] get error:", err);
+      res.status(500).json({ message: "Failed to get API key" });
+    }
+  });
+
+  app.post("/api/account/api-key", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      const accessEnabled = await storage.getApiAccessEnabled();
+      if (!accessEnabled && !user?.isAdmin) {
+        return res.status(403).json({ message: "API access is not yet enabled for members" });
+      }
+      const { label } = req.body as { label?: string };
+      const { rawKey, record } = await storage.generateUserPublicApiKey(req.session.userId!, label);
+      res.json({
+        rawKey,
+        record: { id: record.id, keyPrefix: record.keyPrefix, label: record.label, createdAt: record.createdAt, lastUsedAt: record.lastUsedAt },
+      });
+    } catch (err) {
+      console.error("[api-key] generate error:", err);
+      res.status(500).json({ message: "Failed to generate API key" });
+    }
+  });
+
+  app.delete("/api/account/api-key", requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.revokeUserPublicApiKey(req.session.userId!);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[api-key] revoke error:", err);
+      res.status(500).json({ message: "Failed to revoke API key" });
+    }
+  });
+
+  // ─── Public Read-Only API (v1) ────────────────────────────────────────────
+  async function requireApiKey(req: Request, res: Response, next: NextFunction) {
+    const authHeader = req.headers["authorization"] || "";
+    const xApiKey = req.headers["x-api-key"] as string | undefined;
+    let rawKey = xApiKey || "";
+    if (!rawKey && authHeader.toLowerCase().startsWith("bearer ")) {
+      rawKey = authHeader.slice(7).trim();
+    }
+    if (!rawKey || !rawKey.startsWith("ftk_")) {
+      return res.status(401).json({ message: "Missing or invalid API key. Use Authorization: Bearer <key> or X-API-Key header." });
+    }
+    try {
+      const { createHash } = await import("crypto");
+      const keyHash = createHash("sha256").update(rawKey).digest("hex");
+      const user = await storage.getUserByPublicApiKeyHash(keyHash);
+      if (!user) return res.status(401).json({ message: "API key not found or revoked." });
+      if (user.disabled) return res.status(403).json({ message: "Account is disabled." });
+
+      // ClickFunnels membership check (cached 24 h)
+      const keyRecord = await storage.getUserPublicApiKey(user.id);
+      const cfCheckedAt = keyRecord?.cfLastCheckedAt;
+      const needsCfCheck = !cfCheckedAt || (Date.now() - new Date(cfCheckedAt).getTime() > 24 * 60 * 60 * 1000);
+      let cfEnrolled = user.cfEnrolled;
+      if (needsCfCheck && user.email) {
+        try {
+          const { checkCfEnrollmentByEmail } = await import("./clickfunnels");
+          const cfInfo = await checkCfEnrollmentByEmail(user.email, user.cfContactId ?? undefined);
+          cfEnrolled = cfInfo.enrolled;
+          await storage.updateUser(user.id, {
+            cfEnrolled: cfInfo.enrolled,
+            cfEnrolledAt: cfInfo.enrolled ? (user.cfEnrolledAt ?? new Date()) : user.cfEnrolledAt,
+            cfRevokedAt: !cfInfo.enrolled ? new Date() : user.cfRevokedAt,
+          });
+          await storage.touchPublicApiKey(keyHash, true);
+        } catch {
+          await storage.touchPublicApiKey(keyHash, false);
+        }
+      } else {
+        await storage.touchPublicApiKey(keyHash, false);
+      }
+
+      if (!cfEnrolled && !user.isAdmin) {
+        return res.status(403).json({ message: "Active Fearless Influencer Academy membership required." });
+      }
+
+      (req as any).apiUser = user;
+      next();
+    } catch (err) {
+      console.error("[v1] auth error:", err);
+      res.status(500).json({ message: "Internal error during API key validation." });
+    }
+  }
+
+  // CORS for v1 API — allow external apps
+  app.use("/api/v1", (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, X-API-Key, Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    if (_req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+  });
+
+  app.get("/api/v1/me", requireApiKey, async (req: Request, res: Response) => {
+    const user = (req as any).apiUser;
+    res.json({
+      id: user.id,
+      displayName: user.displayName,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      cfEnrolled: user.cfEnrolled,
+      timezone: user.timezone,
+      createdAt: user.createdAt,
+    });
+  });
+
+  app.get("/api/v1/dashboard", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const [summary, streak] = await Promise.all([
+        storage.getDashboardProjectsSummary(user.id),
+        storage.getDmoStreak(user.id),
+      ]);
+      res.json({
+        projects: {
+          totalActive: summary.totalActive,
+          totalOpenTasks: summary.totalOpenTasks,
+          totalDueThisWeek: summary.totalDueThisWeek,
+          totalOverdue: summary.totalOverdue,
+        },
+        dmo: {
+          currentStreak: streak.current,
+          bestStreak: streak.best,
+          totalDays: streak.totalDays,
+        },
+      });
+    } catch (err) {
+      console.error("[v1] dashboard error:", err);
+      res.status(500).json({ message: "Failed to load dashboard data" });
+    }
+  });
+
+  app.get("/api/v1/tasks", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const tasks = await storage.getAllOpenTasksForUser(user.id);
+      res.json({ tasks });
+    } catch (err) {
+      console.error("[v1] tasks error:", err);
+      res.status(500).json({ message: "Failed to load tasks" });
+    }
+  });
+
+  app.get("/api/v1/dmo", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const tz = user.timezone || "UTC";
+      const { todayKeyInTz } = await import("../shared/datetime");
+      const todayKey = todayKeyInTz(tz);
+      const [entry, streak] = await Promise.all([
+        storage.getDmoEntry(user.id, todayKey),
+        storage.getDmoStreak(user.id),
+      ]);
+      res.json({ date: todayKey, entry: entry?.data ?? null, streak });
+    } catch (err) {
+      console.error("[v1] dmo error:", err);
+      res.status(500).json({ message: "Failed to load DMO data" });
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 

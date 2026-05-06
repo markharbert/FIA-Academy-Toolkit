@@ -28,6 +28,11 @@ import {
   FolderPlus,
   Folder,
   Pencil,
+  Key,
+  Copy,
+  Eye,
+  EyeOff,
+  Smartphone,
   Trash2,
   CheckCircle2,
   XCircle,
@@ -210,6 +215,48 @@ export default function AccountPage() {
     enabled: !!user,
   });
 
+  const { data: apiKeyData, isLoading: isApiKeyLoading } = useQuery<{
+    accessEnabled: boolean;
+    record: { id: string; keyPrefix: string; label: string | null; createdAt: string; lastUsedAt: string | null } | null;
+  }>({
+    queryKey: ["/api/account/api-key"],
+    enabled: !!user,
+  });
+
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [keyVisible, setKeyVisible] = useState(false);
+
+  const generateKeyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/account/api-key", {});
+      return res.json() as Promise<{ rawKey: string; record: { id: string; keyPrefix: string; label: string | null; createdAt: string; lastUsedAt: string | null } }>;
+    },
+    onSuccess: (data) => {
+      setRevealedKey(data.rawKey);
+      setKeyVisible(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/account/api-key"] });
+      toast({ title: "API key generated", description: "Copy it now — it won't be shown again." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Couldn't generate key", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const revokeKeyMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/account/api-key");
+    },
+    onSuccess: () => {
+      setRevealedKey(null);
+      setKeyVisible(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/account/api-key"] });
+      toast({ title: "API key revoked" });
+    },
+    onError: () => {
+      toast({ title: "Couldn't revoke key", variant: "destructive" });
+    },
+  });
+
   const saveNotifMutation = useMutation({
     mutationFn: async (payload: { allEnabled: boolean; preferences: NotificationPreferences }) => {
       const res = await apiRequest("PUT", "/api/account/notification-preferences", payload);
@@ -298,7 +345,7 @@ export default function AccountPage() {
       </div>
 
       <Tabs defaultValue="profile">
-        <TabsList className="w-full grid grid-cols-5 mb-6" data-testid="tabs-account">
+        <TabsList className={`w-full grid mb-6 ${apiKeyData?.accessEnabled ? "grid-cols-6" : "grid-cols-5"}`} data-testid="tabs-account">
           <TabsTrigger value="profile" data-testid="tab-profile">
             <User className="h-3.5 w-3.5 mr-1.5" />
             Profile
@@ -319,6 +366,12 @@ export default function AccountPage() {
             <Activity className="h-3.5 w-3.5 mr-1.5" />
             Activity
           </TabsTrigger>
+          {apiKeyData?.accessEnabled && (
+            <TabsTrigger value="api" data-testid="tab-api">
+              <Key className="h-3.5 w-3.5 mr-1.5" />
+              API
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ─── Profile Tab ─────────────────────────────────────── */}
@@ -733,6 +786,144 @@ export default function AccountPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ─── API Tab ──────────────────────────────────────── */}
+        {apiKeyData?.accessEnabled && (
+          <TabsContent value="api">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <CardTitle>API Access</CardTitle>
+                    <CardDescription>
+                      Generate a personal API key to connect the Academy Toolkit mobile app or any companion dashboard to your account.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {isApiKeyLoading ? (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                  </div>
+                ) : (
+                  <>
+                    {/* Current key or revealed key */}
+                    {(revealedKey || apiKeyData?.record) && (
+                      <div className="space-y-3">
+                        <div className="rounded-lg border bg-muted/40 p-4 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Your API Key</p>
+                            <div className="flex items-center gap-1">
+                              {revealedKey && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => setKeyVisible(v => !v)}
+                                    data-testid="button-toggle-key-visibility"
+                                  >
+                                    {keyVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(revealedKey);
+                                      toast({ title: "Copied to clipboard" });
+                                    }}
+                                    data-testid="button-copy-api-key"
+                                  >
+                                    <Copy className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <code className="block text-sm font-mono break-all text-foreground" data-testid="text-api-key">
+                            {revealedKey
+                              ? (keyVisible ? revealedKey : revealedKey.slice(0, 12) + "•".repeat(revealedKey.length - 12))
+                              : (apiKeyData?.record?.keyPrefix + "••••••••••••••••••••••••••••••••••••••••••••••••••••")}
+                          </code>
+                          {revealedKey && (
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                              <Key className="h-3 w-3" /> Save this key now — it won't be shown again once you leave this page.
+                            </p>
+                          )}
+                          {!revealedKey && apiKeyData?.record && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Created {formatDate(apiKeyData.record.createdAt)}
+                              {apiKeyData.record.lastUsedAt && ` · Last used ${formatRelative(apiKeyData.record.lastUsedAt)}`}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => generateKeyMutation.mutate()}
+                            disabled={generateKeyMutation.isPending}
+                            data-testid="button-regenerate-api-key"
+                          >
+                            {generateKeyMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+                            Regenerate key
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => revokeKeyMutation.mutate()}
+                            disabled={revokeKeyMutation.isPending}
+                            data-testid="button-revoke-api-key"
+                          >
+                            {revokeKeyMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
+                            Revoke
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No key yet */}
+                    {!revealedKey && !apiKeyData?.record && (
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          You don't have an API key yet. Generate one to connect your account to the mobile app or a companion dashboard.
+                        </p>
+                        <Button
+                          size="sm"
+                          onClick={() => generateKeyMutation.mutate()}
+                          disabled={generateKeyMutation.isPending}
+                          data-testid="button-generate-api-key"
+                        >
+                          {generateKeyMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Key className="h-3.5 w-3.5 mr-1.5" />}
+                          Generate API key
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Endpoints reference */}
+                    <div className="rounded-lg border p-4 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Available endpoints (read-only)</p>
+                      <ul className="space-y-1 text-xs font-mono text-muted-foreground">
+                        <li><span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span> /api/v1/me</li>
+                        <li><span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span> /api/v1/dashboard</li>
+                        <li><span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span> /api/v1/tasks</li>
+                        <li><span className="text-emerald-600 dark:text-emerald-400 font-bold">GET</span> /api/v1/dmo</li>
+                      </ul>
+                      <p className="text-[11px] text-muted-foreground pt-1">
+                        Pass your key as <code className="bg-muted px-1 rounded">Authorization: Bearer &lt;key&gt;</code> or <code className="bg-muted px-1 rounded">X-API-Key: &lt;key&gt;</code>
+                      </p>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

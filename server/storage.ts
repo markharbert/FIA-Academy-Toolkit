@@ -1,6 +1,7 @@
 import { 
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
-  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys,
+  type PublicApiKey,
   dmoEntries, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
   teleprompterScripts, type TeleprompterScript, type InsertTeleprompterScript,
@@ -326,6 +327,15 @@ export interface IStorage {
   // App Settings
   getMonthlyCreditsLimit(): Promise<number>;
   setMonthlyCreditsLimit(limit: number): Promise<void>;
+  getApiAccessEnabled(): Promise<boolean>;
+  setApiAccessEnabled(enabled: boolean): Promise<void>;
+
+  // Public API Keys
+  getUserPublicApiKey(userId: string): Promise<PublicApiKey | undefined>;
+  generateUserPublicApiKey(userId: string, label?: string): Promise<{ rawKey: string; record: PublicApiKey }>;
+  revokeUserPublicApiKey(userId: string): Promise<void>;
+  getUserByPublicApiKeyHash(keyHash: string): Promise<User | undefined>;
+  touchPublicApiKey(keyHash: string, cfChecked?: boolean): Promise<void>;
 
   // DMO Tracker
   getDmoEntry(userId: string, date: string): Promise<DmoEntry | undefined>;
@@ -1992,8 +2002,58 @@ export class DatabaseStorage implements IStorage {
     await db.insert(appSettings)
       .values({ key: "monthly_credits_limit", value: String(limit), updatedAt: now })
       .onConflictDoUpdate({ target: appSettings.key, set: { value: String(limit), updatedAt: now } });
-    // Update all existing users to the new limit
     await db.update(videoTrendsCredits).set({ monthlyLimit: limit, updatedAt: now });
+  }
+
+  async getApiAccessEnabled(): Promise<boolean> {
+    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, "api_access_enabled"));
+    return row?.value === "true";
+  }
+
+  async setApiAccessEnabled(enabled: boolean): Promise<void> {
+    const now = new Date();
+    await db.insert(appSettings)
+      .values({ key: "api_access_enabled", value: enabled ? "true" : "false", updatedAt: now })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value: enabled ? "true" : "false", updatedAt: now } });
+  }
+
+  // Public API Keys
+  async getUserPublicApiKey(userId: string): Promise<PublicApiKey | undefined> {
+    const [row] = await db.select().from(publicApiKeys).where(eq(publicApiKeys.userId, userId));
+    return row || undefined;
+  }
+
+  async generateUserPublicApiKey(userId: string, label?: string): Promise<{ rawKey: string; record: PublicApiKey }> {
+    const { createHash, randomBytes } = await import("crypto");
+    const rawKey = "ftk_" + randomBytes(32).toString("hex");
+    const keyHash = createHash("sha256").update(rawKey).digest("hex");
+    const keyPrefix = rawKey.slice(0, 12);
+    // Revoke any existing key first
+    await db.delete(publicApiKeys).where(eq(publicApiKeys.userId, userId));
+    const [record] = await db.insert(publicApiKeys)
+      .values({ userId, keyHash, keyPrefix, label: label || null })
+      .returning();
+    return { rawKey, record };
+  }
+
+  async revokeUserPublicApiKey(userId: string): Promise<void> {
+    await db.delete(publicApiKeys).where(eq(publicApiKeys.userId, userId));
+  }
+
+  async getUserByPublicApiKeyHash(keyHash: string): Promise<User | undefined> {
+    const [row] = await db
+      .select({ user: users })
+      .from(publicApiKeys)
+      .innerJoin(users, eq(users.id, publicApiKeys.userId))
+      .where(eq(publicApiKeys.keyHash, keyHash));
+    return row?.user || undefined;
+  }
+
+  async touchPublicApiKey(keyHash: string, cfChecked = false): Promise<void> {
+    const now = new Date();
+    const updates: Partial<typeof publicApiKeys.$inferSelect> = { lastUsedAt: now };
+    if (cfChecked) updates.cfLastCheckedAt = now;
+    await db.update(publicApiKeys).set(updates).where(eq(publicApiKeys.keyHash, keyHash));
   }
 
   // DMO Tracker

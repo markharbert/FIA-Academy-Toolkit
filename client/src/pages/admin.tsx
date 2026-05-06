@@ -50,6 +50,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { 
   Loader2, CheckCircle, AlertCircle,
   Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
@@ -57,7 +58,7 @@ import {
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
   Key, Youtube, MessageSquare, XCircle, Trash2,
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
-  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link
+  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -293,6 +294,50 @@ interface CfUser {
   cfEnrolledAt: string | null;
   cfRevokedAt: string | null;
   cfContactId: string | null;
+}
+
+function ApiAccessToggleCard() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/admin/settings/api-access"],
+  });
+  const toggle = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiRequest("PUT", "/api/admin/settings/api-access", { enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings/api-access"] });
+      toast({ title: "Setting saved" });
+    },
+    onError: () => toast({ title: "Failed to update setting", variant: "destructive" }),
+  });
+
+  return (
+    <Card data-testid="card-api-access-toggle">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-base">API Access for Members</CardTitle>
+              <CardDescription className="text-sm mt-0.5">
+                When enabled, members can generate API keys from their Account page to use with the mobile / companion app.
+              </CardDescription>
+            </div>
+          </div>
+          {isLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : (
+            <Switch
+              checked={data?.enabled ?? false}
+              onCheckedChange={(v) => toggle.mutate(v)}
+              disabled={toggle.isPending}
+              data-testid="toggle-api-access"
+            />
+          )}
+        </div>
+      </CardHeader>
+    </Card>
+  );
 }
 
 function CfIntegrationTab() {
@@ -1902,6 +1947,9 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* API Access toggle */}
+          <ApiAccessToggleCard />
 
           {/* Integration health strip */}
           <div className="grid gap-4 md:grid-cols-2">

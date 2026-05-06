@@ -1617,3 +1617,17 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   reputationDropAlert: { enabled: true },
   weeklyInboxReport: { enabled: false, dayOfWeek: 1, hour: 8 },
 };
+
+// ─── Public API Keys (read-only external/mobile API access) ───────────────────
+export const publicApiKeys = pgTable("public_api_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  label: text("label"),
+  lastUsedAt: timestamp("last_used_at"),
+  cfLastCheckedAt: timestamp("cf_last_checked_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type PublicApiKey = typeof publicApiKeys.$inferSelect;
