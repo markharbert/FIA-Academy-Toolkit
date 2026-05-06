@@ -7192,6 +7192,103 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── v1 Projects write access ─────────────────────────────────────────────
+
+  app.get("/api/v1/projects", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const projects = await storage.getProjectsForUser(user.id);
+      res.json({ projects });
+    } catch (err) {
+      console.error("[v1] projects list error:", err);
+      res.status(500).json({ message: "Failed to load projects" });
+    }
+  });
+
+  app.post("/api/v1/projects", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const parsed = insertProjectSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const project = await storage.createProject(user.id, parsed.data);
+      res.status(201).json({ project });
+    } catch (err) {
+      console.error("[v1] project create error:", err);
+      res.status(500).json({ message: "Failed to create project" });
+    }
+  });
+
+  app.patch("/api/v1/projects/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const parsed = insertProjectSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const project = await storage.updateProject(req.params.id, user.id, parsed.data);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      res.json({ project });
+    } catch (err) {
+      console.error("[v1] project update error:", err);
+      res.status(500).json({ message: "Failed to update project" });
+    }
+  });
+
+  app.delete("/api/v1/projects/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const existing = await storage.getProject(req.params.id, user.id);
+      if (!existing) return res.status(404).json({ message: "Project not found" });
+      await storage.deleteProject(req.params.id, user.id);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[v1] project delete error:", err);
+      res.status(500).json({ message: "Failed to delete project" });
+    }
+  });
+
+  // ─── v1 Tasks write access ────────────────────────────────────────────────
+
+  app.post("/api/v1/tasks", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const parsed = insertProjectTaskSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const project = await storage.getProject(parsed.data.projectId, user.id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const task = await storage.createTask(user.id, parsed.data.projectId, parsed.data);
+      res.status(201).json({ task });
+    } catch (err) {
+      console.error("[v1] task create error:", err);
+      res.status(500).json({ message: "Failed to create task" });
+    }
+  });
+
+  app.patch("/api/v1/tasks/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const parsed = updateProjectTaskSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const task = await storage.updateTask(req.params.id, user.id, parsed.data);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      res.json({ task });
+    } catch (err) {
+      console.error("[v1] task update error:", err);
+      res.status(500).json({ message: "Failed to update task" });
+    }
+  });
+
+  app.delete("/api/v1/tasks/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const existing = await storage.getTask(req.params.id, user.id);
+      if (!existing) return res.status(404).json({ message: "Task not found" });
+      await storage.deleteTask(req.params.id, user.id);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[v1] task delete error:", err);
+      res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 
