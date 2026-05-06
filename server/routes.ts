@@ -1142,12 +1142,14 @@ export async function registerRoutes(
       const html    = override?.htmlOverride   ?? fn().html;
       const text    = fn().text;
 
-      const adminUser = await storage.getUser(req.session.userId!);
-      if (!adminUser?.email) return res.status(400).json({ message: "Admin user has no email address" });
+      // Allow caller to specify a recipient; fall back to the admin's own email
+      const { email: bodyEmail } = req.body as { email?: string };
+      const sendTo = bodyEmail?.trim() || (await storage.getUser(req.session.userId!))?.email;
+      if (!sendTo) return res.status(400).json({ message: "No email address available" });
 
       const { sendEmail } = await import("./email-sendgrid");
-      await sendEmail({ to: adminUser.email, subject: `[TEST] ${subject}`, html, text });
-      res.json({ message: "Test email sent", to: adminUser.email });
+      await sendEmail({ to: sendTo, subject: `[TEST] ${subject}`, html, text });
+      res.json({ message: "Test email sent", to: sendTo });
     } catch (err: any) {
       console.error("[email-templates] send-test error:", err);
       res.status(500).json({ message: err?.message ?? "Failed to send test email" });

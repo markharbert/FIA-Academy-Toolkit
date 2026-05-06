@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -41,6 +41,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Loader2, CheckCircle, AlertCircle,
@@ -610,11 +618,22 @@ const EMAIL_TEMPLATE_GROUPS = ["General", "Projects & Tasks", "DMO", "Video", "E
 
 function EmailTemplatesTab() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [selectedKey, setSelectedKey] = useState("welcome");
   const [isEditing, setIsEditing] = useState(false);
   const [subjectDraft, setSubjectDraft] = useState("");
   const [htmlDraft, setHtmlDraft] = useState("");
   const [previewVersion, setPreviewVersion] = useState(0);
+
+  // Visual editor state
+  const [editorMode, setEditorMode] = useState<"visual" | "html">("visual");
+  const [visualSrcdoc, setVisualSrcdoc] = useState("");
+  const [visualFrameKey, setVisualFrameKey] = useState(0);
+  const visualIframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Send-test dialog
+  const [sendTestOpen, setSendTestOpen] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
   const [sendTestPending, setSendTestPending] = useState(false);
 
   const { data: overridesData } = useQuery<{ overrides: Array<{ templateKey: string; subjectOverride: string | null; updatedAt: string }> }>({
@@ -635,9 +654,28 @@ function EmailTemplatesTab() {
     }
   }, [source, selectedKey]);
 
+  // Extract current HTML from the visual iframe (or fall back to htmlDraft)
+  function getIframeHtml(): string {
+    const doc = visualIframeRef.current?.contentDocument;
+    if (doc) return "<!DOCTYPE html>" + doc.documentElement.outerHTML;
+    return htmlDraft;
+  }
+
+  function switchToHtml() {
+    if (editorMode === "visual") setHtmlDraft(getIframeHtml());
+    setEditorMode("html");
+  }
+
+  function switchToVisual() {
+    const html = editorMode === "html" ? htmlDraft : visualSrcdoc;
+    setVisualSrcdoc(html);
+    setVisualFrameKey((k) => k + 1);
+    setEditorMode("visual");
+  }
+
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("PUT", `/api/admin/email-templates/${selectedKey}`, { subject: subjectDraft, html: htmlDraft });
+    mutationFn: async ({ subject, html }: { subject: string; html: string }) => {
+      const res = await apiRequest("PUT", `/api/admin/email-templates/${selectedKey}`, { subject, html });
       return res.json();
     },
     onSuccess: () => {
@@ -668,12 +706,24 @@ function EmailTemplatesTab() {
   const selectedTemplate = EMAIL_TEMPLATES.find((t) => t.key === selectedKey);
   const hasOverride = overrideKeys.has(selectedKey);
 
+  function handleSave() {
+    const html = editorMode === "visual" ? getIframeHtml() : htmlDraft;
+    saveMutation.mutate({ subject: subjectDraft, html });
+  }
+
+  function openSendTestDialog() {
+    setTestEmail(user?.email ?? "");
+    setSendTestOpen(true);
+  }
+
   async function sendTestEmail() {
+    if (!testEmail.trim()) return;
     setSendTestPending(true);
     try {
-      const res = await apiRequest("POST", `/api/admin/email-templates/${selectedKey}/send-test`, {});
+      const res = await apiRequest("POST", `/api/admin/email-templates/${selectedKey}/send-test`, { email: testEmail.trim() });
       const data = await res.json();
       toast({ title: "Test email sent", description: `Delivered to ${data.to}` });
+      setSendTestOpen(false);
     } catch {
       toast({ title: "Failed to send test email", variant: "destructive" });
     } finally {
@@ -690,213 +740,310 @@ function EmailTemplatesTab() {
     if (source) {
       setSubjectDraft(source.subject);
       setHtmlDraft(source.html);
+      setVisualSrcdoc(source.html);
+      setVisualFrameKey((k) => k + 1);
     }
+    setEditorMode("visual");
     setIsEditing(true);
   }
 
   function restoreDefault() {
     if (source) {
+      const h = source.defaultHtml;
       setSubjectDraft(source.defaultSubject);
-      setHtmlDraft(source.defaultHtml);
+      setHtmlDraft(h);
+      setVisualSrcdoc(h);
+      setVisualFrameKey((k) => k + 1);
     }
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="border-b">
-        <CardTitle className="flex items-center gap-2">
-          <Mail className="h-5 w-5 text-violet-500" />
-          Email Templates
-        </CardTitle>
-        <CardDescription>
-          Preview and customise the notification emails sent to members. Edits take effect immediately for future sends.
-        </CardDescription>
-      </CardHeader>
-      <div className="flex" style={{ height: "680px" }}>
-        {/* ── Sidebar ── */}
-        <div className="w-52 shrink-0 border-r overflow-y-auto p-2 space-y-3">
-          {EMAIL_TEMPLATE_GROUPS.map((group) => (
-            <div key={group}>
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                {group}
-              </p>
-              {EMAIL_TEMPLATES.filter((t) => t.group === group).map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => selectTemplate(t.key)}
-                  className={cn(
-                    "w-full text-left px-2.5 py-1.5 rounded-md text-sm flex items-center justify-between gap-1 transition-colors",
-                    selectedKey === t.key
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-foreground"
-                  )}
-                  data-testid={`btn-template-${t.key}`}
-                >
-                  <span className="truncate">{t.label}</span>
-                  {overrideKeys.has(t.key) && (
-                    <span className={cn(
-                      "shrink-0 text-[9px] font-bold px-1 py-0.5 rounded",
-                      selectedKey === t.key
-                        ? "bg-white/20 text-white"
-                        : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
-                    )}>
-                      CUSTOM
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
+    <>
+      {/* ── Send-test dialog ── */}
+      <Dialog open={sendTestOpen} onOpenChange={setSendTestOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send test email</DialogTitle>
+            <DialogDescription>
+              Send a copy of the <strong>{selectedTemplate?.label}</strong> template to any address.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label className="text-sm font-medium">Recipient email address</label>
+            <Input
+              type="email"
+              placeholder="you@example.com"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendTestEmail()}
+              autoFocus
+              data-testid="input-test-email"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendTestOpen(false)}>Cancel</Button>
+            <Button
+              onClick={sendTestEmail}
+              disabled={sendTestPending || !testEmail.trim()}
+              data-testid="button-confirm-send-test"
+            >
+              {sendTestPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+              Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {/* ── Right panel ── */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          {/* Toolbar */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/20 gap-3 shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="font-medium text-sm truncate">{selectedTemplate?.label}</span>
-              {hasOverride && !isEditing && (
-                <Badge variant="secondary" className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
-                  Custom
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {isEditing ? (
-                <>
-                  {source?.hasOverride && (
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b">
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-violet-500" />
+            Email Templates
+          </CardTitle>
+          <CardDescription>
+            Preview and customise the notification emails sent to members. Edits take effect immediately for future sends.
+          </CardDescription>
+        </CardHeader>
+        <div className="flex" style={{ height: "680px" }}>
+          {/* ── Sidebar ── */}
+          <div className="w-52 shrink-0 border-r overflow-y-auto p-2 space-y-3">
+            {EMAIL_TEMPLATE_GROUPS.map((group) => (
+              <div key={group}>
+                <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  {group}
+                </p>
+                {EMAIL_TEMPLATES.filter((t) => t.group === group).map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => selectTemplate(t.key)}
+                    className={cn(
+                      "w-full text-left px-2.5 py-1.5 rounded-md text-sm flex items-center justify-between gap-1 transition-colors",
+                      selectedKey === t.key
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted text-foreground"
+                    )}
+                    data-testid={`btn-template-${t.key}`}
+                  >
+                    <span className="truncate">{t.label}</span>
+                    {overrideKeys.has(t.key) && (
+                      <span className={cn(
+                        "shrink-0 text-[9px] font-bold px-1 py-0.5 rounded",
+                        selectedKey === t.key
+                          ? "bg-white/20 text-white"
+                          : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
+                      )}>
+                        CUSTOM
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* ── Right panel ── */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/20 gap-3 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-medium text-sm truncate">{selectedTemplate?.label}</span>
+                {hasOverride && !isEditing && (
+                  <Badge variant="secondary" className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                    Custom
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {isEditing ? (
+                  <>
+                    {source?.hasOverride && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs text-muted-foreground"
+                        onClick={() => resetMutation.mutate()}
+                        disabled={resetMutation.isPending}
+                        data-testid="button-reset-template"
+                      >
+                        {resetMutation.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                        Reset to default
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                      onClick={restoreDefault}
+                      disabled={saveMutation.isPending}
+                    >
+                      Restore original text
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                      onClick={() => setIsEditing(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="text-xs"
+                      onClick={handleSave}
+                      disabled={saveMutation.isPending}
+                      data-testid="button-save-template"
+                    >
+                      {saveMutation.isPending && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
+                      Save template
+                    </Button>
+                  </>
+                ) : (
+                  <>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-xs text-muted-foreground"
-                      onClick={() => resetMutation.mutate()}
-                      disabled={resetMutation.isPending}
-                      data-testid="button-reset-template"
+                      className="text-xs"
+                      onClick={() => setPreviewVersion((v) => v + 1)}
+                      data-testid="button-refresh-preview"
                     >
-                      {resetMutation.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                      Reset to default
+                      <RefreshCw className="h-3 w-3 mr-1.5" />
+                      Refresh
                     </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs"
-                    onClick={restoreDefault}
-                    disabled={saveMutation.isPending}
-                  >
-                    Restore original text
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs"
-                    onClick={() => setIsEditing(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => saveMutation.mutate()}
-                    disabled={saveMutation.isPending}
-                    data-testid="button-save-template"
-                  >
-                    {saveMutation.isPending && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-                    Save template
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-xs"
-                    onClick={() => setPreviewVersion((v) => v + 1)}
-                    data-testid="button-refresh-preview"
-                  >
-                    <RefreshCw className="h-3 w-3 mr-1.5" />
-                    Refresh
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs"
-                    onClick={sendTestEmail}
-                    disabled={sendTestPending}
-                    data-testid="button-send-test-email"
-                  >
-                    {sendTestPending ? (
-                      <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                    ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                      onClick={openSendTestDialog}
+                      data-testid="button-send-test-email"
+                    >
                       <Send className="h-3 w-3 mr-1.5" />
-                    )}
-                    Send test email
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="text-xs"
-                    onClick={startEditing}
-                    data-testid="button-edit-template"
-                  >
-                    Edit template
-                  </Button>
-                </>
-              )}
+                      Send test email
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="text-xs"
+                      onClick={startEditing}
+                      data-testid="button-edit-template"
+                    >
+                      Edit template
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Content */}
-          {isEditing ? (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Subject line
-                </label>
-                <Input
-                  value={subjectDraft}
-                  onChange={(e) => setSubjectDraft(e.target.value)}
-                  className="font-mono text-sm"
-                  placeholder="Email subject"
-                  data-testid="input-template-subject"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  HTML body
-                </label>
-                <Textarea
-                  value={htmlDraft}
-                  onChange={(e) => setHtmlDraft(e.target.value)}
-                  className="font-mono text-xs leading-relaxed resize-y"
-                  style={{ minHeight: "460px" }}
-                  spellCheck={false}
-                  data-testid="textarea-template-html"
-                />
-                <p className="text-xs text-muted-foreground">
-                  This is the full HTML email. Edit carefully — invalid HTML may break rendering. Use "Restore original text" to reset the editor to the saved version.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 relative bg-slate-100 dark:bg-slate-900">
-              {sourceLoading ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            {/* Content area */}
+            {isEditing ? (
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                {/* Subject + mode toggle */}
+                <div className="px-4 py-3 border-b space-y-3 shrink-0 bg-background">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Subject line
+                    </label>
+                    <Input
+                      value={subjectDraft}
+                      onChange={(e) => setSubjectDraft(e.target.value)}
+                      className="text-sm"
+                      placeholder="Email subject"
+                      data-testid="input-template-subject"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Body
+                    </label>
+                    <div className="flex rounded-md border overflow-hidden text-xs">
+                      <button
+                        onClick={switchToVisual}
+                        className={cn(
+                          "px-3 py-1.5 font-medium transition-colors",
+                          editorMode === "visual"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background hover:bg-muted text-muted-foreground"
+                        )}
+                        data-testid="button-editor-visual"
+                      >
+                        Visual
+                      </button>
+                      <button
+                        onClick={switchToHtml}
+                        className={cn(
+                          "px-3 py-1.5 font-medium transition-colors border-l",
+                          editorMode === "html"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background hover:bg-muted text-muted-foreground"
+                        )}
+                        data-testid="button-editor-html"
+                      >
+                        HTML
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <iframe
-                  key={`${selectedKey}-${previewVersion}`}
-                  src={`/api/admin/email-preview/${selectedKey}`}
-                  className="absolute inset-0 w-full h-full border-0"
-                  title={`Email preview: ${selectedTemplate?.label}`}
-                  data-testid="iframe-template-preview"
-                />
-              )}
-            </div>
-          )}
+
+                {/* Editor body */}
+                <div className="flex-1 overflow-hidden relative">
+                  {editorMode === "visual" ? (
+                    <>
+                      <iframe
+                        key={visualFrameKey}
+                        ref={visualIframeRef}
+                        srcDoc={visualSrcdoc}
+                        className="absolute inset-0 w-full h-full border-0 bg-slate-100 dark:bg-slate-900"
+                        title="Visual email editor"
+                        onLoad={() => {
+                          const doc = visualIframeRef.current?.contentDocument;
+                          if (doc) {
+                            doc.designMode = "on";
+                            doc.body.style.outline = "none";
+                          }
+                        }}
+                        data-testid="iframe-visual-editor"
+                      />
+                      <div className="absolute bottom-3 right-3 pointer-events-none">
+                        <span className="text-[10px] bg-black/50 text-white px-2 py-1 rounded-full">
+                          Click any text to edit
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 overflow-y-auto p-4">
+                      <Textarea
+                        value={htmlDraft}
+                        onChange={(e) => setHtmlDraft(e.target.value)}
+                        className="font-mono text-xs leading-relaxed resize-none w-full h-full min-h-[340px]"
+                        spellCheck={false}
+                        data-testid="textarea-template-html"
+                      />
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Edit the raw HTML. Switch to Visual to preview your changes.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 relative bg-slate-100 dark:bg-slate-900">
+                {sourceLoading ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <iframe
+                    key={`${selectedKey}-${previewVersion}`}
+                    src={`/api/admin/email-preview/${selectedKey}`}
+                    className="absolute inset-0 w-full h-full border-0"
+                    title={`Email preview: ${selectedTemplate?.label}`}
+                    data-testid="iframe-template-preview"
+                  />
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+    </>
   );
 }
 
