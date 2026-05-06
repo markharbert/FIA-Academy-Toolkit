@@ -313,7 +313,7 @@ export default function AccountPage() {
           </TabsTrigger>
           <TabsTrigger value="notifications" data-testid="tab-notifications">
             <Bell className="h-3.5 w-3.5 mr-1.5" />
-            Emails
+            Notifications
           </TabsTrigger>
           <TabsTrigger value="activity" data-testid="tab-activity">
             <Activity className="h-3.5 w-3.5 mr-1.5" />
