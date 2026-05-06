@@ -1,3 +1,6 @@
+// ─── Base URL ─────────────────────────────────────────────────────────────────
+const BASE_URL = (process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com").replace(/\/$/, "");
+
 // ─── Shared HTML wrapper ──────────────────────────────────────────────────────
 
 function wrap(title: string, body: string): string {
@@ -18,7 +21,7 @@ function wrap(title: string, body: string): string {
           <table cellpadding="0" cellspacing="0" width="100%">
             <tr>
               <td width="56" valign="middle" style="padding-right:16px;">
-                <img src="https://toolkit.fearlessmarketinglab.com/lion-logo.png" width="48" height="48" alt="Lion" style="display:block;border-radius:6px;" />
+                <img src="${BASE_URL}/lion-logo.png" width="48" height="48" alt="Lion" style="display:block;border-radius:6px;" />
               </td>
               <td valign="middle">
                 <p style="margin:0;color:#7ab5d9;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;">Fearless Influencer Academy Toolkit</p>
@@ -39,7 +42,7 @@ function wrap(title: string, body: string): string {
         <td style="background:#fff;padding:0 32px 24px;border-radius:0 0 12px 12px;border-top:1px solid #f1f5f9;">
           <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;">
             You're receiving this because you have notifications enabled in your Academy Toolkit account.<br/>
-            <a href="https://fearlessmarketinglab.com/account" style="color:#3f92cc;text-decoration:none;">Manage notification preferences</a>
+            <a href="${BASE_URL}/account" style="color:#3f92cc;text-decoration:none;">Manage notification preferences</a>
           </p>
         </td>
       </tr>
@@ -86,9 +89,9 @@ export function taskDueReminderEmail(params: {
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">You have ${count} task${count > 1 ? "s" : ""} coming up soon:</p>
     <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
-    ${btn("View my projects", "https://fearlessmarketinglab.com/projects")}`;
+    ${btn("View my projects", `${BASE_URL}/projects`)}`;
 
-  const text = `Hey ${name},\n\nYou have ${count} task(s) due soon:\n${params.tasks.map(t => `- ${t.title} (${t.projectName}) - Due ${t.dueDate}`).join("\n")}\n\nView at https://fearlessmarketinglab.com/projects`;
+  const text = `Hey ${name},\n\nYou have ${count} task(s) due soon:\n${params.tasks.map(t => `- ${t.title} (${t.projectName}) - Due ${t.dueDate}`).join("\n")}\n\nView at ${BASE_URL}/projects`;
 
   return { subject, html: wrap(subject, body), text };
 }
@@ -112,9 +115,9 @@ export function overdueAlertEmail(params: {
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">These tasks are past their due date:</p>
     <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
-    ${btn("Go to my projects", "https://fearlessmarketinglab.com/projects")}`;
+    ${btn("Go to my projects", `${BASE_URL}/projects`)}`;
 
-  const text = `Hey ${name},\n\nOverdue tasks:\n${params.tasks.map(t => `- ${t.title} (${t.projectName}) — ${t.daysOverdue}d overdue`).join("\n")}\n\nhttps://fearlessmarketinglab.com/projects`;
+  const text = `Hey ${name},\n\nOverdue tasks:\n${params.tasks.map(t => `- ${t.title} (${t.projectName}) — ${t.daysOverdue}d overdue`).join("\n")}\n\n${BASE_URL}/projects`;
 
   return { subject, html: wrap(subject, body), text };
 }
@@ -132,8 +135,8 @@ export function projectDueReminderEmail(params: {
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">
       Your project <strong>${params.projectName}</strong> is due on <strong>${params.dueDate}</strong> — that's ${params.daysLeft} day${params.daysLeft !== 1 ? "s" : ""} away.
     </p>
-    ${btn("View project", "https://fearlessmarketinglab.com/projects")}`;
-  const text = `Hey ${name},\n\nYour project "${params.projectName}" is due on ${params.dueDate} (${params.daysLeft} day(s) away).\n\nhttps://fearlessmarketinglab.com/projects`;
+    ${btn("View project", `${BASE_URL}/projects`)}`;
+  const text = `Hey ${name},\n\nYour project "${params.projectName}" is due on ${params.dueDate} (${params.daysLeft} day(s) away).\n\n${BASE_URL}/projects`;
   return { subject, html: wrap(subject, body), text };
 }
 
@@ -163,8 +166,8 @@ export function weeklyProjectDigestEmail(params: {
   const body = `
     <p style="margin:0 0 4px;font-size:15px;color:#334155;">Hey ${name}, here's your project summary for the week:</p>
     ${statsRow}${projectList}
-    ${btn("View all projects", "https://fearlessmarketinglab.com/projects")}`;
-  const text = `Hey ${name},\n\nWeekly project digest:\nOpen: ${params.openTasks} | Done: ${params.doneTasks} | Overdue: ${params.overdueCount}\n\nhttps://fearlessmarketinglab.com/projects`;
+    ${btn("View all projects", `${BASE_URL}/projects`)}`;
+  const text = `Hey ${name},\n\nWeekly project digest:\nOpen: ${params.openTasks} | Done: ${params.doneTasks} | Overdue: ${params.overdueCount}\n\n${BASE_URL}/projects`;
   return { subject, html: wrap(subject, body), text };
 }
 
@@ -180,8 +183,8 @@ export function dmoStreakAtRiskEmail(params: {
       You're on a <strong>${params.streakCount}-day DMO streak</strong> and haven't logged your activities today yet.
     </p>
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">Log in before midnight to keep your streak alive!</p>
-    ${btn("Log my DMO", "https://fearlessmarketinglab.com/dmo")}`;
-  const text = `Hey ${name},\n\nYou have a ${params.streakCount}-day streak and haven't logged today yet. Keep it going!\n\nhttps://fearlessmarketinglab.com/dmo`;
+    ${btn("Log my DMO", `${BASE_URL}/dmo-tracker`)}`;
+  const text = `Hey ${name},\n\nYou have a ${params.streakCount}-day streak and haven't logged today yet. Keep it going!\n\n${BASE_URL}/dmo-tracker`;
   return { subject, html: wrap("Keep Your Streak Alive!", body), text };
 }
 
@@ -201,8 +204,8 @@ export function dmoMilestoneEmail(params: {
     <p style="margin:16px 0 20px;font-size:15px;color:#334155;text-align:center;">
       You've been showing up consistently for <strong>${params.streakCount} days straight</strong>. That discipline is what separates the pros. Keep going!
     </p>
-    ${btn("View my DMO", "https://fearlessmarketinglab.com/dmo")}`;
-  const text = `Hey ${name},\n\nCongratulations on your ${params.streakCount}-day DMO streak! Keep it up!\n\nhttps://fearlessmarketinglab.com/dmo`;
+    ${btn("View my DMO", `${BASE_URL}/dmo-tracker`)}`;
+  const text = `Hey ${name},\n\nCongratulations on your ${params.streakCount}-day DMO streak! Keep it up!\n\n${BASE_URL}/dmo-tracker`;
   return { subject, html: wrap(`${params.streakCount}-Day Streak Milestone!`, body), text };
 }
 
@@ -218,8 +221,8 @@ export function dmoStreakBrokenEmail(params: {
       Your <strong>${params.streakCount}-day DMO streak</strong> ended. That happens — the key is to start a new one today.
     </p>
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">Every pro has missed a day. What matters is getting back up.</p>
-    ${btn("Start a new streak", "https://fearlessmarketinglab.com/dmo")}`;
-  const text = `Hey ${name},\n\nYour ${params.streakCount}-day streak ended. Start fresh today!\n\nhttps://fearlessmarketinglab.com/dmo`;
+    ${btn("Start a new streak", `${BASE_URL}/dmo-tracker`)}`;
+  const text = `Hey ${name},\n\nYour ${params.streakCount}-day streak ended. Start fresh today!\n\n${BASE_URL}/dmo-tracker`;
   return { subject, html: wrap("Start Fresh Today", body), text };
 }
 
@@ -239,8 +242,8 @@ export function weeklyDmoSummaryEmail(params: {
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name}, here's your DMO performance this week:</p>
     ${statsRow}
-    ${btn("View full DMO tracker", "https://fearlessmarketinglab.com/dmo")}`;
-  const text = `Hey ${name},\n\nWeekly DMO summary:\nPoints: ${params.points} | Streak: ${params.currentStreak} days | Days logged: ${params.activitiesLogged}\n\nhttps://fearlessmarketinglab.com/dmo`;
+    ${btn("View full DMO tracker", `${BASE_URL}/dmo-tracker`)}`;
+  const text = `Hey ${name},\n\nWeekly DMO summary:\nPoints: ${params.points} | Streak: ${params.currentStreak} days | Days logged: ${params.activitiesLogged}\n\n${BASE_URL}/dmo-tracker`;
   return { subject, html: wrap("Weekly DMO Summary", body), text };
 }
 
@@ -262,8 +265,8 @@ export function videoScoringCompleteEmail(params: {
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
     <p style="margin:0 0 8px;font-size:15px;color:#334155;">Your video <strong>"${params.videoTitle}"</strong> has been analyzed.</p>
     ${scoreDisplay}
-    ${btn("View my results", `https://fearlessmarketinglab.com/sessions/${params.sessionId}`)}`;
-  const text = `Hey ${name},\n\nYour video "${params.videoTitle}" has been scored${params.score !== null ? ` — ${params.score}/100` : ""}.\n\nView results: https://fearlessmarketinglab.com/sessions/${params.sessionId}`;
+    ${btn("View my results", `${BASE_URL}/video-score-upload/${params.sessionId}`)}`;
+  const text = `Hey ${name},\n\nYour video "${params.videoTitle}" has been scored${params.score !== null ? ` — ${params.score}/100` : ""}.\n\nView results: ${BASE_URL}/video-score-upload/${params.sessionId}`;
   return { subject, html: wrap("Your Video Results Are Ready", body), text };
 }
 
@@ -277,8 +280,8 @@ export function videoPracticeReminderEmail(params: {
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">
       You haven't uploaded a practice video this week yet. Consistency is the key to improvement — even a quick 60-second take counts.
     </p>
-    ${btn("Upload a video", "https://fearlessmarketinglab.com/upload")}`;
-  const text = `Hey ${name},\n\nYou haven't uploaded a practice video this week yet. Keep the habit going!\n\nhttps://fearlessmarketinglab.com/upload`;
+    ${btn("Upload a video", `${BASE_URL}/video-score-upload`)}`;
+  const text = `Hey ${name},\n\nYou haven't uploaded a practice video this week yet. Keep the habit going!\n\n${BASE_URL}/video-score-upload`;
   return { subject, html: wrap("Time for Your Weekly Video Practice", body), text };
 }
 
@@ -298,8 +301,8 @@ export function reputationDropAlertEmail(params: {
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">
       A dropping reputation can hurt your inbox placement. Review your recent campaign activity and authentication setup.
     </p>
-    ${btn("Check sender reputation", "https://fearlessmarketinglab.com/email-tools/sender-reputation")}`;
-  const text = `Hey ${name},\n\nSender reputation drop for ${params.domain}: ${params.previousScore} → ${params.score}.\n\nhttps://fearlessmarketinglab.com/email-tools/sender-reputation`;
+    ${btn("Check sender reputation", `${BASE_URL}/email-tools/sender-reputation`)}`;
+  const text = `Hey ${name},\n\nSender reputation drop for ${params.domain}: ${params.previousScore} → ${params.score}.\n\n${BASE_URL}/email-tools/sender-reputation`;
   return { subject, html: wrap("Sender Reputation Drop Detected", body), text };
 }
 
@@ -319,8 +322,8 @@ export function weeklyInboxReportEmail(params: {
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name}, here's your inbox placement performance for the week:</p>
     ${statsRow}
-    ${btn("View inbox analyzer", "https://fearlessmarketinglab.com/email-tools/inbox-analyzer")}`;
-  const text = `Hey ${name},\n\nWeekly inbox report:\nInbox: ${params.inboxRate}% | Spam: ${params.spamRate}% | Analyzed: ${params.emailsAnalyzed}\n\nhttps://fearlessmarketinglab.com/email-tools/inbox-analyzer`;
+    ${btn("View inbox analyzer", `${BASE_URL}/email-tools/inbox-analyzer`)}`;
+  const text = `Hey ${name},\n\nWeekly inbox report:\nInbox: ${params.inboxRate}% | Spam: ${params.spamRate}% | Analyzed: ${params.emailsAnalyzed}\n\n${BASE_URL}/email-tools/inbox-analyzer`;
   return { subject, html: wrap("Weekly Inbox Placement Report", body), text };
 }
 
@@ -341,7 +344,7 @@ export function welcomeEmail(params: {
       <li><strong>Track your DMO</strong> — build daily habits and watch your streak grow</li>
       <li><strong>Analyze your inbox</strong> — monitor deliverability and competitor emails</li>
     </ul>
-    ${btn("Go to your dashboard", "https://fearlessmarketinglab.com/")}`;
-  const text = `Hey ${name}, welcome to Academy Toolkit!\n\nYour account is active. Get started at https://fearlessmarketinglab.com/`;
+    ${btn("Go to your dashboard", `${BASE_URL}/dashboard`)}`;
+  const text = `Hey ${name}, welcome to Academy Toolkit!\n\nYour account is active. Get started at ${BASE_URL}/dashboard`;
   return { subject, html: wrap("Welcome to Academy Toolkit!", body), text };
 }
