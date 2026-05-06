@@ -2,7 +2,8 @@ import { useState, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { ProjectWithCounts, ProjectTask, ProjectTemplateWithCounts } from "@shared/schema";
+import type { ProjectWithCounts, ProjectTask, ProjectTemplateWithCounts, Project, ProjectColumn } from "@shared/schema";
+import { TaskDetailSheet } from "@/components/projects/task-detail-sheet";
 
 type UrgentTask = ProjectTask & { projectName: string; projectColor: string };
 import { Card, CardContent } from "@/components/ui/card";
@@ -537,7 +538,7 @@ function AllTasksList({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading: 
   );
 }
 
-function TasksCalendar({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading: boolean; tz?: string | null }) {
+function TasksCalendar({ tasks, isLoading, tz, onTaskClick }: { tasks: OpenTask[]; isLoading: boolean; tz?: string | null; onTaskClick: (task: OpenTask) => void }) {
   const z = tz || "America/New_York";
   const [cursor, setCursor] = useState(() => {
     const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d;
@@ -621,10 +622,10 @@ function TasksCalendar({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading:
               </div>
               <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
                 {dayTasks.slice(0, 3).map(t => (
-                  <Link
+                  <button
                     key={t.id}
-                    href={`/projects/${t.projectId}`}
-                    className={`text-[10px] leading-tight px-1.5 py-0.5 rounded truncate hover-elevate ${
+                    onClick={() => onTaskClick(t)}
+                    className={`text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate hover-elevate ${
                       overdue && !isToday ? "bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200" :
                       isToday ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200" :
                       "bg-muted text-foreground"
@@ -634,7 +635,7 @@ function TasksCalendar({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading:
                   >
                     <span className="inline-block h-1.5 w-1.5 rounded-full mr-1 align-middle" style={{ background: t.projectColor }} aria-hidden="true" />
                     {t.title}
-                  </Link>
+                  </button>
                 ))}
                 {dayTasks.length > 3 && (
                   <span className="text-[9px] text-muted-foreground px-1.5">+{dayTasks.length - 3} more</span>
@@ -877,6 +878,27 @@ export default function ProjectsPage() {
   const { data: templates = [], isLoading: templatesLoading } = useQuery<ProjectTemplateWithCounts[]>({
     queryKey: ["/api/project-templates"],
   });
+
+  // Calendar task detail sheet
+  const [calendarTask, setCalendarTask] = useState<OpenTask | null>(null);
+  const { data: calendarProject } = useQuery<Project>({
+    queryKey: ["/api/projects", calendarTask?.projectId],
+    enabled: !!calendarTask,
+  });
+  const { data: calendarColumns = [] } = useQuery<ProjectColumn[]>({
+    queryKey: ["/api/projects", calendarTask?.projectId, "columns"],
+    enabled: !!calendarTask,
+  });
+  const { data: calendarProjectTasks = [] } = useQuery<ProjectTask[]>({
+    queryKey: ["/api/projects", calendarTask?.projectId, "tasks"],
+    enabled: !!calendarTask,
+  });
+  const calendarSubtasks = calendarTask
+    ? calendarProjectTasks.filter(t => t.parentTaskId === calendarTask.id)
+    : [];
+  const calendarParentTask = calendarTask?.parentTaskId
+    ? calendarProjectTasks.find(t => t.id === calendarTask.parentTaskId) ?? null
+    : null;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -1233,7 +1255,7 @@ export default function ProjectsPage() {
         ) : topTab === "list" ? (
           <AllTasksList tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} />
         ) : topTab === "calendar" ? (
-          <TasksCalendar tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} />
+          <TasksCalendar tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setCalendarTask} />
         ) : (
           <TemplatesTab
             templates={templates}
@@ -1245,6 +1267,22 @@ export default function ProjectsPage() {
           />
         )}
       </div>
+
+      {calendarProject && (
+        <TaskDetailSheet
+          project={calendarProject}
+          columns={calendarColumns}
+          task={calendarTask}
+          parentTask={calendarParentTask}
+          subtasks={calendarSubtasks}
+          open={!!calendarTask}
+          onOpenChange={(o) => { if (!o) setCalendarTask(null); }}
+          onOpenTask={(id) => {
+            const t = calendarProjectTasks.find(p => p.id === id);
+            if (t) setCalendarTask({ ...t, projectName: calendarTask?.projectName ?? "", projectColor: calendarTask?.projectColor ?? "" });
+          }}
+        />
+      )}
 
       <Dialog open={createTemplateOpen} onOpenChange={setCreateTemplateOpen}>
         <DialogContent className="sm:max-w-md" data-testid="dialog-new-template">
