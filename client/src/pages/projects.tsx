@@ -252,18 +252,18 @@ function formatDueLabel(due: Date): { text: string; tone: "overdue" | "soon" | "
   const hours = Math.round(absMs / 3600000);
 
   if (diffMs < 0) {
-    if (hours < 1) return { text: `${minutes}m overdue`, tone: "overdue" };
-    if (hours < 24) return { text: `${hours}h overdue`, tone: "overdue" };
-    return { text: `${Math.round(hours / 24)}d overdue`, tone: "overdue" };
+    if (hours < 1) return { text: `Past Due · ${minutes}m`, tone: "overdue" };
+    if (hours < 24) return { text: `Past Due · ${hours}h`, tone: "overdue" };
+    return { text: `Past Due · ${Math.round(hours / 24)}d`, tone: "overdue" };
   }
   const sameDay = due.toDateString() === now.toDateString();
   const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
   const isTomorrow = due.toDateString() === tomorrow.toDateString();
 
-  if (hours < 1) return { text: `in ${minutes}m`, tone: "soon" };
-  if (sameDay) return { text: `today ${due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`, tone: "today" };
-  if (isTomorrow) return { text: `tomorrow ${due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`, tone: "tomorrow" };
-  return { text: `in ${hours}h`, tone: "soon" };
+  if (hours < 1) return { text: `Urgent · ${minutes}m`, tone: "soon" };
+  if (sameDay) return { text: `Urgent · today ${due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`, tone: "today" };
+  if (isTomorrow) return { text: `Urgent · tomorrow`, tone: "tomorrow" };
+  return { text: `Urgent · ${hours}h`, tone: "soon" };
 }
 
 function UrgentTasksBanner({ tasks }: { tasks: UrgentTask[] }) {
@@ -278,11 +278,11 @@ function UrgentTasksBanner({ tasks }: { tasks: UrgentTask[] }) {
             <Flame className="h-3.5 w-3.5 text-white" />
           </div>
           <div>
-            <h2 className="text-sm font-bold leading-tight" data-testid="text-urgent-tasks-title">Urgent — due in next 48 hours</h2>
+            <h2 className="text-sm font-bold leading-tight" data-testid="text-urgent-tasks-title">Tasks Need Attention</h2>
             <p className="text-[11px] text-muted-foreground leading-tight">
-              {overdue.length > 0 && <span className="text-rose-600 dark:text-rose-400 font-medium">{overdue.length} overdue</span>}
+              {overdue.length > 0 && <span className="text-rose-600 dark:text-rose-400 font-medium">{overdue.length} past due</span>}
               {overdue.length > 0 && upcoming.length > 0 && <span> · </span>}
-              {upcoming.length > 0 && <span>{upcoming.length} upcoming</span>}
+              {upcoming.length > 0 && <span className="text-amber-600 dark:text-amber-400 font-medium">{upcoming.length} urgent</span>}
             </p>
           </div>
         </div>

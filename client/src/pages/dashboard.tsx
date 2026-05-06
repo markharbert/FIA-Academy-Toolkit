@@ -207,7 +207,7 @@ function formatTaskDue(due: Date, tz?: string | null): string {
   const diff = dayDiffInTz(due, tz || "America/New_York");
   if (diff === 0) return "Today";
   if (diff === 1) return "Tomorrow";
-  if (diff < 0) return `${-diff}d overdue`;
+  if (diff < 0) return `Past Due · ${-diff}d`;
   return formatInTz(due, tz || "America/New_York", "MMM d");
 }
 
@@ -259,6 +259,9 @@ export default function DashboardPage() {
   }>({ queryKey: ["/api/dashboard/projects"] });
   const { data: openTasks = [] } = useQuery<OpenTask[]>({
     queryKey: ["/api/projects/all-tasks"],
+  });
+  const { data: urgentTasks = [] } = useQuery<OpenTask[]>({
+    queryKey: ["/api/projects/urgent-tasks"],
   });
 
   // ── derived values ─────────────────────────────────────────────────────────
@@ -436,6 +439,7 @@ export default function DashboardPage() {
           <ProjectsHero
             summary={projectsSummary}
             tasks={openTasks}
+            urgentTasks={urgentTasks}
             tz={user?.timezone}
           />
           <EmailHealthTile
@@ -621,6 +625,7 @@ export default function DashboardPage() {
 function ProjectsHero({
   summary,
   tasks,
+  urgentTasks,
   tz,
 }: {
   summary: {
@@ -631,9 +636,13 @@ function ProjectsHero({
     totalOverdue: number;
   } | undefined;
   tasks: OpenTask[];
+  urgentTasks?: OpenTask[];
   tz?: string | null;
 }) {
   const s = summary ?? { projects: [], totalActive: 0, totalOpenTasks: 0, totalDueThisWeek: 0, totalOverdue: 0 };
+  const urgent = urgentTasks ?? [];
+  const pastDueTasks = urgent.filter(t => t.dueDate && new Date(t.dueDate) < new Date());
+  const upcomingTasks = urgent.filter(t => t.dueDate && new Date(t.dueDate) >= new Date());
 
   // "Up Next" = tasks due this week only (overdue + today + this week).
   // Tasks without a due date and tasks dated further out are intentionally hidden.
@@ -656,7 +665,7 @@ function ProjectsHero({
       out.push({ section, tone, items: take });
       remaining -= take.length;
     };
-    push("Overdue", "text-rose-600 dark:text-rose-400", overdue);
+    push("Past Due", "text-rose-600 dark:text-rose-400", overdue);
     push("Today", "text-amber-600 dark:text-amber-400", today);
     push("This week", "text-sky-600 dark:text-sky-400", week);
     return out;
@@ -682,6 +691,58 @@ function ProjectsHero({
             Open all <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
+
+        {/* Urgent / Past Due alert banner */}
+        {urgent.length > 0 && (
+          <Link href="/projects" data-testid="banner-urgent-tasks">
+            <div className="mt-4 rounded-lg overflow-hidden border border-rose-500/30 bg-gradient-to-r from-rose-500/8 to-amber-500/5 hover:from-rose-500/14 transition-colors cursor-pointer">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-rose-500/20">
+                <div className="flex items-center gap-2">
+                  <div className="h-5 w-5 rounded-md bg-gradient-to-br from-rose-500 to-amber-500 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="h-3 w-3 text-white" />
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {pastDueTasks.length > 0 && (
+                      <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400">{pastDueTasks.length} Past Due</span>
+                    )}
+                    {pastDueTasks.length > 0 && upcomingTasks.length > 0 && (
+                      <span className="text-muted-foreground text-[11px]">·</span>
+                    )}
+                    {upcomingTasks.length > 0 && (
+                      <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">{upcomingTasks.length} Urgent</span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 shrink-0">
+                  View all <ChevronRight className="h-3 w-3" />
+                </span>
+              </div>
+              <ul className="divide-y divide-rose-500/10">
+                {urgent.slice(0, 3).map(t => {
+                  const isPastDue = t.dueDate && new Date(t.dueDate) < new Date();
+                  return (
+                    <li key={t.id} className="flex items-center gap-2.5 px-3 py-2" data-testid={`dashboard-urgent-task-${t.id}`}>
+                      {isPastDue
+                        ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-500" />
+                        : <Flame className="h-3 w-3 shrink-0 text-amber-500" />
+                      }
+                      <p className="text-xs font-medium flex-1 truncate">{t.title}</p>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ background: t.projectColor }} />
+                        <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{t.projectName}</span>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${
+                        isPastDue ? "bg-rose-500/15 text-rose-700 dark:text-rose-400" : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                      }`}>
+                        {isPastDue ? "Past Due" : "Urgent"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </Link>
+        )}
 
         {/* Summary chips */}
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
