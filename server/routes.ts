@@ -561,6 +561,13 @@ export async function registerRoutes(
     }
   });
 
+  // Public: serve brand logo (used in email templates)
+  app.get("/lion-logo.png", (_req: Request, res: Response) => {
+    const imgPath = path.join(process.cwd(), "client", "public", "lion-logo.png");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(imgPath);
+  });
+
   app.get("/api/auth/me", async (req: Request, res: Response) => {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Not authenticated" });
@@ -1054,10 +1061,16 @@ export async function registerRoutes(
     try {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.setHeader("Pragma", "no-cache");
+      // Rewrite production asset URLs so images load correctly in the dev preview
+      const prodBase = "https://toolkit.fearlessmarketinglab.com";
+      const reqBase = `${req.protocol}://${req.get("host")}`;
+      function rewriteForPreview(html: string) {
+        return html.replace(new RegExp(prodBase, "g"), reqBase);
+      }
       const override = await storage.getEmailTemplateOverride(template);
       if (override?.htmlOverride) {
         res.setHeader("Content-Type", "text/html");
-        return res.send(override.htmlOverride);
+        return res.send(rewriteForPreview(override.htmlOverride));
       }
       const fn = buildDefaultTemplateMap()[template];
       if (!fn) {
@@ -1065,7 +1078,7 @@ export async function registerRoutes(
         return res.status(404).send(`<pre>Unknown template "${template}".\n\nAvailable:\n${available}</pre>`);
       }
       res.setHeader("Content-Type", "text/html");
-      res.send(fn().html);
+      res.send(rewriteForPreview(fn().html));
     } catch (err) {
       res.status(500).send("<pre>Error rendering template</pre>");
     }
