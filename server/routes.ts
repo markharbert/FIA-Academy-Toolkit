@@ -7326,6 +7326,168 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── v1 DMO write + history ───────────────────────────────────────────────
+
+  app.post("/api/v1/dmo", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const dateRaw = req.body.date;
+      const date = (typeof dateRaw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateRaw))
+        ? dateRaw
+        : (() => { const { todayKeyInTz } = require("../shared/datetime"); return todayKeyInTz(user.timezone || "UTC"); })();
+      const parsed = dmoEntryDataSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const entry = await storage.upsertDmoEntry(user.id, date, parsed.data);
+      res.json({ entry });
+    } catch (err) {
+      console.error("[v1] dmo save error:", err);
+      res.status(500).json({ message: "Failed to save DMO entry" });
+    }
+  });
+
+  app.get("/api/v1/dmo/history", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const limit = Math.min(Number(req.query.limit) || 60, 365);
+      const entries = await storage.getDmoEntries(user.id, limit);
+      res.json({ entries });
+    } catch (err) {
+      console.error("[v1] dmo history error:", err);
+      res.status(500).json({ message: "Failed to load DMO history" });
+    }
+  });
+
+  // ─── v1 Video Sessions (read-only) ────────────────────────────────────────
+
+  app.get("/api/v1/sessions/folders", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const folders = await storage.getFoldersByUser(user.id);
+      res.json({ folders });
+    } catch (err) {
+      console.error("[v1] session folders error:", err);
+      res.status(500).json({ message: "Failed to load folders" });
+    }
+  });
+
+  app.get("/api/v1/sessions", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const sessions = await storage.getSessionsByUser(user.id);
+      res.json({
+        sessions: sessions.map(s => ({
+          id: s.id,
+          title: s.title,
+          goalType: s.goalType,
+          sourceType: s.sourceType,
+          processingStatus: s.processingStatus,
+          totalScore: s.scoreJson ? (s.scoreJson as any).totalScore ?? null : null,
+          durationSeconds: s.durationSeconds,
+          folderId: s.folderId,
+          thumbnailPath: s.thumbnailPath,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        })),
+      });
+    } catch (err) {
+      console.error("[v1] sessions list error:", err);
+      res.status(500).json({ message: "Failed to load sessions" });
+    }
+  });
+
+  app.get("/api/v1/sessions/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const session = await storage.getSession(req.params.id);
+      if (!session || session.userId !== user.id) return res.status(404).json({ message: "Session not found" });
+      res.json({ session: {
+        id: session.id,
+        title: session.title,
+        goalType: session.goalType,
+        sourceType: session.sourceType,
+        processingStatus: session.processingStatus,
+        durationSeconds: session.durationSeconds,
+        folderId: session.folderId,
+        thumbnailPath: session.thumbnailPath,
+        transcriptText: session.transcriptEditedText || session.transcriptText,
+        scoreJson: session.scoreJson,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      }});
+    } catch (err) {
+      console.error("[v1] session detail error:", err);
+      res.status(500).json({ message: "Failed to load session" });
+    }
+  });
+
+  // ─── v1 Teleprompter (full CRUD) ──────────────────────────────────────────
+
+  app.get("/api/v1/teleprompter", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const scripts = await storage.getTeleprompterScriptsByUser(user.id);
+      res.json({ scripts });
+    } catch (err) {
+      console.error("[v1] teleprompter list error:", err);
+      res.status(500).json({ message: "Failed to load scripts" });
+    }
+  });
+
+  app.get("/api/v1/teleprompter/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const script = await storage.getTeleprompterScript(req.params.id, user.id);
+      if (!script) return res.status(404).json({ message: "Script not found" });
+      res.json({ script });
+    } catch (err) {
+      console.error("[v1] teleprompter get error:", err);
+      res.status(500).json({ message: "Failed to load script" });
+    }
+  });
+
+  app.post("/api/v1/teleprompter", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { title, content } = req.body;
+      if (!title || typeof title !== "string" || !title.trim()) return res.status(400).json({ message: "title is required" });
+      if (typeof content !== "string") return res.status(400).json({ message: "content is required" });
+      const script = await storage.createTeleprompterScript(user.id, { title: title.trim(), content });
+      res.status(201).json({ script });
+    } catch (err) {
+      console.error("[v1] teleprompter create error:", err);
+      res.status(500).json({ message: "Failed to create script" });
+    }
+  });
+
+  app.patch("/api/v1/teleprompter/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { title, content } = req.body;
+      if (title !== undefined && (typeof title !== "string" || !title.trim())) return res.status(400).json({ message: "title must be a non-empty string" });
+      const script = await storage.updateTeleprompterScript(req.params.id, user.id, {
+        ...(title !== undefined ? { title: title.trim() } : {}),
+        ...(content !== undefined ? { content } : {}),
+      });
+      if (!script) return res.status(404).json({ message: "Script not found" });
+      res.json({ script });
+    } catch (err) {
+      console.error("[v1] teleprompter update error:", err);
+      res.status(500).json({ message: "Failed to update script" });
+    }
+  });
+
+  app.delete("/api/v1/teleprompter/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const ok = await storage.deleteTeleprompterScript(req.params.id, user.id);
+      if (!ok) return res.status(404).json({ message: "Script not found" });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[v1] teleprompter delete error:", err);
+      res.status(500).json({ message: "Failed to delete script" });
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 
