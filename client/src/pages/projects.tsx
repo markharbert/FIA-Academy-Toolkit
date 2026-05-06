@@ -458,7 +458,7 @@ function formatTaskDue(due: Date, tz?: string | null): string {
   return formatInTz(due, z, sameYear ? "MMM d" : "MMM d, yyyy") + timeStr;
 }
 
-function TaskRow({ t, tz }: { t: OpenTask; tz?: string | null }) {
+function TaskRow({ t, tz, onClick }: { t: OpenTask; tz?: string | null; onClick?: (t: OpenTask) => void }) {
   const due = t.dueDate ? new Date(t.dueDate) : null;
   const bucket = bucketTask(t, tz);
   const dueClasses =
@@ -466,8 +466,8 @@ function TaskRow({ t, tz }: { t: OpenTask; tz?: string | null }) {
     bucket === "today"   ? "text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40" :
     bucket === "week"    ? "text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/40" :
     "text-muted-foreground bg-muted";
-  return (
-    <Link href={`/projects/${t.projectId}`} className="flex items-center gap-3 px-4 py-2.5 hover-elevate transition-colors group" data-testid={`row-task-${t.id}`}>
+  const inner = (
+    <>
       <CircleDot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium truncate" data-testid={`text-task-title-${t.id}`}>{t.title}</p>
@@ -487,11 +487,23 @@ function TaskRow({ t, tz }: { t: OpenTask; tz?: string | null }) {
         </span>
       )}
       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" onClick={() => onClick(t)} className="w-full flex items-center gap-3 px-4 py-2.5 hover-elevate transition-colors group text-left" data-testid={`row-task-${t.id}`}>
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <Link href={`/projects/${t.projectId}`} className="flex items-center gap-3 px-4 py-2.5 hover-elevate transition-colors group" data-testid={`row-task-${t.id}`}>
+      {inner}
     </Link>
   );
 }
 
-function AllTasksList({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading: boolean; tz?: string | null }) {
+function AllTasksList({ tasks, isLoading, tz, onTaskClick }: { tasks: OpenTask[]; isLoading: boolean; tz?: string | null; onTaskClick?: (t: OpenTask) => void }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -511,10 +523,10 @@ function AllTasksList({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading: 
     );
   }
   const groups: Array<{ key: ReturnType<typeof bucketTask>; title: string; tone: string; items: OpenTask[] }> = [
-    { key: "overdue", title: "Overdue", tone: "text-rose-600 dark:text-rose-400", items: [] },
-    { key: "today",   title: "Today",   tone: "text-amber-600 dark:text-amber-400", items: [] },
+    { key: "overdue", title: "Past Due", tone: "text-rose-600 dark:text-rose-400", items: [] },
+    { key: "today",   title: "Today",    tone: "text-amber-600 dark:text-amber-400", items: [] },
     { key: "week",    title: "This week", tone: "text-sky-600 dark:text-sky-400", items: [] },
-    { key: "later",   title: "Later",   tone: "text-foreground", items: [] },
+    { key: "later",   title: "Later",    tone: "text-foreground", items: [] },
     { key: "none",    title: "No due date", tone: "text-muted-foreground", items: [] },
   ];
   for (const t of tasks) {
@@ -530,7 +542,7 @@ function AllTasksList({ tasks, isLoading, tz }: { tasks: OpenTask[]; isLoading: 
             <Badge variant="outline" className="text-[10px]">{g.items.length}</Badge>
           </div>
           <ul className="divide-y divide-border">
-            {g.items.map(t => <li key={t.id}>{<TaskRow t={t} tz={tz} />}</li>)}
+            {g.items.map(t => <li key={t.id}><TaskRow t={t} tz={tz} onClick={onTaskClick} /></li>)}
           </ul>
         </div>
       ))}
@@ -878,6 +890,27 @@ export default function ProjectsPage() {
   const { data: templates = [], isLoading: templatesLoading } = useQuery<ProjectTemplateWithCounts[]>({
     queryKey: ["/api/project-templates"],
   });
+
+  // All-tasks list task detail sheet
+  const [listTask, setListTask] = useState<OpenTask | null>(null);
+  const { data: listProject } = useQuery<Project>({
+    queryKey: ["/api/projects", listTask?.projectId],
+    enabled: !!listTask,
+  });
+  const { data: listColumns = [] } = useQuery<ProjectColumn[]>({
+    queryKey: ["/api/projects", listTask?.projectId, "columns"],
+    enabled: !!listTask,
+  });
+  const { data: listProjectTasks = [] } = useQuery<ProjectTask[]>({
+    queryKey: ["/api/projects", listTask?.projectId, "tasks"],
+    enabled: !!listTask,
+  });
+  const listSubtasks = listTask
+    ? listProjectTasks.filter(t => t.parentTaskId === listTask.id)
+    : [];
+  const listParentTask = listTask?.parentTaskId
+    ? listProjectTasks.find(t => t.id === listTask.parentTaskId) ?? null
+    : null;
 
   // Calendar task detail sheet
   const [calendarTask, setCalendarTask] = useState<OpenTask | null>(null);
@@ -1253,7 +1286,7 @@ export default function ProjectsPage() {
             />
           )
         ) : topTab === "list" ? (
-          <AllTasksList tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} />
+          <AllTasksList tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setListTask} />
         ) : topTab === "calendar" ? (
           <TasksCalendar tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setCalendarTask} />
         ) : (
@@ -1267,6 +1300,22 @@ export default function ProjectsPage() {
           />
         )}
       </div>
+
+      {listProject && (
+        <TaskDetailSheet
+          project={listProject}
+          columns={listColumns}
+          task={listTask}
+          parentTask={listParentTask}
+          subtasks={listSubtasks}
+          open={!!listTask}
+          onOpenChange={(o) => { if (!o) setListTask(null); }}
+          onOpenTask={(id) => {
+            const t = listProjectTasks.find(p => p.id === id);
+            if (t) setListTask({ ...t, projectName: listTask?.projectName ?? "", projectColor: listTask?.projectColor ?? "" });
+          }}
+        />
+      )}
 
       {calendarProject && (
         <TaskDetailSheet
