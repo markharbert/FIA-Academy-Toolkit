@@ -15,8 +15,17 @@ function wrap(title: string, body: string): string {
       <!-- Header -->
       <tr>
         <td style="background:linear-gradient(135deg,#06092a 0%,#0c1a4d 60%,#132660 100%);padding:28px 32px;border-radius:12px 12px 0 0;">
-          <p style="margin:0;color:#7ab5d9;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;">Fearless Influencer Academy Toolkit</p>
-          <p style="margin:6px 0 0;color:#fff;font-size:20px;font-weight:700;line-height:1.3;">${title}</p>
+          <table cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td width="56" valign="middle" style="padding-right:16px;">
+                <img src="https://toolkit.fearlessmarketinglab.com/lion-logo.png" width="48" height="48" alt="Lion" style="display:block;border-radius:6px;" />
+              </td>
+              <td valign="middle">
+                <p style="margin:0;color:#7ab5d9;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;">Fearless Influencer Academy Toolkit</p>
+                <p style="margin:6px 0 0;color:#fff;font-size:20px;font-weight:700;line-height:1.3;">${title}</p>
+              </td>
+            </tr>
+          </table>
         </td>
       </tr>
       <!-- Body -->
