@@ -9,7 +9,6 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
-  defaultDropAnimationSideEffects,
   closestCenter,
   useDroppable,
 } from "@dnd-kit/core";
@@ -439,13 +438,17 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
       await apiRequest("POST", `/api/projects/${projectId}/tasks/reorder`, updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
+      // Tasks cache was already updated optimistically in handleDragEnd — no need to
+      // invalidate it here (that would trigger a refetch → useEffect → re-render → jump).
+      // Only invalidate aggregated queries used by other views.
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects/all-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects/urgent-tasks"] });
     },
     onError: (err: Error) => {
       toast({ title: "Failed to save order", description: err.message, variant: "destructive" });
+      // Revert optimistic cache update and local state on failure
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
       setLocalOrder(serverTasksByColumn);
     },
   });
@@ -662,11 +665,7 @@ export function KanbanBoard({ projectId, tasks, tz, onOpenTask }: KanbanBoardPro
           </div>
         </div>
 
-        <DragOverlay dropAnimation={{
-          duration: 180,
-          easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
-          sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0.18" } } }),
-        }}>
+        <DragOverlay dropAnimation={null}>
           {activeDragTask && (() => {
             const subs = subtasksByParent[activeDragTask.id] ?? [];
             return (
