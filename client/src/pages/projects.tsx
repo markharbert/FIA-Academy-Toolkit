@@ -883,10 +883,11 @@ export default function ProjectsPage() {
 
   const { data: projects = [], isLoading } = useQuery<ProjectWithCounts[]>({ queryKey: ["/api/projects"] });
   const { data: urgentTasks = [] } = useQuery<UrgentTask[]>({ queryKey: ["/api/projects/urgent-tasks"] });
-  const { data: allTasks = [], isLoading: tasksLoading } = useQuery<OpenTask[]>({
+  const { data: allTasksRaw = [], isLoading: tasksLoading } = useQuery<OpenTask[]>({
     queryKey: ["/api/projects/all-tasks"],
     enabled: topTab === "list" || topTab === "calendar",
   });
+  const allTasks = allTasksRaw.filter(t => !t.parentTaskId);
   const { data: templates = [], isLoading: templatesLoading } = useQuery<ProjectTemplateWithCounts[]>({
     queryKey: ["/api/project-templates"],
   });

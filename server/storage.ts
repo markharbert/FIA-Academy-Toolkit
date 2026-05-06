@@ -2694,6 +2694,7 @@ export class DatabaseStorage implements IStorage {
         AND t.status <> 'done'
         AND t.due_date IS NOT NULL
         AND p.status = 'active'
+        AND t.parent_task_id IS NULL
         AND t.due_date <= NOW() + (${hoursAhead} || ' hours')::interval
       ORDER BY t.due_date ASC
       LIMIT 25
