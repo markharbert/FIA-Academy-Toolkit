@@ -225,11 +225,11 @@ function computeSenderTrustScore(st: SenderTrust | null): number | null {
 function computeTechScore(th: TechnicalHealth | null): number | null {
   if (!th) return null;
   let pts = 0;
-  if (th.hasPlainTextVersion) pts += 3;
-  if (th.hasPreheader) pts += 2;
+  if (th.hasPreheader) pts += 3;
+  if (th.estimatedSizeKb < 100) pts += 3;
   if (th.trackingPixelCount === 0) pts += 2;
-  if (th.estimatedSizeKb < 100) pts += 2;
   if (th.missingAltCount === 0) pts += 1;
+  if (th.hasPlainTextVersion) pts += 1;
   return Math.round((pts / 10) * 100);
 }
 
@@ -668,15 +668,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 return Math.round((p / 15) * 100);
               })() : null },
               { label: "Spam", score: email.spamScore },
-              { label: "Technical", score: th ? (() => {
-                let p = 0;
-                if (th.hasPlainTextVersion) p += 3;
-                if (th.hasPreheader) p += 2;
-                if (th.trackingPixelCount === 0) p += 2;
-                if (th.estimatedSizeKb < 100) p += 2;
-                if (th.missingAltCount === 0) p += 1;
-                return Math.round((p / 10) * 100);
-              })() : null },
+              { label: "Technical", score: th ? computeTechScore(th) : null },
               { label: "Content", score: cq ? (() => {
                 let p = wordCountPts(cq.wordCount);
                 if (cq.hasPersonalization) p += 1;
@@ -958,35 +950,77 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
         {/* Technical Health */}
         {th && (
           <SectionPanel title="Technical Health" icon={Zap} score={computeTechScore(th)}>
-            <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
+            <div className="space-y-2">
               <CheckRow pass={th.hasHtmlVersion} label="HTML version present" />
-              <CheckRow pass={th.hasPlainTextVersion} label="Plain text version present" detail={!th.hasPlainTextVersion ? "helps avoid spam filters" : undefined} />
+              {!th.hasHtmlVersion && (
+                <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                  <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>This email has no HTML body, which is unusual — most ESPs send HTML automatically. Check your sending platform to make sure HTML templates are enabled and not being stripped before send. If unsure, contact your email service provider's support team and ask why the HTML body is missing.</span>
+                </div>
+              )}
+              <CheckRow pass={th.hasPlainTextVersion} label="Plain text version present" detail={!th.hasPlainTextVersion ? "low signal — most modern ESPs send HTML-only" : undefined} />
+              {!th.hasPlainTextVersion && (
+                <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                  <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>The absence of a plain text version is a low signal today — Gmail, Yahoo, Outlook, and AOL understand that most modern campaigns are HTML-only, so this is unlikely to affect deliverability in a meaningful way. If you'd like to add one anyway, most ESPs have a plain text tab or auto-generate option in the email editor. Contact your ESP's support if you can't find it.</span>
+                </div>
+              )}
               <CheckRow pass={th.hasPreheader} warn={!th.hasPreheader} label={th.hasPreheader ? "Preheader text detected" : "No preheader text"} detail={!th.hasPreheader ? "missed preview opportunity" : undefined} />
+              {!th.hasPreheader && (
+                <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                  <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>Without preheader text, email clients fill that preview space with whatever appears first in your email body — often code or unintended copy. Most ESPs have a dedicated preheader field in the email editor — check there first. If you can't find it, contact your email service provider's support team.</span>
+                </div>
+              )}
               <CheckRow
                 pass={th.estimatedSizeKb < 100}
                 warn={th.estimatedSizeKb >= 100 && th.estimatedSizeKb < 102}
                 label={`~${th.estimatedSizeKb} KB email size`}
                 detail={th.estimatedSizeKb >= 102 ? "Gmail clips at 102 KB" : "under Gmail clip limit"}
               />
+              {th.estimatedSizeKb >= 102 && (
+                <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                  <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>Gmail clips emails at 102 KB and shows a "Message clipped" link — many readers won't expand it, so your call to action may never be seen. Trim inline CSS, remove unnecessary HTML comments, and compress or remove large images. If you're using a template builder, contact your ESP's support and ask how to reduce email size.</span>
+                </div>
+              )}
               <CheckRow
                 pass={th.missingAltCount === 0}
                 label={th.missingAltCount === 0 ? "All images have ALT text" : `${th.missingAltCount} image${th.missingAltCount !== 1 ? "s" : ""} missing ALT text`}
                 detail={th.missingAltCount > 0 ? "impacts accessibility & spam score" : undefined}
               />
+              {th.missingAltCount > 0 && (
+                <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                  <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>Images without ALT text show as blank boxes when images are blocked — the default in Outlook and many corporate email clients. Add a short descriptive ALT attribute to every image in your template. If someone else built your template, contact your email designer or developer to make the fix.</span>
+                </div>
+              )}
               <CheckRow
                 pass={th.trackingPixelCount === 0}
                 warn={th.trackingPixelCount > 0}
                 label={th.trackingPixelCount === 0 ? "No tracking pixels detected" : `${th.trackingPixelCount} tracking pixel${th.trackingPixelCount !== 1 ? "s" : ""} found`}
               />
+              {th.trackingPixelCount > 0 && (
+                <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                  <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>Tracking pixels are 1×1 invisible images used to detect opens — some spam filters treat them as suspicious, and Apple Mail Privacy Protection makes them unreliable anyway. Check your platform settings for an option to disable open tracking. If you can't find it, contact your email service provider and ask them to disable tracking pixels on your account or campaign.</span>
+                </div>
+              )}
               {th.uniqueExternalDomains > 0 && (
-                <div className="col-span-2">
+                <>
                   <CheckRow
                     pass={th.uniqueExternalDomains <= 3}
                     warn={th.uniqueExternalDomains > 3 && th.uniqueExternalDomains <= 6}
                     label={`${th.uniqueExternalDomains} unique external domain${th.uniqueExternalDomains !== 1 ? "s" : ""} in links`}
                     detail={th.uniqueExternalDomains > 6 ? "high variety may trigger filters" : undefined}
                   />
-                </div>
+                  {th.uniqueExternalDomains > 6 && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                      <span>Linking to many different domains can trigger spam filters — spammers frequently use multiple redirect domains to hide destinations. Review your email links and consolidate them to as few distinct domains as possible, ideally just your own. If the links were added by your ESP or a third-party tool, contact them and ask which redirect domains are being injected into your links.</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </SectionPanel>

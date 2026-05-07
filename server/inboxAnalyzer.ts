@@ -756,16 +756,16 @@ export function computeOverallScore(params: {
   const spamPoints = Math.round((params.spamScore / 100) * 28);
   // max 28
 
-  // Technical health: 10 pts
+  // Technical health: 10 pts (preheader 3 + size 3 + tracking pixels 2 + ALT text 1 + plain text 1)
   let techPoints = 6; // default
   if (params.technicalHealth) {
     const th = params.technicalHealth;
     techPoints = 0;
-    if (th.hasPlainTextVersion) techPoints += 3;
-    if (th.hasPreheader) techPoints += 2;
+    if (th.hasPreheader) techPoints += 3;
+    if (th.estimatedSizeKb < 100) techPoints += 3;
     if (th.trackingPixelCount === 0) techPoints += 2;
-    if (th.estimatedSizeKb < 100) techPoints += 2;
     if (th.missingAltCount === 0) techPoints += 1;
+    if (th.hasPlainTextVersion) techPoints += 1;
   }
   // max 10
 
