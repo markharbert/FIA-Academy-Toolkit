@@ -53,10 +53,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { 
   Loader2, CheckCircle, AlertCircle,
-  Users, ChevronLeft, ChevronRight, Shield, ShieldOff, Ban, Video,
+  Users, ChevronLeft, ChevronRight, ChevronUp, Shield, ShieldOff, Ban, Video,
   CheckCircle2, LogOut, LogIn, RefreshCw, Search, Mail, Eye, EyeOff, Info, Clock,
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
-  Key, Youtube, MessageSquare, XCircle, Trash2,
+  Key, Youtube, MessageSquare, XCircle, Trash2, Bug, Lightbulb, X,
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
   CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone
 } from "lucide-react";
@@ -1325,6 +1325,407 @@ function EmailTemplatesTab() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+type AdminFeedbackPost = {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  description: string;
+  status: string;
+  adminResponse: string | null;
+  createdAt: string;
+  updatedAt: string;
+  voteCount: number;
+  hasVoted: boolean;
+  commentCount: number;
+  userName: string;
+  userEmail: string;
+};
+
+type AdminFeedbackDetail = AdminFeedbackPost & {
+  comments: Array<{
+    id: string;
+    postId: string;
+    userId: string;
+    body: string;
+    isAdminNote: boolean;
+    createdAt: string;
+    userName: string;
+    userEmail: string;
+  }>;
+};
+
+const FEEDBACK_STATUS_OPTIONS: Record<string, string[]> = {
+  feature: ["open", "under_review", "planned", "in_progress", "completed", "closed"],
+  bug: ["open", "under_review", "resolved", "closed"],
+};
+
+const FEEDBACK_STATUS_LABELS: Record<string, string> = {
+  open: "Open",
+  under_review: "Under Review",
+  planned: "Planned",
+  in_progress: "In Progress",
+  completed: "Completed",
+  resolved: "Resolved",
+  closed: "Closed",
+};
+
+const FEEDBACK_STATUS_COLORS: Record<string, string> = {
+  open: "bg-blue-100 text-blue-700",
+  under_review: "bg-yellow-100 text-yellow-700",
+  planned: "bg-purple-100 text-purple-700",
+  in_progress: "bg-orange-100 text-orange-700",
+  completed: "bg-green-100 text-green-700",
+  resolved: "bg-green-100 text-green-700",
+  closed: "bg-gray-100 text-gray-600",
+};
+
+function AdminFeedbackPostRow({
+  post,
+  onSelect,
+}: {
+  post: AdminFeedbackPost;
+  onSelect: (p: AdminFeedbackPost) => void;
+}) {
+  return (
+    <div
+      className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors"
+      onClick={() => onSelect(post)}
+      data-testid={`admin-feedback-row-${post.id}`}
+    >
+      <div className="flex flex-col items-center justify-center w-12 shrink-0">
+        {post.type === "feature" ? (
+          <>
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-bold">{post.voteCount}</span>
+          </>
+        ) : (
+          <Bug className="h-5 w-5 text-red-500" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-sm">{post.title}</span>
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${FEEDBACK_STATUS_COLORS[post.status] ?? "bg-gray-100 text-gray-600"}`}>
+            {FEEDBACK_STATUS_LABELS[post.status] ?? post.status}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{post.description}</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {post.userName} · {format(new Date(post.createdAt), "MMM d, yyyy")}
+          {post.commentCount > 0 && ` · ${post.commentCount} comment${post.commentCount !== 1 ? "s" : ""}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AdminFeedbackDetailPanel({
+  postId,
+  onClose,
+}: {
+  postId: string;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [status, setStatus] = useState("");
+  const [adminResponse, setAdminResponse] = useState("");
+  const [commentBody, setCommentBody] = useState("");
+  const [isAdminNote, setIsAdminNote] = useState(false);
+
+  const { data: post, isLoading } = useQuery<AdminFeedbackDetail>({
+    queryKey: ["/api/feedback", postId],
+    queryFn: () => fetch(`/api/feedback/${postId}`, { credentials: "include" }).then((r) => r.json()),
+  });
+
+  useEffect(() => {
+    if (post) {
+      setStatus(post.status);
+      setAdminResponse(post.adminResponse ?? "");
+    }
+  }, [post?.id]);
+
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("PATCH", `/api/feedback/${postId}`, {
+        status: status || post?.status,
+        adminResponse: adminResponse || undefined,
+      }),
+    onSuccess: () => {
+      toast({ title: "Updated successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback", postId] });
+    },
+    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/feedback/${postId}/comments`, { body: commentBody, isAdminNote }),
+    onSuccess: () => {
+      setCommentBody("");
+      setIsAdminNote(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback", postId] });
+    },
+    onError: () => toast({ title: "Failed to post comment", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/feedback/${postId}`),
+    onSuccess: () => {
+      toast({ title: "Deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback"] });
+      onClose();
+    },
+    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+  });
+
+  if (isLoading || !post) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const statusOptions = FEEDBACK_STATUS_OPTIONS[post.type] ?? ["open", "closed"];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-semibold text-base">{post.title}</h3>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${FEEDBACK_STATUS_COLORS[post.status] ?? "bg-gray-100 text-gray-600"}`}>
+              {FEEDBACK_STATUS_LABELS[post.status] ?? post.status}
+            </span>
+            <span className="text-xs text-muted-foreground">{post.type === "feature" ? "Feature Request" : "Bug Report"}</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            By {post.userName} ({post.userEmail}) · {format(new Date(post.createdAt), "MMM d, yyyy 'at' h:mm a")}
+            {post.type === "feature" && ` · ${post.voteCount} vote${post.voteCount !== 1 ? "s" : ""}`}
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose} data-testid="button-close-detail">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <p className="text-sm whitespace-pre-wrap border rounded-lg p-3 bg-muted">{post.description}</p>
+
+      <div className="space-y-3 border rounded-lg p-4">
+        <p className="text-sm font-semibold">Admin Controls</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Status</label>
+            <Select
+              value={status || post.status}
+              onValueChange={setStatus}
+            >
+              <SelectTrigger className="h-8 text-sm" data-testid="select-feedback-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((s) => (
+                  <SelectItem key={s} value={s}>{FEEDBACK_STATUS_LABELS[s] ?? s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Public Response (visible to submitter)</label>
+          <Textarea
+            value={adminResponse}
+            onChange={(e) => setAdminResponse(e.target.value)}
+            placeholder="Write an official response visible to the member..."
+            className="min-h-[80px] text-sm"
+            data-testid="input-admin-response"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={() => updateMutation.mutate()}
+            disabled={updateMutation.isPending}
+            data-testid="button-save-feedback"
+          >
+            {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save Changes"}
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+            data-testid="button-delete-feedback"
+          >
+            {deleteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Trash2 className="h-3.5 w-3.5 mr-1" />Delete</>}
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <p className="text-sm font-semibold">Comments ({post.comments.length})</p>
+        {post.comments.length === 0 && (
+          <p className="text-sm text-muted-foreground">No comments yet.</p>
+        )}
+        {post.comments.map((c) => (
+          <div
+            key={c.id}
+            className={`rounded-lg p-3 text-sm ${c.isAdminNote ? "bg-yellow-50 border border-yellow-200" : "bg-muted"}`}
+          >
+            {c.isAdminNote && (
+              <p className="text-xs font-semibold text-yellow-700 mb-1">Admin Note (private)</p>
+            )}
+            <p className="whitespace-pre-wrap">{c.body}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {c.userName} · {format(new Date(c.createdAt), "MMM d 'at' h:mm a")}
+            </p>
+          </div>
+        ))}
+        <div className="space-y-2">
+          <Textarea
+            value={commentBody}
+            onChange={(e) => setCommentBody(e.target.value)}
+            placeholder="Post a comment..."
+            className="min-h-[72px] text-sm"
+            data-testid="input-admin-comment"
+          />
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isAdminNote}
+                onChange={(e) => setIsAdminNote(e.target.checked)}
+                data-testid="checkbox-admin-note-panel"
+              />
+              Private admin note
+            </label>
+            <Button
+              size="sm"
+              onClick={() => commentMutation.mutate()}
+              disabled={!commentBody.trim() || commentMutation.isPending}
+              data-testid="button-post-admin-comment"
+            >
+              {commentMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Post"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminFeedbackTab() {
+  const { toast } = useToast();
+  const [feedbackType, setFeedbackType] = useState("feature");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+
+  const { data: posts = [], isLoading } = useQuery<AdminFeedbackPost[]>({
+    queryKey: ["/api/feedback", feedbackType, statusFilter],
+    queryFn: () => {
+      const params = new URLSearchParams({ type: feedbackType });
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      return fetch(`/api/feedback?${params}`, { credentials: "include" }).then((r) => r.json());
+    },
+  });
+
+  const featureCount = posts.filter((p) => p.type === "feature").length;
+  const bugCount = posts.filter((p) => p.type === "bug").length;
+
+  const statusOptions = feedbackType === "feature"
+    ? ["all", "open", "under_review", "planned", "in_progress", "completed", "closed"]
+    : ["all", "open", "under_review", "resolved", "closed"];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">All Feedback</CardTitle>
+            <CardDescription>
+              Review and manage bug reports and feature requests from members.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant={feedbackType === "feature" ? "default" : "outline"}
+                  onClick={() => { setFeedbackType("feature"); setStatusFilter("all"); setSelectedPostId(null); }}
+                  data-testid="admin-tab-features"
+                >
+                  <Lightbulb className="h-3.5 w-3.5 mr-1" /> Features
+                </Button>
+                <Button
+                  size="sm"
+                  variant={feedbackType === "bug" ? "default" : "outline"}
+                  onClick={() => { setFeedbackType("bug"); setStatusFilter("all"); setSelectedPostId(null); }}
+                  data-testid="admin-tab-bugs"
+                >
+                  <Bug className="h-3.5 w-3.5 mr-1" /> Bugs
+                </Button>
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-8 text-sm w-36" data-testid="admin-select-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s === "all" ? "All Statuses" : FEEDBACK_STATUS_LABELS[s] ?? s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : posts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No submissions yet.</p>
+            ) : (
+              <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                {posts.map((post) => (
+                  <AdminFeedbackPostRow
+                    key={post.id}
+                    post={post}
+                    onSelect={(p) => setSelectedPostId(p.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        {selectedPostId ? (
+          <Card>
+            <CardContent className="pt-4">
+              <AdminFeedbackDetailPanel
+                postId={selectedPostId}
+                onClose={() => setSelectedPostId(null)}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-64 text-center text-muted-foreground border-2 border-dashed rounded-lg">
+            <MessageSquare className="h-8 w-8 mb-2 opacity-40" />
+            <p className="text-sm">Select a submission to review and manage it</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -1885,6 +2286,10 @@ export default function AdminPage() {
           <TabsTrigger value="email-templates" data-testid="tab-email-templates">
             <Mail className="h-3.5 w-3.5 mr-1.5" />
             Email Templates
+          </TabsTrigger>
+          <TabsTrigger value="feedback" data-testid="tab-feedback">
+            <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+            Feedback
           </TabsTrigger>
         </TabsList>
 
@@ -2695,6 +3100,10 @@ export default function AdminPage() {
 
         <TabsContent value="email-templates" className="space-y-6">
           <EmailTemplatesTab />
+        </TabsContent>
+
+        <TabsContent value="feedback" className="space-y-6">
+          <AdminFeedbackTab />
         </TabsContent>
 
       </Tabs>

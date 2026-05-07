@@ -502,6 +502,53 @@ async function runStartupMigrations() {
         ON public_api_keys(user_id)
     `);
     console.log("[startup] public_api_keys migration complete");
+
+    // Feedback (Bug Reports & Feature Requests)
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS feedback_posts (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(20) NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'open',
+        admin_response TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS feedback_posts_user_id_idx ON feedback_posts(user_id, created_at DESC)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS feedback_posts_type_status_idx ON feedback_posts(type, status, created_at DESC)
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS feedback_votes (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        post_id VARCHAR NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(post_id, user_id)
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS feedback_votes_post_id_idx ON feedback_votes(post_id)
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS feedback_comments (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        post_id VARCHAR NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        is_admin_note BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS feedback_comments_post_id_idx ON feedback_comments(post_id, created_at ASC)
+    `);
+    console.log("[startup] feedback tables migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

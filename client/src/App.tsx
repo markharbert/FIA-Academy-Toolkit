@@ -42,6 +42,7 @@ import CfLoginPage from "@/pages/cf-login";
 import HelpPage from "@/pages/help";
 import HelpCategoryPage from "@/pages/help-category";
 import HelpArticlePage from "@/pages/help-article";
+import FeedbackPage from "@/pages/feedback";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -209,6 +210,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/help/:slug">
         {() => <ProtectedRoute component={HelpArticlePage} />}
+      </Route>
+      <Route path="/feedback">
+        {() => <ProtectedRoute component={FeedbackPage} />}
       </Route>
       <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>

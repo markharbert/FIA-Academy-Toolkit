@@ -25,6 +25,7 @@ import {
   Target,
   BookOpen,
   Briefcase,
+  MessageSquarePlus,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -169,6 +170,17 @@ export function AppSidebar() {
                 >
                   <BookOpen />
                   <span>Help Docs</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location.startsWith("/feedback")}
+                  tooltip="Report a Bug / Request a Feature"
+                  onClick={() => setLocation("/feedback")}
+                  data-testid="nav-feedback"
+                >
+                  <MessageSquarePlus />
+                  <span>Bug / Feature Requests</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

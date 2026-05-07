@@ -7643,6 +7643,112 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── Feedback (Bug Reports & Feature Requests) ────────────────────────────────
+  app.get("/api/feedback", async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
+    const user = await storage.getUser(req.session.userId);
+    if (!user) return res.status(401).json({ message: "Unauthorized" });
+    const type = req.query.type as string | undefined;
+    const status = req.query.status as string | undefined;
+    try {
+      const posts = await storage.getFeedbackPosts(req.session.userId, !!user.isAdmin, type, status);
+      res.json(posts);
+    } catch (err) {
+      console.error("[feedback] list error:", err);
+      res.status(500).json({ message: "Failed to load feedback" });
+    }
+  });
+
+  app.post("/api/feedback", async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
+    const { title, description, type } = req.body;
+    if (!title?.trim() || !description?.trim() || !["bug", "feature"].includes(type)) {
+      return res.status(400).json({ message: "Title, description, and valid type are required" });
+    }
+    try {
+      const post = await storage.createFeedbackPost({
+        userId: req.session.userId,
+        title: title.trim(),
+        description: description.trim(),
+        type,
+        status: "open",
+      });
+      res.status(201).json(post);
+    } catch (err) {
+      console.error("[feedback] create error:", err);
+      res.status(500).json({ message: "Failed to submit feedback" });
+    }
+  });
+
+  app.get("/api/feedback/:id", async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
+    const user = await storage.getUser(req.session.userId);
+    if (!user) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const post = await storage.getFeedbackPost(req.params.id, req.session.userId, !!user.isAdmin);
+      if (!post) return res.status(404).json({ message: "Not found" });
+      res.json(post);
+    } catch (err) {
+      console.error("[feedback] get error:", err);
+      res.status(500).json({ message: "Failed to load feedback post" });
+    }
+  });
+
+  app.post("/api/feedback/:id/vote", async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const result = await storage.toggleFeedbackVote(req.params.id, req.session.userId);
+      res.json(result);
+    } catch (err) {
+      console.error("[feedback] vote error:", err);
+      res.status(500).json({ message: "Failed to toggle vote" });
+    }
+  });
+
+  app.post("/api/feedback/:id/comments", async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
+    const user = await storage.getUser(req.session.userId);
+    if (!user) return res.status(401).json({ message: "Unauthorized" });
+    const { body, isAdminNote } = req.body;
+    if (!body?.trim()) return res.status(400).json({ message: "Comment body is required" });
+    if (isAdminNote && !user.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    try {
+      const comment = await storage.addFeedbackComment(req.params.id, req.session.userId, body.trim(), !!isAdminNote);
+      res.status(201).json(comment);
+    } catch (err) {
+      console.error("[feedback] comment error:", err);
+      res.status(500).json({ message: "Failed to add comment" });
+    }
+  });
+
+  app.patch("/api/feedback/:id", async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    const { status, adminResponse } = req.body;
+    try {
+      const post = await storage.updateFeedbackPost(req.params.id, { status, adminResponse });
+      if (!post) return res.status(404).json({ message: "Not found" });
+      res.json(post);
+    } catch (err) {
+      console.error("[feedback] update error:", err);
+      res.status(500).json({ message: "Failed to update feedback" });
+    }
+  });
+
+  app.delete("/api/feedback/:id", async (req: Request, res: Response) => {
+    if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    try {
+      await storage.deleteFeedbackPost(req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[feedback] delete error:", err);
+      res.status(500).json({ message: "Failed to delete feedback" });
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 

@@ -36,6 +36,8 @@ import {
   type ProjectColumn, type InsertProjectColumn,
   type ProjectTemplate, type InsertProjectTemplate, type ProjectTemplateWithCounts,
   type ProjectTemplateTask, type InsertProjectTemplateTask, type UpdateProjectTemplateTask,
+  feedbackPosts, feedbackVotes, feedbackComments,
+  type FeedbackPost, type InsertFeedbackPost, type FeedbackPostWithMeta, type FeedbackCommentWithUser,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
@@ -510,6 +512,15 @@ export interface IStorage {
       limit?: number;
     },
   ): Promise<FeedResponse>;
+
+  // Feedback
+  getFeedbackPosts(userId: string, isAdmin: boolean, type?: string, status?: string): Promise<import("@shared/schema").FeedbackPostWithMeta[]>;
+  getFeedbackPost(id: string, userId: string, isAdmin: boolean): Promise<(import("@shared/schema").FeedbackPostWithMeta & { comments: import("@shared/schema").FeedbackCommentWithUser[] }) | undefined>;
+  createFeedbackPost(data: import("@shared/schema").InsertFeedbackPost & { userId: string }): Promise<import("@shared/schema").FeedbackPost>;
+  toggleFeedbackVote(postId: string, userId: string): Promise<{ voted: boolean }>;
+  addFeedbackComment(postId: string, userId: string, body: string, isAdminNote: boolean): Promise<import("@shared/schema").FeedbackCommentWithUser>;
+  updateFeedbackPost(id: string, updates: { status?: string; adminResponse?: string }): Promise<import("@shared/schema").FeedbackPost | undefined>;
+  deleteFeedbackPost(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3878,6 +3889,163 @@ export class DatabaseStorage implements IStorage {
         sql`${dmoEntries.date} <= ${endKey}`
       ))
       .orderBy(desc(dmoEntries.date));
+  }
+
+  // ─── Feedback ────────────────────────────────────────────────────────────────
+  async getFeedbackPosts(userId: string, isAdmin: boolean, type?: string, status?: string): Promise<FeedbackPostWithMeta[]> {
+    const rows = await db.execute(sql`
+      SELECT
+        fp.*,
+        u.display_name AS user_name,
+        u.email AS user_email,
+        COALESCE(v.vote_count, 0)::int AS vote_count,
+        COALESCE(c.comment_count, 0)::int AS comment_count,
+        CASE WHEN mv.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS has_voted
+      FROM feedback_posts fp
+      JOIN users u ON u.id = fp.user_id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*)::int AS vote_count FROM feedback_votes GROUP BY post_id
+      ) v ON v.post_id = fp.id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*)::int AS comment_count FROM feedback_comments WHERE is_admin_note = FALSE GROUP BY post_id
+      ) c ON c.post_id = fp.id
+      LEFT JOIN feedback_votes mv ON mv.post_id = fp.id AND mv.user_id = ${userId}
+      WHERE (
+        fp.type = 'feature'
+        OR (fp.type = 'bug' AND (fp.user_id = ${userId} OR ${isAdmin}))
+      )
+      ${type ? sql`AND fp.type = ${type}` : sql``}
+      ${status ? sql`AND fp.status = ${status}` : sql``}
+      ORDER BY
+        CASE WHEN fp.type = 'feature' THEN COALESCE(v.vote_count, 0) ELSE 0 END DESC,
+        fp.created_at DESC
+    `);
+    return (rows.rows as any[]).map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      type: r.type,
+      title: r.title,
+      description: r.description,
+      status: r.status,
+      adminResponse: r.admin_response ?? null,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      voteCount: Number(r.vote_count),
+      hasVoted: Boolean(r.has_voted),
+      commentCount: Number(r.comment_count),
+      userName: r.user_name ?? r.user_email ?? "Member",
+      userEmail: r.user_email ?? "",
+    }));
+  }
+
+  async getFeedbackPost(id: string, userId: string, isAdmin: boolean): Promise<(FeedbackPostWithMeta & { comments: FeedbackCommentWithUser[] }) | undefined> {
+    const rows = await db.execute(sql`
+      SELECT
+        fp.*,
+        u.display_name AS user_name,
+        u.email AS user_email,
+        COALESCE(v.vote_count, 0)::int AS vote_count,
+        COALESCE(c.comment_count, 0)::int AS comment_count,
+        CASE WHEN mv.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS has_voted
+      FROM feedback_posts fp
+      JOIN users u ON u.id = fp.user_id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*)::int AS vote_count FROM feedback_votes GROUP BY post_id
+      ) v ON v.post_id = fp.id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*)::int AS comment_count FROM feedback_comments WHERE is_admin_note = FALSE GROUP BY post_id
+      ) c ON c.post_id = fp.id
+      LEFT JOIN feedback_votes mv ON mv.post_id = fp.id AND mv.user_id = ${userId}
+      WHERE fp.id = ${id}
+        AND (
+          fp.type = 'feature'
+          OR (fp.type = 'bug' AND (fp.user_id = ${userId} OR ${isAdmin}))
+        )
+    `);
+    if (!rows.rows.length) return undefined;
+    const r = rows.rows[0] as any;
+    const post: FeedbackPostWithMeta = {
+      id: r.id,
+      userId: r.user_id,
+      type: r.type,
+      title: r.title,
+      description: r.description,
+      status: r.status,
+      adminResponse: r.admin_response ?? null,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      voteCount: Number(r.vote_count),
+      hasVoted: Boolean(r.has_voted),
+      commentCount: Number(r.comment_count),
+      userName: r.user_name ?? r.user_email ?? "Member",
+      userEmail: r.user_email ?? "",
+    };
+
+    const commentRows = await db.execute(sql`
+      SELECT fc.*, u.display_name AS user_name, u.email AS user_email
+      FROM feedback_comments fc
+      JOIN users u ON u.id = fc.user_id
+      WHERE fc.post_id = ${id}
+        AND (fc.is_admin_note = FALSE OR ${isAdmin})
+      ORDER BY fc.created_at ASC
+    `);
+    const comments: FeedbackCommentWithUser[] = (commentRows.rows as any[]).map(c => ({
+      id: c.id,
+      postId: c.post_id,
+      userId: c.user_id,
+      body: c.body,
+      isAdminNote: Boolean(c.is_admin_note),
+      createdAt: c.created_at,
+      userName: c.user_name ?? c.user_email ?? "Member",
+      userEmail: c.user_email ?? "",
+    }));
+
+    return { ...post, comments };
+  }
+
+  async createFeedbackPost(data: InsertFeedbackPost & { userId: string }): Promise<FeedbackPost> {
+    const [post] = await db.insert(feedbackPosts).values({
+      userId: data.userId,
+      type: data.type,
+      title: data.title,
+      description: data.description,
+      status: "open",
+    }).returning();
+    return post;
+  }
+
+  async toggleFeedbackVote(postId: string, userId: string): Promise<{ voted: boolean }> {
+    const existing = await db.select().from(feedbackVotes)
+      .where(and(eq(feedbackVotes.postId, postId), eq(feedbackVotes.userId, userId)));
+    if (existing.length > 0) {
+      await db.delete(feedbackVotes).where(and(eq(feedbackVotes.postId, postId), eq(feedbackVotes.userId, userId)));
+      return { voted: false };
+    } else {
+      await db.insert(feedbackVotes).values({ postId, userId });
+      return { voted: true };
+    }
+  }
+
+  async addFeedbackComment(postId: string, userId: string, body: string, isAdminNote: boolean): Promise<FeedbackCommentWithUser> {
+    const [comment] = await db.insert(feedbackComments).values({ postId, userId, body, isAdminNote }).returning();
+    const user = await this.getUser(userId);
+    return {
+      ...comment,
+      userName: user?.displayName ?? user?.email ?? "Member",
+      userEmail: user?.email ?? "",
+    };
+  }
+
+  async updateFeedbackPost(id: string, updates: { status?: string; adminResponse?: string }): Promise<FeedbackPost | undefined> {
+    const [post] = await db.update(feedbackPosts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(feedbackPosts.id, id))
+      .returning();
+    return post;
+  }
+
+  async deleteFeedbackPost(id: string): Promise<void> {
+    await db.delete(feedbackPosts).where(eq(feedbackPosts.id, id));
   }
 }
 

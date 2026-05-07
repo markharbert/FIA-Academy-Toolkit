@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1671,3 +1671,57 @@ export const webhooks = pgTable("webhooks", {
 
 export type Webhook = typeof webhooks.$inferSelect;
 export type InsertWebhook = typeof webhooks.$inferInsert;
+
+// ─── Feedback (Bug Reports & Feature Requests) ────────────────────────────────
+export const feedbackPosts = pgTable("feedback_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 20 }).notNull(), // "bug" | "feature"
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  status: varchar("status", { length: 30 }).notNull().default("open"),
+  // feature: open | under_review | planned | in_progress | completed | closed
+  // bug:     open | under_review | resolved | closed
+  adminResponse: text("admin_response"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertFeedbackPostSchema = createInsertSchema(feedbackPosts).omit({ id: true, createdAt: true, updatedAt: true, adminResponse: true });
+export type InsertFeedbackPost = z.infer<typeof insertFeedbackPostSchema>;
+export type FeedbackPost = typeof feedbackPosts.$inferSelect;
+
+export const feedbackVotes = pgTable("feedback_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => feedbackPosts.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  uniqueVote: unique().on(t.postId, t.userId),
+}));
+
+export type FeedbackVote = typeof feedbackVotes.$inferSelect;
+
+export const feedbackComments = pgTable("feedback_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => feedbackPosts.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  isAdminNote: boolean("is_admin_note").default(false).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type FeedbackComment = typeof feedbackComments.$inferSelect;
+
+export type FeedbackPostWithMeta = FeedbackPost & {
+  voteCount: number;
+  hasVoted: boolean;
+  commentCount: number;
+  userName: string;
+  userEmail: string;
+};
+
+export type FeedbackCommentWithUser = FeedbackComment & {
+  userName: string;
+  userEmail: string;
+};
