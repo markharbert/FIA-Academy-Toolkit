@@ -5287,7 +5287,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
           const { score: spamScore, flags: spamFlags } = analyzeSpamLanguage(subject, bodyText, bodyHtml);
           const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
-          const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
+          const contentQuality = analyzeContentQuality(bodyText, bodyHtml, subject);
           const canSpamCompliance = analyzeCanSpamCompliance(bodyText, bodyHtml, subject);
           const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain, bodyHtml);
 
@@ -5470,7 +5470,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
           const { score: spamScore, flags: spamFlags } = analyzeSpamLanguage(subject, bodyText, bodyHtml);
           const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
-          const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
+          const contentQuality = analyzeContentQuality(bodyText, bodyHtml, subject);
           const canSpamCompliance = analyzeCanSpamCompliance(bodyText, bodyHtml, subject);
           const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain, bodyHtml);
 

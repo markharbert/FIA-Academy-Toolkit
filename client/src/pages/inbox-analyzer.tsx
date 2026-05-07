@@ -244,9 +244,20 @@ function wordCountPts(wc: number): number {
 
 function computeContentScore(cq: ContentQuality | null): number | null {
   if (!cq) return null;
-  let pts = wordCountPts(cq.wordCount);
-  if (cq.hasPersonalization) pts += 1;
-  if (cq.hasPs) pts += 1;
+  let pts = 0;
+  // Tier 1 — Spam Risk (6 pts)
+  if (!cq.hasUrlShortener) pts += 2;
+  if (!cq.hasHiddenText) pts += 2;
+  if (cq.htmlToTextRatio >= 0.3) pts += 1;
+  if (cq.linkToTextRatio <= 0.02) pts += 1;
+  // Tier 2 — Engagement (3 pts)
+  const wc = cq.wordCount;
+  if (wc >= 50 && wc <= 300) pts += 2;
+  else if (wc > 300 && wc <= 700) pts += 1;
+  const sc = cq.subjectCharCount ?? 0;
+  if (sc >= 20 && sc <= 60) pts += 1;
+  // Tier 3 — Best Practice (1 pt)
+  if (cq.hasPersonalization || cq.hasPs) pts += 1;
   return Math.round((pts / 10) * 100);
 }
 
@@ -669,12 +680,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               })() : null },
               { label: "Spam", score: email.spamScore },
               { label: "Technical", score: th ? computeTechScore(th) : null },
-              { label: "Content", score: cq ? (() => {
-                let p = wordCountPts(cq.wordCount);
-                if (cq.hasPersonalization) p += 1;
-                if (cq.hasPs) p += 1;
-                return Math.round((p / 10) * 100);
-              })() : null },
+              { label: "Content", score: cq ? computeContentScore(cq) : null },
               { label: "CAN-SPAM", score: cs?.score ?? null },
             ].map((item) => (
               <div key={item.label} className="flex flex-col items-center gap-1 rounded-lg bg-muted/30 py-2 px-1">
@@ -1029,75 +1035,172 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
         {/* Content Quality */}
         {cq && (
           <SectionPanel title="Content Quality" icon={BookOpen} score={computeContentScore(cq)}>
-            <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
-              <CheckRow
-                pass={cq.wordCount >= 100 && cq.wordCount <= 400}
-                warn={cq.wordCount >= 401 && cq.wordCount <= 800}
-                label={`${cq.wordCount} words`}
-                detail={
-                  cq.wordCount < 100 ? "too short — below minimum" :
-                  cq.wordCount <= 400 ? "sweet spot — 8/8 pts" :
-                  cq.wordCount <= 500 ? "good — 6/8 pts" :
-                  cq.wordCount <= 600 ? "acceptable — 4/8 pts" :
-                  cq.wordCount <= 700 ? "long — 2/8 pts" :
-                  cq.wordCount <= 800 ? "very long — 1/8 pts" :
-                  "over limit — 0/8 pts"
-                }
-              />
-              <CheckRow
-                pass={cq.hasPersonalization}
-                warn={!cq.hasPersonalization}
-                label={cq.hasPersonalization ? "Personalization detected" : "No personalization found"}
-                detail={!cq.hasPersonalization ? "use first name or merge tags" : undefined}
-              />
-              <CheckRow
-                pass={cq.hasPs}
-                warn={!cq.hasPs}
-                label={cq.hasPs ? "P.S. section found" : "No P.S. section"}
-                detail={!cq.hasPs ? "P.S. is one of the most-read parts of any email" : "great engagement technique"}
-              />
-            </div>
+            <div className="space-y-4">
 
-            {/* Per-item guidance for anything missing */}
-            {(!cq.hasPs || !cq.hasPersonalization || cq.wordCount < 100 || cq.wordCount > 400) && (
-              <div className="space-y-2 pt-1">
-                {!cq.hasPs && (
-                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
-                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                    <span><strong>No P.S. line — no action required.</strong> A P.S. is one of the most-read parts of an email and a great place to repeat your call-to-action, but leaving it out will not affect whether your email lands in the inbox. Think of it as an engagement tip, not a deliverability requirement.</span>
-                  </div>
-                )}
-                {!cq.hasPersonalization && (
-                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
-                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                    <span><strong>No personalization — no action required.</strong> Adding a first name or other merge tag can improve open and click rates because it feels more personal, but it is not a factor email providers use to determine spam placement. Your deliverability is not affected.</span>
-                  </div>
-                )}
-                {cq.wordCount < 100 && cq.wordCount > 0 && (
-                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
-                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                    <span><strong>Very short email.</strong> Extremely brief emails can occasionally raise spam filter flags because they lack context, but this varies by provider. Consider adding more value or explanation to your message if you are seeing placement issues.</span>
-                  </div>
-                )}
-                {cq.wordCount > 400 && cq.wordCount <= 800 && (
-                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
-                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                    <span><strong>Email length doesn't directly hurt deliverability</strong>, but shorter emails generally drive better engagement. The more concise your message, the more likely readers are to read and click through. Generally, emails under 400 words tend to see the highest engagement rates.</span>
-                  </div>
-                )}
-                {cq.wordCount > 800 && (
-                  <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
-                    <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                    <span><strong>Email length doesn't directly hurt deliverability</strong>, but shorter emails generally drive better engagement. At over 800 words, reader drop-off is significant. Consider trimming your message or breaking it into a series of shorter emails.</span>
-                  </div>
-                )}
+              {/* ── Tier 1: Spam Risk Factors ── */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Tier 1 — Spam Risk Factors</p>
+                <div className="space-y-2">
+                  <CheckRow
+                    pass={!cq.hasUrlShortener}
+                    label={cq.hasUrlShortener ? "URL shortener detected in links" : "No URL shorteners detected"}
+                    detail={cq.hasUrlShortener ? "major spam trigger" : undefined}
+                  />
+                  {cq.hasUrlShortener && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
+                      <span>Your email contains one or more shortened links (bit.ly, tinyurl, etc.). These are a major spam trigger because they hide the destination URL — exactly what spammers do to disguise malicious links. Gmail, Yahoo, and Outlook all flag them as suspicious. <strong>To fix it:</strong> go into your email editor, find each shortened link, and replace it with the full destination URL. If you need click tracking, use your email platform's built-in tracking instead — it tracks the same data without the spam risk. If the links were added by a third-party tool, contact that tool's support and ask how to use your own domain for tracking links.</span>
+                    </div>
+                  )}
+
+                  <CheckRow
+                    pass={!cq.hasHiddenText}
+                    label={cq.hasHiddenText ? "Hidden text detected in HTML" : "No hidden text detected"}
+                    detail={cq.hasHiddenText ? "aggressive spam signal" : undefined}
+                  />
+                  {cq.hasHiddenText && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
+                      <span>Your email appears to contain hidden text — content invisible to readers but present in the HTML (white text on white, font-size:0, or display:none). This is a well-known spam technique flagged aggressively by every major provider. Even if added unintentionally by your editor, it can cause serious deliverability damage. <strong>To fix it:</strong> inspect your email's HTML source and remove any text matching the background color, font-size:0, or display:none elements. If you didn't add it yourself, contact your email designer, developer, or ESP support team and ask them to audit and clean the HTML.</span>
+                    </div>
+                  )}
+
+                  <CheckRow
+                    pass={cq.htmlToTextRatio >= 0.3}
+                    warn={cq.htmlToTextRatio >= 0.2 && cq.htmlToTextRatio < 0.3}
+                    label={cq.htmlToTextRatio >= 0.3 ? `Good text-to-image ratio (${Math.round(cq.htmlToTextRatio * 100)}% live text)` : `Low text-to-image ratio (${Math.round(cq.htmlToTextRatio * 100)}% live text)`}
+                    detail={cq.htmlToTextRatio < 0.3 ? "aim for at least 30% readable text" : undefined}
+                  />
+                  {cq.isImageHeavy && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
+                      <span>Your email is predominantly or entirely images with very little readable text. This is one of the most reliable ways to land in spam — filters can't read images, so an all-image email looks blank to them. <strong>To fix it:</strong> break up your images with live written text. Aim for at least 40–60% of your email to be readable text outside of images. Add a written intro, body copy, or text-based CTA between images. If your template only supports image-based layouts, contact your email service provider's support team and ask about templates with live text sections.</span>
+                    </div>
+                  )}
+                  {!cq.isImageHeavy && cq.htmlToTextRatio < 0.3 && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
+                      <span>Your email has very little readable text relative to its total content. Spam filters analyze this ratio — if live text makes up less than 30% of the content, it raises a red flag. <strong>To fix it:</strong> add more written text to your email. Even a few sentences of real copy between images makes a significant difference. If your template doesn't easily allow text blocks, contact your email service provider's support team.</span>
+                    </div>
+                  )}
+
+                  <CheckRow
+                    pass={cq.linkToTextRatio <= 0.02}
+                    warn={cq.linkToTextRatio > 0.02 && cq.linkToTextRatio <= 0.04}
+                    label={cq.linkToTextRatio <= 0.02 ? "Link density is acceptable" : `High link density (${Math.round(cq.linkToTextRatio * 50)} links per 50 words)`}
+                    detail={cq.linkToTextRatio > 0.02 ? "more than 1 link per 50 words" : undefined}
+                  />
+                  {cq.linkToTextRatio > 0.02 && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
+                      <span>Your email has more than one link for every 50 words of content. A high density of links tells spam filters that the email is more about redirecting people than delivering value — a pattern common in spam. <strong>To fix it:</strong> review your email and remove any links that aren't essential. Consolidate multiple links going to the same destination into one strong call-to-action. If your template automatically adds links in footers or social icons, contact your email service provider and ask which ones can be removed.</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
 
-            {/* General reminder that content quality is about engagement, not spam filters */}
-            <div className="flex items-start gap-2 pt-1 text-xs text-muted-foreground">
-              <CircleCheck className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-muted-foreground/60" />
-              <span>Content quality signals measure engagement best practices. None of these items will directly cause your email to land in spam — they are suggestions for improving reader experience and click rates.</span>
+              {/* ── Tier 2: Engagement Quality ── */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Tier 2 — Engagement Quality</p>
+                <div className="space-y-2">
+                  {(() => {
+                    const sc = cq.subjectCharCount ?? 0;
+                    const subjectOk = sc >= 20 && sc <= 60;
+                    const subjectTooLong = sc > 60;
+                    const subjectTooShort = sc > 0 && sc < 20;
+                    return (
+                      <>
+                        <CheckRow
+                          pass={subjectOk}
+                          warn={subjectTooLong}
+                          label={sc === 0 ? "Subject line length unknown" : subjectOk ? `Subject line length is ideal (${sc} chars)` : subjectTooLong ? `Subject line too long (${sc} chars)` : `Subject line too short (${sc} chars)`}
+                          detail={subjectTooLong ? "will be cut off on mobile" : subjectTooShort ? "may appear suspicious" : undefined}
+                        />
+                        {subjectTooLong && (
+                          <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                            <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                            <span>Your subject line is over 60 characters, which means it will be cut off on most mobile devices — where the majority of emails are now opened. Readers who can't see the full subject line are less likely to open it. <strong>To fix it:</strong> trim your subject line to between 30 and 50 characters. Front-load the most important words so even a truncated version still makes sense. Edit it directly in your email editor before sending.</span>
+                          </div>
+                        )}
+                        {subjectTooShort && (
+                          <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                            <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                            <span>Your subject line is under 20 characters, which can look incomplete or suspicious to both readers and spam filters. Very short subject lines are common in phishing attempts. <strong>To fix it:</strong> expand your subject line to at least 30 characters. Give readers enough context to understand what the email is about before they open it. This is a quick edit you can make directly in your email editor.</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  <CheckRow
+                    pass={cq.wordCount >= 50 && cq.wordCount <= 300}
+                    warn={cq.wordCount > 300 && cq.wordCount <= 700}
+                    label={`${cq.wordCount} words`}
+                    detail={
+                      cq.wordCount < 50 ? "too short — may look like phishing" :
+                      cq.wordCount <= 300 ? "ideal length" :
+                      cq.wordCount <= 700 ? "on the longer side — engagement may drop" :
+                      "very long — significant reader drop-off expected"
+                    }
+                  />
+                  {cq.wordCount > 0 && cq.wordCount < 50 && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                      <span>Your email body has fewer than 50 words, which can look like a phishing attempt or a test email to spam filters — they rely on content to assess whether an email is legitimate. <strong>To fix it:</strong> add more written content. Even a few extra sentences explaining your offer or providing value to the reader can make a difference. Aim for at least 50–100 words of body copy. If your template doesn't allow adding text, contact your ESP support and ask how to add a text content block.</span>
+                    </div>
+                  )}
+                  {cq.wordCount > 300 && cq.wordCount <= 700 && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                      <span>Your email is on the longer side. Word count doesn't directly cause spam filtering, but longer emails tend to have lower engagement — and sustained low engagement over time can affect your sender reputation. Consider trimming to the essentials, or linking to a blog post or landing page for the full content. Keep the email focused on one clear message and one call to action.</span>
+                    </div>
+                  )}
+                  {cq.wordCount > 700 && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                      <span>At over 700 words, reader drop-off is significant — most readers will skim and disengage before reaching your call-to-action. <strong>To fix it:</strong> trim your email to the core message, or break it into a series of shorter emails. If you have a lot of value to share, link to a blog post or landing page instead of putting it all in the email body. No ESP involvement needed — this is a content editing task.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Tier 3: Best Practices ── */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Tier 3 — Best Practices</p>
+                <div className="space-y-2">
+                  <CheckRow
+                    pass={cq.hasPersonalization}
+                    warn={!cq.hasPersonalization}
+                    label={cq.hasPersonalization ? "Personalization detected" : "No personalization found"}
+                    detail={!cq.hasPersonalization ? "use first name or merge tags" : undefined}
+                  />
+                  {!cq.hasPersonalization && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                      <span><strong>No action required.</strong> Adding a first name or merge tag can improve open and click rates by making the email feel more direct, but it has no impact on whether your email lands in the inbox. To add it, look for a "personalize" or "merge tag" option in your email editor and insert the recipient's first name in your greeting.</span>
+                    </div>
+                  )}
+
+                  <CheckRow
+                    pass={cq.hasPs}
+                    warn={!cq.hasPs}
+                    label={cq.hasPs ? "P.S. section found" : "No P.S. section"}
+                    detail={!cq.hasPs ? "great engagement opportunity" : "great engagement technique"}
+                  />
+                  {!cq.hasPs && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                      <span><strong>No action required.</strong> A P.S. line is one of the most-read parts of any email and a great place to repeat your call-to-action — but it has zero impact on deliverability. To add one, simply write "P.S." at the end of your email body followed by a short punchy sentence repeating your main offer or CTA.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer note */}
+              <div className="flex items-start gap-2 pt-1 text-xs text-muted-foreground">
+                <CircleCheck className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-muted-foreground/60" />
+                <span>Tier 1 issues can directly affect inbox placement and should be fixed before sending. Tier 2 and 3 are engagement improvements that won't directly cause spam filtering.</span>
+              </div>
             </div>
           </SectionPanel>
         )}
@@ -1602,7 +1705,7 @@ function MyAddressTab({
               { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist check (Spamhaus ZEN); sending domain blacklist check (Spamhaus DBL); click tracking domain blacklist monitoring; display name / domain match; Reply-To alignment." },
               { icon: AlertTriangle, label: "Spammy Language (35 pts)", desc: "Comprehensive scan for 100+ high / medium / low-risk trigger phrases in both subject and body — grouped by severity with highlighted matches." },
               { icon: Zap, label: "Technical Health (10 pts)", desc: "HTML/text version, preheader, email size, missing ALT text, tracking pixels, and external domains." },
-              { icon: BookOpen, label: "Content Quality (10 pts)", desc: "Word count scored on a tiered scale: 100–400 words = 8 pts, 401–500 = 6 pts, 501–600 = 4 pts, 601–700 = 2 pts, 701–800 = 1 pt, outside range = 0 pts. Plus P.S. section and personalization (1 pt each)." },
+              { icon: BookOpen, label: "Content Quality (10 pts)", desc: "Three tiers: Tier 1 Spam Risk (6 pts) — URL shorteners, hidden text, HTML-to-text ratio, link density. Tier 2 Engagement (3 pts) — subject line length, word count. Tier 3 Best Practices (1 pt) — personalization and P.S." },
             ].map((item) => (
               <div key={item.label} className="flex gap-3 p-3 rounded-lg bg-muted/40">
                 <item.icon className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />

@@ -612,7 +612,7 @@ export async function analyzeSenderTrust(
 
 // ── Content quality analysis ────────────────────────────────────────────────
 
-export function analyzeContentQuality(bodyText: string, bodyHtml: string): ContentQuality {
+export function analyzeContentQuality(bodyText: string, bodyHtml: string, subject: string = ""): ContentQuality {
   // Strip HTML tags to get plain text from HTML body for all checks
   const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   const textToSearch = (bodyText || "").trim() || htmlAsText;
@@ -625,10 +625,43 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string): Conte
     /\{[a-z_]+\}|%[a-z_]+%|\[\[[\w\s]+\]\]/i.test(textToSearch + bodyHtml) ||
     /\b(?:Hi|Hey|Dear|Hello)\s+[A-Z][a-z]+[,!]/i.test(textToSearch);
 
+  // HTML-to-text ratio: estimate visible text vs total content
+  const imgTagCount = ((bodyHtml || "").match(/<img\b/gi) || []).length;
+  // Each image treated as ~100 word-equivalents of content space
+  const totalContentUnits = wordCount + imgTagCount * 100;
+  const htmlToTextRatio = totalContentUnits > 0 ? wordCount / totalContentUnits : 1;
+
+  // Image-heavy: very few words but multiple images, or negligible text
+  const isImageHeavy = (wordCount < 50 && imgTagCount >= 2) || (imgTagCount > 0 && htmlToTextRatio < 0.2);
+
+  // URL shortener detection
+  const URL_SHORTENER_RE = /https?:\/\/(bit\.ly|tinyurl\.com|t\.co|ow\.ly|goo\.gl|buff\.ly|is\.gd|rebrand\.ly|cutt\.ly|rb\.gy|short\.io|clk\.sh|lnkd\.in)\//i;
+  const hasUrlShortener = URL_SHORTENER_RE.test((bodyHtml || "") + (bodyText || ""));
+
+  // Hidden text detection: white/background-matched text, font-size:0, display:none, visibility:hidden
+  const hasHiddenText =
+    /color\s*:\s*(#fff(?:fff)?|white)\b/i.test(bodyHtml || "") ||
+    /font-size\s*:\s*0/i.test(bodyHtml || "") ||
+    /display\s*:\s*none/i.test(bodyHtml || "") ||
+    /visibility\s*:\s*hidden/i.test(bodyHtml || "");
+
+  // Link-to-text ratio: more than 1 link per 50 words is flagged
+  const linkCount = ((bodyHtml || "").match(/<a\b/gi) || []).length;
+  const linkToTextRatio = wordCount > 0 ? linkCount / wordCount : 0;
+
+  // Subject line character count
+  const subjectCharCount = (subject || "").length;
+
   return {
     wordCount,
     hasPs,
     hasPersonalization,
+    htmlToTextRatio,
+    hasUrlShortener,
+    hasHiddenText,
+    linkToTextRatio,
+    isImageHeavy,
+    subjectCharCount,
   };
 }
 
@@ -769,19 +802,27 @@ export function computeOverallScore(params: {
   }
   // max 10
 
-  // Content quality: 10 pts (word count 8 + personalization 1 + P.S. 1)
+  // Content quality: 10 pts
+  // Tier 1 — Spam Risk (6 pts): URL shortener 2 + hidden text 2 + html-to-text ratio 1 + link density 1
+  // Tier 2 — Engagement (3 pts): word count 2 + subject length 1
+  // Tier 3 — Best Practice (1 pt): personalization or P.S.
   let contentPoints = 5; // default
   if (params.contentQuality) {
     const cq = params.contentQuality;
     contentPoints = 0;
+    // Tier 1
+    if (!cq.hasUrlShortener) contentPoints += 2;
+    if (!cq.hasHiddenText) contentPoints += 2;
+    if (cq.htmlToTextRatio >= 0.3) contentPoints += 1;
+    if (cq.linkToTextRatio <= 0.02) contentPoints += 1; // ≤ 1 link per 50 words
+    // Tier 2
     const wc = cq.wordCount;
-    if (wc >= 100 && wc <= 400) contentPoints += 8;
-    else if (wc >= 401 && wc <= 500) contentPoints += 6;
-    else if (wc >= 501 && wc <= 600) contentPoints += 4;
-    else if (wc >= 601 && wc <= 700) contentPoints += 2;
-    else if (wc >= 701 && wc <= 800) contentPoints += 1;
-    if (cq.hasPersonalization) contentPoints += 1;
-    if (cq.hasPs) contentPoints += 1;
+    if (wc >= 50 && wc <= 300) contentPoints += 2;
+    else if (wc > 300 && wc <= 700) contentPoints += 1;
+    const sc = cq.subjectCharCount ?? 0;
+    if (sc >= 20 && sc <= 60) contentPoints += 1;
+    // Tier 3
+    if (cq.hasPersonalization || cq.hasPs) contentPoints += 1;
   }
   // max 10
 

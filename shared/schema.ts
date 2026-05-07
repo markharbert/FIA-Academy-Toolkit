@@ -866,6 +866,12 @@ export type ContentQuality = {
   wordCount: number;
   hasPs: boolean;
   hasPersonalization: boolean;
+  htmlToTextRatio: number;
+  hasUrlShortener: boolean;
+  hasHiddenText: boolean;
+  linkToTextRatio: number;
+  isImageHeavy: boolean;
+  subjectCharCount: number;
 };
 
 export type CanSpamCompliance = {
