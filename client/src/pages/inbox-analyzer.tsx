@@ -1061,7 +1061,22 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   {cq.hasHiddenText && (
                     <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
                       <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
-                      <span>Your email appears to contain hidden text — content invisible to readers but present in the HTML (white text on white, font-size:0, or display:none). This is a well-known spam technique flagged aggressively by every major provider. Even if added unintentionally by your editor, it can cause serious deliverability damage. <strong>To fix it:</strong> inspect your email's HTML source and remove any text matching the background color, font-size:0, or display:none elements. If you didn't add it yourself, contact your email designer, developer, or ESP support team and ask them to audit and clean the HTML.</span>
+                      <div className="space-y-2">
+                        <span>Your email appears to contain hidden text — content invisible to readers but present in the HTML (white text on white, font-size:0, or display:none). This is a well-known spam technique flagged aggressively by every major provider. Even if added unintentionally by your editor, it can cause serious deliverability damage. <strong>To fix it:</strong> locate and remove the items listed below from your email's HTML. If you didn't add them yourself, contact your email designer, developer, or ESP support team and ask them to audit and clean the HTML.</span>
+                        {cq.hiddenTextSamples && cq.hiddenTextSamples.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="font-semibold text-xs uppercase tracking-wide text-red-700 dark:text-red-400">What was detected:</p>
+                            <ul className="space-y-1">
+                              {cq.hiddenTextSamples.slice(0, 4).map((sample, i) => (
+                                <li key={i} className="font-mono text-xs bg-red-100 dark:bg-red-900/40 rounded px-2 py-1 break-all">{sample}</li>
+                              ))}
+                              {cq.hiddenTextSamples.length > 4 && (
+                                <li className="text-xs text-red-600 dark:text-red-400 italic">+ {cq.hiddenTextSamples.length - 4} more instance{cq.hiddenTextSamples.length - 4 !== 1 ? "s" : ""} detected</li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 

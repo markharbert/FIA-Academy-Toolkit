@@ -869,6 +869,7 @@ export type ContentQuality = {
   htmlToTextRatio: number;
   hasUrlShortener: boolean;
   hasHiddenText: boolean;
+  hiddenTextSamples: string[];
   linkToTextRatio: number;
   isImageHeavy: boolean;
   subjectCharCount: number;

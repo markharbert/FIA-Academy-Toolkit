@@ -638,12 +638,55 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
   const URL_SHORTENER_RE = /https?:\/\/(bit\.ly|tinyurl\.com|t\.co|ow\.ly|goo\.gl|buff\.ly|is\.gd|rebrand\.ly|cutt\.ly|rb\.gy|short\.io|clk\.sh|lnkd\.in)\//i;
   const hasUrlShortener = URL_SHORTENER_RE.test((bodyHtml || "") + (bodyText || ""));
 
-  // Hidden text detection: white/background-matched text, font-size:0, display:none, visibility:hidden
-  const hasHiddenText =
-    /color\s*:\s*(#fff(?:fff)?|white)\b/i.test(bodyHtml || "") ||
-    /font-size\s*:\s*0/i.test(bodyHtml || "") ||
-    /display\s*:\s*none/i.test(bodyHtml || "") ||
-    /visibility\s*:\s*hidden/i.test(bodyHtml || "");
+  // Hidden text detection: capture specific samples for each trigger found
+  const hiddenTextSamples: string[] = [];
+  const html = bodyHtml || "";
+
+  // Helper: extract nearby text content from an HTML snippet
+  const extractText = (snippet: string): string => {
+    const t = snippet.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    return t.length > 80 ? t.slice(0, 77) + "…" : t;
+  };
+
+  // White / near-white text color
+  const whiteColorRe = /(<[^>]+style="[^"]*color\s*:\s*(#fff(?:fff)?|white)\b[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
+  let m: RegExpExecArray | null;
+  while ((m = whiteColorRe.exec(html)) !== null) {
+    const text = extractText(m[0]);
+    if (text) hiddenTextSamples.push(`color: white/fff — "${text}"`);
+    if (hiddenTextSamples.length >= 4) break;
+  }
+
+  // font-size: 0
+  const fontSizeRe = /(<[^>]+style="[^"]*font-size\s*:\s*0[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
+  while ((m = fontSizeRe.exec(html)) !== null) {
+    const text = extractText(m[0]);
+    if (text) hiddenTextSamples.push(`font-size: 0 — "${text}"`);
+    if (hiddenTextSamples.length >= 4) break;
+  }
+
+  // display: none
+  const displayNoneRe = /(<[^>]+style="[^"]*display\s*:\s*none[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
+  while ((m = displayNoneRe.exec(html)) !== null) {
+    const text = extractText(m[0]);
+    if (text) hiddenTextSamples.push(`display: none — "${text}"`);
+    if (hiddenTextSamples.length >= 4) break;
+  }
+
+  // visibility: hidden
+  const visibilityRe = /(<[^>]+style="[^"]*visibility\s*:\s*hidden[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
+  while ((m = visibilityRe.exec(html)) !== null) {
+    const text = extractText(m[0]);
+    if (text) hiddenTextSamples.push(`visibility: hidden — "${text}"`);
+    if (hiddenTextSamples.length >= 4) break;
+  }
+
+  // Fallback: attribute-based hidden (e.g. hidden="hidden" or just hidden attr)
+  if (hiddenTextSamples.length === 0 && /\bhidden(?:="hidden")?\b/i.test(html)) {
+    hiddenTextSamples.push(`hidden attribute detected on one or more elements`);
+  }
+
+  const hasHiddenText = hiddenTextSamples.length > 0;
 
   // Link-to-text ratio: more than 1 link per 50 words is flagged
   const linkCount = ((bodyHtml || "").match(/<a\b/gi) || []).length;
@@ -659,6 +702,7 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
     htmlToTextRatio,
     hasUrlShortener,
     hasHiddenText,
+    hiddenTextSamples,
     linkToTextRatio,
     isImageHeavy,
     subjectCharCount,
