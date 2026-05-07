@@ -5454,12 +5454,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       });
 
       // Open a 24-hour placement monitoring window, pinned to THIS specific email.
-      // We do NOT fire an immediate check here because Gmail's spam filters need a few
-      // minutes to process the email before its folder assignment is reliable.
-      // Setting lastPlacementCheckedAt = now (done inside setPlacementAutoCheckWindow)
-      // enforces the 15-min scheduler throttle, so the first real check runs ~15 minutes
-      // after the email arrives — safely after spam filtering completes.
-      // Two consecutive matching checks are then required before monitoring stops.
+      // lastPlacementCheckedAt is stamped as 10 minutes ago inside setPlacementAutoCheckWindow,
+      // so the 15-min scheduler throttle fires the first real check ~5 minutes after arrival —
+      // enough time for Gmail's spam filters to finish, but fast enough to show a quick result.
+      // A confirmation check then runs 15 minutes after that first check.
+      // Two consecutive matching checks are required before monitoring stops.
       (async () => {
         const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
         await storage.setPlacementAutoCheckWindow(

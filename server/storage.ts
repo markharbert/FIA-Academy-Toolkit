@@ -3096,13 +3096,15 @@ export class DatabaseStorage implements IStorage {
 
   async setPlacementAutoCheckWindow(userId: string, until: Date | null, emailContext?: { receivedAt: Date; subject: string; messageId?: string }): Promise<void> {
     // When opening a new window (until != null):
-    //   - Stamp lastPlacementCheckedAt so the 15-min scheduler throttle enforces a
-    //     minimum delay before the first real check (lets Gmail's spam filters finish).
+    //   - Stamp lastPlacementCheckedAt as 10 minutes ago so the 15-min scheduler
+    //     throttle fires the first real check ~5 minutes after the email arrives
+    //     (enough time for Gmail's spam filters to finish processing).
+    //   - Confirmation check then runs 15 minutes after that first check.
     //   - Clear lastPlacementResults so the UI shows "pending" for the new email
     //     rather than stale results from a previous email's monitoring run.
     // When closing the window (until == null) we leave both timestamps alone.
     const extra = until !== null
-      ? { lastPlacementCheckedAt: new Date(), lastPlacementResults: null }
+      ? { lastPlacementCheckedAt: new Date(Date.now() - 10 * 60 * 1000), lastPlacementResults: null }
       : {};
     const contextFields = emailContext
       ? {
