@@ -34,20 +34,41 @@ export async function runPlacementCheckForUser(
     const connected  = allInboxes.filter(i => i.isConnected && i.provider === "gmail");
     if (connected.length === 0) return;
 
-    const results: PlacementResult[] = await Promise.all(
-      connected.map(inbox =>
-        checkGmailPlacement(
-          {
-            id:                inbox.id,
-            label:             inbox.label,
-            email:             inbox.email,
-            provider:          inbox.provider,
-            oauthAccessToken:  inbox.oauthAccessToken,
-            oauthRefreshToken: inbox.oauthRefreshToken,
-          },
-          sendingFrom,
-          emailContext
-        )
+    const results: PlacementResult[] = (
+      await Promise.all(
+        connected.map(async inbox => {
+          try {
+            return await checkGmailPlacement(
+              {
+                id:                inbox.id,
+                label:             inbox.label,
+                email:             inbox.email,
+                provider:          inbox.provider,
+                oauthAccessToken:  inbox.oauthAccessToken,
+                oauthRefreshToken: inbox.oauthRefreshToken,
+              },
+              sendingFrom,
+              emailContext
+            );
+          } catch (err: any) {
+            if (err?.code === "OAUTH_INVALID_GRANT") {
+              // Token expired or revoked — mark this inbox so the UI shows a reconnect warning
+              console.warn(`[PlacementScheduler] invalid_grant for inbox ${inbox.email} — marking needs-reconnect`);
+              await storage.markSeedInboxNeedsReconnect(inbox.id);
+            } else {
+              console.error(`[PlacementScheduler] unexpected error for inbox ${inbox.email}:`, err?.message);
+            }
+            // Return an error status so this inbox doesn't block the rest
+            return {
+              inboxId: inbox.id,
+              label: inbox.label,
+              email: inbox.email,
+              provider: inbox.provider,
+              checkedAt: new Date().toISOString(),
+              status: "error" as const,
+            } satisfies PlacementResult;
+          }
+        })
       )
     );
 

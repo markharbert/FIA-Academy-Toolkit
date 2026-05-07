@@ -430,6 +430,7 @@ export interface IStorage {
   deleteSeedInbox(id: string): Promise<void>;
   toggleSeedInbox(id: string, isActive: boolean): Promise<void>;
   storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void>;
+  markSeedInboxNeedsReconnect(id: string): Promise<void>;
   disconnectSeedInbox(id: string): Promise<void>;
   // Sender Reputation (Postmaster)
   getPostmasterConnection(userId: string): Promise<PostmasterConnection | null>;
@@ -3183,7 +3184,14 @@ export class DatabaseStorage implements IStorage {
       oauthRefreshToken: refreshToken,
       oauthTokenExpiry: expiry,
       isConnected: true,
+      oauthNeedsReconnect: false, // clear any previous expiry flag on fresh connect
     }).where(eq(seedInboxes.id, id));
+  }
+
+  async markSeedInboxNeedsReconnect(id: string): Promise<void> {
+    await db.update(seedInboxes)
+      .set({ oauthNeedsReconnect: true })
+      .where(eq(seedInboxes.id, id));
   }
 
   async disconnectSeedInbox(id: string): Promise<void> {

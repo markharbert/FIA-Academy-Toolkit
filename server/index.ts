@@ -112,6 +112,11 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] email_inbox_addresses migration complete");
     await db.execute(sql`
+      ALTER TABLE seed_inboxes
+        ADD COLUMN IF NOT EXISTS oauth_needs_reconnect boolean NOT NULL DEFAULT false
+    `);
+    console.log("[startup] seed_inboxes oauth_needs_reconnect migration complete");
+    await db.execute(sql`
       ALTER TABLE email_analyses
         ADD COLUMN IF NOT EXISTS placement_results jsonb,
         ADD COLUMN IF NOT EXISTS placement_confirmed_at timestamp

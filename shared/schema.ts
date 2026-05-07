@@ -922,9 +922,10 @@ export const seedInboxes = pgTable("seed_inboxes", {
   oauthRefreshToken: text("oauth_refresh_token"),
   oauthTokenExpiry: timestamp("oauth_token_expiry"),
   isConnected: boolean("is_connected").default(false).notNull(),
+  oauthNeedsReconnect: boolean("oauth_needs_reconnect").default(false).notNull(),
 });
 
-export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true, oauthAccessToken: true, oauthRefreshToken: true, oauthTokenExpiry: true, isConnected: true });
+export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true, oauthAccessToken: true, oauthRefreshToken: true, oauthTokenExpiry: true, isConnected: true, oauthNeedsReconnect: true });
 export type InsertSeedInbox = z.infer<typeof insertSeedInboxSchema>;
 export type SeedInbox = typeof seedInboxes.$inferSelect;
 

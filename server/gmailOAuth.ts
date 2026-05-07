@@ -203,7 +203,15 @@ export async function checkGmailPlacement(
 
     return { ...base, status: "not_found" };
   } catch (err: any) {
-    console.error("[GmailPlacement] Error checking inbox", inbox.email, err?.message);
+    const msg: string = err?.message ?? String(err);
+    console.error("[GmailPlacement] Error checking inbox", inbox.email, msg);
+    // Surface token-expiry errors distinctly so the scheduler can mark the inbox
+    if (msg.includes("invalid_grant") || msg.includes("Token has been expired")) {
+      const e = new Error(msg) as any;
+      e.code = "OAUTH_INVALID_GRANT";
+      e.inboxId = inbox.id;
+      throw e;
+    }
     return { ...base, status: "error" };
   }
 }

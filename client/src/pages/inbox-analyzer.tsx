@@ -2012,7 +2012,22 @@ function SettingsTab() {
                   {/* Bottom row: OAuth connect / disconnect for Gmail */}
                   {inbox.provider === "gmail" && (
                     <div className="border-t border-border px-3 py-2 bg-muted/10 flex items-center justify-between">
-                      {inbox.isConnected ? (
+                      {inbox.isConnected && inbox.oauthNeedsReconnect ? (
+                        // Token expired — show a prominent reconnect warning
+                        <div className="flex items-center gap-3 w-full">
+                          <CircleAlert className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+                          <p className="text-xs text-red-600 dark:text-red-400 flex-1 font-medium">Google token expired — placement checks are failing. Reconnect to restore.</p>
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs gap-1.5 flex-shrink-0 bg-red-600 hover:bg-red-700 text-white"
+                            onClick={() => { window.location.href = `/api/inbox-analyzer/seed-inboxes/connect/gmail?inboxId=${inbox.id}`; }}
+                            data-testid={`button-reconnect-gmail-${inbox.id}`}
+                          >
+                            <SiGmail className="h-3 w-3" />
+                            Reconnect
+                          </Button>
+                        </div>
+                      ) : inbox.isConnected ? (
                         <div className="flex items-center gap-3 w-full">
                           <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
                           <p className="text-xs text-muted-foreground flex-1">Gmail API authorized — placement checks active</p>
