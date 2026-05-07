@@ -862,6 +862,17 @@ export type SenderTrust = {
   trackingDomainsBlacklisted: string[];
 };
 
+export type HiddenBlockResult = {
+  text: string;
+  methods: string[];
+  position: number;
+  hasLinks: boolean;
+  hasImages: boolean;
+  classification: 'PREHEADER' | 'AMBIGUOUS' | 'SPAM_SIGNAL';
+};
+
+export type HiddenTextClassification = 'NONE' | 'PREHEADER' | 'AMBIGUOUS' | 'SPAM_SIGNAL' | 'MIXED';
+
 export type ContentQuality = {
   wordCount: number;
   hasPs: boolean;
@@ -869,6 +880,8 @@ export type ContentQuality = {
   htmlToTextRatio: number;
   hasUrlShortener: boolean;
   hasHiddenText: boolean;
+  hiddenTextClassification: HiddenTextClassification;
+  hiddenBlocks: HiddenBlockResult[];
   hiddenTextSamples: string[];
   linkToTextRatio: number;
   isImageHeavy: boolean;

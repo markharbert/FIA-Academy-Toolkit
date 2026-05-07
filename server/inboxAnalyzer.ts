@@ -638,87 +638,153 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
   const URL_SHORTENER_RE = /https?:\/\/(bit\.ly|tinyurl\.com|t\.co|ow\.ly|goo\.gl|buff\.ly|is\.gd|rebrand\.ly|cutt\.ly|rb\.gy|short\.io|clk\.sh|lnkd\.in)\//i;
   const hasUrlShortener = URL_SHORTENER_RE.test((bodyHtml || "") + (bodyText || ""));
 
-  // Hidden text detection: capture specific samples for each trigger found
-  const hiddenTextSamples: string[] = [];
+  // ── Hidden text detection (two-stage: detect → classify) ──────────────────
   const html = bodyHtml || "";
 
-  // Helper: extract nearby text content from an HTML snippet
-  const extractText = (snippet: string): string => {
-    const t = snippet.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    return t.length > 80 ? t.slice(0, 77) + "…" : t;
+  // Strip Outlook conditional comments — these are legitimate rendering helpers
+  const htmlStripped = html.replace(/<!--\[if\b[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, "");
+
+  // Find body start offset so we can measure position relative to body
+  const bodyTagMatch = htmlStripped.match(/<body\b[^>]*>/i);
+  const bodyStart = bodyTagMatch
+    ? htmlStripped.indexOf(bodyTagMatch[0]) + bodyTagMatch[0].length
+    : 0;
+
+  // Detect which CSS methods are hiding a given attribute string
+  const detectMethods = (attrs: string): string[] => {
+    const m: string[] = [];
+    if (/display\s*:\s*none/i.test(attrs))            m.push("display:none");
+    if (/visibility\s*:\s*hidden/i.test(attrs))       m.push("visibility:hidden");
+    if (/max-height\s*:\s*0/i.test(attrs))            m.push("max-height:0");
+    if (/font-size\s*:\s*0/i.test(attrs))             m.push("font-size:0");
+    if (/font-size\s*:\s*1px/i.test(attrs))           m.push("font-size:1px");
+    if (/opacity\s*:\s*0/i.test(attrs))               m.push("opacity:0");
+    if (/mso-hide\s*:\s*all/i.test(attrs))            m.push("mso-hide:all");
+    if (/color\s*:\s*(#fff(?:fff)?|white)\b/i.test(attrs)) m.push("color:white");
+    if (/\bhidden(?:="hidden")?\b/i.test(attrs))      m.push("hidden-attr");
+    return m;
   };
 
-  // White / near-white text color
-  const whiteColorRe = /(<[^>]+style="[^"]*color\s*:\s*(#fff(?:fff)?|white)\b[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
-  let m: RegExpExecArray | null;
-  while ((m = whiteColorRe.exec(html)) !== null) {
-    const text = extractText(m[0]);
-    if (text) hiddenTextSamples.push(`color: white/fff — "${text}"`);
-    if (hiddenTextSamples.length >= 4) break;
+  // Broad pattern: any element opening tag that has a hiding property
+  const HIDE_TAG_RE = /<([a-z][a-z0-9]*)\b([^>]*(?:display\s*:\s*none|visibility\s*:\s*hidden|max-height\s*:\s*0|font-size\s*:\s*(?:0|1px)|opacity\s*:\s*0|mso-hide\s*:\s*all|color\s*:\s*(?:#fff(?:fff)?|white)\b|\bhidden(?:="hidden")?)[^>]*)>/gi;
+
+  type RawBlock = {
+    startPos: number;
+    attrs: string;
+    methods: string[];
+    text: string;
+    hasLinks: boolean;
+    hasImages: boolean;
+  };
+
+  const rawBlocks: RawBlock[] = [];
+  let hm: RegExpExecArray | null;
+  HIDE_TAG_RE.lastIndex = 0;
+  while ((hm = HIDE_TAG_RE.exec(htmlStripped)) !== null) {
+    const startPos = hm.index;
+    const attrs = hm[2];
+    const methods = detectMethods(attrs);
+    if (methods.length === 0) continue;
+    // Grab up to 500 chars of content after the opening tag for text/link/image extraction
+    const snippet = htmlStripped.slice(startPos, startPos + 500);
+    const text = snippet.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 250);
+    rawBlocks.push({
+      startPos,
+      attrs,
+      methods,
+      text,
+      hasLinks: /<a\b/i.test(snippet),
+      hasImages: /<img\b/i.test(snippet),
+    });
   }
 
-  // font-size: 0
-  const fontSizeRe = /(<[^>]+style="[^"]*font-size\s*:\s*0[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
-  while ((m = fontSizeRe.exec(html)) !== null) {
-    const text = extractText(m[0]);
-    if (text) hiddenTextSamples.push(`font-size: 0 — "${text}"`);
-    if (hiddenTextSamples.length >= 4) break;
-  }
-
-  // display: none
-  const displayNoneRe = /(<[^>]+style="[^"]*display\s*:\s*none[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
-  while ((m = displayNoneRe.exec(html)) !== null) {
-    const text = extractText(m[0]);
-    if (text) hiddenTextSamples.push(`display: none — "${text}"`);
-    if (hiddenTextSamples.length >= 4) break;
-  }
-
-  // visibility: hidden
-  const visibilityRe = /(<[^>]+style="[^"]*visibility\s*:\s*hidden[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
-  while ((m = visibilityRe.exec(html)) !== null) {
-    const text = extractText(m[0]);
-    if (text) hiddenTextSamples.push(`visibility: hidden — "${text}"`);
-    if (hiddenTextSamples.length >= 4) break;
-  }
-
-  // Fallback: attribute-based hidden (e.g. hidden="hidden" or just hidden attr)
-  // Try to extract text near the hidden element for context
-  if (hiddenTextSamples.length === 0) {
-    const hiddenAttrRe = /(<[^>]+\bhidden(?:="hidden")?\b[^>]*>)([\s\S]{0,200}?)<\//gi;
-    while ((m = hiddenAttrRe.exec(html)) !== null) {
-      const text = extractText(m[0]);
-      const position = m.index;
-      const isNearTop = position < 2000;
-      const label = isNearTop
-        ? text
-          ? `Likely ESP preheader/preview text near top of email — "${text}" (this is normally harmless — see note below)`
-          : `Likely ESP preheader/preview text near top of email — no readable text found (this is normally harmless — see note below)`
-        : text
-          ? `HTML hidden attribute deeper in email — "${text}" (not in preheader position — review carefully)`
-          : `HTML hidden attribute found deeper in email with no readable text (review carefully)`;
-      hiddenTextSamples.push(label);
-      if (hiddenTextSamples.length >= 4) break;
+  // Sort by position, then deduplicate: blocks within 300 chars are the same element
+  rawBlocks.sort((a, b) => a.startPos - b.startPos);
+  const dedupedBlocks: RawBlock[] = [];
+  for (const block of rawBlocks) {
+    const last = dedupedBlocks[dedupedBlocks.length - 1];
+    if (last && block.startPos - last.startPos < 300) {
+      // Merge methods — multiple CSS properties on the same element counts as ONE block
+      last.methods = [...new Set([...last.methods, ...block.methods])];
+      if (block.hasLinks) last.hasLinks = true;
+      if (block.hasImages) last.hasImages = true;
+      continue;
     }
+    dedupedBlocks.push({ ...block });
   }
 
-  // Also check display:none near top — common ESP preheader pattern
-  // If all samples are preheader-style, annotate them
-  if (hiddenTextSamples.length === 0) {
-    const dispNoneTopRe = /(<[^>]+style="[^"]*display\s*:\s*none[^"]*max-height\s*:\s*0[^"]*"[^>]*>|<[^>]+style="[^"]*max-height\s*:\s*0[^"]*display\s*:\s*none[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
-    while ((m = dispNoneTopRe.exec(html)) !== null) {
-      if (m.index < 2000) {
-        const text = extractText(m[0]);
-        hiddenTextSamples.push(
-          text
-            ? `Likely ESP preheader/preview text — "${text}" (display:none + max-height:0 pattern — normally harmless)`
-            : `ESP preheader pattern detected (display:none + max-height:0) near top of email — normally harmless`
-        );
-        if (hiddenTextSamples.length >= 4) break;
-      }
-    }
+  // Strip zero-width spacing characters — these are not real content
+  const ZERO_WIDTH_RE = /(&(?:zwnj|zwj|nbsp|#847|#8203|#65279|#200[bcd]|#feff|#ad);|[\u200B-\u200D\uFEFF\u00AD\u034F])/gi;
+  const cleanBlockText = (t: string) => t.replace(ZERO_WIDTH_RE, "").replace(/\s+/g, " ").trim();
+  const isSpacingOnly = (t: string) => cleanBlockText(t).length === 0;
+
+  // Only consider blocks that have actual content (not just spacing chars)
+  const contentBlocks = dedupedBlocks.filter(b => !isSpacingOnly(b.text));
+
+  // Classify each content block
+  const classifyBlock = (block: RawBlock, index: number): "PREHEADER" | "AMBIGUOUS" | "SPAM_SIGNAL" => {
+    const clean = cleanBlockText(block.text);
+    const posRelBody = block.startPos - bodyStart;
+
+    // SPAM SIGNAL — any one of these triggers hard flag
+    if (block.hasLinks)                                           return "SPAM_SIGNAL";
+    if (block.hasImages)                                          return "SPAM_SIGNAL";
+    if (clean.length > 500)                                       return "SPAM_SIGNAL";
+    if (posRelBody > 1500)                                        return "SPAM_SIGNAL";
+    if (/https?:\/\/\S+/i.test(clean))                           return "SPAM_SIGNAL";
+    if (/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(clean))  return "SPAM_SIGNAL";
+    if (/\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/.test(clean))          return "SPAM_SIGNAL";
+    // Keyword stuffing: 6+ comma-separated terms
+    if (clean.split(",").map(s => s.trim()).filter(s => s.length > 2).length >= 6) return "SPAM_SIGNAL";
+    // Second content block or beyond is suspicious
+    if (index > 0) return "SPAM_SIGNAL";
+
+    // PREHEADER — must meet all criteria
+    const inPosition  = posRelBody >= 0 && posRelBody <= 1500;
+    const rightLength = clean.length >= 1 && clean.length <= 250;
+    if (inPosition && rightLength) return "PREHEADER";
+
+    return "AMBIGUOUS";
+  };
+
+  type ClassifiedBlock = RawBlock & { cleanText: string; classification: "PREHEADER" | "AMBIGUOUS" | "SPAM_SIGNAL" };
+  const classifiedBlocks: ClassifiedBlock[] = contentBlocks.map((block, i) => ({
+    ...block,
+    cleanText: cleanBlockText(block.text),
+    classification: classifyBlock(block, i),
+  }));
+
+  // Overall classification
+  type OverallClass = "NONE" | "PREHEADER" | "AMBIGUOUS" | "SPAM_SIGNAL" | "MIXED";
+  let hiddenTextClassification: OverallClass = "NONE";
+  if (classifiedBlocks.length > 0) {
+    const hasSpam     = classifiedBlocks.some(b => b.classification === "SPAM_SIGNAL");
+    const hasPreheader = classifiedBlocks.some(b => b.classification === "PREHEADER");
+    const hasAmbiguous = classifiedBlocks.some(b => b.classification === "AMBIGUOUS");
+    if (hasSpam && hasPreheader)   hiddenTextClassification = "MIXED";
+    else if (hasSpam)              hiddenTextClassification = "SPAM_SIGNAL";
+    else if (hasAmbiguous)         hiddenTextClassification = "AMBIGUOUS";
+    else if (hasPreheader)         hiddenTextClassification = "PREHEADER";
   }
 
-  const hasHiddenText = hiddenTextSamples.length > 0;
+  // hasHiddenText true only for non-safe classifications (drives scoring)
+  const hasHiddenText = hiddenTextClassification === "SPAM_SIGNAL" || hiddenTextClassification === "MIXED" || hiddenTextClassification === "AMBIGUOUS";
+
+  // hiddenBlocks for UI display
+  const hiddenBlocks = classifiedBlocks.map(b => ({
+    text: b.cleanText.slice(0, 120) + (b.cleanText.length > 120 ? "…" : ""),
+    methods: b.methods,
+    position: b.startPos - bodyStart,
+    hasLinks: b.hasLinks,
+    hasImages: b.hasImages,
+    classification: b.classification,
+  }));
+
+  // Legacy samples array for any backward-compat consumers
+  const hiddenTextSamples = classifiedBlocks.map(b => {
+    const label = b.classification === "PREHEADER" ? "PREHEADER (safe)" : b.classification === "AMBIGUOUS" ? "AMBIGUOUS" : "SPAM SIGNAL";
+    return `[${label}] ${b.methods.join(" + ")} — "${b.cleanText.slice(0, 80)}${b.cleanText.length > 80 ? "…" : ""}"`;
+  });
 
   // Link-to-text ratio: more than 1 link per 50 words is flagged
   const linkCount = ((bodyHtml || "").match(/<a\b/gi) || []).length;
@@ -734,6 +800,8 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
     htmlToTextRatio,
     hasUrlShortener,
     hasHiddenText,
+    hiddenTextClassification,
+    hiddenBlocks,
     hiddenTextSamples,
     linkToTextRatio,
     isImageHeavy,
@@ -888,7 +956,10 @@ export function computeOverallScore(params: {
     contentPoints = 0;
     // Tier 1
     if (!cq.hasUrlShortener) contentPoints += 2;
-    if (!cq.hasHiddenText) contentPoints += 2;
+    // Hidden text: NONE/PREHEADER = 2pts, AMBIGUOUS = 1pt, SPAM_SIGNAL/MIXED = 0pts
+    const hidClass = cq.hiddenTextClassification ?? (cq.hasHiddenText ? "SPAM_SIGNAL" : "NONE");
+    if (hidClass === "NONE" || hidClass === "PREHEADER") contentPoints += 2;
+    else if (hidClass === "AMBIGUOUS") contentPoints += 1;
     if (cq.htmlToTextRatio >= 0.3) contentPoints += 1;
     if (cq.linkToTextRatio <= 0.02) contentPoints += 1; // ≤ 1 link per 50 words
     // Tier 2

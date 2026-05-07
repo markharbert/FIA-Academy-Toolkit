@@ -247,7 +247,10 @@ function computeContentScore(cq: ContentQuality | null): number | null {
   let pts = 0;
   // Tier 1 — Spam Risk (6 pts)
   if (!cq.hasUrlShortener) pts += 2;
-  if (!cq.hasHiddenText) pts += 2;
+  // Hidden text: NONE/PREHEADER = 2pts, AMBIGUOUS = 1pt, SPAM_SIGNAL/MIXED = 0pts
+  const hidClass = cq.hiddenTextClassification ?? (cq.hasHiddenText ? "SPAM_SIGNAL" : "NONE");
+  if (hidClass === "NONE" || hidClass === "PREHEADER") pts += 2;
+  else if (hidClass === "AMBIGUOUS") pts += 1;
   if (cq.htmlToTextRatio >= 0.3) pts += 1;
   if (cq.linkToTextRatio <= 0.02) pts += 1;
   // Tier 2 — Engagement (3 pts)
@@ -1053,38 +1056,157 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                     </div>
                   )}
 
-                  <CheckRow
-                    pass={!cq.hasHiddenText}
-                    label={cq.hasHiddenText ? "Hidden text detected in HTML" : "No hidden text detected"}
-                    detail={cq.hasHiddenText ? "aggressive spam signal" : undefined}
-                  />
-                  {cq.hasHiddenText && (
-                    <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
-                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
-                      <div className="space-y-2">
-                        <div className="space-y-2">
-                          <span>Your email contains content that is invisible to the reader but still present in the HTML code. Spam filters can see this hidden content even though your subscribers can't — and hiding text is a well-known spam technique that major providers flag aggressively.</span>
-                          <div className="rounded bg-red-100 dark:bg-red-900/40 border border-red-200 dark:border-red-700 px-3 py-2 text-xs text-red-800 dark:text-red-300">
-                            <strong>Important — this may be your ESP's preview text:</strong> Most email platforms (ActiveCampaign, Klaviyo, Mailchimp, ConvertKit, Keap, etc.) automatically add a hidden block near the top of your email to power the <em>preview text</em> or <em>preheader</em> field you fill in when composing your campaign. That hidden block is intentional and normally harmless. If the text shown below matches what you typed into your ESP's "preview text" box, you can disregard this flag — it's your platform doing its job.
-                          </div>
-                          <span>If the items below do <strong>not</strong> match your preview text and are not a recognized part of your template, they should be removed. <strong>To fix it:</strong> locate each item in your email's HTML and delete it, or contact your email designer, developer, or ESP support team and ask them to audit the template.</span>
-                        </div>
-                        {cq.hiddenTextSamples && cq.hiddenTextSamples.length > 0 && (
-                          <div className="space-y-1">
-                            <p className="font-semibold text-xs uppercase tracking-wide text-red-700 dark:text-red-400">What was detected:</p>
-                            <ul className="space-y-1">
-                              {cq.hiddenTextSamples.slice(0, 4).map((sample, i) => (
-                                <li key={i} className="font-mono text-xs bg-red-100 dark:bg-red-900/40 rounded px-2 py-1 break-all">{sample}</li>
-                              ))}
-                              {cq.hiddenTextSamples.length > 4 && (
-                                <li className="text-xs text-red-600 dark:text-red-400 italic">+ {cq.hiddenTextSamples.length - 4} more instance{cq.hiddenTextSamples.length - 4 !== 1 ? "s" : ""} detected</li>
+                  {(() => {
+                    const hidClass = cq.hiddenTextClassification ?? (cq.hasHiddenText ? "SPAM_SIGNAL" : "NONE");
+                    const blocks = cq.hiddenBlocks ?? [];
+                    const spamBlocks = blocks.filter(b => b.classification === "SPAM_SIGNAL");
+                    const preheaderBlocks = blocks.filter(b => b.classification === "PREHEADER");
+                    const ambiguousBlocks = blocks.filter(b => b.classification === "AMBIGUOUS");
+
+                    if (hidClass === "NONE") {
+                      return (
+                        <CheckRow
+                          pass={true}
+                          label="No hidden text detected"
+                        />
+                      );
+                    }
+
+                    if (hidClass === "PREHEADER") {
+                      return (
+                        <>
+                          <CheckRow
+                            pass={true}
+                            label="Preheader / preview text detected (ESP standard — no action needed)"
+                          />
+                          <div className="flex items-start gap-2.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                            <Info className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                            <div className="space-y-2 w-full">
+                              <span>We found a hidden block at the top of your email — this is your ESP's <strong>preview text / preheader</strong>. Every major email platform (ClickFunnels, ActiveCampaign, Klaviyo, Mailchimp, ConvertKit, Keap, etc.) adds this automatically and major mailbox providers expect to see it. No action needed.</span>
+                              {preheaderBlocks.length > 0 && (
+                                <div className="space-y-1">
+                                  <p className="font-semibold text-xs uppercase tracking-wide text-blue-700 dark:text-blue-400">Detected preview text:</p>
+                                  <ul className="space-y-1">
+                                    {preheaderBlocks.map((b, i) => (
+                                      <li key={i} className="font-mono text-xs bg-blue-100 dark:bg-blue-900/40 rounded px-2 py-1 break-all">
+                                        <span className="text-blue-500 mr-1">[{b.methods.join(" + ")}]</span> {b.text || <em className="opacity-60">spacing chars only</em>}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
                               )}
-                            </ul>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                        </>
+                      );
+                    }
+
+                    if (hidClass === "AMBIGUOUS") {
+                      return (
+                        <>
+                          <CheckRow
+                            pass={false}
+                            warn={true}
+                            label="Unusual hidden text pattern detected"
+                            detail="review recommended"
+                          />
+                          <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                            <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                            <div className="space-y-2 w-full">
+                              <span>We found hidden text that may be your ESP's preview text, but the formatting is slightly unusual (e.g. located further into the email than expected, or slightly longer than a typical preheader). Review the detected content below and confirm it matches what you typed into your "preview text" field. If it doesn't match, contact your ESP or email designer.</span>
+                              {ambiguousBlocks.length > 0 && (
+                                <div className="space-y-1">
+                                  <p className="font-semibold text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400">What was detected:</p>
+                                  <ul className="space-y-1">
+                                    {ambiguousBlocks.map((b, i) => (
+                                      <li key={i} className="font-mono text-xs bg-amber-100 dark:bg-amber-900/40 rounded px-2 py-1 break-all">
+                                        <span className="text-amber-600 mr-1">[{b.methods.join(" + ")}]</span> {b.text}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    }
+
+                    if (hidClass === "SPAM_SIGNAL") {
+                      return (
+                        <>
+                          <CheckRow
+                            pass={false}
+                            label="Hidden text detected in HTML"
+                            detail="aggressive spam signal"
+                          />
+                          <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
+                            <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
+                            <div className="space-y-2 w-full">
+                              <span>Your email contains content that is invisible to the reader but still present in the HTML code. Spam filters can see this hidden content even though your subscribers can't — and hiding text is a well-known spam technique that major providers flag aggressively. <strong>To fix it:</strong> locate each item in your email's HTML and delete it, or contact your email designer, developer, or ESP support team and ask them to audit the template.</span>
+                              {spamBlocks.length > 0 && (
+                                <div className="space-y-1">
+                                  <p className="font-semibold text-xs uppercase tracking-wide text-red-700 dark:text-red-400">What was detected:</p>
+                                  <ul className="space-y-1">
+                                    {spamBlocks.map((b, i) => (
+                                      <li key={i} className="font-mono text-xs bg-red-100 dark:bg-red-900/40 rounded px-2 py-1 break-all">
+                                        <span className="text-red-600 mr-1">[{b.methods.join(" + ")}]</span> {b.text}
+                                        {b.hasLinks && <span className="ml-1 text-red-500">[contains links]</span>}
+                                        {b.hasImages && <span className="ml-1 text-red-500">[contains images]</span>}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    }
+
+                    // MIXED: preheader + spam signal
+                    return (
+                      <>
+                        <CheckRow
+                          pass={false}
+                          label="Suspicious hidden text detected"
+                          detail="also found a legitimate preheader"
+                        />
+                        <div className="flex items-start gap-2.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-800 dark:text-red-300">
+                          <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-500" />
+                          <div className="space-y-3 w-full">
+                            <span>We found a legitimate preheader (your ESP's preview text — that's fine), but we also detected additional hidden content that should be removed. Spam filters flag hidden text aggressively, even when a legitimate preheader is also present.</span>
+                            {preheaderBlocks.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="font-semibold text-xs uppercase tracking-wide text-green-700 dark:text-green-400">Legitimate preheader (no action needed):</p>
+                                <ul className="space-y-1">
+                                  {preheaderBlocks.map((b, i) => (
+                                    <li key={i} className="font-mono text-xs bg-red-100 dark:bg-red-900/40 rounded px-2 py-1 break-all opacity-75">
+                                      <span className="mr-1">[{b.methods.join(" + ")}]</span> {b.text}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {spamBlocks.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="font-semibold text-xs uppercase tracking-wide text-red-700 dark:text-red-400">Suspicious content — remove this:</p>
+                                <ul className="space-y-1">
+                                  {spamBlocks.map((b, i) => (
+                                    <li key={i} className="font-mono text-xs bg-red-100 dark:bg-red-900/40 rounded px-2 py-1 break-all">
+                                      <span className="text-red-600 mr-1">[{b.methods.join(" + ")}]</span> {b.text}
+                                      {b.hasLinks && <span className="ml-1 text-red-500">[contains links]</span>}
+                                      {b.hasImages && <span className="ml-1 text-red-500">[contains images]</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
 
                   <CheckRow
                     pass={cq.htmlToTextRatio >= 0.3}
