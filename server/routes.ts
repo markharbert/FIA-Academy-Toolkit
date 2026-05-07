@@ -1073,12 +1073,12 @@ export async function registerRoutes(
         firstName: sample.firstName, inboxRate: 87, spamRate: 4, emailsAnalyzed: 23,
       }, resources),
       welcome: () => emailTemplates.welcomeEmail({ firstName: sample.firstName, email: sample.email }, resources),
-      feedbackSubmittedFeature: () => emailTemplates.feedbackSubmittedEmail({ firstName: sample.firstName, type: "feature", title: "Add dark mode to the teleprompter" }, resources),
-      feedbackSubmittedBug: () => emailTemplates.feedbackSubmittedEmail({ firstName: sample.firstName, type: "bug", title: "Video upload fails on files over 500MB" }, resources),
-      newBugAdminAlert: () => emailTemplates.newBugAdminAlertEmail({ submitterName: "Jane Smith", submitterEmail: "jane@example.com", title: "Video upload fails on files over 500MB", description: "When I try to upload a video larger than 500MB the upload just spins and never completes. I've tried multiple times with different files." }, resources),
-      feedbackCommentFeature: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "feature", postTitle: "Add dark mode to the teleprompter", commenterName: "Admin", commentBody: "Great idea! We've added this to our roadmap for Q3.", isAdmin: false }, resources),
-      feedbackCommentBug: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", commenterName: "Jane Smith", commentBody: "Still happening for me even after the latest update.", isAdmin: true }, resources),
-      feedbackStatusChanged: () => emailTemplates.feedbackStatusChangedEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", newStatus: "in_progress", adminResponse: "We've reproduced this and a fix is on the way!" }, resources),
+      feedbackSubmittedFeature: () => emailTemplates.feedbackSubmittedEmail({ firstName: sample.firstName, type: "feature", title: "Add dark mode to the teleprompter", postId: "demo-post-id" }, resources),
+      feedbackSubmittedBug: () => emailTemplates.feedbackSubmittedEmail({ firstName: sample.firstName, type: "bug", title: "Video upload fails on files over 500MB", postId: "demo-post-id" }, resources),
+      newBugAdminAlert: () => emailTemplates.newBugAdminAlertEmail({ submitterName: "Jane Smith", submitterEmail: "jane@example.com", title: "Video upload fails on files over 500MB", description: "When I try to upload a video larger than 500MB the upload just spins and never completes. I've tried multiple times with different files.", postId: "demo-post-id" }, resources),
+      feedbackCommentFeature: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "feature", postTitle: "Add dark mode to the teleprompter", commenterName: "Admin", commentBody: "Great idea! We've added this to our roadmap for Q3.", isAdmin: false, postId: "demo-post-id" }, resources),
+      feedbackCommentBug: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", commenterName: "Jane Smith", commentBody: "Still happening for me even after the latest update.", isAdmin: true, postId: "demo-post-id" }, resources),
+      feedbackStatusChanged: () => emailTemplates.feedbackStatusChangedEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", newStatus: "in_progress", postId: "demo-post-id", adminResponse: "We've reproduced this and a fix is on the way!" }, resources),
     };
   }
 
@@ -7731,7 +7731,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             const submitterPrefs = await storage.getNotificationPrefs(submitter.id);
             if (submitterPrefs.allEnabled && submitterPrefs.preferences[prefKey]?.enabled !== false) {
               const tpl = emailTemplates.feedbackSubmittedEmail(
-                { firstName: submitter.firstName, type: type as "feature" | "bug", title: title.trim() },
+                { firstName: submitter.firstName, type: type as "feature" | "bug", title: title.trim(), postId: post.id },
                 resources
               );
               await sendEmail({ to: submitter.email, ...tpl });
@@ -7750,6 +7750,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
                   submitterEmail: submitter.email || "",
                   title: title.trim(),
                   description: description.trim(),
+                  postId: post.id,
                 }, resources);
                 await sendEmail({ to: admin.email, ...tpl });
               }
@@ -7829,6 +7830,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
                   commenterName,
                   commentBody: body.trim(),
                   isAdmin: false,
+                  postId: req.params.id,
                 }, resources);
                 await sendEmail({ to: owner.email, ...tpl });
               }
@@ -7848,6 +7850,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
                   commenterName,
                   commentBody: body.trim(),
                   isAdmin: true,
+                  postId: req.params.id,
                 }, resources);
                 await sendEmail({ to: admin.email, ...tpl });
               }
@@ -7892,6 +7895,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
                   type: post.type as "feature" | "bug",
                   postTitle: post.title,
                   newStatus: status,
+                  postId: req.params.id,
                   adminResponse: adminResponse || post.adminResponse,
                 }, resources);
                 await sendEmail({ to: owner.email, ...tpl });

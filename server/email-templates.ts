@@ -353,6 +353,7 @@ export function feedbackSubmittedEmail(params: {
   firstName: string | null;
   type: "feature" | "bug";
   title: string;
+  postId: string;
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const isFeature = params.type === "feature";
@@ -362,6 +363,7 @@ export function feedbackSubmittedEmail(params: {
   const blurb = isFeature
     ? "Thanks for sharing your idea! We review every feature request and will keep you posted as things progress."
     : "Thanks for letting us know. We review every bug report and will work on getting it fixed as soon as possible.";
+  const postUrl = `${BASE_URL}/feedback?post=${params.postId}`;
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">${blurb}</p>
@@ -370,8 +372,8 @@ export function feedbackSubmittedEmail(params: {
       <p style="margin:0;font-size:16px;font-weight:700;color:#1e293b;">${params.title}</p>
     </div>
     <p style="margin:0 0 20px;font-size:14px;color:#64748b;">You can check the status on the Feedback page at any time.</p>
-    ${btn("View feedback board", `${BASE_URL}/feedback`)}`;
-  const text = `Hey ${name},\n\n${blurb}\n\n${label}: ${params.title}\n\nView it at ${BASE_URL}/feedback`;
+    ${btn("View my submission", postUrl)}`;
+  const text = `Hey ${name},\n\n${blurb}\n\n${label}: ${params.title}\n\nView it at ${postUrl}`;
   return { subject, html: wrap(subject, body, resources), text };
 }
 
@@ -380,7 +382,9 @@ export function newBugAdminAlertEmail(params: {
   submitterEmail: string;
   title: string;
   description: string;
+  postId: string;
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
+  const postUrl = `${BASE_URL}/feedback?post=${params.postId}`;
   const subject = `🐛 New bug report: ${params.title}`;
   const body = `
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">A new bug report has been submitted and needs your attention.</p>
@@ -391,8 +395,8 @@ export function newBugAdminAlertEmail(params: {
     </div>
     <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Description</p>
     <p style="margin:0 0 24px;font-size:14px;color:#334155;line-height:1.7;">${params.description}</p>
-    ${btn("Review in admin panel", `${BASE_URL}/admin`)}`;
-  const text = `New bug report from ${params.submitterName} (${params.submitterEmail})\n\n${params.title}\n\n${params.description}\n\nReview at ${BASE_URL}/admin`;
+    ${btn("Review bug report", postUrl)}`;
+  const text = `New bug report from ${params.submitterName} (${params.submitterEmail})\n\n${params.title}\n\n${params.description}\n\nReview at ${postUrl}`;
   return { subject, html: wrap("New Bug Report", body, resources), text };
 }
 
@@ -401,6 +405,7 @@ export function feedbackStatusChangedEmail(params: {
   type: "feature" | "bug";
   postTitle: string;
   newStatus: string;
+  postId: string;
   adminResponse?: string | null;
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
@@ -419,6 +424,7 @@ export function feedbackStatusChangedEmail(params: {
   };
   const humanStatus = statusLabels[params.newStatus] ?? params.newStatus;
   const subject = `Update on your ${label}: ${params.postTitle}`;
+  const postUrl = `${BASE_URL}/feedback?post=${params.postId}`;
 
   const responseBlock = params.adminResponse
     ? `<p style="margin:20px 0 8px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Official response from our team</p>
@@ -438,9 +444,9 @@ export function feedbackStatusChangedEmail(params: {
     </div>
     ${responseBlock}
     <p style="margin:0 0 4px;font-size:14px;color:#64748b;">You can track the progress of your ${label} on the Feedback page at any time.</p>
-    ${btn("View feedback board", `${BASE_URL}/feedback`)}`;
+    ${btn("View my feedback", postUrl)}`;
 
-  const text = `Hey ${name},\n\nThere's a status update on your ${label} "${params.postTitle}".\n\nNew status: ${humanStatus}${params.adminResponse ? "\n\nOfficial response: " + params.adminResponse : ""}\n\nView it at ${BASE_URL}/feedback`;
+  const text = `Hey ${name},\n\nThere's a status update on your ${label} "${params.postTitle}".\n\nNew status: ${humanStatus}${params.adminResponse ? "\n\nOfficial response: " + params.adminResponse : ""}\n\nView it at ${postUrl}`;
   return { subject, html: wrap("Feedback Status Update", body, resources), text };
 }
 
@@ -451,6 +457,7 @@ export function feedbackCommentEmail(params: {
   commenterName: string;
   commentBody: string;
   isAdmin: boolean;
+  postId: string;
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const isFeature = params.type === "feature";
@@ -461,6 +468,7 @@ export function feedbackCommentEmail(params: {
   const intro = params.isAdmin
     ? `A new comment was posted on a ${label} that needs your attention.`
     : `${params.commenterName} left a comment on your ${label}.`;
+  const postUrl = `${BASE_URL}/feedback?post=${params.postId}`;
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
     <p style="margin:0 0 20px;font-size:15px;color:#334155;">${intro}</p>
@@ -472,8 +480,8 @@ export function feedbackCommentEmail(params: {
     <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;margin:0 0 24px;border:1px solid #e2e8f0;">
       <p style="margin:0;font-size:15px;color:#334155;line-height:1.7;">${params.commentBody}</p>
     </div>
-    ${btn("View the discussion", `${BASE_URL}/feedback`)}`;
-  const text = `Hey ${name},\n\n${intro}\n\n"${params.postTitle}"\n\n${params.commenterName}: ${params.commentBody}\n\nView at ${BASE_URL}/feedback`;
+    ${btn("View the discussion", postUrl)}`;
+  const text = `Hey ${name},\n\n${intro}\n\n"${params.postTitle}"\n\n${params.commenterName}: ${params.commentBody}\n\nView at ${postUrl}`;
   return { subject, html: wrap(subject, body, resources), text };
 }
 

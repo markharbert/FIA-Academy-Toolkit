@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -368,8 +368,17 @@ export default function FeedbackPage() {
   const [submitType, setSubmitType] = useState<"feature" | "bug">("feature");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("post");
+  });
   const [votingId, setVotingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const postParam = params.get("post");
+    if (postParam) setSelectedPostId(postParam);
+  }, []);
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
