@@ -687,11 +687,34 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
     const hiddenAttrRe = /(<[^>]+\bhidden(?:="hidden")?\b[^>]*>)([\s\S]{0,200}?)<\//gi;
     while ((m = hiddenAttrRe.exec(html)) !== null) {
       const text = extractText(m[0]);
-      const label = text
-        ? `HTML hidden attribute — "${text}" (invisible to readers but present in your code)`
-        : `HTML hidden attribute found on an element with no readable text (could be a template leftover or preheader)`;
+      const position = m.index;
+      const isNearTop = position < 2000;
+      const label = isNearTop
+        ? text
+          ? `Likely ESP preheader/preview text near top of email — "${text}" (this is normally harmless — see note below)`
+          : `Likely ESP preheader/preview text near top of email — no readable text found (this is normally harmless — see note below)`
+        : text
+          ? `HTML hidden attribute deeper in email — "${text}" (not in preheader position — review carefully)`
+          : `HTML hidden attribute found deeper in email with no readable text (review carefully)`;
       hiddenTextSamples.push(label);
       if (hiddenTextSamples.length >= 4) break;
+    }
+  }
+
+  // Also check display:none near top — common ESP preheader pattern
+  // If all samples are preheader-style, annotate them
+  if (hiddenTextSamples.length === 0) {
+    const dispNoneTopRe = /(<[^>]+style="[^"]*display\s*:\s*none[^"]*max-height\s*:\s*0[^"]*"[^>]*>|<[^>]+style="[^"]*max-height\s*:\s*0[^"]*display\s*:\s*none[^"]*"[^>]*>)([\s\S]{0,200}?)<\//gi;
+    while ((m = dispNoneTopRe.exec(html)) !== null) {
+      if (m.index < 2000) {
+        const text = extractText(m[0]);
+        hiddenTextSamples.push(
+          text
+            ? `Likely ESP preheader/preview text — "${text}" (display:none + max-height:0 pattern — normally harmless)`
+            : `ESP preheader pattern detected (display:none + max-height:0) near top of email — normally harmless`
+        );
+        if (hiddenTextSamples.length >= 4) break;
+      }
     }
   }
 
