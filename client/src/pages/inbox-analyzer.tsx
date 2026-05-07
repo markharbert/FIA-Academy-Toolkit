@@ -259,15 +259,11 @@ function computePlacementScore(results: PlacementResult[] | null): number | null
 }
 
 const IP_BLACKLIST_URLS: Record<string, (ip: string) => string> = {
-  "Spamhaus": (ip) => `https://check.spamhaus.org/listed/?searchterm=${encodeURIComponent(ip)}`,
-  "Barracuda": (ip) => `https://www.barracudacentral.org/lookups?ip=${encodeURIComponent(ip)}`,
-  "SpamCop": (ip) => `https://www.spamcop.net/bl.shtml?${encodeURIComponent(ip)}`,
+  "Spamhaus ZEN": (ip) => `https://check.spamhaus.org/listed/?searchterm=${encodeURIComponent(ip)}`,
 };
 
 const DOMAIN_BLACKLIST_URLS: Record<string, (domain: string) => string> = {
   "Spamhaus DBL": (domain) => `https://check.spamhaus.org/listed/?searchterm=${encodeURIComponent(domain)}`,
-  "SURBL": (domain) => `https://www.surbl.org/surbl-analysis?site=${encodeURIComponent(domain)}`,
-  "URIBL": (domain) => `https://uribl.com/show.cgi?query=${encodeURIComponent(domain)}&type=data`,
 };
 
 // Identifies the email service provider from the sending domain and returns
@@ -861,7 +857,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               <CheckRow
                 pass={!st.blacklisted}
                 label={st.blacklisted ? `Sending IP blacklisted on: ${(st.blacklistHits ?? []).join(", ") || "unknown list"}` : "Sending IP not on any blocklists"}
-                detail={st.blacklisted ? "may affect inbox delivery" : "Spamhaus, Barracuda, SpamCop checked"}
+                detail={st.blacklisted ? "may affect inbox delivery" : "Spamhaus ZEN checked"}
               />
               {st.blacklisted && (
                 <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
@@ -892,7 +888,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 label={st.domainBlacklisted
                   ? `Sending domain blacklisted on: ${(st.domainBlacklistHits ?? []).join(", ") || "unknown list"}`
                   : "Sending domain not on any domain blocklists"}
-                detail={st.domainBlacklisted ? "may affect inbox delivery" : "Spamhaus DBL, SURBL, URIBL checked"}
+                detail={st.domainBlacklisted ? "may affect inbox delivery" : "Spamhaus DBL checked"}
               />
               {st.domainBlacklisted && (
                 <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
@@ -1569,7 +1565,7 @@ function MyAddressTab({
           <div className="grid sm:grid-cols-2 gap-3">
             {[
               { icon: ShieldCheck, label: "Authentication (30 pts)", desc: "SPF, DKIM, and DMARC pass/fail results from your actual sending server — plus DNS record presence." },
-              { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist checks (Spamhaus, Barracuda, SpamCop); sending domain blacklist checks (Spamhaus DBL, SURBL, URIBL); click tracking domain blacklist monitoring; display name / domain match; Reply-To alignment." },
+              { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist check (Spamhaus ZEN); sending domain blacklist check (Spamhaus DBL); click tracking domain blacklist monitoring; display name / domain match; Reply-To alignment." },
               { icon: AlertTriangle, label: "Spammy Language (35 pts)", desc: "Comprehensive scan for 100+ high / medium / low-risk trigger phrases in both subject and body — grouped by severity with highlighted matches." },
               { icon: Zap, label: "Technical Health (10 pts)", desc: "HTML/text version, preheader, email size, missing ALT text, tracking pixels, and external domains." },
               { icon: BookOpen, label: "Content Quality (10 pts)", desc: "Word count scored on a tiered scale: 100–400 words = 8 pts, 401–500 = 6 pts, 501–600 = 4 pts, 601–700 = 2 pts, 701–800 = 1 pt, outside range = 0 pts. Plus P.S. section and personalization (1 pt each)." },

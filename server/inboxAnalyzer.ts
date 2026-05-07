@@ -182,9 +182,7 @@ async function checkBlacklists(ip: string): Promise<string[]> {
   if (!ip) return [];
   const reversed = ip.split(".").reverse().join(".");
   const lists = [
-    { name: "Spamhaus", host: `${reversed}.zen.spamhaus.org` },
-    { name: "Barracuda", host: `${reversed}.b.barracudacentral.org` },
-    { name: "SpamCop", host: `${reversed}.bl.spamcop.net` },
+    { name: "Spamhaus ZEN", host: `${reversed}.zen.spamhaus.org` },
   ];
   const hits: string[] = [];
   await Promise.all(
@@ -200,15 +198,13 @@ async function checkBlacklists(ip: string): Promise<string[]> {
   return hits;
 }
 
-// ── Domain Blacklist checks (DBL / SURBL / URIBL) ────────────────────────────
+// ── Domain Blacklist checks (Spamhaus DBL) ────────────────────────────────────
 
 async function checkDomainBlacklists(domain: string): Promise<string[]> {
   if (!domain) return [];
   const d = domain.toLowerCase().replace(/^www\./i, "");
   const lists = [
     { name: "Spamhaus DBL", host: `${d}.dbl.spamhaus.org` },
-    { name: "SURBL", host: `${d}.multi.surbl.org` },
-    { name: "URIBL", host: `${d}.black.uribl.com` },
   ];
   const hits: string[] = [];
   await Promise.all(
