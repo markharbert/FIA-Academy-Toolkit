@@ -103,7 +103,7 @@ export async function runPlacementCheckForUser(
       }
     } else {
       const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
-      console.log(`[PlacementScheduler] checked ${connected.length} inbox(es) for user ${userId} — ${summary}`);
+      console.log(`[PlacementScheduler] checked ${targetInboxes.length} inbox(es) for user ${userId} — ${summary}`);
     }
   } catch (err: any) {
     console.error(`[PlacementScheduler] error for user ${userId}:`, err?.message);
