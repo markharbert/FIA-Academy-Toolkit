@@ -1626,6 +1626,10 @@ export interface NotificationPreferences {
   videoPracticeReminder: { enabled: boolean };
   reputationDropAlert: { enabled: boolean };
   weeklyInboxReport: { enabled: boolean; dayOfWeek: number; hour: number };
+  featureRequestReceived: { enabled: boolean };
+  bugReportReceived: { enabled: boolean };
+  featureRequestComment: { enabled: boolean };
+  bugReportComment: { enabled: boolean };
 }
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -1641,6 +1645,10 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   videoPracticeReminder: { enabled: false },
   reputationDropAlert: { enabled: true },
   weeklyInboxReport: { enabled: false, dayOfWeek: 1, hour: 8 },
+  featureRequestReceived: { enabled: true },
+  bugReportReceived: { enabled: true },
+  featureRequestComment: { enabled: true },
+  bugReportComment: { enabled: true },
 };
 
 // ─── Public API Keys (read-only external/mobile API access) ───────────────────

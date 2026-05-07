@@ -685,6 +685,15 @@ export default function AccountPage() {
                           { key: "weeklyInboxReport" as const, label: "Weekly inbox report", desc: "Inbox placement rate and spam rate summary for the week." },
                         ],
                       },
+                      {
+                        group: "Bug & Feature Feedback",
+                        items: [
+                          { key: "featureRequestReceived" as const, label: "Feature request received", desc: "Confirmation email when you submit a feature request." },
+                          { key: "bugReportReceived" as const, label: "Bug report received", desc: "Confirmation when you file a bug report. Admins also get an alert for every new bug." },
+                          { key: "featureRequestComment" as const, label: "Feature request comments", desc: "Notify you (and admins) when someone comments on a feature request." },
+                          { key: "bugReportComment" as const, label: "Bug report comments", desc: "Notify you (and admins) when someone comments on a bug report." },
+                        ],
+                      },
                     ].map(({ group, items }) => (
                       <div key={group} className="mb-5">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

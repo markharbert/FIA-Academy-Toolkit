@@ -1053,6 +1053,11 @@ export async function registerRoutes(
         firstName: sample.firstName, inboxRate: 87, spamRate: 4, emailsAnalyzed: 23,
       }, resources),
       welcome: () => emailTemplates.welcomeEmail({ firstName: sample.firstName, email: sample.email }, resources),
+      feedbackSubmittedFeature: () => emailTemplates.feedbackSubmittedEmail({ firstName: sample.firstName, type: "feature", title: "Add dark mode to the teleprompter" }, resources),
+      feedbackSubmittedBug: () => emailTemplates.feedbackSubmittedEmail({ firstName: sample.firstName, type: "bug", title: "Video upload fails on files over 500MB" }, resources),
+      newBugAdminAlert: () => emailTemplates.newBugAdminAlertEmail({ submitterName: "Jane Smith", submitterEmail: "jane@example.com", title: "Video upload fails on files over 500MB", description: "When I try to upload a video larger than 500MB the upload just spins and never completes. I've tried multiple times with different files." }, resources),
+      feedbackCommentFeature: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "feature", postTitle: "Add dark mode to the teleprompter", commenterName: "Admin", commentBody: "Great idea! We've added this to our roadmap for Q3.", isAdmin: false }, resources),
+      feedbackCommentBug: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", commenterName: "Jane Smith", commentBody: "Still happening for me even after the latest update.", isAdmin: true }, resources),
     };
   }
 
@@ -7674,6 +7679,52 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         status: "open",
       });
       res.status(201).json(post);
+
+      // Fire notifications asynchronously (don't block response)
+      (async () => {
+        try {
+          const { sendEmail } = await import("./email-sendgrid");
+          const [submitter, resources] = await Promise.all([
+            storage.getUser(req.session.userId!),
+            storage.getActiveEmailResources(),
+          ]);
+          if (!submitter) return;
+
+          const prefKey = type === "feature" ? "featureRequestReceived" : "bugReportReceived";
+
+          // Email the submitter confirmation
+          if (submitter.email) {
+            const submitterPrefs = await storage.getNotificationPrefs(submitter.id);
+            if (submitterPrefs.allEnabled && submitterPrefs.preferences[prefKey]?.enabled !== false) {
+              const tpl = emailTemplates.feedbackSubmittedEmail(
+                { firstName: submitter.firstName, type: type as "feature" | "bug", title: title.trim() },
+                resources
+              );
+              await sendEmail({ to: submitter.email, ...tpl });
+            }
+          }
+
+          // For bug reports, also notify all admins
+          if (type === "bug") {
+            const admins = await storage.getAdminUsersForNotifications();
+            for (const admin of admins) {
+              if (!admin.email || admin.id === submitter.id) continue;
+              const adminPrefs = await storage.getNotificationPrefs(admin.id);
+              if (adminPrefs.allEnabled && adminPrefs.preferences.bugReportReceived?.enabled !== false) {
+                const tpl = emailTemplates.newBugAdminAlertEmail({
+                  submitterName: submitter.displayName || submitter.firstName || "A member",
+                  submitterEmail: submitter.email || "",
+                  title: title.trim(),
+                  description: description.trim(),
+                }, resources);
+                await sendEmail({ to: admin.email, ...tpl });
+              }
+            }
+          }
+        } catch (notifErr) {
+          console.error("[feedback] notification error:", notifErr);
+        }
+      })();
     } catch (err) {
       console.error("[feedback] create error:", err);
       res.status(500).json({ message: "Failed to submit feedback" });
@@ -7715,6 +7766,63 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const comment = await storage.addFeedbackComment(req.params.id, req.session.userId, body.trim(), !!isAdminNote);
       res.status(201).json(comment);
+
+      // Fire comment notifications asynchronously
+      (async () => {
+        try {
+          const { sendEmail } = await import("./email-sendgrid");
+          const [post, resources, admins] = await Promise.all([
+            storage.getFeedbackPost(req.params.id, req.session.userId!, true),
+            storage.getActiveEmailResources(),
+            storage.getAdminUsersForNotifications(),
+          ]);
+          if (!post) return;
+
+          const postType = post.type as "feature" | "bug";
+          const commenterName = user.displayName || user.firstName || "Someone";
+          const prefKey = postType === "feature" ? "featureRequestComment" : "bugReportComment";
+
+          // Notify post owner if they're not the one commenting
+          if (post.userId !== req.session.userId) {
+            const owner = await storage.getUser(post.userId);
+            if (owner?.email) {
+              const ownerPrefs = await storage.getNotificationPrefs(owner.id);
+              if (ownerPrefs.allEnabled && ownerPrefs.preferences[prefKey]?.enabled !== false) {
+                const tpl = emailTemplates.feedbackCommentEmail({
+                  firstName: owner.firstName,
+                  type: postType,
+                  postTitle: post.title,
+                  commenterName,
+                  commentBody: body.trim(),
+                  isAdmin: false,
+                }, resources);
+                await sendEmail({ to: owner.email, ...tpl });
+              }
+            }
+          }
+
+          // Notify all admins if the commenter is not an admin
+          if (!user.isAdmin) {
+            for (const admin of admins) {
+              if (!admin.email) continue;
+              const adminPrefs = await storage.getNotificationPrefs(admin.id);
+              if (adminPrefs.allEnabled && adminPrefs.preferences[prefKey]?.enabled !== false) {
+                const tpl = emailTemplates.feedbackCommentEmail({
+                  firstName: admin.firstName,
+                  type: postType,
+                  postTitle: post.title,
+                  commenterName,
+                  commentBody: body.trim(),
+                  isAdmin: true,
+                }, resources);
+                await sendEmail({ to: admin.email, ...tpl });
+              }
+            }
+          }
+        } catch (notifErr) {
+          console.error("[feedback] comment notification error:", notifErr);
+        }
+      })();
     } catch (err) {
       console.error("[feedback] comment error:", err);
       res.status(500).json({ message: "Failed to add comment" });

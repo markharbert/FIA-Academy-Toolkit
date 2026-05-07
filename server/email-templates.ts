@@ -349,6 +349,86 @@ export function weeklyInboxReportEmail(params: {
   return { subject, html: wrap("Weekly Inbox Placement Report", body, resources), text };
 }
 
+export function feedbackSubmittedEmail(params: {
+  firstName: string | null;
+  type: "feature" | "bug";
+  title: string;
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
+  const name = params.firstName || "there";
+  const isFeature = params.type === "feature";
+  const subject = isFeature
+    ? "We received your feature request!"
+    : "We received your bug report!";
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">
+      ${isFeature
+        ? "Thanks for submitting a feature request! We review every idea and will update you if it's planned or in progress."
+        : "Thanks for letting us know about this bug. We review every report and will work on getting it resolved."}
+    </p>
+    <div style="background:#f8fafc;border-left:4px solid ${isFeature ? "#3f92cc" : "#ef4444"};padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 20px;">
+      <p style="margin:0;font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">${isFeature ? "Feature Request" : "Bug Report"}</p>
+      <p style="margin:6px 0 0;font-size:15px;font-weight:600;color:#1e293b;">${params.title}</p>
+    </div>
+    <p style="margin:0 0 20px;font-size:14px;color:#64748b;">You can check the status of your ${isFeature ? "request" : "report"} on the Feedback page at any time.</p>
+    ${btn("View feedback board", `${BASE_URL}/feedback`)}`;
+  const text = `Hey ${name},\n\n${isFeature ? "Thanks for submitting a feature request!" : "Thanks for submitting your bug report!"}\n\n${params.title}\n\nView your submission at ${BASE_URL}/feedback`;
+  return { subject, html: wrap(subject, body, resources), text };
+}
+
+export function newBugAdminAlertEmail(params: {
+  submitterName: string;
+  submitterEmail: string;
+  title: string;
+  description: string;
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
+  const subject = `New bug report from ${params.submitterName}`;
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">A new bug report has been submitted:</p>
+    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 20px;">
+      <p style="margin:0;font-size:13px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.5px;">Bug Report</p>
+      <p style="margin:6px 0 4px;font-size:15px;font-weight:600;color:#1e293b;">${params.title}</p>
+      <p style="margin:0;font-size:13px;color:#64748b;">Submitted by <strong>${params.submitterName}</strong> (${params.submitterEmail})</p>
+    </div>
+    <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Description</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#334155;line-height:1.6;">${params.description}</p>
+    ${btn("View in admin panel", `${BASE_URL}/admin`)}`;
+  const text = `New bug report from ${params.submitterName} (${params.submitterEmail})\n\n${params.title}\n\n${params.description}\n\nReview at ${BASE_URL}/admin`;
+  return { subject, html: wrap("New Bug Report", body, resources), text };
+}
+
+export function feedbackCommentEmail(params: {
+  firstName: string | null;
+  type: "feature" | "bug";
+  postTitle: string;
+  commenterName: string;
+  commentBody: string;
+  isAdmin: boolean;
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
+  const name = params.firstName || "there";
+  const isFeature = params.type === "feature";
+  const subject = params.isAdmin
+    ? `New comment on ${isFeature ? "feature request" : "bug report"}: ${params.postTitle}`
+    : `${params.commenterName} commented on your ${isFeature ? "feature request" : "bug report"}`;
+  const intro = params.isAdmin
+    ? `A new comment was posted on a ${isFeature ? "feature request" : "bug report"} you may want to review.`
+    : `${params.commenterName} left a comment on your ${isFeature ? "feature request" : "bug report"}.`;
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">${intro}</p>
+    <div style="background:#f8fafc;border-left:4px solid ${isFeature ? "#3f92cc" : "#ef4444"};padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 16px;">
+      <p style="margin:0;font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;">${isFeature ? "Feature Request" : "Bug Report"}</p>
+      <p style="margin:6px 0 0;font-size:15px;font-weight:600;color:#1e293b;">${params.postTitle}</p>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin:0 0 20px;">
+      <p style="margin:0 0 8px;font-size:12px;font-weight:600;color:#64748b;">${params.commenterName} wrote:</p>
+      <p style="margin:0;font-size:14px;color:#334155;line-height:1.6;">${params.commentBody}</p>
+    </div>
+    ${btn("View the discussion", `${BASE_URL}/feedback`)}`;
+  const text = `Hey ${name},\n\n${intro}\n\n"${params.postTitle}"\n\n${params.commenterName}: ${params.commentBody}\n\nView at ${BASE_URL}/feedback`;
+  return { subject, html: wrap(subject, body, resources), text };
+}
+
 export function welcomeEmail(params: {
   firstName: string | null;
   email: string;

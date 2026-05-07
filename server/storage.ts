@@ -449,6 +449,7 @@ export interface IStorage {
   hasNotificationBeenSent(userId: string, type: string, refId: string, since: Date): Promise<boolean>;
   logNotification(userId: string, type: string, refId: string | null): Promise<void>;
   getAllUsersForNotifications(): Promise<Array<{ id: string; email: string | null; displayName: string | null; firstName: string | null; timezone: string }>>;
+  getAdminUsersForNotifications(): Promise<Array<{ id: string; email: string | null; displayName: string | null; firstName: string | null }>>;
   getDmoEntriesForWeek(userId: string, tz: string): Promise<import("@shared/schema").DmoEntry[]>;
 
   // Email template overrides
@@ -3802,6 +3803,18 @@ export class DatabaseStorage implements IStorage {
       displayName: r.display_name,
       firstName: r.first_name,
       timezone: r.timezone || "America/New_York",
+    }));
+  }
+
+  async getAdminUsersForNotifications(): Promise<Array<{ id: string; email: string | null; displayName: string | null; firstName: string | null }>> {
+    const result = await pool.query(
+      `SELECT id, email, display_name, first_name FROM users WHERE is_admin = true AND (is_disabled = false OR is_disabled IS NULL)`
+    );
+    return result.rows.map((r: any) => ({
+      id: r.id,
+      email: r.email,
+      displayName: r.display_name,
+      firstName: r.first_name,
     }));
   }
 
