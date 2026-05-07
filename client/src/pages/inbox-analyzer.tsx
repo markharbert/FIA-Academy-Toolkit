@@ -272,6 +272,52 @@ function computePlacementScore(results: PlacementResult[] | null): number | null
   return Math.round((inboxCount / definitive.length) * 100);
 }
 
+function PlacementTip({ results }: { results: PlacementResult[] }) {
+  const statuses = results.map(r => r.status);
+  if (statuses.includes("spam")) {
+    return (
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50">
+        <CircleX className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-red-700 dark:text-red-400">Landing in Spam — take action now</p>
+          <p className="text-sm text-red-600/80 dark:text-red-400/70 mt-0.5">This is the most urgent issue to fix. The most common cause is a failed authentication check — review your Authentication score above. A broken SPF, DKIM, or DMARC record can usually be corrected in your DNS settings.</p>
+        </div>
+      </div>
+    );
+  }
+  if (statuses.includes("promotions")) {
+    return (
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50">
+        <CircleAlert className="h-4 w-4 text-orange-500 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">Landing in Promotions</p>
+          <p className="text-sm text-orange-600/80 dark:text-orange-400/70 mt-0.5">Gmail flagged this as bulk marketing. Two things help most: (1) reduce images and links — a plain-text-style email looks more like a person writing to a person; (2) make sure your From name is consistent with how your subscribers know you.</p>
+        </div>
+      </div>
+    );
+  }
+  if (statuses.includes("updates")) {
+    return (
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800/50">
+        <Info className="h-4 w-4 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">Landing in Updates — not bad, but Primary is better</p>
+          <p className="text-sm text-yellow-600/80 dark:text-yellow-400/70 mt-0.5">Updates is a real tab people check, but Primary gets opened first. The most effective move: ask your subscribers to reply to one of your emails. A single reply teaches Gmail you're a real conversation — and that signal tends to stick.</p>
+        </div>
+      </div>
+    );
+  }
+  if (statuses.length > 0 && statuses.every(s => s === "primary")) {
+    return (
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/50">
+        <CircleCheck className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-green-700 dark:text-green-400">You're landing in Primary — exactly where you want to be. This is the inbox your subscribers check first. Keep doing what you're doing.</p>
+      </div>
+    );
+  }
+  return null;
+}
+
 const IP_BLACKLIST_URLS: Record<string, (ip: string) => string> = {
   "Spamhaus ZEN": (ip) => `https://check.spamhaus.org/listed/?searchterm=${encodeURIComponent(ip)}`,
 };
@@ -710,6 +756,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   <PlacementStatusBadge status={result.status} />
                 </div>
               ))}
+              <PlacementTip results={confirmedResults} />
               {confirmedAt && (
                 <p className="text-xs text-muted-foreground pt-0.5">
                   Confirmed {confirmedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {confirmedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -776,6 +823,9 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   </div>
                 );
               })}
+              {hasAnyResults && lastPlacementResults && (
+                <PlacementTip results={lastPlacementResults as PlacementResult[]} />
+              )}
               <div className="pt-0.5 space-y-1">
                 {lastPlacementCheckedAt && hasAnyResults && (
                   <div className="flex items-center justify-between gap-2">
