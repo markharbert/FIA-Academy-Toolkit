@@ -1691,6 +1691,7 @@ export const feedbackPosts = pgTable("feedback_posts", {
   // feature: open | under_review | planned | in_progress | completed | closed
   // bug:     open | under_review | resolved | closed
   adminResponse: text("admin_response"),
+  screenshotPath: text("screenshot_path"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

@@ -1518,6 +1518,24 @@ function AdminFeedbackDetailPanel({
 
       <p className="text-sm whitespace-pre-wrap border rounded-lg p-3 bg-muted">{post.description}</p>
 
+      {post.screenshotPath && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Attached Screenshot</p>
+          <a
+            href={`/api/feedback-screenshots/${post.screenshotPath.replace("feedback-screenshots/", "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="link-admin-screenshot"
+          >
+            <img
+              src={`/api/feedback-screenshots/${post.screenshotPath.replace("feedback-screenshots/", "")}`}
+              alt="Bug report screenshot"
+              className="rounded-lg border max-h-72 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+            />
+          </a>
+        </div>
+      )}
+
       <div className="space-y-3 border rounded-lg p-4">
         <p className="text-sm font-semibold">Admin Controls</p>
         <div className="grid grid-cols-2 gap-3">

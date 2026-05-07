@@ -47,13 +47,33 @@ const openai = new OpenAI({
 });
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
+const SCREENSHOTS_DIR = path.join(process.cwd(), "uploads", "feedback-screenshots");
 const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_RETRANSCRIBES_PER_DAY = 3;
 
-// Ensure uploads directory exists
+// Ensure upload directories exist
+if (!fs.existsSync(SCREENSHOTS_DIR)) {
+  fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+}
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
+
+// Multer for bug report screenshots (images only, 5MB max)
+const screenshotUpload = multer({
+  storage: multer.diskStorage({
+    destination: SCREENSHOTS_DIR,
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase() || ".png";
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed for screenshots"));
+  },
+});
 
 // Dedicated multer for the public inbound email webhook.
 // Uses memory storage with a strict 1 MB cap so no data ever touches disk
@@ -7664,12 +7684,24 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  app.post("/api/feedback", async (req: Request, res: Response) => {
+  // Serve feedback screenshots
+  app.get("/api/feedback-screenshots/:filename", requireAuth, (req: Request, res: Response) => {
+    const filename = path.basename(req.params.filename);
+    const filePath = path.join(SCREENSHOTS_DIR, filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ message: "Not found" });
+    res.sendFile(filePath);
+  });
+
+  app.post("/api/feedback", screenshotUpload.single("screenshot"), async (req: Request, res: Response) => {
     if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
     const { title, description, type } = req.body;
     if (!title?.trim() || !description?.trim() || !["bug", "feature"].includes(type)) {
+      // Clean up uploaded file if validation fails
+      if (req.file) fs.unlink(req.file.path, () => {});
       return res.status(400).json({ message: "Title, description, and valid type are required" });
     }
+    // Only allow screenshots on bug reports
+    const screenshotPath = (type === "bug" && req.file) ? `feedback-screenshots/${req.file.filename}` : null;
     try {
       const post = await storage.createFeedbackPost({
         userId: req.session.userId,
@@ -7677,6 +7709,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         description: description.trim(),
         type,
         status: "open",
+        screenshotPath,
       });
       res.status(201).json(post);
 

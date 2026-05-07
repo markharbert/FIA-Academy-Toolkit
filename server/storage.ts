@@ -517,7 +517,7 @@ export interface IStorage {
   // Feedback
   getFeedbackPosts(userId: string, isAdmin: boolean, type?: string, status?: string): Promise<import("@shared/schema").FeedbackPostWithMeta[]>;
   getFeedbackPost(id: string, userId: string, isAdmin: boolean): Promise<(import("@shared/schema").FeedbackPostWithMeta & { comments: import("@shared/schema").FeedbackCommentWithUser[] }) | undefined>;
-  createFeedbackPost(data: import("@shared/schema").InsertFeedbackPost & { userId: string }): Promise<import("@shared/schema").FeedbackPost>;
+  createFeedbackPost(data: import("@shared/schema").InsertFeedbackPost & { userId: string; screenshotPath?: string | null }): Promise<import("@shared/schema").FeedbackPost>;
   toggleFeedbackVote(postId: string, userId: string): Promise<{ voted: boolean }>;
   addFeedbackComment(postId: string, userId: string, body: string, isAdminNote: boolean): Promise<import("@shared/schema").FeedbackCommentWithUser>;
   updateFeedbackPost(id: string, updates: { status?: string; adminResponse?: string }): Promise<import("@shared/schema").FeedbackPost | undefined>;
@@ -4016,13 +4016,14 @@ export class DatabaseStorage implements IStorage {
     return { ...post, comments };
   }
 
-  async createFeedbackPost(data: InsertFeedbackPost & { userId: string }): Promise<FeedbackPost> {
+  async createFeedbackPost(data: InsertFeedbackPost & { userId: string; screenshotPath?: string | null }): Promise<FeedbackPost> {
     const [post] = await db.insert(feedbackPosts).values({
       userId: data.userId,
       type: data.type,
       title: data.title,
       description: data.description,
       status: "open",
+      screenshotPath: data.screenshotPath ?? null,
     }).returning();
     return post;
   }

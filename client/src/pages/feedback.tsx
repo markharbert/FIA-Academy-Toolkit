@@ -38,6 +38,8 @@ import {
   ArrowLeft,
   Send,
   Lock,
+  ImagePlus,
+  ZoomIn,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { FeedbackPostWithMeta, FeedbackCommentWithUser } from "@shared/schema";
@@ -143,10 +145,12 @@ function PostDetailView({
   post,
   onBack,
   isAdmin,
+  onLightbox,
 }: {
   post: FeedbackPostDetail;
   onBack: () => void;
   isAdmin: boolean;
+  onLightbox?: (src: string) => void;
 }) {
   const { toast } = useToast();
   const [commentBody, setCommentBody] = useState("");
@@ -206,6 +210,18 @@ function PostDetailView({
             Submitted by {post.userName} · {format(new Date(post.createdAt), "MMM d, yyyy")}
           </p>
           <p className="text-sm text-foreground whitespace-pre-wrap">{post.description}</p>
+          {post.screenshotPath && (
+            <div className="mt-3 space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">Attached Screenshot</p>
+              <img
+                src={`/api/feedback-screenshots/${post.screenshotPath.replace("feedback-screenshots/", "")}`}
+                alt="Bug report screenshot"
+                className="rounded-lg border max-h-64 object-contain cursor-zoom-in"
+                onClick={() => onLightbox?.(`/api/feedback-screenshots/${post.screenshotPath!.replace("feedback-screenshots/", "")}`)}
+                data-testid="img-post-screenshot"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -299,6 +315,9 @@ export default function FeedbackPage() {
   const [description, setDescription] = useState("");
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [votingId, setVotingId] = useState<string | null>(null);
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const isAdmin = !!user?.isAdmin;
 
@@ -319,13 +338,28 @@ export default function FeedbackPage() {
   });
 
   const submitMutation = useMutation({
-    mutationFn: () =>
-      apiRequest("POST", "/api/feedback", { title, description, type: submitType }),
+    mutationFn: () => {
+      const formData = new FormData();
+      formData.append("title", title);
+      formData.append("description", description);
+      formData.append("type", submitType);
+      if (screenshotFile && submitType === "bug") formData.append("screenshot", screenshotFile);
+      return fetch("/api/feedback", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(await r.text());
+        return r.json();
+      });
+    },
     onSuccess: () => {
       toast({ title: "Submitted! Thank you for your feedback." });
       setSubmitOpen(false);
       setTitle("");
       setDescription("");
+      setScreenshotFile(null);
+      setScreenshotPreview(null);
       queryClient.invalidateQueries({ queryKey: ["/api/feedback"] });
     },
     onError: () => toast({ title: "Failed to submit. Please try again.", variant: "destructive" }),
@@ -359,6 +393,7 @@ export default function FeedbackPage() {
             post={selectedPost}
             onBack={() => setSelectedPostId(null)}
             isAdmin={isAdmin}
+            onLightbox={setLightboxSrc}
           />
         )}
       </div>
@@ -495,7 +530,7 @@ export default function FeedbackPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={submitOpen} onOpenChange={setSubmitOpen}>
+      <Dialog open={submitOpen} onOpenChange={(open) => { setSubmitOpen(open); if (!open) { setScreenshotFile(null); setScreenshotPreview(null); } }}>
         <DialogContent className="sm:max-w-lg" data-testid="dialog-submit-feedback">
           <DialogHeader>
             <DialogTitle>
@@ -560,10 +595,61 @@ export default function FeedbackPage() {
                 data-testid="input-feedback-description"
               />
             </div>
+
+            {submitType === "bug" && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                  Screenshot <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                {screenshotPreview ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={screenshotPreview}
+                      alt="Screenshot preview"
+                      className="rounded-lg border max-h-48 object-contain cursor-pointer"
+                      onClick={() => setLightboxSrc(screenshotPreview)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setScreenshotFile(null); setScreenshotPreview(null); }}
+                      className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5 hover:bg-muted"
+                      data-testid="button-remove-screenshot"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label
+                    className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted/40 transition-colors text-muted-foreground text-sm"
+                    data-testid="label-screenshot-upload"
+                  >
+                    <ImagePlus className="h-6 w-6" />
+                    <span>Click to attach a screenshot (PNG, JPG, GIF — max 5MB)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      data-testid="input-screenshot-file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        setScreenshotFile(file);
+                        if (file) {
+                          const url = URL.createObjectURL(file);
+                          setScreenshotPreview(url);
+                        } else {
+                          setScreenshotPreview(null);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSubmitOpen(false)} data-testid="button-cancel-feedback">
+            <Button variant="outline" onClick={() => { setSubmitOpen(false); setScreenshotFile(null); setScreenshotPreview(null); }} data-testid="button-cancel-feedback">
               Cancel
             </Button>
             <Button
@@ -580,6 +666,28 @@ export default function FeedbackPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxSrc(null)}
+          data-testid="lightbox-overlay"
+        >
+          <button
+            className="absolute top-4 right-4 text-white hover:text-gray-300"
+            onClick={() => setLightboxSrc(null)}
+            data-testid="button-close-lightbox"
+          >
+            <X className="h-7 w-7" />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Screenshot"
+            className="max-w-full max-h-full rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

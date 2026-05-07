@@ -548,6 +548,9 @@ async function runStartupMigrations() {
     await db.execute(sql`
       CREATE INDEX IF NOT EXISTS feedback_comments_post_id_idx ON feedback_comments(post_id, created_at ASC)
     `);
+    await db.execute(sql`
+      ALTER TABLE feedback_posts ADD COLUMN IF NOT EXISTS screenshot_path TEXT
+    `);
     console.log("[startup] feedback tables migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
