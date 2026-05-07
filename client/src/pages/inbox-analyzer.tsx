@@ -279,8 +279,8 @@ function PlacementTip({ results }: { results: PlacementResult[] }) {
       <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50">
         <CircleX className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-semibold text-red-700 dark:text-red-400">Landing in Spam — take action now</p>
-          <p className="text-sm text-red-600/80 dark:text-red-400/70 mt-0.5">This is the most urgent issue to fix. The most common cause is a failed authentication check — review your Authentication score above. A broken SPF, DKIM, or DMARC record can usually be corrected in your DNS settings.</p>
+          <p className="text-sm font-semibold text-red-700 dark:text-red-400">Landing in Spam on this send</p>
+          <p className="text-sm text-red-600/80 dark:text-red-400/70 mt-0.5">One result doesn't define your reputation — what matters is the pattern over time. If you're seeing this consistently, the most common cause is a failed authentication check. Review your Authentication score above; a broken SPF, DKIM, or DMARC record can usually be corrected in your DNS settings.</p>
         </div>
       </div>
     );
@@ -290,8 +290,8 @@ function PlacementTip({ results }: { results: PlacementResult[] }) {
       <div className="flex items-start gap-2.5 p-3 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50">
         <CircleAlert className="h-4 w-4 text-orange-500 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">Landing in Promotions</p>
-          <p className="text-sm text-orange-600/80 dark:text-orange-400/70 mt-0.5">Gmail flagged this as bulk marketing. Two things help most: (1) reduce images and links — a plain-text-style email looks more like a person writing to a person; (2) make sure your From name is consistent with how your subscribers know you.</p>
+          <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">Landing in Promotions on this send</p>
+          <p className="text-sm text-orange-600/80 dark:text-orange-400/70 mt-0.5">This isn't the end of the world — it's worth watching across multiple sends. If you're consistently landing here, two things tend to help: (1) reduce images and links — a plain-text-style email looks more like a person writing to a person; (2) make sure your From name is consistent with how your subscribers know you.</p>
         </div>
       </div>
     );
