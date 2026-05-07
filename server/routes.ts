@@ -5019,7 +5019,12 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const isAdmin = user?.isAdmin ?? false;
       const activeOnly = !isAdmin;
       const inboxes = await storage.getSeedInboxes(activeOnly);
-      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...rest }) => rest);
+      const { isServiceAccountConfigured } = await import("./gmailOAuth");
+      const saConfigured = isServiceAccountConfigured();
+      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...rest }) => ({
+        ...rest,
+        serviceAccountConfigured: saConfigured,
+      }));
       res.json(sanitized);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch seed inboxes" });

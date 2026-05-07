@@ -2012,8 +2012,17 @@ function SettingsTab() {
                   {/* Bottom row: OAuth connect / disconnect for Gmail */}
                   {inbox.provider === "gmail" && (
                     <div className="border-t border-border px-3 py-2 bg-muted/10 flex items-center justify-between">
-                      {inbox.isConnected && inbox.oauthNeedsReconnect ? (
-                        // Token expired — show a prominent reconnect warning
+                      {(inbox as any).serviceAccountConfigured ? (
+                        // Service account active — no OAuth needed, permanent connection
+                        <div className="flex items-center gap-3 w-full">
+                          <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                          <p className="text-xs text-muted-foreground flex-1">Connected via Workspace Service Account — permanent, no re-auth needed</p>
+                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-blue-500/15 text-blue-600 border-blue-500/20 flex-shrink-0">
+                            Workspace
+                          </Badge>
+                        </div>
+                      ) : inbox.isConnected && inbox.oauthNeedsReconnect ? (
+                        // OAuth token expired — show a prominent reconnect warning
                         <div className="flex items-center gap-3 w-full">
                           <CircleAlert className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
                           <p className="text-xs text-red-600 dark:text-red-400 flex-1 font-medium">Google token expired — placement checks are failing. Reconnect to restore.</p>

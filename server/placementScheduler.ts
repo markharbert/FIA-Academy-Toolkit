@@ -1,5 +1,5 @@
 import type { IStorage } from "./storage";
-import { checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
+import { checkGmailPlacement, checkGmailPlacementServiceAccount, isServiceAccountConfigured, type PlacementResult } from "./gmailOAuth";
 
 const TICK_INTERVAL_MS  = 5 * 60 * 1000;   // scheduler wakes up every 5 min
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;  // check each user at most every 15 min
@@ -31,13 +31,23 @@ export async function runPlacementCheckForUser(
 ): Promise<void> {
   try {
     const allInboxes = await storage.getSeedInboxes(true);
-    const connected  = allInboxes.filter(i => i.isConnected && i.provider === "gmail");
-    if (connected.length === 0) return;
+    const useServiceAccount = isServiceAccountConfigured();
+
+    // With a service account we can check any Gmail inbox (no per-inbox OAuth needed).
+    // Without one, fall back to only checking OAuth-connected inboxes.
+    const targetInboxes = useServiceAccount
+      ? allInboxes.filter(i => i.provider === "gmail")
+      : allInboxes.filter(i => i.isConnected && i.provider === "gmail");
+
+    if (targetInboxes.length === 0) return;
 
     const results: PlacementResult[] = (
       await Promise.all(
-        connected.map(async inbox => {
+        targetInboxes.map(async inbox => {
           try {
+            if (useServiceAccount) {
+              return await checkGmailPlacementServiceAccount(inbox, sendingFrom, emailContext);
+            }
             return await checkGmailPlacement(
               {
                 id:                inbox.id,
@@ -52,13 +62,11 @@ export async function runPlacementCheckForUser(
             );
           } catch (err: any) {
             if (err?.code === "OAUTH_INVALID_GRANT") {
-              // Token expired or revoked — mark this inbox so the UI shows a reconnect warning
               console.warn(`[PlacementScheduler] invalid_grant for inbox ${inbox.email} — marking needs-reconnect`);
               await storage.markSeedInboxNeedsReconnect(inbox.id);
             } else {
               console.error(`[PlacementScheduler] unexpected error for inbox ${inbox.email}:`, err?.message);
             }
-            // Return an error status so this inbox doesn't block the rest
             return {
               inboxId: inbox.id,
               label: inbox.label,
