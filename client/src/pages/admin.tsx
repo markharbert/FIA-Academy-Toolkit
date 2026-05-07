@@ -1438,6 +1438,7 @@ function AdminFeedbackDetailPanel({
   const [adminResponse, setAdminResponse] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [isAdminNote, setIsAdminNote] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const { data: post, isLoading } = useQuery<AdminFeedbackDetail>({
     queryKey: ["/api/feedback", postId],
@@ -1579,12 +1580,33 @@ function AdminFeedbackDetailPanel({
           <Button
             size="sm"
             variant="destructive"
-            onClick={() => deleteMutation.mutate()}
+            onClick={() => setConfirmDeleteOpen(true)}
             disabled={deleteMutation.isPending}
             data-testid="button-delete-feedback"
           >
             {deleteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Trash2 className="h-3.5 w-3.5 mr-1" />Delete</>}
           </Button>
+
+          <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete <strong>"{post.title}"</strong> along with all its votes and comments. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteMutation.mutate()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  data-testid="button-confirm-delete"
+                >
+                  Yes, delete it
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
