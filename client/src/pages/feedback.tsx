@@ -141,6 +141,11 @@ function PostCard({
   );
 }
 
+const FEEDBACK_STATUS_OPTIONS: Record<string, string[]> = {
+  feature: ["open", "under_review", "planned", "in_progress", "completed", "closed"],
+  bug: ["open", "under_review", "in_progress", "resolved", "closed"],
+};
+
 function PostDetailView({
   post,
   onBack,
@@ -155,6 +160,24 @@ function PostDetailView({
   const { toast } = useToast();
   const [commentBody, setCommentBody] = useState("");
   const [isAdminNote, setIsAdminNote] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+
+  const statusOptions = FEEDBACK_STATUS_OPTIONS[post.type] ?? ["open", "closed"];
+
+  const updateStatusMutation = useMutation({
+    mutationFn: (newStatus: string) =>
+      apiRequest("PATCH", `/api/feedback/${post.id}`, { status: newStatus }),
+    onSuccess: () => {
+      setPendingStatus(null);
+      toast({ title: "Status updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback", post.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback"] });
+    },
+    onError: () => {
+      setPendingStatus(null);
+      toast({ title: "Failed to update status", variant: "destructive" });
+    },
+  });
 
   const commentMutation = useMutation({
     mutationFn: () =>
@@ -184,6 +207,38 @@ function PostDetailView({
           <ArrowLeft className="h-4 w-4 mr-1" /> Back
         </Button>
       </div>
+
+      {isAdmin && (
+        <div className="flex items-center gap-2 flex-wrap rounded-lg border bg-muted/40 px-4 py-3">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mr-1">Set status:</span>
+          {statusOptions.map((s) => {
+            const cfg = STATUS_CONFIG[s] ?? { label: s, color: "bg-gray-100 text-gray-600", icon: null };
+            const isCurrent = (pendingStatus ?? post.status) === s;
+            return (
+              <button
+                key={s}
+                onClick={() => {
+                  if (s === post.status) return;
+                  setPendingStatus(s);
+                  updateStatusMutation.mutate(s);
+                }}
+                disabled={updateStatusMutation.isPending}
+                data-testid={`button-set-status-${s}`}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all border
+                  ${isCurrent
+                    ? `${cfg.color} border-current opacity-100 ring-2 ring-offset-1 ring-current`
+                    : "bg-background text-muted-foreground border-border hover:bg-muted"
+                  }`}
+              >
+                {updateStatusMutation.isPending && pendingStatus === s
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : cfg.icon}
+                {cfg.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex gap-4 items-start">
         {post.type === "feature" && (

@@ -1078,6 +1078,7 @@ export async function registerRoutes(
       newBugAdminAlert: () => emailTemplates.newBugAdminAlertEmail({ submitterName: "Jane Smith", submitterEmail: "jane@example.com", title: "Video upload fails on files over 500MB", description: "When I try to upload a video larger than 500MB the upload just spins and never completes. I've tried multiple times with different files." }, resources),
       feedbackCommentFeature: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "feature", postTitle: "Add dark mode to the teleprompter", commenterName: "Admin", commentBody: "Great idea! We've added this to our roadmap for Q3.", isAdmin: false }, resources),
       feedbackCommentBug: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", commenterName: "Jane Smith", commentBody: "Still happening for me even after the latest update.", isAdmin: true }, resources),
+      feedbackStatusChanged: () => emailTemplates.feedbackStatusChangedEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", newStatus: "in_progress", adminResponse: "We've reproduced this and a fix is on the way!" }, resources),
     };
   }
 
@@ -7868,9 +7869,39 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
     const { status, adminResponse } = req.body;
     try {
+      // Fetch the existing post before updating so we can detect status changes
+      const existingPost = await storage.getFeedbackPost(req.params.id, req.session.userId, true);
+      const previousStatus = existingPost?.status;
+
       const post = await storage.updateFeedbackPost(req.params.id, { status, adminResponse });
       if (!post) return res.status(404).json({ message: "Not found" });
       res.json(post);
+
+      // Fire status-change notification asynchronously
+      if (status && status !== previousStatus) {
+        (async () => {
+          try {
+            const { sendEmail } = await import("./email-sendgrid");
+            const [resources] = await Promise.all([storage.getActiveEmailResources()]);
+            const owner = await storage.getUser(post.userId);
+            if (owner?.email) {
+              const ownerPrefs = await storage.getNotificationPrefs(owner.id);
+              if (ownerPrefs.allEnabled && ownerPrefs.preferences.feedbackStatusChanged?.enabled !== false) {
+                const tpl = emailTemplates.feedbackStatusChangedEmail({
+                  firstName: owner.firstName,
+                  type: post.type as "feature" | "bug",
+                  postTitle: post.title,
+                  newStatus: status,
+                  adminResponse: adminResponse || post.adminResponse,
+                }, resources);
+                await sendEmail({ to: owner.email, ...tpl });
+              }
+            }
+          } catch (notifErr) {
+            console.error("[feedback] status notification error:", notifErr);
+          }
+        })();
+      }
     } catch (err) {
       console.error("[feedback] update error:", err);
       res.status(500).json({ message: "Failed to update feedback" });

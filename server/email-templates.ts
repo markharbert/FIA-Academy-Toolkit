@@ -396,6 +396,46 @@ export function newBugAdminAlertEmail(params: {
   return { subject, html: wrap("New Bug Report", body, resources), text };
 }
 
+export function feedbackStatusChangedEmail(params: {
+  firstName: string | null;
+  type: "feature" | "bug";
+  postTitle: string;
+  newStatus: string;
+  adminResponse?: string | null;
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
+  const name = params.firstName || "there";
+  const isFeature = params.type === "feature";
+  const label = isFeature ? "feature request" : "bug report";
+  const icon = isFeature ? "💡" : "🐛";
+  const statusLabels: Record<string, string> = {
+    open: "Open",
+    under_review: "Under Review",
+    planned: "Planned",
+    in_progress: "In Progress",
+    completed: "Completed",
+    resolved: "Resolved",
+    closed: "Closed",
+  };
+  const humanStatus = statusLabels[params.newStatus] ?? params.newStatus;
+  const subject = `Update on your ${label}: ${params.postTitle}`;
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;">We've updated the status of your ${label}.</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 20px;border:1px solid #e2e8f0;">
+      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">${icon}&nbsp; ${isFeature ? "Feature Request" : "Bug Report"}</p>
+      <p style="margin:0 0 12px;font-size:16px;font-weight:700;color:#1e293b;">${params.postTitle}</p>
+      <p style="margin:0;font-size:13px;color:#64748b;">New status: <strong style="color:#334155;">${humanStatus}</strong></p>
+    </div>
+    ${params.adminResponse ? `
+    <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Official Response</p>
+    <div style="background:#f0f9ff;border-radius:10px;padding:16px 20px;margin:0 0 24px;border:1px solid #bae6fd;">
+      <p style="margin:0;font-size:15px;color:#334155;line-height:1.7;">${params.adminResponse}</p>
+    </div>` : ""}
+    ${btn("View on feedback board", `${BASE_URL}/feedback`)}`;
+  const text = `Hey ${name},\n\nThe status of your ${label} "${params.postTitle}" has been updated to: ${humanStatus}.\n${params.adminResponse ? `\nOfficial response: ${params.adminResponse}\n` : ""}\nView it at ${BASE_URL}/feedback`;
+  return { subject, html: wrap(subject, body, resources), text };
+}
+
 export function feedbackCommentEmail(params: {
   firstName: string | null;
   type: "feature" | "bug";

@@ -692,6 +692,7 @@ export default function AccountPage() {
                           { key: "bugReportReceived" as const, label: "Bug report received", desc: "Confirmation when you file a bug report. Admins also get an alert for every new bug." },
                           { key: "featureRequestComment" as const, label: "Feature request comments", desc: "Notify you (and admins) when someone comments on a feature request." },
                           { key: "bugReportComment" as const, label: "Bug report comments", desc: "Notify you (and admins) when someone comments on a bug report." },
+                          { key: "feedbackStatusChanged" as const, label: "Status updates", desc: "Email when an admin changes the status of your feature request or bug report." },
                         ],
                       },
                     ].map(({ group, items }) => (

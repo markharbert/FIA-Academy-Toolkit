@@ -662,6 +662,7 @@ const EMAIL_TEMPLATES = [
   { key: "newBugAdminAlert", label: "Bug report alert (admin)", group: "Feedback" },
   { key: "feedbackCommentFeature", label: "Feature request comment", group: "Feedback" },
   { key: "feedbackCommentBug", label: "Bug report comment", group: "Feedback" },
+  { key: "feedbackStatusChanged", label: "Status update notification", group: "Feedback" },
 ];
 
 const EMAIL_TEMPLATE_GROUPS = ["General", "Projects & Tasks", "DMO", "Video", "Email Health", "Feedback"];

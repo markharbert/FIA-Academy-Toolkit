@@ -1630,6 +1630,7 @@ export interface NotificationPreferences {
   bugReportReceived: { enabled: boolean };
   featureRequestComment: { enabled: boolean };
   bugReportComment: { enabled: boolean };
+  feedbackStatusChanged: { enabled: boolean };
 }
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -1649,6 +1650,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   bugReportReceived: { enabled: true },
   featureRequestComment: { enabled: true },
   bugReportComment: { enabled: true },
+  feedbackStatusChanged: { enabled: true },
 };
 
 // ─── Public API Keys (read-only external/mobile API access) ───────────────────
