@@ -258,6 +258,18 @@ function computePlacementScore(results: PlacementResult[] | null): number | null
   return Math.round((inboxCount / definitive.length) * 100);
 }
 
+const IP_BLACKLIST_URLS: Record<string, (ip: string) => string> = {
+  "Spamhaus": (ip) => `https://check.spamhaus.org/listed/?searchterm=${encodeURIComponent(ip)}`,
+  "Barracuda": (ip) => `https://www.barracudacentral.org/lookups?ip=${encodeURIComponent(ip)}`,
+  "SpamCop": (ip) => `https://www.spamcop.net/bl.shtml?${encodeURIComponent(ip)}`,
+};
+
+const DOMAIN_BLACKLIST_URLS: Record<string, (domain: string) => string> = {
+  "Spamhaus DBL": (domain) => `https://check.spamhaus.org/listed/?searchterm=${encodeURIComponent(domain)}`,
+  "SURBL": (domain) => `https://www.surbl.org/surbl-analysis?site=${encodeURIComponent(domain)}`,
+  "URIBL": (domain) => `https://uribl.com/show.cgi?query=${encodeURIComponent(domain)}&type=data`,
+};
+
 // Identifies the email service provider from the sending domain and returns
 // tailored support advice for a blacklisted IP.
 function getBlacklistGuidance(sendingDomain: string | null | undefined, sendingIp: string | null | undefined, blacklistHits: string[] | null | undefined): string {
@@ -854,7 +866,25 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               {st.blacklisted && (
                 <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
                   <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
-                  <span>{getBlacklistGuidance(email.sendingDomain, email.sendingIp, st.blacklistHits ?? [])}</span>
+                  <div className="space-y-2">
+                    <span>{getBlacklistGuidance(email.sendingDomain, email.sendingIp, st.blacklistHits ?? [])}</span>
+                    {(st.blacklistHits ?? []).some(hit => IP_BLACKLIST_URLS[hit]) && (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
+                        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Verify listing:</span>
+                        {(st.blacklistHits ?? []).filter(hit => IP_BLACKLIST_URLS[hit]).map(hit => (
+                          <a
+                            key={hit}
+                            href={IP_BLACKLIST_URLS[hit](email.sendingIp ?? "")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-medium underline underline-offset-2 text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200"
+                          >
+                            {hit} →
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               <CheckRow
@@ -867,7 +897,25 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               {st.domainBlacklisted && (
                 <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
                   <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
-                  <span>The sending domain <strong>{email.sendingDomain}</strong> is listed on {(st.domainBlacklistHits ?? []).join(", ")}. Contact your email service provider and request removal from these domain blocklists. You may also need to review your sending practices to avoid re-listing.</span>
+                  <div className="space-y-2">
+                    <span>The sending domain <strong>{email.sendingDomain}</strong> is listed on {(st.domainBlacklistHits ?? []).join(", ")}. Contact your email service provider and request removal from these domain blocklists. You may also need to review your sending practices to avoid re-listing.</span>
+                    {(st.domainBlacklistHits ?? []).some(hit => DOMAIN_BLACKLIST_URLS[hit]) && (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
+                        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Verify listing:</span>
+                        {(st.domainBlacklistHits ?? []).filter(hit => DOMAIN_BLACKLIST_URLS[hit]).map(hit => (
+                          <a
+                            key={hit}
+                            href={DOMAIN_BLACKLIST_URLS[hit](email.sendingDomain ?? "")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-medium underline underline-offset-2 text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200"
+                          >
+                            {hit} →
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               {(st.trackingDomainsChecked ?? []).length > 0 && (
