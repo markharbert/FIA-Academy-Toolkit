@@ -1,0 +1,135 @@
+Here's the detailed prompt you can give your developer:
+
+Developer Prompt: Refactor Hidden Text Detection to Distinguish Preheaders From Malicious Hidden Content
+Context
+Our email monitoring tool currently flags ALL hidden text in email HTML as an aggressive spam signal. This is producing false positives because every major email service provider (ClickFunnels, ActiveCampaign, Klaviyo, Mailchimp, ConvertKit, Keap, etc.) automatically inserts a hidden HTML block near the top of every email to power the preview text / preheader field. This is industry-standard practice and is NOT a spam signal. Major mailbox providers (Gmail, Yahoo, Outlook) actively expect to see this pattern and do not penalize it.
+Our current detection is too aggressive and is incorrectly flagging legitimate preheader text as malicious hidden content. We need to refactor the detection logic to classify what was found and only flag genuinely suspicious patterns.
+What Needs to Change
+The hidden text detector should run in two stages:
+Stage 1: Detect hidden text (current behavior, keep this).
+Stage 2: Classify each hidden block as either a legitimate preheader OR a suspicious spam signal, then score accordingly.
+Detection Logic Specification
+Step 1: Identify all hidden text blocks in the HTML
+Continue detecting hidden content using these CSS patterns:
+
+display: none
+visibility: hidden
+max-height: 0 combined with overflow: hidden
+font-size: 0 or font-size: 1px
+color matching the background color (white text on white background, etc.)
+opacity: 0
+mso-hide: all
+aria-hidden="true" combined with any of the above
+Inline styles AND class-based styles (check both)
+
+For each hidden block detected, capture:
+
+The text content
+The character count of the text
+The position in the HTML (offset from the start of <body>)
+The CSS method(s) used to hide it
+Whether it contains links (<a> tags)
+Whether it contains images
+Whether it appears once or is duplicated
+
+Step 2: Classify each hidden block
+For each hidden block, run it through these classification checks in order:
+LEGITIMATE PREHEADER (do NOT flag, no point deduction):
+A block qualifies as a legitimate preheader if it meets ALL of the following:
+
+Position: Located within the first 1,500 characters after the opening <body> tag
+Length: Text content is between 1 and 250 characters (preheaders are short)
+Singularity: It is the ONLY hidden block in the email, OR it is the first hidden block and other hidden blocks are zero-width spacing characters (&zwnj;, &nbsp;, &#847;, etc.)
+No links: Contains zero <a> tags
+No images: Contains zero <img> tags
+Plain text content: Does not contain hidden URLs, email addresses, or phone numbers as raw text
+No keyword stuffing: Does not contain comma-separated lists of more than 5 unrelated terms
+
+If a block meets ALL seven criteria, classify it as PREHEADER and do not deduct points.
+SPAM SIGNAL (flag aggressively, full point deduction):
+A block qualifies as a spam signal if ANY of the following are true:
+
+Contains hidden links (<a href> tags inside hidden content)
+Contains hidden images
+Contains 6 or more comma-separated terms (keyword stuffing pattern)
+Located more than 1,500 characters into the body (mid-email or bottom hidden content)
+Multiple separate hidden text blocks exist (more than one unique hidden message, excluding spacing characters)
+Hidden text length exceeds 500 characters
+Hidden text contains URLs, email addresses, or phone numbers
+Hidden text content does not match the visible email subject or body theme (use simple keyword overlap check)
+White text on white background (or color matching background) used to hide content within visible sections of the email
+
+If a block meets ANY of these criteria, classify it as SPAM_SIGNAL and apply the full point deduction.
+AMBIGUOUS (informational warning, partial point deduction):
+A block qualifies as ambiguous if it doesn't clearly match either category. For example:
+
+A short hidden block located in the middle of the email with no links
+A preheader-style block at the top, but slightly over 250 characters
+A single hidden block using unusual CSS combinations (multiple hide methods stacked)
+
+If ambiguous, classify as AMBIGUOUS and apply partial point deduction (50% of full deduction).
+Step 3: Score and report
+The scoring breakdown for the "Hidden text" check (currently worth 10 points in the Tier 1 Spam Risk Factors section):
+
+No hidden text detected: 10/10 points
+PREHEADER classification only: 10/10 points (with informational note, not a warning)
+AMBIGUOUS classification: 5/10 points (with warning)
+SPAM_SIGNAL classification: 0/10 points (with aggressive warning)
+Mixed (preheader + spam signal): 0/10 points (treat as spam signal, mention preheader was also detected but is fine)
+
+UI Changes Required
+Current UI (problem):
+The current display says "Hidden text detected in HTML (aggressive spam signal)" with a red X icon for ALL detected hidden text, including legitimate preheaders. This causes false alarms.
+New UI logic:
+If classification is PREHEADER:
+Display with a green checkmark icon. Message:
+
+"Preheader text detected (this is your ESP's preview text feature). This is industry-standard practice and major email providers expect to see it. No action needed."
+
+Optional collapsible detail showing what was detected so the user can verify it matches their preview text field.
+If classification is AMBIGUOUS:
+Display with a yellow warning icon. Message:
+
+"Unusual hidden text pattern detected. This may be your ESP's preview text but the formatting is unusual. Review the detected content below to confirm it matches what you typed in your preview text field. If it doesn't match, contact your ESP or email designer."
+
+Show the detected hidden content with the CSS methods used.
+If classification is SPAM_SIGNAL:
+Display with a red X icon. Keep the current aggressive warning message:
+
+"Hidden text detected in HTML (aggressive spam signal). Your email contains content that is invisible to the reader but still present in the HTML code. Spam filters can see this hidden content even though your subscribers can't, and hiding text is a well-known spam technique that major providers flag aggressively."
+
+Show the detected hidden content with the CSS methods and exact content.
+If classification is MIXED:
+Display with a red X icon. Message:
+
+"Suspicious hidden text detected. We also found a legitimate preheader, which is fine, but additional hidden content was found that should be removed."
+
+List the suspicious blocks separately from the preheader block.
+Edge Cases to Handle
+
+Zero-width spacing characters: Many ESPs add a chain of &zwnj;, &nbsp;, and &#847; after the preheader text to fill remaining preview space. Treat these as part of the preheader, not separate hidden blocks.
+Multiple CSS hide methods on same block: Some ESPs apply display:none, visibility:hidden, AND max-height:0 simultaneously to ensure cross-client compatibility. Treat this as ONE hidden block for classification purposes, not three separate violations.
+Outlook conditional comments: Code wrapped in <!--[if mso]>...<![endif]--> is Outlook-specific and is sometimes used for hidden content that only renders in Outlook. Don't flag these unless they meet other spam signal criteria.
+Aria-hidden accessibility markup: aria-hidden="true" is often used for accessibility purposes (decorative elements). Combined with display:none, treat as legitimate.
+Empty hidden blocks: A hidden block with only whitespace or zero-width characters is a spacing block, not text content. Don't classify as preheader OR spam.
+
+Testing Requirements
+Before deploying, test with sample emails from these ESPs to confirm preheaders are correctly identified as legitimate:
+
+ClickFunnels (uses display:none with mso-hide:all)
+ActiveCampaign (uses display:none with max-height:0)
+Klaviyo (uses visibility:hidden with zero-width spacing)
+Mailchimp (uses display:none with overflow:hidden)
+ConvertKit (uses inline display:none)
+Keap / Infusionsoft (uses display:none)
+
+Also test with known spam patterns:
+
+Hidden link blocks (should flag)
+Keyword stuffing (should flag)
+Mid-email hidden text (should flag)
+Multiple hidden blocks with different content (should flag)
+White-on-white hidden text in body (should flag)
+
+Summary
+The goal is simple: stop punishing users for legitimate ESP preheader text while still catching actual spam signals. The classification logic determines which is which based on position, length, content, and structure. Update both the detection algorithm and the UI to reflect the three possible outcomes (safe preheader, ambiguous, or genuine spam signal).
