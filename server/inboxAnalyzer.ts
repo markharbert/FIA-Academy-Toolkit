@@ -682,8 +682,17 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
   }
 
   // Fallback: attribute-based hidden (e.g. hidden="hidden" or just hidden attr)
-  if (hiddenTextSamples.length === 0 && /\bhidden(?:="hidden")?\b/i.test(html)) {
-    hiddenTextSamples.push(`hidden attribute detected on one or more elements`);
+  // Try to extract text near the hidden element for context
+  if (hiddenTextSamples.length === 0) {
+    const hiddenAttrRe = /(<[^>]+\bhidden(?:="hidden")?\b[^>]*>)([\s\S]{0,200}?)<\//gi;
+    while ((m = hiddenAttrRe.exec(html)) !== null) {
+      const text = extractText(m[0]);
+      const label = text
+        ? `HTML hidden attribute — "${text}" (invisible to readers but present in your code)`
+        : `HTML hidden attribute found on an element with no readable text (could be a template leftover or preheader)`;
+      hiddenTextSamples.push(label);
+      if (hiddenTextSamples.length >= 4) break;
+    }
   }
 
   const hasHiddenText = hiddenTextSamples.length > 0;
