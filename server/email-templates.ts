@@ -417,22 +417,28 @@ export function feedbackStatusChangedEmail(params: {
     closed: "Closed",
   };
   const humanStatus = statusLabels[params.newStatus] ?? params.newStatus;
-  const subject = `Update on your ${label}: ${params.postTitle}`;
+  const subject = `Status update on your ${label}: ${params.postTitle}`;
+
+  const responseBlock = params.adminResponse
+    ? `<p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#64748b;">Official response from our team:</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;margin:0 0 24px;border:1px solid #e2e8f0;">
+      <p style="margin:0;font-size:15px;color:#334155;line-height:1.7;">${params.adminResponse}</p>
+    </div>`
+    : "";
+
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
-    <p style="margin:0 0 20px;font-size:15px;color:#334155;">We've updated the status of your ${label}.</p>
-    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 20px;border:1px solid #e2e8f0;">
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;">There's an update on your ${label} — the status has changed.</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 16px;border:1px solid #e2e8f0;">
       <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">${icon}&nbsp; ${isFeature ? "Feature Request" : "Bug Report"}</p>
-      <p style="margin:0 0 12px;font-size:16px;font-weight:700;color:#1e293b;">${params.postTitle}</p>
-      <p style="margin:0;font-size:13px;color:#64748b;">New status: <strong style="color:#334155;">${humanStatus}</strong></p>
+      <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:#1e293b;">${params.postTitle}</p>
+      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">New Status</p>
+      <p style="margin:0;font-size:17px;font-weight:700;color:#0c1a4d;">${humanStatus}</p>
     </div>
-    ${params.adminResponse ? `
-    <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Official Response</p>
-    <div style="background:#f0f9ff;border-radius:10px;padding:16px 20px;margin:0 0 24px;border:1px solid #bae6fd;">
-      <p style="margin:0;font-size:15px;color:#334155;line-height:1.7;">${params.adminResponse}</p>
-    </div>` : ""}
+    ${responseBlock}
     ${btn("View on feedback board", `${BASE_URL}/feedback`)}`;
-  const text = `Hey ${name},\n\nThe status of your ${label} "${params.postTitle}" has been updated to: ${humanStatus}.\n${params.adminResponse ? `\nOfficial response: ${params.adminResponse}\n` : ""}\nView it at ${BASE_URL}/feedback`;
+
+  const text = `Hey ${name},\n\nThere's a status update on your ${label} "${params.postTitle}".\n\nNew status: ${humanStatus}${params.adminResponse ? "\n\nOfficial response: " + params.adminResponse : ""}\n\nView it at ${BASE_URL}/feedback`;
   return { subject, html: wrap(subject, body, resources), text };
 }
 
