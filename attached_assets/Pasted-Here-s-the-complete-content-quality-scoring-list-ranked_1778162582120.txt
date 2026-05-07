@@ -1,0 +1,29 @@
+Here's the complete content quality scoring list, ranked by real deliverability impact, totaling 100 points:
+Content Quality Scoring (100 points total)
+Tier 1: Spam Risk Factors (60 points)
+#FactorPointsWhat to Check1HTML-to-text ratio10Flag if under 30% live text. Aim for 60/40 text-to-image. All-image emails fail this hard.2URL shortener detection10Flag bit.ly, tinyurl, t.co, ow.ly, goo.gl, buff.ly, is.gd, rebrand.ly, cutt.ly. Any shortener = major hit.3Hidden text or broken HTML10White text on white, font-size 0, display:none, color-matched backgrounds, malformed tags.4Subject line caps and punctuation10ALL CAPS, more than 1 exclamation point, dollar signs, multiple punctuation marks (!!!, ???, !?!).5Link count and density10Flag more than 1 link per 100 words of content. 5+ links in a short email is a red flag.6Suspicious link patterns10Display text doesn't match actual URL, links to different domain than From, IP-address links, .zip/.exe destinations.
+Tier 2: Engagement Quality (30 points)
+#FactorPointsWhat to Check7Subject line length10Ideal 30-50 chars. Flag if over 60 (mobile cutoff) or under 20 (often spammy).8Word count appropriateness1050-300 words ideal. 300-700 acceptable. Over 700 hurts engagement. Under 50 looks like phishing.9Image alt text and accessibility10Flag missing alt text on images, missing preheader/preview text, no mobile-responsive structure.
+Tier 3: Best Practice Bonus (10 points)
+#FactorPointsWhat to Check10Engagement boosters10Combine: personalization tags, P.S. section, reply-inviting language, single clear CTA, first-person tone. Award partial credit.
+How to Implement This
+Tier 1 (60 points): All-or-nothing or heavy partial deduction. These are real spam triggers. If an email fails one of these, the user should fix it immediately.
+Tier 2 (30 points): Graduated scoring. An email at 250 words gets full points, at 500 gets 7, at 800 gets 4, at 1500 gets 0.
+Tier 3 (10 points): All bonus. Award partial credit across multiple factors. Missing any one of these doesn't hurt much.
+Score Interpretation Guide for Your UI
+
+90-100: Excellent. Email is well-optimized for deliverability and engagement.
+75-89: Good. Minor improvements possible but no real risk.
+60-74: Acceptable. Some optimization recommended but won't hurt delivery.
+40-59: Needs work. Several issues that combined could affect placement.
+Below 40: High risk. Multiple spam triggers present, fix before sending.
+
+Key Improvements Over Your Current System
+Your current system gave 40/100 to a perfectly reasonable email because of three weak signals. With this new structure, that same 501-word email with no P.S. and no merge tag would score:
+
+60/60 on Tier 1 (assuming clean HTML, no shorteners, normal links, decent subject)
+22/30 on Tier 2 (slight word count deduction, otherwise fine)
+4/10 on Tier 3 (no personalization, no P.S., but otherwise okay)
+
+Total: 86/100 which accurately reflects that this is a solid, deliverable email with minor engagement improvements possible. That's a much more honest and useful score than 40/100.
+Plug this directly into your tool and your content quality scores will start matching actual deliverability outcomes instead of penalizing things that don't matter.
