@@ -657,9 +657,14 @@ const EMAIL_TEMPLATES = [
   { key: "videoPracticeReminder", label: "Practice reminder", group: "Video" },
   { key: "reputationDropAlert", label: "Reputation drop alert", group: "Email Health" },
   { key: "weeklyInboxReport", label: "Weekly inbox report", group: "Email Health" },
+  { key: "feedbackSubmittedFeature", label: "Feature request received", group: "Feedback" },
+  { key: "feedbackSubmittedBug", label: "Bug report received (submitter)", group: "Feedback" },
+  { key: "newBugAdminAlert", label: "Bug report alert (admin)", group: "Feedback" },
+  { key: "feedbackCommentFeature", label: "Feature request comment", group: "Feedback" },
+  { key: "feedbackCommentBug", label: "Bug report comment", group: "Feedback" },
 ];
 
-const EMAIL_TEMPLATE_GROUPS = ["General", "Projects & Tasks", "DMO", "Video", "Email Health"];
+const EMAIL_TEMPLATE_GROUPS = ["General", "Projects & Tasks", "DMO", "Video", "Email Health", "Feedback"];
 
 function EmailTemplatesTab() {
   const { toast } = useToast();
