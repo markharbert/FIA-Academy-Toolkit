@@ -362,6 +362,14 @@ const SPAM_TRIGGERS: TriggerEntry[] = [
   { phrase: "incredible", severity: "low", category: "Common Marketing" },
 ];
 
+// Whole-word match: won't fire on substrings (e.g. "deal" won't match inside "ideal").
+// Escapes regex metacharacters in the phrase, then wraps in word-boundary assertions.
+// The `i` flag handles case since bodyLower/subjectLower may not be fully lowercased.
+function phraseMatchesText(text: string, phrase: string): boolean {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+}
+
 export function analyzeSpamLanguage(
   subject: string,
   bodyText: string,
@@ -389,8 +397,8 @@ export function analyzeSpamLanguage(
     const phrase = trigger.phrase;
     if (seenPhrases.has(phrase)) continue;
 
-    const inSubject = subjectLower.includes(phrase);
-    const inBody = bodyLower.includes(phrase);
+    const inSubject = phraseMatchesText(subjectLower, phrase);
+    const inBody = phraseMatchesText(bodyLower, phrase);
 
     if (inSubject) {
       seenPhrases.add(phrase);
