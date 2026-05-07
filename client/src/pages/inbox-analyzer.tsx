@@ -489,7 +489,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
     }
   };
 
-  const connectedInboxes = seedInboxes.filter(s => s.isActive && s.isConnected);
+  const connectedInboxes = seedInboxes.filter(s => s.isActive && (s.isConnected || (s as any).serviceAccountConfigured));
 
   // Confirmed results live directly on the email record (written once, never overwritten).
   // These take full priority — no need for address-level monitoring state once confirmed.

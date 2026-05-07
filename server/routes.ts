@@ -5172,7 +5172,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
 
       const allInboxes = await storage.getSeedInboxes(true); // active only
-      const connectedInboxes = allInboxes.filter(i => i.isConnected && i.provider === "gmail");
+      const { checkGmailPlacementServiceAccount: saCheck, isServiceAccountConfigured } = await import("./gmailOAuth");
+      const useServiceAccount = isServiceAccountConfigured();
+      const connectedInboxes = useServiceAccount
+        ? allInboxes.filter(i => i.provider === "gmail")
+        : allInboxes.filter(i => i.isConnected && i.provider === "gmail");
 
       if (connectedInboxes.length === 0) {
         return res.json({ results: [], sendingFrom, message: "No connected seed inboxes yet" });
@@ -5190,18 +5194,20 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
       const results: PlacementResult[] = await Promise.all(
         connectedInboxes.map(inbox =>
-          checkGmailPlacement(
-            {
-              id: inbox.id,
-              label: inbox.label,
-              email: inbox.email,
-              provider: inbox.provider,
-              oauthAccessToken: inbox.oauthAccessToken,
-              oauthRefreshToken: inbox.oauthRefreshToken,
-            },
-            sendingFrom,
-            emailContext
-          )
+          useServiceAccount
+            ? saCheck(inbox, sendingFrom, emailContext)
+            : checkGmailPlacement(
+                {
+                  id: inbox.id,
+                  label: inbox.label,
+                  email: inbox.email,
+                  provider: inbox.provider,
+                  oauthAccessToken: inbox.oauthAccessToken,
+                  oauthRefreshToken: inbox.oauthRefreshToken,
+                },
+                sendingFrom,
+                emailContext
+              )
         )
       );
 
@@ -5335,9 +5341,12 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
               // Prefer user-configured sendingFromAddress; fall back to the email's actual from address.
               const senderForPlacement = addr?.sendingFromAddress || fromAddress;
               const allInboxes = await storage.getSeedInboxes(true);
-              const connectedInboxes = allInboxes.filter(i => i.isConnected && i.provider === "gmail");
+              const { checkGmailPlacement, checkGmailPlacementServiceAccount: saCheck2, isServiceAccountConfigured: isSA } = await import("./gmailOAuth");
+              const useSA = isSA();
+              const connectedInboxes = useSA
+                ? allInboxes.filter(i => i.provider === "gmail")
+                : allInboxes.filter(i => i.isConnected && i.provider === "gmail");
               if (connectedInboxes.length > 0 && senderForPlacement) {
-                const { checkGmailPlacement } = await import("./gmailOAuth");
                 // Always use THIS specific email's own identifiers, not the address-level
                 // pinned context (which points to the most recent email and would send
                 // the Gmail search after the wrong message for any older email).
@@ -5348,18 +5357,20 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
                 };
                 const placementResults = await Promise.all(
                   connectedInboxes.map(inbox =>
-                    checkGmailPlacement(
-                      {
-                        id: inbox.id,
-                        label: inbox.label,
-                        email: inbox.email,
-                        provider: inbox.provider,
-                        oauthAccessToken: inbox.oauthAccessToken,
-                        oauthRefreshToken: inbox.oauthRefreshToken,
-                      },
-                      senderForPlacement,
-                      emailCtx
-                    )
+                    useSA
+                      ? saCheck2(inbox, senderForPlacement, emailCtx)
+                      : checkGmailPlacement(
+                          {
+                            id: inbox.id,
+                            label: inbox.label,
+                            email: inbox.email,
+                            provider: inbox.provider,
+                            oauthAccessToken: inbox.oauthAccessToken,
+                            oauthRefreshToken: inbox.oauthRefreshToken,
+                          },
+                          senderForPlacement,
+                          emailCtx
+                        )
                   )
                 );
                 await storage.saveLastPlacementResults(userId, placementResults);
