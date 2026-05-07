@@ -406,6 +406,7 @@ export function feedbackStatusChangedEmail(params: {
   const name = params.firstName || "there";
   const isFeature = params.type === "feature";
   const label = isFeature ? "feature request" : "bug report";
+  const labelTitle = isFeature ? "Feature Request" : "Bug Report";
   const icon = isFeature ? "💡" : "🐛";
   const statusLabels: Record<string, string> = {
     open: "Open",
@@ -417,29 +418,30 @@ export function feedbackStatusChangedEmail(params: {
     closed: "Closed",
   };
   const humanStatus = statusLabels[params.newStatus] ?? params.newStatus;
-  const subject = `Status update on your ${label}: ${params.postTitle}`;
+  const subject = `Update on your ${label}: ${params.postTitle}`;
 
   const responseBlock = params.adminResponse
-    ? `<p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#64748b;">Official response from our team:</p>
-    <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;margin:0 0 24px;border:1px solid #e2e8f0;">
-      <p style="margin:0;font-size:15px;color:#334155;line-height:1.7;">${params.adminResponse}</p>
+    ? `<p style="margin:20px 0 8px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Official response from our team</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;margin:0 0 20px;border:1px solid #e2e8f0;">
+      <p style="margin:0;font-size:14px;color:#334155;line-height:1.7;">${params.adminResponse}</p>
     </div>`
     : "";
 
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
-    <p style="margin:0 0 20px;font-size:15px;color:#334155;">There's an update on your ${label} — the status has changed.</p>
-    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 16px;border:1px solid #e2e8f0;">
-      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">${icon}&nbsp; ${isFeature ? "Feature Request" : "Bug Report"}</p>
-      <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:#1e293b;">${params.postTitle}</p>
-      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">New Status</p>
-      <p style="margin:0;font-size:17px;font-weight:700;color:#0c1a4d;">${humanStatus}</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;">There's a status update on your ${label}.</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 20px;border:1px solid #e2e8f0;">
+      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">${icon}&nbsp; ${labelTitle}</p>
+      <p style="margin:0 0 20px;font-size:16px;font-weight:700;color:#1e293b;">${params.postTitle}</p>
+      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Status</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#0c1a4d;">${humanStatus}</p>
     </div>
     ${responseBlock}
-    ${btn("View on feedback board", `${BASE_URL}/feedback`)}`;
+    <p style="margin:0 0 4px;font-size:14px;color:#64748b;">You can track the progress of your ${label} on the Feedback page at any time.</p>
+    ${btn("View feedback board", `${BASE_URL}/feedback`)}`;
 
   const text = `Hey ${name},\n\nThere's a status update on your ${label} "${params.postTitle}".\n\nNew status: ${humanStatus}${params.adminResponse ? "\n\nOfficial response: " + params.adminResponse : ""}\n\nView it at ${BASE_URL}/feedback`;
-  return { subject, html: wrap(subject, body, resources), text };
+  return { subject, html: wrap("Feedback Status Update", body, resources), text };
 }
 
 export function feedbackCommentEmail(params: {
