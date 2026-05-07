@@ -356,23 +356,22 @@ export function feedbackSubmittedEmail(params: {
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const isFeature = params.type === "feature";
-  const subject = isFeature
-    ? "We received your feature request!"
-    : "We received your bug report!";
+  const icon = isFeature ? "💡" : "🐛";
+  const label = isFeature ? "Feature Request" : "Bug Report";
+  const subject = isFeature ? "We received your feature request!" : "We received your bug report!";
+  const blurb = isFeature
+    ? "Thanks for sharing your idea! We review every feature request and will keep you posted as things progress."
+    : "Thanks for letting us know. We review every bug report and will work on getting it fixed as soon as possible.";
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">
-      ${isFeature
-        ? "Thanks for submitting a feature request! We review every idea and will update you if it's planned or in progress."
-        : "Thanks for letting us know about this bug. We review every report and will work on getting it resolved."}
-    </p>
-    <div style="background:#f8fafc;border-left:4px solid ${isFeature ? "#3f92cc" : "#ef4444"};padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 20px;">
-      <p style="margin:0;font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">${isFeature ? "Feature Request" : "Bug Report"}</p>
-      <p style="margin:6px 0 0;font-size:15px;font-weight:600;color:#1e293b;">${params.title}</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;">${blurb}</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 20px;border:1px solid #e2e8f0;">
+      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">${icon}&nbsp; ${label} submitted</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1e293b;">${params.title}</p>
     </div>
-    <p style="margin:0 0 20px;font-size:14px;color:#64748b;">You can check the status of your ${isFeature ? "request" : "report"} on the Feedback page at any time.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#64748b;">You can check the status on the Feedback page at any time.</p>
     ${btn("View feedback board", `${BASE_URL}/feedback`)}`;
-  const text = `Hey ${name},\n\n${isFeature ? "Thanks for submitting a feature request!" : "Thanks for submitting your bug report!"}\n\n${params.title}\n\nView your submission at ${BASE_URL}/feedback`;
+  const text = `Hey ${name},\n\n${blurb}\n\n${label}: ${params.title}\n\nView it at ${BASE_URL}/feedback`;
   return { subject, html: wrap(subject, body, resources), text };
 }
 
@@ -382,17 +381,17 @@ export function newBugAdminAlertEmail(params: {
   title: string;
   description: string;
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
-  const subject = `New bug report from ${params.submitterName}`;
+  const subject = `🐛 New bug report: ${params.title}`;
   const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">A new bug report has been submitted:</p>
-    <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 20px;">
-      <p style="margin:0;font-size:13px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.5px;">Bug Report</p>
-      <p style="margin:6px 0 4px;font-size:15px;font-weight:600;color:#1e293b;">${params.title}</p>
-      <p style="margin:0;font-size:13px;color:#64748b;">Submitted by <strong>${params.submitterName}</strong> (${params.submitterEmail})</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;">A new bug report has been submitted and needs your attention.</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 20px;border:1px solid #e2e8f0;">
+      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">🐛&nbsp; Bug Report</p>
+      <p style="margin:0 0 12px;font-size:16px;font-weight:700;color:#1e293b;">${params.title}</p>
+      <p style="margin:0;font-size:13px;color:#64748b;">Submitted by <strong style="color:#334155;">${params.submitterName}</strong> &mdash; ${params.submitterEmail}</p>
     </div>
     <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Description</p>
-    <p style="margin:0 0 20px;font-size:14px;color:#334155;line-height:1.6;">${params.description}</p>
-    ${btn("View in admin panel", `${BASE_URL}/admin`)}`;
+    <p style="margin:0 0 24px;font-size:14px;color:#334155;line-height:1.7;">${params.description}</p>
+    ${btn("Review in admin panel", `${BASE_URL}/admin`)}`;
   const text = `New bug report from ${params.submitterName} (${params.submitterEmail})\n\n${params.title}\n\n${params.description}\n\nReview at ${BASE_URL}/admin`;
   return { subject, html: wrap("New Bug Report", body, resources), text };
 }
@@ -407,22 +406,23 @@ export function feedbackCommentEmail(params: {
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
   const isFeature = params.type === "feature";
+  const label = isFeature ? "feature request" : "bug report";
   const subject = params.isAdmin
-    ? `New comment on ${isFeature ? "feature request" : "bug report"}: ${params.postTitle}`
-    : `${params.commenterName} commented on your ${isFeature ? "feature request" : "bug report"}`;
+    ? `💬 New comment on ${label}: ${params.postTitle}`
+    : `${params.commenterName} commented on your ${label}`;
   const intro = params.isAdmin
-    ? `A new comment was posted on a ${isFeature ? "feature request" : "bug report"} you may want to review.`
-    : `${params.commenterName} left a comment on your ${isFeature ? "feature request" : "bug report"}.`;
+    ? `A new comment was posted on a ${label} that needs your attention.`
+    : `${params.commenterName} left a comment on your ${label}.`;
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">${intro}</p>
-    <div style="background:#f8fafc;border-left:4px solid ${isFeature ? "#3f92cc" : "#ef4444"};padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 16px;">
-      <p style="margin:0;font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;">${isFeature ? "Feature Request" : "Bug Report"}</p>
-      <p style="margin:6px 0 0;font-size:15px;font-weight:600;color:#1e293b;">${params.postTitle}</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;">${intro}</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 16px;border:1px solid #e2e8f0;">
+      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">${isFeature ? "💡" : "🐛"}&nbsp; ${isFeature ? "Feature Request" : "Bug Report"}</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1e293b;">${params.postTitle}</p>
     </div>
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin:0 0 20px;">
-      <p style="margin:0 0 8px;font-size:12px;font-weight:600;color:#64748b;">${params.commenterName} wrote:</p>
-      <p style="margin:0;font-size:14px;color:#334155;line-height:1.6;">${params.commentBody}</p>
+    <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#64748b;">${params.commenterName} wrote:</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;margin:0 0 24px;border:1px solid #e2e8f0;">
+      <p style="margin:0;font-size:15px;color:#334155;line-height:1.7;">${params.commentBody}</p>
     </div>
     ${btn("View the discussion", `${BASE_URL}/feedback`)}`;
   const text = `Hey ${name},\n\n${intro}\n\n"${params.postTitle}"\n\n${params.commenterName}: ${params.commentBody}\n\nView at ${BASE_URL}/feedback`;
