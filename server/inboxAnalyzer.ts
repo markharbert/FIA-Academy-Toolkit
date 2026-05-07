@@ -651,22 +651,22 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
     : 0;
 
   // Detect which CSS methods are hiding a given attribute string
+  // Note: color:white and font-size:1px are intentionally excluded — they produce
+  // too many false positives (white text on dark backgrounds, footer spacer wrappers).
   const detectMethods = (attrs: string): string[] => {
     const m: string[] = [];
-    if (/display\s*:\s*none/i.test(attrs))            m.push("display:none");
-    if (/visibility\s*:\s*hidden/i.test(attrs))       m.push("visibility:hidden");
-    if (/max-height\s*:\s*0/i.test(attrs))            m.push("max-height:0");
-    if (/font-size\s*:\s*0/i.test(attrs))             m.push("font-size:0");
-    if (/font-size\s*:\s*1px/i.test(attrs))           m.push("font-size:1px");
-    if (/opacity\s*:\s*0/i.test(attrs))               m.push("opacity:0");
-    if (/mso-hide\s*:\s*all/i.test(attrs))            m.push("mso-hide:all");
-    if (/color\s*:\s*(#fff(?:fff)?|white)\b/i.test(attrs)) m.push("color:white");
-    if (/\bhidden(?:="hidden")?\b/i.test(attrs))      m.push("hidden-attr");
+    if (/display\s*:\s*none/i.test(attrs))       m.push("display:none");
+    if (/visibility\s*:\s*hidden/i.test(attrs))  m.push("visibility:hidden");
+    if (/max-height\s*:\s*0/i.test(attrs))       m.push("max-height:0");
+    if (/font-size\s*:\s*0(?:px)?\b/i.test(attrs)) m.push("font-size:0");
+    if (/opacity\s*:\s*0\b/i.test(attrs))        m.push("opacity:0");
+    if (/mso-hide\s*:\s*all/i.test(attrs))       m.push("mso-hide:all");
+    if (/\bhidden(?:="hidden")?\b/i.test(attrs)) m.push("hidden-attr");
     return m;
   };
 
   // Broad pattern: any element opening tag that has a hiding property
-  const HIDE_TAG_RE = /<([a-z][a-z0-9]*)\b([^>]*(?:display\s*:\s*none|visibility\s*:\s*hidden|max-height\s*:\s*0|font-size\s*:\s*(?:0|1px)|opacity\s*:\s*0|mso-hide\s*:\s*all|color\s*:\s*(?:#fff(?:fff)?|white)\b|\bhidden(?:="hidden")?)[^>]*)>/gi;
+  const HIDE_TAG_RE = /<([a-z][a-z0-9]*)\b([^>]*(?:display\s*:\s*none|visibility\s*:\s*hidden|max-height\s*:\s*0|font-size\s*:\s*0(?:px)?\b|opacity\s*:\s*0\b|mso-hide\s*:\s*all|\bhidden(?:="hidden")?)[^>]*)>/gi;
 
   type RawBlock = {
     startPos: number;
