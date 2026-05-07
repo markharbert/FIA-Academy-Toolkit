@@ -119,13 +119,18 @@ function PostCard({
             <StatusBadge status={post.status} />
           </div>
           <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{post.description}</p>
-          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+            <span className="font-medium text-foreground/70">Posted by {post.userName}</span>
+            <span>·</span>
             <span>{format(new Date(post.createdAt), "MMM d, yyyy")}</span>
             {post.commentCount > 0 && (
-              <span className="flex items-center gap-1">
-                <MessageSquare className="h-3 w-3" />
-                {post.commentCount} {post.commentCount === 1 ? "comment" : "comments"}
-              </span>
+              <>
+                <span>·</span>
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3" />
+                  {post.commentCount} {post.commentCount === 1 ? "comment" : "comments"}
+                </span>
+              </>
             )}
           </div>
         </div>
