@@ -887,7 +887,10 @@ export default function ProjectsPage() {
     queryKey: ["/api/projects/all-tasks"],
     enabled: topTab === "list" || topTab === "calendar",
   });
+  // List view: top-level tasks only (subtasks shown under their parent in the detail sheet)
   const allTasks = allTasksRaw.filter(t => !t.parentTaskId);
+  // Calendar view: all tasks with a due date, including subtasks, so nothing with a deadline goes missing
+  const calendarTasks = allTasksRaw.filter(t => !!t.dueDate);
   const { data: templates = [], isLoading: templatesLoading } = useQuery<ProjectTemplateWithCounts[]>({
     queryKey: ["/api/project-templates"],
   });
@@ -1289,7 +1292,7 @@ export default function ProjectsPage() {
         ) : topTab === "list" ? (
           <AllTasksList tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setListTask} />
         ) : topTab === "calendar" ? (
-          <TasksCalendar tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setCalendarTask} />
+          <TasksCalendar tasks={calendarTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setCalendarTask} />
         ) : (
           <TemplatesTab
             templates={templates}

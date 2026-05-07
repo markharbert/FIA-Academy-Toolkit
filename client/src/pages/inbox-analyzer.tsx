@@ -36,7 +36,7 @@ import type {
   TechnicalHealth, SenderTrust, ContentQuality, CanSpamCompliance, SeedInbox,
 } from "@shared/schema";
 
-const INBOX_DOMAIN = "score.fearlesspromos.com";
+const INBOX_DOMAIN = "score.fearlesspromo.com";
 
 // ── Error boundary so a crash in one email row doesn't blank the whole page ───
 class EmailDetailErrorBoundary extends Component<

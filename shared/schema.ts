@@ -980,8 +980,6 @@ export const dmoEntries = pgTable("dmo_entries", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
   // The 5 core DMO activities. Times stored in *seconds* (precise to the second).
-  // A startup migration adds these columns and backfills `seconds = minutes * 60`
-  // from the legacy `*_minutes` columns, which remain in the DB unused.
   visionMeditation: boolean("vision_meditation").default(false).notNull(),
   visionSeconds: integer("vision_seconds").default(0).notNull(),
   personalDevelopment: boolean("personal_development").default(false).notNull(),
