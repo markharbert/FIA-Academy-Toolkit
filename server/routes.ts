@@ -5019,11 +5019,13 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const isAdmin = user?.isAdmin ?? false;
       const activeOnly = !isAdmin;
       const inboxes = await storage.getSeedInboxes(activeOnly);
-      const { isServiceAccountConfigured } = await import("./gmailOAuth");
+      const { isServiceAccountConfigured, isServiceAccountEligible } = await import("./gmailOAuth");
       const saConfigured = isServiceAccountConfigured();
       const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...rest }) => ({
         ...rest,
-        serviceAccountConfigured: saConfigured,
+        // Only mark as SA-configured if the inbox is a Workspace account (not @gmail.com).
+        // DWD cannot impersonate personal Gmail accounts.
+        serviceAccountConfigured: saConfigured && isServiceAccountEligible(rest.email),
       }));
       res.json(sanitized);
     } catch (err) {
@@ -5172,11 +5174,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
 
       const allInboxes = await storage.getSeedInboxes(true); // active only
-      const { checkGmailPlacementServiceAccount: saCheck, isServiceAccountConfigured } = await import("./gmailOAuth");
-      const useServiceAccount = isServiceAccountConfigured();
-      const connectedInboxes = useServiceAccount
-        ? allInboxes.filter(i => i.provider === "gmail")
-        : allInboxes.filter(i => i.isConnected && i.provider === "gmail");
+      const { checkGmailPlacementServiceAccount: saCheck, isServiceAccountConfigured, isServiceAccountEligible } = await import("./gmailOAuth");
+      const saConfigured = isServiceAccountConfigured();
+      // SA (DWD) only works for Workspace accounts. @gmail.com inboxes must use OAuth.
+      const connectedInboxes = allInboxes.filter(i =>
+        i.provider === "gmail" && (
+          (saConfigured && isServiceAccountEligible(i.email)) || i.isConnected
+        )
+      );
 
       if (connectedInboxes.length === 0) {
         return res.json({ results: [], sendingFrom, message: "No connected seed inboxes yet" });
@@ -5194,7 +5199,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
       const results: PlacementResult[] = await Promise.all(
         connectedInboxes.map(inbox =>
-          useServiceAccount
+          (saConfigured && isServiceAccountEligible(inbox.email))
             ? saCheck(inbox, sendingFrom, emailContext)
             : checkGmailPlacement(
                 {
@@ -5341,11 +5346,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
               // Prefer user-configured sendingFromAddress; fall back to the email's actual from address.
               const senderForPlacement = addr?.sendingFromAddress || fromAddress;
               const allInboxes = await storage.getSeedInboxes(true);
-              const { checkGmailPlacement, checkGmailPlacementServiceAccount: saCheck2, isServiceAccountConfigured: isSA } = await import("./gmailOAuth");
+              const { checkGmailPlacement, checkGmailPlacementServiceAccount: saCheck2, isServiceAccountConfigured: isSA, isServiceAccountEligible: isSAEligible } = await import("./gmailOAuth");
               const useSA = isSA();
-              const connectedInboxes = useSA
-                ? allInboxes.filter(i => i.provider === "gmail")
-                : allInboxes.filter(i => i.isConnected && i.provider === "gmail");
+              // SA (DWD) only works for Workspace accounts. @gmail.com inboxes must use OAuth.
+              const connectedInboxes = allInboxes.filter(i =>
+                i.provider === "gmail" && (
+                  (useSA && isSAEligible(i.email)) || i.isConnected
+                )
+              );
               if (connectedInboxes.length > 0 && senderForPlacement) {
                 // Always use THIS specific email's own identifiers, not the address-level
                 // pinned context (which points to the most recent email and would send
@@ -5357,7 +5365,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
                 };
                 const placementResults = await Promise.all(
                   connectedInboxes.map(inbox =>
-                    useSA
+                    (useSA && isSAEligible(inbox.email))
                       ? saCheck2(inbox, senderForPlacement, emailCtx)
                       : checkGmailPlacement(
                           {

@@ -118,6 +118,14 @@ export function isServiceAccountConfigured(): boolean {
   return !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
 }
 
+// Returns true only for Google Workspace (non-consumer) email addresses.
+// Domain-wide delegation (DWD) cannot impersonate personal @gmail.com /
+// @googlemail.com accounts — Google returns unauthorized_client for those.
+export function isServiceAccountEligible(email: string): boolean {
+  const lower = email.toLowerCase();
+  return !lower.endsWith("@gmail.com") && !lower.endsWith("@googlemail.com");
+}
+
 // Service-account version — uses domain-wide delegation, never expires.
 // The inbox email must be in the Workspace domain granted to the service account.
 export async function checkGmailPlacementServiceAccount(

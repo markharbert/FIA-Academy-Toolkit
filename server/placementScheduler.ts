@@ -1,5 +1,5 @@
 import type { IStorage } from "./storage";
-import { checkGmailPlacement, checkGmailPlacementServiceAccount, isServiceAccountConfigured, type PlacementResult } from "./gmailOAuth";
+import { checkGmailPlacement, checkGmailPlacementServiceAccount, isServiceAccountConfigured, isServiceAccountEligible, type PlacementResult } from "./gmailOAuth";
 
 const TICK_INTERVAL_MS  = 5 * 60 * 1000;   // scheduler wakes up every 5 min
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;  // check each user at most every 15 min
@@ -31,13 +31,15 @@ export async function runPlacementCheckForUser(
 ): Promise<void> {
   try {
     const allInboxes = await storage.getSeedInboxes(true);
-    const useServiceAccount = isServiceAccountConfigured();
+    const saConfigured = isServiceAccountConfigured();
 
-    // With a service account we can check any Gmail inbox (no per-inbox OAuth needed).
-    // Without one, fall back to only checking OAuth-connected inboxes.
-    const targetInboxes = useServiceAccount
-      ? allInboxes.filter(i => i.provider === "gmail")
-      : allInboxes.filter(i => i.isConnected && i.provider === "gmail");
+    // SA (DWD) only works for Google Workspace accounts — not personal @gmail.com.
+    // Include an inbox if it's SA-eligible (Workspace) OR if it has an OAuth token.
+    const targetInboxes = allInboxes.filter(i =>
+      i.provider === "gmail" && (
+        (saConfigured && isServiceAccountEligible(i.email)) || i.isConnected
+      )
+    );
 
     if (targetInboxes.length === 0) return;
 
@@ -45,7 +47,7 @@ export async function runPlacementCheckForUser(
       await Promise.all(
         targetInboxes.map(async inbox => {
           try {
-            if (useServiceAccount) {
+            if (saConfigured && isServiceAccountEligible(inbox.email)) {
               return await checkGmailPlacementServiceAccount(inbox, sendingFrom, emailContext);
             }
             return await checkGmailPlacement(
