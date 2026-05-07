@@ -165,7 +165,7 @@ export async function checkGmailPlacementServiceAccount(
     }
 
     if (!result && context?.receivedAt) {
-      const received     = context.receivedAt;
+      const received     = new Date(context.receivedAt); // coerce: may arrive as string from DB
       const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
       const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
       let q2 = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
@@ -257,7 +257,7 @@ export async function checkGmailPlacement(
 
     // Strategy 2: tight date window + from + subject
     if (!result && context?.receivedAt) {
-      const received     = context.receivedAt;
+      const received     = new Date(context.receivedAt); // coerce: may arrive as string from DB
       const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
       const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
       let q2 = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
