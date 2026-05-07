@@ -93,7 +93,7 @@ export function startPlacementScheduler(storage: IStorage): void {
     }
 
     for (const user of users) {
-      const lastCheck      = user.lastPlacementCheckedAt?.getTime() ?? 0;
+      const lastCheck      = user.lastPlacementCheckedAt ? new Date(user.lastPlacementCheckedAt).getTime() : 0;
       const timeSinceCheck = now.getTime() - lastCheck;
 
       if (timeSinceCheck < CHECK_INTERVAL_MS) continue;
