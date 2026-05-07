@@ -200,6 +200,57 @@ async function checkBlacklists(ip: string): Promise<string[]> {
   return hits;
 }
 
+// ── Domain Blacklist checks (DBL / SURBL / URIBL) ────────────────────────────
+
+async function checkDomainBlacklists(domain: string): Promise<string[]> {
+  if (!domain) return [];
+  const d = domain.toLowerCase().replace(/^www\./i, "");
+  const lists = [
+    { name: "Spamhaus DBL", host: `${d}.dbl.spamhaus.org` },
+    { name: "SURBL", host: `${d}.multi.surbl.org` },
+    { name: "URIBL", host: `${d}.black.uribl.com` },
+  ];
+  const hits: string[] = [];
+  await Promise.all(
+    lists.map(async ({ name, host }) => {
+      try {
+        await dns.promises.resolve4(host);
+        hits.push(name);
+      } catch {
+        // ENOTFOUND = not listed, that's fine
+      }
+    })
+  );
+  return hits;
+}
+
+// ── Extract click tracking domains from email HTML ───────────────────────────
+
+const TRACKING_SUBDOMAIN_RE = /^(?:click|track|links?|em|go|lt|lp|link|open|trk|cta|t|e|r|f|url|email)\./i;
+
+function extractTrackingDomains(bodyHtml: string, sendingDomain: string): string[] {
+  if (!bodyHtml) return [];
+  const rootDomain = sendingDomain.toLowerCase().replace(/^www\./i, "");
+  const linkMatches = bodyHtml.match(/href\s*=\s*["']https?:\/\/([^/"'?#\s]+)/gi) || [];
+  const seen = new Set<string>();
+  const tracking: string[] = [];
+  for (const m of linkMatches) {
+    const match = m.match(/href\s*=\s*["']https?:\/\/([^/"'?#\s]+)/i);
+    if (!match) continue;
+    const host = match[1].toLowerCase().replace(/^www\./i, "");
+    if (seen.has(host)) continue;
+    seen.add(host);
+    // Skip the sending domain and its subdomains
+    if (host === rootDomain || host.endsWith(`.${rootDomain}`)) continue;
+    // Include only domains that look like click/tracking subdomains
+    if (TRACKING_SUBDOMAIN_RE.test(host)) {
+      tracking.push(host);
+      if (tracking.length >= 5) break;
+    }
+  }
+  return tracking;
+}
+
 // ── Spam language analysis ──────────────────────────────────────────────────
 
 type TriggerEntry = { phrase: string; severity: "high" | "medium" | "low"; category: string };
@@ -513,7 +564,8 @@ export async function analyzeSenderTrust(
   fromRaw: string,
   replyTo: string | undefined,
   sendingIp: string,
-  sendingDomain: string
+  sendingDomain: string,
+  bodyHtml: string = ""
 ): Promise<SenderTrust> {
   const displayNameMatch = fromRaw.match(/^"?([^"<\n]+)"?\s*</);
   const displayName = displayNameMatch ? displayNameMatch[1].trim().toLowerCase() : null;
@@ -535,13 +587,30 @@ export async function analyzeSenderTrust(
     replyToMatchesFrom = replyDomain === sendingDomain.toLowerCase();
   }
 
-  const blacklistHits = await checkBlacklists(sendingIp);
+  const trackingDomains = extractTrackingDomains(bodyHtml, sendingDomain);
+
+  const [blacklistHits, domainBlacklistHits, ...trackingHitsArrays] = await Promise.all([
+    checkBlacklists(sendingIp),
+    checkDomainBlacklists(sendingDomain),
+    ...trackingDomains.map(d => checkDomainBlacklists(d)),
+  ]);
+
+  const trackingDomainsBlacklisted: string[] = [];
+  trackingDomains.forEach((domain, i) => {
+    if (trackingHitsArrays[i] && trackingHitsArrays[i].length > 0) {
+      trackingDomainsBlacklisted.push(domain);
+    }
+  });
 
   return {
     displayNameDomainMatch,
     replyToMatchesFrom,
     blacklisted: blacklistHits.length > 0,
     blacklistHits,
+    domainBlacklisted: domainBlacklistHits.length > 0,
+    domainBlacklistHits,
+    trackingDomainsChecked: trackingDomains,
+    trackingDomainsBlacklisted,
   };
 }
 
@@ -675,12 +744,13 @@ export function computeOverallScore(params: {
   if (params.dkimRecordExists) authPoints += 3;
   // max 30
 
-  // Sender Trust: 15 pts
+  // Sender Trust: 15 pts (IP 4 + domain 4 + display name 4 + reply-to 3)
   let trustPoints = 10; // default when not yet analyzed
   if (params.senderTrust) {
     const st = params.senderTrust;
     trustPoints = 0;
-    if (!st.blacklisted) trustPoints += 8;
+    if (!st.blacklisted) trustPoints += 4;
+    if (!st.domainBlacklisted) trustPoints += 4;
     if (st.displayNameDomainMatch === true) trustPoints += 4;
     if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) trustPoints += 3;
   }

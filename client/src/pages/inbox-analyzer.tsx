@@ -215,7 +215,8 @@ function computeAuthScore(email: EmailAnalysis): number | null {
 function computeSenderTrustScore(st: SenderTrust | null): number | null {
   if (!st) return null;
   let pts = 0;
-  if (!st.blacklisted) pts += 8;
+  if (!st.blacklisted) pts += 4;
+  if (!st.domainBlacklisted) pts += 4;
   if (st.displayNameDomainMatch === true) pts += 4;
   if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) pts += 3;
   return Math.round((pts / 15) * 100);
@@ -652,7 +653,8 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               })() },
               { label: "Trust", score: st ? (() => {
                 let p = 0;
-                if (!st.blacklisted) p += 8;
+                if (!st.blacklisted) p += 4;
+                if (!st.domainBlacklisted) p += 4;
                 if (st.displayNameDomainMatch === true) p += 4;
                 if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) p += 3;
                 return Math.round((p / 15) * 100);
@@ -846,7 +848,7 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             <div className="space-y-2">
               <CheckRow
                 pass={!st.blacklisted}
-                label={st.blacklisted ? `IP blacklisted on: ${(st.blacklistHits ?? []).join(", ") || "unknown list"}` : "IP not on any blocklists"}
+                label={st.blacklisted ? `Sending IP blacklisted on: ${(st.blacklistHits ?? []).join(", ") || "unknown list"}` : "Sending IP not on any blocklists"}
                 detail={st.blacklisted ? "may affect inbox delivery" : "Spamhaus, Barracuda, SpamCop checked"}
               />
               {st.blacklisted && (
@@ -854,6 +856,38 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
                   <span>{getBlacklistGuidance(email.sendingDomain, email.sendingIp, st.blacklistHits ?? [])}</span>
                 </div>
+              )}
+              <CheckRow
+                pass={!st.domainBlacklisted}
+                label={st.domainBlacklisted
+                  ? `Sending domain blacklisted on: ${(st.domainBlacklistHits ?? []).join(", ") || "unknown list"}`
+                  : "Sending domain not on any domain blocklists"}
+                detail={st.domainBlacklisted ? "may affect inbox delivery" : "Spamhaus DBL, SURBL, URIBL checked"}
+              />
+              {st.domainBlacklisted && (
+                <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                  <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>The sending domain <strong>{email.sendingDomain}</strong> is listed on {(st.domainBlacklistHits ?? []).join(", ")}. Contact your email service provider and request removal from these domain blocklists. You may also need to review your sending practices to avoid re-listing.</span>
+                </div>
+              )}
+              {(st.trackingDomainsChecked ?? []).length > 0 && (
+                <>
+                  <CheckRow
+                    pass={(st.trackingDomainsBlacklisted ?? []).length === 0}
+                    label={(st.trackingDomainsBlacklisted ?? []).length > 0
+                      ? `Click tracking domain blacklisted: ${st.trackingDomainsBlacklisted.join(", ")}`
+                      : `Click tracking domain${(st.trackingDomainsChecked ?? []).length > 1 ? "s" : ""} not on any blocklists`}
+                    detail={(st.trackingDomainsBlacklisted ?? []).length > 0
+                      ? "links in this email may be flagged"
+                      : `Checked: ${(st.trackingDomainsChecked ?? []).join(", ")}`}
+                  />
+                  {(st.trackingDomainsBlacklisted ?? []).length > 0 && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                      <span>The click tracking domain <strong>{st.trackingDomainsBlacklisted.join(", ")}</strong> is blacklisted. This means links in the email may be flagged or blocked. Contact your email service provider — this is their infrastructure and they are responsible for getting it removed.</span>
+                    </div>
+                  )}
+                </>
               )}
               {st.displayNameDomainMatch !== null && (
                 <CheckRow
@@ -1487,7 +1521,7 @@ function MyAddressTab({
           <div className="grid sm:grid-cols-2 gap-3">
             {[
               { icon: ShieldCheck, label: "Authentication (30 pts)", desc: "SPF, DKIM, and DMARC pass/fail results from your actual sending server — plus DNS record presence." },
-              { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist checks across Spamhaus, Barracuda & SpamCop; display name / domain match; Reply-To alignment." },
+              { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist checks (Spamhaus, Barracuda, SpamCop); sending domain blacklist checks (Spamhaus DBL, SURBL, URIBL); click tracking domain blacklist monitoring; display name / domain match; Reply-To alignment." },
               { icon: AlertTriangle, label: "Spammy Language (35 pts)", desc: "Comprehensive scan for 100+ high / medium / low-risk trigger phrases in both subject and body — grouped by severity with highlighted matches." },
               { icon: Zap, label: "Technical Health (10 pts)", desc: "HTML/text version, preheader, email size, missing ALT text, tracking pixels, and external domains." },
               { icon: BookOpen, label: "Content Quality (10 pts)", desc: "Word count scored on a tiered scale: 100–400 words = 8 pts, 401–500 = 6 pts, 501–600 = 4 pts, 601–700 = 2 pts, 701–800 = 1 pt, outside range = 0 pts. Plus P.S. section and personalization (1 pt each)." },

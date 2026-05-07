@@ -5289,7 +5289,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
           const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
           const canSpamCompliance = analyzeCanSpamCompliance(bodyText, bodyHtml, subject);
-          const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain);
+          const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain, bodyHtml);
 
           const overallScore = computeOverallScore({
             spfResult,
@@ -5472,7 +5472,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           const technicalHealth = analyzeTechnicalHealth(bodyHtml, bodyText);
           const contentQuality = analyzeContentQuality(bodyText, bodyHtml);
           const canSpamCompliance = analyzeCanSpamCompliance(bodyText, bodyHtml, subject);
-          const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain);
+          const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain, bodyHtml);
 
           const overallScore = computeOverallScore({
             spfResult: parseSpfResult(spfRaw),

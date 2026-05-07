@@ -856,6 +856,10 @@ export type SenderTrust = {
   replyToMatchesFrom: boolean | null;
   blacklisted: boolean;
   blacklistHits: string[];
+  domainBlacklisted: boolean;
+  domainBlacklistHits: string[];
+  trackingDomainsChecked: string[];
+  trackingDomainsBlacklisted: string[];
 };
 
 export type ContentQuality = {
