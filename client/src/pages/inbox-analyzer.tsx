@@ -743,17 +743,15 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 </div>
               )}
             </div>
-          ) : !sendingFromAddress ? (
-            // ── No sending address set ──
+          ) : !isActivePlacementEmail ? (
+            // ── No active monitoring window for this email ──
             <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
               <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-muted-foreground">Set your sending From address in My Address to enable automatic placement monitoring.</p>
-            </div>
-          ) : !isActivePlacementEmail ? (
-            // ── No placement data for this email ──
-            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
-              <CircleAlert className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-muted-foreground">No placement data recorded for this email.</p>
+              <p className="text-sm text-muted-foreground">
+                {!sendingFromAddress
+                  ? "Set your sending From address in My Address to enable automatic placement monitoring."
+                  : "No placement data recorded for this email."}
+              </p>
             </div>
           ) : (
             // ── Active monitoring: checks are in progress ──
