@@ -25,7 +25,7 @@ import {
   Inbox, Info, CircleCheck, CircleX, CircleAlert,
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
   User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
-  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare, Scale,
+  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare, Scale, Key,
 } from "lucide-react";
 import { SiGmail } from "react-icons/si";
 import { apiRequest } from "@/lib/queryClient";
@@ -1922,18 +1922,9 @@ function SettingsTab() {
   const { toast } = useToast();
   const search = useSearch();
 
-  // Show success/error toast on redirect back from Google OAuth
-  useEffect(() => {
-    const params = new URLSearchParams(search);
-    if (params.get("connected") === "1") {
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
-      toast({ title: "Gmail inbox connected!", description: "The inbox is now authorized and ready to check placement." });
-      window.history.replaceState({}, "", window.location.pathname + "?tab=settings");
-    } else if (params.get("error")) {
-      toast({ title: "OAuth connection failed", description: "Google authorization was denied or failed. Try again.", variant: "destructive" });
-      window.history.replaceState({}, "", window.location.pathname + "?tab=settings");
-    }
-  }, [search]);
+  // Per-inbox App Password input state
+  const [appPasswords, setAppPasswords] = useState<Record<string, string>>({});
+  const [connectingId, setConnectingId] = useState<string | null>(null);
 
   const { data: seedInboxes = [], isLoading: seedLoading } = useQuery<SeedInbox[]>({
     queryKey: ["/api/inbox-analyzer/seed-inboxes"],
@@ -1946,18 +1937,30 @@ function SettingsTab() {
 
   const addMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/inbox-analyzer/seed-inboxes", { provider: newProvider, label: newLabel, email: newEmail }).then(r => r.json() as Promise<SeedInbox>),
-    onSuccess: (data: SeedInbox) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
       setNewLabel("");
       setNewEmail("");
       setShowAddForm(false);
-      toast({ title: "Inbox added" });
-      // Immediately kick off OAuth for Gmail
-      if (data.provider === "gmail") {
-        window.location.href = `/api/inbox-analyzer/seed-inboxes/connect/gmail?inboxId=${data.id}`;
-      }
+      toast({ title: "Inbox added", description: "Set the App Password below to activate placement checking." });
     },
     onError: () => toast({ title: "Failed to add inbox", variant: "destructive" }),
+  });
+
+  const imapConnectMutation = useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      apiRequest("POST", `/api/inbox-analyzer/seed-inboxes/${id}/connect/imap`, { password }).then(r => r.json()),
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
+      setAppPasswords(p => { const next = { ...p }; delete next[id]; return next; });
+      setConnectingId(null);
+      toast({ title: "Gmail inbox connected!", description: "Connected via App Password — no re-auth ever needed." });
+    },
+    onError: (err: any, { id }) => {
+      setConnectingId(null);
+      toast({ title: "Connection failed", description: err?.message || "Check App Password and that IMAP is enabled in Gmail.", variant: "destructive" });
+      void id;
+    },
   });
 
   const toggleMutation = useMutation({
@@ -1993,7 +1996,7 @@ function SettingsTab() {
             Placement Seed Inboxes
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Real Gmail accounts you control. Members add them to their CRM — we check where their emails land via Gmail API.
+            Real Gmail accounts you control. Members add them to their CRM — we check where emails land via IMAP. Connect each inbox once with an App Password and it stays connected permanently.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -2059,37 +2062,26 @@ function SettingsTab() {
                     </AlertDialog>
                   </div>
 
-                  {/* Bottom row: OAuth connect / disconnect for Gmail */}
+                  {/* Bottom row: connection status / App Password form for Gmail */}
                   {inbox.provider === "gmail" && (
-                    <div className="border-t border-border px-3 py-2 bg-muted/10 flex items-center justify-between">
+                    <div className="border-t border-border px-3 py-2.5 bg-muted/10">
                       {(inbox as any).serviceAccountConfigured ? (
-                        // Service account active — no OAuth needed, permanent connection
-                        <div className="flex items-center gap-3 w-full">
+                        // Workspace Service Account — permanent, no setup needed
+                        <div className="flex items-center gap-3">
                           <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
                           <p className="text-xs text-muted-foreground flex-1">Connected via Workspace Service Account — permanent, no re-auth needed</p>
                           <Badge className="text-[10px] px-1.5 py-0 h-4 bg-blue-500/15 text-blue-600 border-blue-500/20 flex-shrink-0">
                             Workspace
                           </Badge>
                         </div>
-                      ) : inbox.isConnected && inbox.oauthNeedsReconnect ? (
-                        // OAuth token expired — show a prominent reconnect warning
-                        <div className="flex items-center gap-3 w-full">
-                          <CircleAlert className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
-                          <p className="text-xs text-red-600 dark:text-red-400 flex-1 font-medium">Google token expired — placement checks are failing. Reconnect to restore.</p>
-                          <Button
-                            size="sm"
-                            className="h-7 text-xs gap-1.5 flex-shrink-0 bg-red-600 hover:bg-red-700 text-white"
-                            onClick={() => { window.location.href = `/api/inbox-analyzer/seed-inboxes/connect/gmail?inboxId=${inbox.id}`; }}
-                            data-testid={`button-reconnect-gmail-${inbox.id}`}
-                          >
-                            <SiGmail className="h-3 w-3" />
-                            Reconnect
-                          </Button>
-                        </div>
-                      ) : inbox.isConnected ? (
-                        <div className="flex items-center gap-3 w-full">
+                      ) : (inbox as any).authMethod === "imap" && inbox.isConnected ? (
+                        // IMAP + App Password — connected, permanent
+                        <div className="flex items-center gap-3">
                           <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
-                          <p className="text-xs text-muted-foreground flex-1">Gmail API authorized — placement checks active</p>
+                          <p className="text-xs text-muted-foreground flex-1">Connected via App Password — permanent, no re-auth ever needed</p>
+                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-700 border-emerald-500/20 flex-shrink-0">
+                            IMAP
+                          </Badge>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -2102,18 +2094,55 @@ function SettingsTab() {
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3 w-full">
-                          <CircleAlert className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />
-                          <p className="text-xs text-muted-foreground flex-1">Connect this Gmail account to enable placement checking</p>
-                          <Button
-                            size="sm"
-                            className="h-7 text-xs gap-1.5 flex-shrink-0"
-                            onClick={() => { window.location.href = `/api/inbox-analyzer/seed-inboxes/connect/gmail?inboxId=${inbox.id}`; }}
-                            data-testid={`button-connect-gmail-${inbox.id}`}
-                          >
-                            <SiGmail className="h-3 w-3" />
-                            Connect with Google
-                          </Button>
+                        // Not connected — show App Password setup form
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Key className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                            <p className="text-xs font-medium text-foreground">Set App Password to activate</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Input
+                              type="password"
+                              placeholder="xxxx xxxx xxxx xxxx"
+                              value={appPasswords[inbox.id] || ""}
+                              onChange={e => setAppPasswords(p => ({ ...p, [inbox.id]: e.target.value }))}
+                              className="text-sm font-mono h-8 flex-1"
+                              data-testid={`input-app-password-${inbox.id}`}
+                              onKeyDown={e => {
+                                if (e.key === "Enter" && appPasswords[inbox.id]?.trim()) {
+                                  setConnectingId(inbox.id);
+                                  imapConnectMutation.mutate({ id: inbox.id, password: appPasswords[inbox.id] });
+                                }
+                              }}
+                            />
+                            <Button
+                              size="sm"
+                              className="h-8 text-xs gap-1.5"
+                              disabled={!appPasswords[inbox.id]?.trim() || connectingId === inbox.id}
+                              onClick={() => {
+                                setConnectingId(inbox.id);
+                                imapConnectMutation.mutate({ id: inbox.id, password: appPasswords[inbox.id] });
+                              }}
+                              data-testid={`button-connect-imap-${inbox.id}`}
+                            >
+                              {connectingId === inbox.id
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Key className="h-3.5 w-3.5" />}
+                              Connect
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Generate at{" "}
+                            <a
+                              href="https://myaccount.google.com/apppasswords"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline text-primary hover:text-primary/80"
+                            >
+                              myaccount.google.com/apppasswords
+                            </a>
+                            {" "}(requires 2-Step Verification). Also enable IMAP in Gmail → Settings → See all settings → Forwarding and POP/IMAP.
+                          </p>
                         </div>
                       )}
                     </div>
@@ -2169,7 +2198,7 @@ function SettingsTab() {
               </div>
               {newProvider === "gmail" && (
                 <p className="text-xs text-muted-foreground">
-                  After adding, you'll be redirected to Google to authorize inbox access.
+                  After adding, set an App Password to activate placement checking. Generate one at myaccount.google.com/apppasswords (requires 2FA).
                 </p>
               )}
               <div className="flex gap-2">
@@ -2180,8 +2209,8 @@ function SettingsTab() {
                   onClick={() => addMutation.mutate()}
                   data-testid="button-add-seed-inbox"
                 >
-                  {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : newProvider === "gmail" ? <SiGmail className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                  {newProvider === "gmail" ? "Add & Connect with Google" : "Add Inbox"}
+                  {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  Add Inbox
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>Cancel</Button>
               </div>

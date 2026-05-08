@@ -5047,7 +5047,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const inboxes = await storage.getSeedInboxes(activeOnly);
       const { isServiceAccountConfigured, isServiceAccountEligible } = await import("./gmailOAuth");
       const saConfigured = isServiceAccountConfigured();
-      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...rest }) => ({
+      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, imapPassword: _p, ...rest }) => ({
         ...rest,
         // Only mark as SA-configured if the inbox is a Workspace account (not @gmail.com).
         // DWD cannot impersonate personal Gmail accounts.
@@ -5090,7 +5090,37 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  // Gmail OAuth: start connect flow (admin only)
+  // IMAP + App Password: connect a personal Gmail seed inbox (admin only)
+  app.post("/api/inbox-analyzer/seed-inboxes/:id/connect/imap", requireAdmin, async (req: Request, res: Response) => {
+    const { password } = req.body;
+    if (!password || typeof password !== "string" || password.trim().length < 8) {
+      return res.status(400).json({ message: "App Password is required (at least 8 characters)" });
+    }
+    try {
+      const inbox = await storage.getSeedInboxById(req.params.id);
+      if (!inbox) return res.status(404).json({ message: "Inbox not found" });
+      if (inbox.provider !== "gmail") return res.status(400).json({ message: "IMAP App Password is only supported for Gmail inboxes" });
+
+      // Verify the credentials work before saving
+      const { verifyImapConnection } = await import("./imapPlacement");
+      const verify = await verifyImapConnection(inbox.email, password.trim());
+      if (!verify.success) {
+        return res.status(400).json({ message: verify.error || "IMAP connection failed" });
+      }
+
+      // Store encrypted
+      const { encryptApiKey } = await import("./storage");
+      const encrypted = encryptApiKey(password.trim());
+      await storage.storeImapPassword(inbox.id, encrypted);
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[IMAP] connect error:", err?.message);
+      res.status(500).json({ message: "Failed to save App Password" });
+    }
+  });
+
+  // Gmail OAuth: start connect flow (admin only) — LEGACY, kept for existing OAuth inboxes
   app.get("/api/inbox-analyzer/seed-inboxes/connect/gmail", requireAdmin, async (req: Request, res: Response) => {
     const inboxId = req.query.inboxId as string;
     if (!inboxId) return res.status(400).json({ message: "inboxId required" });

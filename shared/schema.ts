@@ -920,15 +920,18 @@ export const seedInboxes = pgTable("seed_inboxes", {
   email: text("email").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-  // OAuth tokens (stored encrypted)
+  // Legacy OAuth tokens (personal Gmail only; keep for backward compat)
   oauthAccessToken: text("oauth_access_token"),
   oauthRefreshToken: text("oauth_refresh_token"),
   oauthTokenExpiry: timestamp("oauth_token_expiry"),
   isConnected: boolean("is_connected").default(false).notNull(),
   oauthNeedsReconnect: boolean("oauth_needs_reconnect").default(false).notNull(),
+  // IMAP + App Password auth (personal Gmail — permanent, no re-auth needed)
+  imapPassword: text("imap_password"),  // AES-256-GCM encrypted App Password
+  authMethod: text("auth_method"),      // 'imap' | 'oauth' | null
 });
 
-export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true, oauthAccessToken: true, oauthRefreshToken: true, oauthTokenExpiry: true, isConnected: true, oauthNeedsReconnect: true });
+export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true, oauthAccessToken: true, oauthRefreshToken: true, oauthTokenExpiry: true, isConnected: true, oauthNeedsReconnect: true, imapPassword: true, authMethod: true });
 export type InsertSeedInbox = z.infer<typeof insertSeedInboxSchema>;
 export type SeedInbox = typeof seedInboxes.$inferSelect;
 

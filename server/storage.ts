@@ -435,6 +435,7 @@ export interface IStorage {
   deleteSeedInbox(id: string): Promise<void>;
   toggleSeedInbox(id: string, isActive: boolean): Promise<void>;
   storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void>;
+  storeImapPassword(id: string, encryptedPassword: string): Promise<void>;
   markSeedInboxNeedsReconnect(id: string): Promise<void>;
   disconnectSeedInbox(id: string): Promise<void>;
   // Sender Reputation (Postmaster)
@@ -3244,11 +3245,25 @@ export class DatabaseStorage implements IStorage {
       oauthRefreshToken: refreshToken,
       oauthTokenExpiry: expiry,
       isConnected: true,
-      oauthNeedsReconnect: false, // clear any previous expiry flag on fresh connect
+      oauthNeedsReconnect: false,
+      authMethod: "oauth",
+    }).where(eq(seedInboxes.id, id));
+  }
+
+  async storeImapPassword(id: string, encryptedPassword: string): Promise<void> {
+    await db.update(seedInboxes).set({
+      imapPassword: encryptedPassword,
+      isConnected: true,
+      authMethod: "imap",
+      // Clear any stale OAuth state
+      oauthNeedsReconnect: false,
     }).where(eq(seedInboxes.id, id));
   }
 
   async markSeedInboxNeedsReconnect(id: string): Promise<void> {
+    // Only applies to OAuth inboxes — IMAP inboxes never need reconnect
+    const [row] = await db.select({ authMethod: seedInboxes.authMethod }).from(seedInboxes).where(eq(seedInboxes.id, id));
+    if (row?.authMethod === "imap") return;
     await db.update(seedInboxes)
       .set({ oauthNeedsReconnect: true })
       .where(eq(seedInboxes.id, id));
@@ -3259,7 +3274,10 @@ export class DatabaseStorage implements IStorage {
       oauthAccessToken: null,
       oauthRefreshToken: null,
       oauthTokenExpiry: null,
+      imapPassword: null,
+      authMethod: null,
       isConnected: false,
+      oauthNeedsReconnect: false,
     }).where(eq(seedInboxes.id, id));
   }
 

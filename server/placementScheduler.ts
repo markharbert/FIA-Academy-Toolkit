@@ -1,5 +1,6 @@
 import type { IStorage } from "./storage";
 import { checkGmailPlacement, checkGmailPlacementServiceAccount, isServiceAccountConfigured, isServiceAccountEligible, type PlacementResult } from "./gmailOAuth";
+import { checkGmailPlacementImap } from "./imapPlacement";
 
 const TICK_INTERVAL_MS     = 5 * 60 * 1000;   // scheduler wakes up every 5 min
 const CHECK_INTERVAL_MS    = 15 * 60 * 1000;  // re-check interval if still not found
@@ -26,11 +27,15 @@ export async function runPlacementCheckForUser(
     const allInboxes = await storage.getSeedInboxes(true);
     const saConfigured = isServiceAccountConfigured();
 
-    // SA (DWD) only works for Google Workspace accounts — not personal @gmail.com.
-    // Include an inbox if it's SA-eligible (Workspace) OR if it has an OAuth token.
+    // Routing:
+    //   SA (DWD)   — Google Workspace accounts (isServiceAccountEligible), never expires
+    //   IMAP       — personal @gmail.com with authMethod='imap' + App Password, never expires
+    //   OAuth      — legacy personal @gmail.com OAuth tokens (kept for backward compat)
     const targetInboxes = allInboxes.filter(i =>
       i.provider === "gmail" && (
-        (saConfigured && isServiceAccountEligible(i.email)) || i.isConnected
+        (saConfigured && isServiceAccountEligible(i.email)) ||
+        i.authMethod === "imap" ||
+        (i.isConnected && i.oauthAccessToken)
       )
     );
 
@@ -40,9 +45,25 @@ export async function runPlacementCheckForUser(
       await Promise.all(
         targetInboxes.map(async inbox => {
           try {
+            // 1. Service Account (Google Workspace)
             if (saConfigured && isServiceAccountEligible(inbox.email)) {
               return await checkGmailPlacementServiceAccount(inbox, sendingFrom, emailContext);
             }
+            // 2. IMAP + App Password (personal Gmail, permanent)
+            if (inbox.authMethod === "imap") {
+              return await checkGmailPlacementImap(
+                {
+                  id:           inbox.id,
+                  label:        inbox.label,
+                  email:        inbox.email,
+                  provider:     inbox.provider,
+                  imapPassword: inbox.imapPassword,
+                },
+                sendingFrom,
+                emailContext
+              );
+            }
+            // 3. Legacy OAuth (personal Gmail)
             return await checkGmailPlacement(
               {
                 id:                inbox.id,
