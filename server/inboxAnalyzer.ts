@@ -986,8 +986,8 @@ export function computeOverallScore(params: {
     if (cq.linkToTextRatio <= 0.02) contentPoints += 1; // ≤ 1 link per 50 words
     // Tier 2
     const wc = cq.wordCount;
-    if (wc >= 50 && wc <= 300) contentPoints += 2;
-    else if (wc > 300 && wc <= 700) contentPoints += 1;
+    if (wc >= 50 && wc <= 500) contentPoints += 2;
+    else if (wc > 500 && wc <= 900) contentPoints += 1;
     const sc = cq.subjectCharCount ?? 0;
     if (sc >= 20 && sc <= 60) contentPoints += 1;
     // Tier 3

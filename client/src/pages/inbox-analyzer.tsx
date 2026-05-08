@@ -233,14 +233,6 @@ function computeTechScore(th: TechnicalHealth | null): number | null {
   return Math.round((pts / 10) * 100);
 }
 
-function wordCountPts(wc: number): number {
-  if (wc >= 100 && wc <= 400) return 8;
-  if (wc >= 401 && wc <= 500) return 6;
-  if (wc >= 501 && wc <= 600) return 4;
-  if (wc >= 601 && wc <= 700) return 2;
-  if (wc >= 701 && wc <= 800) return 1;
-  return 0;
-}
 
 function computeContentScore(cq: ContentQuality | null): number | null {
   if (!cq) return null;
@@ -255,8 +247,8 @@ function computeContentScore(cq: ContentQuality | null): number | null {
   if (cq.linkToTextRatio <= 0.02) pts += 1;
   // Tier 2 — Engagement (3 pts)
   const wc = cq.wordCount;
-  if (wc >= 50 && wc <= 300) pts += 2;
-  else if (wc > 300 && wc <= 700) pts += 1;
+  if (wc >= 50 && wc <= 500) pts += 2;
+  else if (wc > 500 && wc <= 900) pts += 1;
   const sc = cq.subjectCharCount ?? 0;
   if (sc >= 20 && sc <= 60) pts += 1;
   // Tier 3 — Best Practice (1 pt)
@@ -1334,13 +1326,13 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   })()}
 
                   <CheckRow
-                    pass={cq.wordCount >= 50 && cq.wordCount <= 300}
-                    warn={cq.wordCount > 300 && cq.wordCount <= 700}
+                    pass={cq.wordCount >= 50 && cq.wordCount <= 500}
+                    warn={cq.wordCount > 500 && cq.wordCount <= 900}
                     label={`${cq.wordCount} words`}
                     detail={
                       cq.wordCount < 50 ? "too short — may look like phishing" :
-                      cq.wordCount <= 300 ? "ideal length" :
-                      cq.wordCount <= 700 ? "on the longer side — engagement may drop" :
+                      cq.wordCount <= 500 ? "ideal length" :
+                      cq.wordCount <= 900 ? "on the longer side — engagement may drop" :
                       "very long — significant reader drop-off expected"
                     }
                   />
@@ -1350,16 +1342,16 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                       <span>Your email body has fewer than 50 words, which can look like a phishing attempt or a test email to spam filters — they rely on content to assess whether an email is legitimate. <strong>To fix it:</strong> add more written content. Even a few extra sentences explaining your offer or providing value to the reader can make a difference. Aim for at least 50–100 words of body copy. If your template doesn't allow adding text, contact your ESP support and ask how to add a text content block.</span>
                     </div>
                   )}
-                  {cq.wordCount > 300 && cq.wordCount <= 700 && (
+                  {cq.wordCount > 500 && cq.wordCount <= 900 && (
                     <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
                       <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
                       <span>Your email is on the longer side. Word count doesn't directly cause spam filtering, but longer emails tend to have lower engagement — and sustained low engagement over time can affect your sender reputation. Consider trimming to the essentials, or linking to a blog post or landing page for the full content. Keep the email focused on one clear message and one call to action.</span>
                     </div>
                   )}
-                  {cq.wordCount > 700 && (
+                  {cq.wordCount > 900 && (
                     <div className="flex items-start gap-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-300">
                       <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
-                      <span>At over 700 words, reader drop-off is significant — most readers will skim and disengage before reaching your call-to-action. <strong>To fix it:</strong> trim your email to the core message, or break it into a series of shorter emails. If you have a lot of value to share, link to a blog post or landing page instead of putting it all in the email body. No ESP involvement needed — this is a content editing task.</span>
+                      <span>At over 900 words, reader drop-off is significant — most readers will skim and disengage before reaching your call-to-action. <strong>To fix it:</strong> trim your email to the core message, or break it into a series of shorter emails. If you have a lot of value to share, link to a blog post or landing page instead of putting it all in the email body. No ESP involvement needed — this is a content editing task.</span>
                     </div>
                   )}
                 </div>
