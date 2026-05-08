@@ -8003,6 +8003,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         "X-WR-TIMEZONE:UTC",
       ];
 
+      const alarm = [
+        "BEGIN:VALARM",
+        "TRIGGER:-P1D",
+        "ACTION:DISPLAY",
+        "DESCRIPTION:Due tomorrow",
+        "END:VALARM",
+      ];
+
       for (const t of tasks) {
         if (!t.dueDate) continue;
         const dateStr = icalDateOnly(new Date(t.dueDate));
@@ -8016,6 +8024,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           `DTEND;VALUE=DATE:${icalNextDay(new Date(t.dueDate))}`,
           `SUMMARY:${summary}`,
           ...(desc ? [`DESCRIPTION:${desc}`] : []),
+          ...alarm,
           "END:VEVENT",
         );
       }
@@ -8030,6 +8039,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           `DTSTART;VALUE=DATE:${dateStr}`,
           `DTEND;VALUE=DATE:${icalNextDay(new Date(p.dueDate))}`,
           `SUMMARY:${icalEscape(`\uD83D\uDCC1 ${p.name} (project due)`)}`,
+          ...alarm,
           "END:VEVENT",
         );
       }
