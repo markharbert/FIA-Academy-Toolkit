@@ -1947,6 +1947,19 @@ function SettingsTab() {
     onError: () => toast({ title: "Failed to add inbox", variant: "destructive" }),
   });
 
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+  const [editingLabelValue, setEditingLabelValue] = useState("");
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, label }: { id: string; label: string }) =>
+      apiRequest("PATCH", `/api/inbox-analyzer/seed-inboxes/${id}/rename`, { label }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
+      setEditingLabelId(null);
+    },
+    onError: () => toast({ title: "Failed to rename inbox", variant: "destructive" }),
+  });
+
   const imapConnectMutation = useMutation({
     mutationFn: ({ id, password }: { id: string; password: string }) =>
       apiRequest("POST", `/api/inbox-analyzer/seed-inboxes/${id}/connect/imap`, { password }).then(r => r.json()),
@@ -2020,14 +2033,50 @@ function SettingsTab() {
                   <div className="flex items-center gap-3 p-3">
                     <ProviderIcon provider={inbox.provider} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-foreground">{inbox.label}</p>
+                      <div className="flex items-center gap-1.5">
+                        {editingLabelId === inbox.id ? (
+                          <form
+                            className="flex items-center gap-1"
+                            onSubmit={e => {
+                              e.preventDefault();
+                              if (editingLabelValue.trim()) {
+                                renameMutation.mutate({ id: inbox.id, label: editingLabelValue.trim() });
+                              }
+                            }}
+                          >
+                            <Input
+                              autoFocus
+                              value={editingLabelValue}
+                              onChange={e => setEditingLabelValue(e.target.value)}
+                              className="h-6 text-sm py-0 px-1.5 w-36"
+                              data-testid={`input-rename-${inbox.id}`}
+                              onBlur={() => {
+                                if (editingLabelValue.trim() && editingLabelValue.trim() !== inbox.label) {
+                                  renameMutation.mutate({ id: inbox.id, label: editingLabelValue.trim() });
+                                } else {
+                                  setEditingLabelId(null);
+                                }
+                              }}
+                              onKeyDown={e => e.key === "Escape" && setEditingLabelId(null)}
+                            />
+                            {renameMutation.isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                          </form>
+                        ) : (
+                          <button
+                            className="text-sm font-medium text-foreground hover:text-primary cursor-text text-left truncate max-w-[140px]"
+                            onClick={() => { setEditingLabelId(inbox.id); setEditingLabelValue(inbox.label); }}
+                            title="Click to rename"
+                            data-testid={`label-seed-${inbox.id}`}
+                          >
+                            {inbox.label}
+                          </button>
+                        )}
                         {inbox.isConnected ? (
-                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-600 border-emerald-500/20">
+                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-600 border-emerald-500/20 flex-shrink-0">
                             Connected
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground flex-shrink-0">
                             Not connected
                           </Badge>
                         )}

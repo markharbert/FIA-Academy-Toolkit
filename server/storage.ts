@@ -434,6 +434,7 @@ export interface IStorage {
   addSeedInbox(data: InsertSeedInbox): Promise<SeedInbox>;
   deleteSeedInbox(id: string): Promise<void>;
   toggleSeedInbox(id: string, isActive: boolean): Promise<void>;
+  renameSeedInbox(id: string, label: string): Promise<void>;
   storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void>;
   storeImapPassword(id: string, encryptedPassword: string): Promise<void>;
   markSeedInboxNeedsReconnect(id: string): Promise<void>;
@@ -3235,6 +3236,10 @@ export class DatabaseStorage implements IStorage {
   async getSeedInboxById(id: string): Promise<SeedInbox | null> {
     const [row] = await db.select().from(seedInboxes).where(eq(seedInboxes.id, id));
     return row || null;
+  }
+
+  async renameSeedInbox(id: string, label: string): Promise<void> {
+    await db.update(seedInboxes).set({ label }).where(eq(seedInboxes.id, id));
   }
 
   async storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, _verifiedEmail: string): Promise<void> {

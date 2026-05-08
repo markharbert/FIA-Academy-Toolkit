@@ -5070,6 +5070,19 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.patch("/api/inbox-analyzer/seed-inboxes/:id/rename", requireAdmin, async (req: Request, res: Response) => {
+    const { label } = req.body;
+    if (!label || typeof label !== "string" || !label.trim()) {
+      return res.status(400).json({ message: "label is required" });
+    }
+    try {
+      await storage.renameSeedInbox(req.params.id, label.trim());
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to rename inbox" });
+    }
+  });
+
   app.patch("/api/inbox-analyzer/seed-inboxes/:id/toggle", requireAdmin, async (req: Request, res: Response) => {
     const { isActive } = req.body;
     if (typeof isActive !== "boolean") return res.status(400).json({ message: "isActive boolean required" });
