@@ -980,6 +980,24 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                       <span>The click tracking domain <strong>{st.trackingDomainsBlacklisted.join(", ")}</strong> is blacklisted. This means links in the email may be flagged or blocked. Contact your email service provider — this is their infrastructure and they are responsible for getting it removed.</span>
                     </div>
                   )}
+                  <CheckRow
+                    pass={!st.trackingDomainMismatch}
+                    warn={!!st.trackingDomainMismatch}
+                    label={st.trackingDomainMismatch
+                      ? `Click tracking links use a different domain than the sender (${(st.trackingDomainRoots ?? []).filter(r => r !== (email.sendingDomain ?? "").split(".").slice(-2).join(".")).join(", ")})`
+                      : "Click tracking domain matches sending domain"}
+                    detail={st.trackingDomainMismatch ? "worth being aware of" : "good alignment signal"}
+                  />
+                  {st.trackingDomainMismatch && (
+                    <div className="flex items-start gap-2.5 rounded-md bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 px-3 py-2.5 text-sm text-yellow-800 dark:text-yellow-300">
+                      <CircleAlert className="h-4 w-4 mt-0.5 flex-shrink-0 text-yellow-500" />
+                      <div>
+                        <p className="font-medium mb-1">Heads up — this is a signal, not a verdict</p>
+                        <p>Links in this email pass through <strong>{(st.trackingDomainRoots ?? []).join(", ")}</strong> instead of <strong>{email.sendingDomain}</strong>. This happens when your email service provider uses their own shared domain to track clicks, which is common and expected for most ESPs.</p>
+                        <p className="mt-1.5">Spam filters can treat this as a misalignment signal because the "From" domain and the link domain don't match — a tactic also used in phishing. This does <em>not</em> mean your email is going to spam, but it is one factor that could contribute to lower deliverability over time. If you want to eliminate this signal entirely, ask your ESP about setting up a <strong>custom click-tracking domain</strong> (a CNAME like <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded text-xs">track.yourdomain.com</code>) — most major platforms support this on paid plans.</p>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {st.displayNameDomainMatch !== null && (

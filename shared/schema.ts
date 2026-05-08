@@ -861,6 +861,8 @@ export type SenderTrust = {
   domainBlacklistHits: string[];
   trackingDomainsChecked: string[];
   trackingDomainsBlacklisted: string[];
+  trackingDomainMismatch: boolean;
+  trackingDomainRoots: string[];
 };
 
 export type HiddenBlockResult = {

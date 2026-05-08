@@ -224,6 +224,11 @@ async function checkDomainBlacklists(domain: string): Promise<string[]> {
 
 const TRACKING_SUBDOMAIN_RE = /^(?:click|track|links?|em|go|lt|lp|link|open|trk|cta|t|e|r|f|url|email)\./i;
 
+function getRootDomain(host: string): string {
+  const parts = host.toLowerCase().replace(/^www\./, "").split(".");
+  return parts.slice(-2).join(".");
+}
+
 function extractTrackingDomains(bodyHtml: string, sendingDomain: string): string[] {
   if (!bodyHtml) return [];
   const rootDomain = sendingDomain.toLowerCase().replace(/^www\./i, "");
@@ -606,6 +611,13 @@ export async function analyzeSenderTrust(
     }
   });
 
+  // Check whether click-tracking link roots differ from the sending domain root
+  const sendingRoot = getRootDomain(sendingDomain);
+  const trackingDomainRoots = [...new Set(trackingDomains.map(d => getRootDomain(d)))];
+  const trackingDomainMismatch =
+    trackingDomainRoots.length > 0 &&
+    trackingDomainRoots.some(r => r !== sendingRoot);
+
   return {
     displayNameDomainMatch,
     replyToMatchesFrom,
@@ -615,6 +627,8 @@ export async function analyzeSenderTrust(
     domainBlacklistHits,
     trackingDomainsChecked: trackingDomains,
     trackingDomainsBlacklisted,
+    trackingDomainMismatch,
+    trackingDomainRoots,
   };
 }
 
