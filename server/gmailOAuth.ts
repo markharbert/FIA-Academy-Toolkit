@@ -165,7 +165,7 @@ export async function checkGmailPlacementServiceAccount(
     }
 
     if (!result && context?.receivedAt) {
-      const received     = new Date(context.receivedAt); // coerce: may arrive as string from DB
+      const received     = new Date(context.receivedAt);
       const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
       const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
       let q2 = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
@@ -177,8 +177,34 @@ export async function checkGmailPlacementServiceAccount(
       if (!result) console.log(`[GmailPlacement/SA] ${inbox.email} | date+subject query found nothing — trying sender fallback`);
     }
 
+    // Strategy 3: broad sender search — ONLY run if the email is old enough for Gmail
+    // to have indexed it. Running too early causes false results: strategies 1 and 2 find
+    // nothing (email not yet indexed), and this query matches OLDER emails from the same
+    // sender (including ones sitting in spam), producing incorrect spam readings.
+    const MIN_AGE_FOR_BROAD_SEARCH_MS = 25 * 60 * 1000; // 25 minutes
+    const emailAgeMs = context?.receivedAt
+      ? Date.now() - new Date(context.receivedAt).getTime()
+      : Infinity;
+
     if (!result) {
-      result = await queryFolders(gmail, `from:${safeSender} newer_than:5d`, inbox.email);
+      if (emailAgeMs < MIN_AGE_FOR_BROAD_SEARCH_MS) {
+        console.log(
+          `[GmailPlacement/SA] ${inbox.email} | email only ${Math.round(emailAgeMs / 60000)}min old — ` +
+          `skipping broad search to avoid false positives; will retry later`
+        );
+        // Return not_found so the scheduler retries once Gmail has indexed the email
+      } else {
+        // Anchor the date to receivedAt (don't use newer_than:5d — that matches emails
+        // from before the current test, including old spam from the same sender)
+        let q3 = `from:${safeSender}`;
+        if (context?.receivedAt) {
+          const dayBefore = new Date(new Date(context.receivedAt).getTime() - 24 * 60 * 60 * 1000);
+          q3 += ` after:${gmailDateStr(dayBefore)}`;
+        } else {
+          q3 += ` newer_than:5d`;
+        }
+        result = await queryFolders(gmail, q3, inbox.email);
+      }
     }
 
     if (result) {
@@ -257,7 +283,7 @@ export async function checkGmailPlacement(
 
     // Strategy 2: tight date window + from + subject
     if (!result && context?.receivedAt) {
-      const received     = new Date(context.receivedAt); // coerce: may arrive as string from DB
+      const received     = new Date(context.receivedAt);
       const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
       const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
       let q2 = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
@@ -271,9 +297,34 @@ export async function checkGmailPlacement(
       }
     }
 
-    // Strategy 3: from + newer_than:5d
+    // Strategy 3: broad sender search — ONLY run if the email is old enough for Gmail
+    // to have indexed it. Running too early causes false results: strategies 1 and 2 find
+    // nothing (email not yet indexed), and this query matches OLDER emails from the same
+    // sender (including ones sitting in spam), producing incorrect spam readings.
+    const MIN_AGE_FOR_BROAD_SEARCH_MS = 25 * 60 * 1000; // 25 minutes
+    const emailAgeMs = context?.receivedAt
+      ? Date.now() - new Date(context.receivedAt).getTime()
+      : Infinity;
+
     if (!result) {
-      result = await queryFolders(gmail, `from:${safeSender} newer_than:5d`, inbox.email);
+      if (emailAgeMs < MIN_AGE_FOR_BROAD_SEARCH_MS) {
+        console.log(
+          `[GmailPlacement] ${inbox.email} | email only ${Math.round(emailAgeMs / 60000)}min old — ` +
+          `skipping broad search to avoid false positives; will retry later`
+        );
+        // Return not_found so the scheduler retries once Gmail has indexed the email
+      } else {
+        // Anchor the date to receivedAt (don't use newer_than:5d — that matches emails
+        // from before the current test, including old spam from the same sender)
+        let q3 = `from:${safeSender}`;
+        if (context?.receivedAt) {
+          const dayBefore = new Date(new Date(context.receivedAt).getTime() - 24 * 60 * 60 * 1000);
+          q3 += ` after:${gmailDateStr(dayBefore)}`;
+        } else {
+          q3 += ` newer_than:5d`;
+        }
+        result = await queryFolders(gmail, q3, inbox.email);
+      }
     }
 
     if (result) {

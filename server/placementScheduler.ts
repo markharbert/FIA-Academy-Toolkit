@@ -1,9 +1,10 @@
 import type { IStorage } from "./storage";
 import { checkGmailPlacement, checkGmailPlacementServiceAccount, isServiceAccountConfigured, isServiceAccountEligible, type PlacementResult } from "./gmailOAuth";
 
-const TICK_INTERVAL_MS  = 5 * 60 * 1000;   // scheduler wakes up every 5 min
-const CHECK_INTERVAL_MS = 15 * 60 * 1000;  // check each user at most every 15 min
-const STAGGER_MS        = 1500;             // delay between users to avoid API bursts
+const TICK_INTERVAL_MS       = 5 * 60 * 1000;   // scheduler wakes up every 5 min
+const CHECK_INTERVAL_MS      = 15 * 60 * 1000;  // check each user at most every 15 min
+const STAGGER_MS             = 1500;             // delay between users to avoid API bursts
+const MIN_INITIAL_DELAY_MS   = 12 * 60 * 1000;  // don't check until 12 min after email arrived (Gmail indexing lag)
 
 const DEFINITIVE_STATUSES = new Set(["primary", "promotions", "social", "updates", "forums", "spam"]);
 
@@ -128,6 +129,21 @@ export function startPlacementScheduler(storage: IStorage): void {
       const timeSinceCheck = now.getTime() - lastCheck;
 
       if (timeSinceCheck < CHECK_INTERVAL_MS) continue;
+
+      // Don't check until at least 12 minutes after the email arrived.
+      // Gmail needs time to index new mail — checking too early causes Strategy 1 and 2
+      // to find nothing, then Strategy 3 falls back to matching older emails from the
+      // same sender (including ones already in spam), producing false readings.
+      if (user.placementCheckReceivedAt) {
+        const emailAgeMs = now.getTime() - new Date(user.placementCheckReceivedAt).getTime();
+        if (emailAgeMs < MIN_INITIAL_DELAY_MS) {
+          console.log(
+            `[PlacementScheduler] holding off on user ${user.userId} — ` +
+            `email arrived ${Math.round(emailAgeMs / 1000)}s ago, waiting for Gmail indexing`
+          );
+          continue;
+        }
+      }
 
       await runPlacementCheckForUser(
         storage,
