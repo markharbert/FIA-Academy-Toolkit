@@ -889,14 +889,6 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
               <span>SPF failed, but DMARC passes via DKIM alignment — email providers still recognize this message as authenticated. No action required.</span>
             </div>
           )}
-          <Separator className="my-1" />
-          <p className="text-sm font-semibold text-muted-foreground">DNS Records Configured</p>
-          <p className="text-xs text-muted-foreground -mt-1 mb-1">Whether the sender's domain has these records set up in DNS — separate from the per-email authentication results above.</p>
-          <div className="grid sm:grid-cols-2 gap-2">
-            <DnsCheck exists={email.spfRecordExists} label="SPF record" />
-            <DnsCheck exists={email.dkimRecordExists} label="DKIM record" />
-            <DnsCheck exists={email.dmarcRecordExists} label="DMARC record" />
-          </div>
         </SectionPanel>
 
         {/* Sender Trust */}
