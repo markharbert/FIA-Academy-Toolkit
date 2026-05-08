@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema } from "@shared/schema";
-import { safeTimezone, todayKeyInTz } from "@shared/datetime";
+import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import multer from "multer";
@@ -7991,8 +7991,17 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         storage.getProjectsForUser(user.id),
       ]);
 
-      const dtstamp = icalDtstamp(new Date());
-      const host = "toolkit.fearlessmarketinglab.com";
+      const now = new Date();
+      const dtstamp = icalDtstamp(now);
+      const appHost = "toolkit.fearlessmarketinglab.com";
+
+      function priorityLabel(p: string): string {
+        if (p === "high") return "🔴 High";
+        if (p === "medium") return "🟡 Medium";
+        if (p === "low") return "🟢 Low";
+        return "";
+      }
+
       const lines: string[] = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -8003,43 +8012,118 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         "X-WR-TIMEZONE:UTC",
       ];
 
-      const alarm = [
-        "BEGIN:VALARM",
-        "TRIGGER:-P1D",
-        "ACTION:DISPLAY",
-        "DESCRIPTION:Due tomorrow",
-        "END:VALARM",
-      ];
-
+      // ── Tasks ───────────────────────────────────────────────────────────────
       for (const t of tasks) {
         if (!t.dueDate) continue;
-        const dateStr = icalDateOnly(new Date(t.dueDate));
-        const summary = icalEscape(t.projectName ? `${t.title} [${t.projectName}]` : t.title);
-        const desc = t.notes ? icalEscape(t.notes) : "";
-        lines.push(
-          "BEGIN:VEVENT",
-          `UID:task-${t.id}@${host}`,
-          `DTSTAMP:${dtstamp}`,
-          `DTSTART;VALUE=DATE:${dateStr}`,
-          `DTEND;VALUE=DATE:${icalNextDay(new Date(t.dueDate))}`,
-          `SUMMARY:${summary}`,
-          ...(desc ? [`DESCRIPTION:${desc}`] : []),
-          ...alarm,
-          "END:VEVENT",
+        const due = new Date(t.dueDate);
+        const hasTime = dueHasTime(due);
+        const isOverdue = due < now;
+
+        const summary = icalEscape(
+          `${isOverdue ? "⚠️ OVERDUE: " : ""}${t.title}${t.projectName ? ` [${t.projectName}]` : ""}`
         );
+
+        const descParts: string[] = [];
+        if (t.projectName) descParts.push(`Project: ${t.projectName}`);
+        if (t.priority && t.priority !== "none") descParts.push(`Priority: ${priorityLabel(t.priority)}`);
+        if (Array.isArray(t.tags) && t.tags.length > 0) descParts.push(`Tags: ${(t.tags as string[]).join(", ")}`);
+        if (isOverdue) descParts.push("⚠️ This task is overdue");
+        if (t.notes) descParts.push(`\nNotes: ${t.notes}`);
+        descParts.push(`\nOpen in Toolkit: https://${appHost}/projects?project=${t.projectId}`);
+        const desc = icalEscape(descParts.join("\n"));
+
+        // Day-before alarm (all events)
+        const alarms: string[] = [
+          "BEGIN:VALARM",
+          "TRIGGER:-P1D",
+          "ACTION:DISPLAY",
+          "DESCRIPTION:Due tomorrow",
+          "END:VALARM",
+        ];
+
+        if (hasTime) {
+          // Timed event — also alert 30 min before
+          alarms.push(
+            "BEGIN:VALARM",
+            "TRIGGER:-PT30M",
+            "ACTION:DISPLAY",
+            "DESCRIPTION:Due in 30 minutes",
+            "END:VALARM",
+          );
+          // DTEND = DTSTART + 1 hour so the event block is visible on the calendar
+          const dtend = new Date(due.getTime() + 60 * 60 * 1000);
+          lines.push(
+            "BEGIN:VEVENT",
+            `UID:task-${t.id}@${appHost}`,
+            `DTSTAMP:${dtstamp}`,
+            `DTSTART:${icalDtstamp(due)}`,
+            `DTEND:${icalDtstamp(dtend)}`,
+            `SUMMARY:${summary}`,
+            `DESCRIPTION:${desc}`,
+            `URL:https://${appHost}/projects?project=${t.projectId}`,
+            ...alarms,
+            "END:VEVENT",
+          );
+        } else {
+          // All-day event — also alert morning of (9 AM, 9 h after midnight start)
+          alarms.push(
+            "BEGIN:VALARM",
+            "TRIGGER:PT9H",
+            "ACTION:DISPLAY",
+            "DESCRIPTION:Due today",
+            "END:VALARM",
+          );
+          lines.push(
+            "BEGIN:VEVENT",
+            `UID:task-${t.id}@${appHost}`,
+            `DTSTAMP:${dtstamp}`,
+            `DTSTART;VALUE=DATE:${icalDateOnly(due)}`,
+            `DTEND;VALUE=DATE:${icalNextDay(due)}`,
+            `SUMMARY:${summary}`,
+            `DESCRIPTION:${desc}`,
+            `URL:https://${appHost}/projects?project=${t.projectId}`,
+            ...alarms,
+            "END:VEVENT",
+          );
+        }
       }
 
+      // ── Projects (duration block + due-date marker) ──────────────────────────
       for (const p of projects) {
         if (!p.dueDate || p.status === "archived") continue;
-        const dateStr = icalDateOnly(new Date(p.dueDate));
+        const due = new Date(p.dueDate);
+        const isOverdue = due < now;
+
+        const descParts: string[] = [];
+        if (p.description) descParts.push(p.description);
+        descParts.push(`Open tasks: ${p.openTasks}`);
+        if (isOverdue) descParts.push("⚠️ This project is overdue");
+        descParts.push(`\nOpen in Toolkit: https://${appHost}/projects?project=${p.id}`);
+        const desc = icalEscape(descParts.join("\n"));
+
+        const summary = icalEscape(`${isOverdue ? "⚠️ OVERDUE: " : ""}📁 ${p.name} (project due)`);
+
+        // Duration block spans from project creation → due date (transparent so it doesn't block time)
         lines.push(
           "BEGIN:VEVENT",
-          `UID:project-${p.id}@${host}`,
+          `UID:project-${p.id}@${appHost}`,
           `DTSTAMP:${dtstamp}`,
-          `DTSTART;VALUE=DATE:${dateStr}`,
-          `DTEND;VALUE=DATE:${icalNextDay(new Date(p.dueDate))}`,
-          `SUMMARY:${icalEscape(`\uD83D\uDCC1 ${p.name} (project due)`)}`,
-          ...alarm,
+          `DTSTART;VALUE=DATE:${icalDateOnly(new Date(p.createdAt))}`,
+          `DTEND;VALUE=DATE:${icalNextDay(due)}`,
+          `SUMMARY:${summary}`,
+          `DESCRIPTION:${desc}`,
+          `URL:https://${appHost}/projects?project=${p.id}`,
+          "TRANSP:TRANSPARENT",
+          "BEGIN:VALARM",
+          "TRIGGER:-P1D",
+          "ACTION:DISPLAY",
+          "DESCRIPTION:Project due tomorrow",
+          "END:VALARM",
+          "BEGIN:VALARM",
+          "TRIGGER:PT9H",
+          "ACTION:DISPLAY",
+          "DESCRIPTION:Project due today",
+          "END:VALARM",
           "END:VEVENT",
         );
       }
