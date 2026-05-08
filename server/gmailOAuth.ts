@@ -76,8 +76,20 @@ function gmailDateStr(d: Date): string {
   return `${y}/${m}/${day}`;
 }
 
+// Strip characters that break Gmail search query parsing.
+// Keeps the subject readable while preventing operator injection.
+function sanitizeSubject(subject: string): string {
+  return subject
+    .replace(/['"\\[\]{}()|<>^~*?]/g, "")
+    .replace(/\s+/g, " ")
+    .substring(0, 45)
+    .trim();
+}
+
 // Run all six folder searches for a given base query.
-// Returns counts and a derived status, or null if all counts are zero.
+// Returns a derived status, or null if all counts are zero (email not found with this query).
+// Spam-first rule: spam is checked before category labels so it always wins if present.
+// Every non-spam query uses -in:spam to prevent false category matches.
 async function queryFolders(
   gmail: ReturnType<typeof google.gmail>,
   base_q: string,
@@ -111,7 +123,7 @@ async function queryFolders(
   if (socialCount  > 0) return { status: "social",     queryUsed: base_q };
   if (updatesCount > 0) return { status: "updates",    queryUsed: base_q };
   if (forumsCount  > 0) return { status: "forums",     queryUsed: base_q };
-  return null; // nothing found with this query
+  return null;
 }
 
 export function isServiceAccountConfigured(): boolean {
@@ -124,6 +136,118 @@ export function isServiceAccountConfigured(): boolean {
 export function isServiceAccountEligible(email: string): boolean {
   const lower = email.toLowerCase();
   return !lower.endsWith("@gmail.com") && !lower.endsWith("@googlemail.com");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEARCH STRATEGY CASCADE  (identical logic for both OAuth and Service Account)
+//
+// The broadcast email problem: platforms like ClickFunnels assign a UNIQUE
+// Message-ID to every recipient. The ID captured at the seed parse address is
+// never the same as the ID that lands in the Gmail seed inbox. So rfc822msgid:
+// searches reliably fail for broadcasts. The subject line, by contrast, is
+// IDENTICAL for every recipient — making it the most reliable anchor.
+//
+// Rule: NEVER search by sender alone without a subject or tight date window.
+//       That was the original bug — it matched old emails from the same sender
+//       (including ones already sitting in spam) and returned wrong results.
+//
+// S1 — rfc822msgid (exact ID match)
+//   Works for transactional emails (one-to-one delivery, same ID everywhere).
+//   Silently fails for broadcasts. If it returns nothing, cascade immediately.
+//
+// S2 — subject + sender + tight date window (same-day ± 1 buffer day)
+//   PRIMARY strategy for broadcast emails. Subject is identical for all
+//   recipients; combined with sender and a narrow date it uniquely identifies
+//   the right email even without a matching Message-ID.
+//   Subject REQUIRED — if absent, skip to S2B.
+//
+// S2B — subject + sender + wider date window (day−1 → day+3)
+//   Catches edge cases: email sent just before midnight, Gmail delivery lag,
+//   or UTC/timezone offset shifting the effective calendar day.
+//   Subject REQUIRED — if absent, skip to S3.
+//
+// S3 — subject + sender (no date), gated at 25 min
+//   True last resort. Runs only after Gmail has had time to index the email.
+//   Subject is ALWAYS kept in this query — without it we risk matching any
+//   recent email from the same sender. If no subject is available, falls back
+//   to a date-anchored sender-only search (day−1 → day+3) which is at least
+//   bounded in time. No-subject AND no-receivedAt → not_found (too dangerous).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MIN_AGE_FOR_BROAD_SEARCH_MS = 25 * 60 * 1000; // 25 min — Gmail indexing buffer
+
+async function runPlacementCascade(
+  gmail: ReturnType<typeof google.gmail>,
+  safeSender: string,
+  inboxEmail: string,
+  tag: string,
+  context?: { receivedAt?: Date | null; subject?: string | null; messageId?: string | null }
+): Promise<PlacementStatus> {
+  let result: { status: PlacementStatus; queryUsed: string } | null = null;
+
+  const safeSubject = context?.subject ? sanitizeSubject(context.subject) : null;
+  const emailAgeMs  = context?.receivedAt
+    ? Date.now() - new Date(context.receivedAt).getTime()
+    : Infinity;
+
+  // S1: rfc822msgid — exact single-message match
+  if (!result && context?.messageId) {
+    const safeMessageId = context.messageId.replace(/['"\\<> ]/g, "");
+    result = await queryFolders(gmail, `rfc822msgid:${safeMessageId}`, inboxEmail);
+    if (!result) console.log(`${tag} rfc822msgid found nothing — trying subject+date`);
+  }
+
+  // S2: subject + sender + tight date window (day-of receivedAt → day+2)
+  // Subject is REQUIRED here — without it this query is too broad.
+  if (!result && context?.receivedAt && safeSubject) {
+    const received    = new Date(context.receivedAt);
+    const dayOf       = new Date(Date.UTC(received.getUTCFullYear(), received.getUTCMonth(), received.getUTCDate()));
+    const twoDaysLater = new Date(dayOf.getTime() + 2 * 24 * 60 * 60 * 1000);
+    const q2 = `from:${safeSender} subject:"${safeSubject}" after:${gmailDateStr(dayOf)} before:${gmailDateStr(twoDaysLater)}`;
+    result = await queryFolders(gmail, q2, inboxEmail);
+    if (!result) console.log(`${tag} tight subject+date found nothing — widening window`);
+  }
+
+  // S2B: subject + sender + wider date window (day−1 → day+3)
+  // Handles midnight-send edge cases, timezone offsets, Gmail delivery lag.
+  // Subject REQUIRED.
+  if (!result && context?.receivedAt && safeSubject) {
+    const received      = new Date(context.receivedAt);
+    const dayBefore     = new Date(received.getTime() - 1 * 24 * 60 * 60 * 1000);
+    const threeDaysAfter = new Date(received.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const q2b = `from:${safeSender} subject:"${safeSubject}" after:${gmailDateStr(dayBefore)} before:${gmailDateStr(threeDaysAfter)}`;
+    result = await queryFolders(gmail, q2b, inboxEmail);
+    if (!result) console.log(`${tag} wider subject+date found nothing — trying open subject search`);
+  }
+
+  // S3: last resort — gated at 25 min to avoid matching emails not yet indexed
+  if (!result) {
+    if (emailAgeMs < MIN_AGE_FOR_BROAD_SEARCH_MS) {
+      console.log(
+        `${tag} email only ${Math.round(emailAgeMs / 60000)}min old — ` +
+        `deferring broad search; scheduler will retry after Gmail indexes it`
+      );
+      // Return not_found — scheduler retries in 15 min
+    } else if (safeSubject) {
+      // With subject: safe to search without date — subject is specific enough
+      result = await queryFolders(gmail, `from:${safeSender} subject:"${safeSubject}" newer_than:7d`, inboxEmail);
+    } else if (context?.receivedAt) {
+      // No subject available: use a date-bounded sender search — at least it's not open-ended
+      const received      = new Date(context.receivedAt);
+      const dayBefore     = new Date(received.getTime() - 1 * 24 * 60 * 60 * 1000);
+      const threeDaysAfter = new Date(received.getTime() + 3 * 24 * 60 * 60 * 1000);
+      console.log(`${tag} no subject available — date-anchored sender fallback`);
+      result = await queryFolders(gmail, `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(threeDaysAfter)}`, inboxEmail);
+    }
+    // No subject AND no receivedAt → return not_found (safer than an open-ended sender search)
+  }
+
+  if (result) {
+    console.log(`${tag} resolved → ${result.status} (query: "${result.queryUsed}")`);
+    return result.status;
+  }
+
+  return "not_found";
 }
 
 // Service-account version — uses domain-wide delegation, never expires.
@@ -150,69 +274,15 @@ export async function checkGmailPlacementServiceAccount(
       email: key.client_email,
       key: key.private_key,
       scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
-      subject: inbox.email, // domain-wide delegation: impersonate this Workspace user
+      subject: inbox.email,
     });
 
-    const gmail = google.gmail({ version: "v1", auth });
+    const gmail      = google.gmail({ version: "v1", auth });
     const safeSender = senderAddress.replace(/['"\\]/g, "");
+    const tag        = `[GmailPlacement/SA] ${inbox.email} |`;
 
-    let result: { status: PlacementStatus; queryUsed: string } | null = null;
-
-    if (!result && context?.messageId) {
-      const safeMessageId = context.messageId.replace(/['"\\<> ]/g, "");
-      result = await queryFolders(gmail, `rfc822msgid:${safeMessageId}`, inbox.email);
-      if (!result) console.log(`[GmailPlacement/SA] ${inbox.email} | rfc822msgid found nothing — trying date fallback`);
-    }
-
-    if (!result && context?.receivedAt) {
-      const received     = new Date(context.receivedAt);
-      const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
-      const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
-      let q2 = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
-      if (context.subject) {
-        const safeSubject = context.subject.replace(/['"\\]/g, "").substring(0, 50).trim();
-        if (safeSubject) q2 += ` subject:"${safeSubject}"`;
-      }
-      result = await queryFolders(gmail, q2, inbox.email);
-      if (!result) console.log(`[GmailPlacement/SA] ${inbox.email} | date+subject query found nothing — trying sender fallback`);
-    }
-
-    // Strategy 3: broad sender search — ONLY run if the email is old enough for Gmail
-    // to have indexed it. Running too early causes false results: strategies 1 and 2 find
-    // nothing (email not yet indexed), and this query matches OLDER emails from the same
-    // sender (including ones sitting in spam), producing incorrect spam readings.
-    const MIN_AGE_FOR_BROAD_SEARCH_MS = 25 * 60 * 1000; // 25 minutes
-    const emailAgeMs = context?.receivedAt
-      ? Date.now() - new Date(context.receivedAt).getTime()
-      : Infinity;
-
-    if (!result) {
-      if (emailAgeMs < MIN_AGE_FOR_BROAD_SEARCH_MS) {
-        console.log(
-          `[GmailPlacement/SA] ${inbox.email} | email only ${Math.round(emailAgeMs / 60000)}min old — ` +
-          `skipping broad search to avoid false positives; will retry later`
-        );
-        // Return not_found so the scheduler retries once Gmail has indexed the email
-      } else {
-        // Anchor the date to receivedAt (don't use newer_than:5d — that matches emails
-        // from before the current test, including old spam from the same sender)
-        let q3 = `from:${safeSender}`;
-        if (context?.receivedAt) {
-          const dayBefore = new Date(new Date(context.receivedAt).getTime() - 24 * 60 * 60 * 1000);
-          q3 += ` after:${gmailDateStr(dayBefore)}`;
-        } else {
-          q3 += ` newer_than:5d`;
-        }
-        result = await queryFolders(gmail, q3, inbox.email);
-      }
-    }
-
-    if (result) {
-      console.log(`[GmailPlacement/SA] ${inbox.email} | resolved → ${result.status}`);
-      return { ...base, status: result.status };
-    }
-
-    return { ...base, status: "not_found" };
+    const status = await runPlacementCascade(gmail, safeSender, inbox.email, tag, context);
+    return { ...base, status };
   } catch (err: any) {
     const msg: string = err?.message ?? String(err);
     console.error("[GmailPlacement/SA] Error checking inbox", inbox.email, msg);
@@ -244,99 +314,15 @@ export async function checkGmailPlacement(
       refresh_token: inbox.oauthRefreshToken || undefined,
     });
 
-    const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
-
+    const gmail      = google.gmail({ version: "v1", auth: oAuth2Client });
     const safeSender = senderAddress.replace(/['"\\]/g, "");
+    const tag        = `[GmailPlacement] ${inbox.email} |`;
 
-    // Three-strategy cascade — tries the most specific first, falls back on zero results.
-    //
-    // KEY INSIGHT: some email senders (e.g. ClickFunnels) use internal Docker hostnames
-    // as the Message-ID domain (e.g. @cf2-admin…ptvzn.mail).  Gmail's rfc822msgid: search
-    // sometimes fails to find these even though the email is in the inbox.  When that
-    // happens we fall through to Strategy 2 or 3 rather than returning not_found prematurely.
-    //
-    // Strategy 1 — rfc822msgid: (exact single-message match, best precision):
-    //   Only used when we have a stored Message-ID.  If it returns zero across all folders,
-    //   cascade to Strategy 2 instead of giving up.
-    //
-    // Strategy 2 — tight date window + from + subject (good precision):
-    //   1 day before → 2 days after received-at timestamp, filtered by sender and subject.
-    //   Only used when we have the received-at timestamp.
-    //   If it also returns zero, cascade to Strategy 3.
-    //
-    // Strategy 3 — sender + newer_than:5d (last resort, lowest precision):
-    //   Widest net; can match recent emails from the same sender regardless of subject.
-    //
-    // Spam-first rule: spam is always checked FIRST so it overrides category labels.
-    // Every non-spam query uses -in:spam to avoid false category matches.
-
-    let result: { status: PlacementStatus; queryUsed: string } | null = null;
-
-    // Strategy 1: rfc822msgid:
-    if (!result && context?.messageId) {
-      const safeMessageId = context.messageId.replace(/['"\\<> ]/g, "");
-      result = await queryFolders(gmail, `rfc822msgid:${safeMessageId}`, inbox.email);
-      if (!result) {
-        console.log(`[GmailPlacement] ${inbox.email} | rfc822msgid found nothing — trying date fallback`);
-      }
-    }
-
-    // Strategy 2: tight date window + from + subject
-    if (!result && context?.receivedAt) {
-      const received     = new Date(context.receivedAt);
-      const dayBefore    = new Date(received.getTime() - 24 * 60 * 60 * 1000);
-      const twoDaysAfter = new Date(received.getTime() + 2 * 24 * 60 * 60 * 1000);
-      let q2 = `from:${safeSender} after:${gmailDateStr(dayBefore)} before:${gmailDateStr(twoDaysAfter)}`;
-      if (context.subject) {
-        const safeSubject = context.subject.replace(/['"\\]/g, "").substring(0, 50).trim();
-        if (safeSubject) q2 += ` subject:"${safeSubject}"`;
-      }
-      result = await queryFolders(gmail, q2, inbox.email);
-      if (!result) {
-        console.log(`[GmailPlacement] ${inbox.email} | date+subject query found nothing — trying sender fallback`);
-      }
-    }
-
-    // Strategy 3: broad sender search — ONLY run if the email is old enough for Gmail
-    // to have indexed it. Running too early causes false results: strategies 1 and 2 find
-    // nothing (email not yet indexed), and this query matches OLDER emails from the same
-    // sender (including ones sitting in spam), producing incorrect spam readings.
-    const MIN_AGE_FOR_BROAD_SEARCH_MS = 25 * 60 * 1000; // 25 minutes
-    const emailAgeMs = context?.receivedAt
-      ? Date.now() - new Date(context.receivedAt).getTime()
-      : Infinity;
-
-    if (!result) {
-      if (emailAgeMs < MIN_AGE_FOR_BROAD_SEARCH_MS) {
-        console.log(
-          `[GmailPlacement] ${inbox.email} | email only ${Math.round(emailAgeMs / 60000)}min old — ` +
-          `skipping broad search to avoid false positives; will retry later`
-        );
-        // Return not_found so the scheduler retries once Gmail has indexed the email
-      } else {
-        // Anchor the date to receivedAt (don't use newer_than:5d — that matches emails
-        // from before the current test, including old spam from the same sender)
-        let q3 = `from:${safeSender}`;
-        if (context?.receivedAt) {
-          const dayBefore = new Date(new Date(context.receivedAt).getTime() - 24 * 60 * 60 * 1000);
-          q3 += ` after:${gmailDateStr(dayBefore)}`;
-        } else {
-          q3 += ` newer_than:5d`;
-        }
-        result = await queryFolders(gmail, q3, inbox.email);
-      }
-    }
-
-    if (result) {
-      console.log(`[GmailPlacement] ${inbox.email} | resolved → ${result.status}`);
-      return { ...base, status: result.status };
-    }
-
-    return { ...base, status: "not_found" };
+    const status = await runPlacementCascade(gmail, safeSender, inbox.email, tag, context);
+    return { ...base, status };
   } catch (err: any) {
     const msg: string = err?.message ?? String(err);
     console.error("[GmailPlacement] Error checking inbox", inbox.email, msg);
-    // Surface token-expiry errors distinctly so the scheduler can mark the inbox
     if (msg.includes("invalid_grant") || msg.includes("Token has been expired")) {
       const e = new Error(msg) as any;
       e.code = "OAUTH_INVALID_GRANT";
