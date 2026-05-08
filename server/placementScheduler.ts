@@ -8,8 +8,12 @@ const MIN_INITIAL_DELAY_MS = 15 * 60 * 1000;  // wait 15 min after email arrives
 
 const DEFINITIVE_STATUSES = new Set(["primary", "promotions", "social", "updates", "forums", "spam"]);
 
+// A result blocks lock-in only when it's "not_found" — meaning Gmail hasn't indexed
+// the email yet and we should retry later. "error" and "not_connected" are permanent
+// states for that inbox (bad token, no connection) and must never prevent the other
+// inboxes from being locked in. "not_found" is the only truly temporary state.
 function allResolved(results: PlacementResult[]): boolean {
-  return results.length > 0 && results.every(r => DEFINITIVE_STATUSES.has(r.status));
+  return results.length > 0 && results.every(r => r.status !== "not_found");
 }
 
 export async function runPlacementCheckForUser(
