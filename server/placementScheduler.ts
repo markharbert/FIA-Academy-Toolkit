@@ -1,10 +1,10 @@
 import type { IStorage } from "./storage";
 import { checkGmailPlacement, checkGmailPlacementServiceAccount, isServiceAccountConfigured, isServiceAccountEligible, type PlacementResult } from "./gmailOAuth";
 
-const TICK_INTERVAL_MS       = 5 * 60 * 1000;   // scheduler wakes up every 5 min
-const CHECK_INTERVAL_MS      = 15 * 60 * 1000;  // check each user at most every 15 min
-const STAGGER_MS             = 1500;             // delay between users to avoid API bursts
-const MIN_INITIAL_DELAY_MS   = 12 * 60 * 1000;  // don't check until 12 min after email arrived (Gmail indexing lag)
+const TICK_INTERVAL_MS     = 5 * 60 * 1000;   // scheduler wakes up every 5 min
+const CHECK_INTERVAL_MS    = 15 * 60 * 1000;  // re-check interval if still not found
+const STAGGER_MS           = 1500;             // delay between users to avoid API bursts
+const MIN_INITIAL_DELAY_MS = 15 * 60 * 1000;  // wait 15 min after email arrives before first check
 
 const DEFINITIVE_STATUSES = new Set(["primary", "promotions", "social", "updates", "forums", "spam"]);
 
@@ -12,22 +12,10 @@ function allResolved(results: PlacementResult[]): boolean {
   return results.length > 0 && results.every(r => DEFINITIVE_STATUSES.has(r.status));
 }
 
-// Returns true only if both result sets contain the same status for every inbox.
-// Requires the same number of results and matching status per inboxId.
-function resultsMatch(prev: unknown[] | null, next: PlacementResult[]): boolean {
-  if (!prev || !Array.isArray(prev) || prev.length === 0) return false;
-  if (prev.length !== next.length) return false;
-  const prevMap = new Map(
-    (prev as Array<{ inboxId: string; status: string }>).map(r => [r.inboxId, r.status])
-  );
-  return next.every(r => prevMap.get(r.inboxId) === r.status);
-}
-
 export async function runPlacementCheckForUser(
   storage: IStorage,
   userId: string,
   sendingFrom: string,
-  previousResults: unknown[] | null = null,
   emailContext?: { messageId?: string | null; receivedAt?: Date | null; subject?: string | null }
 ): Promise<void> {
   try {
@@ -85,28 +73,20 @@ export async function runPlacementCheckForUser(
 
     await storage.saveLastPlacementResults(userId, results);
 
-    const definitiveNow = allResolved(results);
-    const confirmedMatch = definitiveNow && resultsMatch(previousResults, results);
+    const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
 
-    if (definitiveNow) {
-      if (confirmedMatch) {
-        // Same definitive result on two consecutive checks — trustworthy, stop monitoring.
-        await storage.setPlacementAutoCheckWindow(userId, null);
-        // Permanently store confirmed results on the specific email record so they
-        // are never overwritten when a new email arrives and opens a new window.
-        if (emailContext?.messageId) {
-          await storage.saveEmailPlacementResults(emailContext.messageId, userId, results);
-        }
-        const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
-        console.log(`[PlacementScheduler] CONFIRMED for user ${userId} — ${summary} — monitoring stopped`);
-      } else {
-        // First time we've seen a definitive result. Keep monitoring; next check will confirm.
-        const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
-        console.log(`[PlacementScheduler] first definitive reading for user ${userId} — ${summary} — awaiting confirmation check`);
+    if (allResolved(results)) {
+      // First definitive result — lock it in immediately, stop monitoring.
+      // No second confirmation check needed: Gmail's categorisation is final within
+      // minutes of delivery and the 15-min indexing hold ensures we're reading the
+      // right email before we ever run a search.
+      await storage.setPlacementAutoCheckWindow(userId, null);
+      if (emailContext?.messageId) {
+        await storage.saveEmailPlacementResults(emailContext.messageId, userId, results);
       }
+      console.log(`[PlacementScheduler] LOCKED IN for user ${userId} — ${summary} — monitoring stopped`);
     } else {
-      const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
-      console.log(`[PlacementScheduler] checked ${targetInboxes.length} inbox(es) for user ${userId} — ${summary}`);
+      console.log(`[PlacementScheduler] checked ${targetInboxes.length} inbox(es) for user ${userId} — ${summary} — will retry`);
     }
   } catch (err: any) {
     console.error(`[PlacementScheduler] error for user ${userId}:`, err?.message);
@@ -130,16 +110,14 @@ export function startPlacementScheduler(storage: IStorage): void {
 
       if (timeSinceCheck < CHECK_INTERVAL_MS) continue;
 
-      // Don't check until at least 12 minutes after the email arrived.
-      // Gmail needs time to index new mail — checking too early causes Strategy 1 and 2
-      // to find nothing, then Strategy 3 falls back to matching older emails from the
-      // same sender (including ones already in spam), producing false readings.
+      // Hold off until 15 minutes after the email arrived.
+      // Gmail needs time to index new mail before searches return accurate results.
       if (user.placementCheckReceivedAt) {
         const emailAgeMs = now.getTime() - new Date(user.placementCheckReceivedAt).getTime();
         if (emailAgeMs < MIN_INITIAL_DELAY_MS) {
           console.log(
-            `[PlacementScheduler] holding off on user ${user.userId} — ` +
-            `email arrived ${Math.round(emailAgeMs / 1000)}s ago, waiting for Gmail indexing`
+            `[PlacementScheduler] holding — email arrived ${Math.round(emailAgeMs / 1000)}s ago for user ${user.userId}, ` +
+            `waiting until 15min mark`
           );
           continue;
         }
@@ -149,7 +127,6 @@ export function startPlacementScheduler(storage: IStorage): void {
         storage,
         user.userId,
         user.effectiveSenderAddress,
-        user.lastPlacementResults,
         { messageId: user.placementCheckMessageId, receivedAt: user.placementCheckReceivedAt, subject: user.placementCheckSubject }
       );
       await new Promise(r => setTimeout(r, STAGGER_MS));
@@ -161,5 +138,5 @@ export function startPlacementScheduler(storage: IStorage): void {
     () => tick().catch(err => console.error("[PlacementScheduler] tick error:", err)),
     TICK_INTERVAL_MS
   );
-  console.log("[PlacementScheduler] started (tick every 5 min, check interval 15 min, confirmation required)");
+  console.log("[PlacementScheduler] started (tick every 5 min, 15-min initial hold, locks in on first definitive result)");
 }
