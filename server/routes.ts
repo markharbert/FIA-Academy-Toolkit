@@ -7999,7 +7999,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         "PRODID:-//Academy Toolkit//Projects Calendar//EN",
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
-        "X-WR-CALNAME:Academy Toolkit Tasks",
+        `X-WR-CALNAME:${user.firstName ? `${user.firstName}'s Project Calendar` : "My Project Calendar"}`,
         "X-WR-TIMEZONE:UTC",
       ];
 
