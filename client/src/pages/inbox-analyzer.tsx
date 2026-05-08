@@ -1949,6 +1949,8 @@ function SettingsTab() {
 
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [editingLabelValue, setEditingLabelValue] = useState("");
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
 
   const renameMutation = useMutation({
     mutationFn: ({ id, label }: { id: string; label: string }) =>
@@ -2116,31 +2118,91 @@ function SettingsTab() {
                     <div className="border-t border-border px-3 py-2.5 bg-muted/10">
                       {(inbox as any).serviceAccountConfigured ? (
                         // Workspace Service Account — permanent, no setup needed
-                        <div className="flex items-center gap-3">
-                          <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
-                          <p className="text-xs text-muted-foreground flex-1">Connected via Workspace Service Account — permanent, no re-auth needed</p>
-                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-blue-500/15 text-blue-600 border-blue-500/20 flex-shrink-0">
-                            Workspace
-                          </Badge>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-3">
+                            <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                            <p className="text-xs text-muted-foreground flex-1">Connected via Workspace Service Account — permanent, no re-auth needed</p>
+                            <Badge className="text-[10px] px-1.5 py-0 h-4 bg-blue-500/15 text-blue-600 border-blue-500/20 flex-shrink-0">
+                              Workspace
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-xs px-2 flex-shrink-0 gap-1"
+                              disabled={testingId === inbox.id}
+                              data-testid={`button-test-${inbox.id}`}
+                              onClick={async () => {
+                                setTestingId(inbox.id);
+                                setTestResults(r => { const n = { ...r }; delete n[inbox.id]; return n; });
+                                try {
+                                  const res = await apiRequest("POST", `/api/inbox-analyzer/seed-inboxes/${inbox.id}/test`);
+                                  const data = await res.json();
+                                  setTestResults(r => ({ ...r, [inbox.id]: data }));
+                                } catch { setTestResults(r => ({ ...r, [inbox.id]: { success: false, message: "Request failed." } })); }
+                                finally { setTestingId(null); }
+                              }}
+                            >
+                              {testingId === inbox.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                              Test
+                            </Button>
+                          </div>
+                          {testResults[inbox.id] && (
+                            <div className={`flex items-center gap-1.5 text-xs px-0.5 ${testResults[inbox.id].success ? "text-emerald-600" : "text-red-500"}`}>
+                              {testResults[inbox.id].success
+                                ? <CircleCheck className="h-3 w-3 flex-shrink-0" />
+                                : <CircleX className="h-3 w-3 flex-shrink-0" />}
+                              {testResults[inbox.id].message}
+                            </div>
+                          )}
                         </div>
                       ) : (inbox as any).authMethod === "imap" && inbox.isConnected ? (
                         // IMAP + App Password — connected, permanent
-                        <div className="flex items-center gap-3">
-                          <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
-                          <p className="text-xs text-muted-foreground flex-1">Connected via App Password — permanent, no re-auth ever needed</p>
-                          <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-700 border-emerald-500/20 flex-shrink-0">
-                            IMAP
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-xs text-muted-foreground hover:text-red-500 px-2"
-                            onClick={() => disconnectMutation.mutate(inbox.id)}
-                            disabled={disconnectMutation.isPending}
-                            data-testid={`button-disconnect-${inbox.id}`}
-                          >
-                            Disconnect
-                          </Button>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-3">
+                            <CircleCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                            <p className="text-xs text-muted-foreground flex-1">Connected via App Password — permanent, no re-auth ever needed</p>
+                            <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-700 border-emerald-500/20 flex-shrink-0">
+                              IMAP
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-xs px-2 flex-shrink-0 gap-1"
+                              disabled={testingId === inbox.id}
+                              data-testid={`button-test-${inbox.id}`}
+                              onClick={async () => {
+                                setTestingId(inbox.id);
+                                setTestResults(r => { const n = { ...r }; delete n[inbox.id]; return n; });
+                                try {
+                                  const res = await apiRequest("POST", `/api/inbox-analyzer/seed-inboxes/${inbox.id}/test`);
+                                  const data = await res.json();
+                                  setTestResults(r => ({ ...r, [inbox.id]: data }));
+                                } catch { setTestResults(r => ({ ...r, [inbox.id]: { success: false, message: "Request failed." } })); }
+                                finally { setTestingId(null); }
+                              }}
+                            >
+                              {testingId === inbox.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                              Test
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs text-muted-foreground hover:text-red-500 px-2"
+                              onClick={() => disconnectMutation.mutate(inbox.id)}
+                              disabled={disconnectMutation.isPending}
+                              data-testid={`button-disconnect-${inbox.id}`}
+                            >
+                              Disconnect
+                            </Button>
+                          </div>
+                          {testResults[inbox.id] && (
+                            <div className={`flex items-center gap-1.5 text-xs px-0.5 ${testResults[inbox.id].success ? "text-emerald-600" : "text-red-500"}`}>
+                              {testResults[inbox.id].success
+                                ? <CircleCheck className="h-3 w-3 flex-shrink-0" />
+                                : <CircleX className="h-3 w-3 flex-shrink-0" />}
+                              {testResults[inbox.id].message}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         // Not connected — show App Password setup form

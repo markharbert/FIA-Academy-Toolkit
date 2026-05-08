@@ -5070,6 +5070,44 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.post("/api/inbox-analyzer/seed-inboxes/:id/test", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const inbox = await storage.getSeedInboxById(req.params.id);
+      if (!inbox) return res.status(404).json({ success: false, message: "Inbox not found" });
+
+      const { isServiceAccountConfigured, isServiceAccountEligible } = await import("./gmailOAuth");
+      const { verifyImapConnection } = await import("./imapPlacement");
+      const { decryptApiKey } = await import("./storage");
+
+      // Service Account path
+      if (isServiceAccountConfigured() && isServiceAccountEligible(inbox.email)) {
+        if (isServiceAccountConfigured()) {
+          return res.json({ success: true, message: "Workspace Service Account is active and configured correctly." });
+        }
+        return res.json({ success: false, message: "Service Account not configured on this server." });
+      }
+
+      // IMAP path
+      if ((inbox as any).authMethod === "imap" && (inbox as any).imapPassword) {
+        const plain = decryptApiKey((inbox as any).imapPassword);
+        const result = await verifyImapConnection(inbox.email, plain);
+        if (result.success) {
+          return res.json({ success: true, message: "IMAP connection verified — App Password is working." });
+        }
+        return res.json({ success: false, message: result.error || "IMAP connection failed." });
+      }
+
+      // OAuth path (legacy)
+      if (inbox.isConnected && (inbox as any).oauthAccessToken) {
+        return res.json({ success: true, message: "OAuth token is present. It may still expire — consider switching to App Password." });
+      }
+
+      return res.json({ success: false, message: "Inbox is not connected. Set an App Password to activate it." });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message || "Test failed unexpectedly." });
+    }
+  });
+
   app.patch("/api/inbox-analyzer/seed-inboxes/:id/rename", requireAdmin, async (req: Request, res: Response) => {
     const { label } = req.body;
     if (!label || typeof label !== "string" || !label.trim()) {
