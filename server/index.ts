@@ -552,6 +552,17 @@ async function runStartupMigrations() {
       ALTER TABLE feedback_posts ADD COLUMN IF NOT EXISTS screenshot_path TEXT
     `);
     console.log("[startup] feedback tables migration complete");
+
+    // iCal feed token for each user
+    await db.execute(sql`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS ical_token TEXT
+    `);
+    await db.execute(sql`
+      UPDATE users
+      SET ical_token = replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')
+      WHERE ical_token IS NULL
+    `);
+    console.log("[startup] ical_token migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

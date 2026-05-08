@@ -374,6 +374,9 @@ export interface IStorage {
   }>;
   getUrgentTasksForUser(userId: string, hoursAhead?: number): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
   getAllOpenTasksForUser(userId: string): Promise<Array<ProjectTask & { projectName: string; projectColor: string }>>;
+  getAllTasksWithDueDatesForUser(userId: string): Promise<Array<ProjectTask & { projectName: string }>>;
+  getUserByIcalToken(token: string): Promise<User | null>;
+  rotateIcalToken(userId: string): Promise<string>;
   getTaskComments(taskId: string, userId: string): Promise<Array<TaskComment & { authorName: string | null; authorEmail: string | null }>>;
   addTaskComment(taskId: string, userId: string, body: string): Promise<TaskComment>;
   updateTaskComment(taskId: string, commentId: string, userId: string, body: string): Promise<TaskComment | undefined>;
@@ -2763,6 +2766,49 @@ export class DatabaseStorage implements IStorage {
       projectName: r.project_name,
       projectColor: r.project_color,
     }));
+  }
+
+  async getAllTasksWithDueDatesForUser(userId: string): Promise<Array<ProjectTask & { projectName: string }>> {
+    const result = await db.execute(sql`
+      SELECT t.*, p.name AS project_name
+      FROM project_tasks t
+      JOIN projects p ON p.id = t.project_id
+      WHERE t.user_id = ${userId}
+        AND t.status <> 'done'
+        AND t.due_date IS NOT NULL
+        AND p.status = 'active'
+      ORDER BY t.due_date ASC, t.created_at ASC
+    `);
+    return (result.rows as any[]).map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      projectId: r.project_id,
+      parentTaskId: r.parent_task_id,
+      title: r.title,
+      notes: r.notes,
+      status: r.status,
+      priority: r.priority,
+      dueDate: r.due_date ? new Date(r.due_date) : null,
+      completedAt: r.completed_at ? new Date(r.completed_at) : null,
+      tags: r.tags || [],
+      links: r.links || [],
+      sortOrder: r.sort_order,
+      createdAt: new Date(r.created_at),
+      updatedAt: new Date(r.updated_at),
+      projectName: r.project_name,
+    }));
+  }
+
+  async getUserByIcalToken(token: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.icalToken, token));
+    return user || null;
+  }
+
+  async rotateIcalToken(userId: string): Promise<string> {
+    const { randomBytes } = await import("crypto");
+    const token = randomBytes(24).toString("hex");
+    await db.update(users).set({ icalToken: token }).where(eq(users.id, userId));
+    return token;
   }
 
   // ── Project Templates ────────────────────────────────────────────────────

@@ -18,7 +18,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { dayDiffInTz, dueDateKey as dueDateKeyInTz, dueHasTime, formatInTz } from "@shared/datetime";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText, Upload } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText, Upload, RefreshCw, ExternalLink } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function formatProjectDueLabel(due: Date, tz?: string | null): { text: string; tone: "overdue" | "soon" | "today" | "tomorrow" | "future" } {
@@ -546,6 +547,100 @@ function AllTasksList({ tasks, isLoading, tz, onTaskClick }: { tasks: OpenTask[]
           </ul>
         </div>
       ))}
+    </div>
+  );
+}
+
+function CalendarSync() {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  const { data, isLoading } = useQuery<{ url: string }>({
+    queryKey: ["/api/calendar/ical-url"],
+  });
+
+  const rotateMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/calendar/rotate-ical-token").then(r => r.json()),
+    onSuccess: (data: { url: string }) => {
+      queryClient.setQueryData(["/api/calendar/ical-url"], data);
+      toast({ title: "Link regenerated", description: "Your old subscription link is now invalid. Subscribe with the new one." });
+    },
+    onError: () => toast({ title: "Failed to regenerate link", variant: "destructive" }),
+  });
+
+  const handleCopy = () => {
+    if (!data?.url) return;
+    navigator.clipboard.writeText(data.url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast({ title: "Link copied!", description: 'Paste it in Google Calendar → Other calendars → "From URL".' });
+    });
+  };
+
+  return (
+    <div className="mb-4 rounded-xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
+        <CalendarDays className="h-4 w-4 text-indigo-500 shrink-0" />
+        <span className="text-sm font-semibold">Subscribe to Google Calendar</span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <a
+                href="https://calendar.google.com/calendar/r/settings/addbyurl"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                data-testid="link-open-google-calendar"
+              >
+                Open Google Calendar <ExternalLink className="h-3 w-3" />
+              </a>
+            </TooltipTrigger>
+            <TooltipContent>Opens Google Calendar's "Add by URL" page</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+      <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+        <p className="text-xs text-muted-foreground shrink-0">
+          Your private feed URL — copy and paste into any calendar app.
+        </p>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <input
+            readOnly
+            value={isLoading ? "Generating…" : (data?.url ?? "")}
+            className="flex-1 min-w-0 text-xs font-mono bg-muted/50 border border-border rounded-md px-2.5 py-1.5 text-muted-foreground focus:outline-none truncate"
+            onClick={e => (e.target as HTMLInputElement).select()}
+            data-testid="input-ical-url"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCopy}
+            disabled={!data?.url}
+            className="shrink-0"
+            data-testid="button-copy-ical-url"
+          >
+            <Copy className="h-3.5 w-3.5 mr-1.5" />
+            {copied ? "Copied!" : "Copy"}
+          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => rotateMutation.mutate()}
+                  disabled={rotateMutation.isPending}
+                  className="shrink-0 text-muted-foreground"
+                  data-testid="button-regenerate-ical"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${rotateMutation.isPending ? "animate-spin" : ""}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Regenerate URL (invalidates old link)</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1292,7 +1387,10 @@ export default function ProjectsPage() {
         ) : topTab === "list" ? (
           <AllTasksList tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setListTask} />
         ) : topTab === "calendar" ? (
-          <TasksCalendar tasks={calendarTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setCalendarTask} />
+          <>
+            <CalendarSync />
+            <TasksCalendar tasks={calendarTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setCalendarTask} />
+          </>
         ) : (
           <TemplatesTab
             templates={templates}

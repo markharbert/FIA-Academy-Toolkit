@@ -7925,6 +7925,127 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── iCal Calendar Feed ──────────────────────────────────────────────────────
+
+  function icalDateOnly(d: Date): string {
+    const yy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yy}${mm}${dd}`;
+  }
+
+  function icalDtstamp(d: Date): string {
+    return `${icalDateOnly(d)}T${String(d.getUTCHours()).padStart(2,"0")}${String(d.getUTCMinutes()).padStart(2,"0")}${String(d.getUTCSeconds()).padStart(2,"0")}Z`;
+  }
+
+  function icalNextDay(d: Date): string {
+    const next = new Date(d);
+    next.setUTCDate(next.getUTCDate() + 1);
+    return icalDateOnly(next);
+  }
+
+  function icalEscape(s: string): string {
+    return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+  }
+
+  // Returns the user's current iCal subscription URL (generates token if missing)
+  app.get("/api/calendar/ical-url", requireAuth, async (req: Request, res: Response) => {
+    try {
+      let user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      let token = user.icalToken;
+      if (!token) token = await storage.rotateIcalToken(req.session.userId!);
+      const proto = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.get("host");
+      const url = `${proto}://${host}/api/calendar/ical/${token}.ics`;
+      res.json({ url });
+    } catch (err) {
+      console.error("[ical] get-url error:", err);
+      res.status(500).json({ message: "Failed to get iCal URL" });
+    }
+  });
+
+  // Regenerates the token, invalidating the old link
+  app.post("/api/calendar/rotate-ical-token", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const token = await storage.rotateIcalToken(req.session.userId!);
+      const proto = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.get("host");
+      const url = `${proto}://${host}/api/calendar/ical/${token}.ics`;
+      res.json({ url });
+    } catch (err) {
+      console.error("[ical] rotate-token error:", err);
+      res.status(500).json({ message: "Failed to rotate token" });
+    }
+  });
+
+  // Public iCal feed — secured by the opaque token, no session required
+  app.get("/api/calendar/ical/:token", async (req: Request, res: Response) => {
+    try {
+      const token = req.params.token.replace(/\.ics$/, "");
+      const user = await storage.getUserByIcalToken(token);
+      if (!user) return res.status(404).type("text/plain").send("Calendar not found");
+
+      const [tasks, projects] = await Promise.all([
+        storage.getAllTasksWithDueDatesForUser(user.id),
+        storage.getProjectsForUser(user.id),
+      ]);
+
+      const dtstamp = icalDtstamp(new Date());
+      const host = "toolkit.fearlessmarketinglab.com";
+      const lines: string[] = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Academy Toolkit//Projects Calendar//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "X-WR-CALNAME:Academy Toolkit Tasks",
+        "X-WR-TIMEZONE:UTC",
+      ];
+
+      for (const t of tasks) {
+        if (!t.dueDate) continue;
+        const dateStr = icalDateOnly(new Date(t.dueDate));
+        const summary = icalEscape(t.projectName ? `${t.title} [${t.projectName}]` : t.title);
+        const desc = t.notes ? icalEscape(t.notes) : "";
+        lines.push(
+          "BEGIN:VEVENT",
+          `UID:task-${t.id}@${host}`,
+          `DTSTAMP:${dtstamp}`,
+          `DTSTART;VALUE=DATE:${dateStr}`,
+          `DTEND;VALUE=DATE:${icalNextDay(new Date(t.dueDate))}`,
+          `SUMMARY:${summary}`,
+          ...(desc ? [`DESCRIPTION:${desc}`] : []),
+          "END:VEVENT",
+        );
+      }
+
+      for (const p of projects) {
+        if (!p.dueDate || p.status === "archived") continue;
+        const dateStr = icalDateOnly(new Date(p.dueDate));
+        lines.push(
+          "BEGIN:VEVENT",
+          `UID:project-${p.id}@${host}`,
+          `DTSTAMP:${dtstamp}`,
+          `DTSTART;VALUE=DATE:${dateStr}`,
+          `DTEND;VALUE=DATE:${icalNextDay(new Date(p.dueDate))}`,
+          `SUMMARY:${icalEscape(`\uD83D\uDCC1 ${p.name} (project due)`)}`,
+          "END:VEVENT",
+        );
+      }
+
+      lines.push("END:VCALENDAR");
+
+      res.set("Content-Type", "text/calendar; charset=utf-8");
+      res.set("Content-Disposition", 'attachment; filename="academy-toolkit.ics"');
+      res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.send(lines.join("\r\n"));
+    } catch (err) {
+      console.error("[ical] feed error:", err);
+      res.status(500).type("text/plain").send("Failed to generate calendar");
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 
