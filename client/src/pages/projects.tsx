@@ -18,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { dayDiffInTz, dueDateKey as dueDateKeyInTz, dueHasTime, formatInTz } from "@shared/datetime";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText, Upload, RefreshCw, ExternalLink } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText, Upload, ExternalLink } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -559,15 +559,6 @@ function CalendarSync() {
     queryKey: ["/api/calendar/ical-url"],
   });
 
-  const rotateMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/calendar/rotate-ical-token").then(r => r.json()),
-    onSuccess: (data: { url: string }) => {
-      queryClient.setQueryData(["/api/calendar/ical-url"], data);
-      toast({ title: "Link regenerated", description: "Your old subscription link is now invalid. Subscribe with the new one." });
-    },
-    onError: () => toast({ title: "Failed to regenerate link", variant: "destructive" }),
-  });
-
   const handleCopy = () => {
     if (!data?.url) return;
     navigator.clipboard.writeText(data.url).then(() => {
@@ -622,23 +613,6 @@ function CalendarSync() {
             <Copy className="h-3.5 w-3.5 mr-1.5" />
             {copied ? "Copied!" : "Copy"}
           </Button>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => rotateMutation.mutate()}
-                  disabled={rotateMutation.isPending}
-                  className="shrink-0 text-muted-foreground"
-                  data-testid="button-regenerate-ical"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${rotateMutation.isPending ? "animate-spin" : ""}`} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Regenerate URL (invalidates old link)</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         </div>
       </div>
     </div>
