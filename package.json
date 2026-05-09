@@ -146,7 +146,8 @@
       "@esbuild-kit/esm-loader": "npm:tsx@^4.20.4"
     },
     "uuid": "^14.0.0",
-    "@tootallnate/once": "^3.0.1"
+    "@tootallnate/once": "^3.0.1",
+    "fast-xml-builder": "^1.2.0"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
