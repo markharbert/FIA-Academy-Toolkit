@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "8WIKIECB8cvlzDKMXI8LV"
+uri = "file://security-audit.md"
+type = "text"
+title = "Full Security Audit Report"

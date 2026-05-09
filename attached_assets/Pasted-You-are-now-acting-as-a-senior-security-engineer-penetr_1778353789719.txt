@@ -1,0 +1,361 @@
+You are now acting as a senior security engineer, penetration tester, QA automation engineer, DevOps reliability engineer, and scalability architect.
+
+Your job is to aggressively audit, stress test, and attempt to break this application before it reaches production.
+
+Assume this app will handle real users, sensitive data, financial transactions, private information, authentication, and production-level traffic.
+
+I want you to think like:
+
+* A malicious attacker
+* A frustrated user
+* A penetration tester
+* A load testing engineer
+* A compliance auditor
+* A chaos engineer
+* A scalability architect
+
+Analyze the ENTIRE codebase and identify:
+
+* Security vulnerabilities
+* Performance bottlenecks
+* Reliability issues
+* Authentication weaknesses
+* Authorization flaws
+* API exposure risks
+* Data validation problems
+* Scalability limitations
+* User flow failures
+* Edge cases
+* Concurrency problems
+* Infrastructure weaknesses
+* Logging and monitoring gaps
+* Compliance concerns
+* Failure recovery issues
+
+Then generate:
+
+1. A full vulnerability report
+2. Severity ratings for every issue
+3. Reproduction steps
+4. Suggested fixes
+5. Automated test recommendations
+6. Load testing scripts
+7. Security hardening recommendations
+8. CI/CD testing recommendations
+9. Monitoring recommendations
+10. Deployment readiness score
+
+Perform the following audits in detail:
+
+---
+
+## SECTION 1: AUTHENTICATION & AUTHORIZATION
+
+Test for:
+
+* Broken authentication
+* Weak session handling
+* JWT vulnerabilities
+* Missing token expiration
+* Token replay attacks
+* Session fixation
+* Password reset vulnerabilities
+* MFA weaknesses
+* Privilege escalation
+* Role bypasses
+* Horizontal privilege escalation
+* Vertical privilege escalation
+* Insecure admin routes
+* Missing route guards
+* IDOR vulnerabilities
+* Unauthorized API access
+* Anonymous access to protected resources
+
+Attempt to:
+
+* Access other users’ data
+* Bypass login requirements
+* Forge tokens
+* Reuse expired sessions
+* Manipulate user IDs
+* Access hidden routes directly
+* Escalate permissions
+
+---
+
+## SECTION 2: INPUT VALIDATION & INJECTION TESTING
+
+Test all forms, APIs, query params, headers, and database interactions for:
+
+* SQL injection
+* NoSQL injection
+* Command injection
+* XSS
+* Stored XSS
+* Reflected XSS
+* CSRF
+* SSRF
+* Path traversal
+* File upload vulnerabilities
+* Template injection
+* XML injection
+* JSON injection
+* Header injection
+* Open redirects
+
+Attempt malicious payloads and edge case inputs:
+
+* Extremely large inputs
+* Invalid formats
+* Unicode payloads
+* Encoded payloads
+* Script tags
+* Binary data
+* Nested JSON abuse
+* Null byte attacks
+* Unexpected data types
+
+---
+
+## SECTION 3: API SECURITY TESTING
+
+Inspect every API endpoint.
+
+Check for:
+
+* Unauthenticated access
+* Overly verbose errors
+* Missing rate limits
+* Missing throttling
+* Data leakage
+* Excessive permissions
+* Improper CORS policies
+* Sensitive headers exposed
+* Weak API key handling
+* Missing input sanitization
+* GraphQL abuse vectors
+* Batch abuse attacks
+
+Attempt:
+
+* Endpoint fuzzing
+* Parameter tampering
+* Mass assignment
+* Request replay attacks
+* API abuse patterns
+* High-frequency request attacks
+
+---
+
+## SECTION 4: DATA SECURITY & PRIVACY
+
+Audit all sensitive data handling.
+
+Check:
+
+* Encryption at rest
+* Encryption in transit
+* Plaintext secrets
+* Exposed environment variables
+* Sensitive logging
+* Password hashing quality
+* Database exposure risks
+* Backup security
+* PII handling
+* Data retention issues
+* Secret management
+* Token storage vulnerabilities
+* Browser storage vulnerabilities
+
+Identify:
+
+* Any exposed secrets
+* Hardcoded credentials
+* Weak cryptography
+* Unsafe storage patterns
+
+---
+
+## SECTION 5: LOAD TESTING & SCALABILITY
+
+Simulate:
+
+* 10 users
+* 50 users
+* 100 users
+* 500 users
+* 1,000+ concurrent users
+
+Stress test:
+
+* APIs
+* Database queries
+* Authentication flows
+* File uploads
+* Search functionality
+* Real-time features
+* Background jobs
+* Webhooks
+* Queue systems
+
+Identify:
+
+* Memory leaks
+* Slow queries
+* CPU spikes
+* Thread exhaustion
+* Bottlenecks
+* Race conditions
+* Deadlocks
+* Timeout failures
+* Cache inefficiencies
+* Scaling limits
+
+Generate:
+
+* Load testing scripts
+* Benchmark reports
+* Recommended scaling architecture
+
+---
+
+## SECTION 6: USER FLOW & QA TESTING
+
+Simulate real users with unexpected behavior.
+
+Test:
+
+* Broken navigation
+* Form failures
+* Mobile responsiveness
+* Browser compatibility
+* Session timeouts
+* Multi-tab behavior
+* Refresh handling
+* Back button handling
+* Network interruptions
+* Partial submissions
+* Duplicate requests
+* Slow internet conditions
+
+Attempt:
+
+* Rage clicking
+* Double submissions
+* Abandoned flows
+* Invalid workflows
+* Simultaneous actions
+* Corrupted state scenarios
+
+---
+
+## SECTION 7: FAILURE & CHAOS TESTING
+
+Intentionally break infrastructure components.
+
+Simulate:
+
+* Database outages
+* API failures
+* Queue failures
+* Cache failures
+* DNS issues
+* Expired SSL certificates
+* Disk space exhaustion
+* Memory pressure
+* Container crashes
+* Third-party service outages
+
+Evaluate:
+
+* Recovery handling
+* Graceful degradation
+* Retry logic
+* Circuit breakers
+* User-facing failures
+* Error messaging quality
+
+---
+
+## SECTION 8: DEVOPS & DEPLOYMENT AUDIT
+
+Review:
+
+* CI/CD pipeline security
+* Environment separation
+* Secret injection
+* Docker security
+* Dependency vulnerabilities
+* Package risks
+* Open ports
+* Production configs
+* Logging infrastructure
+* Monitoring setup
+* Alerting systems
+* Rollback strategy
+
+Check for:
+
+* Outdated dependencies
+* Known CVEs
+* Supply chain vulnerabilities
+* Unsafe build scripts
+
+---
+
+## SECTION 9: COMPLIANCE & BEST PRACTICES
+
+Evaluate readiness for:
+
+* GDPR
+* SOC2
+* HIPAA
+* PCI DSS
+* OWASP Top 10
+* Secure coding standards
+
+Identify:
+
+* Compliance gaps
+* Legal risks
+* Audit concerns
+* Data governance weaknesses
+
+---
+
+## SECTION 10: AUTOMATED TEST GENERATION
+
+Generate:
+
+* Unit tests
+* Integration tests
+* End-to-end tests
+* Security tests
+* Regression tests
+* Load testing scripts
+* Smoke tests
+
+Ensure tests run automatically on every build and deployment.
+
+---
+
+## FINAL OUTPUT REQUIREMENTS
+
+Provide:
+
+1. Executive summary
+2. Critical vulnerabilities
+3. High-risk findings
+4. Medium-risk findings
+5. Low-risk findings
+6. Performance bottlenecks
+7. Scalability concerns
+8. Recommended fixes prioritized by severity
+9. Estimated production readiness score from 1-10
+10. Immediate actions required before launch
+
+Be extremely aggressive and assume attackers WILL attempt to exploit this app.
+
+Do not assume the code is safe simply because it works.
+
+Your objective is to break the application before real users do.
