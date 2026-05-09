@@ -2,7 +2,7 @@ import {
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks,
   type PublicApiKey, type Webhook,
-  dmoEntries, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
+  dmoEntries, dmoSettings, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
   teleprompterScripts, type TeleprompterScript, type InsertTeleprompterScript,
   type CompetitorTracker, type InsertCompetitorTracker, type CompetitorTrackerWithStats,
@@ -24,7 +24,7 @@ import {
   type LinkPlaceholder, type InsertLinkPlaceholder,
   type UserApiKey, type InsertUserApiKey, type ApiKeyProvider,
   type SavedOffer, type InsertSavedOffer,
-  type DmoEntry, type InsertDmoEntry, type DmoEntryData,
+  type DmoEntry, type InsertDmoEntry, type DmoEntryData, type DmoSettings,
   type EmailAnalysis, type EmailInboxAddress, type SeedInbox, type InsertSeedInbox,
   type PostmasterConnection, type PostmasterDomain,
   projects, projectTasks, taskComments, taskActivity, taskAttachments,
@@ -352,6 +352,8 @@ export interface IStorage {
   getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }>;
   getDmoSummary(userId: string, period: string): Promise<{ summary: string; tips: string[]; moodScore: number | null; performanceScore: number | null; generatedAt: Date } | null>;
   upsertDmoSummary(userId: string, period: string, periodType: string, summary: string, tips: string[], moodScore: number | null, performanceScore: number | null): Promise<void>;
+  getDmoSettings(userId: string): Promise<DmoSettings>;
+  upsertDmoSettings(userId: string, data: Partial<Omit<DmoSettings, 'userId'>>): Promise<DmoSettings>;
 
   // Projects
   getProjectsForUser(userId: string): Promise<ProjectWithCounts[]>;
@@ -2226,6 +2228,22 @@ export class DatabaseStorage implements IStorage {
          generated_at = NOW()`,
       [userId, period, periodType, summary, tips, moodScore, performanceScore]
     );
+  }
+
+  async getDmoSettings(userId: string): Promise<DmoSettings> {
+    const rows = await db.select().from(dmoSettings).where(eq(dmoSettings.userId, userId));
+    if (rows.length > 0) return rows[0];
+    return { userId, visionTarget: 30, personalTarget: 30, expandTarget: 60, executionTarget: 60, connectingTarget: 60 };
+  }
+
+  async upsertDmoSettings(userId: string, data: Partial<Omit<DmoSettings, 'userId'>>): Promise<DmoSettings> {
+    const existing = await db.select().from(dmoSettings).where(eq(dmoSettings.userId, userId));
+    if (existing.length > 0) {
+      const [updated] = await db.update(dmoSettings).set(data).where(eq(dmoSettings.userId, userId)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(dmoSettings).values({ userId, ...data }).returning();
+    return created;
   }
 
   // ── Projects ─────────────────────────────────────────────────────────────

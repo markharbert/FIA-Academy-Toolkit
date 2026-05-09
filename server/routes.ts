@@ -4954,6 +4954,35 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // DMO Settings — per-user goal targets
+  app.get("/api/dmo/settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const settings = await storage.getDmoSettings(userId);
+      res.json(settings);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch DMO settings" });
+    }
+  });
+
+  app.post("/api/dmo/settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const clamp = (v: unknown, min = 1, max = 480) =>
+        v != null ? Math.max(min, Math.min(max, Math.round(Number(v)))) : undefined;
+      const settings = await storage.upsertDmoSettings(userId, {
+        visionTarget: clamp(req.body.visionTarget),
+        personalTarget: clamp(req.body.personalTarget),
+        expandTarget: clamp(req.body.expandTarget),
+        executionTarget: clamp(req.body.executionTarget),
+        connectingTarget: clamp(req.body.connectingTarget),
+      });
+      res.json(settings);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save DMO settings" });
+    }
+  });
+
   // DMO Journal Summary — get cached AI summary for a period
   app.get("/api/dmo/summary/:period", requireAuth, async (req: Request, res: Response) => {
     try {

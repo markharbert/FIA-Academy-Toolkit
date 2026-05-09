@@ -4,6 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -34,8 +35,15 @@ import {
   ChevronRight,
   BookText,
   RefreshCw,
+  Pencil,
+  Check,
+  X,
+  Plus,
+  Minus,
+  ExternalLink,
+  Target,
 } from "lucide-react";
-import type { DmoEntry } from "@shared/schema";
+import type { DmoEntry, DmoSettings } from "@shared/schema";
 import { useAuth } from "@/lib/auth";
 
 // ─── Activity definitions ────────────────────────────────────────────────────
@@ -44,10 +52,11 @@ const DMO_ACTIVITIES = [
   {
     key: "visionMeditation" as const,
     secondsKey: "visionSeconds" as const,
+    settingsKey: "visionTarget" as const,
     label: "Vision & Meditation",
     tagline: "Get quiet. Visualise where you're going.",
     description: "Shut out the noise. Write your objectives, plan your strategy, see your future.",
-    target: 30,
+    defaultTarget: 30,
     icon: Eye,
     gradient: "from-violet-600 to-purple-700",
     glowColor: "shadow-violet-500/40",
@@ -60,10 +69,11 @@ const DMO_ACTIVITIES = [
   {
     key: "personalDevelopment" as const,
     secondsKey: "personalSeconds" as const,
+    settingsKey: "personalTarget" as const,
     label: "Personal Development",
     tagline: "Read, listen, grow. Invest in yourself.",
     description: "Training audios, books, spiritual growth, live events, coaching.",
-    target: 30,
+    defaultTarget: 30,
     icon: BookOpen,
     gradient: "from-blue-600 to-cyan-600",
     glowColor: "shadow-blue-500/40",
@@ -76,10 +86,11 @@ const DMO_ACTIVITIES = [
   {
     key: "expandSkills" as const,
     secondsKey: "expandSeconds" as const,
+    settingsKey: "expandTarget" as const,
     label: "Expand Your Skills",
     tagline: "Self-education will make you a fortune.",
     description: "Traffic, ads, content creation, video marketing, prospecting, copywriting.",
-    target: 60,
+    defaultTarget: 60,
     icon: Lightbulb,
     gradient: "from-teal-500 to-emerald-600",
     glowColor: "shadow-teal-500/40",
@@ -92,10 +103,11 @@ const DMO_ACTIVITIES = [
   {
     key: "execution" as const,
     secondsKey: "executionSeconds" as const,
+    settingsKey: "executionTarget" as const,
     label: "Execution",
     tagline: "After you consume — CREATE.",
     description: "Post, make a video, run an ad, write a podcast, do a webinar. Show up consistently.",
-    target: 60,
+    defaultTarget: 60,
     icon: Zap,
     gradient: "from-amber-500 to-orange-600",
     glowColor: "shadow-amber-500/40",
@@ -108,10 +120,11 @@ const DMO_ACTIVITIES = [
   {
     key: "connecting" as const,
     secondsKey: "connectingSeconds" as const,
+    settingsKey: "connectingTarget" as const,
     label: "Connect with People",
     tagline: "This is your money activity.",
     description: "Messenger, DMs, Zoom, phone calls, comments on posts. Connect with your audience every day.",
-    target: 60,
+    defaultTarget: 60,
     icon: Users,
     gradient: "from-red-600 to-rose-700",
     glowColor: "shadow-red-500/40",
@@ -141,6 +154,15 @@ function formatTimer(seconds: number): string {
   return `${m}:${s}`;
 }
 
+function parseMinsInput(raw: string): number {
+  const trimmed = raw.trim();
+  if (trimmed.includes(":")) {
+    const [m, s] = trimmed.split(":").map(n => parseInt(n, 10) || 0);
+    return Math.max(0, m * 60 + s);
+  }
+  return Math.max(0, (parseInt(trimmed, 10) || 0) * 60);
+}
+
 /** Returns 0–5 points earned based on seconds done vs minute-target. */
 function calcPoints(seconds: number, targetMinutes: number): number {
   if (targetMinutes <= 0) return 0;
@@ -149,13 +171,13 @@ function calcPoints(seconds: number, targetMinutes: number): number {
 
 /** Color for a bar based on total pts (0–25). */
 function getBarColor(pts: number): string {
-  if (pts === 0)  return "#1e293b"; // none
-  if (pts <= 5)   return "#4c1d95"; // 1–5 pts (violet)
-  if (pts <= 10)  return "#1d4ed8"; // 6–10 pts (blue)
-  if (pts <= 15)  return "#0d9488"; // 11–15 pts (teal)
-  if (pts <= 20)  return "#d97706"; // 16–20 pts (amber)
-  if (pts <= 24)  return "#ea580c"; // 21–24 pts (orange)
-  return "#16a34a";                 // 25 pts — perfect day (green)
+  if (pts === 0)  return "#1e293b";
+  if (pts <= 5)   return "#4c1d95";
+  if (pts <= 10)  return "#1d4ed8";
+  if (pts <= 15)  return "#0d9488";
+  if (pts <= 20)  return "#d97706";
+  if (pts <= 24)  return "#ea580c";
+  return "#16a34a";
 }
 
 const BAR_LEGEND = [
@@ -176,7 +198,7 @@ function getTodayString(tz?: string | null): string {
       month: "2-digit",
       day: "2-digit",
     });
-    return fmt.format(new Date()); // en-CA gives YYYY-MM-DD
+    return fmt.format(new Date());
   } catch {
     return new Date().toISOString().split("T")[0];
   }
@@ -234,35 +256,54 @@ function PointDots({
 
 interface ActivityCardProps {
   activity: typeof DMO_ACTIVITIES[number];
+  targetMinutes: number;
   savedSeconds: number;
   savedChecked: boolean;
   onSave: (seconds: number) => Promise<void>;
-  onAutoSave: (seconds: number) => void; // silent — no toast
+  onAutoSave: (seconds: number) => void;
+  onGoalChange: (minutes: number) => void;
   isSaving: boolean;
 }
 
 const LS_KEY = (key: string) => `dmo-draft-${key}`;
 
-function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave, isSaving }: ActivityCardProps) {
+function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onSave, onAutoSave, onGoalChange, isSaving }: ActivityCardProps) {
   const Icon = activity.icon;
+
   const [timer, setTimer] = useState<TimerState>(() => {
-    // If already saved/checked, start from that
     if (savedChecked || savedSeconds > 0) {
       return { status: "done", elapsed: savedSeconds, startedAt: null };
     }
-    // Check localStorage for a mid-session draft (crash/refresh recovery)
     try {
       const raw = localStorage.getItem(LS_KEY(activity.key));
       if (raw) {
-        const draft = JSON.parse(raw) as { elapsed: number; startedAt: number };
-        // Treat restored timer as paused so the user can resume or stop
+        const draft = JSON.parse(raw) as { elapsed: number; startedAt: number; status?: string };
+        if (draft.status === "running" && draft.startedAt) {
+          // Timer was running when user left — restore as running so it keeps ticking
+          return { status: "running", elapsed: draft.elapsed, startedAt: draft.startedAt };
+        }
         const recovered = draft.elapsed + Math.floor((Date.now() - draft.startedAt) / 1000);
         return { status: "paused", elapsed: recovered, startedAt: null };
       }
     } catch { /* ignore */ }
     return { status: "idle", elapsed: 0, startedAt: null };
   });
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Confirm-before-save state
+  const [pendingSecs, setPendingSecs] = useState<number | null>(null);
+  const [pendingInput, setPendingInput] = useState("");
+
+  // Edit logged time state (in "done" mode)
+  const [editingDone, setEditingDone] = useState(false);
+  const [editDoneInput, setEditDoneInput] = useState("");
+
+  // Edit goal inline
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState(String(targetMinutes));
+
+  useEffect(() => { setGoalInput(String(targetMinutes)); }, [targetMinutes]);
 
   // Live elapsed = accumulated + whatever's ticking right now
   const liveSeconds =
@@ -276,20 +317,20 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
       const capturedStart = timer.startedAt;
       const capturedElapsed = timer.elapsed;
       intervalRef.current = setInterval(() => {
-        // Keep localStorage up-to-date every second (zero network cost)
         try {
           localStorage.setItem(LS_KEY(activity.key), JSON.stringify({
             elapsed: capturedElapsed,
             startedAt: capturedStart,
+            status: "running",
           }));
         } catch { /* ignore */ }
-        setTimer(t => ({ ...t })); // trigger re-render
+        setTimer(t => ({ ...t })); // trigger re-render for live time
       }, 1000);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [timer.status, timer.startedAt, timer.elapsed, activity.key]);
 
-  // Auto-save to server every 5 s while running — keeps the DB current
+  // Auto-save to server every 5 s while running
   useEffect(() => {
     if (timer.status !== "running" || !timer.startedAt) return;
     const capturedElapsed = timer.elapsed;
@@ -302,7 +343,6 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
     return () => clearInterval(id);
   }, [timer.status, timer.startedAt, timer.elapsed, onAutoSave]);
 
-  // Start the timer immediately — no full-screen focus overlay.
   const handleStart = useCallback(() => {
     setTimer(prev => ({ ...prev, status: "running", startedAt: Date.now() }));
   }, []);
@@ -312,41 +352,100 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
       const added = prev.startedAt ? Math.floor((Date.now() - prev.startedAt) / 1000) : 0;
       return { status: "paused", elapsed: prev.elapsed + added, startedAt: null };
     });
-  }, []);
+    try { localStorage.removeItem(LS_KEY(activity.key)); } catch { /* ignore */ }
+  }, [activity.key]);
 
-  // "Add More Time" — resume from where we left off (including already-saved seconds)
   const handleAddMore = useCallback(() => {
     setTimer({
       status: "running",
-      elapsed: savedSeconds, // anchor to what's already saved
+      elapsed: savedSeconds,
       startedAt: Date.now(),
     });
+    setEditingDone(false);
   }, [savedSeconds]);
 
-  const handleDone = useCallback(async () => {
+  // "Done" — capture time and show confirmation UI instead of saving immediately
+  const handleDone = useCallback(() => {
     const added = timer.startedAt ? Math.floor((Date.now() - timer.startedAt) / 1000) : 0;
     const totalSeconds = timer.elapsed + added;
-    setTimer({ status: "done", elapsed: totalSeconds, startedAt: null });
-    // Clear crash-recovery draft — session is now committed
+    // Stop the timer, hold at current value
+    setTimer({ status: "paused", elapsed: totalSeconds, startedAt: null });
     try { localStorage.removeItem(LS_KEY(activity.key)); } catch { /* ignore */ }
-    // Save exact seconds (no rounding) — even a 20-second session is preserved truthfully.
-    await onSave(totalSeconds);
-  }, [timer, onSave, activity.key]);
+    // Pre-fill confirmation with mm:ss format
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    setPendingInput(s > 0 ? `${m}:${String(s).padStart(2, "0")}` : String(m));
+    setPendingSecs(totalSeconds);
+  }, [timer, activity.key]);
+
+  const handleConfirmSave = useCallback(async () => {
+    const seconds = parseMinsInput(pendingInput);
+    setTimer({ status: "done", elapsed: seconds, startedAt: null });
+    setPendingSecs(null);
+    await onSave(seconds);
+  }, [pendingInput, onSave]);
+
+  const handleCancelConfirm = useCallback(() => {
+    setPendingSecs(null);
+    // Leave timer in paused state so user can resume or keep editing
+  }, []);
+
+  // Add or subtract minutes manually (while paused or in confirm step)
+  const handleAdjustTime = useCallback((deltaMinutes: number) => {
+    if (pendingSecs !== null) {
+      const cur = parseMinsInput(pendingInput);
+      const next = Math.max(0, cur + deltaMinutes * 60);
+      const m = Math.floor(next / 60);
+      const s = next % 60;
+      setPendingInput(s > 0 ? `${m}:${String(s).padStart(2, "0")}` : String(m));
+    } else {
+      setTimer(prev => {
+        const next = Math.max(0, prev.elapsed + deltaMinutes * 60);
+        return { ...prev, elapsed: next };
+      });
+    }
+  }, [pendingSecs, pendingInput]);
+
+  // Edit the already-logged time in "done" state
+  const handleStartEditDone = useCallback(() => {
+    const m = Math.floor(liveSeconds / 60);
+    const s = liveSeconds % 60;
+    setEditDoneInput(s > 0 ? `${m}:${String(s).padStart(2, "0")}` : String(m));
+    setEditingDone(true);
+  }, [liveSeconds]);
+
+  const handleSaveEditDone = useCallback(async () => {
+    const seconds = parseMinsInput(editDoneInput);
+    setTimer({ status: "done", elapsed: seconds, startedAt: null });
+    setEditingDone(false);
+    await onSave(seconds);
+  }, [editDoneInput, onSave]);
+
+  const handleCancelEditDone = useCallback(() => {
+    setEditingDone(false);
+  }, []);
+
+  const handleSaveGoal = useCallback(() => {
+    const mins = Math.max(1, Math.min(480, parseInt(goalInput, 10) || targetMinutes));
+    setGoalInput(String(mins));
+    setEditingGoal(false);
+    onGoalChange(mins);
+  }, [goalInput, targetMinutes, onGoalChange]);
 
   const isDone = timer.status === "done";
   const isRunning = timer.status === "running";
   const isPaused = timer.status === "paused";
   const isIdle = timer.status === "idle";
+  const isConfirming = pendingSecs !== null;
 
-  const targetPct = Math.min(100, Math.round((liveSeconds / (activity.target * 60)) * 100));
+  const targetPct = Math.min(100, Math.round((liveSeconds / (targetMinutes * 60)) * 100));
+  const goalMet = liveSeconds >= targetMinutes * 60;
 
-  // Points: 0–5 based on live time vs target
-  const pointsEarned = calcPoints(liveSeconds, activity.target);
+  const pointsEarned = calcPoints(liveSeconds, targetMinutes);
   const isFull = pointsEarned >= 5;
 
   return (
     <>
-    {/* Outer wrapper — thick animated gradient ring when running */}
     <div className={`relative rounded-2xl transition-all duration-300 ${
       isRunning
         ? `p-[4px] bg-gradient-to-br ${activity.gradient} shadow-2xl ${activity.glowColor}`
@@ -354,12 +453,10 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
     }`}>
       {isRunning && (
         <>
-          {/* Inner ring — fast dark→vivid heartbeat */}
           <div
             className={`absolute -inset-2 rounded-3xl bg-gradient-to-br ${activity.gradient} -z-10`}
             style={{ animation: "dmo-ring-inner 0.85s ease-in-out infinite" }}
           />
-          {/* Outer halo — wider, slightly slower, offset so they never peak at same time */}
           <div
             className={`absolute -inset-6 rounded-[32px] bg-gradient-to-br ${activity.gradient} -z-10`}
             style={{ animation: "dmo-ring-outer 1.15s ease-in-out infinite", animationDelay: "0.4s" }}
@@ -374,19 +471,23 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
           ? `${activity.borderActive} ${activity.bgActive}`
           : isRunning
           ? "border-transparent bg-card dark:bg-card"
-          : isPaused
+          : isPaused || isConfirming
           ? `${activity.borderActive} ${activity.bgActive} opacity-90`
           : "border-border bg-card hover:border-border/80"
       }`}
     >
       {/* Animated top progress bar */}
-      {(isRunning || isPaused || isDone) && (
+      {(isRunning || isPaused || isDone || isConfirming) && (
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-white/10">
           <div
             className={`h-full transition-all duration-1000 ${isRunning ? "animate-pulse" : ""}`}
             style={{
-              width: `${isDone ? 100 : targetPct}%`,
-              background: isDone ? "rgba(255,255,255,0.6)" : `hsl(var(--primary))`,
+              width: `${Math.min(100, isDone ? 100 : targetPct)}%`,
+              background: goalMet
+                ? "rgba(74,222,128,0.8)"
+                : isDone
+                ? "rgba(255,255,255,0.6)"
+                : `hsl(var(--primary))`,
             }}
           />
         </div>
@@ -406,13 +507,51 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
                 <h3 className={`font-bold text-base ${isDone && isFull ? "text-white" : "text-foreground"}`}>
                   {activity.label}
                 </h3>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    isDone && isFull ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  Goal: {activity.target} min
-                </span>
+                {/* Goal badge — editable inline */}
+                {editingGoal ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={480}
+                      value={goalInput}
+                      onChange={e => setGoalInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") handleSaveGoal(); if (e.key === "Escape") { setEditingGoal(false); setGoalInput(String(targetMinutes)); } }}
+                      className="h-6 w-16 text-xs px-1.5 py-0"
+                      autoFocus
+                      data-testid={`input-dmo-goal-${activity.key}`}
+                    />
+                    <span className="text-xs text-muted-foreground">min</span>
+                    <button onClick={handleSaveGoal} className="h-5 w-5 flex items-center justify-center rounded text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30">
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => { setEditingGoal(false); setGoalInput(String(targetMinutes)); }} className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:bg-muted">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingGoal(true)}
+                    className={`group flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
+                      isDone && isFull ? "bg-white/20 text-white hover:bg-white/30" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                    title="Click to change goal"
+                    data-testid={`badge-dmo-goal-${activity.key}`}
+                  >
+                    <Target className="h-2.5 w-2.5" />
+                    Goal: {targetMinutes} min
+                    <Pencil className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                  </button>
+                )}
+                {/* Goal-met indicator — shown when time is past the target */}
+                {goalMet && !isIdle && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
+                    isDone && isFull ? "bg-white/20 text-white" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                  }`}>
+                    <CheckCircle2 className="h-3 w-3" />
+                    Goal Met!
+                  </span>
+                )}
               </div>
               <p className={`text-sm mt-0.5 font-medium ${isDone && isFull ? "text-white/90" : "text-muted-foreground"}`}>
                 {activity.tagline}
@@ -425,26 +564,61 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
 
           {/* Right: timer + controls */}
           <div className="shrink-0 flex flex-col items-end gap-3">
-            {/* Timer display */}
-            <div
-              className={`text-3xl font-mono font-bold tabular-nums transition-all ${
-                isDone && isFull
-                  ? "text-white"
-                  : isDone && !isFull
-                  ? activity.timerColor
-                  : isRunning
-                  ? activity.timerColor
-                  : "text-foreground/40"
-              }`}
-              data-testid={`timer-display-${activity.key}`}
-            >
-              {isDone && savedSeconds > 0 && timer.status === "done" && timer.elapsed === 0
-                ? formatTimer(savedSeconds)
-                : formatTimer(liveSeconds)}
-            </div>
+            {/* Timer display — editable in done state */}
+            {isDone && editingDone ? (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={editDoneInput}
+                  onChange={e => setEditDoneInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleSaveEditDone(); if (e.key === "Escape") handleCancelEditDone(); }}
+                  placeholder="mm or mm:ss"
+                  className="h-9 w-28 text-right font-mono text-base px-2"
+                  autoFocus
+                  data-testid={`input-dmo-edit-time-${activity.key}`}
+                />
+                <button onClick={handleSaveEditDone} disabled={isSaving} className="h-8 w-8 flex items-center justify-center rounded-lg bg-green-600 text-white hover:bg-green-500">
+                  <Check className="h-4 w-4" />
+                </button>
+                <button onClick={handleCancelEditDone} className="h-8 w-8 flex items-center justify-center rounded-lg border border-border hover:bg-muted">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`text-3xl font-mono font-bold tabular-nums transition-all ${
+                    isDone && isFull
+                      ? "text-white"
+                      : isDone && !isFull
+                      ? activity.timerColor
+                      : isRunning
+                      ? activity.timerColor
+                      : isConfirming
+                      ? activity.timerColor
+                      : "text-foreground/40"
+                  }`}
+                  data-testid={`timer-display-${activity.key}`}
+                >
+                  {formatTimer(liveSeconds)}
+                </div>
+                {/* Edit pencil — only in done state (not confirming) */}
+                {isDone && !editingDone && (
+                  <button
+                    onClick={handleStartEditDone}
+                    className={`h-6 w-6 flex items-center justify-center rounded transition-colors ${
+                      isFull ? "text-white/60 hover:bg-white/20" : "text-muted-foreground hover:bg-muted"
+                    }`}
+                    title="Edit logged time"
+                    data-testid={`button-dmo-edit-time-${activity.key}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Point dots — shown whenever any time has been logged */}
-            {(isDone || isRunning || isPaused) && (
+            {(isDone || isRunning || isPaused || isConfirming) && !editingDone && (
               <PointDots
                 earned={pointsEarned}
                 isFull={isFull}
@@ -454,13 +628,12 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
             )}
 
             {/* Controls */}
+            {!editingDone && (
             <div className="flex items-center gap-2">
-              {isDone ? (
+              {isDone && !isConfirming ? (
                 <>
                   <div className="flex items-center gap-1.5">
-                    {isFull ? (
-                      <CheckCircle2 className="h-4 w-4 text-white" />
-                    ) : null}
+                    {isFull ? <CheckCircle2 className="h-4 w-4 text-white" /> : null}
                     <span className={`text-sm font-bold ${isFull ? "text-white" : activity.timerColor}`}>
                       {pointsEarned}/5 pts
                     </span>
@@ -488,7 +661,7 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
                   <Play className="h-4 w-4 mr-1.5 fill-white" />
                   Start
                 </Button>
-              ) : (
+              ) : !isConfirming ? (
                 <div className="flex gap-2">
                   {isRunning ? (
                     <Button
@@ -521,13 +694,77 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
                     Done
                   </Button>
                 </div>
-              )}
+              ) : null}
             </div>
+            )}
           </div>
         </div>
 
-        {/* Quote — visible only when idle/done */}
-        {(isIdle || isDone) && (
+        {/* ── Confirm-before-save panel ── */}
+        {isConfirming && (
+          <div className={`mt-4 rounded-xl border-2 ${activity.borderActive} bg-background/80 p-4`}>
+            <p className="text-sm font-semibold text-foreground mb-3">
+              Review your time before saving
+            </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Minus / Plus quick adjusters */}
+              <button
+                onClick={() => handleAdjustTime(-5)}
+                className="h-8 w-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted text-muted-foreground"
+                title="−5 min"
+                data-testid={`button-dmo-minus5-${activity.key}`}
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={pendingInput}
+                  onChange={e => setPendingInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleConfirmSave(); }}
+                  placeholder="mm or mm:ss"
+                  className="h-9 w-28 text-center font-mono text-base"
+                  autoFocus
+                  data-testid={`input-dmo-confirm-${activity.key}`}
+                />
+                <span className="text-xs text-muted-foreground">min / mm:ss</span>
+              </div>
+              <button
+                onClick={() => handleAdjustTime(5)}
+                className="h-8 w-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted text-muted-foreground"
+                title="+5 min"
+                data-testid={`button-dmo-plus5-${activity.key}`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+              <Button
+                size="sm"
+                onClick={handleConfirmSave}
+                disabled={isSaving}
+                className="h-9 px-4 bg-green-600 hover:bg-green-500 text-white font-semibold"
+                data-testid={`button-dmo-confirm-save-${activity.key}`}
+              >
+                <Check className="h-3.5 w-3.5 mr-1" />
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCancelConfirm}
+                className="h-9 px-3"
+                data-testid={`button-dmo-cancel-confirm-${activity.key}`}
+              >
+                Cancel
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Tip: Type minutes (e.g. <strong>35</strong>) or minutes:seconds (e.g. <strong>5:30</strong>).
+              Use − / + to adjust by 5 min.
+            </p>
+          </div>
+        )}
+
+        {/* Quote — visible only when idle/done (not confirming) */}
+        {(isIdle || isDone) && !isConfirming && !editingDone && (
           <p className={`mt-4 text-xs italic border-t pt-3 ${
             isDone && isFull
               ? "text-white/50 border-white/20"
@@ -538,17 +775,17 @@ function ActivityCard({ activity, savedSeconds, savedChecked, onSave, onAutoSave
         )}
 
         {/* Running pulse indicator */}
-        {isRunning && (
+        {isRunning && !isConfirming && (
           <div className="mt-4 flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-gradient-to-br ${activity.gradient} opacity-75`} />
               <span className={`relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-br ${activity.gradient}`} />
             </span>
             <span className={`text-xs font-semibold ${activity.timerColor}`}>
-              Timer running — stay focused!
+              {goalMet ? "Goal reached — keep going! 🎉" : "Timer running — stay focused!"}
             </span>
             <span className={`ml-auto text-xs font-medium ${activity.timerColor} opacity-70`}>
-              {targetPct}% of goal
+              {goalMet ? `+${Math.floor((liveSeconds - targetMinutes * 60) / 60)}m past goal` : `${targetPct}% of goal`}
             </span>
           </div>
         )}
@@ -616,14 +853,17 @@ function getMonthBounds(month: string): { start: string; end: string; label: str
   return { start, end, label };
 }
 
-function calcEntryPts(entry: DmoEntry): number {
-  return DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints((entry[a.secondsKey] as number) ?? 0, a.target), 0);
+function calcEntryPts(entry: DmoEntry, targets?: DmoSettings): number {
+  return DMO_ACTIVITIES.reduce((sum, a) => {
+    const t = targets ? (targets[a.settingsKey] ?? a.defaultTarget) : a.defaultTarget;
+    return sum + calcPoints((entry[a.secondsKey] as number) ?? 0, t);
+  }, 0);
 }
 
 // ─── Journal entry card ────────────────────────────────────────────────────────
 
-function JournalEntryCard({ entry }: { entry: DmoEntry }) {
-  const pts = calcEntryPts(entry);
+function JournalEntryCard({ entry, targets }: { entry: DmoEntry; targets?: DmoSettings }) {
+  const pts = calcEntryPts(entry, targets);
   const dateObj = new Date(entry.date + "T12:00:00");
   const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
   const dateDisplay = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -639,7 +879,8 @@ function JournalEntryCard({ entry }: { entry: DmoEntry }) {
         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
           <div className="flex gap-1" title="Activities completed">
             {DMO_ACTIVITIES.map(a => {
-              const p = calcPoints((entry[a.secondsKey] as number) ?? 0, a.target);
+              const t = targets ? (targets[a.settingsKey] ?? a.defaultTarget) : a.defaultTarget;
+              const p = calcPoints((entry[a.secondsKey] as number) ?? 0, t);
               return (
                 <div key={a.key} className={`h-2.5 w-2.5 rounded-full transition-all ${p > 0 ? `bg-gradient-to-br ${a.gradient}` : "bg-muted"}`} title={`${a.label}: ${p}/5 pts`} />
               );
@@ -768,11 +1009,11 @@ function SummaryCard({
 
 // ─── Week section ─────────────────────────────────────────────────────────────
 
-function WeekSection({ weekKey, entries }: { weekKey: string; entries: DmoEntry[] }) {
+function WeekSection({ weekKey, entries, targets }: { weekKey: string; entries: DmoEntry[]; targets?: DmoSettings }) {
   const bounds = getWeekBounds(weekKey);
   const [open, setOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
-  const avgPts = Math.round(entries.reduce((s, e) => s + calcEntryPts(e), 0) / entries.length);
+  const avgPts = Math.round(entries.reduce((s, e) => s + calcEntryPts(e, targets), 0) / entries.length);
 
   return (
     <div className="mb-4">
@@ -811,7 +1052,7 @@ function WeekSection({ weekKey, entries }: { weekKey: string; entries: DmoEntry[
           <Card className="border border-border overflow-hidden">
             <CardContent className="p-0">
               {[...entries].sort((a, b) => b.date.localeCompare(a.date)).map(e => (
-                <JournalEntryCard key={e.date} entry={e} />
+                <JournalEntryCard key={e.date} entry={e} targets={targets} />
               ))}
             </CardContent>
           </Card>
@@ -823,13 +1064,12 @@ function WeekSection({ weekKey, entries }: { weekKey: string; entries: DmoEntry[
 
 // ─── Month section ────────────────────────────────────────────────────────────
 
-function MonthSection({ monthKey, entries }: { monthKey: string; entries: DmoEntry[] }) {
+function MonthSection({ monthKey, entries, targets }: { monthKey: string; entries: DmoEntry[]; targets?: DmoSettings }) {
   const bounds = getMonthBounds(monthKey);
   const [showSummary, setShowSummary] = useState(false);
-  const totalPts = entries.reduce((s, e) => s + calcEntryPts(e), 0);
-  const perfectDays = entries.filter(e => calcEntryPts(e) >= 25).length;
+  const totalPts = entries.reduce((s, e) => s + calcEntryPts(e, targets), 0);
+  const perfectDays = entries.filter(e => calcEntryPts(e, targets) >= 25).length;
 
-  // Group into weeks (descending by week start)
   const weekMap = new Map<string, DmoEntry[]>();
   for (const e of entries) {
     const wk = getISOWeek(e.date);
@@ -870,7 +1110,7 @@ function MonthSection({ monthKey, entries }: { monthKey: string; entries: DmoEnt
       )}
 
       {weeks.map(([wk, wkEntries]) => (
-        <WeekSection key={wk} weekKey={wk} entries={wkEntries} />
+        <WeekSection key={wk} weekKey={wk} entries={wkEntries} targets={targets} />
       ))}
     </div>
   );
@@ -878,11 +1118,10 @@ function MonthSection({ monthKey, entries }: { monthKey: string; entries: DmoEnt
 
 // ─── Journal tab ──────────────────────────────────────────────────────────────
 
-function JournalTab({ entries }: { entries: DmoEntry[] }) {
+function JournalTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettings }) {
   const [notesOnly, setNotesOnly] = useState(false);
   const filtered = notesOnly ? entries.filter(e => e.notes?.trim()) : entries;
 
-  // Group by month (descending)
   const monthMap = new Map<string, DmoEntry[]>();
   for (const e of filtered) {
     const m = getMonthPeriod(e.date);
@@ -922,7 +1161,7 @@ function JournalTab({ entries }: { entries: DmoEntry[] }) {
         </button>
       </div>
       {months.map(([mk, mes]) => (
-        <MonthSection key={mk} monthKey={mk} entries={mes} />
+        <MonthSection key={mk} monthKey={mk} entries={mes} targets={targets} />
       ))}
     </div>
   );
@@ -946,6 +1185,17 @@ export default function DmoTrackerPage() {
     queryKey: ["/api/dmo/streak"],
   });
 
+  const { data: dmoSettings } = useQuery<DmoSettings>({
+    queryKey: ["/api/dmo/settings"],
+  });
+
+  const settingsMutation = useMutation({
+    mutationFn: (data: Partial<Omit<DmoSettings, "userId">>) =>
+      apiRequest("POST", "/api/dmo/settings", data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/dmo/settings"] }),
+    onError: () => toast({ title: "Failed to save goal", variant: "destructive" }),
+  });
+
   const [chartDays, setChartDays] = useState(7);
 
   const { data: history } = useQuery<DmoEntry[]>({
@@ -953,7 +1203,6 @@ export default function DmoTrackerPage() {
     queryFn: () => fetch(`/api/dmo/history?limit=${chartDays}`, { credentials: "include" }).then(r => r.json()),
   });
 
-  // Separate full history for journal (always 365 days)
   const { data: journalEntries } = useQuery<DmoEntry[]>({
     queryKey: ["/api/dmo/history", 365],
     queryFn: () => fetch("/api/dmo/history?limit=365", { credentials: "include" }).then(r => r.json()),
@@ -994,7 +1243,6 @@ export default function DmoTrackerPage() {
     });
   }, [saveMutation, toast]);
 
-  // Silent auto-save — no toast, just persist to DB
   const handleAutoSave = useCallback(async (
     key: typeof DMO_ACTIVITIES[number]["key"],
     secondsKey: typeof DMO_ACTIVITIES[number]["secondsKey"],
@@ -1003,9 +1251,16 @@ export default function DmoTrackerPage() {
     try {
       await saveMutation.mutateAsync({ [key]: true, [secondsKey]: seconds });
     } catch {
-      // Silently ignore — will retry in 30 s
+      // Silently ignore — will retry in 5 s
     }
   }, [saveMutation]);
+
+  const handleGoalChange = useCallback((
+    settingsKey: typeof DMO_ACTIVITIES[number]["settingsKey"],
+    minutes: number
+  ) => {
+    settingsMutation.mutate({ [settingsKey]: minutes });
+  }, [settingsMutation]);
 
   const handleSaveNotes = () => {
     saveMutation.mutate({ notes });
@@ -1013,17 +1268,26 @@ export default function DmoTrackerPage() {
     toast({ title: "Notes saved." });
   };
 
+  const handlePopOut = () => {
+    window.open(
+      window.location.href,
+      "dmo-popout",
+      "width=640,height=860,left=100,top=80,resizable=yes,scrollbars=yes"
+    );
+  };
+
   const entry = todayData?.entry;
 
-  // Point-based scoring: each activity worth 5 pts, 25 pts max
+  const getTarget = (a: typeof DMO_ACTIVITIES[number]) =>
+    dmoSettings ? (dmoSettings[a.settingsKey] ?? a.defaultTarget) : a.defaultTarget;
+
   const totalPoints = DMO_ACTIVITIES.reduce((sum, a) => {
     const secs = entry?.[a.secondsKey] ?? 0;
-    return sum + calcPoints(secs, a.target);
+    return sum + calcPoints(secs, getTarget(a));
   }, 0);
   const isPerfectDay = totalPoints >= 25;
   const completionPct = Math.round((totalPoints / 25) * 100);
 
-  // Build chart data for the selected range — each bar = total pts earned that day (0–25)
   const chartData = (() => {
     const map = new Map<string, DmoEntry>();
     (history ?? []).forEach(e => map.set(e.date, e));
@@ -1032,13 +1296,12 @@ export default function DmoTrackerPage() {
       const dateStr = d.toISOString().split("T")[0];
       const e = map.get(dateStr);
       const pts = e
-        ? DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints(e[a.secondsKey] ?? 0, a.target), 0)
+        ? DMO_ACTIVITIES.reduce((sum, a) => sum + calcPoints(e[a.secondsKey] ?? 0, getTarget(a)), 0)
         : 0;
       return { date: formatDisplayDate(dateStr), fullDate: dateStr, pts };
     });
   })();
 
-  // Chart rendering settings — scale to fit the selected range
   const chartBarSize = chartDays <= 7 ? 28 : chartDays <= 30 ? 14 : chartDays <= 60 ? 6 : chartDays <= 90 ? 4 : 3;
   const chartInterval = chartDays <= 7 ? 0 : chartDays <= 30 ? 4 : chartDays <= 60 ? 9 : chartDays <= 90 ? 14 : 29;
   const chartHeight = 200;
@@ -1052,7 +1315,18 @@ export default function DmoTrackerPage() {
       <div className="bg-sidebar text-sidebar-foreground px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-end justify-between gap-5">
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Daily Method of Operation</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-white tracking-tight">Daily Method of Operation</h1>
+              <button
+                onClick={handlePopOut}
+                className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
+                title="Open in a pop-out window"
+                data-testid="button-dmo-popout"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Pop out
+              </button>
+            </div>
             <p className="text-white/50 text-sm mt-1">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
             </p>
@@ -1111,7 +1385,7 @@ export default function DmoTrackerPage() {
       {/* ── Journal tab ── */}
       {activeTab === "journal" && (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-12">
-          <JournalTab entries={journalEntries ?? []} />
+          <JournalTab entries={journalEntries ?? []} targets={dmoSettings} />
         </div>
       )}
 
@@ -1205,10 +1479,12 @@ export default function DmoTrackerPage() {
                   <ActivityCard
                     key={activity.key}
                     activity={activity}
+                    targetMinutes={getTarget(activity)}
                     savedSeconds={entry?.[activity.secondsKey] ?? 0}
                     savedChecked={entry?.[activity.key] ?? false}
                     onSave={(seconds) => handleActivitySave(activity.key, activity.secondsKey, seconds)}
                     onAutoSave={(seconds) => handleAutoSave(activity.key, activity.secondsKey, seconds)}
+                    onGoalChange={(minutes) => handleGoalChange(activity.settingsKey, minutes)}
                     isSaving={saveMutation.isPending}
                   />
                 ))}
@@ -1332,13 +1608,14 @@ export default function DmoTrackerPage() {
               <CardContent className="px-4 pb-4 space-y-2.5">
                 {DMO_ACTIVITIES.map(a => {
                   const Icon = a.icon;
+                  const t = getTarget(a);
                   return (
                     <div key={a.key} className="flex items-center gap-3">
                       <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${a.gradient} flex items-center justify-center shrink-0`}>
                         <Icon className="h-3.5 w-3.5 text-white" />
                       </div>
                       <span className="text-xs text-white/80 flex-1">{a.label}</span>
-                      <span className="text-xs text-white/40">{a.target === 30 ? "30m" : "1h+"}</span>
+                      <span className="text-xs text-white/40">{t}m</span>
                     </div>
                   );
                 })}

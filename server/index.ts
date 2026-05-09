@@ -558,6 +558,19 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] feedback tables migration complete");
 
+    // DMO per-user goal settings
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS dmo_settings (
+        user_id VARCHAR PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        vision_target INTEGER NOT NULL DEFAULT 30,
+        personal_target INTEGER NOT NULL DEFAULT 30,
+        expand_target INTEGER NOT NULL DEFAULT 60,
+        execution_target INTEGER NOT NULL DEFAULT 60,
+        connecting_target INTEGER NOT NULL DEFAULT 60
+      )
+    `);
+    console.log("[startup] dmo_settings migration complete");
+
     // iCal feed token for each user
     await db.execute(sql`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS ical_token TEXT

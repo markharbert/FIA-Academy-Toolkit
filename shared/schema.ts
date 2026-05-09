@@ -1020,6 +1020,19 @@ export const dmoEntryDataSchema = createInsertSchema(dmoEntries).omit({
 
 export type DmoEntryData = z.infer<typeof dmoEntryDataSchema>;
 
+// ── DMO Settings (per-user goal targets) ─────────────────────────────────────
+
+export const dmoSettings = pgTable("dmo_settings", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  visionTarget: integer("vision_target").default(30).notNull(),
+  personalTarget: integer("personal_target").default(30).notNull(),
+  expandTarget: integer("expand_target").default(60).notNull(),
+  executionTarget: integer("execution_target").default(60).notNull(),
+  connectingTarget: integer("connecting_target").default(60).notNull(),
+});
+
+export type DmoSettings = typeof dmoSettings.$inferSelect;
+
 // ── Sender Reputation (Google Postmaster Tools) ───────────────────────────────
 
 export const postmasterConnections = pgTable("postmaster_connections", {
