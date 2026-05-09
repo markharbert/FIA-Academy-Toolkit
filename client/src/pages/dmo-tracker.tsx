@@ -1319,12 +1319,12 @@ export default function DmoTrackerPage() {
               <h1 className="text-3xl font-bold text-white tracking-tight">Daily Method of Operation</h1>
               <button
                 onClick={handlePopOut}
-                className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
+                className="flex items-center gap-1.5 text-xs font-medium text-white bg-white/15 hover:bg-white/25 border border-white/20 hover:border-white/40 transition-all px-3 py-1.5 rounded-lg"
                 title="Open in a pop-out window"
                 data-testid="button-dmo-popout"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                Pop out
+                Pop Out
               </button>
             </div>
             <p className="text-white/50 text-sm mt-1">
