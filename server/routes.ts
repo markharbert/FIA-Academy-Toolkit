@@ -28,6 +28,7 @@ import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type Placement
 import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
 import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
+import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -217,8 +218,12 @@ export async function registerRoutes(
         tableName: "user_sessions",
         createTableIfMissing: true,
       }),
-      secret: process.env.SESSION_SECRET || "video-confidence-coach-secret-key",
-      resave: true, // Enable resave for rolling sessions
+      secret: (() => {
+        const s = process.env.SESSION_SECRET;
+        if (!s) throw new Error("SESSION_SECRET environment variable is required but not set");
+        return s;
+      })(),
+      resave: true,
       saveUninitialized: true, // Required for OAuth state storage before callback
       rolling: true, // Reset expiration on each request (activity extends session)
       cookie: {
@@ -234,7 +239,23 @@ export async function registerRoutes(
   // AUTH ROUTES
   // ===================
 
-  app.post("/api/auth/signup", async (req: Request, res: Response) => {
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many attempts, please try again later." },
+  });
+
+  const apiV1Limiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Rate limit exceeded. Please slow down your requests." },
+  });
+
+  app.post("/api/auth/signup", authLimiter, async (req: Request, res: Response) => {
     try {
       const parsed = signupSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -293,6 +314,9 @@ export async function registerRoutes(
         });
       }
 
+      await new Promise<void>((resolve, reject) =>
+        req.session.regenerate(err => (err ? reject(err) : resolve()))
+      );
       req.session.userId = user.id;
 
       let gravatarUrl: string | null = null;
@@ -326,7 +350,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
+  app.post("/api/auth/login", authLimiter, async (req: Request, res: Response) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -373,8 +397,11 @@ export async function registerRoutes(
         }
       }
 
+      await new Promise<void>((resolve, reject) =>
+        req.session.regenerate(err => (err ? reject(err) : resolve()))
+      );
       req.session.userId = user.id;
-      
+
       // Update last login timestamp
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
@@ -7251,8 +7278,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   }
 
-  // CORS for v1 API — allow external apps
-  app.use("/api/v1", (_req: Request, res: Response, next: NextFunction) => {
+  // CORS + rate limiting for v1 API
+  app.use("/api/v1", apiV1Limiter, (_req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Headers", "Authorization, X-API-Key, Content-Type");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
@@ -7710,10 +7737,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!url || typeof url !== "string" || !/^https?:\/\/.+/.test(url)) {
         return res.status(400).json({ message: "A valid url is required" });
       }
+      const safeUrl = await safeNormalizeWebsite(url);
+      if (!safeUrl) {
+        return res.status(400).json({ message: "URL resolves to a private or reserved address and cannot be used as a webhook target." });
+      }
       if (events !== undefined && (!Array.isArray(events) || events.some((e: string) => !VALID_EVENTS.includes(e)))) {
         return res.status(400).json({ message: `events must be an array of: ${VALID_EVENTS.join(", ")}` });
       }
-      const { webhook, secret } = await storage.createWebhook(user.id, { url, label, events });
+      const { webhook, secret } = await storage.createWebhook(user.id, { url: safeUrl, label, events });
       // Return secret only on creation — not retrievable again
       res.status(201).json({ webhook: { ...webhook, secret } });
     } catch (err) {
