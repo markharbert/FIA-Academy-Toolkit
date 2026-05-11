@@ -1267,6 +1267,8 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState("");
+  const [editingTime, setEditingTime] = useState(false);
+  const [timeEdits, setTimeEdits] = useState<Record<string, string>>({});
 
   const notesMutation = useMutation({
     mutationFn: ({ date, notes }: { date: string; notes: string }) =>
@@ -1278,6 +1280,49 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
     },
     onError: () => toast({ title: "Failed to save notes", variant: "destructive" }),
   });
+
+  const timeMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiRequest("POST", "/api/dmo/entry", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/history", 1825] });
+      setEditingTime(false);
+      toast({ title: "Time updated." });
+    },
+    onError: () => toast({ title: "Failed to update time", variant: "destructive" }),
+  });
+
+  const parseTimeEditInput = (val: string): number => {
+    const v = val.trim();
+    if (!v) return 0;
+    if (v.includes(":")) {
+      const [m, s] = v.split(":").map(Number);
+      return ((isNaN(m) ? 0 : m) * 60 + (isNaN(s) ? 0 : s));
+    }
+    const mins = parseFloat(v);
+    return isNaN(mins) ? 0 : Math.round(mins * 60);
+  };
+
+  const startEditingTime = (entry: DmoEntry) => {
+    const edits: Record<string, string> = {};
+    for (const a of DMO_ACTIVITIES) {
+      const secs = (entry[a.secondsKey] as number) ?? 0;
+      edits[a.key] = secs > 0 ? String(Math.round(secs / 60)) : "";
+    }
+    setTimeEdits(edits);
+    setEditingTime(true);
+    setEditingNotes(false);
+  };
+
+  const saveTimeEdits = (entry: DmoEntry, date: string) => {
+    const payload: Record<string, unknown> = { date, notes: entry.notes ?? "" };
+    for (const a of DMO_ACTIVITIES) {
+      const secs = parseTimeEditInput(timeEdits[a.key] ?? "");
+      payload[a.secondsKey] = secs;
+      payload[a.key] = secs > 0 ? true : ((entry[a.key as keyof DmoEntry] as boolean) ?? false);
+    }
+    timeMutation.mutate(payload);
+  };
 
   const entryMap = new Map<string, DmoEntry>();
   for (const e of entries) entryMap.set(e.date, e);
@@ -1428,9 +1473,21 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
                         weekday: "long", month: "long", day: "numeric",
                       })}
                     </p>
-                    <span className="text-xs font-semibold text-muted-foreground">
-                      {formatDuration(getTotalSeconds(selectedEntry))} total · {calcEntryPts(selectedEntry, targets)}/25 pts
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {formatDuration(getTotalSeconds(selectedEntry))} total · {calcEntryPts(selectedEntry, targets)}/25 pts
+                      </span>
+                      {!editingTime && !editingNotes && (
+                        <button
+                          onClick={() => startEditingTime(selectedEntry)}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
+                          data-testid="button-dmo-edit-time"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Edit
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Activity breakdown */}
@@ -1446,21 +1503,56 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
                             <Icon className="h-3.5 w-3.5 text-white" />
                           </div>
                           <span className="text-xs text-foreground flex-1 min-w-0 truncate">{a.label}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className={`h-full rounded-full bg-gradient-to-r ${a.gradient}`}
-                                style={{ width: `${Math.min(100, secs > 0 ? Math.round((secs / (target * 60)) * 100) : 0)}%` }}
+                          {editingTime ? (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <input
+                                type="text"
+                                value={timeEdits[a.key] ?? ""}
+                                onChange={e => setTimeEdits(prev => ({ ...prev, [a.key]: e.target.value }))}
+                                placeholder="min"
+                                className="w-16 h-7 rounded border border-border bg-background px-2 text-xs text-foreground text-center focus:outline-none focus:ring-1 focus:ring-violet-400"
+                                data-testid={`input-dmo-time-${a.key}`}
                               />
+                              <span className="text-[10px] text-muted-foreground">min</span>
                             </div>
-                            <span className={`text-xs font-semibold w-14 text-right ${secs > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
-                              {formatDuration(secs)}
-                            </span>
-                            <span className={`text-[11px] w-4 ${goalMet && secs > 0 ? "text-green-500" : "text-transparent"}`}>✓</span>
-                          </div>
+                          ) : (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full bg-gradient-to-r ${a.gradient}`}
+                                  style={{ width: `${Math.min(100, secs > 0 ? Math.round((secs / (target * 60)) * 100) : 0)}%` }}
+                                />
+                              </div>
+                              <span className={`text-xs font-semibold w-14 text-right ${secs > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
+                                {formatDuration(secs)}
+                              </span>
+                              <span className={`text-[11px] w-4 ${goalMet && secs > 0 ? "text-green-500" : "text-transparent"}`}>✓</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
+                    {editingTime && (
+                      <div className="flex items-center gap-2 justify-end pt-1">
+                        <p className="text-[10px] text-muted-foreground flex-1">Enter minutes (e.g. 45) or min:sec (e.g. 1:30)</p>
+                        <button
+                          onClick={() => setEditingTime(false)}
+                          className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          data-testid="button-dmo-time-cancel"
+                        >
+                          Cancel
+                        </button>
+                        <Button
+                          size="sm"
+                          className="h-7 px-3 text-xs"
+                          disabled={timeMutation.isPending}
+                          onClick={() => saveTimeEdits(selectedEntry, selectedDate!)}
+                          data-testid="button-dmo-time-save"
+                        >
+                          {timeMutation.isPending ? "Saving…" : "Save Time"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Journal notes — editable */}
