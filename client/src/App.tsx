@@ -44,6 +44,7 @@ import HelpCategoryPage from "@/pages/help-category";
 import HelpArticlePage from "@/pages/help-article";
 import FeedbackPage from "@/pages/feedback";
 import NotFound from "@/pages/not-found";
+import NotAuthenticated from "@/pages/not-authenticated";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -57,7 +58,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!user) {
-    return <Redirect to="/login" />;
+    return <Redirect to="/members-only" />;
   }
 
   return <Component />;
@@ -118,7 +119,7 @@ function AuthenticatedCatchAll() {
     return <Redirect to="/dashboard" />;
   }
 
-  return <NotFound />;
+  return <NotAuthenticated />;
 }
 
 function ProtectedRoutes() {
@@ -238,6 +239,9 @@ function PublicRoutes() {
           }
           return <LandingPage />;
         }}
+      </Route>
+      <Route path="/members-only">
+        {() => <NotAuthenticated />}
       </Route>
       <Route path="/login">
         {() => <PublicOnlyRoute component={LoginPage} />}
