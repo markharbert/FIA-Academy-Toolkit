@@ -12,7 +12,7 @@ import multer from "multer";
 import rateLimit from "express-rate-limit";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { sendPasswordResetEmail } from "./email";
+import { sendPasswordResetEmail, sendWorkspaceInviteEmail } from "./email";
 import path from "path";
 import fs from "fs";
 import session from "express-session";
@@ -115,7 +115,20 @@ declare module "express-session" {
     impersonatingAdminId: string;
     gmailOAuthNonce: string;
     gmailOAuthInboxId: string;
+    workspaceOwnerId: string;
   }
+}
+
+declare module "express-serve-static-core" {
+  interface Request {
+    effectiveUserId: string;
+  }
+}
+
+// Returns the workspace owner's userId when the current session is a
+// collaborator, otherwise returns the logged-in user's own userId.
+function getEffectiveUserId(req: Request): string {
+  return req.session.workspaceOwnerId ?? req.session.userId!;
 }
 
 // Auth middleware
@@ -132,15 +145,25 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
     // When an admin is impersonating, bypass disabled/CF checks so they can
     // freely navigate the impersonated user's account.
     const isImpersonating = !!req.session.impersonatingAdminId;
+    // Workspace collaborators get a pass on CF enrollment checks — the owner's
+    // membership is what matters. Verify the invite is still active.
+    const isCollaborator = !!req.session.workspaceOwnerId;
 
     if (!isImpersonating && user.isDisabled) {
       req.session.destroy(() => {});
       return res.status(403).json({ message: "Account is disabled" });
     }
-    // When CF is configured, enforce active membership on every authenticated
-    // request so revoked members are denied mid-session without waiting for
-    // their session to naturally expire. Admins are always exempt.
-    if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
+
+    if (isCollaborator) {
+      const invite = await storage.getActiveInviteForMember(req.session.userId!, req.session.workspaceOwnerId!);
+      if (!invite) {
+        req.session.destroy(() => {});
+        return res.status(403).json({ message: "Workspace access has been revoked" });
+      }
+    } else if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
+      // When CF is configured, enforce active membership on every authenticated
+      // request so revoked members are denied mid-session without waiting for
+      // their session to naturally expire. Admins are always exempt.
       if (user.cfEnrolled !== true) {
         req.session.destroy(() => {});
         return res.status(403).json({
@@ -668,6 +691,10 @@ export async function registerRoutes(
         };
       }
     }
+
+    // Workspace collaborator context
+    const workspaceOwnerId = req.session.workspaceOwnerId ?? null;
+    const isCollaborator = !!workspaceOwnerId;
     
     res.json({ 
       user: { 
@@ -686,6 +713,8 @@ export async function registerRoutes(
         cfRevokedAt: user.cfRevokedAt,
         timezone: user.timezone || "America/New_York",
         impersonating,
+        workspaceOwnerId,
+        isCollaborator,
       } 
     });
   });
@@ -6376,7 +6405,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const labels: any[] = Array.isArray(trelloData.labels) ? trelloData.labels : [];
       const actions: any[] = Array.isArray(trelloData.actions) ? trelloData.actions : [];
 
-      const userId = req.session.userId!;
+      const userId = getEffectiveUserId(req);
 
       // 1. Create project
       const project = await storage.createProject(userId, {
@@ -6535,7 +6564,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         return res.status(400).json({ message: 'CSV is missing a "Task Name" column. Make sure this is an Asana export (project ⋯ → Export/Print → CSV).' });
       }
 
-      const userId = req.session.userId!;
+      const userId = getEffectiveUserId(req);
       const project = await storage.createProject(userId, {
         name: ((overrideName as string) || "Imported from Asana").trim(),
         description: "",
@@ -6630,7 +6659,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
-      const list = await storage.getProjectsForUser(req.session.userId!);
+      const list = await storage.getProjectsForUser(getEffectiveUserId(req));
       res.json(list);
     } catch (err) {
       console.error("[projects] list error:", err);
@@ -6640,13 +6669,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
+      const uid = getEffectiveUserId(req);
       const { templateId, ...rest } = req.body ?? {};
       const data = insertProjectSchema.parse(rest);
-      const created = await storage.createProject(req.session.userId!, data);
+      const created = await storage.createProject(uid, data);
       if (templateId && typeof templateId === "string") {
-        const tpl = await storage.getTemplate(templateId, req.session.userId!);
+        const tpl = await storage.getTemplate(templateId, uid);
         if (tpl) {
-          await storage.instantiateProjectFromTemplate(req.session.userId!, templateId, created);
+          await storage.instantiateProjectFromTemplate(uid, templateId, created);
         }
       }
       res.status(201).json(created);
@@ -6661,7 +6691,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/project-templates", requireAuth, async (req: Request, res: Response) => {
     try {
-      const list = await storage.getTemplatesForUser(req.session.userId!);
+      const list = await storage.getTemplatesForUser(getEffectiveUserId(req));
       res.json(list);
     } catch (err) {
       console.error("[templates] list error:", err);
@@ -6672,7 +6702,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.post("/api/project-templates", requireAuth, async (req: Request, res: Response) => {
     try {
       const data = insertProjectTemplateSchema.parse(req.body);
-      const created = await storage.createTemplate(req.session.userId!, data);
+      const created = await storage.createTemplate(getEffectiveUserId(req), data);
       res.status(201).json(created);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
@@ -6682,7 +6712,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   });
 
   app.get("/api/project-templates/:id", requireAuth, async (req: Request, res: Response) => {
-    const tpl = await storage.getTemplate(req.params.id, req.session.userId!);
+    const tpl = await storage.getTemplate(req.params.id, getEffectiveUserId(req));
     if (!tpl) return res.status(404).json({ message: "Not found" });
     res.json(tpl);
   });
@@ -6690,7 +6720,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.patch("/api/project-templates/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const data = insertProjectTemplateSchema.partial().parse(req.body);
-      const updated = await storage.updateTemplate(req.params.id, req.session.userId!, data);
+      const updated = await storage.updateTemplate(req.params.id, getEffectiveUserId(req), data);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
     } catch (err: any) {
@@ -6702,9 +6732,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.delete("/api/project-templates/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const tpl = await storage.getTemplate(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const tpl = await storage.getTemplate(req.params.id, uid);
       if (!tpl) return res.status(404).json({ message: "Not found" });
-      await storage.deleteTemplate(req.params.id, req.session.userId!);
+      await storage.deleteTemplate(req.params.id, uid);
       res.json({ ok: true });
     } catch (err) {
       console.error("[templates] delete error:", err);
@@ -6714,7 +6745,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/project-templates/:id/duplicate", requireAuth, async (req: Request, res: Response) => {
     try {
-      const copy = await storage.duplicateTemplate(req.params.id, req.session.userId!);
+      const copy = await storage.duplicateTemplate(req.params.id, getEffectiveUserId(req));
       if (!copy) return res.status(404).json({ message: "Not found" });
       res.status(201).json(copy);
     } catch (err) {
@@ -6724,18 +6755,20 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   });
 
   app.get("/api/project-templates/:id/tasks", requireAuth, async (req: Request, res: Response) => {
-    const tpl = await storage.getTemplate(req.params.id, req.session.userId!);
+    const uid = getEffectiveUserId(req);
+    const tpl = await storage.getTemplate(req.params.id, uid);
     if (!tpl) return res.status(404).json({ message: "Not found" });
-    const tasks = await storage.getTemplateTasks(req.params.id, req.session.userId!);
+    const tasks = await storage.getTemplateTasks(req.params.id, uid);
     res.json(tasks);
   });
 
   app.post("/api/project-templates/:id/tasks", requireAuth, async (req: Request, res: Response) => {
     try {
-      const tpl = await storage.getTemplate(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const tpl = await storage.getTemplate(req.params.id, uid);
       if (!tpl) return res.status(404).json({ message: "Not found" });
       const data = insertProjectTemplateTaskSchema.parse(req.body);
-      const created = await storage.createTemplateTask(req.session.userId!, req.params.id, data);
+      const created = await storage.createTemplateTask(uid, req.params.id, data);
       res.status(201).json(created);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
@@ -6750,7 +6783,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.patch("/api/template-tasks/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const data = updateProjectTemplateTaskSchema.parse(req.body);
-      const updated = await storage.updateTemplateTask(req.params.id, req.session.userId!, data);
+      const updated = await storage.updateTemplateTask(req.params.id, getEffectiveUserId(req), data);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
     } catch (err: any) {
@@ -6765,7 +6798,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.delete("/api/template-tasks/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      await storage.deleteTemplateTask(req.params.id, req.session.userId!);
+      await storage.deleteTemplateTask(req.params.id, getEffectiveUserId(req));
       res.json({ ok: true });
     } catch (err) {
       console.error("[templates] delete task error:", err);
@@ -6775,10 +6808,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/projects/:id/save-as-template", requireAuth, async (req: Request, res: Response) => {
     try {
-      const project = await storage.getProject(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const project = await storage.getProject(req.params.id, uid);
       if (!project) return res.status(404).json({ message: "Not found" });
       const name = typeof req.body?.name === "string" ? req.body.name : project.name;
-      const tpl = await storage.snapshotProjectAsTemplate(req.session.userId!, req.params.id, name);
+      const tpl = await storage.snapshotProjectAsTemplate(uid, req.params.id, name);
       res.status(201).json(tpl);
     } catch (err) {
       console.error("[templates] snapshot error:", err);
@@ -6790,9 +6824,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/projects/:id/columns", requireAuth, async (req: Request, res: Response) => {
     try {
-      const project = await storage.getProject(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const project = await storage.getProject(req.params.id, uid);
       if (!project) return res.status(404).json({ message: "Not found" });
-      const columns = await storage.seedColumnsForProject(req.params.id, req.session.userId!);
+      const columns = await storage.seedColumnsForProject(req.params.id, uid);
       res.json(columns);
     } catch (err) {
       console.error("[columns] list error:", err);
@@ -6802,10 +6837,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/projects/:id/columns", requireAuth, async (req: Request, res: Response) => {
     try {
-      const project = await storage.getProject(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const project = await storage.getProject(req.params.id, uid);
       if (!project) return res.status(404).json({ message: "Not found" });
       const data = insertProjectColumnSchema.parse(req.body);
-      const created = await storage.createColumn(req.session.userId!, req.params.id, data);
+      const created = await storage.createColumn(uid, req.params.id, data);
       res.status(201).json(created);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
@@ -6817,7 +6853,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.patch("/api/project-columns/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const data = insertProjectColumnSchema.partial().parse(req.body);
-      const updated = await storage.updateColumn(req.params.id, req.session.userId!, data);
+      const updated = await storage.updateColumn(req.params.id, getEffectiveUserId(req), data);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
     } catch (err: any) {
@@ -6829,7 +6865,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.delete("/api/project-columns/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      await storage.deleteColumn(req.params.id, req.session.userId!);
+      await storage.deleteColumn(req.params.id, getEffectiveUserId(req));
       res.json({ ok: true });
     } catch (err) {
       console.error("[columns] delete error:", err);
@@ -6839,7 +6875,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/projects/urgent-tasks", requireAuth, async (req: Request, res: Response) => {
     try {
-      const tasks = await storage.getUrgentTasksForUser(req.session.userId!, 48);
+      const tasks = await storage.getUrgentTasksForUser(getEffectiveUserId(req), 48);
       res.json(tasks);
     } catch (err) {
       console.error("[projects] urgent-tasks error:", err);
@@ -6849,7 +6885,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/projects/all-tasks", requireAuth, async (req: Request, res: Response) => {
     try {
-      const tasks = await storage.getAllOpenTasksForUser(req.session.userId!);
+      const tasks = await storage.getAllOpenTasksForUser(getEffectiveUserId(req));
       res.json(tasks);
     } catch (err) {
       console.error("[projects] all-tasks error:", err);
@@ -6858,18 +6894,19 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   });
 
   app.get("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
-    const project = await storage.getProject(req.params.id, req.session.userId!);
+    const project = await storage.getProject(req.params.id, getEffectiveUserId(req));
     if (!project) return res.status(404).json({ message: "Not found" });
     res.json(project);
   });
 
   app.patch("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const uid = getEffectiveUserId(req);
       const data = insertProjectSchema.partial().parse(req.body);
-      const updated = await storage.updateProject(req.params.id, req.session.userId!, data);
+      const updated = await storage.updateProject(req.params.id, uid, data);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
-      fireWebhooks(req.session.userId!, "project.updated", updated);
+      fireWebhooks(uid, "project.updated", updated);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       console.error("[projects] update error:", err);
@@ -6879,13 +6916,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.delete("/api/projects/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const project = await storage.getProject(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const project = await storage.getProject(req.params.id, uid);
       if (!project) return res.status(404).json({ message: "Not found" });
       // Clean up all attachment files from cloud storage before DB cascade removes records
       try {
-        const allTasks = await storage.getTasksForProject(req.params.id, req.session.userId!);
+        const allTasks = await storage.getTasksForProject(req.params.id, uid);
         for (const task of allTasks) {
-          const atts = await storage.getTaskAttachments(task.id, req.session.userId!);
+          const atts = await storage.getTaskAttachments(task.id, uid);
           for (const att of atts) {
             try { await objectStorageService.deleteObject(att.objectPath); } catch {}
           }
@@ -6893,9 +6931,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       } catch (cleanupErr) {
         console.warn("[projects] attachment cleanup error (non-fatal):", cleanupErr);
       }
-      await storage.deleteProject(req.params.id, req.session.userId!);
+      await storage.deleteProject(req.params.id, uid);
       res.json({ ok: true });
-      fireWebhooks(req.session.userId!, "project.deleted", { id: req.params.id });
+      fireWebhooks(uid, "project.deleted", { id: req.params.id });
     } catch (err) {
       console.error("[projects] delete error:", err);
       res.status(500).json({ message: "Failed to delete project" });
@@ -6903,22 +6941,24 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   });
 
   app.get("/api/projects/:id/tasks", requireAuth, async (req: Request, res: Response) => {
-    const project = await storage.getProject(req.params.id, req.session.userId!);
+    const uid = getEffectiveUserId(req);
+    const project = await storage.getProject(req.params.id, uid);
     if (!project) return res.status(404).json({ message: "Not found" });
-    const tasks = await storage.getTasksForProject(req.params.id, req.session.userId!);
+    const tasks = await storage.getTasksForProject(req.params.id, uid);
     res.json(tasks);
   });
 
   app.post("/api/projects/:id/tasks/reorder", requireAuth, async (req: Request, res: Response) => {
     try {
-      const project = await storage.getProject(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const project = await storage.getProject(req.params.id, uid);
       if (!project) return res.status(404).json({ message: "Not found" });
       const updates = z.array(z.object({
         id: z.string(),
         columnId: z.string(),
         sortOrder: z.number().int(),
       })).parse(req.body);
-      await storage.reorderTasks(req.params.id, req.session.userId!, updates);
+      await storage.reorderTasks(req.params.id, uid, updates);
       res.json({ ok: true });
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
@@ -6929,10 +6969,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/projects/:id/tasks", requireAuth, async (req: Request, res: Response) => {
     try {
-      const project = await storage.getProject(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const project = await storage.getProject(req.params.id, uid);
       if (!project) return res.status(404).json({ message: "Not found" });
       const data = insertProjectTaskSchema.parse({ ...req.body, projectId: req.params.id });
-      const created = await storage.createTask(req.session.userId!, req.params.id, data);
+      const created = await storage.createTask(uid, req.params.id, data);
       res.status(201).json(created);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
@@ -6946,11 +6987,12 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.patch("/api/tasks/:id", requireAuth, async (req: Request, res: Response) => {
     try {
+      const uid = getEffectiveUserId(req);
       const data = updateProjectTaskSchema.parse(req.body);
-      const updated = await storage.updateTask(req.params.id, req.session.userId!, data);
+      const updated = await storage.updateTask(req.params.id, uid, data);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
-      fireWebhooks(req.session.userId!, "task.updated", updated);
+      fireWebhooks(uid, "task.updated", updated);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       if (err?.message?.startsWith("Invalid parent") || err?.message?.includes("subtask") || err?.message?.includes("own parent")) {
@@ -6963,15 +7005,16 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.delete("/api/tasks/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.id, uid);
       if (!task) return res.status(404).json({ message: "Not found" });
       // Clean up attachment files from cloud storage for this task and its subtasks
       try {
         const allTaskIds = [req.params.id];
-        const allTasks = await storage.getTasksForProject(task.projectId, req.session.userId!);
+        const allTasks = await storage.getTasksForProject(task.projectId, uid);
         allTasks.filter(t => t.parentTaskId === req.params.id).forEach(st => allTaskIds.push(st.id));
         for (const tid of allTaskIds) {
-          const atts = await storage.getTaskAttachments(tid, req.session.userId!);
+          const atts = await storage.getTaskAttachments(tid, uid);
           for (const att of atts) {
             try { await objectStorageService.deleteObject(att.objectPath); } catch {}
           }
@@ -6979,9 +7022,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       } catch (cleanupErr) {
         console.warn("[projects] task attachment cleanup error (non-fatal):", cleanupErr);
       }
-      await storage.deleteTask(req.params.id, req.session.userId!);
+      await storage.deleteTask(req.params.id, uid);
       res.json({ ok: true });
-      fireWebhooks(req.session.userId!, "task.deleted", { id: req.params.id });
+      fireWebhooks(uid, "task.deleted", { id: req.params.id });
     } catch (err) {
       console.error("[projects] delete task error:", err);
       res.status(500).json({ message: "Failed to delete task" });
@@ -6990,9 +7033,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/tasks/:id/comments", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.id, uid);
       if (!task) return res.status(404).json({ message: "Not found" });
-      const comments = await storage.getTaskComments(req.params.id, req.session.userId!);
+      const comments = await storage.getTaskComments(req.params.id, uid);
       res.json(comments);
     } catch (err) {
       console.error("[projects] list comments error:", err);
@@ -7002,10 +7046,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/tasks/:id/comments", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.id, uid);
       if (!task) return res.status(404).json({ message: "Not found" });
       const data = insertTaskCommentSchema.parse(req.body);
-      const created = await storage.addTaskComment(req.params.id, req.session.userId!, data.body);
+      const created = await storage.addTaskComment(req.params.id, uid, data.body);
       res.status(201).json(created);
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
@@ -7016,10 +7061,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.patch("/api/tasks/:taskId/comments/:commentId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.taskId, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.taskId, uid);
       if (!task) return res.status(404).json({ message: "Not found" });
       const data = updateTaskCommentSchema.parse(req.body);
-      const updated = await storage.updateTaskComment(req.params.taskId, req.params.commentId, req.session.userId!, data.body);
+      const updated = await storage.updateTaskComment(req.params.taskId, req.params.commentId, uid, data.body);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
     } catch (err: any) {
@@ -7031,9 +7077,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.delete("/api/tasks/:taskId/comments/:commentId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.taskId, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.taskId, uid);
       if (!task) return res.status(404).json({ message: "Not found" });
-      const ok = await storage.deleteTaskComment(req.params.taskId, req.params.commentId, req.session.userId!);
+      const ok = await storage.deleteTaskComment(req.params.taskId, req.params.commentId, uid);
       if (!ok) return res.status(404).json({ message: "Not found" });
       res.json({ ok: true });
     } catch (err) {
@@ -7044,9 +7091,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/tasks/:id/activity", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.id, uid);
       if (!task) return res.status(404).json({ message: "Not found" });
-      const activity = await storage.getTaskActivity(req.params.id, req.session.userId!);
+      const activity = await storage.getTaskActivity(req.params.id, uid);
       res.json(activity);
     } catch (err) {
       console.error("[projects] list activity error:", err);
@@ -7072,7 +7120,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/tasks/:id/attachments/request-url", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.id, uid);
       if (!task) return res.status(404).json({ message: "Task not found" });
       const { filename, mimeType, size } = req.body ?? {};
       if (!filename || !mimeType || !size) {
@@ -7084,7 +7133,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!ATTACHMENT_ALLOWED_TYPES.has(String(mimeType))) {
         return res.status(400).json({ message: "File type not allowed." });
       }
-      const existing = await storage.getTaskAttachments(req.params.id, req.session.userId!);
+      const existing = await storage.getTaskAttachments(req.params.id, uid);
       if (existing.length >= ATTACHMENT_MAX_COUNT) {
         return res.status(400).json({ message: `Maximum ${ATTACHMENT_MAX_COUNT} attachments per task.` });
       }
@@ -7099,7 +7148,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.post("/api/tasks/:id/attachments", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.id, uid);
       if (!task) return res.status(404).json({ message: "Task not found" });
       const { objectPath, filename, mimeType, size } = req.body ?? {};
       if (!objectPath || !filename || !mimeType || !size) {
@@ -7114,11 +7164,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!ATTACHMENT_ALLOWED_TYPES.has(String(mimeType))) {
         return res.status(400).json({ message: "File type not allowed." });
       }
-      const existing = await storage.getTaskAttachments(req.params.id, req.session.userId!);
+      const existing = await storage.getTaskAttachments(req.params.id, uid);
       if (existing.length >= ATTACHMENT_MAX_COUNT) {
         return res.status(400).json({ message: `Maximum ${ATTACHMENT_MAX_COUNT} attachments per task.` });
       }
-      const attachment = await storage.createTaskAttachment(req.params.id, req.session.userId!, {
+      const attachment = await storage.createTaskAttachment(req.params.id, uid, {
         objectPath: String(objectPath),
         filename: String(filename).slice(0, 255),
         mimeType: String(mimeType).slice(0, 100),
@@ -7133,9 +7183,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/tasks/:id/attachments", requireAuth, async (req: Request, res: Response) => {
     try {
-      const task = await storage.getTask(req.params.id, req.session.userId!);
+      const uid = getEffectiveUserId(req);
+      const task = await storage.getTask(req.params.id, uid);
       if (!task) return res.status(404).json({ message: "Task not found" });
-      const list = await storage.getTaskAttachments(req.params.id, req.session.userId!);
+      const list = await storage.getTaskAttachments(req.params.id, uid);
       res.json(list);
     } catch (err) {
       console.error("[attachments] list error:", err);
@@ -7145,7 +7196,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/attachments/:id/download", requireAuth, async (req: Request, res: Response) => {
     try {
-      const att = await storage.getTaskAttachment(req.params.id, req.session.userId!);
+      const att = await storage.getTaskAttachment(req.params.id, getEffectiveUserId(req));
       if (!att) return res.status(404).json({ message: "Not found" });
       res.setHeader("Content-Disposition", `attachment; filename="${att.filename.replace(/"/g, '\\"')}"`);
       const objectFile = await objectStorageService.getObjectEntityFile(att.objectPath);
@@ -7158,7 +7209,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.delete("/api/attachments/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const deleted = await storage.deleteTaskAttachment(req.params.id, req.session.userId!);
+      const deleted = await storage.deleteTaskAttachment(req.params.id, getEffectiveUserId(req));
       if (!deleted) return res.status(404).json({ message: "Not found" });
       try {
         await objectStorageService.deleteObject(deleted.objectPath);
@@ -7174,11 +7225,164 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.get("/api/dashboard/projects", requireAuth, async (req: Request, res: Response) => {
     try {
-      const summary = await storage.getDashboardProjectsSummary(req.session.userId!);
+      const summary = await storage.getDashboardProjectsSummary(getEffectiveUserId(req));
       res.json(summary);
     } catch (err) {
       console.error("[projects] dashboard summary error:", err);
       res.status(500).json({ message: "Failed to load summary" });
+    }
+  });
+
+  // ─── Workspace Collaborators ────────────────────────────────────────────────
+
+  const MAX_COLLABORATORS = 1;
+
+  // GET /api/workspace/team — list all invites for the owner
+  app.get("/api/workspace/team", requireAuth, async (req: Request, res: Response) => {
+    if (req.session.workspaceOwnerId) {
+      return res.status(403).json({ message: "Collaborators cannot manage team members" });
+    }
+    try {
+      const invites = await storage.getWorkspaceInvites(req.session.userId!);
+      res.json(invites);
+    } catch (err) {
+      console.error("[workspace] list error:", err);
+      res.status(500).json({ message: "Failed to load team" });
+    }
+  });
+
+  // POST /api/workspace/invite — send invite (owner only)
+  app.post("/api/workspace/invite", requireAuth, async (req: Request, res: Response) => {
+    if (req.session.workspaceOwnerId) {
+      return res.status(403).json({ message: "Collaborators cannot send invites" });
+    }
+    const { email } = req.body ?? {};
+    if (!email || typeof email !== "string" || !email.includes("@")) {
+      return res.status(400).json({ message: "Valid email is required" });
+    }
+    try {
+      const active = await storage.countActiveWorkspaceInvites(req.session.userId!);
+      if (active >= MAX_COLLABORATORS) {
+        return res.status(400).json({ message: `You can only have ${MAX_COLLABORATORS} active collaborator${MAX_COLLABORATORS > 1 ? "s" : ""}` });
+      }
+      const owner = await storage.getUser(req.session.userId!);
+      const token = crypto.randomBytes(32).toString("hex");
+      const invite = await storage.createWorkspaceInvite(
+        req.session.userId!,
+        email.trim().toLowerCase(),
+        token,
+      );
+      const appBase = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+      await sendWorkspaceInviteEmail({
+        to: invite.inviteEmail,
+        ownerName: owner?.displayName || owner?.email || "Your workspace owner",
+        inviteUrl: `${appBase}/workspace/accept?token=${token}`,
+      });
+      res.status(201).json(invite);
+    } catch (err: any) {
+      console.error("[workspace] invite error:", err);
+      res.status(500).json({ message: "Failed to send invite" });
+    }
+  });
+
+  // DELETE /api/workspace/invite/:id — revoke invite (owner only)
+  app.delete("/api/workspace/invite/:id", requireAuth, async (req: Request, res: Response) => {
+    if (req.session.workspaceOwnerId) {
+      return res.status(403).json({ message: "Collaborators cannot revoke invites" });
+    }
+    try {
+      const revoked = await storage.revokeWorkspaceInvite(req.params.id, req.session.userId!);
+      if (!revoked) return res.status(404).json({ message: "Invite not found" });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[workspace] revoke error:", err);
+      res.status(500).json({ message: "Failed to revoke invite" });
+    }
+  });
+
+  // GET /api/workspace/invite/info?token=xxx — public, returns invite metadata
+  app.get("/api/workspace/invite/info", async (req: Request, res: Response) => {
+    const { token } = req.query;
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Token is required" });
+    }
+    try {
+      const invite = await storage.getWorkspaceInviteByToken(token);
+      if (!invite || invite.status === "revoked") {
+        return res.status(404).json({ message: "Invite not found or has been revoked" });
+      }
+      if (invite.status === "accepted") {
+        return res.status(400).json({ message: "This invite has already been used" });
+      }
+      const owner = await storage.getUser(invite.ownerId);
+      res.json({
+        ownerName: owner?.displayName || owner?.email || "Unknown",
+        ownerEmail: owner?.email || "",
+        inviteEmail: invite.inviteEmail,
+        status: invite.status,
+      });
+    } catch (err) {
+      console.error("[workspace] invite-info error:", err);
+      res.status(500).json({ message: "Failed to load invite" });
+    }
+  });
+
+  // POST /api/workspace/invite/accept — accept invite (creates/logs-in account)
+  app.post("/api/workspace/invite/accept", async (req: Request, res: Response) => {
+    const { token, password } = req.body ?? {};
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Token is required" });
+    }
+    try {
+      const invite = await storage.getWorkspaceInviteByToken(token);
+      if (!invite || invite.status === "revoked") {
+        return res.status(404).json({ message: "Invite not found or has been revoked" });
+      }
+      if (invite.status === "accepted") {
+        return res.status(400).json({ message: "This invite has already been used" });
+      }
+
+      let memberId: string;
+      const existingUser = await storage.getUserByEmail(invite.inviteEmail);
+
+      if (existingUser) {
+        // Existing account — log them in (password optional if already logged in)
+        memberId = existingUser.id;
+        if (!req.session.userId || req.session.userId !== existingUser.id) {
+          if (!password || typeof password !== "string") {
+            return res.status(400).json({ message: "Password required to log in to the existing account" });
+          }
+          const bcrypt = await import("bcrypt");
+          const valid = await bcrypt.compare(password, existingUser.passwordHash || "");
+          if (!valid) {
+            return res.status(401).json({ message: "Incorrect password" });
+          }
+        }
+      } else {
+        // New account — create with provided password
+        if (!password || typeof password !== "string" || password.length < 8) {
+          return res.status(400).json({ message: "Password must be at least 8 characters" });
+        }
+        const bcrypt = await import("bcrypt");
+        const hash = await bcrypt.hash(password, 10);
+        const newUser = await storage.createUser({
+          email: invite.inviteEmail,
+          passwordHash: hash,
+        });
+        memberId = newUser.id;
+      }
+
+      // Mark invite as accepted and set memberId
+      await storage.acceptWorkspaceInvite(invite.inviteToken, memberId);
+
+      // Establish session as collaborator
+      req.session.userId = memberId;
+      req.session.workspaceOwnerId = invite.ownerId;
+
+      res.json({ ok: true, userId: memberId, workspaceOwnerId: invite.ownerId });
+    } catch (err) {
+      console.error("[workspace] accept error:", err);
+      res.status(500).json({ message: "Failed to accept invite" });
     }
   });
 

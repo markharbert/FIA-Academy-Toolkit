@@ -22,6 +22,8 @@ interface AuthUser {
   cfRevokedAt?: string | null;
   timezone?: string | null;
   impersonating?: ImpersonatingInfo | null;
+  workspaceOwnerId?: string | null;
+  isCollaborator?: boolean;
 }
 
 interface AuthContextType {

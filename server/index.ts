@@ -581,6 +581,21 @@ async function runStartupMigrations() {
       WHERE ical_token IS NULL
     `);
     console.log("[startup] ical_token migration complete");
+
+    // Workspace collaborators table
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS workspace_invites (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        owner_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        invite_email TEXT NOT NULL,
+        invite_token TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        member_id VARCHAR REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        accepted_at TIMESTAMP
+      )
+    `);
+    console.log("[startup] workspace_invites migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

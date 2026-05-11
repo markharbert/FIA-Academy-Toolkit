@@ -124,6 +124,101 @@ Academy Toolkit - Create Videos That Convert
   }
 }
 
+export async function sendWorkspaceInviteEmail(
+  inviteEmail: string,
+  ownerName: string,
+  inviteToken: string
+): Promise<boolean> {
+  const transport = getTransporter();
+  const inviteLink = `${APP_BASE_URL}/workspace/accept?token=${inviteToken}`;
+
+  if (!transport) {
+    console.log(`[Email] Would send workspace invite to ${inviteEmail} (SMTP not configured)`);
+    console.log(`[Email] Invite link: ${inviteLink}`);
+    return true;
+  }
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #06092a; margin-bottom: 10px;">Academy Toolkit</h1>
+      </div>
+
+      <h2 style="color: #06092a;">You've been invited to a Workspace</h2>
+
+      <p><strong>${ownerName}</strong> has invited you to collaborate on their Academy Toolkit workspace.</p>
+
+      <p>As a workspace collaborator, you'll have access to their Project Manager so you can help manage tasks and projects.</p>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${inviteLink}"
+           style="background-color: #da0010; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          Accept Invitation
+        </a>
+      </div>
+
+      <p style="color: #666; font-size: 14px;">
+        Or copy and paste this link into your browser:<br>
+        <a href="${inviteLink}" style="color: #3f92cc; word-break: break-all;">${inviteLink}</a>
+      </p>
+
+      <p style="color: #666; font-size: 14px;">
+        <strong>This invitation link will expire in 7 days.</strong>
+      </p>
+
+      <p style="color: #666; font-size: 14px;">
+        If you weren't expecting this invitation, you can safely ignore this email.
+      </p>
+
+      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+      <p style="color: #999; font-size: 12px; text-align: center;">
+        Academy Toolkit - Create Videos That Convert
+      </p>
+    </body>
+    </html>
+  `;
+
+  const textContent = `
+You've been invited to a Workspace on Academy Toolkit
+
+${ownerName} has invited you to collaborate on their Academy Toolkit workspace.
+
+As a workspace collaborator, you'll have access to their Project Manager so you can help manage tasks and projects.
+
+Accept the invitation here:
+${inviteLink}
+
+This invitation link will expire in 7 days.
+
+If you weren't expecting this invitation, you can safely ignore this email.
+
+---
+Academy Toolkit - Create Videos That Convert
+  `;
+
+  try {
+    await transport.sendMail({
+      from: SMTP_FROM,
+      to: inviteEmail,
+      subject: `${ownerName} invited you to their Academy Toolkit workspace`,
+      text: textContent,
+      html: htmlContent,
+    });
+    console.log(`[Email] Workspace invite sent to ${inviteEmail}`);
+    return true;
+  } catch (error) {
+    console.error("[Email] Failed to send workspace invite email:", error);
+    return false;
+  }
+}
+
 export function isEmailConfigured(): boolean {
   return !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 }

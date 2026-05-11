@@ -3,6 +3,7 @@ import {
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks,
   type PublicApiKey, type Webhook,
   dmoEntries, dmoSettings, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
+  workspaceInvites, type WorkspaceInvite, type WorkspaceInviteWithMember,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
   teleprompterScripts, type TeleprompterScript, type InsertTeleprompterScript,
   type CompetitorTracker, type InsertCompetitorTracker, type CompetitorTrackerWithStats,
@@ -529,6 +530,16 @@ export interface IStorage {
   addFeedbackComment(postId: string, userId: string, body: string, isAdminNote: boolean): Promise<import("@shared/schema").FeedbackCommentWithUser>;
   updateFeedbackPost(id: string, updates: { status?: string; adminResponse?: string }): Promise<import("@shared/schema").FeedbackPost | undefined>;
   deleteFeedbackPost(id: string): Promise<void>;
+
+  // Workspace Collaborators
+  getWorkspaceInvites(ownerId: string): Promise<WorkspaceInviteWithMember[]>;
+  createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string): Promise<WorkspaceInvite>;
+  getWorkspaceInviteByToken(token: string): Promise<WorkspaceInvite | undefined>;
+  getActiveInviteForMember(memberId: string, ownerId: string): Promise<WorkspaceInvite | undefined>;
+  acceptWorkspaceInvite(token: string, memberId: string): Promise<WorkspaceInvite | undefined>;
+  revokeWorkspaceInvite(id: string, ownerId: string): Promise<void>;
+  countActiveWorkspaceInvites(ownerId: string): Promise<number>;
+  getCollaboratorOwner(userId: string): Promise<string | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4147,6 +4158,85 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFeedbackPost(id: string): Promise<void> {
     await db.delete(feedbackPosts).where(eq(feedbackPosts.id, id));
+  }
+
+  // ── Workspace Collaborators ───────────────────────────────────────────────
+
+  async getWorkspaceInvites(ownerId: string): Promise<WorkspaceInviteWithMember[]> {
+    const rows = await db.select({
+      id: workspaceInvites.id,
+      ownerId: workspaceInvites.ownerId,
+      inviteEmail: workspaceInvites.inviteEmail,
+      inviteToken: workspaceInvites.inviteToken,
+      status: workspaceInvites.status,
+      memberId: workspaceInvites.memberId,
+      createdAt: workspaceInvites.createdAt,
+      acceptedAt: workspaceInvites.acceptedAt,
+      memberDisplayName: users.displayName,
+      memberEmail: users.email,
+    })
+    .from(workspaceInvites)
+    .leftJoin(users, eq(workspaceInvites.memberId, users.id))
+    .where(eq(workspaceInvites.ownerId, ownerId))
+    .orderBy(desc(workspaceInvites.createdAt));
+    return rows;
+  }
+
+  async createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string): Promise<WorkspaceInvite> {
+    const [invite] = await db.insert(workspaceInvites).values({
+      ownerId,
+      inviteEmail: inviteEmail.toLowerCase().trim(),
+      inviteToken: token,
+      status: "pending",
+    }).returning();
+    return invite;
+  }
+
+  async getWorkspaceInviteByToken(token: string): Promise<WorkspaceInvite | undefined> {
+    const [invite] = await db.select().from(workspaceInvites).where(eq(workspaceInvites.inviteToken, token));
+    return invite ?? undefined;
+  }
+
+  async getActiveInviteForMember(memberId: string, ownerId: string): Promise<WorkspaceInvite | undefined> {
+    const [invite] = await db.select().from(workspaceInvites).where(
+      and(
+        eq(workspaceInvites.memberId, memberId),
+        eq(workspaceInvites.ownerId, ownerId),
+        eq(workspaceInvites.status, "accepted"),
+      )
+    );
+    return invite ?? undefined;
+  }
+
+  async acceptWorkspaceInvite(token: string, memberId: string): Promise<WorkspaceInvite | undefined> {
+    const [updated] = await db.update(workspaceInvites)
+      .set({ status: "accepted", memberId, acceptedAt: new Date() })
+      .where(and(eq(workspaceInvites.inviteToken, token), eq(workspaceInvites.status, "pending")))
+      .returning();
+    return updated ?? undefined;
+  }
+
+  async revokeWorkspaceInvite(id: string, ownerId: string): Promise<void> {
+    await db.update(workspaceInvites)
+      .set({ status: "revoked", memberId: null, acceptedAt: null })
+      .where(and(eq(workspaceInvites.id, id), eq(workspaceInvites.ownerId, ownerId)));
+  }
+
+  async countActiveWorkspaceInvites(ownerId: string): Promise<number> {
+    const [row] = await db.select({ cnt: count() }).from(workspaceInvites).where(
+      and(
+        eq(workspaceInvites.ownerId, ownerId),
+        or(eq(workspaceInvites.status, "pending"), eq(workspaceInvites.status, "accepted")),
+      )
+    );
+    return row?.cnt ?? 0;
+  }
+
+  async getCollaboratorOwner(userId: string): Promise<string | undefined> {
+    const [row] = await db.select({ ownerId: workspaceInvites.ownerId })
+      .from(workspaceInvites)
+      .where(and(eq(workspaceInvites.memberId, userId), eq(workspaceInvites.status, "accepted")));
+    return row?.ownerId ?? undefined;
   }
 }
 

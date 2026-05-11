@@ -1753,3 +1753,32 @@ export type FeedbackCommentWithUser = FeedbackComment & {
   userName: string;
   userEmail: string;
 };
+
+// ── Workspace Collaborators ───────────────────────────────────────────────────
+
+export const workspaceInvites = pgTable("workspace_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  inviteEmail: text("invite_email").notNull(),
+  inviteToken: text("invite_token").notNull().unique(),
+  status: text("status").notNull().default("pending"), // pending | accepted | revoked
+  memberId: varchar("member_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  acceptedAt: timestamp("accepted_at"),
+});
+
+export type WorkspaceInvite = typeof workspaceInvites.$inferSelect;
+export type InsertWorkspaceInvite = typeof workspaceInvites.$inferInsert;
+
+export interface WorkspaceInviteWithMember {
+  id: string;
+  ownerId: string;
+  inviteEmail: string;
+  inviteToken: string;
+  status: string;
+  memberId: string | null;
+  createdAt: Date;
+  acceptedAt: Date | null;
+  memberDisplayName: string | null;
+  memberEmail: string | null;
+}

@@ -40,6 +40,11 @@ import {
   Globe2,
   Bell,
   BellOff,
+  Users,
+  UserPlus,
+  Mail,
+  Clock,
+  Ban,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -226,6 +231,53 @@ export default function AccountPage() {
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [keyVisible, setKeyVisible] = useState(false);
 
+  // ── Workspace Team ─────────────────────────────────────────────────────────
+  const isCollaborator = !!user?.isCollaborator;
+
+  const { data: teamData, isLoading: isTeamLoading } = useQuery<Array<{
+    id: string;
+    inviteEmail: string;
+    status: string;
+    createdAt: string;
+    acceptedAt: string | null;
+    memberId: string | null;
+    memberDisplayName: string | null;
+    memberEmail: string | null;
+  }>>({
+    queryKey: ["/api/workspace/team"],
+    enabled: !!user && !isCollaborator,
+  });
+
+  const [inviteEmail, setInviteEmail] = useState("");
+
+  const sendInviteMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const res = await apiRequest("POST", "/api/workspace/invite", { email });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workspace/team"] });
+      setInviteEmail("");
+      toast({ title: "Invitation sent", description: "Your team member will receive an email with instructions." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Couldn't send invite", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const revokeInviteMutation = useMutation({
+    mutationFn: async (inviteId: string) => {
+      await apiRequest("DELETE", `/api/workspace/invite/${inviteId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workspace/team"] });
+      toast({ title: "Access revoked" });
+    },
+    onError: () => {
+      toast({ title: "Couldn't revoke access", variant: "destructive" });
+    },
+  });
+
   const generateKeyMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/account/api-key", {});
@@ -345,7 +397,16 @@ export default function AccountPage() {
       </div>
 
       <Tabs defaultValue="profile">
-        <TabsList className={`w-full grid mb-6 ${apiKeyData?.accessEnabled ? "grid-cols-6" : "grid-cols-5"}`} data-testid="tabs-account">
+        <TabsList
+          className={`w-full grid mb-6 ${
+            apiKeyData?.accessEnabled && !isCollaborator
+              ? "grid-cols-7"
+              : apiKeyData?.accessEnabled || !isCollaborator
+              ? "grid-cols-6"
+              : "grid-cols-5"
+          }`}
+          data-testid="tabs-account"
+        >
           <TabsTrigger value="profile" data-testid="tab-profile">
             <User className="h-3.5 w-3.5 mr-1.5" />
             Profile
@@ -366,6 +427,12 @@ export default function AccountPage() {
             <Activity className="h-3.5 w-3.5 mr-1.5" />
             Activity
           </TabsTrigger>
+          {!isCollaborator && (
+            <TabsTrigger value="team" data-testid="tab-team">
+              <Users className="h-3.5 w-3.5 mr-1.5" />
+              Team
+            </TabsTrigger>
+          )}
           {apiKeyData?.accessEnabled && (
             <TabsTrigger value="api" data-testid="tab-api">
               <Key className="h-3.5 w-3.5 mr-1.5" />
@@ -797,7 +864,122 @@ export default function AccountPage() {
           </Card>
         </TabsContent>
 
-        {/* ─── API Tab ──────────────────────────────────────── */}
+        {/* ─── Team Tab ────────────────────────────────────────── */}
+        {!isCollaborator && (
+          <TabsContent value="team">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Workspace Collaborators
+                </CardTitle>
+                <CardDescription>
+                  Invite a VA or team member to access your Project Manager. They get their own login and can only see your projects.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Invite form */}
+                {(!teamData || teamData.filter(i => i.status !== "revoked").length < 1) ? (
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="invite-email">Email address</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="invite-email"
+                          type="email"
+                          placeholder="va@example.com"
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter" && inviteEmail) sendInviteMutation.mutate(inviteEmail); }}
+                          data-testid="input-invite-email"
+                        />
+                        <Button
+                          onClick={() => sendInviteMutation.mutate(inviteEmail)}
+                          disabled={sendInviteMutation.isPending || !inviteEmail}
+                          data-testid="button-send-invite"
+                        >
+                          {sendInviteMutation.isPending
+                            ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                            : <UserPlus className="h-4 w-4 mr-1.5" />}
+                          Send Invite
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        They'll receive an email with a link to set up their collaborator account.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-muted/40 border px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
+                    <Users className="h-4 w-4 shrink-0" />
+                    You've reached the collaborator limit (1). Revoke the current invite to send a new one.
+                  </div>
+                )}
+
+                {/* Current invites */}
+                {isTeamLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : teamData && teamData.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide text-xs">Current invites</p>
+                    {teamData.map((invite) => (
+                      <div
+                        key={invite.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3"
+                        data-testid={`row-invite-${invite.id}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="p-1.5 rounded-full bg-muted">
+                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate" data-testid={`text-invite-email-${invite.id}`}>
+                              {invite.memberDisplayName || invite.memberEmail || invite.inviteEmail}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">{invite.inviteEmail}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {invite.status === "accepted" ? (
+                            <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Active
+                            </Badge>
+                          ) : invite.status === "pending" ? (
+                            <Badge variant="secondary" className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 gap-1">
+                              <Clock className="h-3 w-3" />
+                              Pending
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="gap-1">
+                              <Ban className="h-3 w-3" />
+                              Revoked
+                            </Badge>
+                          )}
+                          {invite.status !== "revoked" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive h-7 px-2"
+                              onClick={() => revokeInviteMutation.mutate(invite.id)}
+                              disabled={revokeInviteMutation.isPending}
+                              data-testid={`button-revoke-invite-${invite.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
         {apiKeyData?.accessEnabled && (
           <TabsContent value="api">
             <Card>

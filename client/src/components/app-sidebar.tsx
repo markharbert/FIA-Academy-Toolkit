@@ -26,6 +26,7 @@ import {
   BookOpen,
   Briefcase,
   MessageSquarePlus,
+  Users,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -33,18 +34,20 @@ import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 const VIDEO_TOOL_PATHS = ["/video-score", "/video-trends", "/video-trends/scripts", "/video-trends/explore", "/video-trends/saved", "/video-trends/settings", "/teleprompter"];
 const EMAIL_TOOL_PATHS = ["/email-tools/inbox-analyzer", "/email-tools/sender-reputation", "/email-tools/inbox-intel"];
 
-const navItems = [
+const allNavItems = [
   {
     title: "Dashboard",
     url: "/dashboard",
     icon: LayoutDashboard,
     testId: "nav-dashboard",
+    collaboratorVisible: false,
   },
   {
     title: "DMO Tracker",
     url: "/dmo-tracker",
     icon: Target,
     testId: "nav-dmo-tracker",
+    collaboratorVisible: false,
   },
   {
     title: "Projects",
@@ -52,6 +55,7 @@ const navItems = [
     icon: Briefcase,
     testId: "nav-projects",
     matchPaths: ["/projects"],
+    collaboratorVisible: true,
   },
   {
     title: "Video Tools",
@@ -59,6 +63,7 @@ const navItems = [
     icon: Wrench,
     testId: "nav-video-tools",
     matchPaths: VIDEO_TOOL_PATHS,
+    collaboratorVisible: false,
   },
   {
     title: "Email Tools",
@@ -66,6 +71,7 @@ const navItems = [
     icon: Mail,
     testId: "nav-email-tools",
     matchPaths: EMAIL_TOOL_PATHS,
+    collaboratorVisible: false,
   },
 ];
 
@@ -73,6 +79,10 @@ export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const { state } = useSidebar();
+  const isCollaborator = !!user?.isCollaborator;
+  const navItems = isCollaborator
+    ? allNavItems.filter((item) => item.collaboratorVisible)
+    : allNavItems;
 
   const handleLogout = async () => {
     await logout();
@@ -214,6 +224,14 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <SidebarMenu>
+          {isCollaborator && (
+            <SidebarMenuItem>
+              <div className="px-2 py-1.5 text-xs text-amber-400/80 flex items-center gap-1.5">
+                <Users className="h-3 w-3 shrink-0" />
+                <span className="truncate">Collaborator workspace</span>
+              </div>
+            </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={() => setLocation("/account")}
