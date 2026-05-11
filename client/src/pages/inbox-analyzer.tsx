@@ -1280,7 +1280,9 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                   <CheckRow
                     pass={cq.linkToTextRatio <= 0.02}
                     warn={cq.linkToTextRatio > 0.02 && cq.linkToTextRatio <= 0.04}
-                    label={cq.linkToTextRatio <= 0.02 ? "Link density is acceptable" : `High link density (${Math.round(cq.linkToTextRatio * 50)} links per 50 words)`}
+                    label={cq.linkToTextRatio <= 0.02
+                      ? "Link density is acceptable"
+                      : `High link density (${cq.linkCount ?? Math.round(cq.linkToTextRatio * (cq.wordCount || 50))} links, ${cq.wordCount} words)`}
                     detail={cq.linkToTextRatio > 0.02 ? "more than 1 link per 50 words" : undefined}
                   />
                   {cq.linkToTextRatio > 0.02 && (

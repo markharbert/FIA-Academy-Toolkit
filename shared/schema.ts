@@ -878,6 +878,7 @@ export type HiddenTextClassification = 'NONE' | 'PREHEADER' | 'AMBIGUOUS' | 'SPA
 
 export type ContentQuality = {
   wordCount: number;
+  linkCount?: number;
   hasPs: boolean;
   hasPersonalization: boolean;
   htmlToTextRatio: number;

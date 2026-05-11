@@ -635,8 +635,13 @@ export async function analyzeSenderTrust(
 // ── Content quality analysis ────────────────────────────────────────────────
 
 export function analyzeContentQuality(bodyText: string, bodyHtml: string, subject: string = ""): ContentQuality {
-  // Strip HTML tags to get plain text from HTML body for all checks
-  const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  // Strip style/script/comment blocks first so their content isn't counted as words
+  const htmlCleaned = (bodyHtml || "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ");
+  // Strip remaining HTML tags to get visible text
+  const htmlAsText = htmlCleaned.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   const textToSearch = (bodyText || "").trim() || htmlAsText;
 
   const wordCount = textToSearch.split(/\s+/).filter(Boolean).length;
@@ -808,8 +813,12 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
     return `[${label}] ${b.methods.join(" + ")} — "${b.cleanText.slice(0, 80)}${b.cleanText.length > 80 ? "…" : ""}"`;
   });
 
-  // Link-to-text ratio: more than 1 link per 50 words is flagged
-  const linkCount = ((bodyHtml || "").match(/<a\b/gi) || []).length;
+  // Link-to-text ratio: more than 1 link per 50 words is flagged.
+  // Count only meaningful text links — exclude image-only anchors (logos, social
+  // icons, CTA images) where the first child is an <img> tag with no text.
+  const totalAnchors = ((bodyHtml || "").match(/<a\b/gi) || []).length;
+  const imageOnlyAnchors = ((bodyHtml || "").match(/<a\b[^>]*>\s*<img\b/gi) || []).length;
+  const linkCount = Math.max(0, totalAnchors - imageOnlyAnchors);
   const linkToTextRatio = wordCount > 0 ? linkCount / wordCount : 0;
 
   // Subject line character count
@@ -817,6 +826,7 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
 
   return {
     wordCount,
+    linkCount,
     hasPs,
     hasPersonalization,
     htmlToTextRatio,
