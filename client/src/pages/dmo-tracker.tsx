@@ -688,7 +688,7 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
                   </Button>
                 </>
               ) : isIdle ? (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end gap-1.5">
                   <Button
                     onClick={handleStart}
                     className={`h-9 px-5 text-sm font-semibold text-white shadow-md ${activity.startBg}`}
