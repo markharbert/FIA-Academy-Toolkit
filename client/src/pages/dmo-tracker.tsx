@@ -1285,7 +1285,9 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
     mutationFn: (payload: Record<string, unknown>) =>
       apiRequest("POST", "/api/dmo/entry", payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/dmo/history", 1825] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/streak"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/today"] });
       setEditingTime(false);
       toast({ title: "Time updated." });
     },
@@ -1674,7 +1676,7 @@ export default function DmoTrackerPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/dmo/today"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dmo/streak"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dmo/history", chartDays] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/history"] });
     },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
