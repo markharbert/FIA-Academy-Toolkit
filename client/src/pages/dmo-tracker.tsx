@@ -321,6 +321,10 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
   const [editingDone, setEditingDone] = useState(false);
   const [editDoneInput, setEditDoneInput] = useState("");
 
+  // Manual entry from idle state
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualInput, setManualInput] = useState("");
+
   // Edit goal inline
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState(String(targetMinutes));
@@ -446,6 +450,15 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
   const handleCancelEditDone = useCallback(() => {
     setEditingDone(false);
   }, []);
+
+  const handleSaveManualEntry = useCallback(async () => {
+    const seconds = parseMinsInput(manualInput);
+    if (seconds <= 0) return;
+    setShowManualEntry(false);
+    setManualInput("");
+    setTimer({ status: "done", elapsed: seconds, startedAt: null });
+    await onSave(seconds);
+  }, [manualInput, onSave]);
 
   const handleSaveGoal = useCallback(() => {
     const mins = Math.max(1, Math.min(480, parseInt(goalInput, 10) || targetMinutes));
@@ -675,14 +688,23 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
                   </Button>
                 </>
               ) : isIdle ? (
-                <Button
-                  onClick={handleStart}
-                  className={`h-9 px-5 text-sm font-semibold text-white shadow-md ${activity.startBg}`}
-                  data-testid={`button-dmo-start-${activity.key}`}
-                >
-                  <Play className="h-4 w-4 mr-1.5 fill-white" />
-                  Start
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleStart}
+                    className={`h-9 px-5 text-sm font-semibold text-white shadow-md ${activity.startBg}`}
+                    data-testid={`button-dmo-start-${activity.key}`}
+                  >
+                    <Play className="h-4 w-4 mr-1.5 fill-white" />
+                    Start
+                  </Button>
+                  <button
+                    onClick={() => { setShowManualEntry(true); setManualInput(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                    data-testid={`button-dmo-log-manual-${activity.key}`}
+                  >
+                    log manually
+                  </button>
+                </div>
               ) : !isConfirming ? (
                 <div className="flex gap-2">
                   {isRunning ? (
@@ -721,6 +743,51 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
             )}
           </div>
         </div>
+
+        {/* ── Manual entry panel (from idle) ── */}
+        {showManualEntry && isIdle && (
+          <div className={`mt-4 rounded-xl border-2 ${activity.borderActive} bg-background/80 p-4`}>
+            <p className="text-sm font-semibold text-foreground mb-3">
+              How many minutes did you spend on this?
+            </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={manualInput}
+                  onChange={e => setManualInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleSaveManualEntry(); if (e.key === "Escape") { setShowManualEntry(false); setManualInput(""); } }}
+                  placeholder="e.g. 30 or 1:30"
+                  className="h-9 w-32 text-center font-mono text-base"
+                  autoFocus
+                  data-testid={`input-dmo-manual-${activity.key}`}
+                />
+                <span className="text-xs text-muted-foreground">min / mm:ss</span>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleSaveManualEntry}
+                disabled={isSaving || parseMinsInput(manualInput) <= 0}
+                className="h-9 px-4 bg-green-600 hover:bg-green-500 text-white font-semibold"
+                data-testid={`button-dmo-manual-save-${activity.key}`}
+              >
+                <Check className="h-3.5 w-3.5 mr-1" />
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setShowManualEntry(false); setManualInput(""); }}
+                className="h-9 px-3"
+                data-testid={`button-dmo-manual-cancel-${activity.key}`}
+              >
+                Cancel
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Type minutes (e.g. <strong>30</strong>) or minutes:seconds (e.g. <strong>1:30</strong>).
+            </p>
+          </div>
+        )}
 
         {/* ── Confirm-before-save panel ── */}
         {isConfirming && (
