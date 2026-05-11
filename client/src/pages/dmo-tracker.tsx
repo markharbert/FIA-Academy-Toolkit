@@ -1039,9 +1039,12 @@ function WeekSection({ weekKey, entries, targets }: { weekKey: string; entries: 
 
   return (
     <div className="mb-4">
-      <button
-        className="w-full flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded-lg transition-colors group"
+      <div
+        role="button"
+        tabIndex={0}
+        className="w-full flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded-lg transition-colors group cursor-pointer"
         onClick={() => setOpen(o => !o)}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setOpen(o => !o); }}
       >
         <div className="flex items-center gap-3">
           {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
@@ -1058,7 +1061,7 @@ function WeekSection({ weekKey, entries, targets }: { weekKey: string; entries: 
           <Sparkles className="h-3 w-3 mr-1" />
           AI Summary
         </Button>
-      </button>
+      </div>
 
       {open && (
         <div className="pl-7 mt-1">
@@ -1473,8 +1476,8 @@ export default function DmoTrackerPage() {
   });
 
   const { data: journalEntries } = useQuery<DmoEntry[]>({
-    queryKey: ["/api/dmo/history", 365],
-    queryFn: () => fetch("/api/dmo/history?limit=365", { credentials: "include" }).then(r => r.json()),
+    queryKey: ["/api/dmo/history", 1825],
+    queryFn: () => fetch("/api/dmo/history?limit=1825", { credentials: "include" }).then(r => r.json()),
     enabled: activeTab === "journal" || activeTab === "log",
   });
 

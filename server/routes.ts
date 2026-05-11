@@ -4998,7 +4998,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.get("/api/dmo/history", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const limit = Math.min(parseInt(req.query.limit as string || "60"), 180);
+      const limit = Math.min(parseInt(req.query.limit as string || "60"), 1825);
       const entries = await storage.getDmoEntries(userId, limit);
       res.json(entries);
     } catch (err) {

@@ -604,6 +604,13 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE workspace_invites ADD COLUMN IF NOT EXISTS invite_first_name TEXT`);
     await db.execute(sql`ALTER TABLE workspace_invites ADD COLUMN IF NOT EXISTS invite_last_name TEXT`);
     console.log("[startup] workspace_invites migration complete");
+
+    // Prune DMO entries older than 5 years (1825 days) — runs at every startup
+    await db.execute(sql`
+      DELETE FROM dmo_entries
+      WHERE date < (CURRENT_DATE - INTERVAL '1825 days')::text
+    `);
+    console.log("[startup] dmo_entries older than 5 years pruned");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }
