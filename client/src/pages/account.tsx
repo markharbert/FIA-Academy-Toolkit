@@ -249,16 +249,20 @@ export default function AccountPage() {
   });
 
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
   const [activeTab, setActiveTab] = useState("profile");
 
   const sendInviteMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const res = await apiRequest("POST", "/api/workspace/invite", { email });
+    mutationFn: async ({ email, firstName, lastName }: { email: string; firstName: string; lastName: string }) => {
+      const res = await apiRequest("POST", "/api/workspace/invite", { email, firstName, lastName });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workspace/team"] });
       setInviteEmail("");
+      setInviteFirstName("");
+      setInviteLastName("");
       toast({ title: "Invitation sent", description: "Your team member will receive an email with instructions." });
     },
     onError: (err: Error) => {
@@ -883,6 +887,30 @@ export default function AccountPage() {
                 {/* Invite form */}
                 {(!teamData || teamData.filter(i => i.status !== "revoked").length < 1) ? (
                   <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="invite-first-name">First name</Label>
+                        <Input
+                          id="invite-first-name"
+                          type="text"
+                          placeholder="Jane"
+                          value={inviteFirstName}
+                          onChange={(e) => setInviteFirstName(e.target.value)}
+                          data-testid="input-invite-first-name"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="invite-last-name">Last name</Label>
+                        <Input
+                          id="invite-last-name"
+                          type="text"
+                          placeholder="Smith"
+                          value={inviteLastName}
+                          onChange={(e) => setInviteLastName(e.target.value)}
+                          data-testid="input-invite-last-name"
+                        />
+                      </div>
+                    </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="invite-email">Email address</Label>
                       <div className="flex gap-2">
@@ -892,11 +920,14 @@ export default function AccountPage() {
                           placeholder="va@example.com"
                           value={inviteEmail}
                           onChange={(e) => setInviteEmail(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter" && inviteEmail) sendInviteMutation.mutate(inviteEmail); }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && inviteEmail)
+                              sendInviteMutation.mutate({ email: inviteEmail, firstName: inviteFirstName, lastName: inviteLastName });
+                          }}
                           data-testid="input-invite-email"
                         />
                         <Button
-                          onClick={() => sendInviteMutation.mutate(inviteEmail)}
+                          onClick={() => sendInviteMutation.mutate({ email: inviteEmail, firstName: inviteFirstName, lastName: inviteLastName })}
                           disabled={sendInviteMutation.isPending || !inviteEmail}
                           data-testid="button-send-invite"
                         >
@@ -907,7 +938,7 @@ export default function AccountPage() {
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        They'll receive an email with a link to set up their collaborator account.
+                        Their name will be shown on tasks and comments. They'll receive an email with a link to set up their account.
                       </p>
                     </div>
                   </div>

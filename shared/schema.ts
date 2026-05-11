@@ -1763,6 +1763,8 @@ export const workspaceInvites = pgTable("workspace_invites", {
   inviteToken: text("invite_token").notNull().unique(),
   status: text("status").notNull().default("pending"), // pending | accepted | revoked
   memberId: varchar("member_id").references(() => users.id, { onDelete: "set null" }),
+  inviteFirstName: text("invite_first_name"),
+  inviteLastName: text("invite_last_name"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   acceptedAt: timestamp("accepted_at"),
 });

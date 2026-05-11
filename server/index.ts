@@ -595,6 +595,9 @@ async function runStartupMigrations() {
         accepted_at TIMESTAMP
       )
     `);
+    // Add name columns if missing (idempotent)
+    await db.execute(sql`ALTER TABLE workspace_invites ADD COLUMN IF NOT EXISTS invite_first_name TEXT`);
+    await db.execute(sql`ALTER TABLE workspace_invites ADD COLUMN IF NOT EXISTS invite_last_name TEXT`);
     console.log("[startup] workspace_invites migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);

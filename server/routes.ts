@@ -7272,7 +7272,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     if (req.session.workspaceOwnerId) {
       return res.status(403).json({ message: "Collaborators cannot send invites" });
     }
-    const { email } = req.body ?? {};
+    const { email, firstName, lastName } = req.body ?? {};
     if (!email || typeof email !== "string" || !email.includes("@")) {
       return res.status(400).json({ message: "Valid email is required" });
     }
@@ -7287,6 +7287,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         req.session.userId!,
         email.trim().toLowerCase(),
         token,
+        firstName || undefined,
+        lastName || undefined,
       );
       const appBase = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
       await sendWorkspaceInviteEmail({
@@ -7398,15 +7400,23 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           }
         }
       } else {
-        // New account — create with provided password
+        // New account — create with provided password and name from invite
         if (!password || typeof password !== "string" || password.length < 8) {
           return res.status(400).json({ message: "Password must be at least 8 characters" });
         }
         const bcrypt = await import("bcrypt");
         const hash = await bcrypt.hash(password, 10);
+        const firstName = invite.inviteFirstName || undefined;
+        const lastName = invite.inviteLastName || undefined;
+        const displayName = firstName && lastName
+          ? `${firstName} ${lastName}`
+          : firstName || lastName || undefined;
         const newUser = await storage.createUser({
           email: invite.inviteEmail,
           passwordHash: hash,
+          firstName,
+          lastName,
+          displayName,
         });
         memberId = newUser.id;
       }

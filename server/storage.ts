@@ -533,7 +533,7 @@ export interface IStorage {
 
   // Workspace Collaborators
   getWorkspaceInvites(ownerId: string): Promise<WorkspaceInviteWithMember[]>;
-  createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string): Promise<WorkspaceInvite>;
+  createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string, firstName?: string, lastName?: string): Promise<WorkspaceInvite>;
   getWorkspaceInviteByToken(token: string): Promise<WorkspaceInvite | undefined>;
   getActiveInviteForMember(memberId: string, ownerId: string): Promise<WorkspaceInvite | undefined>;
   acceptWorkspaceInvite(token: string, memberId: string): Promise<WorkspaceInvite | undefined>;
@@ -4183,12 +4183,14 @@ export class DatabaseStorage implements IStorage {
     return rows;
   }
 
-  async createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string): Promise<WorkspaceInvite> {
+  async createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string, firstName?: string, lastName?: string): Promise<WorkspaceInvite> {
     const [invite] = await db.insert(workspaceInvites).values({
       ownerId,
       inviteEmail: inviteEmail.toLowerCase().trim(),
       inviteToken: token,
       status: "pending",
+      inviteFirstName: firstName?.trim() || null,
+      inviteLastName: lastName?.trim() || null,
     }).returning();
     return invite;
   }
