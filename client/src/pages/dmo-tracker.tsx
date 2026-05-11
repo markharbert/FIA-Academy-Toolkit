@@ -1263,27 +1263,72 @@ function JournalTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSe
 
 function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettings }) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
 
   const entryMap = new Map<string, DmoEntry>();
   for (const e of entries) entryMap.set(e.date, e);
 
-  const months = Array.from(new Set(entries.map(e => e.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a));
+  const allMonths = Array.from(new Set(entries.map(e => e.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a));
+  const activeMonth = selectedMonth && allMonths.includes(selectedMonth) ? selectedMonth : (allMonths[0] ?? "");
 
   const getTarget = (a: typeof DMO_ACTIVITIES[number]) =>
     targets ? (targets[a.settingsKey] ?? a.defaultTarget) : a.defaultTarget;
 
   const selectedEntry = selectedDate ? entryMap.get(selectedDate) : null;
 
+  const buildCalendar = (monthKey: string) => {
+    const [yr, mo] = monthKey.split("-").map(Number);
+    const daysInMonth = new Date(yr, mo, 0).getDate();
+    const firstDow = new Date(yr, mo - 1, 1).getDay();
+    const cells: Array<string | null> = Array(firstDow).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push(`${yr}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+    const weeks: Array<Array<string | null>> = [];
+    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+    return weeks;
+  };
+
   return (
     <div className="space-y-10">
 
-      {/* ── Heat-map calendars ── */}
+      {/* ── Calendar section ── */}
       <div>
-        <h3 className="text-base font-bold text-foreground mb-1">Activity Calendar</h3>
-        <p className="text-xs text-muted-foreground mb-5">Tap any day to see the time breakdown. Darker = more total time logged.</p>
+        <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
+          <div>
+            <h3 className="text-base font-bold text-foreground">Activity Calendar</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Tap any colored day to see the full breakdown and notes. Darker = more time logged.
+            </p>
+          </div>
+          {allMonths.length > 0 && (
+            <Select
+              value={activeMonth}
+              onValueChange={v => { setSelectedMonth(v); setSelectedDate(null); }}
+            >
+              <SelectTrigger className="w-48 h-9 text-sm shrink-0" data-testid="select-dmo-log-month">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {allMonths.map(mk => {
+                  const [yr, mo] = mk.split("-").map(Number);
+                  const label = new Date(yr, mo - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                  const count = entries.filter(e => e.date.startsWith(mk)).length;
+                  return (
+                    <SelectItem key={mk} value={mk}>
+                      {label}
+                      <span className="ml-2 text-muted-foreground text-[11px]">({count}d)</span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-3 mb-5 flex-wrap">
           <span className="text-[10px] text-muted-foreground font-medium">Less</span>
           {[
             { label: "0", cls: "bg-muted/40 border border-border" },
@@ -1301,144 +1346,135 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
           <span className="text-[10px] text-muted-foreground font-medium">More</span>
         </div>
 
-        <div className="space-y-8">
-          {months.map(monthKey => {
-            const [yr, mo] = monthKey.split("-").map(Number);
-            const daysInMonth = new Date(yr, mo, 0).getDate();
-            const firstDow = new Date(yr, mo - 1, 1).getDay();
-
-            const cells: Array<string | null> = Array(firstDow).fill(null);
-            for (let d = 1; d <= daysInMonth; d++) {
-              cells.push(`${yr}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
-            }
-            while (cells.length % 7 !== 0) cells.push(null);
-
-            const weeks: Array<Array<string | null>> = [];
-            for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-
-            const monthLabel = new Date(yr, mo - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-            const monthTotal = entries
-              .filter(e => e.date.startsWith(monthKey))
-              .reduce((s, e) => s + getTotalSeconds(e), 0);
-            const daysLogged = entries.filter(e => e.date.startsWith(monthKey)).length;
-
-            return (
-              <div key={monthKey}>
-                <div className="flex items-baseline gap-3 mb-2">
-                  <h4 className="text-sm font-bold text-foreground">{monthLabel}</h4>
-                  {monthTotal > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {formatDuration(monthTotal)} across {daysLogged} day{daysLogged !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-7 gap-1 mb-1">
-                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
-                    <div key={d} className="text-center text-[10px] text-muted-foreground font-medium">{d}</div>
-                  ))}
-                </div>
-
-                <div className="space-y-1">
-                  {weeks.map((week, wi) => (
-                    <div key={wi} className="grid grid-cols-7 gap-1">
-                      {week.map((date, di) => {
-                        if (!date) return <div key={di} />;
-                        const entry = entryMap.get(date);
-                        const totalSecs = entry ? getTotalSeconds(entry) : 0;
-                        const isSelected = date === selectedDate;
-                        const dayNum = parseInt(date.split("-")[2], 10);
-                        return (
-                          <button
-                            key={di}
-                            onClick={() => totalSecs > 0 && setSelectedDate(isSelected ? null : date)}
-                            data-testid={`button-dmo-log-day-${date}`}
-                            className={`relative rounded-lg py-1.5 px-0.5 text-center transition-all ${
-                              totalSecs > 0
-                                ? `${getHeatClass(totalSecs)} hover:ring-2 hover:ring-violet-400 cursor-pointer`
-                                : "bg-muted/30 text-muted-foreground/30 cursor-default"
-                            } ${isSelected ? "ring-2 ring-violet-500 shadow-md" : ""}`}
-                          >
-                            <span className="block text-[11px] font-semibold leading-tight">{dayNum}</span>
-                            {totalSecs > 0 && (
-                              <span className="block text-[9px] leading-tight opacity-80 mt-0.5">
-                                {formatDuration(totalSecs)}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Expanded day detail */}
-                {selectedDate?.startsWith(monthKey) && selectedEntry && (
-                  <div className="mt-3 rounded-xl border border-border bg-card p-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-sm font-semibold text-foreground">
-                        {new Date(selectedDate + "T12:00:00").toLocaleDateString("en-US", {
-                          weekday: "long", month: "long", day: "numeric",
-                        })}
-                      </p>
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        {formatDuration(getTotalSeconds(selectedEntry))} total
-                      </span>
-                    </div>
-                    <div className="space-y-2.5">
-                      {DMO_ACTIVITIES.map(a => {
-                        const secs = (selectedEntry[a.secondsKey] as number) ?? 0;
-                        const target = getTarget(a);
-                        const goalMet = secs >= target * 60;
-                        const Icon = a.icon;
-                        return (
-                          <div key={a.key} className="flex items-center gap-3">
-                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${a.gradient} flex items-center justify-center shrink-0`}>
-                              <Icon className="h-3.5 w-3.5 text-white" />
-                            </div>
-                            <span className="text-xs text-foreground flex-1 min-w-0 truncate">{a.label}</span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full bg-gradient-to-r ${a.gradient}`}
-                                  style={{ width: `${Math.min(100, secs > 0 ? Math.round((secs / (target * 60)) * 100) : 0)}%` }}
-                                />
-                              </div>
-                              <span className={`text-xs font-semibold w-14 text-right ${secs > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
-                                {formatDuration(secs)}
-                              </span>
-                              <span className={`text-[11px] w-4 ${goalMet && secs > 0 ? "text-green-500" : "text-transparent"}`}>✓</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {selectedEntry.notes?.trim() && (
-                      <p className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground italic">
-                        "{selectedEntry.notes.trim()}"
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {entries.length === 0 && (
+        {entries.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <CalendarCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium">No days logged yet</p>
             <p className="text-xs mt-1">Start tracking in the Today tab.</p>
           </div>
-        )}
+        ) : activeMonth ? (() => {
+          const [yr, mo] = activeMonth.split("-").map(Number);
+          const weeks = buildCalendar(activeMonth);
+          const monthTotal = entries.filter(e => e.date.startsWith(activeMonth)).reduce((s, e) => s + getTotalSeconds(e), 0);
+          const daysLogged = entries.filter(e => e.date.startsWith(activeMonth)).length;
+          return (
+            <div>
+              {daysLogged > 0 ? (
+                <p className="text-xs text-muted-foreground mb-3">
+                  {formatDuration(monthTotal)} logged across {daysLogged} day{daysLogged !== 1 ? "s" : ""}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground/60 italic mb-3">No activity recorded this month.</p>
+              )}
+
+              <div className="grid grid-cols-7 gap-1 mb-1">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
+                  <div key={d} className="text-center text-[10px] text-muted-foreground font-medium">{d}</div>
+                ))}
+              </div>
+              <div className="space-y-1">
+                {weeks.map((week, wi) => (
+                  <div key={wi} className="grid grid-cols-7 gap-1">
+                    {week.map((date, di) => {
+                      if (!date) return <div key={di} />;
+                      const entry = entryMap.get(date);
+                      const totalSecs = entry ? getTotalSeconds(entry) : 0;
+                      const isSelected = date === selectedDate;
+                      const dayNum = parseInt(date.split("-")[2], 10);
+                      return (
+                        <button
+                          key={di}
+                          onClick={() => totalSecs > 0 && setSelectedDate(isSelected ? null : date)}
+                          data-testid={`button-dmo-log-day-${date}`}
+                          className={`relative rounded-lg py-1.5 px-0.5 text-center transition-all ${
+                            totalSecs > 0
+                              ? `${getHeatClass(totalSecs)} hover:ring-2 hover:ring-violet-400 cursor-pointer`
+                              : "bg-muted/30 text-muted-foreground/30 cursor-default"
+                          } ${isSelected ? "ring-2 ring-violet-500 shadow-md" : ""}`}
+                        >
+                          <span className="block text-[11px] font-semibold leading-tight">{dayNum}</span>
+                          {totalSecs > 0 && (
+                            <span className="block text-[9px] leading-tight opacity-80 mt-0.5">
+                              {formatDuration(totalSecs)}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+
+              {/* Expanded day detail — time + journal notes */}
+              {selectedDate?.startsWith(activeMonth) && selectedEntry && (
+                <div className="mt-4 rounded-xl border border-border bg-card p-5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-bold text-foreground">
+                      {new Date(selectedDate + "T12:00:00").toLocaleDateString("en-US", {
+                        weekday: "long", month: "long", day: "numeric",
+                      })}
+                    </p>
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      {formatDuration(getTotalSeconds(selectedEntry))} total · {calcEntryPts(selectedEntry, targets)}/25 pts
+                    </span>
+                  </div>
+
+                  {/* Activity breakdown */}
+                  <div className="space-y-2.5 mb-5">
+                    {DMO_ACTIVITIES.map(a => {
+                      const secs = (selectedEntry[a.secondsKey] as number) ?? 0;
+                      const target = getTarget(a);
+                      const goalMet = secs >= target * 60;
+                      const Icon = a.icon;
+                      return (
+                        <div key={a.key} className="flex items-center gap-3">
+                          <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${a.gradient} flex items-center justify-center shrink-0`}>
+                            <Icon className="h-3.5 w-3.5 text-white" />
+                          </div>
+                          <span className="text-xs text-foreground flex-1 min-w-0 truncate">{a.label}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={`h-full rounded-full bg-gradient-to-r ${a.gradient}`}
+                                style={{ width: `${Math.min(100, secs > 0 ? Math.round((secs / (target * 60)) * 100) : 0)}%` }}
+                              />
+                            </div>
+                            <span className={`text-xs font-semibold w-14 text-right ${secs > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
+                              {formatDuration(secs)}
+                            </span>
+                            <span className={`text-[11px] w-4 ${goalMet && secs > 0 ? "text-green-500" : "text-transparent"}`}>✓</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Journal notes */}
+                  <div className="pt-4 border-t border-border">
+                    <div className="flex items-center gap-2 mb-2">
+                      <BookText className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Daily Notes</span>
+                    </div>
+                    {selectedEntry.notes?.trim() ? (
+                      <p className="text-sm text-foreground leading-relaxed">{selectedEntry.notes.trim()}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/40 italic">No notes recorded for this day.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })() : null}
       </div>
 
       {/* ── Full time table ── */}
       {entries.length > 0 && (
         <div>
           <h3 className="text-base font-bold text-foreground mb-1">Full Time Log</h3>
-          <p className="text-xs text-muted-foreground mb-4">Every day with logged time, most recent first. Click a row to see detail above.</p>
+          <p className="text-xs text-muted-foreground mb-4">
+            Every day with logged time, most recent first. Click a row to jump to that month and open the detail.
+          </p>
           <div className="rounded-xl border border-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -1452,6 +1488,7 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
                     ))}
                     <th className="text-center px-4 py-2.5 font-semibold text-foreground">Total</th>
                     <th className="text-center px-3 py-2.5 font-semibold text-foreground">Pts</th>
+                    <th className="text-center px-3 py-2.5 font-semibold text-foreground">Notes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1460,10 +1497,14 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
                     const pts = calcEntryPts(e, targets);
                     const d = new Date(e.date + "T12:00:00");
                     const isSelected = e.date === selectedDate;
+                    const mk = e.date.slice(0, 7);
                     return (
                       <tr
                         key={e.date}
-                        onClick={() => setSelectedDate(e.date === selectedDate ? null : e.date)}
+                        onClick={() => {
+                          setSelectedMonth(mk);
+                          setSelectedDate(e.date === selectedDate ? null : e.date);
+                        }}
                         className={`border-b border-border last:border-0 cursor-pointer transition-colors ${
                           isSelected ? "bg-violet-50 dark:bg-violet-950/30" : "hover:bg-muted/30"
                         }`}
@@ -1493,6 +1534,15 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
                             {pts}/25
                           </span>
                         </td>
+                        <td className="text-center px-3 py-2.5">
+                          {e.notes?.trim() ? (
+                            <span title={e.notes.trim()}>
+                              <BookText className="h-3.5 w-3.5 text-violet-500 inline" />
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/20">—</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -1514,7 +1564,7 @@ export default function DmoTrackerPage() {
   const today = getTodayString(user?.timezone);
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
-  const [activeTab, setActiveTab] = useState<"today" | "journal" | "log">("today");
+  const [activeTab, setActiveTab] = useState<"today" | "log">("today");
 
   const { data: todayData, isLoading: todayLoading } = useQuery<{ entry: DmoEntry | null; date: string }>({
     queryKey: ["/api/dmo/today"],
@@ -1545,7 +1595,7 @@ export default function DmoTrackerPage() {
   const { data: journalEntries } = useQuery<DmoEntry[]>({
     queryKey: ["/api/dmo/history", 1825],
     queryFn: () => fetch("/api/dmo/history?limit=1825", { credentials: "include" }).then(r => r.json()),
-    enabled: activeTab === "journal" || activeTab === "log",
+    enabled: activeTab === "log",
   });
 
   useEffect(() => {
@@ -1670,14 +1720,6 @@ export default function DmoTrackerPage() {
                   Today
                 </button>
                 <button
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${activeTab === "journal" ? "bg-white text-sidebar shadow-sm" : "text-white/70 hover:text-white"}`}
-                  onClick={() => setActiveTab("journal")}
-                  data-testid="tab-dmo-journal"
-                >
-                  <BookText className="h-3.5 w-3.5" />
-                  Journal
-                </button>
-                <button
                   className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${activeTab === "log" ? "bg-white text-sidebar shadow-sm" : "text-white/70 hover:text-white"}`}
                   onClick={() => setActiveTab("log")}
                   data-testid="tab-dmo-log"
@@ -1739,13 +1781,6 @@ export default function DmoTrackerPage() {
           </div>
         </div>
       </div>
-
-      {/* ── Journal tab ── */}
-      {activeTab === "journal" && (
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-12">
-          <JournalTab entries={journalEntries ?? []} targets={dmoSettings} />
-        </div>
-      )}
 
       {/* ── Log tab ── */}
       {activeTab === "log" && (
