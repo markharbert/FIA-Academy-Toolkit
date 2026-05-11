@@ -99,9 +99,10 @@ export default function LoginPage() {
         <img src={logoImage} alt="Academy Toolkit" className="h-14 w-auto" />
 
         <div className="w-full rounded-2xl border border-white/10 p-8 space-y-6" style={{ background: "hsl(230,75%,14%)" }}>
-          <div className="text-center space-y-1">
-            <h1 className="text-xl font-semibold text-white" data-testid="text-login-title">Sign In</h1>
-            <p className="text-sm text-white/50">For admins and workspace collaborators. Academy members sign in through the Fearless Influencer Academy portal.</p>
+          <div className="text-center space-y-2">
+            <h1 className="text-xl font-semibold text-white" data-testid="text-login-title">Admins &amp; Collaborators</h1>
+            <p className="text-sm text-white/50">This login is for admins and invited workspace collaborators only.</p>
+            <p className="text-xs text-white/30">Academy members access the Toolkit through the Fearless Influencer Academy portal.</p>
           </div>
 
           {error && (
