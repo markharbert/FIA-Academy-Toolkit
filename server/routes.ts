@@ -1135,6 +1135,10 @@ export async function registerRoutes(
       feedbackCommentFeature: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "feature", postTitle: "Add dark mode to the teleprompter", commenterName: "Admin", commentBody: "Great idea! We've added this to our roadmap for Q3.", isAdmin: false, postId: "demo-post-id" }, resources),
       feedbackCommentBug: () => emailTemplates.feedbackCommentEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", commenterName: "Jane Smith", commentBody: "Still happening for me even after the latest update.", isAdmin: true, postId: "demo-post-id" }, resources),
       feedbackStatusChanged: () => emailTemplates.feedbackStatusChangedEmail({ firstName: sample.firstName, type: "bug", postTitle: "Video upload fails on files over 500MB", newStatus: "in_progress", postId: "demo-post-id", adminResponse: "We've reproduced this and a fix is on the way!" }, resources),
+      workspaceInvite: () => emailTemplates.workspaceInviteEmail({
+        ownerName: "Jane Smith",
+        inviteUrl: `${process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com"}/workspace/accept?token=preview-token`,
+      }, resources),
     };
   }
 
