@@ -209,6 +209,28 @@ function formatDisplayDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function formatDuration(seconds: number): string {
+  if (seconds <= 0) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
+function getTotalSeconds(entry: DmoEntry): number {
+  return DMO_ACTIVITIES.reduce((sum, a) => sum + (((entry[a.secondsKey] as number) ?? 0)), 0);
+}
+
+function getHeatClass(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "bg-muted/30 text-muted-foreground/20";
+  if (totalSeconds < 1800) return "bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300";
+  if (totalSeconds < 3600) return "bg-violet-200 dark:bg-violet-800/60 text-violet-800 dark:text-violet-200";
+  if (totalSeconds < 7200) return "bg-violet-400 dark:bg-violet-600/80 text-white";
+  if (totalSeconds < 10800) return "bg-violet-500 dark:bg-violet-500 text-white";
+  return "bg-violet-700 dark:bg-violet-400 text-white";
+}
+
 // ─── Timer state per activity ─────────────────────────────────────────────────
 
 type TimerStatus = "idle" | "running" | "paused" | "done";
@@ -1167,6 +1189,253 @@ function JournalTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSe
   );
 }
 
+// ─── Log Tab ──────────────────────────────────────────────────────────────────
+
+function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettings }) {
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const entryMap = new Map<string, DmoEntry>();
+  for (const e of entries) entryMap.set(e.date, e);
+
+  const months = Array.from(new Set(entries.map(e => e.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a));
+
+  const getTarget = (a: typeof DMO_ACTIVITIES[number]) =>
+    targets ? (targets[a.settingsKey] ?? a.defaultTarget) : a.defaultTarget;
+
+  const selectedEntry = selectedDate ? entryMap.get(selectedDate) : null;
+
+  return (
+    <div className="space-y-10">
+
+      {/* ── Heat-map calendars ── */}
+      <div>
+        <h3 className="text-base font-bold text-foreground mb-1">Activity Calendar</h3>
+        <p className="text-xs text-muted-foreground mb-5">Tap any day to see the time breakdown. Darker = more total time logged.</p>
+
+        {/* Legend */}
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
+          <span className="text-[10px] text-muted-foreground font-medium">Less</span>
+          {[
+            { label: "0", cls: "bg-muted/40 border border-border" },
+            { label: "<30m", cls: "bg-violet-100 dark:bg-violet-900/50" },
+            { label: "30–59m", cls: "bg-violet-200 dark:bg-violet-800/60" },
+            { label: "1–2h", cls: "bg-violet-400 dark:bg-violet-600/80" },
+            { label: "2–3h", cls: "bg-violet-500" },
+            { label: "3h+", cls: "bg-violet-700 dark:bg-violet-400" },
+          ].map(({ label, cls }) => (
+            <span key={label} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <span className={`inline-block w-4 h-4 rounded ${cls}`} />
+              {label}
+            </span>
+          ))}
+          <span className="text-[10px] text-muted-foreground font-medium">More</span>
+        </div>
+
+        <div className="space-y-8">
+          {months.map(monthKey => {
+            const [yr, mo] = monthKey.split("-").map(Number);
+            const daysInMonth = new Date(yr, mo, 0).getDate();
+            const firstDow = new Date(yr, mo - 1, 1).getDay();
+
+            const cells: Array<string | null> = Array(firstDow).fill(null);
+            for (let d = 1; d <= daysInMonth; d++) {
+              cells.push(`${yr}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
+            }
+            while (cells.length % 7 !== 0) cells.push(null);
+
+            const weeks: Array<Array<string | null>> = [];
+            for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+            const monthLabel = new Date(yr, mo - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+            const monthTotal = entries
+              .filter(e => e.date.startsWith(monthKey))
+              .reduce((s, e) => s + getTotalSeconds(e), 0);
+            const daysLogged = entries.filter(e => e.date.startsWith(monthKey)).length;
+
+            return (
+              <div key={monthKey}>
+                <div className="flex items-baseline gap-3 mb-2">
+                  <h4 className="text-sm font-bold text-foreground">{monthLabel}</h4>
+                  {monthTotal > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {formatDuration(monthTotal)} across {daysLogged} day{daysLogged !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 mb-1">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
+                    <div key={d} className="text-center text-[10px] text-muted-foreground font-medium">{d}</div>
+                  ))}
+                </div>
+
+                <div className="space-y-1">
+                  {weeks.map((week, wi) => (
+                    <div key={wi} className="grid grid-cols-7 gap-1">
+                      {week.map((date, di) => {
+                        if (!date) return <div key={di} />;
+                        const entry = entryMap.get(date);
+                        const totalSecs = entry ? getTotalSeconds(entry) : 0;
+                        const isSelected = date === selectedDate;
+                        const dayNum = parseInt(date.split("-")[2], 10);
+                        return (
+                          <button
+                            key={di}
+                            onClick={() => totalSecs > 0 && setSelectedDate(isSelected ? null : date)}
+                            data-testid={`button-dmo-log-day-${date}`}
+                            className={`relative rounded-lg py-1.5 px-0.5 text-center transition-all ${
+                              totalSecs > 0
+                                ? `${getHeatClass(totalSecs)} hover:ring-2 hover:ring-violet-400 cursor-pointer`
+                                : "bg-muted/30 text-muted-foreground/30 cursor-default"
+                            } ${isSelected ? "ring-2 ring-violet-500 shadow-md" : ""}`}
+                          >
+                            <span className="block text-[11px] font-semibold leading-tight">{dayNum}</span>
+                            {totalSecs > 0 && (
+                              <span className="block text-[9px] leading-tight opacity-80 mt-0.5">
+                                {formatDuration(totalSecs)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Expanded day detail */}
+                {selectedDate?.startsWith(monthKey) && selectedEntry && (
+                  <div className="mt-3 rounded-xl border border-border bg-card p-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold text-foreground">
+                        {new Date(selectedDate + "T12:00:00").toLocaleDateString("en-US", {
+                          weekday: "long", month: "long", day: "numeric",
+                        })}
+                      </p>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {formatDuration(getTotalSeconds(selectedEntry))} total
+                      </span>
+                    </div>
+                    <div className="space-y-2.5">
+                      {DMO_ACTIVITIES.map(a => {
+                        const secs = (selectedEntry[a.secondsKey] as number) ?? 0;
+                        const target = getTarget(a);
+                        const goalMet = secs >= target * 60;
+                        const Icon = a.icon;
+                        return (
+                          <div key={a.key} className="flex items-center gap-3">
+                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${a.gradient} flex items-center justify-center shrink-0`}>
+                              <Icon className="h-3.5 w-3.5 text-white" />
+                            </div>
+                            <span className="text-xs text-foreground flex-1 min-w-0 truncate">{a.label}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full bg-gradient-to-r ${a.gradient}`}
+                                  style={{ width: `${Math.min(100, secs > 0 ? Math.round((secs / (target * 60)) * 100) : 0)}%` }}
+                                />
+                              </div>
+                              <span className={`text-xs font-semibold w-14 text-right ${secs > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
+                                {formatDuration(secs)}
+                              </span>
+                              <span className={`text-[11px] w-4 ${goalMet && secs > 0 ? "text-green-500" : "text-transparent"}`}>✓</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {selectedEntry.notes?.trim() && (
+                      <p className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground italic">
+                        "{selectedEntry.notes.trim()}"
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {entries.length === 0 && (
+          <div className="text-center py-16 text-muted-foreground">
+            <CalendarCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">No days logged yet</p>
+            <p className="text-xs mt-1">Start tracking in the Today tab.</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Full time table ── */}
+      {entries.length > 0 && (
+        <div>
+          <h3 className="text-base font-bold text-foreground mb-1">Full Time Log</h3>
+          <p className="text-xs text-muted-foreground mb-4">Every day with logged time, most recent first. Click a row to see detail above.</p>
+          <div className="rounded-xl border border-border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border">
+                    <th className="text-left px-4 py-2.5 font-semibold text-foreground whitespace-nowrap">Date</th>
+                    {DMO_ACTIVITIES.map(a => (
+                      <th key={a.key} className="text-center px-2 py-2.5 font-semibold text-foreground whitespace-nowrap">
+                        {a.label.split(" & ")[0].split(" ").slice(0, 2).join(" ")}
+                      </th>
+                    ))}
+                    <th className="text-center px-4 py-2.5 font-semibold text-foreground">Total</th>
+                    <th className="text-center px-3 py-2.5 font-semibold text-foreground">Pts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...entries].sort((a, b) => b.date.localeCompare(a.date)).map(e => {
+                    const totalSecs = getTotalSeconds(e);
+                    const pts = calcEntryPts(e, targets);
+                    const d = new Date(e.date + "T12:00:00");
+                    const isSelected = e.date === selectedDate;
+                    return (
+                      <tr
+                        key={e.date}
+                        onClick={() => setSelectedDate(e.date === selectedDate ? null : e.date)}
+                        className={`border-b border-border last:border-0 cursor-pointer transition-colors ${
+                          isSelected ? "bg-violet-50 dark:bg-violet-950/30" : "hover:bg-muted/30"
+                        }`}
+                        data-testid={`row-dmo-log-${e.date}`}
+                      >
+                        <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">
+                          <span className="text-muted-foreground text-[10px] mr-1">
+                            {d.toLocaleDateString("en-US", { weekday: "short" })}
+                          </span>
+                          {d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </td>
+                        {DMO_ACTIVITIES.map(a => {
+                          const secs = (e[a.secondsKey] as number) ?? 0;
+                          return (
+                            <td key={a.key} className="text-center px-2 py-2.5">
+                              <span className={secs > 0 ? "text-foreground font-medium" : "text-muted-foreground/25"}>
+                                {formatDuration(secs)}
+                              </span>
+                            </td>
+                          );
+                        })}
+                        <td className="text-center px-4 py-2.5 font-semibold text-foreground">
+                          {formatDuration(totalSecs)}
+                        </td>
+                        <td className="text-center px-3 py-2.5">
+                          <span className={`font-semibold ${pts >= 25 ? "text-green-500" : pts > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
+                            {pts}/25
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DmoTrackerPage() {
@@ -1175,7 +1444,7 @@ export default function DmoTrackerPage() {
   const today = getTodayString(user?.timezone);
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
-  const [activeTab, setActiveTab] = useState<"today" | "journal">("today");
+  const [activeTab, setActiveTab] = useState<"today" | "journal" | "log">("today");
 
   const { data: todayData, isLoading: todayLoading } = useQuery<{ entry: DmoEntry | null; date: string }>({
     queryKey: ["/api/dmo/today"],
@@ -1206,7 +1475,7 @@ export default function DmoTrackerPage() {
   const { data: journalEntries } = useQuery<DmoEntry[]>({
     queryKey: ["/api/dmo/history", 365],
     queryFn: () => fetch("/api/dmo/history?limit=365", { credentials: "include" }).then(r => r.json()),
-    enabled: activeTab === "journal",
+    enabled: activeTab === "journal" || activeTab === "log",
   });
 
   useEffect(() => {
@@ -1285,6 +1554,7 @@ export default function DmoTrackerPage() {
     const secs = entry?.[a.secondsKey] ?? 0;
     return sum + calcPoints(secs, getTarget(a));
   }, 0);
+  const totalTimeSeconds = DMO_ACTIVITIES.reduce((sum, a) => sum + ((entry?.[a.secondsKey] as number) ?? 0), 0);
   const isPerfectDay = totalPoints >= 25;
   const completionPct = Math.round((totalPoints / 25) * 100);
 
@@ -1337,6 +1607,14 @@ export default function DmoTrackerPage() {
                   <BookText className="h-3.5 w-3.5" />
                   Journal
                 </button>
+                <button
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 ${activeTab === "log" ? "bg-white text-sidebar shadow-sm" : "text-white/70 hover:text-white"}`}
+                  onClick={() => setActiveTab("log")}
+                  data-testid="tab-dmo-log"
+                >
+                  <CalendarCheck className="h-3.5 w-3.5" />
+                  Log
+                </button>
               </div>
               <button
                 onClick={handlePopOut}
@@ -1350,34 +1628,44 @@ export default function DmoTrackerPage() {
             </div>
           </div>
 
-          {/* Points ring */}
-          <div className={`flex items-center gap-4 rounded-2xl px-5 py-3 transition-all duration-500 ${
-            isPerfectDay ? "bg-green-500/20 ring-1 ring-green-400/40" : "bg-white/10"
-          }`}>
-            <div className="relative h-14 w-14">
-              <svg className="h-14 w-14 -rotate-90" viewBox="0 0 36 36">
-                <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3" />
-                <circle
-                  cx="18" cy="18" r="15.9" fill="none"
-                  stroke={isPerfectDay ? "#4ade80" : "#dc2626"}
-                  strokeWidth="3"
-                  strokeDasharray={`${completionPct} ${100 - completionPct}`}
-                  strokeLinecap="round"
-                  className="transition-all duration-700"
-                />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
-                {completionPct}%
-              </span>
+          {/* Points ring + total time */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className={`flex items-center gap-4 rounded-2xl px-5 py-3 transition-all duration-500 ${
+              isPerfectDay ? "bg-green-500/20 ring-1 ring-green-400/40" : "bg-white/10"
+            }`}>
+              <div className="relative h-14 w-14">
+                <svg className="h-14 w-14 -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3" />
+                  <circle
+                    cx="18" cy="18" r="15.9" fill="none"
+                    stroke={isPerfectDay ? "#4ade80" : "#dc2626"}
+                    strokeWidth="3"
+                    strokeDasharray={`${completionPct} ${100 - completionPct}`}
+                    strokeLinecap="round"
+                    className="transition-all duration-700"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
+                  {completionPct}%
+                </span>
+              </div>
+              <div>
+                <p className={`font-bold text-xl leading-tight ${isPerfectDay ? "text-green-300" : "text-white"}`} data-testid="text-dmo-total-points">
+                  {totalPoints}<span className="text-sm font-medium opacity-60">/25</span>
+                </p>
+                <p className="text-white/50 text-xs">
+                  {isPerfectDay ? "🎉 Perfect Day!" : "pts earned today"}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className={`font-bold text-xl leading-tight ${isPerfectDay ? "text-green-300" : "text-white"}`} data-testid="text-dmo-total-points">
-                {totalPoints}<span className="text-sm font-medium opacity-60">/25</span>
-              </p>
-              <p className="text-white/50 text-xs">
-                {isPerfectDay ? "🎉 Perfect Day!" : "pts earned today"}
-              </p>
-            </div>
+            {totalTimeSeconds > 0 && (
+              <div className="flex flex-col items-center bg-white/10 rounded-2xl px-5 py-3">
+                <p className="text-xl font-bold text-white leading-tight" data-testid="text-dmo-total-time">
+                  {formatDuration(totalTimeSeconds)}
+                </p>
+                <p className="text-white/50 text-xs mt-0.5">total time today</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1386,6 +1674,21 @@ export default function DmoTrackerPage() {
       {activeTab === "journal" && (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-12">
           <JournalTab entries={journalEntries ?? []} targets={dmoSettings} />
+        </div>
+      )}
+
+      {/* ── Log tab ── */}
+      {activeTab === "log" && (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-12">
+          {journalEntries == null ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-40 rounded-2xl bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <LogTab entries={journalEntries} targets={dmoSettings} />
+          )}
         </div>
       )}
 
