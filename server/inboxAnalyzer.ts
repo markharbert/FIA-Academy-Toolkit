@@ -867,15 +867,32 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
 // ── CAN-SPAM Compliance analysis ─────────────────────────────────────────────
 
 export function analyzeCanSpamCompliance(bodyText: string, bodyHtml: string, subject: string): CanSpamCompliance {
-  const htmlAsText = (bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  const textToSearch = (bodyText || "").trim() || htmlAsText;
+  // Strip style/script blocks before extracting text (same as analyzeContentQuality)
+  const htmlCleaned = (bodyHtml || "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ");
+  const htmlAsText = htmlCleaned.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+  // Detect placeholder bodyText (same logic as analyzeContentQuality)
+  const PLACEHOLDER_RE = /^(plain\s+text\s+(version|email|copy)|this\s+email\s+(is\s+)?(best\s+viewed|requires|was\s+sent)|view\s+this\s+email|html\s+version)/i;
+  const rawBodyText = (bodyText || "").trim();
+  const rawBodyWords = rawBodyText.split(/\s+/).filter(Boolean).length;
+  const isPlaceholderText = rawBodyWords <= 8 || PLACEHOLDER_RE.test(rawBodyText);
+  const textToSearch = (!isPlaceholderText && rawBodyText) ? rawBodyText : htmlAsText;
+
   const combinedRaw = (textToSearch + " " + bodyHtml).toLowerCase();
 
-  // Physical mailing address (street address, PO box, or state+zip)
-  const hasPhysicalAddress =
-    /\d+\s+[\w\s]{2,30}(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|place|pl|suite|ste)\b/i.test(textToSearch) ||
-    /p\.?o\.?\s*box\s+\d+/i.test(textToSearch) ||
-    /\b[A-Z]{2}\s+\d{5}(-\d{4})?\b/.test(textToSearch);
+  // Physical mailing address (street address, PO box, or state+zip).
+  // Always check BOTH the resolved textToSearch AND the HTML-derived text so
+  // that addresses embedded in the HTML footer are found even when bodyText is
+  // a placeholder or empty.
+  const ADDRESS_STREET = /\d+\s+[\w\s]{2,30}(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|place|pl|suite|ste)\b/i;
+  const ADDRESS_POBOX  = /p\.?o\.?\s*box\s+\d+/i;
+  const ADDRESS_STZIP  = /\b[A-Z]{2}\s+\d{5}(-\d{4})?\b/;
+  const hasPhysicalAddress = [textToSearch, htmlAsText].some(t =>
+    ADDRESS_STREET.test(t) || ADDRESS_POBOX.test(t) || ADDRESS_STZIP.test(t)
+  );
 
   // Unsubscribe / opt-out mechanism
   const hasUnsubscribeLink = /unsubscribe|opt.?out|manage preferences|manage subscription/i.test(combinedRaw);
