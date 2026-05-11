@@ -489,26 +489,33 @@ export function workspaceInviteEmail(params: {
   ownerName: string;
   inviteUrl: string;
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
-  const subject = `${params.ownerName} has invited you to their Academy Toolkit workspace`;
+  const subject = `${params.ownerName} invited you to their Academy Toolkit workspace`;
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hi there,</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">
-      <strong>${params.ownerName}</strong> has invited you to collaborate on their <strong>Academy Toolkit</strong> workspace.
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;">
+      <strong>${params.ownerName}</strong> has invited you to join their <strong>Academy Toolkit</strong> workspace as a collaborator.
     </p>
-    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 20px;border:1px solid #e2e8f0;">
-      <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">As a workspace collaborator, you'll have access to:</p>
-      <ul style="margin:0;padding-left:18px;font-size:14px;color:#334155;line-height:2;">
-        <li>Their full <strong>Project Manager</strong> — tasks, boards, calendars</li>
-        <li>Create and update tasks on their behalf</li>
-        <li>Your own separate login — nothing else in their account is visible</li>
-      </ul>
+    <div style="background:#f8fafc;border-radius:10px;padding:20px 24px;margin:0 0 24px;border:1px solid #e2e8f0;">
+      <p style="margin:0 0 14px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">&#128101;&nbsp; As a workspace collaborator you'll have access to</p>
+      <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+        <p style="margin:0;font-size:14px;font-weight:600;color:#1e293b;">&#128193;&nbsp; Full Project Manager</p>
+        <p style="margin:3px 0 0;font-size:13px;color:#64748b;">Tasks, boards, calendars, and project templates</p>
+      </div>
+      <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+        <p style="margin:0;font-size:14px;font-weight:600;color:#1e293b;">&#9989;&nbsp; Create &amp; update tasks</p>
+        <p style="margin:3px 0 0;font-size:13px;color:#64748b;">Manage work on their behalf — scoped only to their projects</p>
+      </div>
+      <div style="padding:10px 0;">
+        <p style="margin:0;font-size:14px;font-weight:600;color:#1e293b;">&#128274;&nbsp; Your own private login</p>
+        <p style="margin:3px 0 0;font-size:13px;color:#64748b;">Nothing else in their account is visible to you</p>
+      </div>
     </div>
-    <p style="margin:0 0 8px;font-size:14px;color:#64748b;">Click the button below to accept your invitation and set up your account.</p>
+    <p style="margin:0 0 6px;font-size:14px;color:#334155;">Click the button below to accept your invitation and set up your collaborator account.</p>
     ${btn("Accept Invitation", params.inviteUrl)}
     <p style="margin:24px 0 0;font-size:12px;color:#94a3b8;">
-      This invitation link expires in 7 days. If you weren't expecting this, you can safely ignore it.
+      This invitation expires in 7 days. If you weren't expecting it, you can safely ignore this email.
     </p>`;
-  const text = `${params.ownerName} has invited you to collaborate on their Academy Toolkit workspace.\n\nAccept your invitation here:\n${params.inviteUrl}\n\nThis link expires in 7 days.`;
+  const text = `${params.ownerName} invited you to collaborate on their Academy Toolkit workspace.\n\nAs a collaborator you'll have access to their full Project Manager — tasks, boards, and calendars — with your own separate login.\n\nAccept your invitation here:\n${params.inviteUrl}\n\nThis link expires in 7 days. If you weren't expecting this, just ignore it.`;
   return { subject, html: wrap("You've Been Invited to a Workspace", body, resources), text };
 }
 
