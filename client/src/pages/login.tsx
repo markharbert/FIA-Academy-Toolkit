@@ -79,8 +79,13 @@ export default function LoginPage() {
     setNotice(null);
     setIsLoading(true);
     try {
-      await login(data.email, data.password);
-      setLocation("/dashboard");
+      const loggedInUser = await login(data.email, data.password);
+      // Collaborators go straight to Projects — that's their workspace
+      if (loggedInUser?.isCollaborator) {
+        setLocation("/projects");
+      } else {
+        setLocation("/dashboard");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -95,8 +100,8 @@ export default function LoginPage() {
 
         <div className="w-full rounded-2xl border border-white/10 p-8 space-y-6" style={{ background: "hsl(230,75%,14%)" }}>
           <div className="text-center space-y-1">
-            <h1 className="text-xl font-semibold text-white" data-testid="text-login-title">Admin Login</h1>
-            <p className="text-sm text-white/50">Members access this app through the Fearless Influencer Academy portal.</p>
+            <h1 className="text-xl font-semibold text-white" data-testid="text-login-title">Sign In</h1>
+            <p className="text-sm text-white/50">For admins and workspace collaborators. Academy members sign in through the Fearless Influencer Academy portal.</p>
           </div>
 
           {error && (

@@ -401,9 +401,16 @@ export async function registerRoutes(
         return res.status(403).json({ message: "This account has been disabled. Please contact support." });
       }
 
-      // If ClickFunnels is configured, require active membership for non-admin users.
-      // Admins bypass this check so they always retain access regardless of CF status.
-      if (CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
+      // Check if this user is an active workspace collaborator.
+      // Collaborators bypass the CF enrollment check — the owner's membership
+      // is what matters, not theirs. We also stamp workspaceOwnerId onto the
+      // session here so requireAuth recognises them as a collaborator going forward.
+      const collaboratorOwnerId = await storage.getCollaboratorOwner(user.id);
+      const isCollaborator = !!collaboratorOwnerId;
+
+      // If ClickFunnels is configured, require active membership for non-admin,
+      // non-collaborator users. Admins and collaborators are always exempt.
+      if (!isCollaborator && CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
         if (user.cfEnrolled === false) {
           console.warn(`[Login] CF membership revoked for user ${user.id} (${email})`);
           return res.status(403).json({
@@ -424,6 +431,9 @@ export async function registerRoutes(
         req.session.regenerate(err => (err ? reject(err) : resolve()))
       );
       req.session.userId = user.id;
+      if (collaboratorOwnerId) {
+        req.session.workspaceOwnerId = collaboratorOwnerId;
+      }
 
       // Update last login timestamp
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
@@ -434,7 +444,7 @@ export async function registerRoutes(
         actionType: "login_success",
         actionLabel: ActionLabels.login_success,
         entityType: "auth",
-        metadata: { method: "email" },
+        metadata: { method: "email", isCollaborator },
         req,
       });
 
@@ -461,6 +471,8 @@ export async function registerRoutes(
           cfEnrolled: user.cfEnrolled,
           cfEnrolledAt: user.cfEnrolledAt,
           cfRevokedAt: user.cfRevokedAt,
+          workspaceOwnerId: collaboratorOwnerId ?? null,
+          isCollaborator,
         }
       });
     } catch (err) {

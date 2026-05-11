@@ -29,7 +29,7 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
   signup: (email: string, password: string, options?: { emailConsent?: boolean; firstName?: string; lastName?: string }) => Promise<void>;
   logout: () => Promise<void>;
   refetch: () => Promise<void>;
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refetch();
   }, [refetch]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<AuthUser> => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -75,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const data = await res.json();
     setUser(data.user);
+    return data.user as AuthUser;
   };
 
   const signup = async (email: string, password: string, options?: { emailConsent?: boolean; firstName?: string; lastName?: string }) => {

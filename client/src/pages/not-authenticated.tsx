@@ -1,4 +1,5 @@
-import { ExternalLink, Lock } from "lucide-react";
+import { ExternalLink, Lock, Users } from "lucide-react";
+import { Link } from "wouter";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
 export default function NotAuthenticated() {
@@ -79,6 +80,21 @@ export default function NotAuthenticated() {
       <p className="mt-8 text-white/25 text-xs text-center">
         Need help? Contact support through the Members Area.
       </p>
+
+      {/* Collaborator login path */}
+      <div className="mt-5 flex items-center gap-2 text-xs text-white/30">
+        <Users className="h-3.5 w-3.5 shrink-0" />
+        <span>
+          Workspace collaborator?{" "}
+          <Link
+            href="/login"
+            className="text-white/50 underline underline-offset-2 hover:text-white/80 transition-colors"
+            data-testid="link-collaborator-login"
+          >
+            Sign in here
+          </Link>
+        </span>
+      </div>
     </div>
   );
 }
