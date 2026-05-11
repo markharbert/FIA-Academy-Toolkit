@@ -350,6 +350,7 @@ export interface IStorage {
   // DMO Tracker
   getDmoEntry(userId: string, date: string): Promise<DmoEntry | undefined>;
   upsertDmoEntry(userId: string, date: string, data: DmoEntryData): Promise<DmoEntry>;
+  updateDmoNotes(userId: string, date: string, notes: string): Promise<DmoEntry | null>;
   getDmoEntries(userId: string, limit?: number): Promise<DmoEntry[]>;
   getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }>;
   getDmoSummary(userId: string, period: string): Promise<{ summary: string; tips: string[]; moodScore: number | null; performanceScore: number | null; generatedAt: Date } | null>;
@@ -2153,6 +2154,14 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return created;
     }
+  }
+
+  async updateDmoNotes(userId: string, date: string, notes: string): Promise<DmoEntry | null> {
+    const [updated] = await db.update(dmoEntries)
+      .set({ notes: notes.trim(), updatedAt: new Date() })
+      .where(and(eq(dmoEntries.userId, userId), eq(dmoEntries.date, date)))
+      .returning();
+    return updated ?? null;
   }
 
   async getDmoEntries(userId: string, limit: number = 60): Promise<DmoEntry[]> {

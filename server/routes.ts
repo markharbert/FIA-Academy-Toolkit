@@ -4995,6 +4995,27 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.patch("/api/dmo/entry/notes", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { date, notes } = req.body;
+      if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ message: "Invalid date" });
+      }
+      if (typeof notes !== "string") {
+        return res.status(400).json({ message: "Invalid notes" });
+      }
+      const existing = await storage.getDmoEntry(userId, date);
+      if (!existing) {
+        return res.status(404).json({ message: "No DMO entry found for that date" });
+      }
+      const updated = await storage.updateDmoNotes(userId, date, notes);
+      res.json({ entry: updated });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update notes" });
+    }
+  });
+
   app.get("/api/dmo/history", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;

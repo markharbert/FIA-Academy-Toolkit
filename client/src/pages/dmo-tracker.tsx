@@ -1262,8 +1262,22 @@ function JournalTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSe
 // ─── Log Tab ──────────────────────────────────────────────────────────────────
 
 function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettings }) {
+  const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesText, setNotesText] = useState("");
+
+  const notesMutation = useMutation({
+    mutationFn: ({ date, notes }: { date: string; notes: string }) =>
+      apiRequest("PATCH", "/api/dmo/entry/notes", { date, notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dmo/history", 1825] });
+      setEditingNotes(false);
+      toast({ title: "Notes saved." });
+    },
+    onError: () => toast({ title: "Failed to save notes", variant: "destructive" }),
+  });
 
   const entryMap = new Map<string, DmoEntry>();
   for (const e of entries) entryMap.set(e.date, e);
@@ -1449,16 +1463,58 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
                     })}
                   </div>
 
-                  {/* Journal notes */}
+                  {/* Journal notes — editable */}
                   <div className="pt-4 border-t border-border">
-                    <div className="flex items-center gap-2 mb-2">
-                      <BookText className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Daily Notes</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <BookText className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Daily Notes</span>
+                      </div>
+                      {!editingNotes && (
+                        <button
+                          onClick={() => { setNotesText(selectedEntry.notes ?? ""); setEditingNotes(true); }}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          data-testid="button-dmo-edit-notes"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Edit
+                        </button>
+                      )}
                     </div>
-                    {selectedEntry.notes?.trim() ? (
+                    {editingNotes ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={notesText}
+                          onChange={e => setNotesText(e.target.value)}
+                          rows={4}
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"
+                          placeholder="Add notes for this day…"
+                          autoFocus
+                          data-testid="textarea-dmo-notes"
+                        />
+                        <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => setEditingNotes(false)}
+                            className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            data-testid="button-dmo-notes-cancel"
+                          >
+                            Cancel
+                          </button>
+                          <Button
+                            size="sm"
+                            className="h-7 px-3 text-xs"
+                            disabled={notesMutation.isPending}
+                            onClick={() => selectedDate && notesMutation.mutate({ date: selectedDate, notes: notesText })}
+                            data-testid="button-dmo-notes-save"
+                          >
+                            {notesMutation.isPending ? "Saving…" : "Save Notes"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : selectedEntry.notes?.trim() ? (
                       <p className="text-sm text-foreground leading-relaxed">{selectedEntry.notes.trim()}</p>
                     ) : (
-                      <p className="text-xs text-muted-foreground/40 italic">No notes recorded for this day.</p>
+                      <p className="text-xs text-muted-foreground/40 italic">No notes recorded for this day. Click Edit to add some.</p>
                     )}
                   </div>
                 </div>
