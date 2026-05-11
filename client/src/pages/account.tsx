@@ -279,6 +279,18 @@ export default function AccountPage() {
     },
   });
 
+  const resendInviteMutation = useMutation({
+    mutationFn: async (inviteId: string) => {
+      await apiRequest("POST", `/api/workspace/invite/${inviteId}/resend`, {});
+    },
+    onSuccess: () => {
+      toast({ title: "Invitation resent", description: "A fresh invite email has been sent." });
+    },
+    onError: () => {
+      toast({ title: "Couldn't resend invite", variant: "destructive" });
+    },
+  });
+
   const generateKeyMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/account/api-key", {});
@@ -947,6 +959,21 @@ export default function AccountPage() {
                               <Ban className="h-3 w-3" />
                               Revoked
                             </Badge>
+                          )}
+                          {invite.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-muted-foreground hover:text-foreground gap-1 text-xs"
+                              onClick={() => resendInviteMutation.mutate(invite.id)}
+                              disabled={resendInviteMutation.isPending}
+                              data-testid={`button-resend-invite-${invite.id}`}
+                            >
+                              {resendInviteMutation.isPending
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <RefreshCw className="h-3.5 w-3.5" />}
+                              Resend
+                            </Button>
                           )}
                           {invite.status !== "revoked" && (
                             <Button

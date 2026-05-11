@@ -7304,6 +7304,29 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // POST /api/workspace/invite/:id/resend — resend a pending invite with a fresh token
+  app.post("/api/workspace/invite/:id/resend", requireAuth, async (req: Request, res: Response) => {
+    if (req.session.workspaceOwnerId) {
+      return res.status(403).json({ message: "Collaborators cannot resend invites" });
+    }
+    try {
+      const newToken = crypto.randomBytes(32).toString("hex");
+      const invite = await storage.refreshWorkspaceInviteToken(req.params.id, req.session.userId!, newToken);
+      if (!invite) return res.status(404).json({ message: "Pending invite not found" });
+      const owner = await storage.getUser(req.session.userId!);
+      const appBase = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+      await sendWorkspaceInviteEmail({
+        to: invite.inviteEmail,
+        ownerName: owner?.displayName || owner?.email || "Your workspace owner",
+        inviteUrl: `${appBase}/workspace/accept?token=${newToken}`,
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[workspace] resend error:", err);
+      res.status(500).json({ message: "Failed to resend invite" });
+    }
+  });
+
   // GET /api/workspace/invite/info?token=xxx — public, returns invite metadata
   app.get("/api/workspace/invite/info", async (req: Request, res: Response) => {
     const { token } = req.query;

@@ -538,6 +538,7 @@ export interface IStorage {
   getActiveInviteForMember(memberId: string, ownerId: string): Promise<WorkspaceInvite | undefined>;
   acceptWorkspaceInvite(token: string, memberId: string): Promise<WorkspaceInvite | undefined>;
   revokeWorkspaceInvite(id: string, ownerId: string): Promise<void>;
+  refreshWorkspaceInviteToken(id: string, ownerId: string, newToken: string): Promise<WorkspaceInvite | undefined>;
   countActiveWorkspaceInvites(ownerId: string): Promise<number>;
   getCollaboratorOwner(userId: string): Promise<string | undefined>;
 }
@@ -4220,6 +4221,14 @@ export class DatabaseStorage implements IStorage {
     await db.update(workspaceInvites)
       .set({ status: "revoked", memberId: null, acceptedAt: null })
       .where(and(eq(workspaceInvites.id, id), eq(workspaceInvites.ownerId, ownerId)));
+  }
+
+  async refreshWorkspaceInviteToken(id: string, ownerId: string, newToken: string): Promise<WorkspaceInvite | undefined> {
+    const [updated] = await db.update(workspaceInvites)
+      .set({ inviteToken: newToken })
+      .where(and(eq(workspaceInvites.id, id), eq(workspaceInvites.ownerId, ownerId), eq(workspaceInvites.status, "pending")))
+      .returning();
+    return updated ?? undefined;
   }
 
   async countActiveWorkspaceInvites(ownerId: string): Promise<number> {
