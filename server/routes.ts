@@ -160,6 +160,18 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
         req.session.destroy(() => {});
         return res.status(403).json({ message: "Workspace access has been revoked" });
       }
+      // The collaborator's access is only as valid as the owner's membership.
+      // If the owner loses their CF enrollment or is disabled, cut the collaborator
+      // off immediately — they are tied to that account.
+      const owner = await storage.getUser(req.session.workspaceOwnerId!);
+      if (!owner || owner.isDisabled) {
+        req.session.destroy(() => {});
+        return res.status(403).json({ message: "Workspace access has been revoked" });
+      }
+      if (process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && owner.cfEnrolled !== true) {
+        req.session.destroy(() => {});
+        return res.status(403).json({ message: "Workspace access has been revoked" });
+      }
     } else if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
       // When CF is configured, enforce active membership on every authenticated
       // request so revoked members are denied mid-session without waiting for
