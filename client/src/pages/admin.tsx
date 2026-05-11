@@ -157,6 +157,10 @@ interface AdminUser {
   totalVideos: number;
   keywordsCreditsThisMonth: number;
   keywordsCreditsTotalUsed: number;
+  projectCount: number;
+  taskCount: number;
+  tasksDoneCount: number;
+  dmoLast30Days: number;
   cfEnrolled: boolean | null;
   cfEnrolledAt: string | null;
   cfRevokedAt: string | null;
@@ -2686,15 +2690,19 @@ export default function AdminPage() {
                           <TableHead>User</TableHead>
                           <TableHead>Role</TableHead>
                           <TableHead>Membership</TableHead>
-                          <TableHead className="text-center">Scores</TableHead>
+                          <TableHead className="text-center">Videos</TableHead>
                           <TableHead className="text-center">KW Credits</TableHead>
+                          <TableHead className="text-center">Projects</TableHead>
+                          <TableHead className="text-center">Tasks</TableHead>
+                          <TableHead className="text-center">DMO (30d)</TableHead>
+                          <TableHead className="text-center">Last Login</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {users.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                               No users found
                             </TableCell>
                           </TableRow>
@@ -2741,6 +2749,24 @@ export default function AdminPage() {
                               </TableCell>
                               <TableCell className="text-center text-sm font-medium">
                                 {u.keywordsCreditsThisMonth || 0}/{u.keywordsCreditsTotalUsed || 0}
+                              </TableCell>
+                              <TableCell className="text-center font-medium">
+                                {u.projectCount ?? 0}
+                              </TableCell>
+                              <TableCell className="text-center text-sm font-medium">
+                                <span title={`${u.tasksDoneCount ?? 0} completed out of ${u.taskCount ?? 0} total`}>
+                                  {u.tasksDoneCount ?? 0}/{u.taskCount ?? 0}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center font-medium">
+                                <span title="DMO days logged in the last 30 days">
+                                  {u.dmoLast30Days ?? 0}/30
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center text-sm text-muted-foreground">
+                                {u.lastLoginAt
+                                  ? format(new Date(u.lastLoginAt), "MMM d, yyyy")
+                                  : <span className="text-muted-foreground/50">—</span>}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center justify-end gap-1">

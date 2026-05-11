@@ -2,6 +2,7 @@ import {
   users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks,
   type PublicApiKey, type Webhook,
+  projects, projectTasks,
   dmoEntries, dmoSettings, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   workspaceInvites, type WorkspaceInvite, type WorkspaceInviteWithMember,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
@@ -530,6 +531,9 @@ export interface IStorage {
   addFeedbackComment(postId: string, userId: string, body: string, isAdminNote: boolean): Promise<import("@shared/schema").FeedbackCommentWithUser>;
   updateFeedbackPost(id: string, updates: { status?: string; adminResponse?: string }): Promise<import("@shared/schema").FeedbackPost | undefined>;
   deleteFeedbackPost(id: string): Promise<void>;
+
+  // Admin activity stats
+  getUserActivityStats(userId: string): Promise<{ projectCount: number; taskCount: number; tasksDoneCount: number; dmoLast30Days: number }>;
 
   // Workspace Collaborators
   getWorkspaceInvites(ownerId: string): Promise<WorkspaceInviteWithMember[]>;
@@ -4181,6 +4185,26 @@ export class DatabaseStorage implements IStorage {
     .where(eq(workspaceInvites.ownerId, ownerId))
     .orderBy(desc(workspaceInvites.createdAt));
     return rows;
+  }
+
+  async getUserActivityStats(userId: string): Promise<{ projectCount: number; taskCount: number; tasksDoneCount: number; dmoLast30Days: number }> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoffDate = thirtyDaysAgo.toISOString().slice(0, 10); // YYYY-MM-DD
+
+    const [projectResult, taskResult, tasksDoneResult, dmoResult] = await Promise.all([
+      db.select({ c: count() }).from(projects).where(eq(projects.userId, userId)),
+      db.select({ c: count() }).from(projectTasks).where(and(eq(projectTasks.userId, userId), isNull(projectTasks.parentTaskId))),
+      db.select({ c: count() }).from(projectTasks).where(and(eq(projectTasks.userId, userId), isNull(projectTasks.parentTaskId), eq(projectTasks.status, "done"))),
+      db.select({ c: count() }).from(dmoEntries).where(and(eq(dmoEntries.userId, userId), gte(dmoEntries.date, cutoffDate))),
+    ]);
+
+    return {
+      projectCount: Number(projectResult[0]?.c ?? 0),
+      taskCount: Number(taskResult[0]?.c ?? 0),
+      tasksDoneCount: Number(tasksDoneResult[0]?.c ?? 0),
+      dmoLast30Days: Number(dmoResult[0]?.c ?? 0),
+    };
   }
 
   async createWorkspaceInvite(ownerId: string, inviteEmail: string, token: string, firstName?: string, lastName?: string): Promise<WorkspaceInvite> {

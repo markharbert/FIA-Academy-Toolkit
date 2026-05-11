@@ -1669,9 +1669,10 @@ export async function registerRoutes(
       // Get identities and credits for provider filter info
       const usersWithProvider = await Promise.all(
         result.users.map(async (user) => {
-          const [identities, credits] = await Promise.all([
+          const [identities, credits, activityStats] = await Promise.all([
             storage.getUserIdentitiesByUser(user.id),
             storage.getVideoTrendsCredits(user.id),
+            storage.getUserActivityStats(user.id),
           ]);
           const providers = identities.map(i => i.provider);
           const hasLocalPassword = !!user.passwordHash;
@@ -1685,6 +1686,10 @@ export async function registerRoutes(
             providers,
             keywordsCreditsThisMonth: credits.creditsUsed,
             keywordsCreditsTotalUsed: credits.totalCreditsUsed || 0,
+            projectCount: activityStats.projectCount,
+            taskCount: activityStats.taskCount,
+            tasksDoneCount: activityStats.tasksDoneCount,
+            dmoLast30Days: activityStats.dmoLast30Days,
           };
         })
       );
