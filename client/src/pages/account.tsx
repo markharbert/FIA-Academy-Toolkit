@@ -249,6 +249,7 @@ export default function AccountPage() {
   });
 
   const [inviteEmail, setInviteEmail] = useState("");
+  const [activeTab, setActiveTab] = useState("profile");
 
   const sendInviteMutation = useMutation({
     mutationFn: async (email: string) => {
@@ -364,7 +365,7 @@ export default function AccountPage() {
   const items = activity?.items ?? [];
 
   return (
-    <div className="container mx-auto max-w-2xl px-4 py-8">
+    <div className="container mx-auto max-w-5xl px-4 py-8">
       {/* Page header with avatar */}
       <div className="flex items-center gap-4 mb-8">
         <Avatar className="h-14 w-14 shrink-0">
@@ -396,50 +397,39 @@ export default function AccountPage() {
         )}
       </div>
 
-      <Tabs defaultValue="profile">
-        <TabsList
-          className={`w-full grid mb-6 ${
-            apiKeyData?.accessEnabled && !isCollaborator
-              ? "grid-cols-7"
-              : apiKeyData?.accessEnabled || !isCollaborator
-              ? "grid-cols-6"
-              : "grid-cols-5"
-          }`}
-          data-testid="tabs-account"
-        >
-          <TabsTrigger value="profile" data-testid="tab-profile">
-            <User className="h-3.5 w-3.5 mr-1.5" />
-            Profile
-          </TabsTrigger>
-          <TabsTrigger value="timezone" data-testid="tab-timezone">
-            <Globe2 className="h-3.5 w-3.5 mr-1.5" />
-            Time Zone
-          </TabsTrigger>
-          <TabsTrigger value="membership" data-testid="tab-membership">
-            <Crown className="h-3.5 w-3.5 mr-1.5" />
-            Membership
-          </TabsTrigger>
-          <TabsTrigger value="notifications" data-testid="tab-notifications">
-            <Bell className="h-3.5 w-3.5 mr-1.5" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="activity" data-testid="tab-activity">
-            <Activity className="h-3.5 w-3.5 mr-1.5" />
-            Activity
-          </TabsTrigger>
-          {!isCollaborator && (
-            <TabsTrigger value="team" data-testid="tab-team">
-              <Users className="h-3.5 w-3.5 mr-1.5" />
-              Team
-            </TabsTrigger>
-          )}
-          {apiKeyData?.accessEnabled && (
-            <TabsTrigger value="api" data-testid="tab-api">
-              <Key className="h-3.5 w-3.5 mr-1.5" />
-              API
-            </TabsTrigger>
-          )}
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex gap-8 items-start">
+          {/* ── Left nav ───────────────────────────────────────── */}
+          <nav className="w-52 shrink-0 sticky top-6 rounded-xl border border-border/60 bg-card p-2 space-y-0.5" data-testid="tabs-account">
+            {(
+              [
+                { value: "profile",       label: "Profile",       icon: User },
+                { value: "timezone",      label: "Time Zone",     icon: Globe2 },
+                { value: "membership",    label: "Membership",    icon: Crown },
+                { value: "notifications", label: "Notifications", icon: Bell },
+                { value: "activity",      label: "Activity",      icon: Activity },
+                ...(!isCollaborator ? [{ value: "team", label: "Team", icon: Users }] : []),
+                ...(apiKeyData?.accessEnabled ? [{ value: "api", label: "API", icon: Key }] : []),
+              ] satisfies { value: string; label: string; icon: ({ className }: { className?: string }) => JSX.Element | null }[]
+            ).map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                onClick={() => setActiveTab(value)}
+                data-testid={`tab-${value}`}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
+                  activeTab === value
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          {/* ── Right content ──────────────────────────────────── */}
+          <div className="flex-1 min-w-0">
 
         {/* ─── Profile Tab ─────────────────────────────────────── */}
         <TabsContent value="profile">
@@ -1116,6 +1106,8 @@ export default function AccountPage() {
             </Card>
           </TabsContent>
         )}
+          </div>{/* /right content */}
+        </div>{/* /flex wrapper */}
       </Tabs>
     </div>
   );
