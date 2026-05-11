@@ -9,6 +9,60 @@ const openai = new OpenAI({
 
 const INBOX_DOMAIN = "score.fearlesspromo.com";
 
+// ── Shared body-text helpers ──────────────────────────────────────────────────
+
+/** Placeholder strings some ESPs send when no plain-text version exists. */
+const BODY_PLACEHOLDER_RE =
+  /^(plain\s+text\s+(version|email|copy)|this\s+email\s+(is\s+)?(best\s+viewed|requires|was\s+sent)|view\s+this\s+email|html\s+version)/i;
+
+/** True if bodyText is empty, ≤ 8 words, or a known ESP stub. */
+function isPlaceholderBodyText(text: string): boolean {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return true;
+  return trimmed.split(/\s+/).filter(Boolean).length <= 8 || BODY_PLACEHOLDER_RE.test(trimmed);
+}
+
+/** Strip style/script/comment blocks then HTML tags to get visible plain text. */
+function extractHtmlText(bodyHtml: string): string {
+  return (bodyHtml || "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Returns the best plain-text representation of an email body.
+ * Falls back to HTML-derived text when bodyText is absent or a stub placeholder.
+ */
+function resolveBodyText(bodyText: string, bodyHtml: string): string {
+  const raw = (bodyText || "").trim();
+  return (!raw || isPlaceholderBodyText(raw)) ? extractHtmlText(bodyHtml) : raw;
+}
+
+/**
+ * Count meaningful text links — excludes image-only anchors (logos, social
+ * icons, CTA image-buttons) that wrap no visible text content.
+ */
+function countTextLinks(bodyHtml: string): number {
+  const html = bodyHtml || "";
+  const anchorBlocks = html.match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) || [];
+  const textLinks = anchorBlocks.filter(block => {
+    const text = block
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;|&#160;/g, " ")
+      .replace(/&[a-z#0-9]+;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return text.length >= 2;
+  }).length;
+  const totalAnchors = (html.match(/<a\b/gi) || []).length;
+  const unmatchedAnchors = Math.max(0, totalAnchors - anchorBlocks.length);
+  return textLinks + unmatchedAnchors;
+}
+
 export function getInboxAddress(token: string): string {
   return `${token}@${INBOX_DOMAIN}`;
 }
@@ -382,14 +436,7 @@ export function analyzeSpamLanguage(
 ): { score: number; flags: SpamFlag[] } {
   const flags: SpamFlag[] = [];
 
-  const htmlAsText = (bodyHtml || "")
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-  const bodyLower = ((bodyText || "").trim() || htmlAsText);
+  const bodyLower = resolveBodyText(bodyText, bodyHtml).toLowerCase();
   const subjectLower = (subject || "").toLowerCase();
   const combined = subjectLower + " " + bodyLower;
 
@@ -470,8 +517,8 @@ export function analyzeSpamLanguage(
     flags.push({ label: `${bodyExclamations} exclamation marks in body`, severity: "medium", category: "pattern" });
   }
 
-  // ALL CAPS words in body (3+ letters)
-  const capsWordMatches = bodyText.match(/\b[A-Z]{3,}\b/g) || [];
+  // ALL CAPS words in body (3+ letters) — use resolved text so placeholder stubs don't hide real caps
+  const capsWordMatches = resolveBodyText(bodyText, bodyHtml).match(/\b[A-Z]{3,}\b/g) || [];
   const filteredCapsWords = [...new Set(capsWordMatches)].filter(w =>
     !["SPF", "DKIM", "DMARC", "HTML", "URL", "CTA", "P.S", "PS"].includes(w)
   );
@@ -484,9 +531,10 @@ export function analyzeSpamLanguage(
     });
   }
 
-  // Link density
+  // Link density — use improved text-link count (excludes image-only anchors)
+  // and proper word count derived from resolved body text (not stub placeholders).
   if (bodyHtml) {
-    const linkCount = (bodyHtml.match(/<a\s/gi) || []).length;
+    const linkCount = countTextLinks(bodyHtml);
     const wordCount = bodyLower.split(/\s+/).filter(Boolean).length;
     if (linkCount > 10) {
       flags.push({ label: `High link count (${linkCount} links) may trigger filters`, severity: "medium", category: "pattern" });
@@ -529,7 +577,8 @@ export function analyzeSubjectLine(subject: string): SubjectAnalysis {
 
 export function analyzeTechnicalHealth(bodyHtml: string, bodyText: string): TechnicalHealth {
   const hasHtmlVersion = (bodyHtml || "").trim().length > 0;
-  const hasPlainTextVersion = (bodyText || "").trim().length > 0;
+  // Only report a real plain-text version — stub placeholders ("PLAIN TEXT VERSION" etc.) don't count
+  const hasPlainTextVersion = !isPlaceholderBodyText(bodyText);
   const estimatedSizeKb = parseFloat(((bodyHtml.length + bodyText.length) / 1024).toFixed(1));
 
   const imgTags = (bodyHtml.match(/<img[^>]*>/gi) || []);
@@ -635,23 +684,8 @@ export async function analyzeSenderTrust(
 // ── Content quality analysis ────────────────────────────────────────────────
 
 export function analyzeContentQuality(bodyText: string, bodyHtml: string, subject: string = ""): ContentQuality {
-  // Strip style/script/comment blocks first so their content isn't counted as words
-  const htmlCleaned = (bodyHtml || "")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ");
-  // Strip remaining HTML tags to get visible text
-  const htmlAsText = htmlCleaned.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-
-  // Some ESPs send a stub plain-text body like "PLAIN TEXT VERSION" or
-  // "This email is best viewed in HTML" rather than real content.
-  // Detect these placeholders (≤ 8 words, or matching known stub phrases) and
-  // fall back to the HTML-derived text so word/link counts are accurate.
-  const PLACEHOLDER_RE = /^(plain\s+text\s+(version|email|copy)|this\s+email\s+(is\s+)?(best\s+viewed|requires|was\s+sent)|view\s+this\s+email|html\s+version)/i;
-  const rawBodyText = (bodyText || "").trim();
-  const rawBodyWords = rawBodyText.split(/\s+/).filter(Boolean).length;
-  const isPlaceholderText = rawBodyWords <= 8 || PLACEHOLDER_RE.test(rawBodyText);
-  const textToSearch = (!isPlaceholderText && rawBodyText) ? rawBodyText : htmlAsText;
+  const htmlAsText = extractHtmlText(bodyHtml);
+  const textToSearch = resolveBodyText(bodyText, bodyHtml);
 
   const wordCount = textToSearch.split(/\s+/).filter(Boolean).length;
 
@@ -823,25 +857,9 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
   });
 
   // Link-to-text ratio: more than 1 link per 50 words is flagged.
-  // Count only meaningful text links — exclude anchors whose visible content is
-  // purely images (logos, social icons, CTA image-buttons). ESP templates commonly
-  // wrap images in nested tables inside <a>, so we match the full <a>...</a> block
-  // and strip all inner tags to check whether real text remains.
-  const anchorBlocks = (bodyHtml || "").match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) || [];
-  const textLinkCount = anchorBlocks.filter(block => {
-    // Strip all HTML tags and decode common HTML entities to get plain text content
-    const text = block
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;|&#160;/g, " ")
-      .replace(/&[a-z#0-9]+;/gi, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    return text.length >= 2; // needs at least 2 non-whitespace chars to be a text link
-  }).length;
-  // Anchors with no closing </a> can't be matched above — count them conservatively
-  const totalAnchors = ((bodyHtml || "").match(/<a\b/gi) || []).length;
-  const unmatchedAnchors = Math.max(0, totalAnchors - anchorBlocks.length);
-  const linkCount = textLinkCount + unmatchedAnchors;
+  // Use shared countTextLinks() which excludes image-only anchors (logos, social
+  // icons, CTA image-buttons) and handles nested-table ESP templates correctly.
+  const linkCount = countTextLinks(bodyHtml);
   const linkToTextRatio = wordCount > 0 ? linkCount / wordCount : 0;
 
   // Subject line character count
@@ -867,19 +885,8 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
 // ── CAN-SPAM Compliance analysis ─────────────────────────────────────────────
 
 export function analyzeCanSpamCompliance(bodyText: string, bodyHtml: string, subject: string): CanSpamCompliance {
-  // Strip style/script blocks before extracting text (same as analyzeContentQuality)
-  const htmlCleaned = (bodyHtml || "")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ");
-  const htmlAsText = htmlCleaned.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-
-  // Detect placeholder bodyText (same logic as analyzeContentQuality)
-  const PLACEHOLDER_RE = /^(plain\s+text\s+(version|email|copy)|this\s+email\s+(is\s+)?(best\s+viewed|requires|was\s+sent)|view\s+this\s+email|html\s+version)/i;
-  const rawBodyText = (bodyText || "").trim();
-  const rawBodyWords = rawBodyText.split(/\s+/).filter(Boolean).length;
-  const isPlaceholderText = rawBodyWords <= 8 || PLACEHOLDER_RE.test(rawBodyText);
-  const textToSearch = (!isPlaceholderText && rawBodyText) ? rawBodyText : htmlAsText;
+  const htmlAsText = extractHtmlText(bodyHtml);
+  const textToSearch = resolveBodyText(bodyText, bodyHtml);
 
   const combinedRaw = (textToSearch + " " + bodyHtml).toLowerCase();
 
