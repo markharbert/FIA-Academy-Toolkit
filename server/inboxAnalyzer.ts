@@ -642,7 +642,16 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
     .replace(/<!--[\s\S]*?-->/g, " ");
   // Strip remaining HTML tags to get visible text
   const htmlAsText = htmlCleaned.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  const textToSearch = (bodyText || "").trim() || htmlAsText;
+
+  // Some ESPs send a stub plain-text body like "PLAIN TEXT VERSION" or
+  // "This email is best viewed in HTML" rather than real content.
+  // Detect these placeholders (≤ 8 words, or matching known stub phrases) and
+  // fall back to the HTML-derived text so word/link counts are accurate.
+  const PLACEHOLDER_RE = /^(plain\s+text\s+(version|email|copy)|this\s+email\s+(is\s+)?(best\s+viewed|requires|was\s+sent)|view\s+this\s+email|html\s+version)/i;
+  const rawBodyText = (bodyText || "").trim();
+  const rawBodyWords = rawBodyText.split(/\s+/).filter(Boolean).length;
+  const isPlaceholderText = rawBodyWords <= 8 || PLACEHOLDER_RE.test(rawBodyText);
+  const textToSearch = (!isPlaceholderText && rawBodyText) ? rawBodyText : htmlAsText;
 
   const wordCount = textToSearch.split(/\s+/).filter(Boolean).length;
 
