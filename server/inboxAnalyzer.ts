@@ -814,11 +814,25 @@ export function analyzeContentQuality(bodyText: string, bodyHtml: string, subjec
   });
 
   // Link-to-text ratio: more than 1 link per 50 words is flagged.
-  // Count only meaningful text links — exclude image-only anchors (logos, social
-  // icons, CTA images) where the first child is an <img> tag with no text.
+  // Count only meaningful text links — exclude anchors whose visible content is
+  // purely images (logos, social icons, CTA image-buttons). ESP templates commonly
+  // wrap images in nested tables inside <a>, so we match the full <a>...</a> block
+  // and strip all inner tags to check whether real text remains.
+  const anchorBlocks = (bodyHtml || "").match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) || [];
+  const textLinkCount = anchorBlocks.filter(block => {
+    // Strip all HTML tags and decode common HTML entities to get plain text content
+    const text = block
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;|&#160;/g, " ")
+      .replace(/&[a-z#0-9]+;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return text.length >= 2; // needs at least 2 non-whitespace chars to be a text link
+  }).length;
+  // Anchors with no closing </a> can't be matched above — count them conservatively
   const totalAnchors = ((bodyHtml || "").match(/<a\b/gi) || []).length;
-  const imageOnlyAnchors = ((bodyHtml || "").match(/<a\b[^>]*>\s*<img\b/gi) || []).length;
-  const linkCount = Math.max(0, totalAnchors - imageOnlyAnchors);
+  const unmatchedAnchors = Math.max(0, totalAnchors - anchorBlocks.length);
+  const linkCount = textLinkCount + unmatchedAnchors;
   const linkToTextRatio = wordCount > 0 ? linkCount / wordCount : 0;
 
   // Subject line character count

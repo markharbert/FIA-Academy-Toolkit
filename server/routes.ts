@@ -5553,6 +5553,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           const canSpamCompliance = analyzeCanSpamCompliance(bodyText, bodyHtml, subject);
           const senderTrust = await analyzeSenderTrust(fromRaw, replyTo || undefined, sendingIp, sendingDomain, bodyHtml);
 
+          // Debug: log intermediate values so we can see what the analysis found
+          {
+            const _totalAnchors = ((bodyHtml || "").match(/<a\b/gi) || []).length;
+            const _anchorBlocks = ((bodyHtml || "").match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) || []).length;
+            const _bodyTextWords = (bodyText || "").trim().split(/\s+/).filter(Boolean).length;
+            console.log(`[reanalyze-debug] emailId=${emailId} bodyText.len=${bodyText.length} bodyHtml.len=${bodyHtml.length} bodyTextWords=${_bodyTextWords} wordCount=${contentQuality.wordCount} totalAnchors=${_totalAnchors} anchorBlocks=${_anchorBlocks} linkCount=${contentQuality.linkCount} ratio=${contentQuality.linkToTextRatio?.toFixed(4)}`);
+            console.log(`[reanalyze-debug] bodyTextPreview=${JSON.stringify((bodyText || "").slice(0, 400))}`);
+          }
+
           const overallScore = computeOverallScore({
             spfResult,
             dkimResult,
