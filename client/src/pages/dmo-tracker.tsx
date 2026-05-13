@@ -204,6 +204,30 @@ function getTodayString(tz?: string | null): string {
   }
 }
 
+// Returns the UTC-millisecond timestamp for the very start of `dateStr` (midnight)
+// in the given IANA timezone. Uses a binary search with ~1-minute precision,
+// which is more than accurate enough for splitting timer seconds across midnight.
+function getDayBoundaryMs(dateStr: string, tz: string): number {
+  try {
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric", month: "2-digit", day: "2-digit",
+    });
+    // Start 14 hours before UTC midnight — guaranteed to be in the previous day for
+    // any timezone (offsets range from UTC-12 to UTC+14).
+    let lo = new Date(`${dateStr}T00:00:00Z`).getTime() - 14 * 3_600_000;
+    let hi = lo + 28 * 3_600_000; // 28-hour search window
+    while (hi - lo > 60_000) { // 1-minute precision
+      const mid = Math.floor((lo + hi) / 2);
+      if (fmt.format(new Date(mid)) < dateStr) lo = mid;
+      else hi = mid;
+    }
+    return hi;
+  } catch {
+    return new Date(`${dateStr}T00:00:00`).getTime();
+  }
+}
+
 function formatDisplayDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -237,8 +261,9 @@ type TimerStatus = "idle" | "running" | "paused" | "done";
 
 interface TimerState {
   status: TimerStatus;
-  elapsed: number;       // total seconds accumulated (including previously saved)
-  startedAt: number | null; // Date.now() when current run started
+  elapsed: number;            // total seconds accumulated (including previously saved)
+  startedAt: number | null;   // Date.now() when current run started
+  sessionStartedDate: string | null; // YYYY-MM-DD date key when session began (for midnight-split detection)
 }
 
 // ─── Point dots ──────────────────────────────────────────────────────────────
@@ -281,34 +306,35 @@ interface ActivityCardProps {
   targetMinutes: number;
   savedSeconds: number;
   savedChecked: boolean;
+  timezone: string;
   onSave: (seconds: number) => Promise<void>;
-  onAutoSave: (seconds: number) => void;
+  onAutoSave: (seconds: number, date?: string) => void;
   onGoalChange: (minutes: number) => void;
   isSaving: boolean;
 }
 
 const LS_KEY = (key: string) => `dmo-draft-${key}`;
 
-function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onSave, onAutoSave, onGoalChange, isSaving }: ActivityCardProps) {
+function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, timezone, onSave, onAutoSave, onGoalChange, isSaving }: ActivityCardProps) {
   const Icon = activity.icon;
 
   const [timer, setTimer] = useState<TimerState>(() => {
     if (savedChecked || savedSeconds > 0) {
-      return { status: "done", elapsed: savedSeconds, startedAt: null };
+      return { status: "done", elapsed: savedSeconds, startedAt: null, sessionStartedDate: null };
     }
     try {
       const raw = localStorage.getItem(LS_KEY(activity.key));
       if (raw) {
-        const draft = JSON.parse(raw) as { elapsed: number; startedAt: number; status?: string };
+        const draft = JSON.parse(raw) as { elapsed: number; startedAt: number; status?: string; sessionStartedDate?: string };
         if (draft.status === "running" && draft.startedAt) {
           // Timer was running when user left — restore as running so it keeps ticking
-          return { status: "running", elapsed: draft.elapsed, startedAt: draft.startedAt };
+          return { status: "running", elapsed: draft.elapsed, startedAt: draft.startedAt, sessionStartedDate: draft.sessionStartedDate ?? null };
         }
         const recovered = draft.elapsed + Math.floor((Date.now() - draft.startedAt) / 1000);
-        return { status: "paused", elapsed: recovered, startedAt: null };
+        return { status: "paused", elapsed: recovered, startedAt: null, sessionStartedDate: null };
       }
     } catch { /* ignore */ }
-    return { status: "idle", elapsed: 0, startedAt: null };
+    return { status: "idle", elapsed: 0, startedAt: null, sessionStartedDate: null };
   });
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -337,46 +363,85 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
       ? timer.elapsed + Math.floor((Date.now() - timer.startedAt) / 1000)
       : timer.elapsed;
 
-  // Tick every second while running — also writes crash-recovery draft to localStorage
+  // Tick every second while running.
+  // Also writes crash-recovery draft to localStorage and detects midnight crossings.
   useEffect(() => {
     if (timer.status === "running" && timer.startedAt) {
       const capturedStart = timer.startedAt;
       const capturedElapsed = timer.elapsed;
+      const capturedSessionDate = timer.sessionStartedDate;
       intervalRef.current = setInterval(() => {
         try {
           localStorage.setItem(LS_KEY(activity.key), JSON.stringify({
             elapsed: capturedElapsed,
             startedAt: capturedStart,
+            sessionStartedDate: capturedSessionDate,
             status: "running",
           }));
         } catch { /* ignore */ }
-        setTimer(t => ({ ...t })); // trigger re-render for live time
+
+        // ── Midnight-split detection ──────────────────────────────────────────
+        // If the calendar date has changed since the session started, we crossed
+        // midnight. Split the elapsed time between yesterday and today so each
+        // day only gets credit for the minutes that actually happened on that day.
+        const currentDate = getTodayString(timezone);
+        if (capturedSessionDate && capturedSessionDate !== currentDate) {
+          const midnightMs = getDayBoundaryMs(currentDate, timezone);
+          // Seconds of the current run that belong to the PREVIOUS day
+          const preMs = capturedStart < midnightMs ? midnightMs - capturedStart : 0;
+          const yesterdaySecs = capturedElapsed + Math.floor(preMs / 1000);
+          // Seconds of the current run that belong to TODAY
+          const todaySecs = Math.max(0, Math.floor((Date.now() - midnightMs) / 1000));
+          // Persist yesterday's final tally (fire-and-forget)
+          if (yesterdaySecs > 0) onAutoSave(yesterdaySecs, capturedSessionDate);
+          // Reset the timer so elapsed only counts today's portion
+          setTimer({
+            status: "running",
+            elapsed: 0,
+            startedAt: midnightMs,
+            sessionStartedDate: currentDate,
+          });
+          return; // skip the normal re-render — setTimer above will trigger one
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        setTimer(t => ({ ...t })); // trigger re-render for live time display
       }, 1000);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [timer.status, timer.startedAt, timer.elapsed, activity.key]);
+  }, [timer.status, timer.startedAt, timer.elapsed, timer.sessionStartedDate, activity.key, timezone, onAutoSave]);
 
-  // Auto-save to server every 5 s while running
+  // Auto-save to server every 5 s while running.
+  // Skip the tick if the date has already changed — the tick effect handles that split.
   useEffect(() => {
     if (timer.status !== "running" || !timer.startedAt) return;
     const capturedElapsed = timer.elapsed;
     const capturedStart = timer.startedAt;
+    const capturedSessionDate = timer.sessionStartedDate;
     const id = setInterval(() => {
+      const currentDate = getTodayString(timezone);
+      if (capturedSessionDate && capturedSessionDate !== currentDate) return; // midnight split pending
       const added = Math.floor((Date.now() - capturedStart) / 1000);
       const totalSeconds = capturedElapsed + added;
       if (totalSeconds > 0) onAutoSave(totalSeconds);
     }, 5_000);
     return () => clearInterval(id);
-  }, [timer.status, timer.startedAt, timer.elapsed, onAutoSave]);
+  }, [timer.status, timer.startedAt, timer.elapsed, timer.sessionStartedDate, timezone, onAutoSave]);
 
   const handleStart = useCallback(() => {
-    setTimer(prev => ({ ...prev, status: "running", startedAt: Date.now() }));
-  }, []);
+    setTimer(prev => ({
+      ...prev,
+      status: "running",
+      startedAt: Date.now(),
+      // Record the date when the session first starts (preserved across pause/resume)
+      sessionStartedDate: prev.sessionStartedDate ?? getTodayString(timezone),
+    }));
+  }, [timezone]);
 
   const handlePause = useCallback(() => {
     setTimer(prev => {
       const added = prev.startedAt ? Math.floor((Date.now() - prev.startedAt) / 1000) : 0;
-      return { status: "paused", elapsed: prev.elapsed + added, startedAt: null };
+      return { status: "paused", elapsed: prev.elapsed + added, startedAt: null, sessionStartedDate: prev.sessionStartedDate };
     });
     try { localStorage.removeItem(LS_KEY(activity.key)); } catch { /* ignore */ }
   }, [activity.key]);
@@ -386,16 +451,17 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
       status: "running",
       elapsed: savedSeconds,
       startedAt: Date.now(),
+      sessionStartedDate: getTodayString(timezone),
     });
     setEditingDone(false);
-  }, [savedSeconds]);
+  }, [savedSeconds, timezone]);
 
   // "Done" — capture time and show confirmation UI instead of saving immediately
   const handleDone = useCallback(() => {
     const added = timer.startedAt ? Math.floor((Date.now() - timer.startedAt) / 1000) : 0;
     const totalSeconds = timer.elapsed + added;
     // Stop the timer, hold at current value
-    setTimer({ status: "paused", elapsed: totalSeconds, startedAt: null });
+    setTimer({ status: "paused", elapsed: totalSeconds, startedAt: null, sessionStartedDate: timer.sessionStartedDate });
     try { localStorage.removeItem(LS_KEY(activity.key)); } catch { /* ignore */ }
     // Pre-fill confirmation with mm:ss format
     const m = Math.floor(totalSeconds / 60);
@@ -406,7 +472,7 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
 
   const handleConfirmSave = useCallback(async () => {
     const seconds = parseMinsInput(pendingInput);
-    setTimer({ status: "done", elapsed: seconds, startedAt: null });
+    setTimer({ status: "done", elapsed: seconds, startedAt: null, sessionStartedDate: null });
     setPendingSecs(null);
     await onSave(seconds);
   }, [pendingInput, onSave]);
@@ -442,7 +508,7 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
 
   const handleSaveEditDone = useCallback(async () => {
     const seconds = parseMinsInput(editDoneInput);
-    setTimer({ status: "done", elapsed: seconds, startedAt: null });
+    setTimer({ status: "done", elapsed: seconds, startedAt: null, sessionStartedDate: null });
     setEditingDone(false);
     await onSave(seconds);
   }, [editDoneInput, onSave]);
@@ -456,7 +522,7 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, onS
     if (seconds <= 0) return;
     setShowManualEntry(false);
     setManualInput("");
-    setTimer({ status: "done", elapsed: seconds, startedAt: null });
+    setTimer({ status: "done", elapsed: seconds, startedAt: null, sessionStartedDate: null });
     await onSave(seconds);
   }, [manualInput, onSave]);
 
@@ -1701,14 +1767,20 @@ export default function DmoTrackerPage() {
   const handleAutoSave = useCallback(async (
     key: typeof DMO_ACTIVITIES[number]["key"],
     secondsKey: typeof DMO_ACTIVITIES[number]["secondsKey"],
-    seconds: number
+    seconds: number,
+    date?: string
   ) => {
     try {
-      await saveMutation.mutateAsync({ [key]: true, [secondsKey]: seconds });
+      if (date && date !== today) {
+        // Midnight-split: save to a specific past date bypassing the mutation's "today" default
+        await apiRequest("POST", "/api/dmo/entry", { date, [key]: true, [secondsKey]: seconds });
+      } else {
+        await saveMutation.mutateAsync({ [key]: true, [secondsKey]: seconds });
+      }
     } catch {
       // Silently ignore — will retry in 5 s
     }
-  }, [saveMutation]);
+  }, [saveMutation, today]);
 
   const handleGoalChange = useCallback((
     settingsKey: typeof DMO_ACTIVITIES[number]["settingsKey"],
@@ -1956,8 +2028,9 @@ export default function DmoTrackerPage() {
                     targetMinutes={getTarget(activity)}
                     savedSeconds={entry?.[activity.secondsKey] ?? 0}
                     savedChecked={entry?.[activity.key] ?? false}
+                    timezone={user?.timezone ?? "America/New_York"}
                     onSave={(seconds) => handleActivitySave(activity.key, activity.secondsKey, seconds)}
-                    onAutoSave={(seconds) => handleAutoSave(activity.key, activity.secondsKey, seconds)}
+                    onAutoSave={(seconds, date) => handleAutoSave(activity.key, activity.secondsKey, seconds, date)}
                     onGoalChange={(minutes) => handleGoalChange(activity.settingsKey, minutes)}
                     isSaving={saveMutation.isPending}
                   />
