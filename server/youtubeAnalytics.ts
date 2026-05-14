@@ -69,79 +69,80 @@ const DEVICE_LABELS: Record<string, string> = {
   GAME_CONSOLE: "Game Console",
 };
 
+const AGE_LABELS: Record<string, string> = {
+  "age13-17": "13–17",
+  "age18-24": "18–24",
+  "age25-34": "25–34",
+  "age35-44": "35–44",
+  "age45-54": "45–54",
+  "age55-64": "55–64",
+  "age65-": "65+",
+};
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 export type YouTubeChannel = {
-  id: string;
-  title: string;
-  handle: string;
-  thumbnail: string;
-  subscriberCount: number;
-  videoCount: number;
-  viewCount: number;
-  publishedAt: string;
-  uploadsPlaylistId: string;
+  id: string; title: string; handle: string; thumbnail: string;
+  subscriberCount: number; videoCount: number; viewCount: number;
+  publishedAt: string; uploadsPlaylistId: string;
 };
 
 export type YouTubeVideo = {
-  id: string;
-  title: string;
-  thumbnail: string;
-  publishedAt: string;
-  viewCount: number;
-  likeCount: number;
-  commentCount: number;
-  duration: string;
-  tags: string[];
+  id: string; title: string; thumbnail: string; publishedAt: string;
+  viewCount: number; likeCount: number; commentCount: number;
+  duration: string; tags: string[];
 };
 
 export type AnalyticsDay = {
-  date: string;
-  views: number;
-  watchMinutes: number;
-  subscribersGained: number;
-  subscribersLost: number;
-  impressions: number;
-  ctr: number;
+  date: string; views: number; watchMinutes: number;
+  subscribersGained: number; subscribersLost: number;
+  impressions: number; ctr: number; shares: number;
 };
 
 export type ChannelAnalyticsTotals = {
-  views: number;
-  watchHours: number;
-  avgViewDuration: number;
-  subscribersGained: number;
-  subscribersLost: number;
-  impressions: number;
-  ctr: number;
+  views: number; watchHours: number; avgViewDuration: number;
+  subscribersGained: number; subscribersLost: number;
+  impressions: number; ctr: number; shares: number;
 };
 
 export type TrafficSource = {
-  source: string;
-  label: string;
-  views: number;
-  watchMinutes: number;
+  source: string; label: string; views: number; watchMinutes: number;
 };
 
 export type DeviceBreakdown = {
-  device: string;
-  label: string;
-  views: number;
-  pct: number;
+  device: string; label: string; views: number; pct: number;
 };
 
 export type CountryViews = {
-  country: string;
-  views: number;
-  watchMinutes: number;
+  country: string; views: number; watchMinutes: number;
+};
+
+export type SearchTerm = {
+  term: string; views: number;
+};
+
+export type AgeGroup = {
+  age: string; label: string; pct: number;
+};
+
+export type DemographicsData = {
+  ageGroups: AgeGroup[];
+  genderMalePct: number;
+  genderFemalePct: number;
+};
+
+export type SubscriberStatusData = {
+  subscribedViews: number; subscribedWatchMinutes: number;
+  nonSubscribedViews: number; nonSubscribedWatchMinutes: number;
 };
 
 export type VideoAnalyticsSummary = {
-  videoId: string;
-  views: number;
-  watchMinutes: number;
-  avgViewDuration: number;
-  avgViewPercentage: number;
-  likes: number;
-  comments: number;
+  videoId: string; views: number; watchMinutes: number;
+  avgViewDuration: number; avgViewPercentage: number;
+  likes: number; comments: number; shares: number;
 };
+
+// ── OAuth ─────────────────────────────────────────────────────────────────────
 
 export function getYouTubeAuthUrl(userId: string): string {
   const client = getOAuthClient();
@@ -154,10 +155,8 @@ export function getYouTubeAuthUrl(userId: string): string {
 }
 
 export async function exchangeYouTubeCode(code: string): Promise<{
-  accessToken: string;
-  refreshToken: string | null;
-  expiry: Date | null;
-  email: string;
+  accessToken: string; refreshToken: string | null;
+  expiry: Date | null; email: string;
 }> {
   const client = getOAuthClient();
   const { tokens } = await client.getToken(code);
@@ -172,9 +171,10 @@ export async function exchangeYouTubeCode(code: string): Promise<{
   };
 }
 
+// ── YouTube Data API v3 ───────────────────────────────────────────────────────
+
 export async function fetchYouTubeChannel(
-  accessToken: string,
-  refreshToken: string | null
+  accessToken: string, refreshToken: string | null
 ): Promise<YouTubeChannel> {
   const auth = makeAuthClient(accessToken, refreshToken);
   const yt = google.youtube({ version: "v3", auth });
@@ -191,8 +191,7 @@ export async function fetchYouTubeChannel(
     thumbnail:
       ch.snippet?.thumbnails?.high?.url ||
       ch.snippet?.thumbnails?.medium?.url ||
-      ch.snippet?.thumbnails?.default?.url ||
-      "",
+      ch.snippet?.thumbnails?.default?.url || "",
     subscriberCount: parseInt(ch.statistics?.subscriberCount || "0"),
     videoCount: parseInt(ch.statistics?.videoCount || "0"),
     viewCount: parseInt(ch.statistics?.viewCount || "0"),
@@ -202,17 +201,14 @@ export async function fetchYouTubeChannel(
 }
 
 export async function fetchYouTubeVideos(
-  accessToken: string,
-  refreshToken: string | null,
-  uploadsPlaylistId: string,
-  maxVideos = 50
+  accessToken: string, refreshToken: string | null,
+  uploadsPlaylistId: string, maxVideos = 50
 ): Promise<YouTubeVideo[]> {
   const auth = makeAuthClient(accessToken, refreshToken);
   const yt = google.youtube({ version: "v3", auth });
 
   const videoIds: string[] = [];
   let pageToken: string | undefined;
-
   do {
     const { data: playlistData } = await yt.playlistItems.list({
       part: ["contentDetails"],
@@ -220,11 +216,7 @@ export async function fetchYouTubeVideos(
       maxResults: 50,
       pageToken,
     });
-    videoIds.push(
-      ...(playlistData.items || [])
-        .map((i) => i.contentDetails?.videoId!)
-        .filter(Boolean)
-    );
+    videoIds.push(...(playlistData.items || []).map((i) => i.contentDetails?.videoId!).filter(Boolean));
     pageToken = playlistData.nextPageToken ?? undefined;
   } while (pageToken && videoIds.length < maxVideos);
 
@@ -238,30 +230,25 @@ export async function fetchYouTubeVideos(
       part: ["snippet", "statistics", "contentDetails"],
       id: chunk,
     });
-    allVideos.push(
-      ...(videoData.items || []).map((v) => ({
-        id: v.id!,
-        title: v.snippet?.title || "",
-        thumbnail:
-          v.snippet?.thumbnails?.medium?.url ||
-          v.snippet?.thumbnails?.default?.url ||
-          "",
-        publishedAt: v.snippet?.publishedAt || "",
-        viewCount: parseInt(v.statistics?.viewCount || "0"),
-        likeCount: parseInt(v.statistics?.likeCount || "0"),
-        commentCount: parseInt(v.statistics?.commentCount || "0"),
-        duration: v.contentDetails?.duration || "",
-        tags: v.snippet?.tags || [],
-      }))
-    );
+    allVideos.push(...(videoData.items || []).map((v) => ({
+      id: v.id!,
+      title: v.snippet?.title || "",
+      thumbnail: v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url || "",
+      publishedAt: v.snippet?.publishedAt || "",
+      viewCount: parseInt(v.statistics?.viewCount || "0"),
+      likeCount: parseInt(v.statistics?.likeCount || "0"),
+      commentCount: parseInt(v.statistics?.commentCount || "0"),
+      duration: v.contentDetails?.duration || "",
+      tags: v.snippet?.tags || [],
+    })));
   }
   return allVideos;
 }
 
+// ── YouTube Analytics API v2 ──────────────────────────────────────────────────
+
 export async function fetchChannelAnalytics(
-  accessToken: string,
-  refreshToken: string | null,
-  days: number
+  accessToken: string, refreshToken: string | null, days: number
 ): Promise<{ timeSeries: AnalyticsDay[]; totals: ChannelAnalyticsTotals } | null> {
   try {
     const auth = makeAuthClient(accessToken, refreshToken);
@@ -271,18 +258,13 @@ export async function fetchChannelAnalytics(
 
     const [tsRes, totRes] = await Promise.all([
       yta.reports.query({
-        ids: "channel==MINE",
-        startDate,
-        endDate,
-        metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost,impressions,impressionClickThroughRate",
-        dimensions: "day",
-        sort: "day",
+        ids: "channel==MINE", startDate, endDate,
+        metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost,impressions,impressionClickThroughRate,shares",
+        dimensions: "day", sort: "day",
       }),
       yta.reports.query({
-        ids: "channel==MINE",
-        startDate,
-        endDate,
-        metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost,impressions,impressionClickThroughRate",
+        ids: "channel==MINE", startDate, endDate,
+        metrics: "views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost,impressions,impressionClickThroughRate,shares",
       }),
     ]);
 
@@ -297,13 +279,12 @@ export async function fetchChannelAnalytics(
         subscribersLost: Number(r["subscribersLost"] || 0),
         impressions: Number(r["impressions"] || 0),
         ctr: Number(r["impressionClickThroughRate"] || 0) * 100,
+        shares: Number(r["shares"] || 0),
       };
     });
 
     const totHeaders = (totRes.data.columnHeaders || []).map((h) => h.name!);
-    const totRow = totRes.data.rows?.[0]
-      ? parseRow(totRes.data.rows[0] as unknown[], totHeaders)
-      : {};
+    const totRow = totRes.data.rows?.[0] ? parseRow(totRes.data.rows[0] as unknown[], totHeaders) : {};
 
     const totals: ChannelAnalyticsTotals = {
       views: Number(totRow["views"] || 0),
@@ -313,102 +294,77 @@ export async function fetchChannelAnalytics(
       subscribersLost: Number(totRow["subscribersLost"] || 0),
       impressions: Number(totRow["impressions"] || 0),
       ctr: Number(totRow["impressionClickThroughRate"] || 0) * 100,
+      shares: Number(totRow["shares"] || 0),
     };
 
     return { timeSeries, totals };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[YouTube Analytics] fetchChannelAnalytics error:", msg);
+    console.error("[YouTube Analytics] fetchChannelAnalytics error:", err instanceof Error ? err.message : err);
     return null;
   }
 }
 
 export async function fetchTrafficSources(
-  accessToken: string,
-  refreshToken: string | null,
-  days: number
+  accessToken: string, refreshToken: string | null, days: number
 ): Promise<TrafficSource[]> {
   try {
     const auth = makeAuthClient(accessToken, refreshToken);
     const yta = google.youtubeAnalytics({ version: "v2", auth });
     const { data } = await yta.reports.query({
-      ids: "channel==MINE",
-      startDate: daysAgoStr(days),
-      endDate: todayStr(),
+      ids: "channel==MINE", startDate: daysAgoStr(days), endDate: todayStr(),
       metrics: "views,estimatedMinutesWatched",
-      dimensions: "insightTrafficSourceType",
-      sort: "-views",
+      dimensions: "insightTrafficSourceType", sort: "-views",
     });
     const headers = (data.columnHeaders || []).map((h) => h.name!);
     return (data.rows || []).map((row) => {
       const r = parseRow(row as unknown[], headers);
       const source = String(r["insightTrafficSourceType"] || "");
       return {
-        source,
-        label: TRAFFIC_LABELS[source] || source,
+        source, label: TRAFFIC_LABELS[source] || source,
         views: Number(r["views"] || 0),
         watchMinutes: Number(r["estimatedMinutesWatched"] || 0),
       };
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[YouTube Analytics] fetchTrafficSources error:", msg);
+    console.error("[YouTube Analytics] fetchTrafficSources error:", err instanceof Error ? err.message : err);
     return [];
   }
 }
 
 export async function fetchDeviceBreakdown(
-  accessToken: string,
-  refreshToken: string | null,
-  days: number
+  accessToken: string, refreshToken: string | null, days: number
 ): Promise<DeviceBreakdown[]> {
   try {
     const auth = makeAuthClient(accessToken, refreshToken);
     const yta = google.youtubeAnalytics({ version: "v2", auth });
     const { data } = await yta.reports.query({
-      ids: "channel==MINE",
-      startDate: daysAgoStr(days),
-      endDate: todayStr(),
-      metrics: "views",
-      dimensions: "deviceType",
-      sort: "-views",
+      ids: "channel==MINE", startDate: daysAgoStr(days), endDate: todayStr(),
+      metrics: "views", dimensions: "deviceType", sort: "-views",
     });
     const headers = (data.columnHeaders || []).map((h) => h.name!);
     const rows = (data.rows || []).map((row) => {
       const r = parseRow(row as unknown[], headers);
       const device = String(r["deviceType"] || "");
-      return {
-        device,
-        label: DEVICE_LABELS[device] || device,
-        views: Number(r["views"] || 0),
-        pct: 0,
-      };
+      return { device, label: DEVICE_LABELS[device] || device, views: Number(r["views"] || 0), pct: 0 };
     });
     const total = rows.reduce((s, r) => s + r.views, 0);
     return rows.map((r) => ({ ...r, pct: total > 0 ? Math.round((r.views / total) * 100) : 0 }));
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[YouTube Analytics] fetchDeviceBreakdown error:", msg);
+    console.error("[YouTube Analytics] fetchDeviceBreakdown error:", err instanceof Error ? err.message : err);
     return [];
   }
 }
 
 export async function fetchTopCountries(
-  accessToken: string,
-  refreshToken: string | null,
-  days: number
+  accessToken: string, refreshToken: string | null, days: number
 ): Promise<CountryViews[]> {
   try {
     const auth = makeAuthClient(accessToken, refreshToken);
     const yta = google.youtubeAnalytics({ version: "v2", auth });
     const { data } = await yta.reports.query({
-      ids: "channel==MINE",
-      startDate: daysAgoStr(days),
-      endDate: todayStr(),
+      ids: "channel==MINE", startDate: daysAgoStr(days), endDate: todayStr(),
       metrics: "views,estimatedMinutesWatched",
-      dimensions: "country",
-      sort: "-views",
-      maxResults: 10,
+      dimensions: "country", sort: "-views", maxResults: 10,
     });
     const headers = (data.columnHeaders || []).map((h) => h.name!);
     return (data.rows || []).map((row) => {
@@ -420,28 +376,124 @@ export async function fetchTopCountries(
       };
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[YouTube Analytics] fetchTopCountries error:", msg);
+    console.error("[YouTube Analytics] fetchTopCountries error:", err instanceof Error ? err.message : err);
     return [];
   }
 }
 
+export async function fetchTopSearchTerms(
+  accessToken: string, refreshToken: string | null, days: number
+): Promise<SearchTerm[]> {
+  try {
+    const auth = makeAuthClient(accessToken, refreshToken);
+    const yta = google.youtubeAnalytics({ version: "v2", auth });
+    const { data } = await yta.reports.query({
+      ids: "channel==MINE", startDate: daysAgoStr(days), endDate: todayStr(),
+      metrics: "views",
+      dimensions: "insightTrafficSourceDetail",
+      filters: "insightTrafficSourceType==YT_SEARCH",
+      sort: "-views", maxResults: 25,
+    });
+    const headers = (data.columnHeaders || []).map((h) => h.name!);
+    return (data.rows || []).map((row) => {
+      const r = parseRow(row as unknown[], headers);
+      return { term: String(r["insightTrafficSourceDetail"] || ""), views: Number(r["views"] || 0) };
+    });
+  } catch (err: unknown) {
+    console.error("[YouTube Analytics] fetchTopSearchTerms error:", err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+export async function fetchDemographics(
+  accessToken: string, refreshToken: string | null, days: number
+): Promise<DemographicsData> {
+  const empty: DemographicsData = { ageGroups: [], genderMalePct: 0, genderFemalePct: 0 };
+  try {
+    const auth = makeAuthClient(accessToken, refreshToken);
+    const yta = google.youtubeAnalytics({ version: "v2", auth });
+    const startDate = daysAgoStr(days);
+    const endDate = todayStr();
+
+    const [ageRes, genderRes] = await Promise.all([
+      yta.reports.query({
+        ids: "channel==MINE", startDate, endDate,
+        metrics: "viewerPercentage", dimensions: "ageGroup", sort: "ageGroup",
+      }),
+      yta.reports.query({
+        ids: "channel==MINE", startDate, endDate,
+        metrics: "viewerPercentage", dimensions: "gender",
+      }),
+    ]);
+
+    const ageHeaders = (ageRes.data.columnHeaders || []).map((h) => h.name!);
+    const ageGroups: AgeGroup[] = (ageRes.data.rows || []).map((row) => {
+      const r = parseRow(row as unknown[], ageHeaders);
+      const age = String(r["ageGroup"] || "");
+      return { age, label: AGE_LABELS[age] || age, pct: Math.round(Number(r["viewerPercentage"] || 0) * 10) / 10 };
+    });
+
+    const genderHeaders = (genderRes.data.columnHeaders || []).map((h) => h.name!);
+    let malePct = 0, femalePct = 0;
+    for (const row of (genderRes.data.rows || [])) {
+      const r = parseRow(row as unknown[], genderHeaders);
+      const g = String(r["gender"] || "").toLowerCase();
+      const pct = Number(r["viewerPercentage"] || 0);
+      if (g === "male") malePct = Math.round(pct * 10) / 10;
+      if (g === "female") femalePct = Math.round(pct * 10) / 10;
+    }
+
+    return { ageGroups, genderMalePct: malePct, genderFemalePct: femalePct };
+  } catch (err: unknown) {
+    console.error("[YouTube Analytics] fetchDemographics error:", err instanceof Error ? err.message : err);
+    return empty;
+  }
+}
+
+export async function fetchSubscriberStatus(
+  accessToken: string, refreshToken: string | null, days: number
+): Promise<SubscriberStatusData> {
+  const empty: SubscriberStatusData = { subscribedViews: 0, subscribedWatchMinutes: 0, nonSubscribedViews: 0, nonSubscribedWatchMinutes: 0 };
+  try {
+    const auth = makeAuthClient(accessToken, refreshToken);
+    const yta = google.youtubeAnalytics({ version: "v2", auth });
+    const { data } = await yta.reports.query({
+      ids: "channel==MINE", startDate: daysAgoStr(days), endDate: todayStr(),
+      metrics: "views,estimatedMinutesWatched",
+      dimensions: "subscribedStatus",
+    });
+    const headers = (data.columnHeaders || []).map((h) => h.name!);
+    const result = { ...empty };
+    for (const row of (data.rows || [])) {
+      const r = parseRow(row as unknown[], headers);
+      const status = String(r["subscribedStatus"] || "").toUpperCase();
+      const views = Number(r["views"] || 0);
+      const mins = Number(r["estimatedMinutesWatched"] || 0);
+      if (status === "SUBSCRIBED") {
+        result.subscribedViews = views;
+        result.subscribedWatchMinutes = mins;
+      } else {
+        result.nonSubscribedViews = views;
+        result.nonSubscribedWatchMinutes = mins;
+      }
+    }
+    return result;
+  } catch (err: unknown) {
+    console.error("[YouTube Analytics] fetchSubscriberStatus error:", err instanceof Error ? err.message : err);
+    return empty;
+  }
+}
+
 export async function fetchVideoAnalytics(
-  accessToken: string,
-  refreshToken: string | null,
-  days: number
+  accessToken: string, refreshToken: string | null, days: number
 ): Promise<VideoAnalyticsSummary[]> {
   try {
     const auth = makeAuthClient(accessToken, refreshToken);
     const yta = google.youtubeAnalytics({ version: "v2", auth });
     const { data } = await yta.reports.query({
-      ids: "channel==MINE",
-      startDate: daysAgoStr(days),
-      endDate: todayStr(),
-      metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments",
-      dimensions: "video",
-      sort: "-views",
-      maxResults: 50,
+      ids: "channel==MINE", startDate: daysAgoStr(days), endDate: todayStr(),
+      metrics: "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares",
+      dimensions: "video", sort: "-views", maxResults: 50,
     });
     const headers = (data.columnHeaders || []).map((h) => h.name!);
     return (data.rows || []).map((row) => {
@@ -454,11 +506,11 @@ export async function fetchVideoAnalytics(
         avgViewPercentage: Number(r["averageViewPercentage"] || 0),
         likes: Number(r["likes"] || 0),
         comments: Number(r["comments"] || 0),
+        shares: Number(r["shares"] || 0),
       };
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[YouTube Analytics] fetchVideoAnalytics error:", msg);
+    console.error("[YouTube Analytics] fetchVideoAnalytics error:", err instanceof Error ? err.message : err);
     return [];
   }
 }

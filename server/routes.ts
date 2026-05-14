@@ -26,7 +26,7 @@ import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
 import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
-import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos, fetchChannelAnalytics, fetchTrafficSources, fetchDeviceBreakdown, fetchTopCountries, fetchVideoAnalytics } from "./youtubeAnalytics";
+import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos, fetchChannelAnalytics, fetchTrafficSources, fetchDeviceBreakdown, fetchTopCountries, fetchVideoAnalytics, fetchDemographics, fetchTopSearchTerms, fetchSubscriberStatus } from "./youtubeAnalytics";
 import { getGscAuthUrl, exchangeGscCode, fetchGscSites, fetchGscData } from "./searchConsole";
 import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
@@ -6563,12 +6563,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const conn = await storage.getYouTubeConnection(userId);
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       const days = Math.min(Math.max(parseInt(req.query.days as string || "28"), 7), 365);
-      const [traffic, devices, countries] = await Promise.all([
+      const [traffic, devices, countries, demographics, searchTerms, subscriberStatus] = await Promise.all([
         fetchTrafficSources(conn.oauthAccessToken, conn.oauthRefreshToken, days),
         fetchDeviceBreakdown(conn.oauthAccessToken, conn.oauthRefreshToken, days),
         fetchTopCountries(conn.oauthAccessToken, conn.oauthRefreshToken, days),
+        fetchDemographics(conn.oauthAccessToken, conn.oauthRefreshToken, days),
+        fetchTopSearchTerms(conn.oauthAccessToken, conn.oauthRefreshToken, days),
+        fetchSubscriberStatus(conn.oauthAccessToken, conn.oauthRefreshToken, days),
       ]);
-      res.json({ traffic, devices, countries });
+      res.json({ traffic, devices, countries, demographics, searchTerms, subscriberStatus });
     } catch (err: any) {
       console.error("[Analytics/YouTube] breakdowns error:", err?.message);
       res.status(500).json({ message: "Failed to fetch breakdowns" });
