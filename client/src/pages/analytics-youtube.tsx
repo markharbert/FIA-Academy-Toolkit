@@ -12,7 +12,7 @@ import {
   ArrowLeft, Youtube, Eye, Video, ThumbsUp, MessageSquare,
   ExternalLink, RefreshCw, LogOut, Clock, TrendingUp, TrendingDown,
   Monitor, Globe, MousePointerClick, AlertCircle, UserPlus, Film,
-  Share2, Search, Users,
+  Share2, Search, Users, ChevronLeft, ChevronRight, Zap,
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -64,6 +64,7 @@ type Status = { connected: boolean; connectedEmail?: string; channel?: Channel }
 type VideoItem = {
   id: string; title: string; thumbnail: string; publishedAt: string;
   viewCount: number; likeCount: number; commentCount: number; duration: string;
+  isShort: boolean;
 };
 type AnalyticsDay = {
   date: string; views: number; watchMinutes: number;
@@ -179,6 +180,9 @@ export default function AnalyticsYouTubePage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [days, setDays] = useState(28);
   const [videoSort, setVideoSort] = useState<SortKey>("views");
+  const [videoFilter, setVideoFilter] = useState<"all" | "regular" | "shorts">("all");
+  const [videoPage, setVideoPage] = useState(0);
+  const VIDEOS_PER_PAGE = 25;
 
   const { data: status, isLoading: statusLoading } = useQuery<Status>({
     queryKey: ["/api/analytics/youtube/status"],
@@ -238,8 +242,11 @@ export default function AnalyticsYouTubePage() {
     return videos.map((v) => ({ ...v, ...(map.get(v.id) || {}) }));
   }, [videos, videoAnalytics]);
 
-  const sortedVideos = useMemo(() => {
-    return [...mergedVideos].sort((a, b) => {
+  const filteredSortedVideos = useMemo(() => {
+    const filtered = videoFilter === "all" ? mergedVideos
+      : videoFilter === "shorts" ? mergedVideos.filter((v) => v.isShort)
+      : mergedVideos.filter((v) => !v.isShort);
+    return [...filtered].sort((a, b) => {
       switch (videoSort) {
         case "views": return (b.viewCount || 0) - (a.viewCount || 0);
         case "watchTime": return (b.watchMinutes || 0) - (a.watchMinutes || 0);
@@ -254,7 +261,12 @@ export default function AnalyticsYouTubePage() {
         default: return 0;
       }
     });
-  }, [mergedVideos, videoSort]);
+  }, [mergedVideos, videoSort, videoFilter]);
+
+  const totalPages = Math.ceil(filteredSortedVideos.length / VIDEOS_PER_PAGE);
+  const pagedVideos = filteredSortedVideos.slice(videoPage * VIDEOS_PER_PAGE, (videoPage + 1) * VIDEOS_PER_PAGE);
+  const shortsCount = mergedVideos.filter((v) => v.isShort).length;
+  const regularCount = mergedVideos.filter((v) => !v.isShort).length;
 
   const chartData = timeSeries.map((d) => ({
     date: fmtShortDate(d.date),
@@ -519,14 +531,28 @@ export default function AnalyticsYouTubePage() {
             {/* ═══════════════════ VIDEOS TAB ═══════════════════ */}
             {tab === "videos" && (
               <div className="space-y-4">
+                {/* Filter + sort bar */}
                 <div className="flex items-center justify-between flex-wrap gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    {sortedVideos.length} video{sortedVideos.length !== 1 ? "s" : ""}
-                    {videoAnalytics?.length ? ` · analytics for last ${days} days` : ""}
-                  </p>
+                  {/* Type filter */}
+                  <div className="flex items-center gap-1.5">
+                    {(["all", "regular", "shorts"] as const).map((f) => {
+                      const count = f === "all" ? mergedVideos.length : f === "shorts" ? shortsCount : regularCount;
+                      const label = f === "all" ? "All" : f === "regular" ? "Regular" : "Shorts";
+                      const icon = f === "shorts" ? <Zap className="h-3 w-3" /> : f === "regular" ? <Video className="h-3 w-3" /> : null;
+                      return (
+                        <button key={f} data-testid={`filter-${f}`}
+                          onClick={() => { setVideoFilter(f); setVideoPage(0); }}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${videoFilter === f ? "bg-red-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+                          {icon}{label}
+                          <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${videoFilter === f ? "bg-white/20 text-white" : "bg-background text-muted-foreground"}`}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Sort */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Sort by</span>
-                    <Select value={videoSort} onValueChange={(v) => setVideoSort(v as SortKey)}>
+                    <Select value={videoSort} onValueChange={(v) => { setVideoSort(v as SortKey); setVideoPage(0); }}>
                       <SelectTrigger className="w-40 h-8 text-xs" data-testid="select-video-sort"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="views">Views</SelectItem>
@@ -540,96 +566,134 @@ export default function AnalyticsYouTubePage() {
                   </div>
                 </div>
 
+                {/* Status line */}
+                {!videosLoading && mergedVideos.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Showing {videoPage * VIDEOS_PER_PAGE + 1}–{Math.min((videoPage + 1) * VIDEOS_PER_PAGE, filteredSortedVideos.length)} of {filteredSortedVideos.length} {videoFilter !== "all" ? videoFilter : ""} video{filteredSortedVideos.length !== 1 ? "s" : ""}
+                    {videoAnalytics?.length ? ` · analytics for last ${days} days` : ""}
+                  </p>
+                )}
+
                 {(videosLoading || videoAnalyticsLoading) ? (
                   <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
-                ) : sortedVideos.length === 0 ? (
+                ) : filteredSortedVideos.length === 0 ? (
                   <Card className="border-border bg-card"><CardContent className="p-8 text-center">
                     <Video className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">No videos found on this channel.</p>
+                    <p className="text-sm text-muted-foreground">
+                      {mergedVideos.length === 0 ? "No videos found on this channel." : `No ${videoFilter} videos found.`}
+                    </p>
                   </CardContent></Card>
                 ) : (
-                  <Card className="border-border bg-card overflow-hidden">
-                    <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
-                    <CardContent className="p-0">
-                      {/* Desktop column headers */}
-                      <div className="hidden lg:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-5 py-2.5 border-b border-border bg-muted/30">
-                        <span className="text-xs font-medium text-muted-foreground">Video</span>
-                        <span className="text-xs font-medium text-muted-foreground text-right">Views · Likes · Shares</span>
-                        <span className="text-xs font-medium text-muted-foreground text-right">Watch Time</span>
-                        <span className="text-xs font-medium text-muted-foreground text-right">Avg Duration</span>
-                        <span className="text-xs font-medium text-muted-foreground text-right">Retention</span>
-                        <span className="text-xs font-medium text-muted-foreground text-right">Engagement</span>
-                      </div>
-                      <div className="divide-y divide-border">
-                        {sortedVideos.map((v, i) => {
-                          const engRate = v.viewCount > 0 ? ((v.likeCount + v.commentCount) / v.viewCount * 100) : 0;
-                          const hasAnalytics = v.watchMinutes !== undefined;
-                          const ret = v.avgViewPercentage || 0;
-                          return (
-                            <div key={v.id} className="flex lg:grid lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-3 lg:gap-2 px-5 py-3.5 items-center hover:bg-muted/20 transition-colors" data-testid={`video-row-${i}`}>
-                              {/* Thumbnail + title */}
-                              <div className="flex items-center gap-3 min-w-0">
-                                <a href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                                  {v.thumbnail
-                                    ? <img src={v.thumbnail} alt="" className="w-20 h-12 object-cover rounded-lg" />
-                                    : <div className="w-20 h-12 bg-muted rounded-lg flex items-center justify-center"><Video className="h-4 w-4 text-muted-foreground" /></div>}
-                                </a>
-                                <div className="min-w-0">
-                                  <a href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
-                                    className="text-sm font-medium text-foreground hover:text-red-500 transition-colors line-clamp-2 leading-snug">{v.title}</a>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-xs text-muted-foreground">{fmtDate(v.publishedAt)}</span>
-                                    {v.duration && <span className="text-xs text-muted-foreground">{parseDuration(v.duration)}</span>}
-                                  </div>
-                                  {/* Mobile stats */}
-                                  <div className="flex flex-wrap gap-3 mt-1 lg:hidden text-xs text-muted-foreground">
-                                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{fmt(v.viewCount)}</span>
-                                    <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{fmt(v.likeCount)}</span>
-                                    <span className="flex items-center gap-1"><Share2 className="h-3 w-3" />{fmt(v.shares || 0)}</span>
-                                    {hasAnalytics && ret > 0 && <span>{ret.toFixed(0)}% retained</span>}
-                                  </div>
-                                </div>
-                              </div>
-                              {/* Desktop columns */}
-                              <div className="hidden lg:block text-right">
-                                <p className="text-sm font-semibold text-foreground">{fmt(v.viewCount)}</p>
-                                <div className="flex items-center justify-end gap-2 mt-0.5">
-                                  <span className="text-xs text-muted-foreground flex items-center gap-0.5"><ThumbsUp className="h-2.5 w-2.5" />{fmt(v.likeCount)}</span>
-                                  <span className="text-xs text-muted-foreground flex items-center gap-0.5"><MessageSquare className="h-2.5 w-2.5" />{fmt(v.commentCount)}</span>
-                                  <span className="text-xs text-orange-500 flex items-center gap-0.5"><Share2 className="h-2.5 w-2.5" />{fmt(v.shares || 0)}</span>
-                                </div>
-                              </div>
-                              <div className="hidden lg:block text-right">
-                                {hasAnalytics && v.watchMinutes
-                                  ? <p className="text-sm font-medium text-foreground">{fmtWatchMins(v.watchMinutes)}</p>
-                                  : <p className="text-sm text-muted-foreground">—</p>}
-                              </div>
-                              <div className="hidden lg:block text-right">
-                                {hasAnalytics && v.avgViewDuration
-                                  ? <p className="text-sm font-medium text-foreground">{fmtSecs(v.avgViewDuration)}</p>
-                                  : <p className="text-sm text-muted-foreground">—</p>}
-                              </div>
-                              <div className="hidden lg:block text-right">
-                                {hasAnalytics && ret > 0 ? (
-                                  <div>
-                                    <p className={`text-sm font-semibold ${ret >= 50 ? "text-emerald-500" : ret >= 30 ? "text-amber-500" : "text-rose-500"}`}>{ret.toFixed(1)}%</p>
-                                    <div className="mt-1 h-1 w-full rounded-full bg-muted overflow-hidden">
-                                      <div className={`h-full rounded-full ${ret >= 50 ? "bg-emerald-500" : ret >= 30 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${Math.min(ret, 100)}%` }} />
+                  <>
+                    <Card className="border-border bg-card overflow-hidden">
+                      <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
+                      <CardContent className="p-0">
+                        {/* Desktop column headers */}
+                        <div className="hidden lg:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-5 py-2.5 border-b border-border bg-muted/30">
+                          <span className="text-xs font-medium text-muted-foreground">Video</span>
+                          <span className="text-xs font-medium text-muted-foreground text-right">Views · Likes · Shares</span>
+                          <span className="text-xs font-medium text-muted-foreground text-right">Watch Time</span>
+                          <span className="text-xs font-medium text-muted-foreground text-right">Avg Duration</span>
+                          <span className="text-xs font-medium text-muted-foreground text-right">Retention</span>
+                          <span className="text-xs font-medium text-muted-foreground text-right">Engagement</span>
+                        </div>
+                        <div className="divide-y divide-border">
+                          {pagedVideos.map((v, i) => {
+                            const engRate = v.viewCount > 0 ? ((v.likeCount + v.commentCount) / v.viewCount * 100) : 0;
+                            const hasAnalytics = v.watchMinutes !== undefined;
+                            const ret = v.avgViewPercentage || 0;
+                            return (
+                              <div key={v.id} className="flex lg:grid lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-3 lg:gap-2 px-5 py-3.5 items-center hover:bg-muted/20 transition-colors" data-testid={`video-row-${i}`}>
+                                {/* Thumbnail + title */}
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <a href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                    {v.thumbnail
+                                      ? <img src={v.thumbnail} alt="" className="w-20 h-12 object-cover rounded-lg" />
+                                      : <div className="w-20 h-12 bg-muted rounded-lg flex items-center justify-center"><Video className="h-4 w-4 text-muted-foreground" /></div>}
+                                  </a>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <a href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
+                                        className="text-sm font-medium text-foreground hover:text-red-500 transition-colors line-clamp-2 leading-snug">{v.title}</a>
+                                      {v.isShort && (
+                                        <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/20">
+                                          <Zap className="h-2.5 w-2.5" />Short
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-xs text-muted-foreground">{fmtDate(v.publishedAt)}</span>
+                                      {v.duration && <span className="text-xs text-muted-foreground">{parseDuration(v.duration)}</span>}
+                                    </div>
+                                    {/* Mobile stats */}
+                                    <div className="flex flex-wrap gap-3 mt-1 lg:hidden text-xs text-muted-foreground">
+                                      <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{fmt(v.viewCount)}</span>
+                                      <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{fmt(v.likeCount)}</span>
+                                      <span className="flex items-center gap-1"><Share2 className="h-3 w-3" />{fmt(v.shares || 0)}</span>
+                                      {hasAnalytics && ret > 0 && <span>{ret.toFixed(0)}% retained</span>}
                                     </div>
                                   </div>
-                                ) : <p className="text-sm text-muted-foreground">—</p>}
+                                </div>
+                                {/* Desktop columns */}
+                                <div className="hidden lg:block text-right">
+                                  <p className="text-sm font-semibold text-foreground">{fmt(v.viewCount)}</p>
+                                  <div className="flex items-center justify-end gap-2 mt-0.5">
+                                    <span className="text-xs text-muted-foreground flex items-center gap-0.5"><ThumbsUp className="h-2.5 w-2.5" />{fmt(v.likeCount)}</span>
+                                    <span className="text-xs text-muted-foreground flex items-center gap-0.5"><MessageSquare className="h-2.5 w-2.5" />{fmt(v.commentCount)}</span>
+                                    <span className="text-xs text-orange-500 flex items-center gap-0.5"><Share2 className="h-2.5 w-2.5" />{fmt(v.shares || 0)}</span>
+                                  </div>
+                                </div>
+                                <div className="hidden lg:block text-right">
+                                  {hasAnalytics && v.watchMinutes
+                                    ? <p className="text-sm font-medium text-foreground">{fmtWatchMins(v.watchMinutes)}</p>
+                                    : <p className="text-sm text-muted-foreground">—</p>}
+                                </div>
+                                <div className="hidden lg:block text-right">
+                                  {hasAnalytics && v.avgViewDuration
+                                    ? <p className="text-sm font-medium text-foreground">{fmtSecs(v.avgViewDuration)}</p>
+                                    : <p className="text-sm text-muted-foreground">—</p>}
+                                </div>
+                                <div className="hidden lg:block text-right">
+                                  {hasAnalytics && ret > 0 ? (
+                                    <div>
+                                      <p className={`text-sm font-semibold ${ret >= 50 ? "text-emerald-500" : ret >= 30 ? "text-amber-500" : "text-rose-500"}`}>{ret.toFixed(1)}%</p>
+                                      <div className="mt-1 h-1 w-full rounded-full bg-muted overflow-hidden">
+                                        <div className={`h-full rounded-full ${ret >= 50 ? "bg-emerald-500" : ret >= 30 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${Math.min(ret, 100)}%` }} />
+                                      </div>
+                                    </div>
+                                  ) : <p className="text-sm text-muted-foreground">—</p>}
+                                </div>
+                                <div className="hidden lg:block text-right">
+                                  {v.viewCount > 0
+                                    ? <p className="text-sm font-medium text-foreground">{engRate.toFixed(2)}%</p>
+                                    : <p className="text-sm text-muted-foreground">—</p>}
+                                </div>
                               </div>
-                              <div className="hidden lg:block text-right">
-                                {v.viewCount > 0
-                                  ? <p className="text-sm font-medium text-foreground">{engRate.toFixed(2)}%</p>
-                                  : <p className="text-sm text-muted-foreground">—</p>}
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between">
+                        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"
+                          onClick={() => setVideoPage((p) => Math.max(0, p - 1))}
+                          disabled={videoPage === 0} data-testid="button-prev-page">
+                          <ChevronLeft className="h-3.5 w-3.5" />Previous
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                          Page {videoPage + 1} of {totalPages}
+                        </span>
+                        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"
+                          onClick={() => setVideoPage((p) => Math.min(totalPages - 1, p + 1))}
+                          disabled={videoPage === totalPages - 1} data-testid="button-next-page">
+                          Next<ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
-                    </CardContent>
-                  </Card>
+                    )}
+                  </>
                 )}
               </div>
             )}

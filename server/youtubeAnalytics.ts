@@ -27,6 +27,12 @@ function makeAuthClient(accessToken: string, refreshToken: string | null) {
   return client;
 }
 
+function durationToSeconds(iso: string): number {
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (parseInt(m[1] || "0") * 3600) + (parseInt(m[2] || "0") * 60) + parseInt(m[3] || "0");
+}
+
 function daysAgoStr(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -90,7 +96,7 @@ export type YouTubeChannel = {
 export type YouTubeVideo = {
   id: string; title: string; thumbnail: string; publishedAt: string;
   viewCount: number; likeCount: number; commentCount: number;
-  duration: string; tags: string[];
+  duration: string; tags: string[]; isShort: boolean;
 };
 
 export type AnalyticsDay = {
@@ -202,7 +208,7 @@ export async function fetchYouTubeChannel(
 
 export async function fetchYouTubeVideos(
   accessToken: string, refreshToken: string | null,
-  uploadsPlaylistId: string, maxVideos = 50
+  uploadsPlaylistId: string, maxVideos = 2000
 ): Promise<YouTubeVideo[]> {
   const auth = makeAuthClient(accessToken, refreshToken);
   const yt = google.youtube({ version: "v3", auth });
@@ -230,17 +236,21 @@ export async function fetchYouTubeVideos(
       part: ["snippet", "statistics", "contentDetails"],
       id: chunk,
     });
-    allVideos.push(...(videoData.items || []).map((v) => ({
-      id: v.id!,
-      title: v.snippet?.title || "",
-      thumbnail: v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url || "",
-      publishedAt: v.snippet?.publishedAt || "",
-      viewCount: parseInt(v.statistics?.viewCount || "0"),
-      likeCount: parseInt(v.statistics?.likeCount || "0"),
-      commentCount: parseInt(v.statistics?.commentCount || "0"),
-      duration: v.contentDetails?.duration || "",
-      tags: v.snippet?.tags || [],
-    })));
+    allVideos.push(...(videoData.items || []).map((v) => {
+      const dur = v.contentDetails?.duration || "";
+      return {
+        id: v.id!,
+        title: v.snippet?.title || "",
+        thumbnail: v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url || "",
+        publishedAt: v.snippet?.publishedAt || "",
+        viewCount: parseInt(v.statistics?.viewCount || "0"),
+        likeCount: parseInt(v.statistics?.likeCount || "0"),
+        commentCount: parseInt(v.statistics?.commentCount || "0"),
+        duration: dur,
+        tags: v.snippet?.tags || [],
+        isShort: durationToSeconds(dur) <= 60,
+      };
+    }));
   }
   return allVideos;
 }
