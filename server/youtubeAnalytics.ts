@@ -557,7 +557,8 @@ export async function fetchVideoComments(
   accessToken: string,
   refreshToken: string | null,
   videoId: string,
-  pageToken?: string
+  pageToken?: string,
+  order: "relevance" | "time" = "relevance"
 ): Promise<{ threads: CommentThread[]; nextPageToken?: string; totalResults?: number }> {
   try {
     const auth = makeAuthClient(accessToken, refreshToken);
@@ -566,7 +567,7 @@ export async function fetchVideoComments(
       part: ["snippet", "replies"],
       videoId,
       maxResults: 25,
-      order: "relevance",
+      order,
       ...(pageToken ? { pageToken } : {}),
     } as any);
 

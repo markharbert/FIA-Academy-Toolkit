@@ -531,6 +531,8 @@ function VideoExpandPanel({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  type CommentSort = "relevance" | "time" | "oldest";
+  const [commentSort, setCommentSort] = useState<CommentSort>("relevance");
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [pageToken, setPageToken] = useState<string | undefined>(undefined);
@@ -539,10 +541,23 @@ function VideoExpandPanel({
   const [requiresReconnect, setRequiresReconnect] = useState(false);
   const processedRef = useRef<string>("__unset__");
 
+  function changeSort(newSort: CommentSort) {
+    setCommentSort(newSort);
+    setPageToken(undefined);
+    setAllThreads([]);
+    setNextPageToken(undefined);
+    processedRef.current = "__unset__";
+  }
+
+  const apiOrder = commentSort === "oldest" ? "time" : commentSort;
+
   const { data: commentsData, isLoading: commentsLoading, error: commentsError } = useQuery<CommentsData>({
-    queryKey: ["/api/analytics/youtube/video", video.id, "comments", pageToken ?? "__first__"],
+    queryKey: ["/api/analytics/youtube/video", video.id, "comments", commentSort, pageToken ?? "__first__"],
     queryFn: async () => {
-      const url = `/api/analytics/youtube/video/${video.id}/comments${pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : ""}`;
+      const params = new URLSearchParams();
+      params.set("order", apiOrder);
+      if (pageToken) params.set("pageToken", pageToken);
+      const url = `/api/analytics/youtube/video/${video.id}/comments?${params.toString()}`;
       const r = await fetch(url, { credentials: "include" });
       if (r.status === 403) {
         const e = new Error("requires_reconnect") as any;
@@ -566,13 +581,15 @@ function VideoExpandPanel({
     const key = pageToken ?? "__first__";
     if (processedRef.current === key) return;
     processedRef.current = key;
+    const incoming = commentsData.threads || [];
+    const ordered = commentSort === "oldest" ? [...incoming].reverse() : incoming;
     if (!pageToken) {
-      setAllThreads(commentsData.threads || []);
+      setAllThreads(ordered);
     } else {
-      setAllThreads((prev) => [...prev, ...(commentsData.threads || [])]);
+      setAllThreads((prev) => commentSort === "oldest" ? [...ordered, ...prev] : [...prev, ...ordered]);
     }
     setNextPageToken(commentsData.nextPageToken);
-  }, [commentsData, pageToken]);
+  }, [commentsData, pageToken, commentSort]);
 
   const replyMut = useMutation({
     mutationFn: ({ commentId, text }: { commentId: string; text: string }) =>
@@ -663,14 +680,36 @@ function VideoExpandPanel({
 
           {/* ── Right: Comments ── */}
           <div className="flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-red-500" />
-                Comments{totalStr}
-              </h4>
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-red-500" />
+                  Comments{totalStr}
+                </h4>
+                {/* Sort pills */}
+                <div className="flex items-center gap-1 mt-2">
+                  {([
+                    { value: "relevance", label: "Top" },
+                    { value: "time",      label: "Newest" },
+                    { value: "oldest",    label: "Oldest" },
+                  ] as { value: CommentSort; label: string }[]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => changeSort(opt.value)}
+                      data-testid={`button-sort-comments-${opt.value}`}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                        commentSort === opt.value
+                          ? "bg-red-500 text-white"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0"
                 data-testid="button-close-video-panel">
                 <X className="h-4 w-4" />
               </button>

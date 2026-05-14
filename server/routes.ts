@@ -6601,7 +6601,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       const { videoId } = req.params;
       const pageToken = req.query.pageToken as string | undefined;
-      const result = await fetchVideoComments(conn.oauthAccessToken, conn.oauthRefreshToken, videoId, pageToken);
+      const orderRaw = req.query.order as string | undefined;
+      const order: "relevance" | "time" = orderRaw === "time" ? "time" : "relevance";
+      const result = await fetchVideoComments(conn.oauthAccessToken, conn.oauthRefreshToken, videoId, pageToken, order);
       res.json(result);
     } catch (err: any) {
       console.error("[YouTube] comments error:", err?.message);
