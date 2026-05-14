@@ -148,12 +148,23 @@ export function startPlacementScheduler(storage: IStorage): void {
         }
       }
 
-      await runPlacementCheckForUser(
-        storage,
-        user.userId,
-        user.effectiveSenderAddress,
-        { messageId: user.placementCheckMessageId, receivedAt: user.placementCheckReceivedAt, subject: user.placementCheckSubject }
+      const CHECK_TIMEOUT_MS = 90_000; // 90 s — prevents a hung IMAP from blocking the loop
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("placement check timed out after 90 s")), CHECK_TIMEOUT_MS)
       );
+      try {
+        await Promise.race([
+          runPlacementCheckForUser(
+            storage,
+            user.userId,
+            user.effectiveSenderAddress,
+            { messageId: user.placementCheckMessageId, receivedAt: user.placementCheckReceivedAt, subject: user.placementCheckSubject }
+          ),
+          timeoutPromise,
+        ]);
+      } catch (err: any) {
+        console.error(`[PlacementScheduler] check for user ${user.userId} failed or timed out:`, err?.message);
+      }
       await new Promise(r => setTimeout(r, STAGGER_MS));
     }
   }

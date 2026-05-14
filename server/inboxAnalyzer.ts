@@ -73,10 +73,12 @@ export function generateToken(): string {
 }
 
 export function generateNamedToken(firstName?: string | null, lastName?: string | null): string {
+  // token column is varchar(20). The 4-digit suffix takes 4 chars, so limit the
+  // name portion to 15 chars → max total 19, always within the column limit.
   const namePart = `${firstName || ""}${lastName || ""}`
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "")
-    .slice(0, 20);
+    .slice(0, 15);
   const suffix = String(Math.floor(1000 + Math.random() * 9000));
   return namePart.length >= 2 ? `${namePart}${suffix}` : generateToken();
 }
