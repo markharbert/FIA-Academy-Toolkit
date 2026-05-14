@@ -26,6 +26,8 @@ import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
 import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
+import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos } from "./youtubeAnalytics";
+import { getGscAuthUrl, exchangeGscCode, fetchGscSites, fetchGscData } from "./searchConsole";
 import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
 import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
@@ -6443,6 +6445,200 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const userId = req.session!.userId!;
       await storage.deletePostmasterConnection(userId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to disconnect" });
+    }
+  });
+
+  // ── Analytics: YouTube ─────────────────────────────────────────────────────
+
+  app.get("/api/analytics/youtube/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.json({ connected: false });
+      try {
+        const channel = await fetchYouTubeChannel(conn.oauthAccessToken, conn.oauthRefreshToken);
+        await storage.updateYouTubeChannel(userId, {
+          channelId: channel.id,
+          channelTitle: channel.title,
+          channelHandle: channel.handle,
+          channelThumbnail: channel.thumbnail,
+          uploadsPlaylistId: channel.uploadsPlaylistId,
+        });
+        res.json({ connected: true, connectedEmail: conn.connectedEmail, channel });
+      } catch (apiErr: any) {
+        console.error("[Analytics/YouTube] status API error:", apiErr?.message);
+        res.json({ connected: true, connectedEmail: conn.connectedEmail, channel: conn.channelId ? { id: conn.channelId, title: conn.channelTitle, handle: conn.channelHandle, thumbnail: conn.channelThumbnail, subscriberCount: 0, videoCount: 0, viewCount: 0, uploadsPlaylistId: conn.uploadsPlaylistId } : null });
+      }
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch YouTube status" });
+    }
+  });
+
+  app.get("/api/analytics/youtube/connect", requireAuth, (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      res.redirect(getYouTubeAuthUrl(userId));
+    } catch (err) {
+      res.status(500).json({ message: "Failed to initiate YouTube OAuth" });
+    }
+  });
+
+  app.get("/api/analytics/youtube/callback", async (req: Request, res: Response) => {
+    const { code, state: userId, error } = req.query as Record<string, string>;
+    if (error || !code || !userId) return res.redirect("/analytics/youtube?error=oauth_failed");
+    try {
+      const { accessToken, refreshToken, expiry, email } = await exchangeYouTubeCode(code);
+      await storage.upsertYouTubeConnection(userId, { oauthAccessToken: accessToken, oauthRefreshToken: refreshToken, oauthTokenExpiry: expiry, connectedEmail: email });
+      try {
+        const channel = await fetchYouTubeChannel(accessToken, refreshToken);
+        await storage.updateYouTubeChannel(userId, { channelId: channel.id, channelTitle: channel.title, channelHandle: channel.handle, channelThumbnail: channel.thumbnail, uploadsPlaylistId: channel.uploadsPlaylistId });
+      } catch (channelErr) {
+        console.error("[Analytics/YouTube] Initial channel fetch failed:", channelErr);
+      }
+      res.redirect("/analytics/youtube");
+    } catch (err) {
+      console.error("[Analytics/YouTube] OAuth callback error:", err);
+      res.redirect("/analytics/youtube?error=oauth_failed");
+    }
+  });
+
+  app.get("/api/analytics/youtube/videos", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      if (!conn.uploadsPlaylistId) return res.json([]);
+      const videos = await fetchYouTubeVideos(conn.oauthAccessToken, conn.oauthRefreshToken, conn.uploadsPlaylistId);
+      res.json(videos);
+    } catch (err: any) {
+      console.error("[Analytics/YouTube] videos error:", err?.message);
+      res.status(500).json({ message: "Failed to fetch videos" });
+    }
+  });
+
+  app.post("/api/analytics/youtube/refresh", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(400).json({ message: "Not connected" });
+      const channel = await fetchYouTubeChannel(conn.oauthAccessToken, conn.oauthRefreshToken);
+      await storage.updateYouTubeChannel(userId, { channelId: channel.id, channelTitle: channel.title, channelHandle: channel.handle, channelThumbnail: channel.thumbnail, uploadsPlaylistId: channel.uploadsPlaylistId });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[Analytics/YouTube] refresh error:", err?.message);
+      res.status(500).json({ message: "Failed to refresh" });
+    }
+  });
+
+  app.delete("/api/analytics/youtube/disconnect", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      await storage.deleteYouTubeConnection(userId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to disconnect" });
+    }
+  });
+
+  // ── Analytics: Google Search Console ───────────────────────────────────────
+
+  app.get("/api/analytics/gsc/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getGscConnection(userId);
+      if (!conn?.oauthAccessToken) return res.json({ connected: false });
+      try {
+        const sites = await fetchGscSites(conn.oauthAccessToken, conn.oauthRefreshToken);
+        const selectedSiteUrl = conn.selectedSiteUrl && sites.includes(conn.selectedSiteUrl) ? conn.selectedSiteUrl : (sites.length === 1 ? sites[0] : null);
+        if (selectedSiteUrl && selectedSiteUrl !== conn.selectedSiteUrl) {
+          await storage.setGscSelectedSite(userId, selectedSiteUrl);
+        }
+        res.json({ connected: true, connectedEmail: conn.connectedEmail, sites, selectedSiteUrl });
+      } catch (apiErr: any) {
+        console.error("[Analytics/GSC] status API error:", apiErr?.message);
+        res.json({ connected: true, connectedEmail: conn.connectedEmail, sites: [], selectedSiteUrl: conn.selectedSiteUrl });
+      }
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch GSC status" });
+    }
+  });
+
+  app.get("/api/analytics/gsc/connect", requireAuth, (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      res.redirect(getGscAuthUrl(userId));
+    } catch (err) {
+      res.status(500).json({ message: "Failed to initiate GSC OAuth" });
+    }
+  });
+
+  app.get("/api/analytics/gsc/callback", async (req: Request, res: Response) => {
+    const { code, state: userId, error } = req.query as Record<string, string>;
+    if (error || !code || !userId) return res.redirect("/analytics/search-console?error=oauth_failed");
+    try {
+      const { accessToken, refreshToken, expiry, email } = await exchangeGscCode(code);
+      await storage.upsertGscConnection(userId, { oauthAccessToken: accessToken, oauthRefreshToken: refreshToken, oauthTokenExpiry: expiry, connectedEmail: email });
+      try {
+        const sites = await fetchGscSites(accessToken, refreshToken);
+        if (sites.length === 1) await storage.setGscSelectedSite(userId, sites[0]);
+      } catch (sitesErr) {
+        console.error("[Analytics/GSC] Initial sites fetch failed:", sitesErr);
+      }
+      res.redirect("/analytics/search-console");
+    } catch (err) {
+      console.error("[Analytics/GSC] OAuth callback error:", err);
+      res.redirect("/analytics/search-console?error=oauth_failed");
+    }
+  });
+
+  app.get("/api/analytics/gsc/data", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getGscConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      const siteUrl = (req.query.siteUrl as string) || conn.selectedSiteUrl;
+      if (!siteUrl) return res.status(400).json({ message: "No site selected" });
+      const days = Math.min(parseInt((req.query.days as string) || "28", 10), 90);
+      const data = await fetchGscData(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days);
+      res.json(data);
+    } catch (err: any) {
+      console.error("[Analytics/GSC] data error:", err?.message);
+      res.status(500).json({ message: "Failed to fetch Search Console data" });
+    }
+  });
+
+  app.post("/api/analytics/gsc/select-site", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const { siteUrl } = req.body as { siteUrl: string };
+      if (!siteUrl) return res.status(400).json({ message: "siteUrl required" });
+      await storage.setGscSelectedSite(userId, siteUrl);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to select site" });
+    }
+  });
+
+  app.post("/api/analytics/gsc/refresh", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getGscConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(400).json({ message: "Not connected" });
+      const sites = await fetchGscSites(conn.oauthAccessToken, conn.oauthRefreshToken);
+      res.json({ success: true, sites });
+    } catch (err: any) {
+      console.error("[Analytics/GSC] refresh error:", err?.message);
+      res.status(500).json({ message: "Failed to refresh" });
+    }
+  });
+
+  app.delete("/api/analytics/gsc/disconnect", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      await storage.deleteGscConnection(userId);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to disconnect" });

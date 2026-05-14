@@ -10,6 +10,8 @@ import {
   type CompetitorTracker, type InsertCompetitorTracker, type CompetitorTrackerWithStats,
   type CompetitorSeedAddress, type CapturedCompetitorEmail, type CapturedCompetitorEmailLink,
   type TrackerAnalytics, type FeedResponse, type ScreenshotStatus,
+  youtubeConnections, type YoutubeConnection,
+  gscConnections, type GscConnection,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -452,6 +454,17 @@ export interface IStorage {
   getPostmasterDomains(userId: string): Promise<PostmasterDomain[]>;
   upsertPostmasterDomain(userId: string, domainName: string, data: { latestReputation: string | null; latestSpamRate: number | null; latestSpfRatio: number | null; latestDkimRatio: number | null; latestDmarcRatio: number | null; latestEncryptionRatio: number | null; trafficStats: any[] }): Promise<void>;
   deletePostmasterDomains(userId: string): Promise<void>;
+
+  // Analytics — YouTube
+  getYouTubeConnection(userId: string): Promise<YoutubeConnection | null>;
+  upsertYouTubeConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string; channelId?: string; channelTitle?: string; channelHandle?: string; channelThumbnail?: string; uploadsPlaylistId?: string }): Promise<YoutubeConnection>;
+  updateYouTubeChannel(userId: string, data: { channelId: string; channelTitle: string; channelHandle: string; channelThumbnail: string; uploadsPlaylistId: string }): Promise<void>;
+  deleteYouTubeConnection(userId: string): Promise<void>;
+  // Analytics — Google Search Console
+  getGscConnection(userId: string): Promise<GscConnection | null>;
+  upsertGscConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<GscConnection>;
+  setGscSelectedSite(userId: string, siteUrl: string): Promise<void>;
+  deleteGscConnection(userId: string): Promise<void>;
 
   // Notifications
   getNotificationPrefs(userId: string): Promise<{ allEnabled: boolean; preferences: import("@shared/schema").NotificationPreferences }>;
@@ -3371,6 +3384,58 @@ export class DatabaseStorage implements IStorage {
 
   async deletePostmasterDomains(userId: string): Promise<void> {
     await db.delete(postmasterDomains).where(eq(postmasterDomains.userId, userId));
+  }
+
+  // ── Analytics ─────────────────────────────────────────────────────────────────
+
+  async getYouTubeConnection(userId: string): Promise<YoutubeConnection | null> {
+    const [row] = await db.select().from(youtubeConnections).where(eq(youtubeConnections.userId, userId));
+    return row ?? null;
+  }
+
+  async upsertYouTubeConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string; channelId?: string; channelTitle?: string; channelHandle?: string; channelThumbnail?: string; uploadsPlaylistId?: string }): Promise<YoutubeConnection> {
+    const [row] = await db
+      .insert(youtubeConnections)
+      .values({ userId, ...data })
+      .onConflictDoUpdate({
+        target: youtubeConnections.userId,
+        set: { oauthAccessToken: data.oauthAccessToken, oauthRefreshToken: data.oauthRefreshToken, oauthTokenExpiry: data.oauthTokenExpiry, connectedEmail: data.connectedEmail, channelId: data.channelId, channelTitle: data.channelTitle, channelHandle: data.channelHandle, channelThumbnail: data.channelThumbnail, uploadsPlaylistId: data.uploadsPlaylistId },
+      })
+      .returning();
+    return row;
+  }
+
+  async updateYouTubeChannel(userId: string, data: { channelId: string; channelTitle: string; channelHandle: string; channelThumbnail: string; uploadsPlaylistId: string }): Promise<void> {
+    await db.update(youtubeConnections).set(data).where(eq(youtubeConnections.userId, userId));
+  }
+
+  async deleteYouTubeConnection(userId: string): Promise<void> {
+    await db.delete(youtubeConnections).where(eq(youtubeConnections.userId, userId));
+  }
+
+  async getGscConnection(userId: string): Promise<GscConnection | null> {
+    const [row] = await db.select().from(gscConnections).where(eq(gscConnections.userId, userId));
+    return row ?? null;
+  }
+
+  async upsertGscConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<GscConnection> {
+    const [row] = await db
+      .insert(gscConnections)
+      .values({ userId, ...data })
+      .onConflictDoUpdate({
+        target: gscConnections.userId,
+        set: { oauthAccessToken: data.oauthAccessToken, oauthRefreshToken: data.oauthRefreshToken, oauthTokenExpiry: data.oauthTokenExpiry, connectedEmail: data.connectedEmail },
+      })
+      .returning();
+    return row;
+  }
+
+  async setGscSelectedSite(userId: string, siteUrl: string): Promise<void> {
+    await db.update(gscConnections).set({ selectedSiteUrl: siteUrl }).where(eq(gscConnections.userId, userId));
+  }
+
+  async deleteGscConnection(userId: string): Promise<void> {
+    await db.delete(gscConnections).where(eq(gscConnections.userId, userId));
   }
 
   // ── Inbox Intel (Competitor Email Intelligence) ─────────────────────────────

@@ -44,6 +44,9 @@ import HelpPage from "@/pages/help";
 import HelpCategoryPage from "@/pages/help-category";
 import HelpArticlePage from "@/pages/help-article";
 import FeedbackPage from "@/pages/feedback";
+import AnalyticsPage from "@/pages/analytics";
+import AnalyticsYouTubePage from "@/pages/analytics-youtube";
+import AnalyticsGscPage from "@/pages/analytics-gsc";
 import NotFound from "@/pages/not-found";
 import NotAuthenticated from "@/pages/not-authenticated";
 
@@ -212,6 +215,15 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/help/:slug">
         {() => <ProtectedRoute component={HelpArticlePage} />}
+      </Route>
+      <Route path="/analytics">
+        {() => <ProtectedRoute component={AnalyticsPage} />}
+      </Route>
+      <Route path="/analytics/youtube">
+        {() => <ProtectedRoute component={AnalyticsYouTubePage} />}
+      </Route>
+      <Route path="/analytics/search-console">
+        {() => <ProtectedRoute component={AnalyticsGscPage} />}
       </Route>
       <Route path="/feedback">
         {() => <ProtectedRoute component={FeedbackPage} />}

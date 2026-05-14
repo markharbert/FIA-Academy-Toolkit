@@ -611,6 +611,37 @@ async function runStartupMigrations() {
       WHERE date < (CURRENT_DATE - INTERVAL '1825 days')::text
     `);
     console.log("[startup] dmo_entries older than 5 years pruned");
+
+    // Analytics connections
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS youtube_connections (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        oauth_access_token TEXT,
+        oauth_refresh_token TEXT,
+        oauth_token_expiry TIMESTAMP,
+        connected_email TEXT,
+        channel_id TEXT,
+        channel_title TEXT,
+        channel_handle TEXT,
+        channel_thumbnail TEXT,
+        uploads_playlist_id TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS gsc_connections (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        oauth_access_token TEXT,
+        oauth_refresh_token TEXT,
+        oauth_token_expiry TIMESTAMP,
+        connected_email TEXT,
+        selected_site_url TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log("[startup] analytics connections migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

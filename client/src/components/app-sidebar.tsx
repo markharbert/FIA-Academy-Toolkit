@@ -27,12 +27,14 @@ import {
   Briefcase,
   MessageSquarePlus,
   Users,
+  BarChart2,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 
 const VIDEO_TOOL_PATHS = ["/video-score", "/video-trends", "/video-trends/scripts", "/video-trends/explore", "/video-trends/saved", "/video-trends/settings", "/teleprompter"];
 const EMAIL_TOOL_PATHS = ["/email-tools/inbox-analyzer", "/email-tools/sender-reputation", "/email-tools/inbox-intel"];
+const ANALYTICS_TOOL_PATHS = ["/analytics/youtube", "/analytics/search-console"];
 
 const allNavItems = [
   {
@@ -71,6 +73,14 @@ const allNavItems = [
     icon: Mail,
     testId: "nav-email-tools",
     matchPaths: EMAIL_TOOL_PATHS,
+    collaboratorVisible: false,
+  },
+  {
+    title: "Analytics",
+    url: "/analytics",
+    icon: BarChart2,
+    testId: "nav-analytics",
+    matchPaths: ANALYTICS_TOOL_PATHS,
     collaboratorVisible: false,
   },
 ];

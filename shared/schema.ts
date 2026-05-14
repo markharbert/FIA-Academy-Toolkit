@@ -1773,6 +1773,38 @@ export const workspaceInvites = pgTable("workspace_invites", {
 export type WorkspaceInvite = typeof workspaceInvites.$inferSelect;
 export type InsertWorkspaceInvite = typeof workspaceInvites.$inferInsert;
 
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+export const youtubeConnections = pgTable("youtube_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  oauthAccessToken: text("oauth_access_token"),
+  oauthRefreshToken: text("oauth_refresh_token"),
+  oauthTokenExpiry: timestamp("oauth_token_expiry"),
+  connectedEmail: text("connected_email"),
+  channelId: text("channel_id"),
+  channelTitle: text("channel_title"),
+  channelHandle: text("channel_handle"),
+  channelThumbnail: text("channel_thumbnail"),
+  uploadsPlaylistId: text("uploads_playlist_id"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type YoutubeConnection = typeof youtubeConnections.$inferSelect;
+
+export const gscConnections = pgTable("gsc_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  oauthAccessToken: text("oauth_access_token"),
+  oauthRefreshToken: text("oauth_refresh_token"),
+  oauthTokenExpiry: timestamp("oauth_token_expiry"),
+  connectedEmail: text("connected_email"),
+  selectedSiteUrl: text("selected_site_url"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type GscConnection = typeof gscConnections.$inferSelect;
+
 export interface WorkspaceInviteWithMember {
   id: string;
   ownerId: string;
