@@ -1816,6 +1816,19 @@ export const insertCannedResponseSchema = createInsertSchema(cannedResponses).om
 export type InsertCannedResponse = z.infer<typeof insertCannedResponseSchema>;
 export type CannedResponse = typeof cannedResponses.$inferSelect;
 
+export const youtubeCommentCache = pgTable("youtube_comment_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  videoId: varchar("video_id").notNull(),
+  videoTitle: text("video_title").notNull().default(""),
+  videoThumbnail: text("video_thumbnail").notNull().default(""),
+  videoPublishedAt: timestamp("video_published_at"),
+  threads: jsonb("threads").$type<any[]>().notNull().default(sql`'[]'::jsonb`),
+  totalResults: integer("total_results").notNull().default(0),
+  cachedAt: timestamp("cached_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type YoutubeCommentCache = typeof youtubeCommentCache.$inferSelect;
+
 export interface WorkspaceInviteWithMember {
   id: string;
   ownerId: string;

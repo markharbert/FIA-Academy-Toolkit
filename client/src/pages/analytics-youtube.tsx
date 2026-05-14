@@ -123,6 +123,13 @@ type VideoAnalytics = {
 };
 type MergedVideo = VideoItem & Partial<VideoAnalytics>;
 
+type CachedThread = CommentThread & {
+  videoId: string;
+  videoTitle: string;
+  videoThumbnail: string;
+  isReplied: boolean;
+};
+
 type CommentReply = {
   id: string; authorName: string; authorAvatar: string; authorChannelId: string;
   text: string; likeCount: number; publishedAt: string;
@@ -782,9 +789,451 @@ function VideoExpandPanel({
   );
 }
 
+// ── CachedCommentCard ─────────────────────────────────────────────────────────
+
+function CachedCommentCard({
+  thread, channelId, isReplying, replyText,
+  onReplyClick, onReplyTextChange, onReplySubmit, onCancelReply,
+  cannedResponses, isPending,
+}: {
+  thread: CachedThread;
+  channelId: string;
+  isReplying: boolean;
+  replyText: string;
+  onReplyClick: () => void;
+  onReplyTextChange: (t: string) => void;
+  onReplySubmit: () => void;
+  onCancelReply: () => void;
+  cannedResponses: CannedResponse[];
+  isPending: boolean;
+}) {
+  const isOwn = thread.authorChannelId === channelId;
+
+  return (
+    <div className="border border-border rounded-2xl bg-card p-4 space-y-3">
+      {/* Video attribution pill */}
+      <a
+        href={`https://youtube.com/watch?v=${thread.videoId}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 bg-muted/50 hover:bg-muted border border-border rounded-full px-2.5 py-1 transition-colors group max-w-full"
+        data-testid={`link-comment-video-${thread.threadId}`}>
+        {thread.videoThumbnail
+          ? <img src={thread.videoThumbnail} alt="" className="w-8 h-5 rounded object-cover shrink-0" />
+          : <div className="w-8 h-5 rounded bg-muted-foreground/20 shrink-0 flex items-center justify-center"><Video className="h-2.5 w-2.5 text-muted-foreground" /></div>}
+        <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground truncate max-w-[280px] transition-colors">{thread.videoTitle}</span>
+        <ExternalLink className="h-2.5 w-2.5 text-muted-foreground/50 shrink-0" />
+      </a>
+
+      {/* Comment body */}
+      <div className="flex gap-2.5">
+        <CommentAvatar src={thread.authorAvatar} name={thread.authorName} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs font-semibold ${isOwn ? "text-red-500" : "text-foreground"}`}>
+              {thread.authorName}
+              {isOwn && <span className="ml-1 text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded-full border border-red-500/20">You</span>}
+            </span>
+            <span className="text-[11px] text-muted-foreground">{relativeTime(thread.publishedAt)}</span>
+            {thread.isReplied
+              ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">✓ Replied</span>
+              : null}
+          </div>
+
+          <p
+            className="text-sm text-foreground mt-1 leading-relaxed break-words"
+            dangerouslySetInnerHTML={{ __html: thread.text }}
+          />
+
+          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+            {thread.likeCount > 0 && (
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <ThumbsUp className="h-3 w-3" />{fmt(thread.likeCount)}
+              </span>
+            )}
+            {thread.totalReplyCount > 0 && (
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <CornerDownRight className="h-3 w-3" />{thread.totalReplyCount} {thread.totalReplyCount === 1 ? "reply" : "replies"}
+              </span>
+            )}
+            <button
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={onReplyClick}
+              data-testid={`button-reply-cached-${thread.commentId}`}>
+              {isReplying ? "Cancel" : thread.isReplied ? "Reply again" : "Reply"}
+            </button>
+          </div>
+
+          {/* Reply form */}
+          {isReplying && (
+            <div className="mt-3 space-y-2">
+              <Textarea
+                value={replyText}
+                onChange={(e) => onReplyTextChange(e.target.value)}
+                placeholder="Add a public reply…"
+                className="text-sm resize-none min-h-[72px] bg-muted/30"
+                autoFocus
+                data-testid={`textarea-reply-cached-${thread.commentId}`}
+              />
+              <div className="flex items-center gap-2 flex-wrap">
+                {cannedResponses.length > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1"
+                        data-testid={`button-canned-cached-${thread.commentId}`}>
+                        <BookMarked className="h-3 w-3" />Canned
+                        <ChevronDown className="h-2.5 w-2.5 ml-0.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-1" align="start">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1.5">Select a canned response</p>
+                      {cannedResponses.map((cr) => (
+                        <button key={cr.id} className="w-full text-left px-2 py-2 rounded-lg hover:bg-muted transition-colors"
+                          onClick={() => onReplyTextChange(cr.body)}
+                          data-testid={`button-use-canned-cached-${cr.id}`}>
+                          <p className="text-xs font-medium text-foreground">{cr.title}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{cr.body}</p>
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                )}
+                <div className="flex-1" />
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onCancelReply}>Cancel</Button>
+                <Button size="sm" className="h-7 text-xs bg-red-500 hover:bg-red-600 text-white gap-1"
+                  disabled={!replyText.trim() || isPending}
+                  onClick={onReplySubmit}
+                  data-testid={`button-post-cached-reply-${thread.commentId}`}>
+                  <Send className="h-3 w-3" />{isPending ? "Posting…" : "Reply"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Existing replies preview */}
+          {!isReplying && thread.replies.length > 0 && (
+            <div className="mt-2.5 pl-3 border-l-2 border-border/40 space-y-2">
+              {thread.replies.slice(0, 2).map((reply) => (
+                <div key={reply.id} className="flex gap-2">
+                  <CommentAvatar src={reply.authorAvatar} name={reply.authorName} />
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-xs font-semibold mr-1.5 ${reply.authorChannelId === channelId ? "text-red-500" : "text-foreground"}`}>{reply.authorName}</span>
+                    <span className="text-[11px] text-muted-foreground">{relativeTime(reply.publishedAt)}</span>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1" dangerouslySetInnerHTML={{ __html: reply.text }} />
+                  </div>
+                </div>
+              ))}
+              {thread.replies.length > 2 && (
+                <p className="text-[11px] text-muted-foreground">+{thread.replies.length - 2} more replies</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── CommentsTab ───────────────────────────────────────────────────────────────
+
+const COMMENT_BATCH_SIZE = 10;
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+function CommentsTab({
+  videos, channelId, cannedResponses,
+}: {
+  videos: VideoItem[];
+  channelId: string;
+  cannedResponses: CannedResponse[];
+}) {
+  const { toast } = useToast();
+  const [showAll, setShowAll] = useState(false);
+  const [allThreads, setAllThreads] = useState<CachedThread[]>([]);
+  const [loadedBatchCount, setLoadedBatchCount] = useState(0);
+  const [cacheInfo, setCacheInfo] = useState({ hits: 0, fetches: 0 });
+  const [requiresReconnect, setRequiresReconnect] = useState(false);
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const didInitRef = useRef(false);
+
+  // Only videos from the last 12 months
+  const recentVideos = useMemo(() => {
+    const cutoff = Date.now() - ONE_YEAR_MS;
+    return videos.filter((v) => v.publishedAt && new Date(v.publishedAt).getTime() > cutoff);
+  }, [videos]);
+
+  const videoBatches = useMemo(() => {
+    const batches: VideoItem[][] = [];
+    for (let i = 0; i < recentVideos.length; i += COMMENT_BATCH_SIZE) {
+      batches.push(recentVideos.slice(i, i + COMMENT_BATCH_SIZE));
+    }
+    return batches;
+  }, [recentVideos]);
+
+  const hasMore = loadedBatchCount < videoBatches.length;
+
+  const loadBatchMut = useMutation({
+    mutationFn: async ({ batchVideos, forceRefresh }: { batchVideos: VideoItem[]; forceRefresh: boolean }) => {
+      const r = await fetch("/api/analytics/youtube/all-comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          videos: batchVideos.map((v) => ({ id: v.id, title: v.title, thumbnail: v.thumbnail, publishedAt: v.publishedAt })),
+          forceRefresh,
+        }),
+      });
+      if (r.status === 403) { const e = new Error("requires_reconnect") as any; e.requiresReconnect = true; throw e; }
+      if (!r.ok) throw new Error(await r.text());
+      return r.json() as Promise<{ threads: CachedThread[]; cacheHits: number; apiFetches: number }>;
+    },
+    onSuccess: (data) => {
+      setAllThreads((prev) => {
+        const existing = new Set(prev.map((t) => t.threadId));
+        return [...prev, ...data.threads.filter((t) => !existing.has(t.threadId))];
+      });
+      setLoadedBatchCount((c) => c + 1);
+      setCacheInfo((prev) => ({ hits: prev.hits + data.cacheHits, fetches: prev.fetches + data.apiFetches }));
+    },
+    onError: (err: any) => {
+      if (err?.requiresReconnect) setRequiresReconnect(true);
+      else toast({ title: "Failed to load comments", variant: "destructive" });
+    },
+  });
+
+  const refreshMut = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/analytics/youtube/all-comments/refresh", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      setAllThreads([]);
+      setLoadedBatchCount(0);
+      setCacheInfo({ hits: 0, fetches: 0 });
+      didInitRef.current = false;
+    },
+    onError: () => toast({ title: "Failed to refresh cache", variant: "destructive" }),
+  });
+
+  // Auto-load first batch when videos are ready
+  useEffect(() => {
+    if (didInitRef.current || videoBatches.length === 0 || loadBatchMut.isPending || refreshMut.isPending) return;
+    didInitRef.current = true;
+    loadBatchMut.mutate({ batchVideos: videoBatches[0], forceRefresh: false });
+  }, [videoBatches, refreshMut.isSuccess]);
+
+  const replyMut = useMutation({
+    mutationFn: ({ commentId, text }: { commentId: string; text: string }) =>
+      apiRequest("POST", `/api/analytics/youtube/comments/${commentId}/reply`, { text }),
+    onSuccess: async (res, { commentId }) => {
+      const data = await res.json();
+      setAllThreads((prev) => prev.map((t) =>
+        t.commentId === commentId ? {
+          ...t,
+          isReplied: true,
+          totalReplyCount: t.totalReplyCount + 1,
+          replies: [...t.replies, {
+            id: data.id || String(Date.now()),
+            authorName: "You",
+            authorAvatar: "",
+            authorChannelId: channelId,
+            text: replyText,
+            likeCount: 0,
+            publishedAt: new Date().toISOString(),
+          }],
+        } : t
+      ));
+      setReplyingToId(null);
+      setReplyText("");
+      toast({ title: "Reply posted!" });
+    },
+    onError: (err: any) => {
+      if (String(err?.message || "").includes("403")) setRequiresReconnect(true);
+      else toast({ title: "Failed to post reply", description: "Something went wrong.", variant: "destructive" });
+    },
+  });
+
+  const displayedThreads = showAll ? allThreads : allThreads.filter((t) => !t.isReplied);
+  const unrepliedCount = allThreads.filter((t) => !t.isReplied).length;
+  const repliedCount = allThreads.filter((t) => t.isReplied).length;
+
+  if (requiresReconnect) {
+    return (
+      <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+        <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-foreground">Reconnect required</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Disconnect and reconnect your channel to grant comment-reading permission, then try again.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" className="shrink-0 text-xs"
+          onClick={() => { window.location.href = "/api/analytics/youtube/connect"; }}>
+          Reconnect
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header bar */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-start gap-3 flex-wrap">
+          {/* Filter toggle */}
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            <button
+              onClick={() => setShowAll(false)}
+              data-testid="button-filter-unreplied"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${!showAll ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              <MessageSquare className="h-3 w-3" />
+              Needs Reply
+              {unrepliedCount > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${!showAll ? "bg-red-500 text-white" : "bg-muted-foreground/20 text-muted-foreground"}`}>
+                  {unrepliedCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setShowAll(true)}
+              data-testid="button-filter-all"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${showAll ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              All
+              {allThreads.length > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${showAll ? "bg-muted-foreground/20 text-foreground" : "bg-muted-foreground/20 text-muted-foreground"}`}>
+                  {allThreads.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Cache status */}
+          {(cacheInfo.hits > 0 || cacheInfo.fetches > 0) && (
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-full">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {cacheInfo.hits > 0 && <span>{cacheInfo.hits} from cache</span>}
+              {cacheInfo.hits > 0 && cacheInfo.fetches > 0 && <span>·</span>}
+              {cacheInfo.fetches > 0 && <span>{cacheInfo.fetches} live</span>}
+            </div>
+          )}
+        </div>
+
+        <Button
+          variant="outline" size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={() => refreshMut.mutate()}
+          disabled={refreshMut.isPending || loadBatchMut.isPending}
+          data-testid="button-refresh-comments">
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshMut.isPending ? "animate-spin" : ""}`} />
+          {refreshMut.isPending ? "Clearing…" : "Refresh cache"}
+        </Button>
+      </div>
+
+      {/* Scope note */}
+      <p className="text-xs text-muted-foreground">
+        Showing comments from your {recentVideos.length} video{recentVideos.length !== 1 ? "s" : ""} published in the last 12 months
+        {loadedBatchCount < videoBatches.length
+          ? ` · ${loadedBatchCount * COMMENT_BATCH_SIZE} of ${recentVideos.length} videos loaded`
+          : ` · all videos loaded`}
+      </p>
+
+      {/* Initial loading state */}
+      {loadBatchMut.isPending && allThreads.length === 0 && (
+        <div className="space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="border border-border rounded-2xl p-4 space-y-3">
+              <Skeleton className="h-7 w-48 rounded-full" />
+              <div className="flex gap-2.5">
+                <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-3/4" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loadBatchMut.isPending && displayedThreads.length === 0 && allThreads.length > 0 && !showAll && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-4">
+            <MessageSquare className="h-8 w-8 text-emerald-500" />
+          </div>
+          <h3 className="text-lg font-bold text-foreground mb-1">All caught up!</h3>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            You've replied to every comment in your last 12 months of videos.
+            {hasMore && " Load more videos to check further back."}
+          </p>
+          {!hasMore && (
+            <Button variant="outline" size="sm" className="mt-4 text-xs" onClick={() => setShowAll(true)}>
+              View all {repliedCount} replied comments
+            </Button>
+          )}
+        </div>
+      )}
+
+      {!loadBatchMut.isPending && allThreads.length === 0 && !loadBatchMut.isPending && recentVideos.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Video className="h-8 w-8 text-muted-foreground/40 mb-3" />
+          <p className="text-sm text-muted-foreground">No videos published in the last 12 months.</p>
+        </div>
+      )}
+
+      {/* Comment cards */}
+      {displayedThreads.length > 0 && (
+        <div className="space-y-3">
+          {displayedThreads.map((thread) => (
+            <CachedCommentCard
+              key={thread.threadId}
+              thread={thread}
+              channelId={channelId}
+              isReplying={replyingToId === thread.commentId}
+              replyText={replyingToId === thread.commentId ? replyText : ""}
+              onReplyClick={() => {
+                if (replyingToId === thread.commentId) { setReplyingToId(null); setReplyText(""); }
+                else { setReplyingToId(thread.commentId); setReplyText(""); }
+              }}
+              onReplyTextChange={setReplyText}
+              onReplySubmit={() => {
+                if (!replyText.trim()) return;
+                replyMut.mutate({ commentId: thread.commentId, text: replyText.trim() });
+              }}
+              onCancelReply={() => { setReplyingToId(null); setReplyText(""); }}
+              cannedResponses={cannedResponses}
+              isPending={replyMut.isPending && replyingToId === thread.commentId}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Load more */}
+      {hasMore && allThreads.length > 0 && (
+        <div className="pt-2">
+          <Button
+            variant="outline"
+            className="w-full text-sm h-10 gap-2"
+            onClick={() => loadBatchMut.mutate({ batchVideos: videoBatches[loadedBatchCount], forceRefresh: false })}
+            disabled={loadBatchMut.isPending}
+            data-testid="button-load-more-videos">
+            {loadBatchMut.isPending
+              ? <><RefreshCw className="h-4 w-4 animate-spin" />Loading next {COMMENT_BATCH_SIZE} videos…</>
+              : <>Load next {Math.min(COMMENT_BATCH_SIZE, recentVideos.length - loadedBatchCount * COMMENT_BATCH_SIZE)} videos ({recentVideos.length - loadedBatchCount * COMMENT_BATCH_SIZE} remaining)</>}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "videos" | "audience";
+type Tab = "overview" | "videos" | "audience" | "comments";
 type SortKey = "views" | "watchTime" | "retention" | "engagement" | "shares" | "date";
 
 export default function AnalyticsYouTubePage() {
@@ -831,7 +1280,7 @@ export default function AnalyticsYouTubePage() {
 
   const { data: cannedResponses = [] } = useQuery<CannedResponse[]>({
     queryKey: ["/api/analytics/youtube/canned-responses"],
-    enabled: connected && tab === "videos",
+    enabled: connected && (tab === "videos" || tab === "comments"),
   });
 
   const disconnectMut = useMutation({
@@ -1019,22 +1468,28 @@ export default function AnalyticsYouTubePage() {
             {/* Tab bar + period selector */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                {(["overview", "videos", "audience"] as Tab[]).map((t) => (
+                {(["overview", "videos", "audience", "comments"] as Tab[]).map((t) => (
                   <button key={t} onClick={() => setTab(t)} data-testid={`tab-${t}`}
                     className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                    {t}
+                    {t === "comments" ? (
+                      <span className="flex items-center gap-1.5">
+                        <MessageSquare className="h-3.5 w-3.5" />Comments
+                      </span>
+                    ) : t}
                   </button>
                 ))}
               </div>
-              <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-                <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-period"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">Last 7 days</SelectItem>
-                  <SelectItem value="28">Last 28 days</SelectItem>
-                  <SelectItem value="90">Last 90 days</SelectItem>
-                  <SelectItem value="365">Last 365 days</SelectItem>
-                </SelectContent>
-              </Select>
+              {tab !== "comments" && (
+                <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+                  <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-period"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">Last 7 days</SelectItem>
+                    <SelectItem value="28">Last 28 days</SelectItem>
+                    <SelectItem value="90">Last 90 days</SelectItem>
+                    <SelectItem value="365">Last 365 days</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* Reconnect banner */}
@@ -1645,6 +2100,37 @@ export default function AnalyticsYouTubePage() {
                       );
                     })()}
                   </>
+                )}
+              </div>
+            )}
+
+            {/* ═══════════════════ COMMENTS TAB ═══════════════════ */}
+            {tab === "comments" && (
+              <div className="space-y-5">
+                {videosLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="border border-border rounded-2xl p-4 space-y-3">
+                        <Skeleton className="h-7 w-48 rounded-full" />
+                        <div className="flex gap-2.5">
+                          <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+                          <div className="flex-1 space-y-1.5">
+                            <Skeleton className="h-3 w-32" />
+                            <Skeleton className="h-3 w-full" />
+                            <Skeleton className="h-3 w-3/4" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : !videos ? (
+                  <ReconnectBanner onConnect={() => { window.location.href = "/api/analytics/youtube/connect"; }} />
+                ) : (
+                  <CommentsTab
+                    videos={videos}
+                    channelId={status?.channelId || ""}
+                    cannedResponses={cannedResponses}
+                  />
                 )}
               </div>
             )}

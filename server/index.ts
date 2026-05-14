@@ -641,7 +641,22 @@ async function runStartupMigrations() {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS youtube_comment_cache (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        video_id VARCHAR NOT NULL,
+        video_title TEXT NOT NULL DEFAULT '',
+        video_thumbnail TEXT NOT NULL DEFAULT '',
+        video_published_at TIMESTAMP,
+        threads JSONB NOT NULL DEFAULT '[]'::jsonb,
+        total_results INTEGER NOT NULL DEFAULT 0,
+        cached_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, video_id)
+      )
+    `);
     console.log("[startup] analytics connections migration complete");
+    console.log("[startup] youtube_comment_cache migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

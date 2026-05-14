@@ -6680,6 +6680,110 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ── YouTube: All Comments (cached, last-12-months videos) ──────────────────
+
+  app.post("/api/analytics/youtube/all-comments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+
+      const { videos, forceRefresh = false } = req.body as {
+        videos: { id: string; title: string; thumbnail: string; publishedAt?: string }[];
+        forceRefresh?: boolean;
+      };
+      if (!Array.isArray(videos) || videos.length === 0) {
+        return res.json({ threads: [], cacheHits: 0, apiFetches: 0 });
+      }
+
+      const channelId = conn.channelId || "";
+      const now = Date.now();
+      const TWO_HOURS   = 2  * 60 * 60 * 1000;
+      const TWENTY_FOUR = 24 * 60 * 60 * 1000;
+      const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+
+      let cacheHits = 0, apiFetches = 0;
+      const allThreads: any[] = [];
+
+      await Promise.all(videos.map(async (video) => {
+        const cacheRow = await storage.getYoutubeCommentCache(userId, video.id);
+
+        let isFresh = false;
+        if (!forceRefresh && cacheRow) {
+          const videoAge = video.publishedAt
+            ? now - new Date(video.publishedAt).getTime()
+            : THIRTY_DAYS + 1;
+          const ttl = videoAge < THIRTY_DAYS ? TWO_HOURS : TWENTY_FOUR;
+          isFresh = (now - new Date(cacheRow.cachedAt).getTime()) < ttl;
+        }
+
+        let threads: any[] = [];
+        if (isFresh && cacheRow) {
+          threads = cacheRow.threads as any[];
+          cacheHits++;
+        } else {
+          try {
+            const result = await fetchVideoComments(
+              conn.oauthAccessToken!,
+              conn.oauthRefreshToken,
+              video.id,
+              undefined,
+              "time"
+            );
+            threads = result.threads || [];
+            await storage.upsertYoutubeCommentCache(userId, {
+              videoId: video.id,
+              videoTitle: video.title,
+              videoThumbnail: video.thumbnail,
+              videoPublishedAt: video.publishedAt ? new Date(video.publishedAt) : null,
+              threads,
+              totalResults: result.totalResults || threads.length,
+            });
+            apiFetches++;
+          } catch (err: any) {
+            if (err?.code === "insufficient_scopes") throw err;
+            threads = (cacheRow?.threads as any[]) || [];
+          }
+        }
+
+        for (const t of threads) {
+          const isReplied = channelId
+            ? (t.replies || []).some((r: any) => r.authorChannelId === channelId)
+            : false;
+          allThreads.push({
+            ...t,
+            videoId: video.id,
+            videoTitle: video.title,
+            videoThumbnail: video.thumbnail,
+            isReplied,
+          });
+        }
+      }));
+
+      allThreads.sort((a, b) =>
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      );
+
+      res.json({ threads: allThreads, cacheHits, apiFetches });
+    } catch (err: any) {
+      console.error("[YouTube] all-comments error:", err?.message);
+      if (err?.code === "insufficient_scopes" || String(err?.message).includes("insufficient")) {
+        return res.status(403).json({ message: "requires_reconnect", requiresReconnect: true });
+      }
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/analytics/youtube/all-comments/refresh", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      await storage.clearYoutubeCommentCache(userId);
+      res.json({ cleared: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to clear cache" });
+    }
+  });
+
   // ── Analytics: Google Search Console ───────────────────────────────────────
 
   app.get("/api/analytics/gsc/status", requireAuth, async (req: Request, res: Response) => {

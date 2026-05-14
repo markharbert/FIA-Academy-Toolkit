@@ -13,6 +13,7 @@ import {
   youtubeConnections, type YoutubeConnection,
   gscConnections, type GscConnection,
   cannedResponses, type CannedResponse,
+  youtubeCommentCache, type YoutubeCommentCache,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -466,6 +467,11 @@ export interface IStorage {
   createCannedResponse(userId: string, data: { title: string; body: string }): Promise<CannedResponse>;
   updateCannedResponse(id: string, userId: string, data: { title?: string; body?: string }): Promise<CannedResponse | null>;
   deleteCannedResponse(id: string, userId: string): Promise<void>;
+  // YouTube Comment Cache
+  getYoutubeCommentCache(userId: string, videoId: string): Promise<YoutubeCommentCache | null>;
+  upsertYoutubeCommentCache(userId: string, data: { videoId: string; videoTitle: string; videoThumbnail: string; videoPublishedAt?: Date | null; threads: any[]; totalResults: number }): Promise<void>;
+  appendReplyToCommentCache(userId: string, videoId: string, commentId: string, reply: any): Promise<void>;
+  clearYoutubeCommentCache(userId: string): Promise<void>;
   // Analytics — Google Search Console
   getGscConnection(userId: string): Promise<GscConnection | null>;
   upsertGscConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<GscConnection>;
@@ -3450,6 +3456,50 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCannedResponse(id: string, userId: string): Promise<void> {
     await db.delete(cannedResponses).where(and(eq(cannedResponses.id, id), eq(cannedResponses.userId, userId)));
+  }
+
+  async getYoutubeCommentCache(userId: string, videoId: string): Promise<YoutubeCommentCache | null> {
+    const [row] = await db
+      .select()
+      .from(youtubeCommentCache)
+      .where(and(eq(youtubeCommentCache.userId, userId), eq(youtubeCommentCache.videoId, videoId)));
+    return row ?? null;
+  }
+
+  async upsertYoutubeCommentCache(userId: string, data: { videoId: string; videoTitle: string; videoThumbnail: string; videoPublishedAt?: Date | null; threads: any[]; totalResults: number }): Promise<void> {
+    await db
+      .insert(youtubeCommentCache)
+      .values({ userId, ...data, cachedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [youtubeCommentCache.userId, youtubeCommentCache.videoId],
+        set: {
+          videoTitle: data.videoTitle,
+          videoThumbnail: data.videoThumbnail,
+          videoPublishedAt: data.videoPublishedAt ?? null,
+          threads: data.threads,
+          totalResults: data.totalResults,
+          cachedAt: new Date(),
+        },
+      });
+  }
+
+  async appendReplyToCommentCache(userId: string, videoId: string, commentId: string, reply: any): Promise<void> {
+    const row = await this.getYoutubeCommentCache(userId, videoId);
+    if (!row) return;
+    const threads = (row.threads as any[]).map((t: any) => {
+      if (t.commentId === commentId) {
+        return { ...t, replies: [...(t.replies || []), reply], totalReplyCount: (t.totalReplyCount || 0) + 1 };
+      }
+      return t;
+    });
+    await db
+      .update(youtubeCommentCache)
+      .set({ threads })
+      .where(and(eq(youtubeCommentCache.userId, userId), eq(youtubeCommentCache.videoId, videoId)));
+  }
+
+  async clearYoutubeCommentCache(userId: string): Promise<void> {
+    await db.delete(youtubeCommentCache).where(eq(youtubeCommentCache.userId, userId));
   }
 
   async getGscConnection(userId: string): Promise<GscConnection | null> {
