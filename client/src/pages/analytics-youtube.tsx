@@ -539,15 +539,27 @@ function VideoExpandPanel({
   const [requiresReconnect, setRequiresReconnect] = useState(false);
   const processedRef = useRef<string>("__unset__");
 
-  const { data: commentsData, isLoading: commentsLoading } = useQuery<CommentsData>({
+  const { data: commentsData, isLoading: commentsLoading, error: commentsError } = useQuery<CommentsData>({
     queryKey: ["/api/analytics/youtube/video", video.id, "comments", pageToken ?? "__first__"],
     queryFn: async () => {
       const url = `/api/analytics/youtube/video/${video.id}/comments${pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : ""}`;
       const r = await fetch(url, { credentials: "include" });
+      if (r.status === 403) {
+        const e = new Error("requires_reconnect") as any;
+        e.requiresReconnect = true;
+        throw e;
+      }
       if (!r.ok) throw new Error(await r.text());
       return r.json();
     },
+    retry: false,
   });
+
+  useEffect(() => {
+    if (commentsError && (commentsError as any)?.requiresReconnect) {
+      setRequiresReconnect(true);
+    }
+  }, [commentsError]);
 
   useEffect(() => {
     if (!commentsData) return;
@@ -679,7 +691,7 @@ function VideoExpandPanel({
                     </div>
                   ))}
                 </div>
-              ) : allThreads.length === 0 ? (
+              ) : requiresReconnect ? null : allThreads.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <MessageSquare className="h-8 w-8 text-muted-foreground/40 mb-3" />
                   <p className="text-sm text-muted-foreground">No comments yet</p>

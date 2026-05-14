@@ -6605,6 +6605,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.json(result);
     } catch (err: any) {
       console.error("[YouTube] comments error:", err?.message);
+      if (err?.code === "insufficient_scopes" || String(err?.message).includes("insufficient")) {
+        return res.status(403).json({ message: "requires_reconnect", requiresReconnect: true });
+      }
       res.status(500).json({ message: "Failed to fetch comments" });
     }
   });

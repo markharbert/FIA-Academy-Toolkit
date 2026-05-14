@@ -604,7 +604,21 @@ export async function fetchVideoComments(
       totalResults: (data.pageInfo as any)?.totalResults ?? undefined,
     };
   } catch (err: unknown) {
-    console.error("[YouTube] fetchVideoComments error:", err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[YouTube] fetchVideoComments error:", msg);
+    // Surface scope/auth errors so the route can return a 403
+    if (
+      msg.includes("insufficient") ||
+      msg.includes("insufficientPermissions") ||
+      msg.includes("forbidden") ||
+      msg.includes("authError") ||
+      msg.includes("401") ||
+      msg.includes("403")
+    ) {
+      const e = new Error("insufficient_scopes") as any;
+      e.code = "insufficient_scopes";
+      throw e;
+    }
     return { threads: [], nextPageToken: undefined };
   }
 }
