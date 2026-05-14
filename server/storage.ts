@@ -2275,13 +2275,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertDmoSettings(userId: string, data: Partial<Omit<DmoSettings, 'userId'>>): Promise<DmoSettings> {
-    const existing = await db.select().from(dmoSettings).where(eq(dmoSettings.userId, userId));
-    if (existing.length > 0) {
-      const [updated] = await db.update(dmoSettings).set(data).where(eq(dmoSettings.userId, userId)).returning();
-      return updated;
-    }
-    const [created] = await db.insert(dmoSettings).values({ userId, ...data }).returning();
-    return created;
+    // Strip undefined values so we never accidentally clear or null-out fields
+    const cleanData = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined && v !== null)
+    ) as Partial<Omit<DmoSettings, 'userId'>>;
+
+    const [row] = await db
+      .insert(dmoSettings)
+      .values({
+        userId,
+        visionTarget: 30,
+        personalTarget: 30,
+        expandTarget: 60,
+        executionTarget: 60,
+        connectingTarget: 60,
+        ...cleanData,
+      })
+      .onConflictDoUpdate({
+        target: dmoSettings.userId,
+        set: cleanData,
+      })
+      .returning();
+    return row;
   }
 
   // ── Projects ─────────────────────────────────────────────────────────────
