@@ -417,36 +417,63 @@ export default function AnalyticsYouTubePage() {
             {/* ═══════════════════ OVERVIEW TAB ═══════════════════ */}
             {tab === "overview" && (
               <div className="space-y-5">
-                {analyticsLoading ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
-                  </div>
-                ) : totals && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <KpiCard label="Views" value={fmt(totals.views)} icon={Eye} iconColor="text-red-500" sub={`last ${days}d`} />
-                    <KpiCard label="Watch Hours" value={fmt(totals.watchHours)} icon={Clock} iconColor="text-rose-500" sub={`last ${days}d`} />
-                    <KpiCard label="Avg View Duration" value={fmtSecs(totals.avgViewDuration)} icon={Film} iconColor="text-pink-500" sub="per view" />
-                    <KpiCard label="Shares" value={fmt(totals.shares)} icon={Share2} iconColor="text-orange-500" sub={`last ${days}d`} />
-                    <KpiCard
-                      label="Subscribers Gained"
-                      value={`+${fmt(totals.subscribersGained)}`}
-                      icon={UserPlus} iconColor="text-emerald-500"
-                      sub={totals.subscribersLost > 0 ? `−${fmt(totals.subscribersLost)} lost` : `last ${days}d`}
-                      trend={
-                        totals.subscribersGained - totals.subscribersLost > 0
-                          ? { value: `+${fmt(totals.subscribersGained - totals.subscribersLost)} net`, positive: true }
-                          : totals.subscribersGained - totals.subscribersLost < 0
-                          ? { value: `${fmt(totals.subscribersGained - totals.subscribersLost)} net`, positive: false }
-                          : null
-                      }
-                    />
-                    <KpiCard label="Impressions" value={fmt(totals.impressions)} icon={Eye} iconColor="text-blue-500" sub="thumbnail shown" />
-                    <KpiCard label="Click-Through Rate" value={totals.ctr.toFixed(1) + "%"} icon={MousePointerClick} iconColor="text-violet-500" sub="impressions → clicks" />
-                    <KpiCard label="Videos Published" value={fmt(status.channel.videoCount)} icon={Video} iconColor="text-muted-foreground" sub="all time" />
-                  </div>
-                )}
 
-                {/* Views trend */}
+                {/* ── All-time hero ── */}
+                <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-white/10">
+                  <div className="px-6 pt-5 pb-1">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-white/40">Channel Totals — All Time</p>
+                  </div>
+                  <div className="grid grid-cols-3 divide-x divide-white/10">
+                    {[
+                      { label: "Subscribers", value: fmt(status.channel.subscriberCount), raw: status.channel.subscriberCount, icon: Users, color: "text-emerald-400" },
+                      { label: "Total Views", value: fmt(status.channel.viewCount), raw: status.channel.viewCount, icon: Eye, color: "text-red-400" },
+                      { label: "Videos", value: fmt(status.channel.videoCount), raw: status.channel.videoCount, icon: Video, color: "text-blue-400" },
+                    ].map(({ label, value, icon: Icon, color }) => (
+                      <div key={label} className="px-6 py-5 text-center">
+                        <Icon className={`h-5 w-5 ${color} mx-auto mb-2 opacity-80`} />
+                        <p className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-none">{value}</p>
+                        <p className="text-xs text-white/40 mt-1.5 font-medium">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Period KPI ribbon ── */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+                    Last {days} Days
+                  </p>
+                  {analyticsLoading ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+                    </div>
+                  ) : totals && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <KpiCard label="Views" value={fmt(totals.views)} icon={Eye} iconColor="text-red-500" sub="in period" />
+                      <KpiCard label="Watch Hours" value={fmt(totals.watchHours)} icon={Clock} iconColor="text-rose-500" sub="in period" />
+                      <KpiCard label="Avg View Duration" value={fmtSecs(totals.avgViewDuration)} icon={Film} iconColor="text-pink-500" sub="per view" />
+                      <KpiCard label="Shares" value={fmt(totals.shares)} icon={Share2} iconColor="text-orange-500" sub="in period" />
+                      <KpiCard
+                        label="Subscribers Gained"
+                        value={`+${fmt(totals.subscribersGained)}`}
+                        icon={UserPlus} iconColor="text-emerald-500"
+                        sub={totals.subscribersLost > 0 ? `−${fmt(totals.subscribersLost)} lost` : "in period"}
+                        trend={
+                          totals.subscribersGained - totals.subscribersLost > 0
+                            ? { value: `+${fmt(totals.subscribersGained - totals.subscribersLost)} net`, positive: true }
+                            : totals.subscribersGained - totals.subscribersLost < 0
+                            ? { value: `${fmt(totals.subscribersGained - totals.subscribersLost)} net`, positive: false }
+                            : null
+                        }
+                      />
+                      <KpiCard label="Impressions" value={fmt(totals.impressions)} icon={Eye} iconColor="text-blue-500" sub="thumbnails shown" />
+                      <KpiCard label="Click-Through Rate" value={totals.ctr.toFixed(1) + "%"} icon={MousePointerClick} iconColor="text-violet-500" sub="impressions → clicks" />
+                      <KpiCard label="Net Subscribers" value={(totals.subscribersGained - totals.subscribersLost >= 0 ? "+" : "") + fmt(totals.subscribersGained - totals.subscribersLost)} icon={TrendingUp} iconColor={totals.subscribersGained - totals.subscribersLost >= 0 ? "text-emerald-500" : "text-rose-500"} sub="gained minus lost" />
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Views trend ── */}
                 {analyticsLoading ? <Skeleton className="h-64 rounded-2xl" /> : chartData.length > 0 && (
                   <SectionCard title="Views Over Time" sub={`Daily views — last ${days} days`}>
                     <ResponsiveContainer width="100%" height={220}>
@@ -461,7 +488,7 @@ export default function AnalyticsYouTubePage() {
                   </SectionCard>
                 )}
 
-                {/* Watch hours + Shares side by side */}
+                {/* ── Watch hours + Shares side by side ── */}
                 {!analyticsLoading && chartData.length > 0 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <SectionCard title="Watch Hours" sub={`Hours watched per day — last ${days} days`}>
@@ -489,7 +516,7 @@ export default function AnalyticsYouTubePage() {
                   </div>
                 )}
 
-                {/* Subscriber activity */}
+                {/* ── Subscriber activity ── */}
                 {!analyticsLoading && chartData.length > 0 && (
                   <SectionCard title="Subscriber Activity" sub={`Gained vs. lost per day — last ${days} days`}>
                     <ResponsiveContainer width="100%" height={200}>
@@ -506,7 +533,7 @@ export default function AnalyticsYouTubePage() {
                   </SectionCard>
                 )}
 
-                {/* Impressions + CTR */}
+                {/* ── Impressions + CTR ── */}
                 {!analyticsLoading && chartData.length > 0 && timeSeries.some((d) => d.impressions > 0) && (
                   <SectionCard title="Impressions & Click-Through Rate" sub={`Thumbnail shown vs. clicked — last ${days} days`}>
                     <ResponsiveContainer width="100%" height={200}>
@@ -525,6 +552,52 @@ export default function AnalyticsYouTubePage() {
                     </ResponsiveContainer>
                   </SectionCard>
                 )}
+
+                {/* ── Top 10 videos (all-time) ── */}
+                {!videosLoading && videos && videos.length > 0 && (() => {
+                  const top10 = [...videos].sort((a, b) => b.viewCount - a.viewCount).slice(0, 10);
+                  const maxViews = top10[0]?.viewCount || 1;
+                  return (
+                    <SectionCard title="Top 10 Videos" sub="Ranked by all-time view count">
+                      <div className="space-y-0 -mx-1">
+                        {top10.map((v, i) => (
+                          <a key={v.id} href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-3 px-1 py-2.5 rounded-xl hover:bg-muted/40 transition-colors group"
+                            data-testid={`top-video-${i}`}>
+                            {/* Rank */}
+                            <span className={`shrink-0 w-6 text-center text-sm font-bold ${i === 0 ? "text-yellow-500" : i === 1 ? "text-slate-400" : i === 2 ? "text-amber-600" : "text-muted-foreground"}`}>
+                              {i + 1}
+                            </span>
+                            {/* Thumbnail */}
+                            {v.thumbnail
+                              ? <img src={v.thumbnail} alt="" className="shrink-0 w-16 h-10 object-cover rounded-lg" />
+                              : <div className="shrink-0 w-16 h-10 bg-muted rounded-lg flex items-center justify-center"><Video className="h-3.5 w-3.5 text-muted-foreground" /></div>}
+                            {/* Title + bar */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground group-hover:text-red-500 transition-colors truncate leading-snug">{v.title}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                  <div className="h-full rounded-full bg-gradient-to-r from-red-500 to-rose-400"
+                                    style={{ width: `${(v.viewCount / maxViews) * 100}%` }} />
+                                </div>
+                                <span className="text-xs text-muted-foreground shrink-0">{fmtDate(v.publishedAt)}</span>
+                              </div>
+                            </div>
+                            {/* Stats */}
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-bold text-foreground">{fmt(v.viewCount)}</p>
+                              <div className="flex items-center gap-1.5 justify-end mt-0.5">
+                                <span className="text-xs text-muted-foreground flex items-center gap-0.5"><ThumbsUp className="h-2.5 w-2.5" />{fmt(v.likeCount)}</span>
+                              </div>
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    </SectionCard>
+                  );
+                })()}
+                {videosLoading && <Skeleton className="h-80 rounded-2xl" />}
+
               </div>
             )}
 
