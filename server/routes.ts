@@ -26,7 +26,7 @@ import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
 import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
-import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos } from "./youtubeAnalytics";
+import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos, fetchChannelAnalytics, fetchTrafficSources, fetchDeviceBreakdown, fetchTopCountries, fetchVideoAnalytics } from "./youtubeAnalytics";
 import { getGscAuthUrl, exchangeGscCode, fetchGscSites, fetchGscData } from "./searchConsole";
 import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
@@ -6540,6 +6540,52 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to disconnect" });
+    }
+  });
+
+  app.get("/api/analytics/youtube/channel-analytics", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      const days = Math.min(Math.max(parseInt(req.query.days as string || "28"), 7), 365);
+      const result = await fetchChannelAnalytics(conn.oauthAccessToken, conn.oauthRefreshToken, days);
+      res.json(result ?? { timeSeries: [], totals: null, error: "analytics_unavailable" });
+    } catch (err: any) {
+      console.error("[Analytics/YouTube] channel-analytics error:", err?.message);
+      res.status(500).json({ message: "Failed to fetch channel analytics" });
+    }
+  });
+
+  app.get("/api/analytics/youtube/breakdowns", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      const days = Math.min(Math.max(parseInt(req.query.days as string || "28"), 7), 365);
+      const [traffic, devices, countries] = await Promise.all([
+        fetchTrafficSources(conn.oauthAccessToken, conn.oauthRefreshToken, days),
+        fetchDeviceBreakdown(conn.oauthAccessToken, conn.oauthRefreshToken, days),
+        fetchTopCountries(conn.oauthAccessToken, conn.oauthRefreshToken, days),
+      ]);
+      res.json({ traffic, devices, countries });
+    } catch (err: any) {
+      console.error("[Analytics/YouTube] breakdowns error:", err?.message);
+      res.status(500).json({ message: "Failed to fetch breakdowns" });
+    }
+  });
+
+  app.get("/api/analytics/youtube/video-analytics", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      const days = Math.min(Math.max(parseInt(req.query.days as string || "28"), 7), 365);
+      const result = await fetchVideoAnalytics(conn.oauthAccessToken, conn.oauthRefreshToken, days);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Analytics/YouTube] video-analytics error:", err?.message);
+      res.status(500).json({ message: "Failed to fetch video analytics" });
     }
   });
 

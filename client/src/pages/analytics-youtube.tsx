@@ -1,9 +1,17 @@
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ArrowLeft,
   Youtube,
@@ -15,8 +23,19 @@ import {
   ExternalLink,
   RefreshCw,
   LogOut,
+  Clock,
+  TrendingUp,
+  TrendingDown,
+  Monitor,
+  Globe,
+  MousePointerClick,
+  AlertCircle,
+  UserPlus,
+  Film,
 } from "lucide-react";
 import {
+  LineChart,
+  Line,
   BarChart,
   Bar,
   XAxis,
@@ -24,8 +43,11 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  Legend,
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
+
+// ── Formatters ────────────────────────────────────────────────────────────────
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -35,7 +57,12 @@ function fmt(n: number): string {
 
 function fmtDate(iso: string): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function fmtShortDate(iso: string): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function parseDuration(iso: string): string {
@@ -49,22 +76,178 @@ function parseDuration(iso: string): string {
   return `${min}:${String(sec).padStart(2, "0")}`;
 }
 
-type Status = { connected: boolean; connectedEmail?: string; channel?: { id: string; title: string; handle: string; thumbnail: string; subscriberCount: number; videoCount: number; viewCount: number } };
-type VideoData = { id: string; title: string; thumbnail: string; publishedAt: string; viewCount: number; likeCount: number; commentCount: number; duration: string }[];
+function fmtSecs(s: number): string {
+  if (!s || s <= 0) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.round(s % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function fmtWatchMins(mins: number): string {
+  if (mins < 1) return "<1 min";
+  if (mins < 60) return `${Math.round(mins)}m`;
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Channel = {
+  id: string; title: string; handle: string; thumbnail: string;
+  subscriberCount: number; videoCount: number; viewCount: number;
+};
+type Status = { connected: boolean; connectedEmail?: string; channel?: Channel };
+
+type VideoItem = {
+  id: string; title: string; thumbnail: string; publishedAt: string;
+  viewCount: number; likeCount: number; commentCount: number; duration: string;
+};
+
+type AnalyticsDay = {
+  date: string; views: number; watchMinutes: number;
+  subscribersGained: number; subscribersLost: number;
+  impressions: number; ctr: number;
+};
+type AnalyticsTotals = {
+  views: number; watchHours: number; avgViewDuration: number;
+  subscribersGained: number; subscribersLost: number;
+  impressions: number; ctr: number;
+};
+type AnalyticsData = { timeSeries: AnalyticsDay[]; totals: AnalyticsTotals } | null;
+
+type TrafficSource = { source: string; label: string; views: number; watchMinutes: number };
+type DeviceBreakdown = { device: string; label: string; views: number; pct: number };
+type CountryViews = { country: string; views: number; watchMinutes: number };
+type BreakdownData = { traffic: TrafficSource[]; devices: DeviceBreakdown[]; countries: CountryViews[] };
+
+type VideoAnalytics = {
+  videoId: string; views: number; watchMinutes: number;
+  avgViewDuration: number; avgViewPercentage: number;
+  likes: number; comments: number;
+};
+
+type MergedVideo = VideoItem & Partial<VideoAnalytics>;
+
+// ── Reusable sub-components ───────────────────────────────────────────────────
+
+function KpiCard({
+  label, value, sub, icon: Icon, iconColor, trend,
+}: {
+  label: string; value: string; sub?: string;
+  icon: React.ElementType; iconColor: string;
+  trend?: { value: string; positive: boolean } | null;
+}) {
+  return (
+    <Card className="border-border bg-card">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
+          <span className="text-xs text-muted-foreground font-medium">{label}</span>
+        </div>
+        <p className="text-2xl font-bold text-foreground leading-none">{value}</p>
+        {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+        {trend && (
+          <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${trend.positive ? "text-emerald-500" : "text-rose-500"}`}>
+            {trend.positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {trend.value}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SectionCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <Card className="border-border bg-card overflow-hidden">
+      <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
+      <CardContent className="p-5">
+        <h3 className="text-sm font-semibold text-foreground mb-0.5">{title}</h3>
+        {sub && <p className="text-xs text-muted-foreground mb-4">{sub}</p>}
+        {!sub && <div className="mb-4" />}
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReconnectBanner({ onConnect }: { onConnect: () => void }) {
+  return (
+    <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+      <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground">Deep analytics require a reconnect</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          A new permission (YouTube Analytics API) was added since you first connected. Disconnect and reconnect your channel to unlock watch time, CTR, traffic sources, device breakdown, and per-video retention data.
+        </p>
+      </div>
+      <Button size="sm" variant="outline" className="shrink-0 text-xs" onClick={onConnect}>
+        Reconnect
+      </Button>
+    </div>
+  );
+}
+
+const TOOLTIP_STYLE = {
+  background: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: 8,
+  fontSize: 12,
+};
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+type Tab = "overview" | "videos" | "audience";
+type SortKey = "views" | "watchTime" | "retention" | "engagement" | "date";
 
 export default function AnalyticsYouTubePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
 
+  const [tab, setTab] = useState<Tab>("overview");
+  const [days, setDays] = useState(28);
+  const [videoSort, setVideoSort] = useState<SortKey>("views");
+
+  // ── Queries ───────────────────────────────────────────────────────────────
+
   const { data: status, isLoading: statusLoading } = useQuery<Status>({
     queryKey: ["/api/analytics/youtube/status"],
   });
 
-  const { data: videos, isLoading: videosLoading } = useQuery<VideoData>({
+  const connected = status?.connected === true;
+
+  const { data: videos, isLoading: videosLoading } = useQuery<VideoItem[]>({
     queryKey: ["/api/analytics/youtube/videos"],
-    enabled: status?.connected === true,
+    enabled: connected,
   });
+
+  const { data: analytics, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
+    queryKey: ["/api/analytics/youtube/channel-analytics", days],
+    queryFn: () =>
+      fetch(`/api/analytics/youtube/channel-analytics?days=${days}`, { credentials: "include" })
+        .then((r) => r.json()),
+    enabled: connected,
+  });
+
+  const { data: breakdowns, isLoading: breakdownsLoading } = useQuery<BreakdownData>({
+    queryKey: ["/api/analytics/youtube/breakdowns", days],
+    queryFn: () =>
+      fetch(`/api/analytics/youtube/breakdowns?days=${days}`, { credentials: "include" })
+        .then((r) => r.json()),
+    enabled: connected && tab === "audience",
+  });
+
+  const { data: videoAnalytics, isLoading: videoAnalyticsLoading } = useQuery<VideoAnalytics[]>({
+    queryKey: ["/api/analytics/youtube/video-analytics", days],
+    queryFn: () =>
+      fetch(`/api/analytics/youtube/video-analytics?days=${days}`, { credentials: "include" })
+        .then((r) => r.json()),
+    enabled: connected && tab === "videos",
+  });
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
 
   const disconnectMut = useMutation({
     mutationFn: () => apiRequest("DELETE", "/api/analytics/youtube/disconnect"),
@@ -80,25 +263,68 @@ export default function AnalyticsYouTubePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/status"] });
       qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/videos"] });
+      qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/channel-analytics", days] });
       toast({ title: "Refreshed", description: "Channel data updated." });
     },
     onError: () => toast({ title: "Error", description: "Could not refresh data.", variant: "destructive" }),
   });
 
+  // ── Derived data ──────────────────────────────────────────────────────────
+
+  const analyticsAvailable = analytics !== null && analytics?.totals !== null && (analytics?.timeSeries?.length ?? 0) > 0;
+
+  const mergedVideos = useMemo<MergedVideo[]>(() => {
+    if (!videos) return [];
+    const analyticsMap = new Map<string, VideoAnalytics>();
+    (videoAnalytics || []).forEach((va) => analyticsMap.set(va.videoId, va));
+    return videos.map((v) => ({ ...v, ...(analyticsMap.get(v.id) || {}) }));
+  }, [videos, videoAnalytics]);
+
+  const sortedVideos = useMemo(() => {
+    return [...mergedVideos].sort((a, b) => {
+      switch (videoSort) {
+        case "views": return (b.viewCount || 0) - (a.viewCount || 0);
+        case "watchTime": return (b.watchMinutes || 0) - (a.watchMinutes || 0);
+        case "retention": return (b.avgViewPercentage || 0) - (a.avgViewPercentage || 0);
+        case "engagement": {
+          const engA = a.viewCount > 0 ? ((a.likeCount + a.commentCount) / a.viewCount) : 0;
+          const engB = b.viewCount > 0 ? ((b.likeCount + b.commentCount) / b.viewCount) : 0;
+          return engB - engA;
+        }
+        case "date": return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+        default: return 0;
+      }
+    });
+  }, [mergedVideos, videoSort]);
+
+  const totals = analytics?.totals;
+  const timeSeries = analytics?.timeSeries || [];
+
+  const chartData = timeSeries.map((d) => ({
+    date: fmtShortDate(d.date),
+    Views: d.views,
+    "Watch Hrs": Math.round(d.watchMinutes / 60 * 10) / 10,
+    "Subs +": d.subscribersGained,
+    "Subs −": d.subscribersLost,
+  }));
+
+  // ── Loading state ─────────────────────────────────────────────────────────
+
   if (statusLoading) {
     return (
       <div className="min-h-screen bg-background">
         <div className="bg-sidebar text-sidebar-foreground px-6 py-8">
-          <div className="max-w-5xl mx-auto">
-            <Skeleton className="h-6 w-32 bg-white/10 mb-4" />
-            <Skeleton className="h-8 w-64 bg-white/10" />
+          <div className="max-w-6xl mx-auto">
+            <Skeleton className="h-5 w-24 bg-white/10 mb-4" />
+            <Skeleton className="h-8 w-56 bg-white/10" />
           </div>
         </div>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
           </div>
           <Skeleton className="h-64 rounded-2xl" />
+          <Skeleton className="h-56 rounded-2xl" />
         </div>
       </div>
     );
@@ -106,9 +332,9 @@ export default function AnalyticsYouTubePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="bg-sidebar text-sidebar-foreground px-6 py-8">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <button
             onClick={() => setLocation("/analytics")}
             className="flex items-center gap-1.5 text-white/50 hover:text-white/80 text-sm mb-4 transition-colors"
@@ -124,32 +350,22 @@ export default function AnalyticsYouTubePage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">YouTube Analytics</h1>
-                {status?.connected && status.connectedEmail && (
+                {connected && status?.connectedEmail && (
                   <p className="text-white/40 text-xs mt-0.5">{status.connectedEmail}</p>
                 )}
               </div>
             </div>
-            {status?.connected && (
+            {connected && (
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-white/60 hover:text-white hover:bg-white/10"
-                  onClick={() => refreshMut.mutate()}
-                  disabled={refreshMut.isPending}
-                  data-testid="button-refresh-youtube"
-                >
+                <Button size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10"
+                  onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}
+                  data-testid="button-refresh-youtube">
                   <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshMut.isPending ? "animate-spin" : ""}`} />
                   Refresh
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-white/60 hover:text-rose-400 hover:bg-white/10"
-                  onClick={() => disconnectMut.mutate()}
-                  disabled={disconnectMut.isPending}
-                  data-testid="button-disconnect-youtube"
-                >
+                <Button size="sm" variant="ghost" className="text-white/60 hover:text-rose-400 hover:bg-white/10"
+                  onClick={() => disconnectMut.mutate()} disabled={disconnectMut.isPending}
+                  data-testid="button-disconnect-youtube">
                   <LogOut className="h-3.5 w-3.5 mr-1.5" />
                   Disconnect
                 </Button>
@@ -159,22 +375,21 @@ export default function AnalyticsYouTubePage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        {/* Not connected */}
-        {!status?.connected && (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+
+        {/* ── Not connected ───────────────────────────────────────────────── */}
+        {!connected && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-20 h-20 rounded-2xl bg-red-500/10 flex items-center justify-center mb-5">
               <Youtube className="h-10 w-10 text-red-500" />
             </div>
             <h2 className="text-xl font-bold text-foreground mb-2">Connect your YouTube channel</h2>
             <p className="text-muted-foreground text-sm max-w-md mb-8 leading-relaxed">
-              Sign in with the Google account that owns your YouTube channel. We'll pull in your channel stats and video performance data.
+              Sign in with the Google account that owns your YouTube channel to unlock full analytics — views, watch time, CTR, traffic sources, device breakdown, retention data, and more.
             </p>
-            <Button
-              className="bg-gradient-to-r from-red-500 to-rose-600 text-white hover:opacity-90 px-6"
+            <Button className="bg-gradient-to-r from-red-500 to-rose-600 text-white hover:opacity-90 px-6"
               onClick={() => { window.location.href = "/api/analytics/youtube/connect"; }}
-              data-testid="button-connect-youtube"
-            >
+              data-testid="button-connect-youtube">
               <Youtube className="h-4 w-4 mr-2" />
               Connect YouTube Channel
             </Button>
@@ -184,19 +399,17 @@ export default function AnalyticsYouTubePage() {
           </div>
         )}
 
-        {/* Connected — dashboard */}
-        {status?.connected && status.channel && (
+        {/* ── Connected ───────────────────────────────────────────────────── */}
+        {connected && status?.channel && (
           <div className="space-y-6">
+
             {/* Channel identity card */}
             <Card className="border-border bg-card overflow-hidden">
               <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
               <CardContent className="p-5 flex items-center gap-4">
                 {status.channel.thumbnail ? (
-                  <img
-                    src={status.channel.thumbnail}
-                    alt={status.channel.title}
-                    className="w-14 h-14 rounded-full object-cover ring-2 ring-red-500/30"
-                  />
+                  <img src={status.channel.thumbnail} alt={status.channel.title}
+                    className="w-14 h-14 rounded-full object-cover ring-2 ring-red-500/30" />
                 ) : (
                   <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center">
                     <Youtube className="h-7 w-7 text-red-500" />
@@ -207,144 +420,463 @@ export default function AnalyticsYouTubePage() {
                   {status.channel.handle && (
                     <p className="text-sm text-muted-foreground">@{status.channel.handle.replace(/^@/, "")}</p>
                   )}
+                  <div className="flex flex-wrap gap-4 mt-2">
+                    <span className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">{fmt(status.channel.subscriberCount)}</span> subscribers
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">{fmt(status.channel.viewCount)}</span> total views
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">{fmt(status.channel.videoCount)}</span> videos
+                    </span>
+                  </div>
                 </div>
-                <a
-                  href={`https://youtube.com/channel/${status.channel.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <a href={`https://youtube.com/channel/${status.channel.id}`}
+                  target="_blank" rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-foreground transition-colors"
-                  data-testid="link-youtube-channel"
-                >
+                  data-testid="link-youtube-channel">
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </CardContent>
             </Card>
 
-            {/* KPI cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[
-                { label: "Subscribers", value: fmt(status.channel.subscriberCount), icon: Users, color: "text-red-500" },
-                { label: "Total Views", value: fmt(status.channel.viewCount), icon: Eye, color: "text-rose-500" },
-                { label: "Videos Published", value: fmt(status.channel.videoCount), icon: Video, color: "text-pink-500" },
-              ].map((kpi) => (
-                <Card key={kpi.label} className="border-border bg-card" data-testid={`kpi-${kpi.label.toLowerCase().replace(/ /g, "-")}`}>
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
-                      <span className="text-xs text-muted-foreground font-medium">{kpi.label}</span>
-                    </div>
-                    <p className="text-3xl font-bold text-foreground">{kpi.value}</p>
-                  </CardContent>
-                </Card>
-              ))}
+            {/* Tab bar + period selector */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                {(["overview", "videos", "audience"] as Tab[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTab(t)}
+                    data-testid={`tab-${t}`}
+                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
+                      tab === t
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+                <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-period">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="28">Last 28 days</SelectItem>
+                  <SelectItem value="90">Last 90 days</SelectItem>
+                  <SelectItem value="365">Last 365 days</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Video performance chart */}
-            {videosLoading && (
-              <Skeleton className="h-64 rounded-2xl" />
-            )}
-            {!videosLoading && videos && videos.length > 0 && (
-              <Card className="border-border bg-card overflow-hidden">
-                <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
-                <CardContent className="p-5">
-                  <h3 className="text-sm font-semibold text-foreground mb-1">Views by Video</h3>
-                  <p className="text-xs text-muted-foreground mb-4">Your most recent uploads ranked by view count</p>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart
-                      data={[...videos].sort((a, b) => b.viewCount - a.viewCount).slice(0, 10).map((v) => ({
-                        name: v.title.length > 28 ? v.title.slice(0, 28) + "…" : v.title,
-                        views: v.viewCount,
-                      }))}
-                      layout="vertical"
-                      margin={{ left: 0, right: 16, top: 0, bottom: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                      <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={fmt} axisLine={false} tickLine={false} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={170} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        formatter={(v: number) => [fmt(v), "Views"]}
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                        cursor={{ fill: "hsl(var(--muted)/0.3)" }}
-                      />
-                      <Bar dataKey="views" fill="#ef4444" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+            {/* Reconnect banner */}
+            {!analyticsLoading && analytics === null && (
+              <ReconnectBanner onConnect={() => { window.location.href = "/api/analytics/youtube/connect"; }} />
             )}
 
-            {/* Video table */}
-            {!videosLoading && videos && videos.length > 0 && (
-              <Card className="border-border bg-card overflow-hidden">
-                <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
-                <CardContent className="p-5">
-                  <h3 className="text-sm font-semibold text-foreground mb-4">Recent Videos</h3>
-                  <div className="space-y-3">
-                    {videos.map((v, i) => (
-                      <div
-                        key={v.id}
-                        className="flex items-start gap-3 py-3 border-b border-border last:border-0"
-                        data-testid={`video-row-${i}`}
-                      >
-                        {/* Thumbnail */}
-                        <a
-                          href={`https://youtube.com/watch?v=${v.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0"
-                        >
-                          {v.thumbnail ? (
-                            <img src={v.thumbnail} alt="" className="w-24 h-14 object-cover rounded-lg" />
-                          ) : (
-                            <div className="w-24 h-14 bg-muted rounded-lg flex items-center justify-center">
-                              <Video className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                          )}
-                        </a>
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <a
-                            href={`https://youtube.com/watch?v=${v.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-medium text-foreground hover:text-red-500 transition-colors line-clamp-2 leading-snug"
-                          >
-                            {v.title}
-                          </a>
-                          <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                            <span className="text-xs text-muted-foreground">{fmtDate(v.publishedAt)}</span>
-                            {v.duration && <span className="text-xs text-muted-foreground">{parseDuration(v.duration)}</span>}
-                          </div>
-                        </div>
-                        {/* Stats */}
-                        <div className="shrink-0 flex flex-col items-end gap-1.5 text-right">
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Eye className="h-3 w-3" />
-                            <span className="font-medium text-foreground">{fmt(v.viewCount)}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <ThumbsUp className="h-3 w-3" />
-                            <span>{fmt(v.likeCount)}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <MessageSquare className="h-3 w-3" />
-                            <span>{fmt(v.commentCount)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+            {/* ── OVERVIEW TAB ─────────────────────────────────────────── */}
+            {tab === "overview" && (
+              <div className="space-y-5">
+                {/* Analytics KPI ribbon */}
+                {analyticsLoading ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
                   </div>
-                </CardContent>
-              </Card>
+                ) : totals ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <KpiCard label="Views" value={fmt(totals.views)} icon={Eye} iconColor="text-red-500"
+                      sub={`last ${days}d`} />
+                    <KpiCard label="Watch Hours" value={fmt(totals.watchHours)} icon={Clock} iconColor="text-rose-500"
+                      sub={`last ${days}d`} />
+                    <KpiCard label="Avg View Duration" value={fmtSecs(totals.avgViewDuration)} icon={Film} iconColor="text-pink-500"
+                      sub="per view" />
+                    <KpiCard
+                      label="Subscribers"
+                      value={`+${fmt(totals.subscribersGained)}`}
+                      icon={UserPlus}
+                      iconColor="text-emerald-500"
+                      sub={totals.subscribersLost > 0 ? `−${fmt(totals.subscribersLost)} lost` : `last ${days}d`}
+                      trend={
+                        totals.subscribersGained - totals.subscribersLost > 0
+                          ? { value: `+${fmt(totals.subscribersGained - totals.subscribersLost)} net`, positive: true }
+                          : totals.subscribersGained - totals.subscribersLost < 0
+                          ? { value: `${fmt(totals.subscribersGained - totals.subscribersLost)} net`, positive: false }
+                          : null
+                      }
+                    />
+                    <KpiCard label="Impressions" value={fmt(totals.impressions)} icon={Eye} iconColor="text-blue-500"
+                      sub="thumbnail shown" />
+                    <KpiCard label="Click-Through Rate" value={totals.ctr.toFixed(1) + "%"} icon={MousePointerClick} iconColor="text-violet-500"
+                      sub="impressions → clicks" />
+                  </div>
+                ) : null}
+
+                {/* Views trend chart */}
+                {analyticsLoading ? (
+                  <Skeleton className="h-64 rounded-2xl" />
+                ) : chartData.length > 0 ? (
+                  <SectionCard title="Views Over Time" sub={`Daily view count — last ${days} days`}>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={chartData} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} tickFormatter={fmt} width={42} />
+                        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, n: string) => [fmt(v), n]} />
+                        <Line type="monotone" dataKey="Views" stroke="#ef4444" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </SectionCard>
+                ) : null}
+
+                {/* Watch hours trend chart */}
+                {!analyticsLoading && chartData.length > 0 && (
+                  <SectionCard title="Watch Hours Over Time" sub={`Total hours watched per day — last ${days} days`}>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={chartData} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} width={36} />
+                        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, n: string) => [v, n]} />
+                        <Line type="monotone" dataKey="Watch Hrs" stroke="#f43f5e" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </SectionCard>
+                )}
+
+                {/* Subscriber gain/loss chart */}
+                {!analyticsLoading && chartData.length > 0 && (
+                  <SectionCard title="Subscriber Activity" sub={`New subscribers and unsubscribes per day — last ${days} days`}>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={chartData} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                        <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} width={28} />
+                        <Tooltip contentStyle={TOOLTIP_STYLE} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                        <Bar dataKey="Subs +" fill="#10b981" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Subs −" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </SectionCard>
+                )}
+
+                {/* Impressions + CTR trend */}
+                {!analyticsLoading && chartData.length > 0 && timeSeries.some((d) => d.impressions > 0) && (
+                  <SectionCard title="Impressions & Click-Through Rate" sub={`How often your thumbnails are shown and clicked — last ${days} days`}>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart
+                        data={timeSeries.map((d) => ({
+                          date: fmtShortDate(d.date),
+                          Impressions: d.impressions,
+                          "CTR %": parseFloat(d.ctr.toFixed(2)),
+                        }))}
+                        margin={{ left: 0, right: 8, top: 4, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                        <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} tickFormatter={fmt} width={42} />
+                        <YAxis yAxisId="right" orientation="right"
+                          tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          axisLine={false} tickLine={false} tickFormatter={(v) => v + "%"} width={36} />
+                        <Tooltip contentStyle={TOOLTIP_STYLE}
+                          formatter={(v: number, n: string) => [n === "CTR %" ? v + "%" : fmt(v), n]} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                        <Line yAxisId="left" type="monotone" dataKey="Impressions" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                        <Line yAxisId="right" type="monotone" dataKey="CTR %" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </SectionCard>
+                )}
+
+                {/* Top 10 videos by views (quick reference) */}
+                {!videosLoading && videos && videos.length > 0 && (
+                  <SectionCard title="Top Videos by Views" sub="Your most-viewed uploads (all time)">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart
+                        data={[...videos].sort((a, b) => b.viewCount - a.viewCount).slice(0, 10).map((v) => ({
+                          name: v.title.length > 30 ? v.title.slice(0, 30) + "…" : v.title,
+                          Views: v.viewCount,
+                        }))}
+                        layout="vertical"
+                        margin={{ left: 0, right: 16, top: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          tickFormatter={fmt} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="name"
+                          tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                          width={185} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [fmt(v), "Views"]} />
+                        <Bar dataKey="Views" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </SectionCard>
+                )}
+              </div>
             )}
 
-            {!videosLoading && videos && videos.length === 0 && (
-              <Card className="border-border bg-card">
-                <CardContent className="p-8 text-center">
-                  <Video className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">No videos found on this channel yet.</p>
-                </CardContent>
-              </Card>
+            {/* ── VIDEOS TAB ───────────────────────────────────────────── */}
+            {tab === "videos" && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    {sortedVideos.length} video{sortedVideos.length !== 1 ? "s" : ""}
+                    {videoAnalytics?.length ? ` · analytics for last ${days} days` : ""}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Sort by</span>
+                    <Select value={videoSort} onValueChange={(v) => setVideoSort(v as SortKey)}>
+                      <SelectTrigger className="w-40 h-8 text-xs" data-testid="select-video-sort">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="views">Views</SelectItem>
+                        <SelectItem value="watchTime">Watch Time</SelectItem>
+                        <SelectItem value="retention">Avg Retention</SelectItem>
+                        <SelectItem value="engagement">Engagement Rate</SelectItem>
+                        <SelectItem value="date">Publish Date</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {(videosLoading || videoAnalyticsLoading) ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+                  </div>
+                ) : sortedVideos.length === 0 ? (
+                  <Card className="border-border bg-card">
+                    <CardContent className="p-8 text-center">
+                      <Video className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                      <p className="text-sm text-muted-foreground">No videos found on this channel.</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-border bg-card overflow-hidden">
+                    <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
+                    <CardContent className="p-0">
+                      {/* Header row */}
+                      <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-5 py-2.5 border-b border-border bg-muted/30">
+                        <span className="text-xs font-medium text-muted-foreground">Video</span>
+                        <span className="text-xs font-medium text-muted-foreground text-right">Views</span>
+                        <span className="text-xs font-medium text-muted-foreground text-right">Watch Time</span>
+                        <span className="text-xs font-medium text-muted-foreground text-right">Avg Duration</span>
+                        <span className="text-xs font-medium text-muted-foreground text-right">Retention</span>
+                        <span className="text-xs font-medium text-muted-foreground text-right">Engagement</span>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {sortedVideos.map((v, i) => {
+                          const engagementRate = v.viewCount > 0
+                            ? ((v.likeCount + v.commentCount) / v.viewCount * 100)
+                            : 0;
+                          const hasAnalytics = v.watchMinutes !== undefined;
+                          return (
+                            <div key={v.id} className="flex md:grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-3 md:gap-2 px-5 py-3.5 items-center hover:bg-muted/30 transition-colors"
+                              data-testid={`video-row-${i}`}>
+                              {/* Thumbnail + title */}
+                              <div className="flex items-center gap-3 min-w-0">
+                                <a href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                  {v.thumbnail ? (
+                                    <img src={v.thumbnail} alt="" className="w-20 h-12 object-cover rounded-lg" />
+                                  ) : (
+                                    <div className="w-20 h-12 bg-muted rounded-lg flex items-center justify-center">
+                                      <Video className="h-4 w-4 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                </a>
+                                <div className="min-w-0">
+                                  <a href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
+                                    className="text-sm font-medium text-foreground hover:text-red-500 transition-colors line-clamp-2 leading-snug">
+                                    {v.title}
+                                  </a>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs text-muted-foreground">{fmtDate(v.publishedAt)}</span>
+                                    {v.duration && <span className="text-xs text-muted-foreground">{parseDuration(v.duration)}</span>}
+                                  </div>
+                                  {/* Mobile stats */}
+                                  <div className="flex flex-wrap gap-3 mt-1.5 md:hidden">
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <Eye className="h-3 w-3" />{fmt(v.viewCount)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <ThumbsUp className="h-3 w-3" />{fmt(v.likeCount)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <MessageSquare className="h-3 w-3" />{fmt(v.commentCount)}
+                                    </span>
+                                    {hasAnalytics && v.avgViewPercentage && v.avgViewPercentage > 0 && (
+                                      <span className="text-xs text-muted-foreground">{v.avgViewPercentage.toFixed(0)}% retained</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Desktop stat columns */}
+                              <div className="hidden md:block text-right">
+                                <p className="text-sm font-semibold text-foreground">{fmt(v.viewCount)}</p>
+                                <div className="flex items-center justify-end gap-2 mt-0.5">
+                                  <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                    <ThumbsUp className="h-2.5 w-2.5" />{fmt(v.likeCount)}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                    <MessageSquare className="h-2.5 w-2.5" />{fmt(v.commentCount)}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="hidden md:block text-right">
+                                {hasAnalytics && v.watchMinutes ? (
+                                  <p className="text-sm font-medium text-foreground">{fmtWatchMins(v.watchMinutes)}</p>
+                                ) : <p className="text-sm text-muted-foreground">—</p>}
+                              </div>
+                              <div className="hidden md:block text-right">
+                                {hasAnalytics && v.avgViewDuration ? (
+                                  <p className="text-sm font-medium text-foreground">{fmtSecs(v.avgViewDuration)}</p>
+                                ) : <p className="text-sm text-muted-foreground">—</p>}
+                              </div>
+                              <div className="hidden md:block text-right">
+                                {hasAnalytics && v.avgViewPercentage && v.avgViewPercentage > 0 ? (
+                                  <div>
+                                    <p className={`text-sm font-semibold ${v.avgViewPercentage >= 50 ? "text-emerald-500" : v.avgViewPercentage >= 30 ? "text-amber-500" : "text-rose-500"}`}>
+                                      {v.avgViewPercentage.toFixed(1)}%
+                                    </p>
+                                    <div className="mt-1 h-1 w-full rounded-full bg-muted overflow-hidden">
+                                      <div className={`h-full rounded-full ${v.avgViewPercentage >= 50 ? "bg-emerald-500" : v.avgViewPercentage >= 30 ? "bg-amber-500" : "bg-rose-500"}`}
+                                        style={{ width: `${Math.min(v.avgViewPercentage, 100)}%` }} />
+                                    </div>
+                                  </div>
+                                ) : <p className="text-sm text-muted-foreground">—</p>}
+                              </div>
+                              <div className="hidden md:block text-right">
+                                {v.viewCount > 0 ? (
+                                  <p className="text-sm font-medium text-foreground">{engagementRate.toFixed(2)}%</p>
+                                ) : <p className="text-sm text-muted-foreground">—</p>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {/* ── AUDIENCE TAB ─────────────────────────────────────────── */}
+            {tab === "audience" && (
+              <div className="space-y-5">
+                {breakdownsLoading ? (
+                  <div className="space-y-4">
+                    <Skeleton className="h-64 rounded-2xl" />
+                    <Skeleton className="h-40 rounded-2xl" />
+                    <Skeleton className="h-56 rounded-2xl" />
+                  </div>
+                ) : !breakdowns ? (
+                  <ReconnectBanner onConnect={() => { window.location.href = "/api/analytics/youtube/connect"; }} />
+                ) : (
+                  <>
+                    {/* Traffic sources */}
+                    {breakdowns.traffic.length > 0 && (
+                      <SectionCard title="Traffic Sources" sub={`Where viewers found your videos — last ${days} days`}>
+                        <div className="space-y-3">
+                          {(() => {
+                            const total = breakdowns.traffic.reduce((s, t) => s + t.views, 0);
+                            return breakdowns.traffic.map((t) => (
+                              <div key={t.source} className="space-y-1">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-medium text-foreground">{t.label}</span>
+                                  <span className="text-muted-foreground">{fmt(t.views)} views · {total > 0 ? Math.round(t.views / total * 100) : 0}%</span>
+                                </div>
+                                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                  <div className="h-full rounded-full bg-red-500"
+                                    style={{ width: `${total > 0 ? (t.views / total) * 100 : 0}%` }} />
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </SectionCard>
+                    )}
+
+                    {/* Device breakdown */}
+                    {breakdowns.devices.length > 0 && (
+                      <SectionCard title="Device Types" sub={`What devices your viewers use — last ${days} days`}>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          {breakdowns.devices.map((d) => {
+                            const icons: Record<string, React.ElementType> = {
+                              MOBILE: Users,
+                              DESKTOP: Monitor,
+                              TABLET: Monitor,
+                              TV: Monitor,
+                              GAME_CONSOLE: Monitor,
+                            };
+                            const DevIcon = icons[d.device] || Monitor;
+                            return (
+                              <div key={d.device} className="flex flex-col items-center gap-2 p-4 bg-muted/40 rounded-xl">
+                                <DevIcon className="h-5 w-5 text-muted-foreground" />
+                                <div className="text-center">
+                                  <p className="text-2xl font-bold text-foreground">{d.pct}%</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{d.label}</p>
+                                  <p className="text-xs text-muted-foreground">{fmt(d.views)} views</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </SectionCard>
+                    )}
+
+                    {/* Top countries */}
+                    {breakdowns.countries.length > 0 && (
+                      <SectionCard title="Top Countries" sub={`Where your audience comes from — last ${days} days`}>
+                        <div className="space-y-3">
+                          {(() => {
+                            const total = breakdowns.countries.reduce((s, c) => s + c.views, 0);
+                            return breakdowns.countries.map((c) => (
+                              <div key={c.country} className="space-y-1">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-medium text-foreground flex items-center gap-2">
+                                    <Globe className="h-3 w-3 text-muted-foreground" />
+                                    {c.country}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {fmt(c.views)} views · {fmtWatchMins(c.watchMinutes)} watched · {total > 0 ? Math.round(c.views / total * 100) : 0}%
+                                  </span>
+                                </div>
+                                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                  <div className="h-full rounded-full bg-blue-500"
+                                    style={{ width: `${total > 0 ? (c.views / total) * 100 : 0}%` }} />
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </SectionCard>
+                    )}
+
+                    {breakdowns.traffic.length === 0 && breakdowns.devices.length === 0 && breakdowns.countries.length === 0 && (
+                      <Card className="border-border bg-card">
+                        <CardContent className="p-8 text-center">
+                          <Globe className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                          <p className="text-sm font-medium text-foreground mb-1">No audience data yet</p>
+                          <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                            Audience breakdown data appears once your channel has received views in the selected time period.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
         )}
