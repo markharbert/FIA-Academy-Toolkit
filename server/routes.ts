@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -26,7 +26,7 @@ import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
 import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
-import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos, fetchChannelAnalytics, fetchTrafficSources, fetchDeviceBreakdown, fetchTopCountries, fetchVideoAnalytics, fetchDemographics, fetchTopSearchTerms, fetchSubscriberStatus } from "./youtubeAnalytics";
+import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos, fetchChannelAnalytics, fetchTrafficSources, fetchDeviceBreakdown, fetchTopCountries, fetchVideoAnalytics, fetchDemographics, fetchTopSearchTerms, fetchSubscriberStatus, fetchVideoComments, postCommentReply } from "./youtubeAnalytics";
 import { getGscAuthUrl, exchangeGscCode, fetchGscSites, fetchGscData } from "./searchConsole";
 import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
@@ -6589,6 +6589,89 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     } catch (err: any) {
       console.error("[Analytics/YouTube] video-analytics error:", err?.message);
       res.status(500).json({ message: "Failed to fetch video analytics" });
+    }
+  });
+
+  // ── YouTube: Comments & Canned Responses ────────────────────────────────────
+
+  app.get("/api/analytics/youtube/video/:videoId/comments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      const { videoId } = req.params;
+      const pageToken = req.query.pageToken as string | undefined;
+      const result = await fetchVideoComments(conn.oauthAccessToken, conn.oauthRefreshToken, videoId, pageToken);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[YouTube] comments error:", err?.message);
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/analytics/youtube/comments/:commentId/reply", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      const { commentId } = req.params;
+      const { text } = req.body;
+      if (!text?.trim()) return res.status(400).json({ message: "Reply text is required" });
+      const result = await postCommentReply(conn.oauthAccessToken, conn.oauthRefreshToken, commentId, text.trim());
+      res.json(result);
+    } catch (err: any) {
+      console.error("[YouTube] reply error:", err?.message);
+      const msg = String(err?.message || "");
+      if (err?.code === 403 || err?.status === 403 || msg.includes("forbidden") || msg.includes("insufficientPermissions") || msg.includes("403")) {
+        return res.status(403).json({ message: "requires_reconnect", requiresReconnect: true });
+      }
+      res.status(500).json({ message: "Failed to post reply" });
+    }
+  });
+
+  app.get("/api/analytics/youtube/canned-responses", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const responses = await storage.getCannedResponses(userId);
+      res.json(responses);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch canned responses" });
+    }
+  });
+
+  app.post("/api/analytics/youtube/canned-responses", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const parsed = insertCannedResponseSchema.omit({ userId: true }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data" });
+      const response = await storage.createCannedResponse(userId, parsed.data);
+      res.json(response);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to create canned response" });
+    }
+  });
+
+  app.patch("/api/analytics/youtube/canned-responses/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const { id } = req.params;
+      const { title, body } = req.body;
+      const updated = await storage.updateCannedResponse(id, userId, { title, body });
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to update canned response" });
+    }
+  });
+
+  app.delete("/api/analytics/youtube/canned-responses/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const { id } = req.params;
+      await storage.deleteCannedResponse(id, userId);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to delete canned response" });
     }
   });
 

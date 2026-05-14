@@ -1,24 +1,35 @@
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   ArrowLeft, Youtube, Eye, Video, ThumbsUp, MessageSquare,
   ExternalLink, RefreshCw, LogOut, Clock, TrendingUp, TrendingDown,
-  Monitor, Globe, MousePointerClick, AlertCircle, UserPlus, Film,
+  MousePointerClick, AlertCircle, UserPlus, Film,
   Share2, Search, Users, ChevronLeft, ChevronRight, Zap,
+  ChevronDown, ChevronUp, X, BookMarked, Pencil, Trash2, Plus,
+  CornerDownRight, Send,
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
+import type { CannedResponse } from "@shared/schema";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -52,6 +63,20 @@ function fmtWatchMins(mins: number): string {
   if (mins < 60) return `${Math.round(mins)}m`;
   const h = Math.floor(mins / 60), m = Math.round(mins % 60);
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+function relativeTime(iso: string): string {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -97,6 +122,17 @@ type VideoAnalytics = {
   avgViewPercentage: number; likes: number; comments: number; shares: number;
 };
 type MergedVideo = VideoItem & Partial<VideoAnalytics>;
+
+type CommentReply = {
+  id: string; authorName: string; authorAvatar: string; authorChannelId: string;
+  text: string; likeCount: number; publishedAt: string;
+};
+type CommentThread = {
+  threadId: string; commentId: string; authorName: string; authorAvatar: string;
+  authorChannelId: string; text: string; likeCount: number; publishedAt: string;
+  totalReplyCount: number; replies: CommentReply[];
+};
+type CommentsData = { threads: CommentThread[]; nextPageToken?: string; totalResults?: number };
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 
@@ -167,6 +203,534 @@ function ReconnectBanner({ onConnect }: { onConnect: () => void }) {
   );
 }
 
+function CommentAvatar({ src, name }: { src: string; name: string }) {
+  const initials = name ? name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase() : "?";
+  if (src) {
+    return <img src={src} alt={name} className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-border" />;
+  }
+  return (
+    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 text-[10px] font-bold text-muted-foreground">
+      {initials}
+    </div>
+  );
+}
+
+// ── CannedResponsesDialog ────────────────────────────────────────────────────
+
+function CannedResponsesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [newTitle, setNewTitle] = useState("");
+  const [newBody, setNewBody] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
+
+  const { data: cannedList = [], isLoading } = useQuery<CannedResponse[]>({
+    queryKey: ["/api/analytics/youtube/canned-responses"],
+    enabled: open,
+  });
+
+  const createMut = useMutation({
+    mutationFn: (data: { title: string; body: string }) =>
+      apiRequest("POST", "/api/analytics/youtube/canned-responses", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/canned-responses"] });
+      setNewTitle(""); setNewBody("");
+      toast({ title: "Saved!", description: "Canned response added." });
+    },
+    onError: () => toast({ title: "Error", description: "Could not save.", variant: "destructive" }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, title, body }: { id: string; title: string; body: string }) =>
+      apiRequest("PATCH", `/api/analytics/youtube/canned-responses/${id}`, { title, body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/canned-responses"] });
+      setEditingId(null);
+      toast({ title: "Updated!" });
+    },
+    onError: () => toast({ title: "Error", description: "Could not update.", variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/analytics/youtube/canned-responses/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/canned-responses"] });
+      toast({ title: "Deleted." });
+    },
+    onError: () => toast({ title: "Error", description: "Could not delete.", variant: "destructive" }),
+  });
+
+  function startEdit(r: CannedResponse) {
+    setEditingId(r.id); setEditTitle(r.title); setEditBody(r.body);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <BookMarked className="h-4 w-4 text-red-500" />
+            Canned Responses
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-2">
+          Save pre-written replies to respond to comments faster.
+        </p>
+
+        {/* Saved responses */}
+        <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
+            </div>
+          ) : cannedList.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              No canned responses yet. Add one below.
+            </div>
+          ) : cannedList.map((r) => (
+            <div key={r.id} className="border border-border rounded-xl p-3 bg-card">
+              {editingId === r.id ? (
+                <div className="space-y-2">
+                  <Input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="Title"
+                    className="h-8 text-sm"
+                    data-testid={`input-edit-title-${r.id}`}
+                  />
+                  <Textarea
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    placeholder="Response text…"
+                    className="text-sm resize-none min-h-[64px]"
+                    data-testid={`textarea-edit-body-${r.id}`}
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs"
+                      onClick={() => setEditingId(null)}>Cancel</Button>
+                    <Button size="sm" className="h-7 text-xs bg-red-500 hover:bg-red-600 text-white"
+                      disabled={!editTitle.trim() || !editBody.trim() || updateMut.isPending}
+                      onClick={() => updateMut.mutate({ id: r.id, title: editTitle, body: editBody })}
+                      data-testid={`button-save-edit-${r.id}`}>
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{r.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{r.body}</p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => startEdit(r)} data-testid={`button-edit-canned-${r.id}`}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-500"
+                      onClick={() => deleteMut.mutate(r.id)} disabled={deleteMut.isPending}
+                      data-testid={`button-delete-canned-${r.id}`}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Add new */}
+        <div className="border-t border-border pt-4 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Add New</p>
+          <Input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="Short title (e.g. Thank you)"
+            className="h-8 text-sm"
+            data-testid="input-new-canned-title"
+          />
+          <Textarea
+            value={newBody}
+            onChange={(e) => setNewBody(e.target.value)}
+            placeholder="Response text… (e.g. Thanks so much for watching! 🙏)"
+            className="text-sm resize-none min-h-[72px]"
+            data-testid="textarea-new-canned-body"
+          />
+          <Button
+            className="w-full bg-red-500 hover:bg-red-600 text-white h-8 text-sm gap-1.5"
+            disabled={!newTitle.trim() || !newBody.trim() || createMut.isPending}
+            onClick={() => createMut.mutate({ title: newTitle.trim(), body: newBody.trim() })}
+            data-testid="button-add-canned">
+            <Plus className="h-3.5 w-3.5" />Save Response
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── CommentItem ───────────────────────────────────────────────────────────────
+
+function CommentItem({
+  thread, channelId, isReplying, replyText,
+  onReplyClick, onReplyTextChange, onReplySubmit, onCancelReply,
+  cannedResponses, isPending,
+}: {
+  thread: CommentThread;
+  channelId: string;
+  isReplying: boolean;
+  replyText: string;
+  onReplyClick: () => void;
+  onReplyTextChange: (t: string) => void;
+  onReplySubmit: () => void;
+  onCancelReply: () => void;
+  cannedResponses: CannedResponse[];
+  isPending: boolean;
+}) {
+  const isOwn = thread.authorChannelId === channelId;
+
+  return (
+    <div className="py-3 border-b border-border/50 last:border-0">
+      {/* Top-level comment */}
+      <div className="flex gap-2.5">
+        <CommentAvatar src={thread.authorAvatar} name={thread.authorName} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs font-semibold ${isOwn ? "text-red-500" : "text-foreground"}`}>
+              {thread.authorName}
+              {isOwn && <span className="ml-1 text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded-full border border-red-500/20">You</span>}
+            </span>
+            <span className="text-[11px] text-muted-foreground">{relativeTime(thread.publishedAt)}</span>
+          </div>
+          <p
+            className="text-sm text-foreground mt-1 leading-relaxed break-words"
+            dangerouslySetInnerHTML={{ __html: thread.text }}
+          />
+          <div className="flex items-center gap-3 mt-1.5">
+            {thread.likeCount > 0 && (
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <ThumbsUp className="h-3 w-3" />{fmt(thread.likeCount)}
+              </span>
+            )}
+            <button
+              className="text-[11px] text-muted-foreground hover:text-foreground font-medium transition-colors"
+              onClick={onReplyClick}
+              data-testid={`button-reply-${thread.commentId}`}>
+              Reply
+            </button>
+          </div>
+
+          {/* Reply form */}
+          {isReplying && (
+            <div className="mt-3 space-y-2">
+              <Textarea
+                value={replyText}
+                onChange={(e) => onReplyTextChange(e.target.value)}
+                placeholder="Add a public reply…"
+                className="text-sm resize-none min-h-[72px] bg-muted/30"
+                autoFocus
+                data-testid={`textarea-reply-${thread.commentId}`}
+              />
+              <div className="flex items-center gap-2 flex-wrap">
+                {cannedResponses.length > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1"
+                        data-testid={`button-canned-picker-${thread.commentId}`}>
+                        <BookMarked className="h-3 w-3" />Canned
+                        <ChevronDown className="h-2.5 w-2.5 ml-0.5" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-1" align="start">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1.5">
+                        Select a canned response
+                      </p>
+                      {cannedResponses.map((cr) => (
+                        <button
+                          key={cr.id}
+                          className="w-full text-left px-2 py-2 rounded-lg hover:bg-muted transition-colors"
+                          onClick={() => onReplyTextChange(cr.body)}
+                          data-testid={`button-use-canned-${cr.id}`}>
+                          <p className="text-xs font-medium text-foreground">{cr.title}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{cr.body}</p>
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                )}
+                <div className="flex-1" />
+                <Button variant="ghost" size="sm" className="h-7 text-xs"
+                  onClick={onCancelReply} data-testid={`button-cancel-reply-${thread.commentId}`}>
+                  Cancel
+                </Button>
+                <Button size="sm"
+                  className="h-7 text-xs bg-red-500 hover:bg-red-600 text-white gap-1"
+                  disabled={!replyText.trim() || isPending}
+                  onClick={onReplySubmit}
+                  data-testid={`button-post-reply-${thread.commentId}`}>
+                  <Send className="h-3 w-3" />
+                  {isPending ? "Posting…" : "Reply"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Existing replies */}
+          {thread.replies.length > 0 && (
+            <div className="mt-3 space-y-2.5 pl-3 border-l-2 border-border/40">
+              {thread.replies.map((reply) => {
+                const replyIsOwn = reply.authorChannelId === channelId;
+                return (
+                  <div key={reply.id} className="flex gap-2">
+                    <CommentAvatar src={reply.authorAvatar} name={reply.authorName} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs font-semibold ${replyIsOwn ? "text-red-500" : "text-foreground"}`}>
+                          {reply.authorName}
+                          {replyIsOwn && <span className="ml-1 text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded-full border border-red-500/20">You</span>}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">{relativeTime(reply.publishedAt)}</span>
+                      </div>
+                      <p
+                        className="text-sm text-foreground mt-0.5 leading-relaxed break-words"
+                        dangerouslySetInnerHTML={{ __html: reply.text }}
+                      />
+                      {reply.likeCount > 0 && (
+                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground mt-1">
+                          <ThumbsUp className="h-3 w-3" />{fmt(reply.likeCount)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {thread.totalReplyCount > thread.replies.length && (
+                <p className="text-[11px] text-muted-foreground pl-0.5 flex items-center gap-1">
+                  <CornerDownRight className="h-3 w-3" />
+                  {thread.totalReplyCount - thread.replies.length} more {thread.totalReplyCount - thread.replies.length === 1 ? "reply" : "replies"} on YouTube
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── VideoExpandPanel ─────────────────────────────────────────────────────────
+
+function VideoExpandPanel({
+  video, channelId, cannedResponses, onClose,
+}: {
+  video: MergedVideo;
+  channelId: string;
+  cannedResponses: CannedResponse[];
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [pageToken, setPageToken] = useState<string | undefined>(undefined);
+  const [allThreads, setAllThreads] = useState<CommentThread[]>([]);
+  const [nextPageToken, setNextPageToken] = useState<string | undefined>(undefined);
+  const [requiresReconnect, setRequiresReconnect] = useState(false);
+  const processedRef = useRef<string>("__unset__");
+
+  const { data: commentsData, isLoading: commentsLoading } = useQuery<CommentsData>({
+    queryKey: ["/api/analytics/youtube/video", video.id, "comments", pageToken ?? "__first__"],
+    queryFn: async () => {
+      const url = `/api/analytics/youtube/video/${video.id}/comments${pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : ""}`;
+      const r = await fetch(url, { credentials: "include" });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+
+  useEffect(() => {
+    if (!commentsData) return;
+    const key = pageToken ?? "__first__";
+    if (processedRef.current === key) return;
+    processedRef.current = key;
+    if (!pageToken) {
+      setAllThreads(commentsData.threads || []);
+    } else {
+      setAllThreads((prev) => [...prev, ...(commentsData.threads || [])]);
+    }
+    setNextPageToken(commentsData.nextPageToken);
+  }, [commentsData, pageToken]);
+
+  const replyMut = useMutation({
+    mutationFn: ({ commentId, text }: { commentId: string; text: string }) =>
+      apiRequest("POST", `/api/analytics/youtube/comments/${commentId}/reply`, { text }),
+    onSuccess: async (res, { commentId }) => {
+      const data = await res.json();
+      setAllThreads((prev) => prev.map((t) =>
+        t.commentId === commentId ? {
+          ...t,
+          totalReplyCount: t.totalReplyCount + 1,
+          replies: [...t.replies, {
+            id: data.id || Date.now().toString(),
+            authorName: "You",
+            authorAvatar: "",
+            authorChannelId: channelId,
+            text: replyText,
+            likeCount: 0,
+            publishedAt: new Date().toISOString(),
+          }],
+        } : t
+      ));
+      setReplyingToId(null);
+      setReplyText("");
+      toast({ title: "Reply posted!", description: "Your reply was added successfully." });
+    },
+    onError: (err: any) => {
+      const msg = String(err?.message || "");
+      if (msg.includes("403") || msg.includes("requires_reconnect")) {
+        setRequiresReconnect(true);
+      } else {
+        toast({ title: "Failed to post reply", description: "Something went wrong.", variant: "destructive" });
+      }
+    },
+  });
+
+  function handleReplySubmit(commentId: string) {
+    if (!replyText.trim()) return;
+    replyMut.mutate({ commentId, text: replyText.trim() });
+  }
+
+  const totalStr = commentsData?.totalResults ? ` (${fmt(commentsData.totalResults)})` : "";
+
+  return (
+    <div className="border-t-2 border-red-500/30 bg-gradient-to-b from-red-500/[0.03] to-transparent">
+      <div className="px-5 py-5">
+        {/* Reconnect banner */}
+        {requiresReconnect && (
+          <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 mb-5">
+            <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">Reconnect to enable replies</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Disconnect and reconnect your channel to grant reply permission, then try again.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" className="shrink-0 text-xs"
+              onClick={() => { window.location.href = "/api/analytics/youtube/connect"; }}>
+              Reconnect
+            </Button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-6">
+          {/* ── Left: Player + meta ── */}
+          <div className="space-y-3">
+            <div className="aspect-video rounded-2xl overflow-hidden bg-black shadow-lg ring-1 ring-white/10">
+              <iframe
+                src={`https://www.youtube.com/embed/${video.id}?rel=0&modestbranding=1`}
+                className="w-full h-full"
+                allowFullScreen
+                title={video.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{video.title}</p>
+              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><Eye className="h-3 w-3 text-red-500" />{fmt(video.viewCount)} views</span>
+                <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3 text-rose-400" />{fmt(video.likeCount)} likes</span>
+                {video.shares !== undefined && video.shares > 0 && (
+                  <span className="flex items-center gap-1"><Share2 className="h-3 w-3 text-orange-400" />{fmt(video.shares)} shares</span>
+                )}
+                <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3 text-blue-400" />{fmt(video.commentCount)} comments</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{fmtDate(video.publishedAt)}{video.duration ? ` · ${parseDuration(video.duration)}` : ""}</p>
+            </div>
+          </div>
+
+          {/* ── Right: Comments ── */}
+          <div className="flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-red-500" />
+                Comments{totalStr}
+              </h4>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                data-testid="button-close-video-panel">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Comment list */}
+            <div className="flex-1 overflow-y-auto max-h-[440px] pr-1 scrollbar-thin">
+              {commentsLoading && allThreads.length === 0 ? (
+                <div className="space-y-4 pt-1">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex gap-2.5 py-2">
+                      <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-3 w-28" />
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-3/4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : allThreads.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <MessageSquare className="h-8 w-8 text-muted-foreground/40 mb-3" />
+                  <p className="text-sm text-muted-foreground">No comments yet</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Comments may be disabled on this video</p>
+                </div>
+              ) : (
+                allThreads.map((thread) => (
+                  <CommentItem
+                    key={thread.threadId}
+                    thread={thread}
+                    channelId={channelId}
+                    isReplying={replyingToId === thread.commentId}
+                    replyText={replyingToId === thread.commentId ? replyText : ""}
+                    onReplyClick={() => {
+                      if (replyingToId === thread.commentId) {
+                        setReplyingToId(null); setReplyText("");
+                      } else {
+                        setReplyingToId(thread.commentId); setReplyText("");
+                      }
+                    }}
+                    onReplyTextChange={setReplyText}
+                    onReplySubmit={() => handleReplySubmit(thread.commentId)}
+                    onCancelReply={() => { setReplyingToId(null); setReplyText(""); }}
+                    cannedResponses={cannedResponses}
+                    isPending={replyMut.isPending && replyingToId === thread.commentId}
+                  />
+                ))
+              )}
+
+              {/* Load more */}
+              {nextPageToken && (
+                <div className="pt-3 pb-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs h-8"
+                    onClick={() => setPageToken(nextPageToken)}
+                    disabled={commentsLoading}
+                    data-testid="button-load-more-comments">
+                    {commentsLoading ? "Loading…" : "Load more comments"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type Tab = "overview" | "videos" | "audience";
@@ -182,6 +746,8 @@ export default function AnalyticsYouTubePage() {
   const [videoSort, setVideoSort] = useState<SortKey>("views");
   const [videoFilter, setVideoFilter] = useState<"all" | "regular" | "shorts">("all");
   const [videoPage, setVideoPage] = useState(0);
+  const [expandedVideoId, setExpandedVideoId] = useState<string | null>(null);
+  const [showCannedDialog, setShowCannedDialog] = useState(false);
   const VIDEOS_PER_PAGE = 25;
 
   const { data: status, isLoading: statusLoading } = useQuery<Status>({
@@ -209,6 +775,11 @@ export default function AnalyticsYouTubePage() {
   const { data: videoAnalytics, isLoading: videoAnalyticsLoading } = useQuery<VideoAnalytics[]>({
     queryKey: ["/api/analytics/youtube/video-analytics", days],
     queryFn: () => fetch(`/api/analytics/youtube/video-analytics?days=${days}`, { credentials: "include" }).then((r) => r.json()),
+    enabled: connected && tab === "videos",
+  });
+
+  const { data: cannedResponses = [] } = useQuery<CannedResponse[]>({
+    queryKey: ["/api/analytics/youtube/canned-responses"],
     enabled: connected && tab === "videos",
   });
 
@@ -276,6 +847,10 @@ export default function AnalyticsYouTubePage() {
     "Subs −": d.subscribersLost,
     Shares: d.shares,
   }));
+
+  function toggleExpand(videoId: string) {
+    setExpandedVideoId((prev) => prev === videoId ? null : videoId);
+  }
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (statusLoading) {
@@ -354,7 +929,7 @@ export default function AnalyticsYouTubePage() {
               data-testid="button-connect-youtube">
               <Youtube className="h-4 w-4 mr-2" />Connect YouTube Channel
             </Button>
-            <p className="text-xs text-muted-foreground mt-4 opacity-60">Read-only access — we never post or modify anything on your channel.</p>
+            <p className="text-xs text-muted-foreground mt-4 opacity-60">Read-only access by default — posting replies requires an extra permission grant.</p>
           </div>
         )}
 
@@ -425,9 +1000,9 @@ export default function AnalyticsYouTubePage() {
                   </div>
                   <div className="grid grid-cols-3 divide-x divide-white/10">
                     {[
-                      { label: "Subscribers", value: fmt(status.channel.subscriberCount), raw: status.channel.subscriberCount, icon: Users, color: "text-emerald-400" },
-                      { label: "Total Views", value: fmt(status.channel.viewCount), raw: status.channel.viewCount, icon: Eye, color: "text-red-400" },
-                      { label: "Videos", value: fmt(status.channel.videoCount), raw: status.channel.videoCount, icon: Video, color: "text-blue-400" },
+                      { label: "Subscribers", value: fmt(status.channel.subscriberCount), icon: Users, color: "text-emerald-400" },
+                      { label: "Total Views", value: fmt(status.channel.viewCount), icon: Eye, color: "text-red-400" },
+                      { label: "Videos", value: fmt(status.channel.videoCount), icon: Video, color: "text-blue-400" },
                     ].map(({ label, value, icon: Icon, color }) => (
                       <div key={label} className="px-6 py-5 text-center">
                         <Icon className={`h-5 w-5 ${color} mx-auto mb-2 opacity-80`} />
@@ -564,15 +1139,12 @@ export default function AnalyticsYouTubePage() {
                           <a key={v.id} href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
                             className="flex items-center gap-3 px-1 py-2.5 rounded-xl hover:bg-muted/40 transition-colors group"
                             data-testid={`top-video-${i}`}>
-                            {/* Rank */}
                             <span className={`shrink-0 w-6 text-center text-sm font-bold ${i === 0 ? "text-yellow-500" : i === 1 ? "text-slate-400" : i === 2 ? "text-amber-600" : "text-muted-foreground"}`}>
                               {i + 1}
                             </span>
-                            {/* Thumbnail */}
                             {v.thumbnail
                               ? <img src={v.thumbnail} alt="" className="shrink-0 w-16 h-10 object-cover rounded-lg" />
                               : <div className="shrink-0 w-16 h-10 bg-muted rounded-lg flex items-center justify-center"><Video className="h-3.5 w-3.5 text-muted-foreground" /></div>}
-                            {/* Title + bar */}
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-foreground group-hover:text-red-500 transition-colors truncate leading-snug">{v.title}</p>
                               <div className="flex items-center gap-2 mt-1">
@@ -583,7 +1155,6 @@ export default function AnalyticsYouTubePage() {
                                 <span className="text-xs text-muted-foreground shrink-0">{fmtDate(v.publishedAt)}</span>
                               </div>
                             </div>
-                            {/* Stats */}
                             <div className="shrink-0 text-right">
                               <p className="text-sm font-bold text-foreground">{fmt(v.viewCount)}</p>
                               <div className="flex items-center gap-1.5 justify-end mt-0.5">
@@ -606,15 +1177,15 @@ export default function AnalyticsYouTubePage() {
               <div className="space-y-4">
                 {/* Filter + sort bar */}
                 <div className="flex items-center justify-between flex-wrap gap-3">
-                  {/* Type filter */}
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Type filter */}
                     {(["all", "regular", "shorts"] as const).map((f) => {
                       const count = f === "all" ? mergedVideos.length : f === "shorts" ? shortsCount : regularCount;
                       const label = f === "all" ? "All" : f === "regular" ? "Regular" : "Shorts";
                       const icon = f === "shorts" ? <Zap className="h-3 w-3" /> : f === "regular" ? <Video className="h-3 w-3" /> : null;
                       return (
                         <button key={f} data-testid={`filter-${f}`}
-                          onClick={() => { setVideoFilter(f); setVideoPage(0); }}
+                          onClick={() => { setVideoFilter(f); setVideoPage(0); setExpandedVideoId(null); }}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${videoFilter === f ? "bg-red-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
                           {icon}{label}
                           <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${videoFilter === f ? "bg-white/20 text-white" : "bg-background text-muted-foreground"}`}>{count}</span>
@@ -622,9 +1193,24 @@ export default function AnalyticsYouTubePage() {
                       );
                     })}
                   </div>
-                  {/* Sort */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Sort by</span>
+                    {/* Canned responses button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => setShowCannedDialog(true)}
+                      data-testid="button-manage-canned">
+                      <BookMarked className="h-3.5 w-3.5" />
+                      Canned Responses
+                      {cannedResponses.length > 0 && (
+                        <span className="bg-red-500/10 text-red-500 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+                          {cannedResponses.length}
+                        </span>
+                      )}
+                    </Button>
+                    {/* Sort */}
+                    <span className="text-xs text-muted-foreground hidden sm:block">Sort by</span>
                     <Select value={videoSort} onValueChange={(v) => { setVideoSort(v as SortKey); setVideoPage(0); }}>
                       <SelectTrigger className="w-40 h-8 text-xs" data-testid="select-video-sort"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -644,6 +1230,7 @@ export default function AnalyticsYouTubePage() {
                   <p className="text-xs text-muted-foreground">
                     Showing {videoPage * VIDEOS_PER_PAGE + 1}–{Math.min((videoPage + 1) * VIDEOS_PER_PAGE, filteredSortedVideos.length)} of {filteredSortedVideos.length} {videoFilter !== "all" ? videoFilter : ""} video{filteredSortedVideos.length !== 1 ? "s" : ""}
                     {videoAnalytics?.length ? ` · analytics for last ${days} days` : ""}
+                    {expandedVideoId && " · click a row to expand"}
                   </p>
                 )}
 
@@ -662,86 +1249,125 @@ export default function AnalyticsYouTubePage() {
                       <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
                       <CardContent className="p-0">
                         {/* Desktop column headers */}
-                        <div className="hidden lg:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-5 py-2.5 border-b border-border bg-muted/30">
+                        <div className="hidden lg:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 px-5 py-2.5 border-b border-border bg-muted/30">
                           <span className="text-xs font-medium text-muted-foreground">Video</span>
                           <span className="text-xs font-medium text-muted-foreground text-right">Views · Likes · Shares</span>
                           <span className="text-xs font-medium text-muted-foreground text-right">Watch Time</span>
                           <span className="text-xs font-medium text-muted-foreground text-right">Avg Duration</span>
                           <span className="text-xs font-medium text-muted-foreground text-right">Retention</span>
                           <span className="text-xs font-medium text-muted-foreground text-right">Engagement</span>
+                          <span className="w-6" />
                         </div>
                         <div className="divide-y divide-border">
-                          {pagedVideos.map((v, i) => {
+                          {pagedVideos.map((v) => {
                             const engRate = v.viewCount > 0 ? ((v.likeCount + v.commentCount) / v.viewCount * 100) : 0;
                             const hasAnalytics = v.watchMinutes !== undefined;
                             const ret = v.avgViewPercentage || 0;
+                            const isExpanded = expandedVideoId === v.id;
                             return (
-                              <div key={v.id} className="flex lg:grid lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-3 lg:gap-2 px-5 py-3.5 items-center hover:bg-muted/20 transition-colors" data-testid={`video-row-${i}`}>
-                                {/* Thumbnail + title */}
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <a href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                                    {v.thumbnail
-                                      ? <img src={v.thumbnail} alt="" className="w-20 h-12 object-cover rounded-lg" />
-                                      : <div className="w-20 h-12 bg-muted rounded-lg flex items-center justify-center"><Video className="h-4 w-4 text-muted-foreground" /></div>}
-                                  </a>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <a href={`https://youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
-                                        className="text-sm font-medium text-foreground hover:text-red-500 transition-colors line-clamp-2 leading-snug">{v.title}</a>
-                                      {v.isShort && (
-                                        <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/20">
-                                          <Zap className="h-2.5 w-2.5" />Short
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-xs text-muted-foreground">{fmtDate(v.publishedAt)}</span>
-                                      {v.duration && <span className="text-xs text-muted-foreground">{parseDuration(v.duration)}</span>}
-                                    </div>
-                                    {/* Mobile stats */}
-                                    <div className="flex flex-wrap gap-3 mt-1 lg:hidden text-xs text-muted-foreground">
-                                      <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{fmt(v.viewCount)}</span>
-                                      <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{fmt(v.likeCount)}</span>
-                                      <span className="flex items-center gap-1"><Share2 className="h-3 w-3" />{fmt(v.shares || 0)}</span>
-                                      {hasAnalytics && ret > 0 && <span>{ret.toFixed(0)}% retained</span>}
-                                    </div>
-                                  </div>
-                                </div>
-                                {/* Desktop columns */}
-                                <div className="hidden lg:block text-right">
-                                  <p className="text-sm font-semibold text-foreground">{fmt(v.viewCount)}</p>
-                                  <div className="flex items-center justify-end gap-2 mt-0.5">
-                                    <span className="text-xs text-muted-foreground flex items-center gap-0.5"><ThumbsUp className="h-2.5 w-2.5" />{fmt(v.likeCount)}</span>
-                                    <span className="text-xs text-muted-foreground flex items-center gap-0.5"><MessageSquare className="h-2.5 w-2.5" />{fmt(v.commentCount)}</span>
-                                    <span className="text-xs text-orange-500 flex items-center gap-0.5"><Share2 className="h-2.5 w-2.5" />{fmt(v.shares || 0)}</span>
-                                  </div>
-                                </div>
-                                <div className="hidden lg:block text-right">
-                                  {hasAnalytics && v.watchMinutes
-                                    ? <p className="text-sm font-medium text-foreground">{fmtWatchMins(v.watchMinutes)}</p>
-                                    : <p className="text-sm text-muted-foreground">—</p>}
-                                </div>
-                                <div className="hidden lg:block text-right">
-                                  {hasAnalytics && v.avgViewDuration
-                                    ? <p className="text-sm font-medium text-foreground">{fmtSecs(v.avgViewDuration)}</p>
-                                    : <p className="text-sm text-muted-foreground">—</p>}
-                                </div>
-                                <div className="hidden lg:block text-right">
-                                  {hasAnalytics && ret > 0 ? (
-                                    <div>
-                                      <p className={`text-sm font-semibold ${ret >= 50 ? "text-emerald-500" : ret >= 30 ? "text-amber-500" : "text-rose-500"}`}>{ret.toFixed(1)}%</p>
-                                      <div className="mt-1 h-1 w-full rounded-full bg-muted overflow-hidden">
-                                        <div className={`h-full rounded-full ${ret >= 50 ? "bg-emerald-500" : ret >= 30 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${Math.min(ret, 100)}%` }} />
+                              <Fragment key={v.id}>
+                                {/* Video row */}
+                                <div
+                                  className={`flex lg:grid lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-3 lg:gap-2 px-5 py-3.5 items-center cursor-pointer transition-colors ${isExpanded ? "bg-red-500/5 border-l-2 border-l-red-500" : "hover:bg-muted/20"}`}
+                                  onClick={() => toggleExpand(v.id)}
+                                  data-testid={`video-row-${v.id}`}>
+                                  {/* Thumbnail + title */}
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="shrink-0 relative group/thumb">
+                                      {v.thumbnail
+                                        ? <img src={v.thumbnail} alt="" className="w-20 h-12 object-cover rounded-lg" />
+                                        : <div className="w-20 h-12 bg-muted rounded-lg flex items-center justify-center"><Video className="h-4 w-4 text-muted-foreground" /></div>}
+                                      {/* Play overlay hint */}
+                                      <div className={`absolute inset-0 rounded-lg flex items-center justify-center bg-black/40 transition-opacity ${isExpanded ? "opacity-100" : "opacity-0 group-hover/thumb:opacity-100"}`}>
+                                        <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center">
+                                          <div className="w-0 h-0 border-y-[5px] border-y-transparent border-l-[8px] border-l-red-500 ml-0.5" />
+                                        </div>
                                       </div>
                                     </div>
-                                  ) : <p className="text-sm text-muted-foreground">—</p>}
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">{v.title}</p>
+                                        {v.isShort && (
+                                          <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/20">
+                                            <Zap className="h-2.5 w-2.5" />Short
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-xs text-muted-foreground">{fmtDate(v.publishedAt)}</span>
+                                        {v.duration && <span className="text-xs text-muted-foreground">{parseDuration(v.duration)}</span>}
+                                        {/* Open in YouTube link */}
+                                        <a
+                                          href={`https://youtube.com/watch?v=${v.id}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-muted-foreground/50 hover:text-red-500 transition-colors"
+                                          onClick={(e) => e.stopPropagation()}
+                                          data-testid={`link-open-youtube-${v.id}`}>
+                                          <ExternalLink className="h-3 w-3" />
+                                        </a>
+                                      </div>
+                                      {/* Mobile stats */}
+                                      <div className="flex flex-wrap gap-3 mt-1 lg:hidden text-xs text-muted-foreground">
+                                        <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{fmt(v.viewCount)}</span>
+                                        <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" />{fmt(v.likeCount)}</span>
+                                        <span className="flex items-center gap-1"><Share2 className="h-3 w-3" />{fmt(v.shares || 0)}</span>
+                                        {hasAnalytics && ret > 0 && <span>{ret.toFixed(0)}% retained</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {/* Desktop columns */}
+                                  <div className="hidden lg:block text-right">
+                                    <p className="text-sm font-semibold text-foreground">{fmt(v.viewCount)}</p>
+                                    <div className="flex items-center justify-end gap-2 mt-0.5">
+                                      <span className="text-xs text-muted-foreground flex items-center gap-0.5"><ThumbsUp className="h-2.5 w-2.5" />{fmt(v.likeCount)}</span>
+                                      <span className="text-xs text-muted-foreground flex items-center gap-0.5"><MessageSquare className="h-2.5 w-2.5" />{fmt(v.commentCount)}</span>
+                                      <span className="text-xs text-orange-500 flex items-center gap-0.5"><Share2 className="h-2.5 w-2.5" />{fmt(v.shares || 0)}</span>
+                                    </div>
+                                  </div>
+                                  <div className="hidden lg:block text-right">
+                                    {hasAnalytics && v.watchMinutes
+                                      ? <p className="text-sm font-medium text-foreground">{fmtWatchMins(v.watchMinutes)}</p>
+                                      : <p className="text-sm text-muted-foreground">—</p>}
+                                  </div>
+                                  <div className="hidden lg:block text-right">
+                                    {hasAnalytics && v.avgViewDuration
+                                      ? <p className="text-sm font-medium text-foreground">{fmtSecs(v.avgViewDuration)}</p>
+                                      : <p className="text-sm text-muted-foreground">—</p>}
+                                  </div>
+                                  <div className="hidden lg:block text-right">
+                                    {hasAnalytics && ret > 0 ? (
+                                      <div>
+                                        <p className={`text-sm font-semibold ${ret >= 50 ? "text-emerald-500" : ret >= 30 ? "text-amber-500" : "text-rose-500"}`}>{ret.toFixed(1)}%</p>
+                                        <div className="mt-1 h-1 w-full rounded-full bg-muted overflow-hidden">
+                                          <div className={`h-full rounded-full ${ret >= 50 ? "bg-emerald-500" : ret >= 30 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${Math.min(ret, 100)}%` }} />
+                                        </div>
+                                      </div>
+                                    ) : <p className="text-sm text-muted-foreground">—</p>}
+                                  </div>
+                                  <div className="hidden lg:block text-right">
+                                    {v.viewCount > 0
+                                      ? <p className="text-sm font-medium text-foreground">{engRate.toFixed(2)}%</p>
+                                      : <p className="text-sm text-muted-foreground">—</p>}
+                                  </div>
+                                  {/* Expand chevron */}
+                                  <div className="hidden lg:flex items-center justify-center w-6">
+                                    {isExpanded
+                                      ? <ChevronUp className="h-4 w-4 text-red-500" />
+                                      : <ChevronDown className="h-4 w-4 text-muted-foreground/50" />}
+                                  </div>
                                 </div>
-                                <div className="hidden lg:block text-right">
-                                  {v.viewCount > 0
-                                    ? <p className="text-sm font-medium text-foreground">{engRate.toFixed(2)}%</p>
-                                    : <p className="text-sm text-muted-foreground">—</p>}
-                                </div>
-                              </div>
+
+                                {/* Expanded panel */}
+                                {isExpanded && (
+                                  <VideoExpandPanel
+                                    video={v}
+                                    channelId={status.channel?.id || ""}
+                                    cannedResponses={cannedResponses}
+                                    onClose={() => setExpandedVideoId(null)}
+                                  />
+                                )}
+                              </Fragment>
                             );
                           })}
                         </div>
@@ -752,7 +1378,7 @@ export default function AnalyticsYouTubePage() {
                     {totalPages > 1 && (
                       <div className="flex items-center justify-between">
                         <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"
-                          onClick={() => setVideoPage((p) => Math.max(0, p - 1))}
+                          onClick={() => { setVideoPage((p) => Math.max(0, p - 1)); setExpandedVideoId(null); }}
                           disabled={videoPage === 0} data-testid="button-prev-page">
                           <ChevronLeft className="h-3.5 w-3.5" />Previous
                         </Button>
@@ -760,7 +1386,7 @@ export default function AnalyticsYouTubePage() {
                           Page {videoPage + 1} of {totalPages}
                         </span>
                         <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"
-                          onClick={() => setVideoPage((p) => Math.min(totalPages - 1, p + 1))}
+                          onClick={() => { setVideoPage((p) => Math.min(totalPages - 1, p + 1)); setExpandedVideoId(null); }}
                           disabled={videoPage === totalPages - 1} data-testid="button-next-page">
                           Next<ChevronRight className="h-3.5 w-3.5" />
                         </Button>
@@ -790,7 +1416,6 @@ export default function AnalyticsYouTubePage() {
                       const nonSubPct = 100 - subPct;
                       return (
                         <SectionCard title="Subscriber Insights" sub={`Who's watching — subscribers vs. new viewers — last ${days} days`}>
-                          {/* Visual split bar */}
                           <div className="h-3 rounded-full overflow-hidden flex mb-5">
                             <div className="bg-emerald-500 h-full transition-all" style={{ width: `${subPct}%` }} />
                             <div className="bg-blue-400 h-full transition-all" style={{ width: `${nonSubPct}%` }} />
@@ -827,7 +1452,6 @@ export default function AnalyticsYouTubePage() {
                     {(breakdowns.demographics?.ageGroups?.length > 0 || breakdowns.demographics?.genderMalePct > 0) && (
                       <SectionCard title="Viewer Demographics" sub={`Age and gender breakdown — last ${days} days`}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Age groups */}
                           {breakdowns.demographics.ageGroups.length > 0 && (
                             <div>
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Age Groups</p>
@@ -848,12 +1472,10 @@ export default function AnalyticsYouTubePage() {
                               </div>
                             </div>
                           )}
-                          {/* Gender */}
                           {(breakdowns.demographics.genderMalePct > 0 || breakdowns.demographics.genderFemalePct > 0) && (
                             <div>
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Gender</p>
                               <div className="space-y-4">
-                                {/* Split bar */}
                                 <div>
                                   <div className="h-3 rounded-full overflow-hidden flex mb-2">
                                     <div className="bg-blue-500 h-full" style={{ width: `${breakdowns.demographics.genderMalePct}%` }} />
@@ -921,7 +1543,7 @@ export default function AnalyticsYouTubePage() {
                                   </span>
                                   <span className="text-muted-foreground shrink-0 ml-3">{fmt(st.views)} views</span>
                                 </div>
-                                <PercentBar value={st.views} total={maxViews} color="bg-amber-500" />
+                                <PercentBar value={st.views} total={maxViews} color="bg-emerald-500" />
                               </div>
                             ))}
                           </div>
@@ -929,62 +1551,59 @@ export default function AnalyticsYouTubePage() {
                       );
                     })()}
 
-                    {/* ── Device Types ── */}
-                    {breakdowns.devices.length > 0 && (
-                      <SectionCard title="Device Types" sub={`What devices your viewers use — last ${days} days`}>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          {breakdowns.devices.map((d) => (
-                            <div key={d.device} className="flex flex-col items-center gap-2 p-4 bg-muted/40 rounded-xl">
-                              <Monitor className="h-5 w-5 text-muted-foreground" />
-                              <div className="text-center">
-                                <p className="text-2xl font-bold text-foreground">{d.pct}%</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">{d.label}</p>
-                                <p className="text-xs text-muted-foreground">{fmt(d.views)} views</p>
+                    {/* ── Device breakdown ── */}
+                    {breakdowns.devices?.length > 0 && (() => {
+                      const totalDeviceViews = breakdowns.devices.reduce((s, d) => s + d.views, 0);
+                      return (
+                        <SectionCard title="Device Types" sub={`How viewers watch — last ${days} days`}>
+                          <div className="space-y-3">
+                            {breakdowns.devices.map((d) => (
+                              <div key={d.device}>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="font-medium text-foreground">{d.label}</span>
+                                  <span className="text-muted-foreground">{fmt(d.views)} · {d.pct.toFixed(0)}%</span>
+                                </div>
+                                <PercentBar value={d.views} total={totalDeviceViews} color="bg-blue-500" />
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      </SectionCard>
-                    )}
+                            ))}
+                          </div>
+                        </SectionCard>
+                      );
+                    })()}
 
                     {/* ── Top Countries ── */}
-                    {breakdowns.countries.length > 0 && (() => {
-                      const total = breakdowns.countries.reduce((s, c) => s + c.views, 0);
+                    {breakdowns.countries?.length > 0 && (() => {
+                      const maxCountryViews = breakdowns.countries[0]?.views || 1;
                       return (
-                        <SectionCard title="Top Countries" sub={`Where your audience comes from — last ${days} days`}>
-                          <div className="space-y-3">
-                            {breakdowns.countries.map((c) => (
+                        <SectionCard title="Top Countries" sub={`Geographic distribution — last ${days} days`}>
+                          <div className="space-y-2.5">
+                            {breakdowns.countries.slice(0, 10).map((c, i) => (
                               <div key={c.country}>
                                 <div className="flex items-center justify-between text-xs mb-1">
                                   <span className="font-medium text-foreground flex items-center gap-2">
-                                    <Globe className="h-3 w-3 text-muted-foreground" />{c.country}
+                                    <span className="text-muted-foreground w-4 text-center shrink-0">{i + 1}</span>
+                                    {c.country}
                                   </span>
-                                  <span className="text-muted-foreground">{fmt(c.views)} views · {fmtWatchMins(c.watchMinutes)} · {total > 0 ? Math.round(c.views / total * 100) : 0}%</span>
+                                  <span className="text-muted-foreground shrink-0 ml-3">{fmt(c.views)} views · {fmtWatchMins(c.watchMinutes)}</span>
                                 </div>
-                                <PercentBar value={c.views} total={total} color="bg-blue-500" />
+                                <PercentBar value={c.views} total={maxCountryViews} color="bg-orange-500" />
                               </div>
                             ))}
                           </div>
                         </SectionCard>
                       );
                     })()}
-
-                    {/* Empty state */}
-                    {breakdowns.traffic.length === 0 && breakdowns.devices.length === 0 && breakdowns.countries.length === 0 &&
-                      (!breakdowns.demographics?.ageGroups?.length) && (!breakdowns.searchTerms?.length) && (
-                      <Card className="border-border bg-card"><CardContent className="p-8 text-center">
-                        <Users className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                        <p className="text-sm font-medium text-foreground mb-1">No audience data yet</p>
-                        <p className="text-xs text-muted-foreground max-w-xs mx-auto">Audience data appears once your channel has received views in the selected time period.</p>
-                      </CardContent></Card>
-                    )}
                   </>
                 )}
               </div>
             )}
+
           </div>
         )}
       </div>
+
+      {/* Canned Responses Dialog */}
+      <CannedResponsesDialog open={showCannedDialog} onOpenChange={setShowCannedDialog} />
     </div>
   );
 }

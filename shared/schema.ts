@@ -1805,6 +1805,17 @@ export const gscConnections = pgTable("gsc_connections", {
 
 export type GscConnection = typeof gscConnections.$inferSelect;
 
+export const cannedResponses = pgTable("canned_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export const insertCannedResponseSchema = createInsertSchema(cannedResponses).omit({ id: true, createdAt: true });
+export type InsertCannedResponse = z.infer<typeof insertCannedResponseSchema>;
+export type CannedResponse = typeof cannedResponses.$inferSelect;
+
 export interface WorkspaceInviteWithMember {
   id: string;
   ownerId: string;

@@ -12,6 +12,7 @@ import {
   type TrackerAnalytics, type FeedResponse, type ScreenshotStatus,
   youtubeConnections, type YoutubeConnection,
   gscConnections, type GscConnection,
+  cannedResponses, type CannedResponse,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -460,6 +461,11 @@ export interface IStorage {
   upsertYouTubeConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string; channelId?: string; channelTitle?: string; channelHandle?: string; channelThumbnail?: string; uploadsPlaylistId?: string }): Promise<YoutubeConnection>;
   updateYouTubeChannel(userId: string, data: { channelId: string; channelTitle: string; channelHandle: string; channelThumbnail: string; uploadsPlaylistId: string }): Promise<void>;
   deleteYouTubeConnection(userId: string): Promise<void>;
+  // YouTube Canned Responses
+  getCannedResponses(userId: string): Promise<CannedResponse[]>;
+  createCannedResponse(userId: string, data: { title: string; body: string }): Promise<CannedResponse>;
+  updateCannedResponse(id: string, userId: string, data: { title?: string; body?: string }): Promise<CannedResponse | null>;
+  deleteCannedResponse(id: string, userId: string): Promise<void>;
   // Analytics — Google Search Console
   getGscConnection(userId: string): Promise<GscConnection | null>;
   upsertGscConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<GscConnection>;
@@ -3426,6 +3432,24 @@ export class DatabaseStorage implements IStorage {
 
   async deleteYouTubeConnection(userId: string): Promise<void> {
     await db.delete(youtubeConnections).where(eq(youtubeConnections.userId, userId));
+  }
+
+  async getCannedResponses(userId: string): Promise<CannedResponse[]> {
+    return db.select().from(cannedResponses).where(eq(cannedResponses.userId, userId)).orderBy(cannedResponses.createdAt);
+  }
+
+  async createCannedResponse(userId: string, data: { title: string; body: string }): Promise<CannedResponse> {
+    const [row] = await db.insert(cannedResponses).values({ userId, ...data }).returning();
+    return row;
+  }
+
+  async updateCannedResponse(id: string, userId: string, data: { title?: string; body?: string }): Promise<CannedResponse | null> {
+    const [row] = await db.update(cannedResponses).set(data).where(and(eq(cannedResponses.id, id), eq(cannedResponses.userId, userId))).returning();
+    return row ?? null;
+  }
+
+  async deleteCannedResponse(id: string, userId: string): Promise<void> {
+    await db.delete(cannedResponses).where(and(eq(cannedResponses.id, id), eq(cannedResponses.userId, userId)));
   }
 
   async getGscConnection(userId: string): Promise<GscConnection | null> {

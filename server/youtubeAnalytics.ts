@@ -3,6 +3,7 @@ import { google } from "googleapis";
 const YOUTUBE_SCOPES = [
   "https://www.googleapis.com/auth/youtube.readonly",
   "https://www.googleapis.com/auth/yt-analytics.readonly",
+  "https://www.googleapis.com/auth/youtube.force-ssl",
   "email",
 ];
 
@@ -523,4 +524,109 @@ export async function fetchVideoAnalytics(
     console.error("[YouTube Analytics] fetchVideoAnalytics error:", err instanceof Error ? err.message : err);
     return [];
   }
+}
+
+// ── Comment types ─────────────────────────────────────────────────────────────
+
+export type CommentReply = {
+  id: string;
+  authorName: string;
+  authorAvatar: string;
+  authorChannelId: string;
+  text: string;
+  likeCount: number;
+  publishedAt: string;
+};
+
+export type CommentThread = {
+  threadId: string;
+  commentId: string;
+  authorName: string;
+  authorAvatar: string;
+  authorChannelId: string;
+  text: string;
+  likeCount: number;
+  publishedAt: string;
+  totalReplyCount: number;
+  replies: CommentReply[];
+};
+
+// ── fetchVideoComments ────────────────────────────────────────────────────────
+
+export async function fetchVideoComments(
+  accessToken: string,
+  refreshToken: string | null,
+  videoId: string,
+  pageToken?: string
+): Promise<{ threads: CommentThread[]; nextPageToken?: string; totalResults?: number }> {
+  try {
+    const auth = makeAuthClient(accessToken, refreshToken);
+    const yt = google.youtube({ version: "v3", auth });
+    const { data } = await yt.commentThreads.list({
+      part: ["snippet", "replies"],
+      videoId,
+      maxResults: 25,
+      order: "relevance",
+      ...(pageToken ? { pageToken } : {}),
+    } as any);
+
+    const threads: CommentThread[] = (data.items || []).map((item: any) => {
+      const tc = item.snippet?.topLevelComment;
+      const tcs = tc?.snippet || {};
+      return {
+        threadId: item.id || "",
+        commentId: tc?.id || "",
+        authorName: tcs.authorDisplayName || "Unknown",
+        authorAvatar: tcs.authorProfileImageUrl || "",
+        authorChannelId: tcs.authorChannelId?.value || "",
+        text: tcs.textDisplay || tcs.textOriginal || "",
+        likeCount: tcs.likeCount || 0,
+        publishedAt: tcs.publishedAt || "",
+        totalReplyCount: item.snippet?.totalReplyCount || 0,
+        replies: (item.replies?.comments || []).map((r: any) => {
+          const rs = r.snippet || {};
+          return {
+            id: r.id || "",
+            authorName: rs.authorDisplayName || "Unknown",
+            authorAvatar: rs.authorProfileImageUrl || "",
+            authorChannelId: rs.authorChannelId?.value || "",
+            text: rs.textDisplay || rs.textOriginal || "",
+            likeCount: rs.likeCount || 0,
+            publishedAt: rs.publishedAt || "",
+          };
+        }),
+      };
+    });
+
+    return {
+      threads,
+      nextPageToken: data.nextPageToken ?? undefined,
+      totalResults: (data.pageInfo as any)?.totalResults ?? undefined,
+    };
+  } catch (err: unknown) {
+    console.error("[YouTube] fetchVideoComments error:", err instanceof Error ? err.message : err);
+    return { threads: [], nextPageToken: undefined };
+  }
+}
+
+// ── postCommentReply ─────────────────────────────────────────────────────────
+
+export async function postCommentReply(
+  accessToken: string,
+  refreshToken: string | null,
+  parentCommentId: string,
+  text: string
+): Promise<{ id: string; text: string }> {
+  const auth = makeAuthClient(accessToken, refreshToken);
+  const yt = google.youtube({ version: "v3", auth });
+  const { data } = await (yt.comments as any).insert({
+    part: ["snippet"],
+    requestBody: {
+      snippet: {
+        parentId: parentCommentId,
+        textOriginal: text,
+      },
+    },
+  });
+  return { id: data.id || "", text: data.snippet?.textOriginal || text };
 }
