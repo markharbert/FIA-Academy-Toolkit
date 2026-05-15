@@ -6,3 +6,9 @@ id = "8WIKIECB8cvlzDKMXI8LV"
 uri = "file://security-audit.md"
 type = "text"
 title = "Full Security Audit Report"
+
+[[outputs]]
+id = "kjUM8vgZecSMd9_qXHG9m"
+uri = "file://attached_assets/youtube-api-design-document.md"
+type = "text"
+title = "YouTube API Design Document — Quota Increase Submission"
