@@ -171,30 +171,33 @@ The YouTube Data API and Analytics API are called exclusively from the server si
 
 ### 9.1 Routine Usage (Analytics + Comments, No Bulk Edit)
 
+The figures below reflect realistic active usage across our member base during a typical day, accounting for multiple members checking analytics, loading their video list, browsing comments, and posting replies throughout the day.
+
 | Feature | API Call | Units Per Call | Estimated Daily Calls | Est. Daily Units |
 |---|---|---|---|---|
-| Channel status check | `channels.list` | 1 | ~5 per user | 5 |
-| Analytics overview | `reports.query` (×7 queries) | 1 each | ~10 sessions/day | 70 |
-| Video list load | `playlistItems.list` + `videos.list` | 1–2 per page | ~10 sessions/day | 40 |
-| Comment loading | `commentThreads.list` | 1 per page | ~5 sessions/day | 20 |
-| Comment replies | `comments.insert` | 50 each | ~10 replies/day | 500 |
-| **Routine daily total** | | | | **~635 units/day** |
+| Channel status check | `channels.list` | 1 | ~10 per user | 10 |
+| Analytics overview | `reports.query` (×7 queries) | 1 each | ~20 sessions/day | 140 |
+| Video list load | `playlistItems.list` + `videos.list` | 1–2 per page | ~20 sessions/day | 80 |
+| Comment loading | `commentThreads.list` | 1 per page | ~10 sessions/day | 40 |
+| Comment replies | `comments.insert` | 50 each | ~20 replies/day | 1,000 |
+| **Routine daily total** | | | | **~1,270 units/day** |
 
-Routine usage is well within the default 10,000-unit daily quota.
+Routine usage is modest, but as our member base grows, aggregate daily consumption from analytics and comment activity will scale proportionally with active users.
 
 ---
 
 ### 9.2 Bulk Edit Usage — The Primary Quota Driver
 
-The Bulk Edit feature is specifically designed to apply a single metadata change across an entire video library at once. Because each `videos.update` call costs 50 units regardless of how many fields are changed, and because members on this platform routinely have 100–500+ videos, a single bulk edit session can consume the entire daily quota — or exceed it — in minutes.
+The Bulk Edit feature is specifically designed to apply a single metadata change across an entire video library at once. Because each `videos.update` call costs 50 units regardless of how many fields are changed, and because members on this platform routinely have 100–800+ videos built up over years of content production, a single bulk edit session can consume the entire default daily quota — or far exceed it — in a matter of minutes.
 
-**Before the bulk update runs**, the system also fetches current metadata for all videos to populate the preview screen. This requires one `playlistItems.list` call per 50 videos to get the ID list, then one `videos.list` call per 50 videos to get current titles/descriptions/tags:
+**Before the bulk update runs**, the system fetches current metadata for all videos to populate the preview screen. This requires one `playlistItems.list` call per 50 videos to retrieve IDs, then one `videos.list` call per 50 videos to retrieve current titles, descriptions, and tags:
 
 | Library Size | `playlistItems.list` calls | `videos.list` calls | Metadata fetch total |
 |---|---|---|---|
 | 100 videos | 2 calls × 1 unit | 2 calls × 1 unit | 4 units |
 | 200 videos | 4 calls × 1 unit | 4 calls × 1 unit | 8 units |
 | 500 videos | 10 calls × 1 unit | 10 calls × 1 unit | 20 units |
+| 800 videos | 16 calls × 1 unit | 16 calls × 1 unit | 32 units |
 
 **The update itself** is where quota is consumed at scale:
 
@@ -205,6 +208,9 @@ The Bulk Edit feature is specifically designed to apply a single metadata change
 | Large library | 200 videos | 50 units each | **10,000 units** | **100% — quota fully exhausted** |
 | Large library | 300 videos | 50 units each | **15,000 units** | **150% — operation fails mid-way** |
 | Large library | 500 videos | 50 units each | **25,000 units** | **250% — would require 3 days to complete** |
+| Large library | 800 videos | 50 units each | **40,000 units** | **400% — would require 4 days to complete** |
+
+It is also realistic that a member runs multiple bulk edit operations in a single day — for example, first updating descriptions to replace a product link, then running a second pass to standardize tags across the same library. Two passes on a 500-video library would require 50,000 units in a single day.
 
 ### 9.3 Real-World Impact of Quota Exhaustion During Bulk Edit
 
@@ -222,12 +228,15 @@ For a marketing professional updating a call-to-action link after a product laun
 
 | Scenario | Units Required |
 |---|---|
-| Routine daily usage (all members) | ~635 units |
+| Routine daily usage (all members) | ~1,270 units |
 | Single bulk edit on 200-video library | 10,008 units |
 | Single bulk edit on 500-video library | 25,020 units |
-| **Recommended daily quota** | **50,000 units** |
+| Single bulk edit on 800-video library | 40,032 units |
+| Two bulk edit passes on 500-video library (same day) | ~50,040 units |
+| Routine usage + two bulk edit passes on 800-video library | ~81,304 units |
+| **Recommended daily quota** | **100,000 units** |
 
-A quota of 50,000 units per day would allow a member with a 500-video library to complete a full bulk metadata update in a single session, with sufficient headroom remaining for routine analytics and comment management usage by other members on the same day. This is the minimum quota level at which the Bulk Edit feature functions reliably for the members this platform is designed to serve.
+A quota of 100,000 units per day provides the headroom necessary for our platform to function reliably as our member base grows. It accommodates a member with an 800-video library running multiple bulk edit passes in a single day, while leaving ample capacity for concurrent routine analytics and comment activity from other members on the same day. This level also provides a safety buffer for platform growth — new members joining means more aggregate API usage from analytics and comment features even on days without bulk editing. We are requesting 100,000 units to avoid needing to return for a second quota increase as our membership scales, and to ensure the Bulk Edit feature works reliably for every member from day one.
 
 ---
 
