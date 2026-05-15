@@ -1768,32 +1768,44 @@ export default function AnalyticsYouTubePage() {
   const [showCannedDialog, setShowCannedDialog] = useState(false);
   const VIDEOS_PER_PAGE = 25;
 
+  const ANALYTICS_CACHE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
   const { data: status, isLoading: statusLoading } = useQuery<Status>({
     queryKey: ["/api/analytics/youtube/status"],
+    staleTime: ANALYTICS_CACHE_MS,
+    gcTime: ANALYTICS_CACHE_MS,
   });
   const connected = status?.connected === true;
 
   const { data: videos, isLoading: videosLoading } = useQuery<VideoItem[]>({
     queryKey: ["/api/analytics/youtube/videos"],
     enabled: connected,
+    staleTime: ANALYTICS_CACHE_MS,
+    gcTime: ANALYTICS_CACHE_MS,
   });
 
   const { data: analytics, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
     queryKey: ["/api/analytics/youtube/channel-analytics", days],
     queryFn: () => fetch(`/api/analytics/youtube/channel-analytics?days=${days}`, { credentials: "include" }).then((r) => r.json()),
     enabled: connected,
+    staleTime: ANALYTICS_CACHE_MS,
+    gcTime: ANALYTICS_CACHE_MS,
   });
 
   const { data: breakdowns, isLoading: breakdownsLoading } = useQuery<BreakdownData>({
     queryKey: ["/api/analytics/youtube/breakdowns", days],
     queryFn: () => fetch(`/api/analytics/youtube/breakdowns?days=${days}`, { credentials: "include" }).then((r) => r.json()),
     enabled: connected && tab === "audience",
+    staleTime: ANALYTICS_CACHE_MS,
+    gcTime: ANALYTICS_CACHE_MS,
   });
 
   const { data: videoAnalytics, isLoading: videoAnalyticsLoading } = useQuery<VideoAnalytics[]>({
     queryKey: ["/api/analytics/youtube/video-analytics", days],
     queryFn: () => fetch(`/api/analytics/youtube/video-analytics?days=${days}`, { credentials: "include" }).then((r) => r.json()),
     enabled: connected && tab === "videos",
+    staleTime: ANALYTICS_CACHE_MS,
+    gcTime: ANALYTICS_CACHE_MS,
   });
 
   const { data: cannedResponses = [] } = useQuery<CannedResponse[]>({
@@ -1914,11 +1926,13 @@ export default function AnalyticsYouTubePage() {
             </div>
             {connected && (
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10"
-                  onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}
-                  data-testid="button-refresh-youtube">
-                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshMut.isPending ? "animate-spin" : ""}`} />Refresh
-                </Button>
+                {status?.isAdmin && (
+                  <Button size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10"
+                    onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}
+                    data-testid="button-refresh-youtube">
+                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshMut.isPending ? "animate-spin" : ""}`} />Refresh
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" className="text-white/60 hover:text-rose-400 hover:bg-white/10"
                   onClick={() => disconnectMut.mutate()} disabled={disconnectMut.isPending}
                   data-testid="button-disconnect-youtube">
