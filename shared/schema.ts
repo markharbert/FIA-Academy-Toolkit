@@ -1829,6 +1829,15 @@ export const youtubeCommentCache = pgTable("youtube_comment_cache", {
 });
 export type YoutubeCommentCache = typeof youtubeCommentCache.$inferSelect;
 
+export const youtubeAnalyticsCache = pgTable("youtube_analytics_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  cacheKey: varchar("cache_key", { length: 100 }).notNull(),
+  dataJson: jsonb("data_json").notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => [unique("youtube_analytics_cache_user_key").on(t.userId, t.cacheKey)]);
+export type YoutubeAnalyticsCache = typeof youtubeAnalyticsCache.$inferSelect;
+
 export interface WorkspaceInviteWithMember {
   id: string;
   ownerId: string;

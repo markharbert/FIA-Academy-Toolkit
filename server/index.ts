@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { bootstrapSuperAdmins } from "./storage";
 import { startNotificationScheduler } from "./notificationScheduler";
+import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
@@ -702,6 +703,7 @@ async function runStartupMigrations() {
       await bootstrapSuperAdmins();
       // Start email notification scheduler
       startNotificationScheduler();
+      startYouTubeAnalyticsScheduler();
     },
   );
 })();

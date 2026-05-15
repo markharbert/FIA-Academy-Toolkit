@@ -6506,13 +6506,22 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  const YT_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  function ytCacheValid(updatedAt: Date): boolean {
+    return Date.now() - updatedAt.getTime() < YT_CACHE_TTL_MS;
+  }
+
   app.get("/api/analytics/youtube/videos", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;
       const conn = await storage.getYouTubeConnection(userId);
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       if (!conn.uploadsPlaylistId) return res.json([]);
+      const cached = await storage.getYoutubeAnalyticsCache(userId, "videos");
+      if (cached && ytCacheValid(cached.updatedAt)) return res.json(cached.data);
       const videos = await fetchYouTubeVideos(conn.oauthAccessToken, conn.oauthRefreshToken, conn.uploadsPlaylistId);
+      await storage.setYoutubeAnalyticsCache(userId, "videos", videos);
       res.json(videos);
     } catch (err: any) {
       console.error("[Analytics/YouTube] videos error:", err?.message);
@@ -6520,13 +6529,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  app.post("/api/analytics/youtube/refresh", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/analytics/youtube/refresh", requireAdmin, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;
       const conn = await storage.getYouTubeConnection(userId);
       if (!conn?.oauthAccessToken) return res.status(400).json({ message: "Not connected" });
       const channel = await fetchYouTubeChannel(conn.oauthAccessToken, conn.oauthRefreshToken);
       await storage.updateYouTubeChannel(userId, { channelId: channel.id, channelTitle: channel.title, channelHandle: channel.handle, channelThumbnail: channel.thumbnail, uploadsPlaylistId: channel.uploadsPlaylistId });
+      await storage.clearYoutubeAnalyticsCache(userId);
       res.json({ success: true });
     } catch (err: any) {
       console.error("[Analytics/YouTube] refresh error:", err?.message);
@@ -6550,8 +6560,13 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const conn = await storage.getYouTubeConnection(userId);
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       const days = Math.min(Math.max(parseInt(req.query.days as string || "28"), 7), 365);
+      const cacheKey = `channel-analytics-${days}`;
+      const cached = await storage.getYoutubeAnalyticsCache(userId, cacheKey);
+      if (cached && ytCacheValid(cached.updatedAt)) return res.json(cached.data);
       const result = await fetchChannelAnalytics(conn.oauthAccessToken, conn.oauthRefreshToken, days);
-      res.json(result ?? { timeSeries: [], totals: null, error: "analytics_unavailable" });
+      const payload = result ?? { timeSeries: [], totals: null, error: "analytics_unavailable" };
+      await storage.setYoutubeAnalyticsCache(userId, cacheKey, payload);
+      res.json(payload);
     } catch (err: any) {
       console.error("[Analytics/YouTube] channel-analytics error:", err?.message);
       res.status(500).json({ message: "Failed to fetch channel analytics" });
@@ -6564,6 +6579,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const conn = await storage.getYouTubeConnection(userId);
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       const days = Math.min(Math.max(parseInt(req.query.days as string || "28"), 7), 365);
+      const cacheKey = `breakdowns-${days}`;
+      const cached = await storage.getYoutubeAnalyticsCache(userId, cacheKey);
+      if (cached && ytCacheValid(cached.updatedAt)) return res.json(cached.data);
       const [traffic, devices, countries, demographics, searchTerms, subscriberStatus] = await Promise.all([
         fetchTrafficSources(conn.oauthAccessToken, conn.oauthRefreshToken, days),
         fetchDeviceBreakdown(conn.oauthAccessToken, conn.oauthRefreshToken, days),
@@ -6572,7 +6590,9 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         fetchTopSearchTerms(conn.oauthAccessToken, conn.oauthRefreshToken, days),
         fetchSubscriberStatus(conn.oauthAccessToken, conn.oauthRefreshToken, days),
       ]);
-      res.json({ traffic, devices, countries, demographics, searchTerms, subscriberStatus });
+      const payload = { traffic, devices, countries, demographics, searchTerms, subscriberStatus };
+      await storage.setYoutubeAnalyticsCache(userId, cacheKey, payload);
+      res.json(payload);
     } catch (err: any) {
       console.error("[Analytics/YouTube] breakdowns error:", err?.message);
       res.status(500).json({ message: "Failed to fetch breakdowns" });
@@ -6585,7 +6605,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const conn = await storage.getYouTubeConnection(userId);
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       const days = Math.min(Math.max(parseInt(req.query.days as string || "28"), 7), 365);
+      const cacheKey = `video-analytics-${days}`;
+      const cached = await storage.getYoutubeAnalyticsCache(userId, cacheKey);
+      if (cached && ytCacheValid(cached.updatedAt)) return res.json(cached.data);
       const result = await fetchVideoAnalytics(conn.oauthAccessToken, conn.oauthRefreshToken, days);
+      await storage.setYoutubeAnalyticsCache(userId, cacheKey, result);
       res.json(result);
     } catch (err: any) {
       console.error("[Analytics/YouTube] video-analytics error:", err?.message);

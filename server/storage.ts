@@ -14,6 +14,7 @@ import {
   gscConnections, type GscConnection,
   cannedResponses, type CannedResponse,
   youtubeCommentCache, type YoutubeCommentCache,
+  youtubeAnalyticsCache,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -472,6 +473,11 @@ export interface IStorage {
   upsertYoutubeCommentCache(userId: string, data: { videoId: string; videoTitle: string; videoThumbnail: string; videoPublishedAt?: Date | null; threads: any[]; totalResults: number }): Promise<void>;
   appendReplyToCommentCache(userId: string, videoId: string, commentId: string, reply: any): Promise<void>;
   clearYoutubeCommentCache(userId: string): Promise<void>;
+  // YouTube Analytics Cache
+  getYoutubeAnalyticsCache(userId: string, cacheKey: string): Promise<{ data: any; updatedAt: Date } | null>;
+  setYoutubeAnalyticsCache(userId: string, cacheKey: string, data: any): Promise<void>;
+  clearYoutubeAnalyticsCache(userId: string): Promise<void>;
+  getAllConnectedYoutubeUsers(): Promise<Array<{ userId: string; oauthAccessToken: string; oauthRefreshToken: string | null; uploadsPlaylistId: string | null }>>;
   // Analytics — Google Search Console
   getGscConnection(userId: string): Promise<GscConnection | null>;
   upsertGscConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<GscConnection>;
@@ -3438,6 +3444,42 @@ export class DatabaseStorage implements IStorage {
 
   async deleteYouTubeConnection(userId: string): Promise<void> {
     await db.delete(youtubeConnections).where(eq(youtubeConnections.userId, userId));
+  }
+
+  async getYoutubeAnalyticsCache(userId: string, cacheKey: string): Promise<{ data: any; updatedAt: Date } | null> {
+    const [row] = await db
+      .select()
+      .from(youtubeAnalyticsCache)
+      .where(and(eq(youtubeAnalyticsCache.userId, userId), eq(youtubeAnalyticsCache.cacheKey, cacheKey)));
+    if (!row) return null;
+    return { data: row.dataJson, updatedAt: row.updatedAt };
+  }
+
+  async setYoutubeAnalyticsCache(userId: string, cacheKey: string, data: any): Promise<void> {
+    await db
+      .insert(youtubeAnalyticsCache)
+      .values({ userId, cacheKey, dataJson: data, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [youtubeAnalyticsCache.userId, youtubeAnalyticsCache.cacheKey],
+        set: { dataJson: data, updatedAt: new Date() },
+      });
+  }
+
+  async clearYoutubeAnalyticsCache(userId: string): Promise<void> {
+    await db.delete(youtubeAnalyticsCache).where(eq(youtubeAnalyticsCache.userId, userId));
+  }
+
+  async getAllConnectedYoutubeUsers(): Promise<Array<{ userId: string; oauthAccessToken: string; oauthRefreshToken: string | null; uploadsPlaylistId: string | null }>> {
+    const rows = await db
+      .select({
+        userId: youtubeConnections.userId,
+        oauthAccessToken: youtubeConnections.oauthAccessToken,
+        oauthRefreshToken: youtubeConnections.oauthRefreshToken,
+        uploadsPlaylistId: youtubeConnections.uploadsPlaylistId,
+      })
+      .from(youtubeConnections)
+      .where(sql`${youtubeConnections.oauthAccessToken} IS NOT NULL AND ${youtubeConnections.oauthAccessToken} != ''`);
+    return rows;
   }
 
   async getCannedResponses(userId: string): Promise<CannedResponse[]> {
