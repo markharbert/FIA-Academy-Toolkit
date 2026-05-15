@@ -789,6 +789,524 @@ function VideoExpandPanel({
   );
 }
 
+// ── Bulk Edit types + helpers ─────────────────────────────────────────────────
+
+type BulkVideoMeta = {
+  id: string; title: string; description: string; tags: string[];
+  thumbnail: string; publishedAt: string; categoryId: string;
+  defaultLanguage: string; isShort: boolean;
+};
+type BulkField = "title" | "description" | "tags";
+type BulkOp = "find_replace" | "prepend" | "append" | "remove" | "add_tag" | "remove_tag";
+type BulkStep = "configure" | "preview" | "applying" | "done";
+type BulkResult = { id: string; title: string; success: boolean; error?: string };
+type BulkPreviewItem = {
+  video: BulkVideoMeta;
+  result: { title: string; description: string; tags: string[] };
+  selected: boolean;
+};
+
+function escRegex(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+function applyBulkTransform(
+  video: BulkVideoMeta, field: BulkField, op: BulkOp,
+  findText: string, replaceText: string, addText: string, cs: boolean
+): { title: string; description: string; tags: string[] } | null {
+  let title = video.title, description = video.description, tags = [...video.tags];
+  const flags = cs ? "g" : "gi";
+
+  if (field === "title") {
+    const orig = title;
+    if (op === "find_replace" && findText) title = title.replace(new RegExp(escRegex(findText), flags), replaceText);
+    else if (op === "prepend" && addText) title = addText + title;
+    else if (op === "append" && addText) title = title + addText;
+    else if (op === "remove" && findText) title = title.replace(new RegExp(escRegex(findText), flags), "");
+    if (title === orig) return null;
+  } else if (field === "description") {
+    const orig = description;
+    if (op === "find_replace" && findText) description = description.replace(new RegExp(escRegex(findText), flags), replaceText);
+    else if (op === "prepend" && addText) description = addText + (description ? "\n\n" + description : "");
+    else if (op === "append" && addText) description = (description ? description + "\n\n" : "") + addText;
+    else if (op === "remove" && findText) description = description.replace(new RegExp(escRegex(findText), flags), "");
+    if (description === orig) return null;
+  } else if (field === "tags") {
+    const origJ = JSON.stringify(tags);
+    if (op === "add_tag" && addText) {
+      const exists = tags.some((t) => cs ? t === addText : t.toLowerCase() === addText.toLowerCase());
+      if (!exists) tags.push(addText);
+    } else if (op === "remove_tag" && findText) {
+      tags = tags.filter((t) => cs ? t !== findText : t.toLowerCase() !== findText.toLowerCase());
+    } else if (op === "find_replace" && findText) {
+      tags = tags.map((t) => (cs ? t === findText : t.toLowerCase() === findText.toLowerCase()) ? replaceText : t);
+    }
+    if (JSON.stringify(tags) === origJ) return null;
+  }
+  return { title, description, tags };
+}
+
+function MarkText({ text, mark, cs, variant }: { text: string; mark: string; cs: boolean; variant: "del" | "add" }) {
+  if (!mark || !text) return <span className="font-mono text-xs break-all">{text || <em className="text-muted-foreground">(empty)</em>}</span>;
+  const esc = escRegex(mark);
+  const flags = cs ? "g" : "gi";
+  const parts = text.split(new RegExp(`(${esc})`, flags));
+  return (
+    <span className="font-mono text-xs break-all">
+      {parts.map((p, i) =>
+        i % 2 === 1
+          ? <mark key={i} className={variant === "del" ? "bg-red-500/20 text-red-600 dark:text-red-400 line-through rounded" : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded not-italic"}>{p}</mark>
+          : <Fragment key={i}>{p}</Fragment>
+      )}
+    </span>
+  );
+}
+
+function TagChips({ tags, added, removed }: { tags: string[]; added?: string; removed?: string }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {tags.length === 0 && <span className="text-xs text-muted-foreground italic">No tags</span>}
+      {tags.map((t) => (
+        <span key={t} className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-medium border ${
+          t === added ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
+          t === removed ? "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30 line-through" :
+          "bg-muted text-muted-foreground border-border"
+        }`}>{t}</span>
+      ))}
+    </div>
+  );
+}
+
+// ── BulkEditTab ───────────────────────────────────────────────────────────────
+
+function BulkEditTab() {
+  const { toast } = useToast();
+  const [step, setStep] = useState<BulkStep>("configure");
+  const [field, setField] = useState<BulkField>("title");
+  const [op, setOp] = useState<BulkOp>("find_replace");
+  const [findText, setFindText] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  const [addText, setAddText] = useState("");
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [videoFilter, setVideoFilter] = useState<"all" | "regular" | "shorts">("all");
+  const [titleSearch, setTitleSearch] = useState("");
+  const [previewItems, setPreviewItems] = useState<BulkPreviewItem[]>([]);
+  const [results, setResults] = useState<BulkResult[]>([]);
+  const [progress, setProgress] = useState(0);
+
+  const { data: metadata = [], isLoading: metaLoading, isError: metaError } = useQuery<BulkVideoMeta[]>({
+    queryKey: ["/api/analytics/youtube/video-metadata"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Reset op when field changes
+  useEffect(() => {
+    if (field === "tags") setOp("add_tag");
+    else setOp("find_replace");
+    setFindText(""); setReplaceText(""); setAddText("");
+  }, [field]);
+
+  const filteredVideos = useMemo(() => {
+    return metadata.filter((v) => {
+      if (videoFilter === "regular" && v.isShort) return false;
+      if (videoFilter === "shorts" && !v.isShort) return false;
+      if (titleSearch && !v.title.toLowerCase().includes(titleSearch.toLowerCase())) return false;
+      return true;
+    });
+  }, [metadata, videoFilter, titleSearch]);
+
+  const canPreview = useMemo(() => {
+    if (field === "tags") return op === "add_tag" ? !!addText.trim() : !!findText.trim();
+    if (op === "find_replace" || op === "remove") return !!findText.trim();
+    return !!addText.trim();
+  }, [field, op, findText, addText]);
+
+  function handlePreview() {
+    const items = filteredVideos
+      .map((v) => {
+        const result = applyBulkTransform(v, field, op, findText, replaceText, addText, caseSensitive);
+        return result ? { video: v, result, selected: true } : null;
+      })
+      .filter(Boolean) as BulkPreviewItem[];
+    if (items.length === 0) {
+      toast({ title: "No matches found", description: "The search text wasn't found in any of your videos." });
+      return;
+    }
+    setPreviewItems(items);
+    setStep("preview");
+  }
+
+  const applyMut = useMutation({
+    mutationFn: async (updates: { id: string; title: string; description: string; tags: string[]; categoryId: string; defaultLanguage?: string }[]) => {
+      const BATCH = 10;
+      const all: BulkResult[] = [];
+      setProgress(0);
+      for (let i = 0; i < updates.length; i += BATCH) {
+        const batch = updates.slice(i, i + BATCH);
+        const r = await apiRequest("POST", "/api/analytics/youtube/bulk-update", { updates: batch });
+        const data = await r.json();
+        all.push(...(data.results || []));
+        setProgress(i + batch.length);
+      }
+      return all;
+    },
+    onSuccess: (data) => { setResults(data); setStep("done"); },
+    onError: () => { toast({ title: "Apply failed", variant: "destructive" }); setStep("preview"); },
+  });
+
+  function handleApply() {
+    const selected = previewItems.filter((i) => i.selected);
+    if (!selected.length) return;
+    setStep("applying");
+    applyMut.mutate(selected.map((i) => ({
+      id: i.video.id,
+      title: i.result.title,
+      description: i.result.description,
+      tags: i.result.tags,
+      categoryId: i.video.categoryId,
+      defaultLanguage: i.video.defaultLanguage,
+    })));
+  }
+
+  function handleReset() {
+    setStep("configure"); setFindText(""); setReplaceText(""); setAddText("");
+    setPreviewItems([]); setResults([]); setProgress(0);
+  }
+
+  const selectedCount = previewItems.filter((i) => i.selected).length;
+  const quotaCost = selectedCount * 50;
+
+  // ── Loading / Error ─────────────────────────────────────────────────────────
+  if (metaLoading) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">Loading your video library…</p>
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+      </div>
+    );
+  }
+  if (metaError || !metadata.length) {
+    return (
+      <div className="text-center py-16">
+        <Video className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
+        <p className="text-sm text-muted-foreground">No videos found or failed to load. Make sure your channel is connected.</p>
+      </div>
+    );
+  }
+
+  // ── Configure step ──────────────────────────────────────────────────────────
+  if (step === "configure") {
+    const fieldOps: { value: BulkOp; label: string }[] = field === "tags"
+      ? [{ value: "add_tag", label: "Add Tag" }, { value: "remove_tag", label: "Remove Tag" }, { value: "find_replace", label: "Replace Tag" }]
+      : [{ value: "find_replace", label: "Find & Replace" }, { value: "prepend", label: "Prepend" }, { value: "append", label: "Append" }, { value: "remove", label: "Remove Text" }];
+
+    const showFind = op === "find_replace" || op === "remove" || op === "remove_tag";
+    const showReplace = op === "find_replace";
+    const showAdd = op === "prepend" || op === "append" || op === "add_tag";
+    const showCase = (showFind || showReplace) && field !== "tags";
+
+    return (
+      <div className="space-y-6 max-w-2xl">
+        {/* Header */}
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Bulk Find & Replace</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">Make the same change across multiple videos at once. You'll preview before anything is saved.</p>
+        </div>
+
+        {/* Step 1: Field */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">1. What field do you want to edit?</p>
+          <div className="flex gap-2">
+            {(["title", "description", "tags"] as BulkField[]).map((f) => (
+              <button key={f} onClick={() => setField(f)} data-testid={`bulk-field-${f}`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors capitalize ${field === f ? "bg-foreground text-background border-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"}`}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Step 2: Operation */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">2. What do you want to do?</p>
+          <div className="flex flex-wrap gap-2">
+            {fieldOps.map((o) => (
+              <button key={o.value} onClick={() => setOp(o.value)} data-testid={`bulk-op-${o.value}`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${op === o.value ? "bg-foreground text-background border-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"}`}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Step 3: Text inputs */}
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">3. Enter the text</p>
+
+          {showFind && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">
+                {op === "remove" || op === "remove_tag" ? "Text to remove" : "Find text"}
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  value={findText} onChange={(e) => setFindText(e.target.value)}
+                  placeholder={field === "tags" ? "Exact tag text…" : "Search for this text…"}
+                  className="flex-1 text-sm font-mono"
+                  data-testid="bulk-input-find"
+                />
+                {showCase && (
+                  <button
+                    onClick={() => setCaseSensitive((c) => !c)}
+                    title="Case sensitive"
+                    data-testid="bulk-toggle-case"
+                    className={`px-3 rounded-lg border text-xs font-bold transition-colors ${caseSensitive ? "bg-foreground text-background border-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    Aa
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {showReplace && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">
+                Replace with {field === "tags" ? "(new tag)" : ""}
+              </label>
+              <Input
+                value={replaceText} onChange={(e) => setReplaceText(e.target.value)}
+                placeholder={field === "tags" ? "New tag text…" : "Replace with this text… (leave blank to delete)"}
+                className="text-sm font-mono"
+                data-testid="bulk-input-replace"
+              />
+            </div>
+          )}
+
+          {showAdd && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">
+                {op === "prepend" ? "Text to add at the beginning" :
+                 op === "append" ? "Text to add at the end" : "Tag to add"}
+              </label>
+              {field === "description" ? (
+                <Textarea
+                  value={addText} onChange={(e) => setAddText(e.target.value)}
+                  placeholder={op === "prepend" ? "This text will appear at the top of every description…" : "This text will appear at the bottom of every description…"}
+                  className="text-sm font-mono resize-none min-h-[80px]"
+                  data-testid="bulk-input-add"
+                />
+              ) : (
+                <Input
+                  value={addText} onChange={(e) => setAddText(e.target.value)}
+                  placeholder={op === "add_tag" ? "e.g. #privatepractice" : "Text to add…"}
+                  className="text-sm font-mono"
+                  data-testid="bulk-input-add"
+                />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Step 4: Filter */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">4. Which videos? ({filteredVideos.length} selected)</p>
+          <div className="flex flex-wrap gap-2">
+            {([["all", "All videos"], ["regular", "Regular videos"], ["shorts", "Shorts only"]] as const).map(([v, label]) => (
+              <button key={v} onClick={() => setVideoFilter(v)} data-testid={`bulk-filter-${v}`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${videoFilter === v ? "bg-foreground text-background border-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <Input
+            value={titleSearch} onChange={(e) => setTitleSearch(e.target.value)}
+            placeholder="Optionally filter by title keyword…"
+            className="text-sm max-w-sm mt-1"
+            data-testid="bulk-filter-title"
+          />
+        </div>
+
+        <Button
+          onClick={handlePreview}
+          disabled={!canPreview || filteredVideos.length === 0}
+          className="gap-2 bg-red-500 hover:bg-red-600 text-white"
+          data-testid="button-bulk-preview">
+          <Search className="h-4 w-4" />Preview Changes
+        </Button>
+      </div>
+    );
+  }
+
+  // ── Preview step ────────────────────────────────────────────────────────────
+  if (step === "preview") {
+    const allSelected = previewItems.every((i) => i.selected);
+    const unaffectedCount = filteredVideos.length - previewItems.length;
+
+    return (
+      <div className="space-y-4 max-w-3xl">
+        {/* Summary bar */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">
+              {selectedCount} video{selectedCount !== 1 ? "s" : ""} will be updated
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {unaffectedCount > 0 && `${unaffectedCount} unchanged · `}
+              Estimated quota cost: {quotaCost.toLocaleString()} units
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => setStep("configure")} data-testid="button-bulk-back">
+              ← Back
+            </Button>
+            <Button
+              size="sm" className="gap-1.5 bg-red-500 hover:bg-red-600 text-white text-xs"
+              disabled={selectedCount === 0}
+              onClick={handleApply}
+              data-testid="button-bulk-apply">
+              Apply to {selectedCount} video{selectedCount !== 1 ? "s" : ""}
+            </Button>
+          </div>
+        </div>
+
+        {/* Select all */}
+        <div className="flex items-center gap-2">
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setPreviewItems((prev) => prev.map((i) => ({ ...i, selected: !allSelected })))}>
+            {allSelected ? "Deselect all" : "Select all"}
+          </button>
+        </div>
+
+        {/* Affected videos list */}
+        <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+          {previewItems.map((item) => (
+            <div key={item.video.id}
+              className={`border rounded-xl p-3 transition-colors ${item.selected ? "border-border bg-card" : "border-border/40 bg-muted/30 opacity-60"}`}>
+              <div className="flex items-start gap-3">
+                {/* Checkbox */}
+                <button
+                  className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${item.selected ? "bg-red-500 border-red-500" : "border-border"}`}
+                  onClick={() => setPreviewItems((prev) => prev.map((p) => p.video.id === item.video.id ? { ...p, selected: !p.selected } : p))}
+                  data-testid={`bulk-select-${item.video.id}`}>
+                  {item.selected && <X className="h-2.5 w-2.5 text-white" style={{ transform: "rotate(45deg)" }} />}
+                </button>
+
+                {/* Thumbnail + title */}
+                <img src={item.video.thumbnail} alt="" className="w-14 h-10 rounded object-cover shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate">{item.video.title}</p>
+
+                  {/* Diff display */}
+                  {field === "title" && (
+                    <div className="mt-1.5 space-y-1">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-wide shrink-0 w-12 pt-0.5">Before</span>
+                        <MarkText text={item.video.title} mark={findText} cs={caseSensitive} variant="del" />
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wide shrink-0 w-12 pt-0.5">After</span>
+                        <MarkText text={item.result.title} mark={op === "find_replace" ? replaceText : op === "prepend" ? addText : op === "append" ? addText : ""} cs={caseSensitive} variant="add" />
+                      </div>
+                    </div>
+                  )}
+
+                  {field === "description" && (
+                    <div className="mt-1.5 space-y-1">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-wide shrink-0 w-12 pt-0.5">Before</span>
+                        <span className="font-mono text-xs text-muted-foreground break-all line-clamp-2">{item.video.description.slice(0, 200) || <em>Empty</em>}</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wide shrink-0 w-12 pt-0.5">After</span>
+                        <span className="font-mono text-xs text-foreground break-all line-clamp-2">{item.result.description.slice(0, 200) || <em>Empty</em>}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {field === "tags" && (
+                    <div className="mt-1.5 space-y-1.5">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-wide shrink-0 w-12 pt-0.5">Before</span>
+                        <TagChips tags={item.video.tags} removed={op === "remove_tag" ? findText : undefined} />
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wide shrink-0 w-12 pt-0.5">After</span>
+                        <TagChips tags={item.result.tags} added={op === "add_tag" ? addText : op === "find_replace" ? replaceText : undefined} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Quota warning */}
+        {quotaCost > 5000 && (
+          <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+            <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-foreground">
+              This operation will use approximately <strong>{quotaCost.toLocaleString()}</strong> quota units — more than half the daily limit.
+              Consider splitting into smaller batches if needed.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Applying step ───────────────────────────────────────────────────────────
+  if (step === "applying") {
+    const total = previewItems.filter((i) => i.selected).length;
+    const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
+    return (
+      <div className="space-y-5 max-w-lg">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Updating videos…</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">{progress} of {total} complete — please don't close this page</p>
+        </div>
+        <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+          <div className="h-full bg-red-500 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="text-sm font-medium text-foreground">{pct}%</p>
+      </div>
+    );
+  }
+
+  // ── Done step ───────────────────────────────────────────────────────────────
+  const succeeded = results.filter((r) => r.success);
+  const failed = results.filter((r) => !r.success);
+  return (
+    <div className="space-y-5 max-w-lg">
+      <div>
+        <h3 className="text-base font-semibold text-foreground">All done!</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {succeeded.length} video{succeeded.length !== 1 ? "s" : ""} updated successfully
+          {failed.length > 0 && ` · ${failed.length} failed`}
+        </p>
+      </div>
+
+      {failed.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Failed</p>
+          {failed.map((r) => (
+            <div key={r.id} className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
+              <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-medium text-foreground truncate">{r.title}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{r.error}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={handleReset} data-testid="button-bulk-new">
+        <Plus className="h-3.5 w-3.5" />Start a new bulk edit
+      </Button>
+    </div>
+  );
+}
+
 // ── CachedCommentCard ─────────────────────────────────────────────────────────
 
 function CachedCommentCard({
@@ -1233,7 +1751,7 @@ function CommentsTab({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "videos" | "audience" | "comments";
+type Tab = "overview" | "videos" | "audience" | "comments" | "bulk";
 type SortKey = "views" | "watchTime" | "retention" | "engagement" | "shares" | "date";
 
 export default function AnalyticsYouTubePage() {
@@ -1468,18 +1986,18 @@ export default function AnalyticsYouTubePage() {
             {/* Tab bar + period selector */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                {(["overview", "videos", "audience", "comments"] as Tab[]).map((t) => (
+                {(["overview", "videos", "audience", "comments", "bulk"] as Tab[]).map((t) => (
                   <button key={t} onClick={() => setTab(t)} data-testid={`tab-${t}`}
                     className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
                     {t === "comments" ? (
-                      <span className="flex items-center gap-1.5">
-                        <MessageSquare className="h-3.5 w-3.5" />Comments
-                      </span>
+                      <span className="flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" />Comments</span>
+                    ) : t === "bulk" ? (
+                      <span className="flex items-center gap-1.5"><Pencil className="h-3.5 w-3.5" />Bulk Edit</span>
                     ) : t}
                   </button>
                 ))}
               </div>
-              {tab !== "comments" && (
+              {tab !== "comments" && tab !== "bulk" && (
                 <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
                   <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-period"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -2101,6 +2619,13 @@ export default function AnalyticsYouTubePage() {
                     })()}
                   </>
                 )}
+              </div>
+            )}
+
+            {/* ═══════════════════ BULK EDIT TAB ═══════════════════ */}
+            {tab === "bulk" && (
+              <div className="space-y-5">
+                <BulkEditTab />
               </div>
             )}
 

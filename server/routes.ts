@@ -26,7 +26,7 @@ import { ObjectStorageService } from "./replit_integrations/object_storage";
 import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "./youtube";
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
 import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
-import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos, fetchChannelAnalytics, fetchTrafficSources, fetchDeviceBreakdown, fetchTopCountries, fetchVideoAnalytics, fetchDemographics, fetchTopSearchTerms, fetchSubscriberStatus, fetchVideoComments, postCommentReply } from "./youtubeAnalytics";
+import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos, fetchChannelAnalytics, fetchTrafficSources, fetchDeviceBreakdown, fetchTopCountries, fetchVideoAnalytics, fetchDemographics, fetchTopSearchTerms, fetchSubscriberStatus, fetchVideoComments, postCommentReply, fetchVideoMetadata, bulkUpdateVideo } from "./youtubeAnalytics";
 import { getGscAuthUrl, exchangeGscCode, fetchGscSites, fetchGscData } from "./searchConsole";
 import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
@@ -6781,6 +6781,60 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.json({ cleared: true });
     } catch (err: any) {
       res.status(500).json({ message: "Failed to clear cache" });
+    }
+  });
+
+  // ── YouTube: Video Metadata (title + description + tags + categoryId) ────────
+
+  app.get("/api/analytics/youtube/video-metadata", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken || !conn.uploadsPlaylistId) {
+        return res.status(401).json({ message: "Not connected" });
+      }
+      const metadata = await fetchVideoMetadata(
+        conn.oauthAccessToken, conn.oauthRefreshToken, conn.uploadsPlaylistId
+      );
+      res.json(metadata);
+    } catch (err: any) {
+      console.error("[YouTube] video-metadata error:", err?.message);
+      res.status(500).json({ message: "Failed to fetch video metadata" });
+    }
+  });
+
+  // ── YouTube: Bulk Update ─────────────────────────────────────────────────────
+
+  app.post("/api/analytics/youtube/bulk-update", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getYouTubeConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+
+      const { updates } = req.body as {
+        updates: { id: string; title: string; description: string; tags: string[]; categoryId: string; defaultLanguage?: string }[];
+      };
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return res.json({ results: [] });
+      }
+
+      const results: { id: string; title: string; success: boolean; error?: string }[] = [];
+      for (const update of updates) {
+        try {
+          await bulkUpdateVideo(conn.oauthAccessToken, conn.oauthRefreshToken, update);
+          results.push({ id: update.id, title: update.title, success: true });
+        } catch (err: any) {
+          const msg = err?.message || "Unknown error";
+          results.push({ id: update.id, title: update.title, success: false, error: msg });
+        }
+        // Small delay to avoid hammering quota too fast
+        await new Promise((r) => setTimeout(r, 80));
+      }
+
+      res.json({ results });
+    } catch (err: any) {
+      console.error("[YouTube] bulk-update error:", err?.message);
+      res.status(500).json({ message: "Failed to apply bulk updates" });
     }
   });
 

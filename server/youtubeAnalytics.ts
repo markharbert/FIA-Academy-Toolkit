@@ -624,6 +624,79 @@ export async function fetchVideoComments(
   }
 }
 
+// ── fetchVideoMetadata (includes description + categoryId) ───────────────────
+
+export type VideoMetadataItem = {
+  id: string; title: string; description: string; tags: string[];
+  thumbnail: string; publishedAt: string; categoryId: string;
+  defaultLanguage: string; isShort: boolean;
+};
+
+export async function fetchVideoMetadata(
+  accessToken: string, refreshToken: string | null,
+  uploadsPlaylistId: string, maxVideos = 2000
+): Promise<VideoMetadataItem[]> {
+  const auth = makeAuthClient(accessToken, refreshToken);
+  const yt = google.youtube({ version: "v3", auth });
+
+  const videoIds: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const { data } = await yt.playlistItems.list({
+      part: ["contentDetails"], playlistId: uploadsPlaylistId,
+      maxResults: 50, pageToken,
+    });
+    videoIds.push(...(data.items || []).map((i) => i.contentDetails?.videoId!).filter(Boolean));
+    pageToken = data.nextPageToken ?? undefined;
+  } while (pageToken && videoIds.length < maxVideos);
+
+  const ids = videoIds.slice(0, maxVideos);
+  if (!ids.length) return [];
+
+  const all: VideoMetadataItem[] = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const { data } = await yt.videos.list({
+      part: ["snippet", "contentDetails"], id: ids.slice(i, i + 50),
+    });
+    for (const v of data.items || []) {
+      const dur = v.contentDetails?.duration || "";
+      all.push({
+        id: v.id!,
+        title: v.snippet?.title || "",
+        description: v.snippet?.description || "",
+        tags: v.snippet?.tags || [],
+        thumbnail: v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url || "",
+        publishedAt: v.snippet?.publishedAt || "",
+        categoryId: v.snippet?.categoryId || "22",
+        defaultLanguage: v.snippet?.defaultLanguage || "",
+        isShort: durationToSeconds(dur) <= 60,
+      });
+    }
+  }
+  return all;
+}
+
+export async function bulkUpdateVideo(
+  accessToken: string, refreshToken: string | null,
+  update: { id: string; title: string; description: string; tags: string[]; categoryId: string; defaultLanguage?: string }
+): Promise<void> {
+  const auth = makeAuthClient(accessToken, refreshToken);
+  const yt = google.youtube({ version: "v3", auth });
+  await yt.videos.update({
+    part: ["snippet"],
+    requestBody: {
+      id: update.id,
+      snippet: {
+        title: update.title,
+        description: update.description,
+        tags: update.tags,
+        categoryId: update.categoryId,
+        ...(update.defaultLanguage ? { defaultLanguage: update.defaultLanguage } : {}),
+      },
+    },
+  });
+}
+
 // ── postCommentReply ─────────────────────────────────────────────────────────
 
 export async function postCommentReply(
