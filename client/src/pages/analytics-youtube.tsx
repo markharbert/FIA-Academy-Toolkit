@@ -85,7 +85,7 @@ type Channel = {
   id: string; title: string; handle: string; thumbnail: string;
   subscriberCount: number; videoCount: number; viewCount: number;
 };
-type Status = { connected: boolean; connectedEmail?: string; channel?: Channel };
+type Status = { connected: boolean; connectedEmail?: string; channel?: Channel; isAdmin?: boolean; channelId?: string };
 type VideoItem = {
   id: string; title: string; thumbnail: string; publishedAt: string;
   viewCount: number; likeCount: number; commentCount: number; duration: string;
@@ -1986,7 +1986,7 @@ export default function AnalyticsYouTubePage() {
             {/* Tab bar + period selector */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                {(["overview", "videos", "audience", "comments", "bulk"] as Tab[]).map((t) => (
+                {(["overview", "videos", "audience", "comments", ...(status?.isAdmin ? ["bulk"] : [])] as Tab[]).map((t) => (
                   <button key={t} onClick={() => setTab(t)} data-testid={`tab-${t}`}
                     className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
                     {t === "comments" ? (
@@ -2623,7 +2623,7 @@ export default function AnalyticsYouTubePage() {
             )}
 
             {/* ═══════════════════ BULK EDIT TAB ═══════════════════ */}
-            {tab === "bulk" && (
+            {tab === "bulk" && status?.isAdmin && (
               <div className="space-y-5">
                 <BulkEditTab />
               </div>

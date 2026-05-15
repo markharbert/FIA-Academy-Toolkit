@@ -6467,7 +6467,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           channelThumbnail: channel.thumbnail,
           uploadsPlaylistId: channel.uploadsPlaylistId,
         });
-        res.json({ connected: true, connectedEmail: conn.connectedEmail, channel });
+        const currentUser = await storage.getUser(userId);
+        res.json({ connected: true, connectedEmail: conn.connectedEmail, channel, isAdmin: currentUser?.isAdmin ?? false, channelId: channel.id });
       } catch (apiErr: any) {
         console.error("[Analytics/YouTube] status API error:", apiErr?.message);
         res.json({ connected: true, connectedEmail: conn.connectedEmail, channel: conn.channelId ? { id: conn.channelId, title: conn.channelTitle, handle: conn.channelHandle, thumbnail: conn.channelThumbnail, subscriberCount: 0, videoCount: 0, viewCount: 0, uploadsPlaylistId: conn.uploadsPlaylistId } : null });
@@ -6786,7 +6787,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   // ── YouTube: Video Metadata (title + description + tags + categoryId) ────────
 
-  app.get("/api/analytics/youtube/video-metadata", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/analytics/youtube/video-metadata", requireAdmin, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;
       const conn = await storage.getYouTubeConnection(userId);
@@ -6805,7 +6806,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   // ── YouTube: Bulk Update ─────────────────────────────────────────────────────
 
-  app.post("/api/analytics/youtube/bulk-update", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/analytics/youtube/bulk-update", requireAdmin, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;
       const conn = await storage.getYouTubeConnection(userId);
