@@ -282,8 +282,11 @@ export default function AnalyticsGscPage() {
   });
 
   const inspectMut = useMutation({
-    mutationFn: (url: string) => apiRequest("POST", "/api/analytics/gsc/inspect-url", { url }),
-    onSuccess: (data: any) => setInspectResult(data),
+    mutationFn: async (url: string) => {
+      const r = await apiRequest("POST", "/api/analytics/gsc/inspect-url", { url });
+      return r.json() as Promise<GscInspection>;
+    },
+    onSuccess: (data) => setInspectResult(data),
     onError: (err: any) => toast({ title: "Inspection failed", description: err?.message || "Could not inspect that URL.", variant: "destructive" }),
   });
 
