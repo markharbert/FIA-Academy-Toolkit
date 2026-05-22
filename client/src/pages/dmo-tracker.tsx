@@ -318,6 +318,10 @@ const LS_KEY = (key: string) => `dmo-draft-${key}`;
 function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, timezone, onSave, onAutoSave, onGoalChange, isSaving }: ActivityCardProps) {
   const Icon = activity.icon;
 
+  // Holds a pending "yesterday" save that needs to be fired after the component mounts.
+  // Declared before the timer useState so the lazy initializer can write to it synchronously.
+  const yesterdayCrossRef = useRef<{ seconds: number; date: string } | null>(null);
+
   const [timer, setTimer] = useState<TimerState>(() => {
     if (savedChecked || savedSeconds > 0) {
       return { status: "done", elapsed: savedSeconds, startedAt: null, sessionStartedDate: null };
@@ -326,7 +330,21 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, tim
       const raw = localStorage.getItem(LS_KEY(activity.key));
       if (raw) {
         const draft = JSON.parse(raw) as { elapsed: number; startedAt: number; status?: string; sessionStartedDate?: string };
+        const today = getTodayString(timezone);
         if (draft.status === "running" && draft.startedAt) {
+          // Detect midnight crossing: the session started on a different calendar day.
+          // This happens when the browser tab was in the background (throttled intervals)
+          // or when the user refreshed the page after midnight.
+          if (draft.sessionStartedDate && draft.sessionStartedDate !== today) {
+            const midnightMs = getDayBoundaryMs(today, timezone);
+            const preMs = draft.startedAt < midnightMs ? midnightMs - draft.startedAt : 0;
+            const yesterdaySecs = Math.max(0, draft.elapsed + Math.floor(preMs / 1000));
+            // Schedule a fire-and-forget save for the previous day — fired in the
+            // mount useEffect below (can't call onAutoSave inside the initializer).
+            yesterdayCrossRef.current = { seconds: yesterdaySecs, date: draft.sessionStartedDate };
+            // Restore the timer showing only today's portion (time since midnight).
+            return { status: "running", elapsed: 0, startedAt: midnightMs, sessionStartedDate: today };
+          }
           // Timer was running when user left — restore as running so it keeps ticking
           return { status: "running", elapsed: draft.elapsed, startedAt: draft.startedAt, sessionStartedDate: draft.sessionStartedDate ?? null };
         }
@@ -411,6 +429,18 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, tim
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [timer.status, timer.startedAt, timer.elapsed, timer.sessionStartedDate, activity.key, timezone, onAutoSave]);
 
+  // On mount: if the localStorage recovery detected a midnight crossing it writes
+  // to yesterdayCrossRef. Fire that auto-save now that onAutoSave is available.
+  useEffect(() => {
+    if (yesterdayCrossRef.current) {
+      const { seconds, date } = yesterdayCrossRef.current;
+      yesterdayCrossRef.current = null;
+      if (seconds > 0) onAutoSave(seconds, date);
+    }
+    // Intentionally run once on mount only — onAutoSave identity is stable enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-save to server every 5 s while running.
   // Skip the tick if the date has already changed — the tick effect handles that split.
   useEffect(() => {
@@ -458,8 +488,25 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, tim
 
   // "Done" — capture time and show confirmation UI instead of saving immediately
   const handleDone = useCallback(() => {
-    const added = timer.startedAt ? Math.floor((Date.now() - timer.startedAt) / 1000) : 0;
-    const totalSeconds = timer.elapsed + added;
+    const today = getTodayString(timezone);
+    let totalSeconds: number;
+
+    // Safety net for midnight crossings that the interval didn't catch (e.g. browser
+    // throttled the tab, or the page was refreshed with an old localStorage entry that
+    // wasn't corrected by the mount effect above). If the session started on a prior
+    // calendar day, split the time: auto-save yesterday's portion and only present
+    // today's portion in the confirmation UI.
+    if (timer.sessionStartedDate && timer.sessionStartedDate !== today && timer.startedAt) {
+      const midnightMs = getDayBoundaryMs(today, timezone);
+      const preMs = timer.startedAt < midnightMs ? midnightMs - timer.startedAt : 0;
+      const yesterdaySecs = Math.max(0, timer.elapsed + Math.floor(preMs / 1000));
+      totalSeconds = Math.max(0, Math.floor((Date.now() - midnightMs) / 1000));
+      if (yesterdaySecs > 0) onAutoSave(yesterdaySecs, timer.sessionStartedDate);
+    } else {
+      const added = timer.startedAt ? Math.floor((Date.now() - timer.startedAt) / 1000) : 0;
+      totalSeconds = timer.elapsed + added;
+    }
+
     // Stop the timer, hold at current value
     setTimer({ status: "paused", elapsed: totalSeconds, startedAt: null, sessionStartedDate: timer.sessionStartedDate });
     try { localStorage.removeItem(LS_KEY(activity.key)); } catch { /* ignore */ }
@@ -468,7 +515,7 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, tim
     const s = totalSeconds % 60;
     setPendingInput(s > 0 ? `${m}:${String(s).padStart(2, "0")}` : String(m));
     setPendingSecs(totalSeconds);
-  }, [timer, activity.key]);
+  }, [timer, activity.key, timezone, onAutoSave]);
 
   const handleConfirmSave = useCallback(async () => {
     const seconds = parseMinsInput(pendingInput);
