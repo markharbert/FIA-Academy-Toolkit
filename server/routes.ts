@@ -6998,6 +6998,90 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.get("/api/analytics/psi", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { url, strategy = "mobile" } = req.query as { url?: string; strategy?: string };
+      if (!url) return res.status(400).json({ message: "url required" });
+      const params = new URLSearchParams({
+        url,
+        strategy: strategy === "desktop" ? "desktop" : "mobile",
+      });
+      ["performance", "accessibility", "best-practices", "seo"].forEach((c) =>
+        params.append("category", c)
+      );
+      const apiKey = process.env.GOOGLE_API_KEY;
+      if (apiKey) params.set("key", apiKey);
+      const psiRes = await fetch(
+        `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params.toString()}`
+      );
+      if (!psiRes.ok) {
+        const errBody = await psiRes.text();
+        console.error("[PSI] API error:", psiRes.status, errBody.slice(0, 300));
+        return res.status(502).json({ message: "PageSpeed API returned an error. Make sure the URL is publicly accessible." });
+      }
+      const psiData = await psiRes.json();
+      const lhr = psiData.lighthouseResult || {};
+      const cats = lhr.categories || {};
+      const audits = lhr.audits || {};
+      const le = psiData.loadingExperience || {};
+
+      const score = (key: string) => Math.round((cats[key]?.score ?? 0) * 100);
+      const metric = (key: string) => ({
+        displayValue: audits[key]?.displayValue || "—",
+        score: audits[key]?.score ?? null,
+        numericValue: audits[key]?.numericValue ?? null,
+      });
+
+      const opportunities = Object.values(audits as Record<string, any>)
+        .filter((a: any) => a.details?.type === "opportunity" && a.score !== null && a.score < 0.9 && a.details?.overallSavingsMs > 100)
+        .sort((a: any, b: any) => (b.details?.overallSavingsMs ?? 0) - (a.details?.overallSavingsMs ?? 0))
+        .slice(0, 6)
+        .map((a: any) => ({
+          id: a.id,
+          title: a.title,
+          description: a.description,
+          displayValue: a.displayValue || "",
+          score: a.score ?? null,
+          savingsMs: a.details?.overallSavingsMs ?? 0,
+        }));
+
+      const fieldMetrics = le.metrics
+        ? {
+            lcp: { value: le.metrics.LARGEST_CONTENTFUL_PAINT_MS?.percentile ?? null, category: le.metrics.LARGEST_CONTENTFUL_PAINT_MS?.category ?? null },
+            fid: { value: le.metrics.FIRST_INPUT_DELAY_MS?.percentile ?? null, category: le.metrics.FIRST_INPUT_DELAY_MS?.category ?? null },
+            cls: { value: le.metrics.CUMULATIVE_LAYOUT_SHIFT_SCORE?.percentile ?? null, category: le.metrics.CUMULATIVE_LAYOUT_SHIFT_SCORE?.category ?? null },
+            fcp: { value: le.metrics.FIRST_CONTENTFUL_PAINT_MS?.percentile ?? null, category: le.metrics.FIRST_CONTENTFUL_PAINT_MS?.category ?? null },
+            overallCategory: le.overall_category ?? null,
+          }
+        : null;
+
+      res.json({
+        url,
+        strategy,
+        fetchTime: lhr.fetchTime || new Date().toISOString(),
+        scores: {
+          performance: score("performance"),
+          accessibility: score("accessibility"),
+          bestPractices: score("best-practices"),
+          seo: score("seo"),
+        },
+        metrics: {
+          fcp: metric("first-contentful-paint"),
+          lcp: metric("largest-contentful-paint"),
+          tbt: metric("total-blocking-time"),
+          cls: metric("cumulative-layout-shift"),
+          si: metric("speed-index"),
+          tti: metric("interactive"),
+        },
+        opportunities,
+        fieldData: fieldMetrics,
+      });
+    } catch (err: any) {
+      console.error("[Analytics/PSI] error:", err?.message);
+      res.status(500).json({ message: err?.message || "Failed to run PageSpeed analysis" });
+    }
+  });
+
   // ── Projects (Asana-lite project manager) ──────────────────────────────────
 
   app.post("/api/projects/import/trello", requireAuth, async (req: Request, res: Response) => {
