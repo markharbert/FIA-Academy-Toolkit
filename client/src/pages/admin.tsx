@@ -300,6 +300,98 @@ interface CfUser {
   cfContactId: string | null;
 }
 
+function EmailSenderCard() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<{ fromName: string; fromEmail: string }>({
+    queryKey: ["/api/admin/settings/email-sender"],
+  });
+  const [nameInput, setNameInput] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [edited, setEdited] = useState(false);
+
+  useEffect(() => {
+    if (data && !edited) {
+      setNameInput(data.fromName);
+      setEmailInput(data.fromEmail);
+    }
+  }, [data, edited]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      apiRequest("PUT", "/api/admin/settings/email-sender", {
+        fromName: nameInput.trim(),
+        fromEmail: emailInput.trim(),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings/email-sender"] });
+      setEdited(false);
+      toast({ title: "Email sender settings saved" });
+    },
+    onError: () => toast({ title: "Failed to save settings", variant: "destructive" }),
+  });
+
+  return (
+    <Card data-testid="card-email-sender">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Mail className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <CardTitle className="text-base">Notification Email Sender</CardTitle>
+            <CardDescription className="text-sm mt-0.5">
+              The "From" name and address that appears in all notification emails sent by the app.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex justify-center py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">From name</label>
+                <input
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => { setNameInput(e.target.value); setEdited(true); }}
+                  placeholder="Fearless Marketing Lab"
+                  className="w-full text-sm border rounded-md px-3 py-2 bg-background"
+                  data-testid="input-email-from-name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">From email</label>
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => { setEmailInput(e.target.value); setEdited(true); }}
+                  placeholder="notifications@fearlesspromo.com"
+                  className="w-full text-sm border rounded-md px-3 py-2 bg-background"
+                  data-testid="input-email-from-address"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => save.mutate()}
+                disabled={save.isPending || !nameInput.trim() || !emailInput.trim()}
+                data-testid="button-save-email-sender"
+              >
+                {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                Save
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ApiAccessToggleCard() {
   const { toast } = useToast();
   const { data, isLoading } = useQuery<{ enabled: boolean }>({
@@ -2403,6 +2495,9 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Email sender settings */}
+          <EmailSenderCard />
 
           {/* API Access toggle */}
           <ApiAccessToggleCard />

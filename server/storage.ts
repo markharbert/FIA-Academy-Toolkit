@@ -338,6 +338,8 @@ export interface IStorage {
   setMonthlyCreditsLimit(limit: number): Promise<void>;
   getApiAccessEnabled(): Promise<boolean>;
   setApiAccessEnabled(enabled: boolean): Promise<void>;
+  getEmailSenderSettings(): Promise<{ fromName: string; fromEmail: string }>;
+  setEmailSenderSettings(fromName: string, fromEmail: string): Promise<void>;
 
   // Public API Keys
   getUserPublicApiKey(userId: string): Promise<PublicApiKey | undefined>;
@@ -2090,6 +2092,28 @@ export class DatabaseStorage implements IStorage {
     await db.insert(appSettings)
       .values({ key: "api_access_enabled", value: enabled ? "true" : "false", updatedAt: now })
       .onConflictDoUpdate({ target: appSettings.key, set: { value: enabled ? "true" : "false", updatedAt: now } });
+  }
+
+  async getEmailSenderSettings(): Promise<{ fromName: string; fromEmail: string }> {
+    const rows = await db.select().from(appSettings)
+      .where(sql`${appSettings.key} IN ('email_from_name', 'email_from_email')`);
+    const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
+    return {
+      fromName:  map["email_from_name"]  || "Fearless Marketing Lab",
+      fromEmail: map["email_from_email"] || "notifications@fearlesspromo.com",
+    };
+  }
+
+  async setEmailSenderSettings(fromName: string, fromEmail: string): Promise<void> {
+    const now = new Date();
+    await Promise.all([
+      db.insert(appSettings)
+        .values({ key: "email_from_name", value: fromName, updatedAt: now })
+        .onConflictDoUpdate({ target: appSettings.key, set: { value: fromName, updatedAt: now } }),
+      db.insert(appSettings)
+        .values({ key: "email_from_email", value: fromEmail, updatedAt: now })
+        .onConflictDoUpdate({ target: appSettings.key, set: { value: fromEmail, updatedAt: now } }),
+    ]);
   }
 
   // Public API Keys

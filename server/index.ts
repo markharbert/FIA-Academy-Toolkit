@@ -2,8 +2,9 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { bootstrapSuperAdmins } from "./storage";
+import { bootstrapSuperAdmins, storage } from "./storage";
 import { startNotificationScheduler } from "./notificationScheduler";
+import { configureEmailSender } from "./email-sendgrid";
 import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
@@ -701,6 +702,14 @@ async function runStartupMigrations() {
       
       // Bootstrap super admins from environment
       await bootstrapSuperAdmins();
+      // Load email sender settings from DB into the sendgrid module
+      try {
+        const senderSettings = await storage.getEmailSenderSettings();
+        configureEmailSender(senderSettings.fromName, senderSettings.fromEmail);
+        console.log(`[email] sender configured: ${senderSettings.fromName} <${senderSettings.fromEmail}>`);
+      } catch (err: any) {
+        console.warn("[email] could not load sender settings from DB, using defaults:", err?.message);
+      }
       // Start email notification scheduler
       startNotificationScheduler();
       startYouTubeAnalyticsScheduler();

@@ -8169,6 +8169,32 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   });
 
   // ─── Admin: API Access Toggle ─────────────────────────────────────────────
+  app.get("/api/admin/settings/email-sender", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const settings = await storage.getEmailSenderSettings();
+      res.json(settings);
+    } catch (err) {
+      console.error("[email-sender] get error:", err);
+      res.status(500).json({ message: "Failed to get email sender settings" });
+    }
+  });
+
+  app.put("/api/admin/settings/email-sender", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { fromName, fromEmail } = req.body as { fromName: string; fromEmail: string };
+      if (!fromName?.trim() || !fromEmail?.trim()) {
+        return res.status(400).json({ message: "fromName and fromEmail are required" });
+      }
+      await storage.setEmailSenderSettings(fromName.trim(), fromEmail.trim());
+      const { configureEmailSender } = await import("./email-sendgrid");
+      configureEmailSender(fromName.trim(), fromEmail.trim());
+      res.json({ fromName: fromName.trim(), fromEmail: fromEmail.trim() });
+    } catch (err) {
+      console.error("[email-sender] set error:", err);
+      res.status(500).json({ message: "Failed to update email sender settings" });
+    }
+  });
+
   app.get("/api/admin/settings/api-access", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const enabled = await storage.getApiAccessEnabled();

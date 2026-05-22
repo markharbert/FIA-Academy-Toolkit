@@ -1,9 +1,17 @@
 import sgMail from "@sendgrid/mail";
 
-const FROM_EMAIL = "notifications@fearlesspromo.com";
-const FROM_NAME = "Fearless Marketing Lab";
+const DEFAULT_FROM_EMAIL = "notifications@fearlesspromo.com";
+const DEFAULT_FROM_NAME  = "Fearless Marketing Lab";
 
+let _fromEmail = DEFAULT_FROM_EMAIL;
+let _fromName  = DEFAULT_FROM_NAME;
 let initialized = false;
+
+/** Called at startup and whenever an admin saves new sender settings. */
+export function configureEmailSender(fromName: string, fromEmail: string): void {
+  _fromName  = fromName  || DEFAULT_FROM_NAME;
+  _fromEmail = fromEmail || DEFAULT_FROM_EMAIL;
+}
 
 function init() {
   if (initialized) return;
@@ -32,12 +40,12 @@ export async function sendEmail({
   try {
     await sgMail.send({
       to,
-      from: { email: FROM_EMAIL, name: FROM_NAME },
+      from: { email: _fromEmail, name: _fromName },
       subject,
       html,
       text,
     });
-    console.log(`[sendgrid] sent "${subject}" to ${to}`);
+    console.log(`[sendgrid] sent "${subject}" to ${to} (from: ${_fromName} <${_fromEmail}>)`);
   } catch (err: any) {
     console.error("[sendgrid] send error:", err?.response?.body ?? err?.message ?? err);
   }
