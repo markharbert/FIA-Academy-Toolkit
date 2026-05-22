@@ -79,6 +79,43 @@ export type GscTimelineRow = {
   date: string;
   clicks: number;
   impressions: number;
+  ctr: number;
+  position: number;
+};
+
+export type GscDeviceRow = {
+  device: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+export type GscCountryRow = {
+  country: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+export type GscAppearanceRow = {
+  appearance: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+export type GscSitemap = {
+  path: string;
+  lastSubmitted: string | null;
+  lastDownloaded: string | null;
+  isPending: boolean;
+  warnings: number;
+  errors: number;
+  submitted: number;
+  indexed: number;
 };
 
 export type GscData = {
@@ -91,6 +128,10 @@ export type GscData = {
   topQueries: GscRow[];
   topPages: GscRow[];
   timeline: GscTimelineRow[];
+  devices: GscDeviceRow[];
+  countries: GscCountryRow[];
+  searchAppearances: GscAppearanceRow[];
+  sitemaps: GscSitemap[];
 };
 
 export async function fetchGscData(
@@ -103,40 +144,72 @@ export async function fetchGscData(
   const sc = google.searchconsole({ version: "v1", auth });
 
   const endDate = new Date();
-  endDate.setDate(endDate.getDate() - 2); // GSC has ~2 day lag
+  endDate.setDate(endDate.getDate() - 2); // GSC has ~2 day data lag
   const startDate = new Date(endDate);
   startDate.setDate(startDate.getDate() - days + 1);
   const fmt = (d: Date) => d.toISOString().split("T")[0];
 
-  const [queriesRes, pagesRes, timelineRes] = await Promise.all([
-    sc.searchanalytics.query({
-      siteUrl,
-      requestBody: {
-        startDate: fmt(startDate),
-        endDate: fmt(endDate),
-        dimensions: ["query"],
-        rowLimit: 20,
-      },
-    }),
-    sc.searchanalytics.query({
-      siteUrl,
-      requestBody: {
-        startDate: fmt(startDate),
-        endDate: fmt(endDate),
-        dimensions: ["page"],
-        rowLimit: 20,
-      },
-    }),
-    sc.searchanalytics.query({
-      siteUrl,
-      requestBody: {
-        startDate: fmt(startDate),
-        endDate: fmt(endDate),
-        dimensions: ["date"],
-        rowLimit: days,
-      },
-    }),
-  ]);
+  const dateRange = {
+    startDate: fmt(startDate),
+    endDate: fmt(endDate),
+  };
+
+  const [queriesRes, pagesRes, timelineRes, devicesRes, countriesRes, appearancesRes] =
+    await Promise.all([
+      sc.searchanalytics.query({
+        siteUrl,
+        requestBody: { ...dateRange, dimensions: ["query"], rowLimit: 50 },
+      }),
+      sc.searchanalytics.query({
+        siteUrl,
+        requestBody: { ...dateRange, dimensions: ["page"], rowLimit: 50 },
+      }),
+      sc.searchanalytics.query({
+        siteUrl,
+        requestBody: { ...dateRange, dimensions: ["date"], rowLimit: days },
+      }),
+      sc.searchanalytics.query({
+        siteUrl,
+        requestBody: { ...dateRange, dimensions: ["device"], rowLimit: 10 },
+      }),
+      sc.searchanalytics.query({
+        siteUrl,
+        requestBody: { ...dateRange, dimensions: ["country"], rowLimit: 20 },
+      }),
+      sc.searchanalytics.query({
+        siteUrl,
+        requestBody: { ...dateRange, dimensions: ["searchAppearance"], rowLimit: 25 },
+      }),
+    ]);
+
+  // Sitemaps — wrapped separately; may fail for domain properties or missing permissions
+  let sitemaps: GscSitemap[] = [];
+  try {
+    const { data: sitemapsData } = await sc.sitemaps.list({ siteUrl });
+    sitemaps = (sitemapsData.sitemap || []).map((s) => {
+      const contents = s.contents || [];
+      const submitted = contents.reduce(
+        (sum, c) => sum + parseInt(String(c.submitted || "0"), 10),
+        0
+      );
+      const indexed = contents.reduce(
+        (sum, c) => sum + parseInt(String(c.indexed || "0"), 10),
+        0
+      );
+      return {
+        path: s.path || "",
+        lastSubmitted: s.lastSubmitted || null,
+        lastDownloaded: s.lastDownloaded || null,
+        isPending: Boolean(s.isPending),
+        warnings: parseInt(String(s.warnings || "0"), 10),
+        errors: parseInt(String(s.errors || "0"), 10),
+        submitted,
+        indexed,
+      };
+    });
+  } catch {
+    // Sitemaps not accessible for this property
+  }
 
   const timeRows = timelineRes.data.rows || [];
   const totalClicks = timeRows.reduce((s, r) => s + (r.clicks || 0), 0);
@@ -147,26 +220,46 @@ export async function fetchGscData(
       ? timeRows.reduce((s, r) => s + (r.position || 0), 0) / timeRows.length
       : 0;
 
+  const mapRow = (r: any): GscRow => ({
+    key: r.keys?.[0] || "",
+    clicks: r.clicks || 0,
+    impressions: r.impressions || 0,
+    ctr: r.ctr || 0,
+    position: r.position || 0,
+  });
+
   return {
     overview: { totalClicks, totalImpressions, avgCtr, avgPosition },
-    topQueries: (queriesRes.data.rows || []).map((r) => ({
-      key: r.keys?.[0] || "",
-      clicks: r.clicks || 0,
-      impressions: r.impressions || 0,
-      ctr: r.ctr || 0,
-      position: r.position || 0,
-    })),
-    topPages: (pagesRes.data.rows || []).map((r) => ({
-      key: r.keys?.[0] || "",
-      clicks: r.clicks || 0,
-      impressions: r.impressions || 0,
-      ctr: r.ctr || 0,
-      position: r.position || 0,
-    })),
+    topQueries: (queriesRes.data.rows || []).map(mapRow),
+    topPages: (pagesRes.data.rows || []).map(mapRow),
     timeline: timeRows.map((r) => ({
       date: r.keys?.[0] || "",
       clicks: r.clicks || 0,
       impressions: r.impressions || 0,
+      ctr: r.ctr || 0,
+      position: r.position || 0,
     })),
+    devices: (devicesRes.data.rows || []).map((r) => ({
+      device: r.keys?.[0] || "",
+      clicks: r.clicks || 0,
+      impressions: r.impressions || 0,
+      ctr: r.ctr || 0,
+      position: r.position || 0,
+    })),
+    countries: (countriesRes.data.rows || []).map((r) => ({
+      country: r.keys?.[0] || "",
+      clicks: r.clicks || 0,
+      impressions: r.impressions || 0,
+      ctr: r.ctr || 0,
+      position: r.position || 0,
+    })),
+    searchAppearances: (appearancesRes.data.rows || []).map((r) => ({
+      appearance: r.keys?.[0] || "",
+      clicks: r.clicks || 0,
+      impressions: r.impressions || 0,
+      ctr: r.ctr || 0,
+      position: r.position || 0,
+    })),
+    sitemaps,
   };
 }

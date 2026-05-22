@@ -6921,7 +6921,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       const siteUrl = (req.query.siteUrl as string) || conn.selectedSiteUrl;
       if (!siteUrl) return res.status(400).json({ message: "No site selected" });
-      const days = Math.min(parseInt((req.query.days as string) || "28", 10), 90);
+      const days = Math.min(parseInt((req.query.days as string) || "28", 10), 365);
       const data = await fetchGscData(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days);
       res.json(data);
     } catch (err: any) {
