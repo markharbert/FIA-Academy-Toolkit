@@ -27,7 +27,7 @@ import { isValidYouTubeUrl, extractYouTubeVideoId, downloadYouTubeAudio } from "
 import { getGmailAuthUrl, exchangeGmailCode, checkGmailPlacement, type PlacementResult } from "./gmailOAuth";
 import { getPostmasterAuthUrl, exchangePostmasterCode, fetchPostmasterData } from "./postmaster";
 import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTubeVideos, fetchChannelAnalytics, fetchTrafficSources, fetchDeviceBreakdown, fetchTopCountries, fetchVideoAnalytics, fetchDemographics, fetchTopSearchTerms, fetchSubscriberStatus, fetchVideoComments, postCommentReply, fetchVideoMetadata, bulkUpdateVideo } from "./youtubeAnalytics";
-import { getGscAuthUrl, exchangeGscCode, fetchGscSites, fetchGscData } from "./searchConsole";
+import { getGscAuthUrl, exchangeGscCode, fetchGscSites, fetchGscData, fetchGscPageKeywords, inspectGscUrl } from "./searchConsole";
 import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
 import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
@@ -6962,6 +6962,39 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to disconnect" });
+    }
+  });
+
+  app.get("/api/analytics/gsc/page-keywords", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getGscConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      const siteUrl = (req.query.siteUrl as string) || conn.selectedSiteUrl;
+      if (!siteUrl) return res.status(400).json({ message: "No site selected" });
+      const days = Math.min(parseInt((req.query.days as string) || "28", 10), 365);
+      const data = await fetchGscPageKeywords(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days);
+      res.json(data);
+    } catch (err: any) {
+      console.error("[Analytics/GSC] page-keywords error:", err?.message);
+      res.status(500).json({ message: "Failed to fetch page keywords" });
+    }
+  });
+
+  app.post("/api/analytics/gsc/inspect-url", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const conn = await storage.getGscConnection(userId);
+      if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
+      const siteUrl = conn.selectedSiteUrl;
+      if (!siteUrl) return res.status(400).json({ message: "No site selected" });
+      const { url } = req.body as { url: string };
+      if (!url) return res.status(400).json({ message: "url required" });
+      const result = await inspectGscUrl(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, url);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Analytics/GSC] inspect-url error:", err?.message);
+      res.status(500).json({ message: err?.message || "Failed to inspect URL" });
     }
   });
 
