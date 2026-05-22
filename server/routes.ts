@@ -7009,15 +7009,23 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       ["performance", "accessibility", "best-practices", "seo"].forEach((c) =>
         params.append("category", c)
       );
-      const apiKey = process.env.GOOGLE_API_KEY;
+      const apiKey = process.env.GOOGLE_API_KEY || process.env.YOUTUBE_API_KEY;
       if (apiKey) params.set("key", apiKey);
       const psiRes = await fetch(
         `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params.toString()}`
       );
       if (!psiRes.ok) {
-        const errBody = await psiRes.text();
-        console.error("[PSI] API error:", psiRes.status, errBody.slice(0, 300));
-        return res.status(502).json({ message: "PageSpeed API returned an error. Make sure the URL is publicly accessible." });
+        let errMsg = `PageSpeed API error (HTTP ${psiRes.status})`;
+        try {
+          const errBody = await psiRes.json() as any;
+          const detail = errBody?.error?.message || errBody?.error?.errors?.[0]?.message;
+          if (detail) errMsg = detail;
+          if (psiRes.status === 429) errMsg = "PageSpeed API quota exceeded. A Google API key with the PageSpeed Insights API enabled is required — add one as GOOGLE_API_KEY in your environment secrets.";
+          if (psiRes.status === 400) errMsg = "The URL could not be fetched. Make sure it is a valid, publicly accessible page.";
+          if (psiRes.status === 403) errMsg = "API key does not have access to the PageSpeed Insights API. Enable it in Google Cloud Console.";
+        } catch { /* keep generic message */ }
+        console.error("[PSI] API error:", psiRes.status, errMsg);
+        return res.status(502).json({ message: errMsg });
       }
       const psiData = await psiRes.json();
       const lhr = psiData.lighthouseResult || {};
