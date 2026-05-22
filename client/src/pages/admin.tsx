@@ -2496,9 +2496,6 @@ export default function AdminPage() {
             </Card>
           </div>
 
-          {/* Email sender settings */}
-          <EmailSenderCard />
-
           {/* API Access toggle */}
           <ApiAccessToggleCard />
 
@@ -3267,6 +3264,7 @@ export default function AdminPage() {
         </TabsContent>
 
         <TabsContent value="email-templates" className="space-y-6">
+          <EmailSenderCard />
           <EmailTemplatesTab />
         </TabsContent>
 
