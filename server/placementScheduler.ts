@@ -1,6 +1,8 @@
 import type { IStorage } from "./storage";
 import { checkGmailPlacement, checkGmailPlacementServiceAccount, isServiceAccountConfigured, isServiceAccountEligible, type PlacementResult } from "./gmailOAuth";
 import { checkGmailPlacementImap } from "./imapPlacement";
+import { sendEmail } from "./email-sendgrid";
+import { inboxAnalysisReportEmail } from "./email-templates";
 
 const TICK_INTERVAL_MS     = 5 * 60 * 1000;   // scheduler wakes up every 5 min
 const CHECK_INTERVAL_MS    = 15 * 60 * 1000;  // re-check interval if still not found
@@ -110,6 +112,57 @@ export async function runPlacementCheckForUser(
         await storage.saveEmailPlacementResults(emailContext.messageId, userId, results);
       }
       console.log(`[PlacementScheduler] LOCKED IN for user ${userId} — ${summary} — monitoring stopped`);
+
+      // Send inbox analysis report email if the user has this notification enabled.
+      try {
+        const [user, prefs] = await Promise.all([
+          storage.getUser(userId),
+          storage.getNotificationPrefs(userId),
+        ]);
+        if (user?.email && prefs.allEnabled && prefs.preferences.inboxReportReady?.enabled) {
+          // Fetch the full analysis record (prefer messageId lookup, skip if not available)
+          const analysis = emailContext?.messageId
+            ? await storage.getEmailAnalysisByMessageId(emailContext.messageId, userId)
+            : undefined;
+          if (analysis) {
+            // Dedup: only send once per analysis
+            const alreadySent = await storage.hasNotificationBeenSent(
+              userId, "inbox_report_ready", analysis.id, new Date(0)
+            );
+            if (!alreadySent) {
+              const resources = await storage.getActiveEmailResources();
+              const tpl = inboxAnalysisReportEmail({
+                firstName: user.firstName ?? null,
+                analysisId: analysis.id,
+                subject: analysis.subject,
+                fromName: analysis.fromName ?? null,
+                fromAddress: analysis.fromAddress,
+                sendingDomain: analysis.sendingDomain ?? null,
+                receivedAt: analysis.receivedAt ?? null,
+                overallScore: analysis.overallScore ?? null,
+                spfResult: analysis.spfResult ?? null,
+                dkimResult: analysis.dkimResult ?? null,
+                dmarcResult: analysis.dmarcResult ?? null,
+                spamFlags: (analysis.spamFlags as any[] | null) ?? null,
+                technicalHealth: (analysis.technicalHealth as any) ?? null,
+                contentQuality: (analysis.contentQuality as any) ?? null,
+                canSpamCompliance: (analysis.canSpamCompliance as any) ?? null,
+                aiSuggestions: (analysis.copyFeedback as any)?.topSuggestions ?? null,
+                placementResults: (results as any[]).map((r: any) => ({
+                  label: r.label,
+                  email: r.email,
+                  status: r.status,
+                })),
+              }, resources);
+              await sendEmail({ to: user.email, ...tpl });
+              await storage.logNotification(userId, "inbox_report_ready", analysis.id);
+              console.log(`[PlacementScheduler] inbox report email sent to ${user.email} for analysis ${analysis.id}`);
+            }
+          }
+        }
+      } catch (notifErr: any) {
+        console.error(`[PlacementScheduler] failed to send inbox report email for user ${userId}:`, notifErr?.message);
+      }
     } else {
       console.log(`[PlacementScheduler] checked ${targetInboxes.length} inbox(es) for user ${userId} — ${summary} — will retry`);
     }

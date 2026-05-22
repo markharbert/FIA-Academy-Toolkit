@@ -485,6 +485,241 @@ export function feedbackCommentEmail(params: {
   return { subject, html: wrap(subject, body, resources), text };
 }
 
+// ─── Inbox Analysis Report ────────────────────────────────────────────────────
+
+type PlacementStatus = "primary" | "promotions" | "social" | "updates" | "forums" | "spam" | "not_found" | "error" | "not_connected";
+type PlacementRow = { label: string; email: string; status: PlacementStatus };
+type SpamFlagRow = { label: string; severity: "high" | "medium" | "low"; matches?: string[] };
+type TechHealth = { hasPlainTextVersion?: boolean; estimatedSizeKb?: number; missingAltCount?: number; trackingPixelCount?: number; hasPreheader?: boolean };
+type ContentQualRow = { wordCount?: number; linkCount?: number; htmlToTextRatio?: number; hasUrlShortener?: boolean };
+type CanSpam = { hasPhysicalAddress?: boolean; hasUnsubscribeLink?: boolean; hasHonestSubject?: boolean };
+
+function scoreColor(score: number): string {
+  if (score >= 80) return "#16a34a";
+  if (score >= 60) return "#d97706";
+  return "#dc2626";
+}
+function scoreLabel(score: number): string {
+  if (score >= 80) return "Excellent deliverability";
+  if (score >= 60) return "Needs some improvement";
+  return "High spam risk — action required";
+}
+function authBadge(result: string | null | undefined): string {
+  if (!result || result === "unknown" || result === "none") return `<span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;">—&nbsp;NONE</span>`;
+  if (result === "pass") return `<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;">&#10003;&nbsp;PASS</span>`;
+  if (result === "softfail") return `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;">~&nbsp;SOFTFAIL</span>`;
+  return `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;">&#10007;&nbsp;${result.toUpperCase()}</span>`;
+}
+function placementIcon(status: PlacementStatus): string {
+  if (status === "primary") return "✅";
+  if (status === "promotions") return "📂";
+  if (status === "social") return "👥";
+  if (status === "updates") return "🔔";
+  if (status === "forums") return "💬";
+  if (status === "spam") return "🚨";
+  if (status === "not_connected") return "○";
+  if (status === "error") return "⚠️";
+  return "—";
+}
+function placementLabel(status: PlacementStatus): string {
+  if (status === "primary") return "Primary Inbox";
+  if (status === "promotions") return "Promotions";
+  if (status === "social") return "Social";
+  if (status === "updates") return "Updates";
+  if (status === "forums") return "Forums";
+  if (status === "spam") return "Spam";
+  if (status === "not_connected") return "Not connected";
+  if (status === "error") return "Error checking";
+  return "Unknown";
+}
+function placementColor(status: PlacementStatus): string {
+  if (status === "primary") return "#166534";
+  if (status === "spam") return "#991b1b";
+  if (status === "error" || status === "not_connected") return "#64748b";
+  return "#92400e";
+}
+function sectionHeader(title: string): string {
+  return `<p style="margin:24px 0 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#94a3b8;border-top:1px solid #f1f5f9;padding-top:20px;">${title}</p>`;
+}
+function checkRow(label: string, ok: boolean | null | undefined, okLabel = "Yes", failLabel = "No"): string {
+  const is = ok === true;
+  return `<tr><td style="padding:7px 0;border-bottom:1px solid #f8fafc;font-size:13px;color:#334155;">${label}</td><td style="padding:7px 0;border-bottom:1px solid #f8fafc;text-align:right;">${is ? `<span style="color:#16a34a;font-weight:600;">${okLabel}</span>` : `<span style="color:#dc2626;font-weight:600;">${failLabel}</span>`}</td></tr>`;
+}
+
+export function inboxAnalysisReportEmail(params: {
+  firstName: string | null;
+  analysisId: string;
+  subject: string;
+  fromName: string | null;
+  fromAddress: string;
+  sendingDomain: string | null;
+  receivedAt: Date | string | null;
+  overallScore: number | null;
+  spfResult: string | null;
+  dkimResult: string | null;
+  dmarcResult: string | null;
+  spamFlags: SpamFlagRow[] | null;
+  technicalHealth: TechHealth | null;
+  contentQuality: ContentQualRow | null;
+  canSpamCompliance: CanSpam | null;
+  aiSuggestions: string[] | null;
+  placementResults: PlacementRow[] | null;
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
+  const name = params.firstName || "there";
+  const emailSubject = `Inbox Report: "${params.subject}"`;
+  const score = params.overallScore ?? null;
+  const scoreStr = score !== null ? String(score) : "—";
+  const color = score !== null ? scoreColor(score) : "#64748b";
+  const verdict = score !== null ? scoreLabel(score) : "Analysis complete";
+  const reportUrl = `${BASE_URL}/email-tools/inbox-analyzer`;
+
+  const receivedStr = params.receivedAt
+    ? new Date(params.receivedAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+    : "";
+
+  // ── Score block ──────────────────────────────────────────────────────────
+  const scoreBlock = `
+    <div style="text-align:center;padding:28px 0 24px;">
+      <div style="display:inline-block;background:${color}10;border:3px solid ${color};border-radius:20px;padding:20px 48px;">
+        <p style="margin:0;font-size:80px;font-weight:900;color:${color};line-height:1;">${scoreStr}</p>
+        <p style="margin:6px 0 0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:${color};">out of 100</p>
+      </div>
+      <p style="margin:14px 0 0;font-size:14px;color:#64748b;font-style:italic;">${verdict}</p>
+    </div>`;
+
+  // ── Email info ───────────────────────────────────────────────────────────
+  const infoBlock = `
+    <div style="background:#f8fafc;border-radius:10px;padding:16px 20px;margin:0 0 8px;border:1px solid #e2e8f0;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr><td style="padding:5px 0;font-size:12px;color:#94a3b8;width:80px;">Subject</td><td style="padding:5px 0;font-size:13px;font-weight:600;color:#1e293b;">${params.subject}</td></tr>
+        <tr><td style="padding:5px 0;font-size:12px;color:#94a3b8;">From</td><td style="padding:5px 0;font-size:13px;color:#334155;">${params.fromName ? `${params.fromName} &lt;${params.fromAddress}&gt;` : params.fromAddress}</td></tr>
+        ${params.sendingDomain ? `<tr><td style="padding:5px 0;font-size:12px;color:#94a3b8;">Domain</td><td style="padding:5px 0;font-size:13px;color:#334155;">${params.sendingDomain}</td></tr>` : ""}
+        ${receivedStr ? `<tr><td style="padding:5px 0;font-size:12px;color:#94a3b8;">Received</td><td style="padding:5px 0;font-size:13px;color:#334155;">${receivedStr}</td></tr>` : ""}
+      </table>
+    </div>`;
+
+  // ── Placement ────────────────────────────────────────────────────────────
+  const placementRows = (params.placementResults || []);
+  const placementBlock = placementRows.length > 0 ? `
+    ${sectionHeader("📬 Inbox Placement")}
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${placementRows.map(r => `
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155;">${placementIcon(r.status)}&nbsp; ${r.label}<br/><span style="font-size:11px;color:#94a3b8;">${r.email}</span></td>
+          <td style="padding:9px 0;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;font-weight:700;color:${placementColor(r.status)};">${placementLabel(r.status)}</td>
+        </tr>`).join("")}
+    </table>` : "";
+
+  // ── Authentication ───────────────────────────────────────────────────────
+  const authBlock = `
+    ${sectionHeader("🔐 Authentication")}
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155;">SPF</td><td style="padding:9px 0;border-bottom:1px solid #f1f5f9;text-align:right;">${authBadge(params.spfResult)}</td></tr>
+      <tr><td style="padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155;">DKIM</td><td style="padding:9px 0;border-bottom:1px solid #f1f5f9;text-align:right;">${authBadge(params.dkimResult)}</td></tr>
+      <tr><td style="padding:9px 0;font-size:13px;color:#334155;">DMARC</td><td style="padding:9px 0;text-align:right;">${authBadge(params.dmarcResult)}</td></tr>
+    </table>`;
+
+  // ── Spam flags ───────────────────────────────────────────────────────────
+  const flags = params.spamFlags || [];
+  const highFlags = flags.filter(f => f.severity === "high");
+  const medFlags = flags.filter(f => f.severity === "medium");
+  const lowFlags = flags.filter(f => f.severity === "low");
+  const spamBlock = `
+    ${sectionHeader(`🚩 Spam Risk${flags.length > 0 ? ` (${flags.length} flag${flags.length !== 1 ? "s" : ""} detected)` : " — None detected"}`)}
+    ${flags.length === 0
+      ? `<p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">&#10003; No spam trigger words or patterns found.</p>`
+      : `<table width="100%" cellpadding="0" cellspacing="0">
+          ${[...highFlags, ...medFlags, ...lowFlags].map(f => {
+            const sev = f.severity === "high" ? "#991b1b" : f.severity === "medium" ? "#92400e" : "#64748b";
+            const bg = f.severity === "high" ? "#fee2e2" : f.severity === "medium" ? "#fef3c7" : "#f1f5f9";
+            return `<tr>
+              <td style="padding:7px 0;border-bottom:1px solid #f8fafc;font-size:13px;color:#334155;">${f.label}${f.matches && f.matches.length ? `<br/><span style="font-size:11px;color:#94a3b8;">${f.matches.slice(0, 3).join(", ")}</span>` : ""}</td>
+              <td style="padding:7px 0;border-bottom:1px solid #f8fafc;text-align:right;"><span style="background:${bg};color:${sev};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">${f.severity.toUpperCase()}</span></td>
+            </tr>`;
+          }).join("")}
+        </table>`}`;
+
+  // ── Technical health ─────────────────────────────────────────────────────
+  const th = params.technicalHealth;
+  const techBlock = th ? `
+    ${sectionHeader("⚙️ Technical Health")}
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${checkRow("Plain text version present", th.hasPlainTextVersion)}
+      ${checkRow("Preheader text present", th.hasPreheader)}
+      ${th.estimatedSizeKb !== undefined ? `<tr><td style="padding:7px 0;border-bottom:1px solid #f8fafc;font-size:13px;color:#334155;">Email size</td><td style="padding:7px 0;border-bottom:1px solid #f8fafc;text-align:right;font-size:13px;color:${(th.estimatedSizeKb ?? 0) > 102 ? "#dc2626" : "#16a34a"};font-weight:600;">${th.estimatedSizeKb}kb${(th.estimatedSizeKb ?? 0) > 102 ? " ⚠️" : ""}</td></tr>` : ""}
+      ${th.missingAltCount !== undefined ? `<tr><td style="padding:7px 0;border-bottom:1px solid #f8fafc;font-size:13px;color:#334155;">Images missing ALT text</td><td style="padding:7px 0;border-bottom:1px solid #f8fafc;text-align:right;font-size:13px;color:${(th.missingAltCount ?? 0) > 0 ? "#dc2626" : "#16a34a"};font-weight:600;">${th.missingAltCount}</td></tr>` : ""}
+      ${th.trackingPixelCount !== undefined ? `<tr><td style="padding:7px 0;font-size:13px;color:#334155;">Tracking pixels</td><td style="padding:7px 0;text-align:right;font-size:13px;color:${(th.trackingPixelCount ?? 0) > 0 ? "#d97706" : "#16a34a"};font-weight:600;">${th.trackingPixelCount}</td></tr>` : ""}
+    </table>` : "";
+
+  // ── Content quality ──────────────────────────────────────────────────────
+  const cq = params.contentQuality;
+  const cqBlock = cq ? `
+    ${sectionHeader("📝 Content Quality")}
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${cq.wordCount !== undefined ? `<tr><td style="padding:7px 0;border-bottom:1px solid #f8fafc;font-size:13px;color:#334155;">Word count</td><td style="padding:7px 0;border-bottom:1px solid #f8fafc;text-align:right;font-size:13px;font-weight:600;color:${(cq.wordCount ?? 0) < 50 ? "#dc2626" : "#334155"};">${cq.wordCount}</td></tr>` : ""}
+      ${cq.linkCount !== undefined ? `<tr><td style="padding:7px 0;border-bottom:1px solid #f8fafc;font-size:13px;color:#334155;">Links</td><td style="padding:7px 0;border-bottom:1px solid #f8fafc;text-align:right;font-size:13px;font-weight:600;color:#334155;">${cq.linkCount}</td></tr>` : ""}
+      ${checkRow("URL shorteners detected", cq.hasUrlShortener === false ? true : false, "None", "Yes ⚠️")}
+    </table>` : "";
+
+  // ── CAN-SPAM ─────────────────────────────────────────────────────────────
+  const cs = params.canSpamCompliance;
+  const canSpamBlock = cs ? `
+    ${sectionHeader("⚖️ CAN-SPAM Compliance")}
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${checkRow("Physical address included", cs.hasPhysicalAddress)}
+      ${checkRow("Unsubscribe link present", cs.hasUnsubscribeLink)}
+      ${checkRow("Honest subject line", cs.hasHonestSubject)}
+    </table>` : "";
+
+  // ── AI suggestions ───────────────────────────────────────────────────────
+  const suggestions = params.aiSuggestions || [];
+  const aiBlock = suggestions.length > 0 ? `
+    ${sectionHeader("💡 AI Suggestions")}
+    <ul style="margin:0;padding-left:20px;">
+      ${suggestions.map(s => `<li style="font-size:13px;color:#334155;line-height:1.7;margin-bottom:4px;">${s}</li>`).join("")}
+    </ul>` : "";
+
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;">Your Inbox Analyzer report is ready. Here's the full breakdown:</p>
+    ${scoreBlock}
+    ${infoBlock}
+    ${placementBlock}
+    ${authBlock}
+    ${spamBlock}
+    ${techBlock}
+    ${cqBlock}
+    ${canSpamBlock}
+    ${aiBlock}
+    ${btn("View Full Report", reportUrl)}`;
+
+  const text = [
+    `Hey ${name},`,
+    ``,
+    `Your Inbox Analyzer report is ready.`,
+    ``,
+    `Overall Score: ${scoreStr}/100 — ${verdict}`,
+    `Subject: ${params.subject}`,
+    `From: ${params.fromName ? `${params.fromName} <${params.fromAddress}>` : params.fromAddress}`,
+    params.sendingDomain ? `Domain: ${params.sendingDomain}` : ``,
+    ``,
+    placementRows.length > 0 ? `INBOX PLACEMENT\n${placementRows.map(r => `  ${placementLabel(r.status)}: ${r.label} (${r.email})`).join("\n")}` : ``,
+    ``,
+    `AUTHENTICATION`,
+    `  SPF: ${params.spfResult || "none"}`,
+    `  DKIM: ${params.dkimResult || "none"}`,
+    `  DMARC: ${params.dmarcResult || "none"}`,
+    ``,
+    flags.length > 0 ? `SPAM FLAGS (${flags.length})\n${flags.map(f => `  [${f.severity.toUpperCase()}] ${f.label}`).join("\n")}` : `No spam flags detected.`,
+    ``,
+    suggestions.length > 0 ? `AI SUGGESTIONS\n${suggestions.map(s => `  - ${s}`).join("\n")}` : ``,
+    ``,
+    `View full report: ${reportUrl}`,
+  ].filter(l => l !== undefined).join("\n");
+
+  return { subject: emailSubject, html: wrap(emailSubject, body, resources), text };
+}
+
 export function workspaceInviteEmail(params: {
   ownerName: string;
   inviteUrl: string;

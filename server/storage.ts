@@ -437,6 +437,7 @@ export interface IStorage {
   updateEmailAnalysis(id: string, data: Partial<EmailAnalysis>): Promise<void>;
   getEmailAnalyses(userId: string, limit?: number): Promise<EmailAnalysis[]>;
   getEmailAnalysis(id: string, userId: string): Promise<EmailAnalysis | undefined>;
+  getEmailAnalysisByMessageId(messageId: string, userId: string): Promise<EmailAnalysis | undefined>;
   deleteEmailAnalysis(id: string, userId: string): Promise<void>;
   // Seed Inboxes (admin-managed)
   getSeedInboxes(activeOnly?: boolean): Promise<SeedInbox[]>;
@@ -3223,6 +3224,12 @@ export class DatabaseStorage implements IStorage {
   async getEmailAnalysis(id: string, userId: string): Promise<EmailAnalysis | undefined> {
     const [row] = await db.select().from(emailAnalyses)
       .where(and(eq(emailAnalyses.id, id), eq(emailAnalyses.userId, userId)));
+    return row || undefined;
+  }
+
+  async getEmailAnalysisByMessageId(messageId: string, userId: string): Promise<EmailAnalysis | undefined> {
+    const [row] = await db.select().from(emailAnalyses)
+      .where(and(eq(emailAnalyses.messageId, messageId), eq(emailAnalyses.userId, userId)));
     return row || undefined;
   }
 

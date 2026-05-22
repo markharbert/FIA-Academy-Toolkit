@@ -1644,6 +1644,7 @@ export interface NotificationPreferences {
   videoPracticeReminder: { enabled: boolean };
   reputationDropAlert: { enabled: boolean };
   weeklyInboxReport: { enabled: boolean; dayOfWeek: number; hour: number };
+  inboxReportReady: { enabled: boolean };
   featureRequestReceived: { enabled: boolean };
   bugReportReceived: { enabled: boolean };
   featureRequestComment: { enabled: boolean };
@@ -1664,6 +1665,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   videoPracticeReminder: { enabled: false },
   reputationDropAlert: { enabled: true },
   weeklyInboxReport: { enabled: false, dayOfWeek: 1, hour: 8 },
+  inboxReportReady: { enabled: true },
   featureRequestReceived: { enabled: true },
   bugReportReceived: { enabled: true },
   featureRequestComment: { enabled: true },

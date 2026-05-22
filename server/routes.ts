@@ -5509,6 +5509,51 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   });
 
   // Re-run analysis on an existing email (e.g. stuck in processing/failed)
+  app.post("/api/inbox-analyzer/emails/:id/resend-report", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const emailId = req.params.id;
+      const userId = req.session.userId!;
+      const analysis = await storage.getEmailAnalysis(emailId, userId);
+      if (!analysis) return res.status(404).json({ message: "Email not found" });
+      if (analysis.status !== "complete") return res.status(400).json({ message: "Analysis is not complete yet" });
+      if (!analysis.placementConfirmedAt) return res.status(400).json({ message: "Placement monitoring has not finished yet" });
+
+      const user = await storage.getUser(userId);
+      if (!user?.email) return res.status(400).json({ message: "No email address on your account" });
+
+      const [resources] = await Promise.all([storage.getActiveEmailResources()]);
+      const { inboxAnalysisReportEmail } = await import("./email-templates");
+      const { sendEmail } = await import("./email-sendgrid");
+      const tpl = inboxAnalysisReportEmail({
+        firstName: user.firstName ?? null,
+        analysisId: analysis.id,
+        subject: analysis.subject,
+        fromName: analysis.fromName ?? null,
+        fromAddress: analysis.fromAddress,
+        sendingDomain: analysis.sendingDomain ?? null,
+        receivedAt: analysis.receivedAt ?? null,
+        overallScore: analysis.overallScore ?? null,
+        spfResult: analysis.spfResult ?? null,
+        dkimResult: analysis.dkimResult ?? null,
+        dmarcResult: analysis.dmarcResult ?? null,
+        spamFlags: (analysis.spamFlags as any[] | null) ?? null,
+        technicalHealth: (analysis.technicalHealth as any) ?? null,
+        contentQuality: (analysis.contentQuality as any) ?? null,
+        canSpamCompliance: (analysis.canSpamCompliance as any) ?? null,
+        aiSuggestions: (analysis.copyFeedback as any)?.topSuggestions ?? null,
+        placementResults: Array.isArray(analysis.placementResults)
+          ? (analysis.placementResults as any[]).map((r: any) => ({ label: r.label, email: r.email, status: r.status }))
+          : null,
+      }, resources);
+      await sendEmail({ to: user.email, ...tpl });
+      await storage.logNotification(userId, "inbox_report_ready_resend", analysis.id);
+      return res.json({ message: "Report sent to " + user.email });
+    } catch (err) {
+      console.error("[inbox-analyzer] resend-report error:", err);
+      res.status(500).json({ message: "Failed to send report" });
+    }
+  });
+
   app.post("/api/inbox-analyzer/emails/:id/reanalyze", requireAuth, async (req: Request, res: Response) => {
     try {
       const emailId = req.params.id;

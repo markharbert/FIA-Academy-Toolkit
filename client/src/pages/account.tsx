@@ -756,6 +756,7 @@ export default function AccountPage() {
                         items: [
                           { key: "reputationDropAlert" as const, label: "Sender reputation drop", desc: "Instant alert when your Google Postmaster reputation drops." },
                           { key: "weeklyInboxReport" as const, label: "Weekly inbox report", desc: "Inbox placement rate and spam rate summary for the week." },
+                          { key: "inboxReportReady" as const, label: "Inbox Analyzer report ready", desc: "Full deliverability report emailed when both analysis and placement monitoring complete." },
                         ],
                       },
                       {

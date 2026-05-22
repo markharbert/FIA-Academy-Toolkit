@@ -25,7 +25,7 @@ import {
   Inbox, Info, CircleCheck, CircleX, CircleAlert,
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
   User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
-  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare, Scale, Key,
+  Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare, Scale, Key, Send,
 } from "lucide-react";
 import { SiGmail } from "react-icons/si";
 import { apiRequest } from "@/lib/queryClient";
@@ -1568,6 +1568,20 @@ function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddres
   isActivePlacementEmail?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/inbox-analyzer/emails/${email.id}/resend-report`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Report sent", description: data?.message ?? "Check your inbox." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not send report", description: err?.message ?? "Please try again.", variant: "destructive" });
+    },
+  });
+  const canResend = email.status === "complete" && !!email.placementConfirmedAt;
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-sm" data-testid={`email-row-${email.id}`}>
@@ -1593,6 +1607,20 @@ function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddres
         {/* Right-side controls — outside the expand button so clicks don't toggle */}
         <div className="flex items-center gap-1 flex-shrink-0">
           <StatusBadge status={email.status} />
+
+          {canResend && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-sky-500 hover:bg-sky-500/10"
+              onClick={(e) => { e.stopPropagation(); resendMutation.mutate(); }}
+              disabled={resendMutation.isPending}
+              title="Re-send report to email"
+              data-testid={`email-resend-${email.id}`}
+            >
+              {resendMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            </Button>
+          )}
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
