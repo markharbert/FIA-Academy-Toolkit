@@ -1918,7 +1918,7 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, defa
   return (
     <div className="space-y-6">
       {/* Top row: reputation badge on left, all controls on right */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap-reverse">
         <ReputationBadge
           reputation={
             [...filtered]
