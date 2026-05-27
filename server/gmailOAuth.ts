@@ -78,12 +78,22 @@ function gmailDateStr(d: Date): string {
 
 // Strip characters that break Gmail search query parsing.
 // Keeps the subject readable while preventing operator injection.
+// IMPORTANT: truncate at a word boundary, never mid-word — a truncated word
+// (e.g. "busines" from "business") inside a quoted phrase search causes
+// Gmail to return zero results even when the email is present.
 function sanitizeSubject(subject: string): string {
-  return subject
+  const MAX = 70;
+  let s = subject
     .replace(/['"\\[\]{}()|<>^~*?]/g, "")
     .replace(/\s+/g, " ")
-    .substring(0, 45)
     .trim();
+  if (s.length > MAX) {
+    s = s.substring(0, MAX);
+    const lastSpace = s.lastIndexOf(" ");
+    // Back up to last complete word if one exists past the halfway point
+    if (lastSpace > MAX / 2) s = s.substring(0, lastSpace);
+  }
+  return s.trim();
 }
 
 // Run all six folder searches for a given base query.

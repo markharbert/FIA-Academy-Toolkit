@@ -4,12 +4,20 @@ import { decryptApiKey } from "./storage";
 
 const MIN_AGE_FOR_BROAD_SEARCH_MS = 25 * 60 * 1000;
 
+// Mirrors the word-boundary truncation in gmailOAuth.ts sanitizeSubject().
+// A truncated word in an IMAP SUBJECT search causes missed matches.
 function sanitizeForImap(s: string): string {
-  return s
+  const MAX = 70;
+  let out = s
     .replace(/["\\[\]{}()|<>^~*?]/g, "")
     .replace(/\s+/g, " ")
-    .substring(0, 45)
     .trim();
+  if (out.length > MAX) {
+    out = out.substring(0, MAX);
+    const lastSpace = out.lastIndexOf(" ");
+    if (lastSpace > MAX / 2) out = out.substring(0, lastSpace);
+  }
+  return out.trim();
 }
 
 type ImapCriteria = {

@@ -5423,11 +5423,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
       const allInboxes = await storage.getSeedInboxes(true); // active only
       const { checkGmailPlacementServiceAccount: saCheck, isServiceAccountConfigured, isServiceAccountEligible } = await import("./gmailOAuth");
+      const { checkGmailPlacementImap } = await import("./imapPlacement");
       const saConfigured = isServiceAccountConfigured();
-      // SA (DWD) only works for Workspace accounts. @gmail.com inboxes must use OAuth.
+      // SA (DWD): Workspace accounts. IMAP: @gmail.com with App Password. OAuth: legacy.
       const connectedInboxes = allInboxes.filter(i =>
         i.provider === "gmail" && (
-          (saConfigured && isServiceAccountEligible(i.email)) || i.isConnected
+          (saConfigured && isServiceAccountEligible(i.email)) ||
+          i.authMethod === "imap" ||
+          (i.isConnected && i.oauthAccessToken)
         )
       );
 
@@ -5436,9 +5439,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
 
       // Pass the pinned email context (Message-ID, subject, received-at) so the Gmail
-      // query targets only the specific email under monitoring.  Message-ID is the gold
-      // standard: a single globally-unique identifier that matches exactly one message
-      // regardless of sender, subject, or date.
+      // query targets only the specific email under monitoring.
       const emailContext = {
         messageId: address?.placementCheckMessageId ?? null,
         receivedAt: address?.placementCheckReceivedAt ?? null,
@@ -5446,22 +5447,26 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       };
 
       const results: PlacementResult[] = await Promise.all(
-        connectedInboxes.map(inbox =>
-          (saConfigured && isServiceAccountEligible(inbox.email))
-            ? saCheck(inbox, sendingFrom, emailContext)
-            : checkGmailPlacement(
-                {
-                  id: inbox.id,
-                  label: inbox.label,
-                  email: inbox.email,
-                  provider: inbox.provider,
-                  oauthAccessToken: inbox.oauthAccessToken,
-                  oauthRefreshToken: inbox.oauthRefreshToken,
-                },
-                sendingFrom,
-                emailContext
-              )
-        )
+        connectedInboxes.map(inbox => {
+          // 1. Service Account (Google Workspace — DWD, never expires)
+          if (saConfigured && isServiceAccountEligible(inbox.email)) {
+            return saCheck(inbox, sendingFrom, emailContext);
+          }
+          // 2. IMAP + App Password (personal Gmail, permanent)
+          if (inbox.authMethod === "imap") {
+            return checkGmailPlacementImap(
+              { id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword },
+              sendingFrom,
+              emailContext
+            );
+          }
+          // 3. Legacy OAuth
+          return checkGmailPlacement(
+            { id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken },
+            sendingFrom,
+            emailContext
+          );
+        })
       );
 
       // Persist results so they survive page refresh
