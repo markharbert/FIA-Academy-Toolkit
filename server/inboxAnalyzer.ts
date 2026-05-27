@@ -627,19 +627,6 @@ export async function analyzeSenderTrust(
   sendingDomain: string,
   bodyHtml: string = ""
 ): Promise<SenderTrust> {
-  const displayNameMatch = fromRaw.match(/^"?([^"<\n]+)"?\s*</);
-  const displayName = displayNameMatch ? displayNameMatch[1].trim().toLowerCase() : null;
-
-  let displayNameDomainMatch: boolean | null = null;
-  if (displayName && sendingDomain) {
-    const domainRoot = sendingDomain.split(".").slice(-2, -1)[0]?.toLowerCase() || "";
-    const firstWord = displayName.split(/\s+/)[0] || "";
-    displayNameDomainMatch =
-      displayName.includes(domainRoot) ||
-      domainRoot.includes(firstWord) ||
-      firstWord.includes(domainRoot);
-  }
-
   let replyToMatchesFrom: boolean | null = null;
   if (replyTo && replyTo.trim().length > 0) {
     const replyDomainMatch = replyTo.match(/@([\w.-]+)/);
@@ -670,7 +657,7 @@ export async function analyzeSenderTrust(
     trackingDomainRoots.some(r => r !== sendingRoot);
 
   return {
-    displayNameDomainMatch,
+    displayNameDomainMatch: null,
     replyToMatchesFrom,
     blacklisted: blacklistHits.length > 0,
     blacklistHits,
@@ -998,15 +985,14 @@ export function computeOverallScore(params: {
   if (params.dkimRecordExists) authPoints += 3;
   // max 30
 
-  // Sender Trust: 15 pts (IP 4 + domain 4 + display name 4 + reply-to 3)
+  // Sender Trust: 15 pts (IP blacklist 5 + domain blacklist 5 + reply-to 5)
   let trustPoints = 10; // default when not yet analyzed
   if (params.senderTrust) {
     const st = params.senderTrust;
     trustPoints = 0;
-    if (!st.blacklisted) trustPoints += 4;
-    if (!st.domainBlacklisted) trustPoints += 4;
-    if (st.displayNameDomainMatch === true) trustPoints += 4;
-    if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) trustPoints += 3;
+    if (!st.blacklisted) trustPoints += 5;
+    if (!st.domainBlacklisted) trustPoints += 5;
+    if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) trustPoints += 5;
   }
   // max 15
 

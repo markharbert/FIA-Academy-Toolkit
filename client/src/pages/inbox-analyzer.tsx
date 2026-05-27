@@ -215,10 +215,9 @@ function computeAuthScore(email: EmailAnalysis): number | null {
 function computeSenderTrustScore(st: SenderTrust | null): number | null {
   if (!st) return null;
   let pts = 0;
-  if (!st.blacklisted) pts += 4;
-  if (!st.domainBlacklisted) pts += 4;
-  if (st.displayNameDomainMatch === true) pts += 4;
-  if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) pts += 3;
+  if (!st.blacklisted) pts += 5;
+  if (!st.domainBlacklisted) pts += 5;
+  if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) pts += 5;
   return Math.round((pts / 15) * 100);
 }
 
@@ -714,10 +713,9 @@ function EmailDetail({ email, onDelete, onReanalyze, onRetryPlacement, seedInbox
               })() },
               { label: "Trust", score: st ? (() => {
                 let p = 0;
-                if (!st.blacklisted) p += 4;
-                if (!st.domainBlacklisted) p += 4;
-                if (st.displayNameDomainMatch === true) p += 4;
-                if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) p += 3;
+                if (!st.blacklisted) p += 5;
+                if (!st.domainBlacklisted) p += 5;
+                if (st.replyToMatchesFrom === true || st.replyToMatchesFrom === null) p += 5;
                 return Math.round((p / 15) * 100);
               })() : null },
               { label: "Spam", score: email.spamScore },
@@ -1953,7 +1951,7 @@ function MyAddressTab({
           <div className="grid sm:grid-cols-2 gap-3">
             {[
               { icon: ShieldCheck, label: "Authentication (30 pts)", desc: "SPF, DKIM, and DMARC pass/fail results from your actual sending server — plus DNS record presence." },
-              { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist check (Spamhaus ZEN); sending domain blacklist check (Spamhaus DBL); click tracking domain blacklist monitoring; display name / domain match; Reply-To alignment." },
+              { icon: ShieldAlert, label: "Sender Trust (15 pts)", desc: "IP blacklist check (Spamhaus ZEN); sending domain blacklist check (Spamhaus DBL); click tracking domain blacklist monitoring; Reply-To alignment." },
               { icon: AlertTriangle, label: "Spammy Language (35 pts)", desc: "Comprehensive scan for 100+ high / medium / low-risk trigger phrases in both subject and body — grouped by severity with highlighted matches." },
               { icon: Zap, label: "Technical Health (10 pts)", desc: "HTML/text version, preheader, email size, missing ALT text, tracking pixels, and external domains." },
               { icon: BookOpen, label: "Content Quality (10 pts)", desc: "Three tiers: Tier 1 Spam Risk (6 pts) — URL shorteners, hidden text, HTML-to-text ratio, link density. Tier 2 Engagement (3 pts) — subject line length, word count. Tier 3 Best Practices (1 pt) — personalization and P.S." },
