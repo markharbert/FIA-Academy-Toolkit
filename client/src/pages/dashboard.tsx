@@ -109,7 +109,33 @@ function reputationTone(rep: string | null | undefined) {
   if (r === "MEDIUM") return { label: "Good", color: "text-sky-500", dot: "bg-sky-500" };
   if (r === "LOW") return { label: "Low", color: "text-amber-500", dot: "bg-amber-500" };
   if (r === "BAD") return { label: "Bad", color: "text-rose-500", dot: "bg-rose-500" };
-  return { label: "Unknown", color: "text-muted-foreground", dot: "bg-muted-foreground/40" };
+  return { label: "No data", color: "text-muted-foreground", dot: "bg-muted-foreground/40" };
+}
+
+// Derive reputation and spam rate from the last 90 days of trafficStats rather than
+// the all-time snapshot columns (latestReputation / latestSpamRate) so the widget
+// always reflects recent sending behaviour, not a value that may be months old.
+function filterPostmasterLast90(stats: any[] | null | undefined): any[] {
+  if (!stats?.length) return [];
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  return [...stats]
+    .filter((s: any) => s.date >= cutoffStr)
+    .sort((a: any, b: any) => b.date.localeCompare(a.date));
+}
+
+function domainRep90(d: PostmasterDomain): string | null {
+  const stats = filterPostmasterLast90(d.trafficStats as any[]);
+  return (
+    stats.find((s: any) => s.domainReputation && s.domainReputation !== "REPUTATION_CATEGORY_UNSPECIFIED")
+      ?.domainReputation ?? null
+  );
+}
+
+function domainSpam90(d: PostmasterDomain): number | null {
+  const stats = filterPostmasterLast90(d.trafficStats as any[]);
+  return stats.find((s: any) => s.spamRate != null)?.spamRate ?? null;
 }
 
 const ANOMALY_META: Record<AnomalyEvent["type"], { icon: React.ComponentType<{ className?: string }>; label: string; color: string; bg: string; ring: string }> = {
@@ -289,7 +315,7 @@ export default function DashboardPage() {
     const domains = reputation?.domains ?? [];
     return (saved && domains.find(d => d.domainName === saved)) || domains[0] || null;
   }, [reputation]);
-  const repTone = reputationTone(primaryDomain?.latestReputation);
+  const repTone = reputationTone(primaryDomain ? domainRep90(primaryDomain) : null);
 
   // Inbox placement: count primaries from last test
   const placement = useMemo(() => {
@@ -853,18 +879,33 @@ function EmailHealthTile({
             <p className="text-[11px] text-muted-foreground mb-2">
               {reputation.lastSyncedAt ? `Synced ${timeAgo(new Date(reputation.lastSyncedAt))}` : "Awaiting sync"}
             </p>
-            <div className="space-y-1.5">
+            <p className="text-[10px] text-muted-foreground/60 mb-1.5">Last 90 days</p>
+            <div className="space-y-2">
               {(reputation.domains ?? []).slice(0, 10).map(d => {
-                const tone = reputationTone(d.latestReputation);
+                const rep90 = domainRep90(d);
+                const spam90 = domainSpam90(d);
+                const tone = reputationTone(rep90);
                 const isDefault = d.domainName === localStorage.getItem("postmaster_default_domain");
+                const spamColor = spam90 == null
+                  ? "text-muted-foreground"
+                  : spam90 < 0.001 ? "text-emerald-500"
+                  : spam90 < 0.003 ? "text-amber-500"
+                  : "text-rose-500";
                 return (
-                  <div key={d.domainName} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={`h-2 w-2 rounded-full flex-shrink-0 ${tone.dot}`} />
-                      <span className="text-xs text-foreground truncate">{d.domainName}</span>
-                      {isDefault && <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400 flex-shrink-0" />}
+                  <div key={d.domainName}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`h-2 w-2 rounded-full flex-shrink-0 ${tone.dot}`} />
+                        <span className="text-xs text-foreground truncate">{d.domainName}</span>
+                        {isDefault && <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400 flex-shrink-0" />}
+                      </div>
+                      <span className={`text-xs font-semibold flex-shrink-0 ${tone.color}`}>{tone.label}</span>
                     </div>
-                    <span className={`text-xs font-semibold flex-shrink-0 ${tone.color}`}>{tone.label}</span>
+                    {spam90 != null && (
+                      <p className={`text-[10px] ml-3.5 mt-0.5 tabular-nums ${spamColor}`}>
+                        Spam rate {(spam90 * 100).toFixed(4)}%
+                      </p>
+                    )}
                   </div>
                 );
               })}
