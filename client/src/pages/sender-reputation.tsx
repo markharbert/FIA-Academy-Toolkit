@@ -1121,10 +1121,14 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
       ? ` Note: this data is from ${ipDateLabel} (${ipDataAgeDays} days ago) — Google's updated Postmaster Tools no longer shows live IP reputation, so this may not reflect your current standing.`
       : ` Data is from ${ipDateLabel}.`;
 
-    const badIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "BAD");
-    const lowIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "LOW");
-    const mediumIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "MEDIUM");
-    const highIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "HIGH");
+    // The Postmaster API always returns all four reputation buckets (BAD/LOW/MEDIUM/HIGH) as
+    // placeholders, even when zero IPs are in that tier. We must check that a bucket actually
+    // has IPs (ipCount > 0 or at least one sampleIp) before treating it as populated.
+    const hasIps = (ip: IpReputation) => (ip.ipCount ?? 0) > 0 || (ip.sampleIps?.length ?? 0) > 0;
+    const badIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "BAD" && hasIps(ip));
+    const lowIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "LOW" && hasIps(ip));
+    const mediumIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "MEDIUM" && hasIps(ip));
+    const highIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "HIGH" && hasIps(ip));
 
     if (badIps.length > 0) {
       items.push({
