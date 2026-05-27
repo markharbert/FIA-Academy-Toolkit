@@ -392,46 +392,6 @@ function AuthChart({ stats }: { stats: DailyTrafficStat[] }) {
   );
 }
 
-function EncryptionChart({ stats }: { stats: DailyTrafficStat[] }) {
-  const hasInbound = stats.some(s => s.inboundEncryptionRatio != null);
-  const data = stats
-    .filter(s => s.outboundEncryptionRatio != null || s.inboundEncryptionRatio != null)
-    .map(s => ({
-      date: shortDate(s.date),
-      Outbound: s.outboundEncryptionRatio != null ? +(s.outboundEncryptionRatio * 100).toFixed(1) : null,
-      ...(hasInbound ? { Inbound: s.inboundEncryptionRatio != null ? +(s.inboundEncryptionRatio * 100).toFixed(1) : null } : {}),
-    }));
-
-  if (data.length === 0) {
-    return <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No encryption data in this period</div>;
-  }
-
-  return (
-    <div className="h-44">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-          <defs>
-            <linearGradient id="outGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="inGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} />
-              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
-          <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={v => `${v}%`} />
-          <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`]} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-          <Area type="monotone" dataKey="Outbound" stroke="#3b82f6" strokeWidth={2} fill="url(#outGrad)" dot={false} connectNulls />
-          {hasInbound && <Area type="monotone" dataKey="Inbound" stroke="#8b5cf6" strokeWidth={2} fill="url(#inGrad)" dot={false} connectNulls />}
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
 
 function ReputationHistoryChart({ stats }: { stats: DailyTrafficStat[] }) {
   const data = stats
@@ -612,8 +572,6 @@ function buildComplianceItems(domain: PostmasterDomainData, filtered: DailyTraff
   const dkim = latest.find(s => s.dkimSuccessRatio != null)?.dkimSuccessRatio ?? null;
   const dmarc = latest.find(s => s.dmarcSuccessRatio != null)?.dmarcSuccessRatio ?? null;
   const spam = latest.find(s => s.spamRate != null)?.spamRate ?? null;
-  const tls = latest.find(s => s.outboundEncryptionRatio != null)?.outboundEncryptionRatio ?? null;
-
   const hasPtrError = filtered.some(s =>
     s.deliveryErrors.some(e => e.errorType === "BAD_PTR_RECORD" && e.errorRatio > 0.001)
   );
@@ -622,7 +580,6 @@ function buildComplianceItems(domain: PostmasterDomainData, filtered: DailyTraff
   const spfPct = spf != null ? Math.round(spf * 100) : null;
   const dkimPct = dkim != null ? Math.round(dkim * 100) : null;
   const dmarcPct = dmarc != null ? Math.round(dmarc * 100) : null;
-  const tlsPct = tls != null ? Math.round(tls * 100) : null;
 
   return [
     {
@@ -660,14 +617,6 @@ function buildComplianceItems(domain: PostmasterDomainData, filtered: DailyTraff
         : spam < 0.003 ? `${(spam * 100).toFixed(4)}% — approaching 0.10% warning threshold`
         : `${(spam * 100).toFixed(4)}% — above 0.30% critical limit`,
       learnUrl: "https://support.google.com/mail/answer/81126#spam-rate",
-    },
-    {
-      id: "tls",
-      label: "TLS Encryption",
-      detail: "Emails should be delivered over an encrypted TLS connection.",
-      status: tls == null ? "nodata" : tls >= 0.95 ? "pass" : "warning",
-      note: tls == null ? "No data yet" : tlsPct! >= 95 ? `${tlsPct}% of sends encrypted — great` : `${tlsPct}% encrypted — some sends are unencrypted`,
-      learnUrl: "https://support.google.com/mail/answer/81126#tls",
     },
     {
       id: "ptr",
@@ -1837,9 +1786,6 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, defa
   const latestSpf = latestFiltered.find(s => s.spfSuccessRatio != null)?.spfSuccessRatio ?? null;
   const latestDkim = latestFiltered.find(s => s.dkimSuccessRatio != null)?.dkimSuccessRatio ?? null;
   const latestDmarc = latestFiltered.find(s => s.dmarcSuccessRatio != null)?.dmarcSuccessRatio ?? null;
-  const latestOutEnc = latestFiltered.find(s => s.outboundEncryptionRatio != null)?.outboundEncryptionRatio ?? null;
-  const latestInEnc = latestFiltered.find(s => s.inboundEncryptionRatio != null)?.inboundEncryptionRatio ?? null;
-
   const spamColor = latestSpam == null ? "muted" : latestSpam < 0.001 ? "emerald" : latestSpam < 0.003 ? "amber" : "red";
   const authColor = (v: number | null) => v == null ? "muted" : v >= 0.95 ? "emerald" : v >= 0.80 ? "amber" : "red";
 
@@ -1921,13 +1867,11 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, defa
       </div>
 
       {/* Summary stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Spam Rate" value={latestSpam != null ? `${(latestSpam * 100).toFixed(4)}%` : "—"} sublabel="user reported" color={spamColor as any} />
         <StatCard label="SPF" value={pct(latestSpf, 1)} sublabel="pass rate" color={authColor(latestSpf) as any} />
         <StatCard label="DKIM" value={pct(latestDkim, 1)} sublabel="pass rate" color={authColor(latestDkim) as any} />
         <StatCard label="DMARC" value={pct(latestDmarc, 1)} sublabel="pass rate" color={authColor(latestDmarc) as any} />
-        <StatCard label="Outbound TLS" value={pct(latestOutEnc, 1)} sublabel="encrypted" color={authColor(latestOutEnc) as any} />
-        <StatCard label="Inbound TLS" value={pct(latestInEnc, 1)} sublabel="encrypted" color={authColor(latestInEnc) as any} />
       </div>
 
       {/* Tabbed content */}
@@ -2015,23 +1959,6 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, defa
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader className="pb-2 pt-4 px-5">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Lock className="h-4 w-4 text-blue-500" />
-                      TLS Encryption
-                      <span className="text-[10px] font-normal text-muted-foreground ml-1">Outbound · Inbound</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5 pb-4 space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <RatioBar label="Outbound" value={latestOutEnc} />
-                      <RatioBar label="Inbound" value={latestInEnc} />
-                    </div>
-                    <Separator />
-                    <EncryptionChart stats={filtered} />
-                  </CardContent>
-                </Card>
               </div>
             </>
           )}
