@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { TaskDetailSheet } from "@/components/projects/task-detail-sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,7 @@ import {
 import type {
   Session, DmoEntry, EmailAnalysis, Script,
   InsightsResponse, AnomalyEvent, PostmasterDomain, ProjectWithCounts,
-  ProjectTask,
+  ProjectTask, Project, ProjectColumn,
 } from "@shared/schema";
 
 type OpenTask = ProjectTask & { projectName: string; projectColor: string };
@@ -689,37 +690,52 @@ function ProjectsHero({
 }) {
   const s = summary ?? { projects: [], totalActive: 0, totalOpenTasks: 0, totalDueThisWeek: 0, totalOverdue: 0 };
 
-  // "Up Next" = tasks due this week only (overdue + today + this week).
-  // Tasks without a due date and tasks dated further out are intentionally hidden.
+  // Sheet state — mirrors the pattern from projects.tsx list view
+  const [listTask, setListTask] = useState<OpenTask | null>(null);
+  const { data: listProject } = useQuery<Project>({
+    queryKey: ["/api/projects", listTask?.projectId],
+    enabled: !!listTask,
+  });
+  const { data: listColumns = [] } = useQuery<ProjectColumn[]>({
+    queryKey: ["/api/projects", listTask?.projectId, "columns"],
+    enabled: !!listTask,
+  });
+  const { data: listProjectTasks = [] } = useQuery<ProjectTask[]>({
+    queryKey: ["/api/projects", listTask?.projectId, "tasks"],
+    enabled: !!listTask,
+  });
+  const listSubtasks = listTask ? listProjectTasks.filter(t => t.parentTaskId === listTask.id) : [];
+  const listParentTask = listTask?.parentTaskId
+    ? listProjectTasks.find(t => t.id === listTask.parentTaskId) ?? null
+    : null;
+
+  // Show all tasks that have a due date, grouped by urgency.
   const grouped = useMemo(() => {
     const overdue: OpenTask[] = [];
     const today: OpenTask[] = [];
     const week: OpenTask[] = [];
+    const later: OpenTask[] = [];
     for (const t of tasks) {
+      if (!t.dueDate) continue; // skip tasks with no due date
       const b = bucketTask(t, tz);
       if (b === "overdue") overdue.push(t);
       else if (b === "today") today.push(t);
       else if (b === "week") week.push(t);
+      else if (b === "later") later.push(t);
     }
-    // Limit to ~8 total, prioritizing earlier groups.
     const out: Array<{ section: string; tone: string; items: OpenTask[] }> = [];
-    let remaining = 8;
-    const push = (section: string, tone: string, items: OpenTask[]) => {
-      if (items.length === 0 || remaining <= 0) return;
-      const take = items.slice(0, remaining);
-      out.push({ section, tone, items: take });
-      remaining -= take.length;
-    };
-    push("Past Due", "text-rose-600 dark:text-rose-400", overdue);
-    push("Today", "text-amber-600 dark:text-amber-400", today);
-    push("This week", "text-sky-600 dark:text-sky-400", week);
+    if (overdue.length) out.push({ section: "Past Due",   tone: "text-rose-600 dark:text-rose-400",  items: overdue });
+    if (today.length)   out.push({ section: "Today",      tone: "text-amber-600 dark:text-amber-400", items: today });
+    if (week.length)    out.push({ section: "This week",  tone: "text-sky-600 dark:text-sky-400",    items: week });
+    if (later.length)   out.push({ section: "Upcoming",   tone: "text-muted-foreground",             items: later });
     return out;
-  }, [tasks]);
+  }, [tasks, tz]);
 
   const hasAnyTasks = grouped.some(g => g.items.length > 0);
   const hasAnyProjects = s.totalActive > 0;
 
   return (
+    <>
     <Card
       className="relative overflow-hidden border-card-border bg-card lg:col-span-2 hover-elevate transition-all"
       data-testid="card-projects-hero"
@@ -814,25 +830,27 @@ function ProjectsHero({
                         "text-muted-foreground bg-muted";
                       return (
                         <li key={t.id} className="border-b border-border last:border-b-0">
-                          <Link href={`/projects/${t.projectId}`}>
-                            <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/40 transition-colors group" data-testid={`hero-task-${t.id}`}>
-                              <CircleDot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{t.title}</p>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: t.projectColor }} aria-hidden="true" />
-                                  <p className="text-[11px] text-muted-foreground truncate">{t.projectName}</p>
-                                </div>
+                          <button
+                            className="w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-muted/40 transition-colors group"
+                            onClick={() => setListTask(t)}
+                            data-testid={`hero-task-${t.id}`}
+                          >
+                            <CircleDot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{t.title}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: t.projectColor }} aria-hidden="true" />
+                                <p className="text-[11px] text-muted-foreground truncate">{t.projectName}</p>
                               </div>
-                              {due && (
-                                <span className={`text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 rounded shrink-0 ${dueClasses}`}>
-                                  <CalendarClock className="h-2.5 w-2.5 inline mr-0.5" />
-                                  {formatTaskDue(due, tz)}
-                                </span>
-                              )}
-                              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                             </div>
-                          </Link>
+                            {due && (
+                              <span className={`text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 rounded shrink-0 ${dueClasses}`}>
+                                <CalendarClock className="h-2.5 w-2.5 inline mr-0.5" />
+                                {formatTaskDue(due, tz)}
+                              </span>
+                            )}
+                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                          </button>
                         </li>
                       );
                     })}
@@ -843,33 +861,25 @@ function ProjectsHero({
           )}
         </div>
 
-        {/* Top projects strip */}
-        {s.projects.length > 0 && (
-          <div className="mt-4">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Top projects</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {s.projects.slice(0, 3).map(p => {
-                const pct = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0;
-                return (
-                  <Link key={p.id} href={`/projects/${p.id}`}>
-                    <div className="rounded-md border border-border p-2.5 hover:bg-muted/40 transition-colors cursor-pointer group" data-testid={`hero-project-${p.id}`}>
-                      <div className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full shrink-0" style={{ background: p.color }} />
-                        <p className="text-sm font-medium truncate flex-1">{p.name}</p>
-                        <span className="text-[10px] text-muted-foreground tabular-nums">{p.openTasks} open</span>
-                      </div>
-                      <div className="mt-2 h-1 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full transition-all" style={{ width: `${pct}%`, background: p.color }} />
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </CardContent>
     </Card>
+
+    {listProject && (
+      <TaskDetailSheet
+        project={listProject}
+        columns={listColumns}
+        task={listTask}
+        parentTask={listParentTask}
+        subtasks={listSubtasks}
+        open={!!listTask}
+        onOpenChange={(o) => { if (!o) setListTask(null); }}
+        onOpenTask={(id) => {
+          const t = listProjectTasks.find(p => p.id === id);
+          if (t) setListTask({ ...t, projectName: listTask?.projectName ?? "", projectColor: listTask?.projectColor ?? "" });
+        }}
+      />
+    )}
+  </>
   );
 }
 
