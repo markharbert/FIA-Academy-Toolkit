@@ -881,7 +881,15 @@ function EmailHealthTile({
             </p>
             <p className="text-[10px] text-muted-foreground/60 mb-1.5">Last 90 days</p>
             <div className="space-y-2">
-              {(reputation.domains ?? []).slice(0, 10).map(d => {
+              {[...(reputation.domains ?? [])]
+                .sort((a, b) => {
+                  const def = localStorage.getItem("postmaster_default_domain");
+                  if (a.domainName === def) return -1;
+                  if (b.domainName === def) return 1;
+                  return 0;
+                })
+                .slice(0, 10)
+                .map(d => {
                 const rep90 = domainRep90(d);
                 const spam90 = domainSpam90(d);
                 const tone = reputationTone(rep90);
