@@ -6495,7 +6495,13 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!conn) {
         return res.json({ connected: false, domains: [] });
       }
-      const domains = await storage.getPostmasterDomains(userId);
+      const domainRows = await storage.getPostmasterDomains(userId);
+      // Ensure trafficStats is always an array — it can be null in the DB if the initial
+      // sync failed after OAuth completed (domain row inserted but stats never written).
+      const domains = domainRows.map(d => ({
+        ...d,
+        trafficStats: Array.isArray(d.trafficStats) ? d.trafficStats : [],
+      }));
       const { oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, ...safeConn } = conn;
       res.json({ connected: true, connectedEmail: safeConn.connectedEmail, lastSyncedAt: safeConn.lastSyncedAt, domains });
     } catch (err) {
@@ -6571,6 +6577,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.delete("/api/sender-reputation/disconnect", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;
+      // Delete domain data first, then the connection. Domain rows are NOT foreign-keyed
+      // to the connection row, so they must be removed explicitly — otherwise they become
+      // orphaned and appear again if the user reconnects with a different Google account.
+      await storage.deletePostmasterDomains(userId);
       await storage.deletePostmasterConnection(userId);
       res.json({ success: true });
     } catch (err) {

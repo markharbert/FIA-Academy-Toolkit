@@ -163,7 +163,8 @@ function pct(v: number | null, decimals = 1) {
   return `${(v * 100).toFixed(decimals)}%`;
 }
 
-function filterByDays(stats: DailyTrafficStat[], days: number): DailyTrafficStat[] {
+function filterByDays(stats: DailyTrafficStat[] | null | undefined, days: number): DailyTrafficStat[] {
+  if (!stats?.length) return [];
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -1872,7 +1873,7 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, defa
           </Select>
           {lastSyncedAt && (
             <span className="text-xs text-muted-foreground whitespace-nowrap">
-              Updated {new Date(lastSyncedAt).toLocaleDateString()}
+              Updated {new Date(lastSyncedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
           <Button size="sm" variant="outline" onClick={onSync} disabled={isSyncing} data-testid="button-sync-postmaster" className="h-8 text-xs">
