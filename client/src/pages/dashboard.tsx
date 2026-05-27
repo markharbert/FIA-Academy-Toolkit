@@ -163,14 +163,14 @@ function Tile({
 }) {
   const card = (
     <Card
-      className={`relative overflow-hidden border-card-border bg-card transition-all hover-elevate ${href ? "cursor-pointer" : ""} ${className}`}
+      className={`relative overflow-hidden border-card-border bg-card transition-all hover-elevate h-full ${href ? "cursor-pointer" : ""} ${className}`}
       data-testid={testId}
     >
       <div className={`absolute inset-x-0 top-0 h-0.5 ${accent}`} />
       <CardContent className="relative pt-5 pb-5 h-full">{children}</CardContent>
     </Card>
   );
-  return href ? <Link href={href}>{card}</Link> : card;
+  return href ? <Link href={href} className="block h-full">{card}</Link> : card;
 }
 
 function TileTitle({
@@ -523,17 +523,23 @@ export default function DashboardPage() {
                 </span>
               )}
             </div>
-            <div className="mt-4 min-h-[34px]">
-              {latestEmail ? (
+            <div className="mt-4">
+              {emails.length > 0 ? (
                 <>
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Latest</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <p className="text-sm font-medium truncate flex-1">{latestEmail.subject || "(No subject)"}</p>
-                    {latestEmail.overallScore != null && (
-                      <span className={`text-xs font-bold shrink-0 ${scoreColor(latestEmail.overallScore)}`}>
-                        {latestEmail.overallScore}
-                      </span>
-                    )}
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-1.5">Recent</p>
+                  <div className="space-y-1.5">
+                    {emails.slice(0, 3).map((email, i) => (
+                      <div key={(email as any).id ?? i} className="flex items-center gap-1.5">
+                        <p className="text-xs font-medium truncate flex-1 text-foreground">{email.subject || "(No subject)"}</p>
+                        {email.overallScore != null ? (
+                          <span className={`text-xs font-bold shrink-0 tabular-nums ${scoreColor(email.overallScore)}`}>
+                            {email.overallScore}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground shrink-0">—</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </>
               ) : (
