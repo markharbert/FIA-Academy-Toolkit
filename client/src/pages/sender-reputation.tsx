@@ -2255,7 +2255,7 @@ export default function SenderReputationPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-sidebar text-sidebar-foreground px-6 py-8">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <button
             className="flex items-center gap-1.5 text-white/50 hover:text-white/80 text-xs mb-4 transition-colors"
             onClick={() => setLocation("/email-tools")}
@@ -2299,7 +2299,7 @@ export default function SenderReputationPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {!status?.connected ? (
           /* ── Not connected ─────────────────────────────────────────────── */
           <div className="max-w-xl mx-auto space-y-6">
