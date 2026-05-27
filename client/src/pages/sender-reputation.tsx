@@ -349,8 +349,9 @@ function SpamDailyTable({ data }: { data: Array<{ date: string; rate: number | n
 
 function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
   const hasRange = stats.some(s => s.spamRateLow != null && s.spamRateHigh != null);
-  const data = stats
-    .filter(s => s.spamRate != null || s.spamRateLow != null)
+  // Include ALL days so the X-axis spans the full selected period.
+  // Days without spam data get null values — dots only appear where readings exist.
+  const data = [...stats]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(s => ({
       date: shortDate(s.date),
@@ -358,16 +359,20 @@ function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
       low: s.spamRateLow != null ? +(s.spamRateLow * 100).toFixed(5) : null,
       high: s.spamRateHigh != null ? +(s.spamRateHigh * 100).toFixed(5) : null,
     }));
+
+  const hasSpamData = data.some(d => d.rate != null || d.low != null);
   // Scale Y axis to actual data so low spam rates show variation instead of a flat line.
-  const dataMax = data.length > 0 ? Math.max(...data.map(d => Math.max(d.rate ?? 0, d.high ?? 0))) : 0;
+  const dataMax = hasSpamData ? Math.max(...data.map(d => Math.max(d.rate ?? 0, d.high ?? 0))) : 0;
   const yMax = dataMax < 0.05 ? Math.max(dataMax * 2.5, 0.005) : 0.4;
 
-  if (data.length === 0) {
+  if (!hasSpamData) {
     return <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No spam rate data in this period</div>;
   }
 
-  const latest = data[data.length - 1];
-  const prev = data[data.length - 2];
+  // Trend uses only the days that actually have readings
+  const withData = data.filter(d => d.rate != null || d.low != null);
+  const latest = withData[withData.length - 1];
+  const prev = withData[withData.length - 2];
   const latestRate = latest?.rate ?? latest?.low ?? 0;
   const prevRate = prev?.rate ?? prev?.low ?? latestRate;
   const trend = latestRate < prevRate ? "down" : latestRate > prevRate ? "up" : "flat";
@@ -430,14 +435,15 @@ function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
         <span className="flex items-center gap-1"><span className="inline-block w-6 border-t-2 border-dashed border-amber-400" /> 0.10% warning</span>
         <span className="flex items-center gap-1"><span className="inline-block w-6 border-t-2 border-dashed border-red-400" /> 0.30% critical</span>
       </div>
-      <SpamDailyTable data={data} />
+      <SpamDailyTable data={data.filter(d => d.rate != null || d.low != null)} />
     </div>
   );
 }
 
 function AuthChart({ stats }: { stats: DailyTrafficStat[] }) {
-  const data = stats
-    .filter(s => s.spfSuccessRatio != null || s.dkimSuccessRatio != null || s.dmarcSuccessRatio != null)
+  // Include ALL days so the X-axis spans the full selected period.
+  const data = [...stats]
+    .sort((a, b) => a.date.localeCompare(b.date))
     .map(s => ({
       date: shortDate(s.date),
       SPF: s.spfSuccessRatio != null ? +(s.spfSuccessRatio * 100).toFixed(1) : null,
@@ -445,7 +451,9 @@ function AuthChart({ stats }: { stats: DailyTrafficStat[] }) {
       DMARC: s.dmarcSuccessRatio != null ? +(s.dmarcSuccessRatio * 100).toFixed(1) : null,
     }));
 
-  if (data.length === 0) {
+  const hasAuthData = data.some(d => d.SPF != null || d.DKIM != null || d.DMARC != null);
+
+  if (!hasAuthData) {
     return <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No authentication data in this period</div>;
   }
 
@@ -475,32 +483,42 @@ function AuthChart({ stats }: { stats: DailyTrafficStat[] }) {
 
 
 function ReputationHistoryChart({ stats }: { stats: DailyTrafficStat[] }) {
-  const data = stats
-    .filter(s => s.domainReputation && s.domainReputation !== "REPUTATION_CATEGORY_UNSPECIFIED")
-    .map(s => ({
-      date: shortDate(s.date),
-      score: repScore(s.domainReputation),
-      reputation: s.domainReputation,
-    }));
+  // Include ALL days so the X-axis always spans the full selected period.
+  // Days without a reputation value get score=null — the line breaks there rather
+  // than the chart collapsing to only the handful of days that have readings.
+  const data = [...stats]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(s => {
+      const hasRep = s.domainReputation && s.domainReputation !== "REPUTATION_CATEGORY_UNSPECIFIED";
+      return {
+        date: shortDate(s.date),
+        score: hasRep ? repScore(s.domainReputation) : null,
+        reputation: s.domainReputation,
+      };
+    });
 
-  if (data.length === 0) {
+  const hasAnyReputation = data.some(d => d.score != null);
+
+  if (!hasAnyReputation) {
     return <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No reputation history in this period</div>;
   }
 
   const CustomDot = (props: any) => {
     const { cx, cy, payload } = props;
+    if (payload.score == null) return null;
     const color = REPUTATION_COLORS[payload.reputation] ?? "#6b7280";
-    return <circle cx={cx} cy={cy} r={3} fill={color} stroke="none" />;
+    return <circle cx={cx} cy={cy} r={4} fill={color} stroke="none" />;
   };
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload?.[0]) return null;
-    const { date, reputation } = payload[0].payload;
+    const { date, reputation, score } = payload[0].payload;
+    if (score == null) return null;
     const cfg = REPUTATION_CONFIG[reputation];
     return (
       <div className="bg-card border border-border rounded-lg px-3 py-2 text-xs shadow">
-        <p className="font-semibold text-foreground">{date}</p>
-        {cfg && <p className={cfg.textColor}>{cfg.label} Reputation</p>}
+        <p className="font-bold text-foreground">{date}</p>
+        {cfg && <p className={`font-semibold ${cfg.textColor}`}>{cfg.label} Reputation</p>}
       </div>
     );
   };
@@ -517,7 +535,7 @@ function ReputationHistoryChart({ stats }: { stats: DailyTrafficStat[] }) {
             tickFormatter={v => ["", "Bad", "Low", "Medium", "High"][Math.round(v)] ?? ""}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Line type="stepAfter" dataKey="score" stroke="#10b981" strokeWidth={2} dot={<CustomDot />} connectNulls />
+          <Line type="stepAfter" dataKey="score" stroke="#10b981" strokeWidth={2} dot={<CustomDot />} connectNulls={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -1524,16 +1542,19 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
   const spamChangePct = spamChange != null && prevSpam != null && prevSpam > 0 ? (spamChange / prevSpam) * 100 : null;
 
   const hasRange = filtered.some(s => s.spamRateLow != null && s.spamRateHigh != null);
+  // Include ALL days so the X-axis spans the full selected period.
   const chartData = [...filtered]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .filter(s => s.spamRate != null || s.spamRateLow != null)
     .map(s => ({
       date: shortDate(s.date),
       rate: s.spamRate != null ? +(s.spamRate * 100).toFixed(5) : null,
       low: s.spamRateLow != null ? +(s.spamRateLow * 100).toFixed(5) : null,
       high: s.spamRateHigh != null ? +(s.spamRateHigh * 100).toFixed(5) : null,
     }));
-  const siDataMax = chartData.length > 0 ? Math.max(...chartData.map(d => Math.max(d.rate ?? 0, d.high ?? 0))) : 0;
+  const siHasSpamData = chartData.some(d => d.rate != null || d.low != null);
+  const siDataMax = siHasSpamData
+    ? Math.max(...chartData.map(d => Math.max(d.rate ?? 0, d.high ?? 0)))
+    : 0;
   const siYMax = siDataMax < 0.05 ? Math.max(siDataMax * 2.5, 0.005) : 0.4;
 
   // Feedback loops aggregated
@@ -1627,7 +1648,7 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
           )}
         </CardHeader>
         <CardContent className="px-5 pb-4">
-          {chartData.length === 0 ? (
+          {!siHasSpamData ? (
             <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No spam rate data in this period</div>
           ) : (
             <>
@@ -1680,7 +1701,7 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
                 <span className="flex items-center gap-1"><span className="inline-block w-6 border-t-2 border-dashed border-amber-400" /> 0.10% warning threshold</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-6 border-t-2 border-dashed border-red-400" /> 0.30% critical threshold</span>
               </div>
-              <SpamDailyTable data={chartData} />
+              <SpamDailyTable data={chartData.filter(d => d.rate != null || d.low != null)} />
             </>
           )}
           <div className="mt-3 grid grid-cols-2 gap-3">
@@ -1899,9 +1920,14 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, defa
       {/* Top row: reputation badge on left, all controls on right */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ReputationBadge
-          reputation={domain.latestReputation}
+          reputation={
+            [...filtered]
+              .sort((a, b) => b.date.localeCompare(a.date))
+              .find(s => s.domainReputation && s.domainReputation !== "REPUTATION_CATEGORY_UNSPECIFIED")
+              ?.domainReputation ?? null
+          }
           dataDate={
-            [...domain.trafficStats]
+            [...filtered]
               .sort((a, b) => b.date.localeCompare(a.date))
               .find(s => s.domainReputation && s.domainReputation !== "REPUTATION_CATEGORY_UNSPECIFIED")
               ?.date ?? null
