@@ -638,8 +638,13 @@ function buildComplianceItems(domain: PostmasterDomainData, filtered: DailyTraff
       id: "headers",
       label: "Valid Message Headers",
       detail: "Every email must include valid From, To, Date, and Message-ID headers.",
-      status: "manual",
-      note: "Reputable ESPs (ActiveCampaign, Mailchimp, etc.) handle this automatically.",
+      // If Google is receiving and analyzing your emails (any traffic data present), your
+      // message headers are valid by definition — Gmail rejects emails with missing headers
+      // before they're even counted in Postmaster data.
+      status: filtered.length > 0 ? "pass" : "nodata",
+      note: filtered.length > 0
+        ? "Gmail is receiving and processing your emails — message headers are valid"
+        : "No data yet",
       learnUrl: "https://support.google.com/mail/answer/81126#requirements-for-all-senders",
     },
     {
@@ -685,9 +690,9 @@ const STATUS_CONFIG: Record<ComplianceStatus, {
   },
   manual: {
     icon: CircleDashed,
-    iconClass: "text-muted-foreground",
-    badgeClass: "bg-muted/50 text-muted-foreground border-border",
-    badgeLabel: "Manual",
+    iconClass: "text-blue-400",
+    badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+    badgeLabel: "Guideline",
   },
 };
 
@@ -800,10 +805,10 @@ function ComplianceSection({ domain, filtered }: { domain: PostmasterDomainData;
 
         <Separator className="my-1" />
 
-        {/* Manual checks */}
+        {/* Best practice guidelines */}
         <div className="px-5 py-1">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Requires manual verification
+            Best practice checklist
           </p>
         </div>
         <div>
