@@ -354,7 +354,7 @@ function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
             <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1} ifOverflow="hidden" label={yMax >= 0.25 ? { value: "0.3% critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" } : undefined} />
             {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#rangeGrad)" connectNulls />}
             {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.5} connectNulls />}
-            <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#spamGrad)" dot={false} connectNulls />
+            <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#spamGrad)" dot={{ r: 3, fill: "#10b981", strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -1595,7 +1595,7 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
                     label={siYMax >= 0.25 ? { value: "0.3% — Critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" } : undefined} />
                   {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#siBandGrad)" legendType="none" connectNulls />}
                   {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.6} legendType="none" connectNulls />}
-                  <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#siLineGrad)" dot={false} connectNulls />
+                  <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#siLineGrad)" dot={{ r: 3, fill: "#10b981", strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
