@@ -297,10 +297,61 @@ function RatioBar({ label, value }: { label: string; value: number | null }) {
   );
 }
 
+// Shared daily-readings table used below both spam charts
+function SpamDailyTable({ data }: { data: Array<{ date: string; rate: number | null; low: number | null; high: number | null }> }) {
+  if (data.length === 0) return null;
+  const rows = [...data].reverse(); // most recent first
+  return (
+    <div className="mt-1">
+      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+        Exact daily readings
+      </p>
+      <div className="max-h-44 overflow-y-auto rounded-lg border border-border text-xs">
+        <table className="w-full">
+          <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm">
+            <tr>
+              <th className="text-left px-3 py-1.5 font-semibold text-muted-foreground">Date</th>
+              <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground">Spam Rate</th>
+              <th className="text-right px-3 py-1.5 font-semibold text-muted-foreground hidden sm:table-cell">vs Threshold</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => {
+              const val = row.rate ?? row.low ?? null;
+              const sev = val == null ? null : val >= 0.3 ? "critical" : val >= 0.1 ? "warning" : "ok";
+              const valColor = sev === "critical" ? "text-red-600 dark:text-red-400" : sev === "warning" ? "text-amber-600 dark:text-amber-400" : sev === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground";
+              return (
+                <tr key={i} className="border-t border-border hover:bg-muted/20 transition-colors">
+                  <td className="px-3 py-1.5 font-medium text-foreground">{row.date}</td>
+                  <td className={`px-3 py-1.5 text-right font-bold tabular-nums ${valColor}`}>
+                    {val != null ? `${val.toFixed(5)}%` : "—"}
+                    {row.low != null && row.high != null && row.rate != null && row.low !== row.high && (
+                      <span className="ml-1 font-normal text-muted-foreground text-[10px]">
+                        ({row.low.toFixed(5)}–{row.high.toFixed(5)})
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-right hidden sm:table-cell">
+                    {sev === "critical" && <span className="font-semibold text-red-600 dark:text-red-400">Above 0.30% — Critical</span>}
+                    {sev === "warning" && <span className="font-semibold text-amber-600 dark:text-amber-400">Above 0.10% — Warning</span>}
+                    {sev === "ok" && <span className="font-semibold text-emerald-600 dark:text-emerald-400">Below threshold — Good</span>}
+                    {sev == null && <span className="text-muted-foreground">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
   const hasRange = stats.some(s => s.spamRateLow != null && s.spamRateHigh != null);
   const data = stats
     .filter(s => s.spamRate != null || s.spamRateLow != null)
+    .sort((a, b) => a.date.localeCompare(b.date))
     .map(s => ({
       date: shortDate(s.date),
       rate: s.spamRate != null ? +(s.spamRate * 100).toFixed(5) : null,
@@ -308,7 +359,6 @@ function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
       high: s.spamRateHigh != null ? +(s.spamRateHigh * 100).toFixed(5) : null,
     }));
   // Scale Y axis to actual data so low spam rates show variation instead of a flat line.
-  // ReferenceLine values (0.1, 0.3) would otherwise force the domain to 0–0.3 and crush the data.
   const dataMax = data.length > 0 ? Math.max(...data.map(d => Math.max(d.rate ?? 0, d.high ?? 0))) : 0;
   const yMax = dataMax < 0.05 ? Math.max(dataMax * 2.5, 0.005) : 0.4;
 
@@ -348,18 +398,39 @@ function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
             <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, yMax]} tickFormatter={v => `${v}%`} />
             <Tooltip
-              formatter={(v: number, name: string) => [`${v.toFixed(5)}%`, name === "rate" ? "Midpoint" : name === "low" ? "Low" : "High"]}
-              contentStyle={{ fontSize: 11, borderRadius: 8 }}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const d = payload[0]?.payload;
+                const val = d.rate ?? d.low ?? null;
+                const sev = val == null ? null : val >= 0.3 ? "critical" : val >= 0.1 ? "warning" : "ok";
+                const sevColor = sev === "critical" ? "#ef4444" : sev === "warning" ? "#f59e0b" : "#10b981";
+                return (
+                  <div className="bg-card border border-border rounded-lg px-3 py-2 text-xs shadow space-y-1">
+                    <p className="font-bold text-foreground">{d.date}</p>
+                    {val != null && <p style={{ color: sevColor }} className="font-bold tabular-nums text-sm">{val.toFixed(5)}%</p>}
+                    {d.low != null && d.high != null && d.low !== d.high && (
+                      <p className="text-muted-foreground">Range: {d.low.toFixed(5)}% – {d.high.toFixed(5)}%</p>
+                    )}
+                    {sev === "critical" && <p className="text-red-500 font-semibold">Above 0.30% critical limit</p>}
+                    {sev === "warning" && <p className="text-amber-500 font-semibold">Above 0.10% warning line</p>}
+                    {sev === "ok" && <p className="text-emerald-500">Below threshold — Good</p>}
+                  </div>
+                );
+              }}
             />
-            <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1} ifOverflow="hidden" label={yMax >= 0.08 ? { value: "0.1% warning", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" } : undefined} />
-            <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1} ifOverflow="hidden" label={yMax >= 0.25 ? { value: "0.3% critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" } : undefined} />
+            <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1} ifOverflow="hidden" />
+            <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1} ifOverflow="hidden" />
             {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#rangeGrad)" connectNulls />}
             {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.5} connectNulls />}
-            <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#spamGrad)" dot={{ r: 3, fill: "#10b981", strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls />
+            <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#spamGrad)" dot={{ r: 4, fill: "#10b981", strokeWidth: 0 }} activeDot={{ r: 6 }} connectNulls />
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      <p className="text-[11px] text-muted-foreground">Keep below 0.1%. Above 0.3% Gmail will start filtering your emails.</p>
+      <div className="flex items-center gap-4 text-[11px]">
+        <span className="flex items-center gap-1"><span className="inline-block w-6 border-t-2 border-dashed border-amber-400" /> 0.10% warning</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-6 border-t-2 border-dashed border-red-400" /> 0.30% critical</span>
+      </div>
+      <SpamDailyTable data={data} />
     </div>
   );
 }
@@ -1559,55 +1630,66 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
           {chartData.length === 0 ? (
             <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No spam rate data in this period</div>
           ) : (
-            <div className="h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="siLineGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="siBandGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.04} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, siYMax]} tickFormatter={v => `${v}%`} />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const d = payload[0]?.payload;
-                      return (
-                        <div className="bg-card border border-border rounded-lg px-3 py-2 text-xs shadow space-y-1">
-                          <p className="font-semibold text-foreground">{d.date}</p>
-                          {d.rate != null && <p className="text-foreground">Midpoint: <span className="font-bold tabular-nums">{d.rate.toFixed(5)}%</span></p>}
-                          {d.low != null && <p className="text-muted-foreground">Low estimate: <span className="tabular-nums">{d.low.toFixed(5)}%</span></p>}
-                          {d.high != null && <p className="text-muted-foreground">High estimate: <span className="tabular-nums">{d.high.toFixed(5)}%</span></p>}
-                          {d.low != null && d.high != null && <p className="text-[10px] text-muted-foreground/70 mt-0.5">Range = Google's confidence interval</p>}
-                        </div>
-                      );
-                    }}
-                  />
-                  <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} ifOverflow="hidden"
-                    label={siYMax >= 0.08 ? { value: "0.1% — Warning", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" } : undefined} />
-                  <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} ifOverflow="hidden"
-                    label={siYMax >= 0.25 ? { value: "0.3% — Critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" } : undefined} />
-                  {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#siBandGrad)" legendType="none" connectNulls />}
-                  {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.6} legendType="none" connectNulls />}
-                  <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#siLineGrad)" dot={{ r: 3, fill: "#10b981", strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <>
+              <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="siLineGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="siBandGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.04} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, siYMax]} tickFormatter={v => `${v}%`} />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const d = payload[0]?.payload;
+                        const val = d.rate ?? d.low ?? null;
+                        const sev = val == null ? null : val >= 0.3 ? "critical" : val >= 0.1 ? "warning" : "ok";
+                        const sevColor = sev === "critical" ? "#ef4444" : sev === "warning" ? "#f59e0b" : "#10b981";
+                        return (
+                          <div className="bg-card border border-border rounded-lg px-3 py-2 text-xs shadow space-y-1">
+                            <p className="font-bold text-foreground">{d.date}</p>
+                            {val != null && <p style={{ color: sevColor }} className="font-bold tabular-nums text-sm">{val.toFixed(5)}%</p>}
+                            {d.low != null && d.high != null && d.low !== d.high && (
+                              <p className="text-muted-foreground">Range: {d.low.toFixed(5)}% – {d.high.toFixed(5)}%</p>
+                            )}
+                            {sev === "critical" && <p className="text-red-500 font-semibold">Above 0.30% critical limit</p>}
+                            {sev === "warning" && <p className="text-amber-500 font-semibold">Above 0.10% warning line</p>}
+                            {sev === "ok" && <p className="text-emerald-500">Below threshold — Good</p>}
+                          </div>
+                        );
+                      }}
+                    />
+                    <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} ifOverflow="hidden" />
+                    <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} ifOverflow="hidden" />
+                    {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#siBandGrad)" legendType="none" connectNulls />}
+                    {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.6} legendType="none" connectNulls />}
+                    <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#siLineGrad)" dot={{ r: 4, fill: "#10b981", strokeWidth: 0 }} activeDot={{ r: 6 }} connectNulls />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center gap-4 text-[11px] text-muted-foreground mt-1">
+                <span className="flex items-center gap-1"><span className="inline-block w-6 border-t-2 border-dashed border-amber-400" /> 0.10% warning threshold</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-6 border-t-2 border-dashed border-red-400" /> 0.30% critical threshold</span>
+              </div>
+              <SpamDailyTable data={chartData} />
+            </>
           )}
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">0.1% Warning Line</p>
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">0.10% Warning Threshold</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Above this, Gmail starts watching your domain more closely. Inbox placement may start to dip.</p>
             </div>
             <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
-              <p className="text-xs font-semibold text-red-700 dark:text-red-400">0.3% Critical Line</p>
+              <p className="text-xs font-semibold text-red-700 dark:text-red-400">0.30% Critical Threshold</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Above this, Gmail automatically starts sending your emails to spam folders.</p>
             </div>
           </div>
