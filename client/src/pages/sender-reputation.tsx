@@ -1105,37 +1105,80 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
   }
 
   // IP reputation
+  // Note: Google's new Postmaster Tools UI no longer displays IP reputation, but the API
+  // may still return historical records. We apply a 7-day recency gate so stale data does
+  // not trigger alarming action items — old IP data reflects a past state, not the current one.
   const latestIpStats = [...filtered].sort((a, b) => b.date.localeCompare(a.date))
     .find(s => s.ipReputations && s.ipReputations.length > 0);
-  const badIps = latestIpStats?.ipReputations.filter(ip => ip.reputation === "BAD") ?? [];
-  const lowIps = latestIpStats?.ipReputations.filter(ip => ip.reputation === "LOW") ?? [];
 
-  if (badIps.length > 0) {
-    items.push({
-      id: "ip-bad",
-      severity: "critical",
-      title: "The IP addresses sending your emails have a BAD reputation",
-      what: "Think of an IP address like a return address on an envelope. Your emails are being sent from addresses that Gmail has flagged as coming from spammers. Gmail automatically rejects or sends those emails to spam — even if your content is fine. This is usually your email platform's problem, not something you did wrong.",
-      steps: [
-        "Contact your email platform's support team (ActiveCampaign, Mailchimp, SendGrid, Keap, etc.) right now. Use live chat if they have it.",
-        "Tell them exactly this: 'Google Postmaster Tools is showing a BAD IP reputation for my sending IPs. I need to be moved to a different IP address or a dedicated IP pool.'",
-        "If they cannot help you, ask if you can upgrade to a dedicated IP address. With a dedicated IP, only your emails use that address — no one else can hurt your reputation.",
-        "While you wait for that to be fixed, go to mxtoolbox.com and click 'Blacklists'. Enter your domain name and see if you are listed on any public spam databases. If you are, visit each blocklist website and request removal.",
-        "If your email platform refuses to help, consider switching to a different provider. Your sending reputation depends on the quality of their infrastructure.",
-      ],
-    });
-  } else if (lowIps.length > 0) {
-    items.push({
-      id: "ip-low",
-      severity: "warning",
-      title: "Some of your sending IPs have a LOW reputation",
-      what: "Some of the IP addresses your emails go out from have a lower reputation with Gmail. This can cause some emails to land in spam instead of the inbox. This is likely your email platform's shared IP pool having some bad senders on it.",
-      steps: [
-        "Contact your email platform's support team. Tell them: 'Some of my sending IPs are showing LOW reputation in Google Postmaster Tools. Can you move me to a cleaner IP pool?'",
-        "Ask if they offer dedicated IP addresses. A dedicated IP means your reputation is entirely in your own hands.",
-        "In the meantime, focus on getting your spam complaint rate as low as possible. As your complaints go down, your IP reputation will naturally improve over time.",
-      ],
-    });
+  if (latestIpStats) {
+    const ipDataDate = new Date(latestIpStats.date);
+    const ipDataAgeMs = Date.now() - ipDataDate.getTime();
+    const ipDataAgeDays = Math.floor(ipDataAgeMs / (1000 * 60 * 60 * 24));
+    const ipDataIsStale = ipDataAgeDays > 7;
+    const ipDateLabel = ipDataDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    const stalenessNote = ipDataIsStale
+      ? ` Note: this data is from ${ipDateLabel} (${ipDataAgeDays} days ago) — Google's updated Postmaster Tools no longer shows live IP reputation, so this may not reflect your current standing.`
+      : ` Data is from ${ipDateLabel}.`;
+
+    const badIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "BAD");
+    const lowIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "LOW");
+    const mediumIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "MEDIUM");
+    const highIps = latestIpStats.ipReputations.filter(ip => ip.reputation === "HIGH");
+
+    if (badIps.length > 0) {
+      items.push({
+        id: "ip-bad",
+        severity: ipDataIsStale ? "warning" : "critical",
+        title: ipDataIsStale
+          ? `Some sending IPs had a BAD reputation as of ${ipDateLabel} — verify current status`
+          : `${badIps.length === 1 ? "A group of" : "Some"} sending IP${badIps.length > 1 ? "s" : ""} ${badIps.length > 1 ? "have" : "has"} a BAD reputation`,
+        what: `Think of an IP address like a return address on an envelope. ${ipDataIsStale ? `As of ${ipDateLabel}, some` : "Some of"} your emails were being sent from addresses that Gmail had flagged as coming from spammers. Gmail automatically rejects or sends those emails to spam — even if your content is fine. This is usually your email platform's problem, not something you did wrong.${stalenessNote}`,
+        steps: ipDataIsStale ? [
+          `Log in to Google Postmaster Tools (postmaster.google.com) and check the IP Reputation section for your domain. Compare what you see there today with this historical data from ${ipDateLabel}.`,
+          "If the current Postmaster view shows MEDIUM or HIGH, your IP reputation has already improved. No immediate action needed — keep monitoring.",
+          "If Postmaster still shows LOW or BAD for IP reputation, contact your email platform's support team. Tell them: 'Google Postmaster Tools is showing a bad IP reputation for my sending IPs. I need to be moved to a cleaner IP pool.'",
+          "Ask your platform if they offer a dedicated IP address. With a dedicated IP, only your emails use that address — no one else can affect your reputation.",
+        ] : [
+          "Contact your email platform's support team (ActiveCampaign, Mailchimp, SendGrid, Keap, etc.) right now. Use live chat if they have it.",
+          "Tell them exactly this: 'Google Postmaster Tools is showing a BAD IP reputation for my sending IPs. I need to be moved to a different IP address or a dedicated IP pool.'",
+          "If they cannot help you, ask if you can upgrade to a dedicated IP address. With a dedicated IP, only your emails use that address — no one else can hurt your reputation.",
+          "While you wait for that to be fixed, go to mxtoolbox.com and click 'Blacklists'. Enter your domain name and see if you are listed on any public spam databases. If you are, visit each blocklist website and request removal.",
+          "If your email platform refuses to help, consider switching to a different provider. Your sending reputation depends on the quality of their infrastructure.",
+        ],
+      });
+    } else if (lowIps.length > 0) {
+      items.push({
+        id: "ip-low",
+        severity: ipDataIsStale ? "ok" : "warning",
+        title: ipDataIsStale
+          ? `Some sending IPs had a LOW reputation as of ${ipDateLabel} — may have improved`
+          : "Some of your sending IPs have a LOW reputation",
+        what: `Some of the IP addresses your emails go out from have a lower reputation with Gmail. This can cause some emails to land in spam instead of the inbox. This is likely your email platform's shared IP pool having some bad senders on it.${stalenessNote}`,
+        steps: ipDataIsStale ? [
+          `Check Google Postmaster Tools (postmaster.google.com) directly to see the current IP reputation status. This data is from ${ipDateLabel} and may no longer reflect your current state.`,
+          "If current Postmaster shows MEDIUM or better, your reputation has improved — no action needed beyond keeping your spam complaint rate low.",
+          "If it still shows LOW, contact your email platform's support and ask to be moved to a cleaner IP pool.",
+        ] : [
+          "Contact your email platform's support team. Tell them: 'Some of my sending IPs are showing LOW reputation in Google Postmaster Tools. Can you move me to a cleaner IP pool?'",
+          "Ask if they offer dedicated IP addresses. A dedicated IP means your reputation is entirely in your own hands.",
+          "In the meantime, focus on getting your spam complaint rate as low as possible. As your complaints go down, your IP reputation will naturally improve over time.",
+        ],
+      });
+    } else if (mediumIps.length > 0 && highIps.length === 0) {
+      items.push({
+        id: "ip-medium",
+        severity: "ok",
+        title: `Your sending IPs have a MEDIUM reputation with Gmail${ipDataIsStale ? ` (as of ${ipDateLabel})` : ""}`,
+        what: `A medium IP reputation means Gmail recognizes your sending addresses but has not fully established trust with them yet. Your emails are likely reaching the inbox for most subscribers, though a small number may land in spam. This is normal for shared IP pools and will improve as you build a consistent sending history with low complaint rates.${stalenessNote}`,
+        steps: [
+          "Keep your spam complaint rate below 0.10% — this is the single most important factor for improving IP reputation.",
+          "Send consistently. Erratic sending patterns (big spikes followed by long silences) signal spammer behavior. A regular schedule builds trust.",
+          "Only email engaged contacts. Anyone who has not opened or clicked in the last 90 days is dragging down your engagement metrics and increasing your risk of complaints.",
+          "A medium reputation is not an emergency — it is a sign to stay disciplined. Monitor this dashboard monthly and watch for any movement toward LOW.",
+        ],
+      });
+    }
   }
 
   // Delivery errors
