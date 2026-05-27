@@ -258,6 +258,10 @@ export default function DashboardPage() {
   const { data: dmoToday } = useQuery<{ entry: DmoEntry | null; date: string }>({
     queryKey: ["/api/dmo/today"],
   });
+  const { data: dmoRecentRaw = [] } = useQuery<DmoEntry[]>({
+    queryKey: ["/api/dmo/history", 3],
+    queryFn: () => fetch("/api/dmo/history?limit=3", { credentials: "include" }).then(r => r.json()),
+  });
   const { data: sessions = [] } = useQuery<Session[]>({
     queryKey: ["/api/sessions"],
   });
@@ -503,6 +507,25 @@ export default function DashboardPage() {
               <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">Perfect day — streak extended.</p>
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">{todayPts === 0 ? "Log activities to keep your streak alive." : `${25 - todayPts} pts left for a perfect day.`}</p>
+            )}
+            {dmoRecentRaw.length > 0 && (
+              <div className="mt-4">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-1.5">Recent</p>
+                <div className="space-y-1.5">
+                  {dmoRecentRaw.slice(0, 3).map((entry, i) => {
+                    const pts = dmoTotalPts(entry);
+                    const label = new Date(entry.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+                    return (
+                      <div key={(entry as any).id ?? i} className="flex items-center gap-1.5">
+                        <p className="text-xs font-medium truncate flex-1 text-foreground">{label}</p>
+                        <span className={`text-xs font-bold shrink-0 tabular-nums ${pts === 25 ? "text-emerald-600 dark:text-emerald-400" : pts >= 15 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                          {pts}/25
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </Tile>
 
