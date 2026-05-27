@@ -44,6 +44,14 @@ export async function sendEmail({
       subject,
       html,
       text,
+      headers: {
+        "Precedence": "transactional",
+        "X-Mailer": "Academy-Toolkit-Notifications",
+      },
+      categories: ["transactional"],
+      mailSettings: {
+        bypassListManagement: { enable: true },
+      },
     });
     console.log(`[sendgrid] sent "${subject}" to ${to} (from: ${_fromName} <${_fromEmail}>)`);
   } catch (err: any) {
