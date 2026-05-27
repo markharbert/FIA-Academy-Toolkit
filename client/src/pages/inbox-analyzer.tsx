@@ -800,12 +800,10 @@ function EmailDetail({ email, onDelete, onReanalyze, onRetryPlacement, seedInbox
               <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
                 <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-muted-foreground">
-                  {!sendingFromAddress
-                    ? "Set your sending From address in My Address to enable automatic placement monitoring."
-                    : "No placement data recorded for this email."}
+                  No placement data recorded for this email.
                 </p>
               </div>
-              {onRetryPlacement && sendingFromAddress && (
+              {onRetryPlacement && (
                 <Button
                   variant="outline" size="sm"
                   className="w-full gap-1.5 text-sm"
@@ -844,11 +842,15 @@ function EmailDetail({ email, onDelete, onReanalyze, onRetryPlacement, seedInbox
                 <PlacementTip results={lastPlacementResults as PlacementResult[]} />
               )}
               <div className="pt-0.5 space-y-1">
-                {lastPlacementCheckedAt && hasAnyResults && (
+                {lastPlacementCheckedAt && (
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                    </p>
+                    {hasAnyResults ? (
+                      <p className="text-xs text-muted-foreground">
+                        Last checked {new Date(lastPlacementCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {new Date(lastPlacementCheckedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Waiting for first result…</p>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
