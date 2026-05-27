@@ -1182,9 +1182,9 @@ function EmailTemplatesTab() {
             )}
           </div>
         ) : (
-        <div className="flex" style={{ height: "680px" }}>
+        <div className="flex" style={{ height: "860px" }}>
           {/* ── Sidebar ── */}
-          <div className="w-52 shrink-0 border-r overflow-y-auto p-2 space-y-3">
+          <div className="w-72 shrink-0 border-r overflow-y-auto p-2 space-y-3">
             {EMAIL_TEMPLATE_GROUPS.map((group) => (
               <div key={group}>
                 <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
