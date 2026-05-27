@@ -214,7 +214,7 @@ const SPAM_REASONS = [
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function ReputationBadge({ reputation }: { reputation: string | null }) {
+function ReputationBadge({ reputation, dataDate }: { reputation: string | null; dataDate?: string | null }) {
   if (!reputation || reputation === "REPUTATION_CATEGORY_UNSPECIFIED") {
     return (
       <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-muted/40 border border-border w-fit">
@@ -226,14 +226,37 @@ function ReputationBadge({ reputation }: { reputation: string | null }) {
       </div>
     );
   }
+
+  // If the data is older than 7 days, downgrade the visual severity for BAD/LOW so we
+  // don't show an alarming red banner for a reputation state that may have already changed.
+  const dataAgeDays = dataDate
+    ? Math.floor((Date.now() - new Date(dataDate).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const isStale = dataDate != null && dataAgeDays > 7;
+  const dateLabel = dataDate
+    ? new Date(dataDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+
+  // When stale, render BAD and LOW in neutral amber tones instead of red/orange alarms.
   const cfg = REPUTATION_CONFIG[reputation] ?? REPUTATION_CONFIG.MEDIUM;
-  const Icon = cfg.icon;
+  const staleCfg = REPUTATION_CONFIG.MEDIUM; // amber — neutral, not alarming
+  const displayCfg = isStale && (reputation === "BAD" || reputation === "LOW") ? staleCfg : cfg;
+  const Icon = displayCfg.icon;
+
   return (
-    <div className={`flex items-center gap-3 px-5 py-3 rounded-xl border ${cfg.bgColor} ${cfg.borderColor} w-fit`}>
-      <Icon className={`h-7 w-7 ${cfg.textColor}`} />
+    <div className={`flex items-center gap-3 px-5 py-3 rounded-xl border ${displayCfg.bgColor} ${displayCfg.borderColor} w-fit`}>
+      <Icon className={`h-7 w-7 ${displayCfg.textColor}`} />
       <div>
-        <p className={`text-xl font-bold ${cfg.textColor}`}>{cfg.label} Reputation</p>
-        <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">{cfg.description}</p>
+        <p className={`text-xl font-bold ${displayCfg.textColor}`}>
+          {cfg.label} Reputation{isStale ? " — Historical" : ""}
+        </p>
+        {isStale ? (
+          <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
+            This was recorded on {dateLabel} ({dataAgeDays} days ago). Open Google Postmaster Tools to see your current status.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">{cfg.description}</p>
+        )}
       </div>
     </div>
   );
@@ -895,14 +918,39 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
   const latest = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
 
   // Domain reputation
+  // Find the actual date the reputation data came from so we can gate on freshness.
+  // We search all trafficStats (not just the time-filtered view) because latestReputation
+  // is computed server-side from the full dataset.
+  const allStats = domain.trafficStats;
+  const repDataStat = [...allStats]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .find(s => s.domainReputation && s.domainReputation !== "REPUTATION_CATEGORY_UNSPECIFIED");
+  const repDataDate = repDataStat?.date ?? null;
+  const repDataAgeDays = repDataDate
+    ? Math.floor((Date.now() - new Date(repDataDate).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const repDataIsStale = repDataDate != null && repDataAgeDays > 7;
+  const repDateLabel = repDataDate
+    ? new Date(repDataDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    : null;
+
   const rep = domain.latestReputation;
   if (rep === "BAD") {
     items.push({
       id: "rep-bad",
-      severity: "critical",
-      title: "Your domain has a BAD reputation with Gmail",
-      what: "This is the most serious problem. Gmail is either blocking your emails or sending almost all of them straight to spam. Most of your subscribers are not seeing your messages at all right now. You need to stop and fix this before sending anything else.",
-      steps: [
+      severity: repDataIsStale ? "warning" : "critical",
+      title: repDataIsStale
+        ? `Your domain had a BAD reputation as of ${repDateLabel} — verify current status`
+        : "Your domain has a BAD reputation with Gmail",
+      what: repDataIsStale
+        ? `Google Postmaster recorded a BAD domain reputation on ${repDateLabel} (${repDataAgeDays} days ago). This data may no longer reflect your current standing — Google's Postmaster Tools can take weeks to update, and your reputation may have already improved. Before taking any drastic action, log in to Google Postmaster Tools directly to confirm what your reputation shows today.`
+        : "This is the most serious problem. Gmail is either blocking your emails or sending almost all of them straight to spam. Most of your subscribers are not seeing your messages at all right now. You need to stop and fix this before sending anything else.",
+      steps: repDataIsStale ? [
+        `Log in to Google Postmaster Tools (postmaster.google.com) and check the Domain Reputation graph for ${domain.domainName}. The data we have is from ${repDateLabel} — look at what it shows for recent days.`,
+        "If Postmaster now shows MEDIUM or HIGH, your reputation has recovered. No emergency action needed — keep focusing on sending only to engaged contacts and keeping your spam complaint rate low.",
+        "If Postmaster still shows BAD or LOW, then the situation is ongoing. In that case: stop sending bulk emails immediately, segment your list to keep only contacts who opened or clicked in the last 60 days, and contact your email platform's support about moving to a cleaner IP pool.",
+        "Check your domain on MXToolbox (mxtoolbox.com → Blacklists). Type in your domain name to see if you are on any spam blocklists. If you are, follow each blocklist's removal instructions.",
+      ] : [
         "Stop sending all bulk emails right now. Do not send any newsletters, broadcasts, or mass emails for at least 2 weeks. Sending more emails while your reputation is bad will make things worse.",
         "Log in to your email platform (like ActiveCampaign, Mailchimp, Keap, etc.) and export your full contact list.",
         "Create a new segment in your email platform called 'Inactive — 90 days' and move everyone who has not opened or clicked any email in the last 90 days into it. Stop sending your regular emails to this segment for now — you will use it for a re-engagement campaign later.",
@@ -917,10 +965,18 @@ function buildActionPlan(domain: PostmasterDomainData, filtered: DailyTrafficSta
   } else if (rep === "LOW") {
     items.push({
       id: "rep-low",
-      severity: "warning",
-      title: "Your domain reputation is LOW — emails may be going to spam",
-      what: "Gmail is suspicious of your emails right now. Some of your messages are probably landing in spam folders instead of the inbox. This is fixable, but you need to act now before it gets worse.",
-      steps: [
+      severity: repDataIsStale ? "ok" : "warning",
+      title: repDataIsStale
+        ? `Your domain had a LOW reputation as of ${repDateLabel} — check current status`
+        : "Your domain reputation is LOW — emails may be going to spam",
+      what: repDataIsStale
+        ? `Google Postmaster recorded a LOW domain reputation on ${repDateLabel} (${repDataAgeDays} days ago). Reputation data can take weeks to refresh, so your current standing may already be better. Check Postmaster directly before making any changes to your sending habits.`
+        : "Gmail is suspicious of your emails right now. Some of your messages are probably landing in spam folders instead of the inbox. This is fixable, but you need to act now before it gets worse.",
+      steps: repDataIsStale ? [
+        `Log in to Google Postmaster Tools (postmaster.google.com) and look at the Domain Reputation graph for ${domain.domainName}. The data here is from ${repDateLabel} — see what the most recent days show.`,
+        "If Postmaster now shows MEDIUM or HIGH, your reputation has improved. Stay disciplined: only email engaged contacts, keep your complaint rate low, and send on a consistent schedule.",
+        "If Postmaster still shows LOW, reduce your sending volume by half for 2 weeks. Only email people who have opened or clicked something in the last 90 days, and check your unsubscribe link is easy to find.",
+      ] : [
         "Cut your sending volume in half for the next 2 weeks. If you normally send to 10,000 people, only send to 5,000 — your most active ones.",
         "Only email people who have opened or clicked something you sent in the last 90 days. Skip everyone else for now.",
         "Create a segment in your email platform called 'Inactive — 6 months' and move anyone who has not engaged in 6 months or more into it. Exclude this segment from your regular sends for now. You can run a targeted re-engagement campaign for them later.",
@@ -1797,7 +1853,15 @@ function DomainDashboard({ domain, domains, selectedDomain, onSelectDomain, defa
     <div className="space-y-6">
       {/* Top row: reputation badge on left, all controls on right */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ReputationBadge reputation={domain.latestReputation} />
+        <ReputationBadge
+          reputation={domain.latestReputation}
+          dataDate={
+            [...domain.trafficStats]
+              .sort((a, b) => b.date.localeCompare(a.date))
+              .find(s => s.domainReputation && s.domainReputation !== "REPUTATION_CATEGORY_UNSPECIFIED")
+              ?.date ?? null
+          }
+        />
         <div className="flex flex-wrap items-center gap-2">
           {domains.length > 1 && (
             <>
