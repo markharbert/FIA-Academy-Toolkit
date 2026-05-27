@@ -306,6 +306,10 @@ function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
       low: s.spamRateLow != null ? +(s.spamRateLow * 100).toFixed(5) : null,
       high: s.spamRateHigh != null ? +(s.spamRateHigh * 100).toFixed(5) : null,
     }));
+  // Scale Y axis to actual data so low spam rates show variation instead of a flat line.
+  // ReferenceLine values (0.1, 0.3) would otherwise force the domain to 0–0.3 and crush the data.
+  const dataMax = data.length > 0 ? Math.max(...data.map(d => Math.max(d.rate ?? 0, d.high ?? 0))) : 0;
+  const yMax = dataMax < 0.05 ? Math.max(dataMax * 2.5, 0.005) : 0.4;
 
   if (data.length === 0) {
     return <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No spam rate data in this period</div>;
@@ -341,16 +345,16 @@ function SpamRateChart({ stats }: { stats: DailyTrafficStat[] }) {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
             <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+            <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, yMax]} tickFormatter={v => `${v}%`} />
             <Tooltip
               formatter={(v: number, name: string) => [`${v.toFixed(5)}%`, name === "rate" ? "Midpoint" : name === "low" ? "Low" : "High"]}
               contentStyle={{ fontSize: 11, borderRadius: 8 }}
             />
-            <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1} label={{ value: "0.1% warning", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" }} />
-            <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1} label={{ value: "0.3% critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" }} />
-            {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#rangeGrad)" />}
-            {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.5} />}
-            <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#spamGrad)" dot={false} />
+            <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1} ifOverflow="hidden" label={yMax >= 0.08 ? { value: "0.1% warning", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" } : undefined} />
+            <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1} ifOverflow="hidden" label={yMax >= 0.25 ? { value: "0.3% critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" } : undefined} />
+            {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#rangeGrad)" connectNulls />}
+            {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.5} connectNulls />}
+            <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#spamGrad)" dot={false} connectNulls />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -373,13 +377,18 @@ function AuthChart({ stats }: { stats: DailyTrafficStat[] }) {
     return <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">No authentication data in this period</div>;
   }
 
+  // Zoom in the Y axis so small dips from 100% are visible rather than a flat line at the top.
+  const allValues = data.flatMap(d => [d.SPF, d.DKIM, d.DMARC].filter((v): v is number => v != null));
+  const authMin = allValues.length > 0 ? Math.min(...allValues) : 0;
+  const authDomainMin = Math.max(0, Math.min(authMin - 5, 85));
+
   return (
     <div className="h-44">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
           <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={v => `${v}%`} />
+          <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={[authDomainMin, 100]} tickFormatter={v => `${v}%`} />
           <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`]} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
           <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
           <ReferenceLine y={95} stroke="#10b981" strokeDasharray="3 2" strokeWidth={1} />
@@ -1452,6 +1461,8 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
       low: s.spamRateLow != null ? +(s.spamRateLow * 100).toFixed(5) : null,
       high: s.spamRateHigh != null ? +(s.spamRateHigh * 100).toFixed(5) : null,
     }));
+  const siDataMax = chartData.length > 0 ? Math.max(...chartData.map(d => Math.max(d.rate ?? 0, d.high ?? 0))) : 0;
+  const siYMax = siDataMax < 0.05 ? Math.max(siDataMax * 2.5, 0.005) : 0.4;
 
   // Feedback loops aggregated
   const feedbackMap: Record<string, { total: number; count: number }> = {};
@@ -1562,7 +1573,7 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.4} />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, siYMax]} tickFormatter={v => `${v}%`} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
@@ -1578,13 +1589,13 @@ function SpamIntelligenceTab({ filtered }: { filtered: DailyTrafficStat[] }) {
                       );
                     }}
                   />
-                  <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5}
-                    label={{ value: "0.1% — Warning", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" }} />
-                  <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5}
-                    label={{ value: "0.3% — Critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" }} />
-                  {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#siBandGrad)" legendType="none" />}
-                  {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.6} legendType="none" />}
-                  <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#siLineGrad)" dot={false} />
+                  <ReferenceLine y={0.1} stroke="#f59e0b" strokeDasharray="4 2" strokeWidth={1.5} ifOverflow="hidden"
+                    label={siYMax >= 0.08 ? { value: "0.1% — Warning", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" } : undefined} />
+                  <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} ifOverflow="hidden"
+                    label={siYMax >= 0.25 ? { value: "0.3% — Critical", position: "insideTopRight", fontSize: 9, fill: "#ef4444" } : undefined} />
+                  {hasRange && <Area type="monotone" dataKey="high" stroke="none" fill="url(#siBandGrad)" legendType="none" connectNulls />}
+                  {hasRange && <Area type="monotone" dataKey="low" stroke="none" fill="white" fillOpacity={0.6} legendType="none" connectNulls />}
+                  <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#siLineGrad)" dot={false} connectNulls />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
