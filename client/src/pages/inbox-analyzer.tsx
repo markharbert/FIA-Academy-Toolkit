@@ -489,10 +489,11 @@ function AltChip({ text }: { text: string }) {
 
 // ── Email Detail Panel ────────────────────────────────────────────────────────
 
-function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFromAddress = "", lastPlacementResults = null, lastPlacementCheckedAt = null, placementAutoCheckUntil = null, isActivePlacementEmail = false }: {
+function EmailDetail({ email, onDelete, onReanalyze, onRetryPlacement, seedInboxes = [], sendingFromAddress = "", lastPlacementResults = null, lastPlacementCheckedAt = null, placementAutoCheckUntil = null, isActivePlacementEmail = false }: {
   email: EmailAnalysis;
   onDelete: () => void;
   onReanalyze?: (id: string) => void;
+  onRetryPlacement?: (id: string) => void;
   seedInboxes?: SeedInbox[];
   sendingFromAddress?: string;
   lastPlacementResults?: PlacementResult[] | null;
@@ -749,14 +750,27 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
                 </div>
               ))}
               <PlacementTip results={confirmedResults} />
-              {confirmedAt && (
-                <p className="text-xs text-muted-foreground pt-0.5">
-                  Confirmed {confirmedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {confirmedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                </p>
-              )}
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                {confirmedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Confirmed {confirmedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {confirmedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  </p>
+                )}
+                {onRetryPlacement && (
+                  <Button
+                    variant="ghost" size="sm"
+                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 ml-auto"
+                    onClick={() => onRetryPlacement(email.id)}
+                    data-testid={`button-retry-placement-${email.id}`}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Retry
+                  </Button>
+                )}
+              </div>
             </div>
           ) : connectedInboxes.length === 0 ? (
-            // ── No seed inboxes configured ──
+            // ── No seed inboxes configured (or all unconnected) ──
             <div className="space-y-2">
               {seedInboxes.length === 0 ? (
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
@@ -784,13 +798,26 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
             </div>
           ) : !isActivePlacementEmail ? (
             // ── No active monitoring window for this email ──
-            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
-              <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-muted-foreground">
-                {!sendingFromAddress
-                  ? "Set your sending From address in My Address to enable automatic placement monitoring."
-                  : "No placement data recorded for this email."}
-              </p>
+            <div className="space-y-2">
+              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/40">
+                <CircleAlert className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-muted-foreground">
+                  {!sendingFromAddress
+                    ? "Set your sending From address in My Address to enable automatic placement monitoring."
+                    : "No placement data recorded for this email."}
+                </p>
+              </div>
+              {onRetryPlacement && sendingFromAddress && (
+                <Button
+                  variant="outline" size="sm"
+                  className="w-full gap-1.5 text-sm"
+                  onClick={() => onRetryPlacement(email.id)}
+                  data-testid={`button-retry-placement-${email.id}`}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Retry Placement Check
+                </Button>
+              )}
             </div>
           ) : (
             // ── Active monitoring: checks are in progress ──
@@ -1556,10 +1583,11 @@ function EmailDetail({ email, onDelete, onReanalyze, seedInboxes = [], sendingFr
 
 // ── Email Row ────────────────────────────────────────────────────────────────
 
-function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddress, lastPlacementResults, lastPlacementCheckedAt, placementAutoCheckUntil, isActivePlacementEmail }: {
+function EmailRow({ email, onDelete, onReanalyze, onRetryPlacement, seedInboxes, sendingFromAddress, lastPlacementResults, lastPlacementCheckedAt, placementAutoCheckUntil, isActivePlacementEmail }: {
   email: EmailAnalysis;
   onDelete: (id: string) => void;
   onReanalyze?: (id: string) => void;
+  onRetryPlacement?: (id: string) => void;
   seedInboxes?: SeedInbox[];
   sendingFromAddress?: string;
   lastPlacementResults?: PlacementResult[] | null;
@@ -1668,7 +1696,7 @@ function EmailRow({ email, onDelete, onReanalyze, seedInboxes, sendingFromAddres
         <div className="px-4 pb-5">
           <Separator className="mb-5" />
           <EmailDetailErrorBoundary>
-            <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} placementAutoCheckUntil={placementAutoCheckUntil} isActivePlacementEmail={isActivePlacementEmail} />
+            <EmailDetail email={email} onDelete={() => onDelete(email.id)} onReanalyze={onReanalyze} onRetryPlacement={onRetryPlacement} seedInboxes={seedInboxes} sendingFromAddress={sendingFromAddress} lastPlacementResults={lastPlacementResults} lastPlacementCheckedAt={lastPlacementCheckedAt} placementAutoCheckUntil={placementAutoCheckUntil} isActivePlacementEmail={isActivePlacementEmail} />
           </EmailDetailErrorBoundary>
         </div>
       )}
@@ -2462,11 +2490,26 @@ export default function InboxAnalyzerPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/address"] });
-      toast({ title: "Re-analysis started", description: "Your email is being analyzed again." });
+      toast({ title: "Re-analysis started", description: "Your email is being analyzed again, including a fresh placement check." });
     },
     onError: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
       toast({ title: "Failed to re-analyze", variant: "destructive" });
+    },
+  });
+
+  const retryPlacementMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/inbox-analyzer/emails/${id}/retry-placement`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/address"] });
+      toast({ title: "Placement check complete", description: "Results have been refreshed." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Placement retry failed", description: err?.message ?? "Could not run placement check", variant: "destructive" });
     },
   });
 
@@ -2560,6 +2603,7 @@ export default function InboxAnalyzerPage() {
                       email={email}
                       onDelete={(id) => deleteMutation.mutate(id)}
                       onReanalyze={(id) => reanalyzeMutation.mutate(id)}
+                      onRetryPlacement={(id) => retryPlacementMutation.mutate(id)}
                       seedInboxes={seedInboxes}
                       sendingFromAddress={addressData?.sendingFromAddress || ""}
                       lastPlacementResults={isActivePlacement ? (addressData?.lastPlacementResults || null) : null}

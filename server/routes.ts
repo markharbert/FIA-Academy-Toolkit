@@ -5645,55 +5645,61 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
             status: "complete",
           });
 
-          // If placement hasn't been confirmed yet, trigger a placement check now.
-          // We skip this when placementResults is already set (confirmed by the scheduler).
-          if (!analysis.placementResults) {
-            try {
-              const addr = await storage.getOrCreateInboxAddress(userId);
-              // Prefer user-configured sendingFromAddress; fall back to the email's actual from address.
-              const senderForPlacement = addr?.sendingFromAddress || fromAddress;
-              const allInboxes = await storage.getSeedInboxes(true);
-              const { checkGmailPlacement, checkGmailPlacementServiceAccount: saCheck2, isServiceAccountConfigured: isSA, isServiceAccountEligible: isSAEligible } = await import("./gmailOAuth");
-              const useSA = isSA();
-              // SA (DWD) only works for Workspace accounts. @gmail.com inboxes must use OAuth.
-              const connectedInboxes = allInboxes.filter(i =>
-                i.provider === "gmail" && (
-                  (useSA && isSAEligible(i.email)) || i.isConnected
-                )
+          // Always re-run placement on reanalyze so that bug fixes (e.g. subject
+          // truncation) take effect retroactively — don't skip even if we already
+          // have confirmed results.
+          try {
+            const addr = await storage.getOrCreateInboxAddress(userId);
+            const senderForPlacement = addr?.sendingFromAddress || fromAddress;
+            const allInboxes = await storage.getSeedInboxes(true);
+            const { checkGmailPlacement, checkGmailPlacementServiceAccount: saCheck2, isServiceAccountConfigured: isSA, isServiceAccountEligible: isSAEligible } = await import("./gmailOAuth");
+            const { checkGmailPlacementImap: imapCheck2 } = await import("./imapPlacement");
+            const useSA = isSA();
+            const connectedInboxes = allInboxes.filter(i =>
+              i.provider === "gmail" && (
+                (useSA && isSAEligible(i.email)) ||
+                i.authMethod === "imap" ||
+                (i.isConnected && i.oauthAccessToken)
+              )
+            );
+            if (connectedInboxes.length > 0 && senderForPlacement) {
+              const emailCtx = {
+                messageId: analysis.messageId ?? null,
+                receivedAt: analysis.receivedAt ? new Date(analysis.receivedAt as unknown as string) : null,
+                subject: analysis.subject ?? null,
+              };
+              // Re-open the monitoring window pinned to THIS email so the scheduler
+              // also picks it up for follow-up checks.
+              const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+              await storage.setPlacementAutoCheckWindow(
+                userId,
+                new Date(Date.now() + TWENTY_FOUR_H),
+                {
+                  receivedAt: emailCtx.receivedAt ?? new Date(),
+                  subject: emailCtx.subject ?? "",
+                  messageId: emailCtx.messageId ?? undefined,
+                }
               );
-              if (connectedInboxes.length > 0 && senderForPlacement) {
-                // Always use THIS specific email's own identifiers, not the address-level
-                // pinned context (which points to the most recent email and would send
-                // the Gmail search after the wrong message for any older email).
-                const emailCtx = {
-                  messageId: analysis.messageId ?? null,
-                  receivedAt: analysis.receivedAt ? new Date(analysis.receivedAt as unknown as string) : null,
-                  subject: analysis.subject ?? null,
-                };
-                const placementResults = await Promise.all(
-                  connectedInboxes.map(inbox =>
-                    (useSA && isSAEligible(inbox.email))
-                      ? saCheck2(inbox, senderForPlacement, emailCtx)
-                      : checkGmailPlacement(
-                          {
-                            id: inbox.id,
-                            label: inbox.label,
-                            email: inbox.email,
-                            provider: inbox.provider,
-                            oauthAccessToken: inbox.oauthAccessToken,
-                            oauthRefreshToken: inbox.oauthRefreshToken,
-                          },
-                          senderForPlacement,
-                          emailCtx
-                        )
-                  )
-                );
-                await storage.saveLastPlacementResults(userId, placementResults);
-                console.log(`[inbox-analyzer] reanalyze also ran placement check for email ${emailId}`);
+              const placementResults = await Promise.all(
+                connectedInboxes.map(inbox => {
+                  if (useSA && isSAEligible(inbox.email)) return saCheck2(inbox, senderForPlacement, emailCtx);
+                  if (inbox.authMethod === "imap") return imapCheck2({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, senderForPlacement, emailCtx);
+                  return checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, senderForPlacement, emailCtx);
+                })
+              );
+              await storage.saveLastPlacementResults(userId, placementResults);
+              // If all inboxes resolved definitively, lock in immediately on the email record
+              const DEFINITIVE = new Set(["primary", "promotions", "social", "updates", "forums", "spam"]);
+              if (placementResults.length > 0 && placementResults.every(r => DEFINITIVE.has(r.status))) {
+                if (analysis.messageId) {
+                  await storage.saveEmailPlacementResults(analysis.messageId, userId, placementResults);
+                }
+                await storage.setPlacementAutoCheckWindow(userId, null);
               }
-            } catch (placementErr: any) {
-              console.error("[inbox-analyzer] reanalyze placement check error:", placementErr?.message);
+              console.log(`[inbox-analyzer] reanalyze ran placement check for email ${emailId}: ${placementResults.map(r => `${r.label}:${r.status}`).join(", ")}`);
             }
+          } catch (placementErr: any) {
+            console.error("[inbox-analyzer] reanalyze placement check error:", placementErr?.message);
           }
         } catch (err) {
           console.error("[inbox-analyzer] reanalyze pipeline error:", err);
@@ -5703,6 +5709,77 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     } catch (err) {
       console.error("[inbox-analyzer] reanalyze error:", err);
       res.status(500).json({ message: "Failed to start re-analysis" });
+    }
+  });
+
+  // Retry placement only — re-opens the 24-h window for a specific email and immediately
+  // runs a fresh placement check. Returns results synchronously so the UI can update right away.
+  app.post("/api/inbox-analyzer/emails/:id/retry-placement", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const emailId = req.params.id;
+      const userId  = req.session.userId!;
+      const analysis = await storage.getEmailAnalysis(emailId, userId);
+      if (!analysis) return res.status(404).json({ message: "Email not found" });
+
+      const addr = await storage.getOrCreateInboxAddress(userId);
+      const senderForPlacement = addr?.sendingFromAddress || analysis.fromAddress;
+      if (!senderForPlacement) {
+        return res.status(400).json({ message: "No sending address configured. Set your From address in My Address first." });
+      }
+
+      const allInboxes = await storage.getSeedInboxes(true);
+      const { checkGmailPlacement, checkGmailPlacementServiceAccount: saCheck, isServiceAccountConfigured: isSA, isServiceAccountEligible: isSAEligible } = await import("./gmailOAuth");
+      const { checkGmailPlacementImap: imapCheck } = await import("./imapPlacement");
+      const useSA = isSA();
+      const connectedInboxes = allInboxes.filter(i =>
+        i.provider === "gmail" && (
+          (useSA && isSAEligible(i.email)) ||
+          i.authMethod === "imap" ||
+          (i.isConnected && i.oauthAccessToken)
+        )
+      );
+
+      if (connectedInboxes.length === 0) {
+        return res.json({ results: [], message: "No connected seed inboxes" });
+      }
+
+      const emailCtx = {
+        messageId: analysis.messageId ?? null,
+        receivedAt: analysis.receivedAt ? new Date(analysis.receivedAt as unknown as string) : null,
+        subject: analysis.subject ?? null,
+      };
+
+      // Re-open a fresh 24-h monitoring window pinned to this email
+      const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+      await storage.setPlacementAutoCheckWindow(userId, new Date(Date.now() + TWENTY_FOUR_H), {
+        receivedAt: emailCtx.receivedAt ?? new Date(),
+        subject: emailCtx.subject ?? "",
+        messageId: emailCtx.messageId ?? undefined,
+      });
+
+      // Run the check immediately
+      const results = await Promise.all(
+        connectedInboxes.map(inbox => {
+          if (useSA && isSAEligible(inbox.email)) return saCheck(inbox, senderForPlacement, emailCtx);
+          if (inbox.authMethod === "imap") return imapCheck({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, senderForPlacement, emailCtx);
+          return checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, senderForPlacement, emailCtx);
+        })
+      );
+
+      await storage.saveLastPlacementResults(userId, results);
+
+      // Lock in immediately if all inboxes returned a definitive result
+      const DEFINITIVE = new Set(["primary", "promotions", "social", "updates", "forums", "spam"]);
+      if (results.length > 0 && results.every(r => DEFINITIVE.has(r.status))) {
+        if (analysis.messageId) await storage.saveEmailPlacementResults(analysis.messageId, userId, results);
+        await storage.setPlacementAutoCheckWindow(userId, null);
+      }
+
+      console.log(`[retry-placement] email ${emailId}: ${results.map(r => `${r.label}:${r.status}`).join(", ")}`);
+      res.json({ results, sendingFrom: senderForPlacement });
+    } catch (err: any) {
+      console.error("[retry-placement] error:", err?.message);
+      res.status(500).json({ message: "Failed to retry placement check" });
     }
   });
 
