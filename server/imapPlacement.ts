@@ -47,11 +47,23 @@ async function searchMailbox(
   }
 }
 
+// Derive PlacementStatus from a set of Gmail X-GM-LABELS strings.
+function categoryFromLabels(labels: Set<string> | undefined): PlacementStatus {
+  if (!labels || labels.size === 0) return "primary";
+  const lbls = [...labels].map((l: string) => l.toLowerCase());
+  if (lbls.some(l => l.includes("category_promotions"))) return "promotions";
+  if (lbls.some(l => l.includes("category_social")))     return "social";
+  if (lbls.some(l => l.includes("category_updates")))    return "updates";
+  if (lbls.some(l => l.includes("category_forums")))     return "forums";
+  return "primary";
+}
+
 // Open INBOX, search for matching emails, return category derived from Gmail labels.
 // Returns null if nothing found.
 async function getInboxCategory(
   client: ImapFlow,
-  criteria: ImapCriteria
+  criteria: ImapCriteria,
+  tag: string
 ): Promise<PlacementStatus | null> {
   const lock = await client.getMailboxLock("INBOX");
   try {
@@ -59,15 +71,22 @@ async function getInboxCategory(
     if (uids.length === 0) return null;
 
     const uid = uids[uids.length - 1];
-    const msg = await client.fetchOne(uid.toString(), { labels: true }, { uid: true });
-    if (!msg) return "primary";
 
-    const lbls = [...(msg.labels || [])].map((l: string) => l.toLowerCase());
-    if (lbls.some(l => l.includes("category_promotions"))) return "promotions";
-    if (lbls.some(l => l.includes("category_social")))     return "social";
-    if (lbls.some(l => l.includes("category_updates")))    return "updates";
-    if (lbls.some(l => l.includes("category_forums")))     return "forums";
-    return "primary";
+    // Primary attempt: fetchOne with labels
+    let labelsSet: Set<string> | undefined;
+    const msg = await client.fetchOne(uid.toString(), { labels: true }, { uid: true });
+    if (msg) labelsSet = msg.labels;
+
+    // Fallback: if fetchOne didn't populate labels, try the fetch iterator
+    if (!labelsSet || labelsSet.size === 0) {
+      for await (const m of client.fetch(uid.toString(), { labels: true }, { uid: true })) {
+        labelsSet = m.labels;
+        break;
+      }
+    }
+
+    console.log(`${tag} UID ${uid} labels:`, labelsSet ? [...labelsSet] : "undefined/empty");
+    return categoryFromLabels(labelsSet);
   } finally {
     lock.release();
   }
@@ -184,7 +203,7 @@ export async function checkGmailPlacementImap(
       // Check INBOX and get category from Gmail labels
       let category: PlacementStatus | null = null;
       try {
-        category = await getInboxCategory(client, criteria);
+        category = await getInboxCategory(client, criteria, `${tag} S${i + 1}`);
       } catch (err: any) {
         console.warn(`${tag} S${i + 1} inbox label fetch error:`, err?.message);
       }
