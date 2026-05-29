@@ -929,7 +929,7 @@ export const seedInboxes = pgTable("seed_inboxes", {
   oauthNeedsReconnect: boolean("oauth_needs_reconnect").default(false).notNull(),
   // IMAP + App Password auth (personal Gmail — permanent, no re-auth needed)
   imapPassword: text("imap_password"),  // AES-256-GCM encrypted App Password
-  authMethod: text("auth_method"),      // 'imap' | 'oauth' | null
+  authMethod: text("auth_method"),      // 'imap' | 'oauth' | 'dual' | null
 });
 
 export const insertSeedInboxSchema = createInsertSchema(seedInboxes).omit({ id: true, createdAt: true, oauthAccessToken: true, oauthRefreshToken: true, oauthTokenExpiry: true, isConnected: true, oauthNeedsReconnect: true, imapPassword: true, authMethod: true });

@@ -3364,14 +3364,17 @@ export class DatabaseStorage implements IStorage {
 
   async storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, _verifiedEmail: string): Promise<void> {
     // Do NOT overwrite the email field — it was manually set by the admin as the inbox identifier.
-    // The OAuth tokens are simply stored as credentials to access that inbox.
+    // If the inbox already has an IMAP App Password, keep both active ("dual" mode) so both
+    // methods run in parallel and OAuth's result takes precedence.
+    const [existing] = await db.select({ imapPassword: seedInboxes.imapPassword }).from(seedInboxes).where(eq(seedInboxes.id, id));
+    const newAuthMethod = existing?.imapPassword ? "dual" : "oauth";
     await db.update(seedInboxes).set({
       oauthAccessToken: accessToken,
       oauthRefreshToken: refreshToken,
       oauthTokenExpiry: expiry,
       isConnected: true,
       oauthNeedsReconnect: false,
-      authMethod: "oauth",
+      authMethod: newAuthMethod,
     }).where(eq(seedInboxes.id, id));
   }
 
@@ -3386,9 +3389,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markSeedInboxNeedsReconnect(id: string): Promise<void> {
-    // Only applies to OAuth inboxes — IMAP inboxes never need reconnect
+    // IMAP-only inboxes never need reconnect.
+    // Dual inboxes demote back to IMAP-only when OAuth expires — inbox keeps working via IMAP.
     const [row] = await db.select({ authMethod: seedInboxes.authMethod }).from(seedInboxes).where(eq(seedInboxes.id, id));
     if (row?.authMethod === "imap") return;
+    if (row?.authMethod === "dual") {
+      await db.update(seedInboxes)
+        .set({ authMethod: "imap", oauthNeedsReconnect: false })
+        .where(eq(seedInboxes.id, id));
+      return;
+    }
     await db.update(seedInboxes)
       .set({ oauthNeedsReconnect: true })
       .where(eq(seedInboxes.id, id));
