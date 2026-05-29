@@ -32,11 +32,13 @@ export async function runPlacementCheckForUser(
     // Routing:
     //   SA (DWD)   — Google Workspace accounts (isServiceAccountEligible), never expires
     //   IMAP       — personal @gmail.com with authMethod='imap' + App Password, never expires
-    //   OAuth      — legacy personal @gmail.com OAuth tokens (kept for backward compat)
+    //   OAuth      — personal @gmail.com OAuth tokens
+    //   Dual       — IMAP + OAuth both active; both run in parallel, OAuth wins if definitive
     const targetInboxes = allInboxes.filter(i =>
       i.provider === "gmail" && (
         (saConfigured && isServiceAccountEligible(i.email)) ||
         i.authMethod === "imap" ||
+        i.authMethod === "dual" ||
         (i.isConnected && i.oauthAccessToken)
       )
     );
@@ -54,27 +56,29 @@ export async function runPlacementCheckForUser(
             // 2. IMAP + App Password (personal Gmail, permanent)
             if (inbox.authMethod === "imap") {
               return await checkGmailPlacementImap(
-                {
-                  id:           inbox.id,
-                  label:        inbox.label,
-                  email:        inbox.email,
-                  provider:     inbox.provider,
-                  imapPassword: inbox.imapPassword,
-                },
+                { id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword },
                 sendingFrom,
                 emailContext
               );
             }
-            // 3. Legacy OAuth (personal Gmail)
+            // 3. Dual mode — run IMAP and OAuth in parallel; OAuth wins when definitive
+            if (inbox.authMethod === "dual") {
+              const DEFINITIVE = new Set(["primary","promotions","social","updates","forums","spam"]);
+              const [imapS, oauthS] = await Promise.allSettled([
+                checkGmailPlacementImap({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, sendingFrom, emailContext),
+                checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, sendingFrom, emailContext),
+              ]);
+              const imapRes  = imapS.status  === "fulfilled" ? imapS.value  : null;
+              const oauthRes = oauthS.status === "fulfilled" ? oauthS.value : null;
+              if (imapRes && oauthRes && imapRes.status !== oauthRes.status)
+                console.log(`[DualMode] ${inbox.email} | IMAP:${imapRes.status} OAuth:${oauthRes.status} → using OAuth`);
+              if (oauthRes && DEFINITIVE.has(oauthRes.status)) return oauthRes;
+              if (imapRes  && DEFINITIVE.has(imapRes.status))  return imapRes;
+              return oauthRes ?? imapRes ?? { inboxId: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, status: "error" as const };
+            }
+            // 4. OAuth only (personal Gmail)
             return await checkGmailPlacement(
-              {
-                id:                inbox.id,
-                label:             inbox.label,
-                email:             inbox.email,
-                provider:          inbox.provider,
-                oauthAccessToken:  inbox.oauthAccessToken,
-                oauthRefreshToken: inbox.oauthRefreshToken,
-              },
+              { id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken },
               sendingFrom,
               emailContext
             );

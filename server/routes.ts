@@ -5425,11 +5425,12 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const { checkGmailPlacementServiceAccount: saCheck, isServiceAccountConfigured, isServiceAccountEligible } = await import("./gmailOAuth");
       const { checkGmailPlacementImap } = await import("./imapPlacement");
       const saConfigured = isServiceAccountConfigured();
-      // SA (DWD): Workspace accounts. IMAP: @gmail.com with App Password. OAuth: legacy.
+      // SA (DWD): Workspace accounts. IMAP: @gmail.com with App Password. Dual: both. OAuth: OAuth only.
       const connectedInboxes = allInboxes.filter(i =>
         i.provider === "gmail" && (
           (saConfigured && isServiceAccountEligible(i.email)) ||
           i.authMethod === "imap" ||
+          i.authMethod === "dual" ||
           (i.isConnected && i.oauthAccessToken)
         )
       );
@@ -5447,7 +5448,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       };
 
       const results: PlacementResult[] = await Promise.all(
-        connectedInboxes.map(inbox => {
+        connectedInboxes.map(async inbox => {
           // 1. Service Account (Google Workspace — DWD, never expires)
           if (saConfigured && isServiceAccountEligible(inbox.email)) {
             return saCheck(inbox, sendingFrom, emailContext);
@@ -5460,7 +5461,22 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
               emailContext
             );
           }
-          // 3. Legacy OAuth
+          // 3. Dual mode — IMAP + OAuth both active; run in parallel, OAuth wins when definitive
+          if (inbox.authMethod === "dual") {
+            const DEFINITIVE = new Set(["primary","promotions","social","updates","forums","spam"]);
+            const [imapS, oauthS] = await Promise.allSettled([
+              checkGmailPlacementImap({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, sendingFrom, emailContext),
+              checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, sendingFrom, emailContext),
+            ]);
+            const imapRes  = imapS.status  === "fulfilled" ? imapS.value  : null;
+            const oauthRes = oauthS.status === "fulfilled" ? oauthS.value : null;
+            if (imapRes && oauthRes && imapRes.status !== oauthRes.status)
+              console.log(`[DualMode] ${inbox.email} | IMAP:${imapRes.status} OAuth:${oauthRes.status} → using OAuth`);
+            if (oauthRes && DEFINITIVE.has(oauthRes.status)) return oauthRes;
+            if (imapRes  && DEFINITIVE.has(imapRes.status))  return imapRes;
+            return oauthRes ?? imapRes ?? { inboxId: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, status: "error" as const };
+          }
+          // 4. OAuth only
           return checkGmailPlacement(
             { id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken },
             sendingFrom,
@@ -5659,6 +5675,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
               i.provider === "gmail" && (
                 (useSA && isSAEligible(i.email)) ||
                 i.authMethod === "imap" ||
+                i.authMethod === "dual" ||
                 (i.isConnected && i.oauthAccessToken)
               )
             );
@@ -5681,9 +5698,23 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
                 }
               );
               const placementResults = await Promise.all(
-                connectedInboxes.map(inbox => {
+                connectedInboxes.map(async inbox => {
                   if (useSA && isSAEligible(inbox.email)) return saCheck2(inbox, senderForPlacement, emailCtx);
                   if (inbox.authMethod === "imap") return imapCheck2({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, senderForPlacement, emailCtx);
+                  if (inbox.authMethod === "dual") {
+                    const DEFINITIVE = new Set(["primary","promotions","social","updates","forums","spam"]);
+                    const [imapS, oauthS] = await Promise.allSettled([
+                      imapCheck2({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, senderForPlacement, emailCtx),
+                      checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, senderForPlacement, emailCtx),
+                    ]);
+                    const imapRes  = imapS.status  === "fulfilled" ? imapS.value  : null;
+                    const oauthRes = oauthS.status === "fulfilled" ? oauthS.value : null;
+                    if (imapRes && oauthRes && imapRes.status !== oauthRes.status)
+                      console.log(`[DualMode] ${inbox.email} | IMAP:${imapRes.status} OAuth:${oauthRes.status} → using OAuth`);
+                    if (oauthRes && DEFINITIVE.has(oauthRes.status)) return oauthRes;
+                    if (imapRes  && DEFINITIVE.has(imapRes.status))  return imapRes;
+                    return oauthRes ?? imapRes ?? { inboxId: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, status: "error" as const };
+                  }
                   return checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, senderForPlacement, emailCtx);
                 })
               );
@@ -5735,6 +5766,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         i.provider === "gmail" && (
           (useSA && isSAEligible(i.email)) ||
           i.authMethod === "imap" ||
+          i.authMethod === "dual" ||
           (i.isConnected && i.oauthAccessToken)
         )
       );
@@ -5759,9 +5791,23 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
       // Run the check immediately
       const results = await Promise.all(
-        connectedInboxes.map(inbox => {
+        connectedInboxes.map(async inbox => {
           if (useSA && isSAEligible(inbox.email)) return saCheck(inbox, senderForPlacement, emailCtx);
           if (inbox.authMethod === "imap") return imapCheck({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, senderForPlacement, emailCtx);
+          if (inbox.authMethod === "dual") {
+            const DEFINITIVE = new Set(["primary","promotions","social","updates","forums","spam"]);
+            const [imapS, oauthS] = await Promise.allSettled([
+              imapCheck({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, senderForPlacement, emailCtx),
+              checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, senderForPlacement, emailCtx),
+            ]);
+            const imapRes  = imapS.status  === "fulfilled" ? imapS.value  : null;
+            const oauthRes = oauthS.status === "fulfilled" ? oauthS.value : null;
+            if (imapRes && oauthRes && imapRes.status !== oauthRes.status)
+              console.log(`[DualMode] ${inbox.email} | IMAP:${imapRes.status} OAuth:${oauthRes.status} → using OAuth`);
+            if (oauthRes && DEFINITIVE.has(oauthRes.status)) return oauthRes;
+            if (imapRes  && DEFINITIVE.has(imapRes.status))  return imapRes;
+            return oauthRes ?? imapRes ?? { inboxId: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, status: "error" as const };
+          }
           return checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, senderForPlacement, emailCtx);
         })
       );
