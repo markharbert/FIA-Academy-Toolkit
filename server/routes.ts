@@ -1292,6 +1292,11 @@ export async function registerRoutes(
         ownerName: "Jane Smith",
         inviteUrl: `${process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com"}/workspace/accept?token=preview-token`,
       }, resources),
+      magicLink: () => emailTemplates.magicLinkLoginEmail({
+        firstName: sample.firstName,
+        loginUrl: `${process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com"}/api/auth/magic-link?token=preview-token`,
+        expiresAt: new Date(Date.now() + 20 * 60 * 1000),
+      }, resources),
     };
   }
 

@@ -742,6 +742,7 @@ function CfIntegrationTab() {
 const EMAIL_TEMPLATES = [
   { key: "welcome", label: "Welcome", group: "General" },
   { key: "workspaceInvite", label: "Workspace collaborator invite", group: "General" },
+  { key: "magicLink", label: "Magic link sign-in", group: "General" },
   { key: "taskDueReminders", label: "Task due reminders", group: "Projects & Tasks" },
   { key: "overdueAlerts", label: "Overdue task alerts", group: "Projects & Tasks" },
   { key: "projectDueReminders", label: "Project due reminders", group: "Projects & Tasks" },
