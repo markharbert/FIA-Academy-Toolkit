@@ -67,6 +67,17 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   userAgent: text("user_agent"),
 });
 
+export const magicLinkTokens = pgTable("magic_link_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type MagicLinkToken = typeof magicLinkTokens.$inferSelect;
+export type InsertMagicLinkToken = typeof magicLinkTokens.$inferInsert;
+
 // Admin audit log table for tracking admin actions
 export const adminAuditLog = pgTable("admin_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

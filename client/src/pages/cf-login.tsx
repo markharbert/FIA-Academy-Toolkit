@@ -133,19 +133,28 @@ export default function CfLoginPage() {
                 Log In with Email &amp; Password
               </a>
             ) : (
-              <div className="w-full rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white/70 leading-relaxed">
-                <p className="font-medium text-white mb-1">Need help?</p>
-                <p>
-                  Please reach out to{" "}
-                  <a
-                    href="mailto:support@markharbert.com"
-                    className="text-[hsl(203,54%,65%)] underline underline-offset-2 hover:text-[hsl(203,54%,80%)]"
-                  >
-                    support@markharbert.com
-                  </a>{" "}
-                  and we&rsquo;ll get this sorted out for you.
-                </p>
-              </div>
+              <>
+                <a
+                  data-testid="link-member-login"
+                  href="/member-login"
+                  className="w-full rounded-lg bg-[hsl(203,54%,53%)] hover:bg-[hsl(203,54%,45%)] text-white text-sm font-semibold py-3 px-4 text-center transition-colors"
+                >
+                  Sign In with Email Link
+                </a>
+                <div className="w-full rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white/70 leading-relaxed">
+                  <p className="font-medium text-white mb-1">Need help?</p>
+                  <p>
+                    Please reach out to{" "}
+                    <a
+                      href="mailto:support@markharbert.com"
+                      className="text-[hsl(203,54%,65%)] underline underline-offset-2 hover:text-[hsl(203,54%,80%)]"
+                    >
+                      support@markharbert.com
+                    </a>{" "}
+                    and we&rsquo;ll get this sorted out for you.
+                  </p>
+                </div>
+              </>
             )}
             <button
               data-testid="button-cf-retry"

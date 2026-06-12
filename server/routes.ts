@@ -845,6 +845,133 @@ export async function registerRoutes(
     }
   });
 
+  // ── Magic Link Login ─────────────────────────────────────────────────────────
+  const MAGIC_LINK_EXPIRY_MINUTES = 20;
+  const MAX_MAGIC_LINK_REQUESTS_PER_15MIN = 3;
+
+  // POST: Request a magic link (member email login)
+  app.post("/api/auth/request-magic-link", async (req: Request, res: Response) => {
+    try {
+      const { email: rawEmail } = req.body;
+      const email = (rawEmail || "").trim().toLowerCase();
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "invalid_email", message: "Please enter a valid email address." });
+      }
+
+      const successMessage = "If this email is linked to an active membership, a login link has been sent. Check your inbox — it expires in 20 minutes.";
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.json({ message: successMessage });
+      }
+
+      if (user.isDisabled) {
+        return res.status(403).json({ error: "account_disabled", message: "This account has been disabled. Please contact support." });
+      }
+
+      // Rate limit: max 3 requests per user per 15 min
+      const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000);
+      const recentCount = await storage.countRecentMagicLinkRequests(user.id, fifteenMinAgo);
+      if (recentCount >= MAX_MAGIC_LINK_REQUESTS_PER_15MIN) {
+        return res.status(429).json({ error: "rate_limited", message: "Too many login requests. Please wait 15 minutes and try again." });
+      }
+
+      // Verify active CF membership when CF is configured
+      if (CF_API_TOKEN && CF_COURSE_ID) {
+        let cfInfo: CfContactInfo;
+        try {
+          cfInfo = await checkCfEnrollmentByEmail(email, (user as any).cfContactId ?? undefined);
+        } catch (err: any) {
+          console.error("[MagicLink] CF API error:", err?.message);
+          return res.status(502).json({ error: "cf_api_error", message: "We couldn't verify your membership right now. Please try again in a moment." });
+        }
+
+        if (!cfInfo.enrolled) {
+          console.warn(`[MagicLink] not enrolled: ${email}`);
+          return res.status(403).json({
+            error: "cf_not_enrolled",
+            message: "We couldn't verify an active membership for this email. If you believe this is an error, please contact support@markharbert.com.",
+          });
+        }
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRY_MINUTES * 60 * 1000);
+
+      await storage.createMagicLinkToken({ userId: user.id, tokenHash, expiresAt });
+
+      const APP_ML_BASE = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+      const loginUrl = `${APP_ML_BASE}/api/auth/magic-link?token=${token}`;
+      const tpl = emailTemplates.magicLinkLoginEmail({
+        firstName: (user as any).firstName ?? null,
+        loginUrl,
+        expiresAt,
+      });
+      const { sendEmail: sendMagicLinkEmail } = await import("./email-sendgrid");
+      await sendMagicLinkEmail({ to: email, ...tpl });
+
+      console.log(`[MagicLink] login link sent to ${email}`);
+      res.json({ message: successMessage });
+    } catch (err: any) {
+      console.error("[MagicLink] request error:", err?.message);
+      res.status(500).json({ error: "server_error", message: "Something went wrong. Please try again." });
+    }
+  });
+
+  // GET: Validate magic link token, create session, redirect to dashboard
+  app.get("/api/auth/magic-link", async (req: Request, res: Response) => {
+    const APP_ML_BASE = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+    try {
+      const { token } = req.query;
+      if (!token || typeof token !== "string") {
+        return res.redirect(`${APP_ML_BASE}/member-login?error=invalid_token`);
+      }
+
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const magicToken = await storage.getMagicLinkTokenByHash(tokenHash);
+
+      if (!magicToken) {
+        return res.redirect(`${APP_ML_BASE}/member-login?error=invalid_token`);
+      }
+
+      if (magicToken.usedAt) {
+        return res.redirect(`${APP_ML_BASE}/member-login?error=already_used`);
+      }
+
+      if (new Date() > new Date(magicToken.expiresAt)) {
+        return res.redirect(`${APP_ML_BASE}/member-login?error=expired`);
+      }
+
+      const user = await storage.getUser(magicToken.userId);
+      if (!user || user.isDisabled) {
+        return res.redirect(`${APP_ML_BASE}/member-login?error=invalid_token`);
+      }
+
+      await storage.markMagicLinkTokenUsed(magicToken.id);
+
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("[MagicLink] session regeneration error:", err);
+          return res.redirect(`${APP_ML_BASE}/member-login?error=server_error`);
+        }
+        req.session.userId = user.id;
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("[MagicLink] session save error:", saveErr);
+            return res.redirect(`${APP_ML_BASE}/member-login?error=server_error`);
+          }
+          console.log(`[MagicLink] session created for user ${user.id} (${user.email})`);
+          res.redirect(`${APP_ML_BASE}/dashboard`);
+        });
+      });
+    } catch (err: any) {
+      console.error("[MagicLink] verify error:", err?.message);
+      res.redirect(`${APP_ML_BASE}/member-login?error=server_error`);
+    }
+  });
+
   // ===================
   // OAUTH ROUTES
   // ===================
@@ -5431,7 +5558,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           (saConfigured && isServiceAccountEligible(i.email)) ||
           i.authMethod === "imap" ||
           i.authMethod === "dual" ||
-          (i.isConnected && i.oauthAccessToken)
+          (i.isConnected && i.oauthAccessToken && !i.oauthNeedsReconnect)
         )
       );
 
@@ -5676,7 +5803,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
                 (useSA && isSAEligible(i.email)) ||
                 i.authMethod === "imap" ||
                 i.authMethod === "dual" ||
-                (i.isConnected && i.oauthAccessToken)
+                (i.isConnected && i.oauthAccessToken && !i.oauthNeedsReconnect)
               )
             );
             if (connectedInboxes.length > 0 && senderForPlacement) {
@@ -5767,7 +5894,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           (useSA && isSAEligible(i.email)) ||
           i.authMethod === "imap" ||
           i.authMethod === "dual" ||
-          (i.isConnected && i.oauthAccessToken)
+          (i.isConnected && i.oauthAccessToken && !i.oauthNeedsReconnect)
         )
       );
 

@@ -775,3 +775,40 @@ export function welcomeEmail(params: {
   const text = `Hey ${name}, welcome to Academy Toolkit!\n\nYour account is active. Get started at ${BASE_URL}/dashboard`;
   return { subject, html: wrap("Welcome to Academy Toolkit!", body, resources), text };
 }
+
+export function magicLinkLoginEmail(params: {
+  firstName: string | null;
+  loginUrl: string;
+  expiresAt: Date;
+}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
+  const name = params.firstName || "there";
+  const expiryTime = params.expiresAt.toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC",
+  }) + " UTC";
+  const subject = "Your Academy Toolkit login link";
+
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hi ${name},</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+      You requested a magic login link for <strong>Academy Toolkit</strong>. Click the button below
+      to sign in instantly — no password needed.
+    </p>
+    <div style="text-align:center;margin:28px 0;">
+      ${btn("Sign In to Academy Toolkit", params.loginUrl)}
+    </div>
+    <div style="margin:24px 0;padding:16px;background:#f8fafc;border-radius:8px;border-left:3px solid #3f92cc;">
+      <p style="margin:0;font-size:13px;color:#64748b;line-height:1.7;">
+        <strong style="color:#334155;">⏱ This link expires at ${expiryTime}</strong><br/>
+        It can only be used once. If you didn't request this, you can safely ignore this email —
+        your account has not been changed.
+      </p>
+    </div>
+    <p style="margin:16px 0 0;font-size:13px;color:#94a3b8;line-height:1.6;">
+      If the button above doesn't work, copy and paste this link into your browser:<br/>
+      <a href="${params.loginUrl}" style="color:#3f92cc;word-break:break-all;">${params.loginUrl}</a>
+    </p>`;
+
+  const text = `Hi ${name},\n\nYou requested a magic login link for Academy Toolkit.\n\nSign in here:\n${params.loginUrl}\n\nThis link expires at ${expiryTime} and can only be used once.\n\nIf you didn't request this, ignore this email — your account has not been changed.`;
+
+  return { subject, html: wrap(subject, body, resources), text };
+}

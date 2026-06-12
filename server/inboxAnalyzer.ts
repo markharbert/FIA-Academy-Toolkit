@@ -198,12 +198,19 @@ export function extractReplyTo(headersRaw: string | undefined): string {
 
 // ── DNS checks ─────────────────────────────────────────────────────────────
 
+const DNS_TRANSIENT_CODES = new Set(["ETIMEDOUT", "EAI_AGAIN", "ECONNRESET", "ECONNREFUSED"]);
+
 export async function checkSpfRecord(domain: string): Promise<boolean> {
   if (!domain) return false;
   try {
     const records = await dns.promises.resolveTxt(domain);
     return records.some((r) => r.join("").startsWith("v=spf1"));
-  } catch {
+  } catch (err: any) {
+    const code: string = err?.code ?? "";
+    if (DNS_TRANSIENT_CODES.has(code)) {
+      console.warn(`[DNS] SPF check failed for ${domain} — transient error (${code}), not penalizing`);
+      return true;
+    }
     return false;
   }
 }
@@ -215,8 +222,12 @@ export async function checkDkimRecord(domain: string): Promise<boolean> {
     try {
       const records = await dns.promises.resolveTxt(`${sel}._domainkey.${domain}`);
       if (records.length > 0) return true;
-    } catch {
-      // Try next selector
+    } catch (err: any) {
+      const code: string = err?.code ?? "";
+      if (DNS_TRANSIENT_CODES.has(code)) {
+        console.warn(`[DNS] DKIM check failed for ${sel}._domainkey.${domain} — transient error (${code}), not penalizing`);
+        return true;
+      }
     }
   }
   return false;
@@ -227,7 +238,12 @@ export async function checkDmarcRecord(domain: string): Promise<boolean> {
   try {
     const records = await dns.promises.resolveTxt(`_dmarc.${domain}`);
     return records.some((r) => r.join("").startsWith("v=DMARC1"));
-  } catch {
+  } catch (err: any) {
+    const code: string = err?.code ?? "";
+    if (DNS_TRANSIENT_CODES.has(code)) {
+      console.warn(`[DNS] DMARC check failed for ${domain} — transient error (${code}), not penalizing`);
+      return true;
+    }
     return false;
   }
 }

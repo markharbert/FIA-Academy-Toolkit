@@ -519,6 +519,7 @@ function EmailDetail({ email, onDelete, onReanalyze, onRetryPlacement, seedInbox
         throw new Error(data.message || "Failed to run placement check");
       }
       await qc.invalidateQueries({ queryKey: ["/api/inbox-analyzer/address"] });
+      await qc.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
       toast({ title: "Placement rechecked", description: "Results have been refreshed." });
     } catch (err: any) {
       toast({ title: "Recheck failed", description: err.message || "Could not run placement check", variant: "destructive" });
@@ -2015,6 +2016,8 @@ function SettingsTab() {
       apiRequest("PATCH", `/api/inbox-analyzer/seed-inboxes/${id}/rename`, { label }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/seed-inboxes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/address"] });
       setEditingLabelId(null);
     },
     onError: () => toast({ title: "Failed to rename inbox", variant: "destructive" }),
@@ -2542,6 +2545,7 @@ export default function InboxAnalyzerPage() {
     mutationFn: (id: string) => apiRequest("DELETE", `/api/inbox-analyzer/emails/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox-analyzer/address"] });
       toast({ title: "Email deleted" });
     },
   });
@@ -2658,11 +2662,10 @@ export default function InboxAnalyzerPage() {
               <div className="space-y-3">
                 {emails.map((email, index) => {
                   const placementMsgId = addressData?.placementCheckMessageId;
-                  // Use Message-ID match when available; fall back to most-recent (index 0)
-                  // for old emails whose message_id was not stored in the database.
+                  // Only show live placement data on the email being actively monitored.
+                  // When a specific messageId is tracked, don't fall back to index 0.
                   const isActivePlacement = placementMsgId
-                    ? (email.messageId === placementMsgId ||
-                       (index === 0 && !emails.some(e => e.messageId === placementMsgId)))
+                    ? email.messageId === placementMsgId
                     : index === 0;
                   return (
                     <EmailRow

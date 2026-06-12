@@ -303,7 +303,8 @@ export async function checkGmailPlacementServiceAccount(
 export async function checkGmailPlacement(
   inbox: { id: string; label: string; email: string; provider: string; oauthAccessToken: string | null; oauthRefreshToken: string | null },
   senderAddress: string,
-  context?: { receivedAt?: Date | null; subject?: string | null; messageId?: string | null }
+  context?: { receivedAt?: Date | null; subject?: string | null; messageId?: string | null },
+  onTokenRefresh?: (data: { accessToken: string; expiry: Date | null }) => Promise<void>
 ): Promise<PlacementResult> {
   const base: Omit<PlacementResult, "status"> = {
     inboxId: inbox.id,
@@ -323,6 +324,17 @@ export async function checkGmailPlacement(
       access_token: inbox.oauthAccessToken,
       refresh_token: inbox.oauthRefreshToken || undefined,
     });
+
+    if (onTokenRefresh) {
+      oAuth2Client.on("tokens", (tokens) => {
+        if (tokens.access_token) {
+          onTokenRefresh({
+            accessToken: tokens.access_token,
+            expiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+          }).catch(err => console.error("[GmailPlacement] failed to persist refreshed token:", err?.message));
+        }
+      });
+    }
 
     const gmail      = google.gmail({ version: "v1", auth: oAuth2Client });
     const safeSender = senderAddress.replace(/['"\\]/g, "");

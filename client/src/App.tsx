@@ -39,6 +39,7 @@ import ProjectsPage from "@/pages/projects";
 import ProjectDetailPage from "@/pages/project-detail";
 import TemplateDetailPage from "@/pages/template-detail";
 import CfLoginPage from "@/pages/cf-login";
+import MemberLoginPage from "@/pages/member-login";
 import WorkspaceInviteAcceptPage from "@/pages/workspace-invite-accept";
 import HelpPage from "@/pages/help";
 import HelpCategoryPage from "@/pages/help-category";
@@ -336,6 +337,7 @@ function App() {
           <Switch>
             {/* Standalone pages — no sidebar, no auth check */}
             <Route path="/cf-login">{() => <CfLoginPage />}</Route>
+            <Route path="/member-login">{() => <MemberLoginPage />}</Route>
             <Route path="/workspace/accept">{() => <WorkspaceInviteAcceptPage />}</Route>
             <Route>{() => <AppLayout />}</Route>
           </Switch>

@@ -39,7 +39,7 @@ export async function runPlacementCheckForUser(
         (saConfigured && isServiceAccountEligible(i.email)) ||
         i.authMethod === "imap" ||
         i.authMethod === "dual" ||
-        (i.isConnected && i.oauthAccessToken)
+        (i.isConnected && i.oauthAccessToken && !i.oauthNeedsReconnect)
       )
     );
 
@@ -66,7 +66,7 @@ export async function runPlacementCheckForUser(
               const DEFINITIVE = new Set(["primary","promotions","social","updates","forums","spam"]);
               const [imapS, oauthS] = await Promise.allSettled([
                 checkGmailPlacementImap({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, imapPassword: inbox.imapPassword }, sendingFrom, emailContext),
-                checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, sendingFrom, emailContext),
+                checkGmailPlacement({ id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken }, sendingFrom, emailContext, async ({ accessToken, expiry }) => { await storage.updateSeedInboxOAuthToken(inbox.id, accessToken, expiry); }),
               ]);
               const imapRes  = imapS.status  === "fulfilled" ? imapS.value  : null;
               const oauthRes = oauthS.status === "fulfilled" ? oauthS.value : null;
@@ -80,7 +80,8 @@ export async function runPlacementCheckForUser(
             return await checkGmailPlacement(
               { id: inbox.id, label: inbox.label, email: inbox.email, provider: inbox.provider, oauthAccessToken: inbox.oauthAccessToken, oauthRefreshToken: inbox.oauthRefreshToken },
               sendingFrom,
-              emailContext
+              emailContext,
+              async ({ accessToken, expiry }) => { await storage.updateSeedInboxOAuthToken(inbox.id, accessToken, expiry); }
             );
           } catch (err: any) {
             if (err?.code === "OAUTH_INVALID_GRANT") {
@@ -104,17 +105,18 @@ export async function runPlacementCheckForUser(
 
     await storage.saveLastPlacementResults(userId, results);
 
+    const resolved = allResolved(results);
     const summary = results.map(r => `${r.label}: ${r.status}`).join(", ");
 
-    if (allResolved(results)) {
+    // Always persist intermediate placement results on every tick; only confirm
+    // (set placementConfirmedAt) once all inboxes have returned a definitive status.
+    if (emailContext?.messageId) {
+      await storage.saveEmailPlacementResults(emailContext.messageId, userId, results, resolved);
+    }
+
+    if (resolved) {
       // First definitive result — lock it in immediately, stop monitoring.
-      // No second confirmation check needed: Gmail's categorisation is final within
-      // minutes of delivery and the 15-min indexing hold ensures we're reading the
-      // right email before we ever run a search.
       await storage.setPlacementAutoCheckWindow(userId, null);
-      if (emailContext?.messageId) {
-        await storage.saveEmailPlacementResults(emailContext.messageId, userId, results);
-      }
       console.log(`[PlacementScheduler] LOCKED IN for user ${userId} — ${summary} — monitoring stopped`);
 
       // Send inbox analysis report email if the user has this notification enabled.

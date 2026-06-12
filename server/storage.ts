@@ -1,5 +1,5 @@
 import { 
-  users, sessions, passwordResetTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
+  users, sessions, passwordResetTokens, magicLinkTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks,
   type PublicApiKey, type Webhook,
   projects, projectTasks,
@@ -19,6 +19,7 @@ import {
   type Session, type InsertSession,
   type ScoreResult,
   type PasswordResetToken, type InsertPasswordResetToken,
+  type MagicLinkToken,
   type UserIdentity, type InsertUserIdentity, type AuthProvider,
   type AdminAuditLog, type InsertAdminAuditLog,
   type UserActionLog, type InsertUserActionLog, type UserActionType,
@@ -108,7 +109,13 @@ export interface IStorage {
   markPasswordResetTokenUsed(id: string): Promise<void>;
   countRecentPasswordResetRequests(userId: string, since: Date): Promise<number>;
   countRecentPasswordResetRequestsByIp(ip: string, since: Date): Promise<number>;
-  
+
+  // Magic Link Tokens
+  createMagicLinkToken(data: { userId: string; tokenHash: string; expiresAt: Date }): Promise<void>;
+  getMagicLinkTokenByHash(tokenHash: string): Promise<MagicLinkToken | undefined>;
+  markMagicLinkTokenUsed(id: string): Promise<void>;
+  countRecentMagicLinkRequests(userId: string, since: Date): Promise<number>;
+
   // User Identities (OAuth)
   getUserIdentityByProvider(provider: AuthProvider, providerUserId: string): Promise<UserIdentity | undefined>;
   getUserIdentitiesByUser(userId: string): Promise<UserIdentity[]>;
@@ -430,7 +437,7 @@ export interface IStorage {
   saveLastPlacementResults(userId: string, results: unknown[]): Promise<void>;
   setPlacementAutoCheckWindow(userId: string, until: Date | null, emailContext?: { receivedAt: Date; subject: string; messageId?: string }): Promise<void>;
   getUsersWithActivePlacementMonitoring(now: Date): Promise<Array<{ userId: string; sendingFromAddress: string; effectiveSenderAddress: string; lastPlacementCheckedAt: Date | null; placementAutoCheckUntil: Date; lastPlacementResults: unknown[] | null; placementCheckReceivedAt: Date | null; placementCheckSubject: string | null; placementCheckMessageId: string | null }>>;
-  saveEmailPlacementResults(messageId: string, userId: string, results: unknown[]): Promise<void>;
+  saveEmailPlacementResults(messageId: string, userId: string, results: unknown[], confirmed?: boolean): Promise<void>;
   createEmailAnalysis(data: {
     userId: string; fromAddress: string; fromName?: string; replyTo?: string; messageId?: string; subject: string;
     bodyText?: string; bodyHtml?: string; rawHeaders?: string;
@@ -451,6 +458,7 @@ export interface IStorage {
   storeSeedInboxOAuthTokens(id: string, accessToken: string, refreshToken: string | null, expiry: Date | null, email: string): Promise<void>;
   storeImapPassword(id: string, encryptedPassword: string): Promise<void>;
   markSeedInboxNeedsReconnect(id: string): Promise<void>;
+  updateSeedInboxOAuthToken(id: string, accessToken: string, expiry: Date | null): Promise<void>;
   disconnectSeedInbox(id: string): Promise<void>;
   // Sender Reputation (Postmaster)
   getPostmasterConnection(userId: string): Promise<PostmasterConnection | null>;
@@ -687,6 +695,31 @@ export class DatabaseStorage implements IStorage {
         gt(passwordResetTokens.createdAt, since)
       ));
     return tokens.length;
+  }
+
+  async createMagicLinkToken(data: { userId: string; tokenHash: string; expiresAt: Date }): Promise<void> {
+    await db.insert(magicLinkTokens).values(data);
+  }
+
+  async getMagicLinkTokenByHash(tokenHash: string): Promise<MagicLinkToken | undefined> {
+    const [token] = await db.select().from(magicLinkTokens)
+      .where(eq(magicLinkTokens.tokenHash, tokenHash));
+    return token || undefined;
+  }
+
+  async markMagicLinkTokenUsed(id: string): Promise<void> {
+    await db.update(magicLinkTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(magicLinkTokens.id, id));
+  }
+
+  async countRecentMagicLinkRequests(userId: string, since: Date): Promise<number> {
+    const rows = await db.select().from(magicLinkTokens)
+      .where(and(
+        eq(magicLinkTokens.userId, userId),
+        gt(magicLinkTokens.createdAt, since)
+      ));
+    return rows.length;
   }
 
   // User Identities (OAuth)
@@ -3298,9 +3331,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(emailInboxAddresses.userId, userId));
   }
 
-  async saveEmailPlacementResults(messageId: string, userId: string, results: unknown[]): Promise<void> {
+  async saveEmailPlacementResults(messageId: string, userId: string, results: unknown[], confirmed = true): Promise<void> {
+    const updates: Record<string, unknown> = { placementResults: results };
+    if (confirmed) updates.placementConfirmedAt = new Date();
     await db.update(emailAnalyses)
-      .set({ placementResults: results, placementConfirmedAt: new Date() })
+      .set(updates as any)
       .where(
         sql`${emailAnalyses.messageId} = ${messageId} AND ${emailAnalyses.userId} = ${userId}`
       );
@@ -3401,6 +3436,12 @@ export class DatabaseStorage implements IStorage {
     }
     await db.update(seedInboxes)
       .set({ oauthNeedsReconnect: true })
+      .where(eq(seedInboxes.id, id));
+  }
+
+  async updateSeedInboxOAuthToken(id: string, accessToken: string, expiry: Date | null): Promise<void> {
+    await db.update(seedInboxes)
+      .set({ oauthAccessToken: accessToken, oauthTokenExpiry: expiry })
       .where(eq(seedInboxes.id, id));
   }
 
