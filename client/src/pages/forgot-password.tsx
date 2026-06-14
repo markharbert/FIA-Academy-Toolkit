@@ -5,13 +5,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Mail, CheckCircle } from "lucide-react";
-import logoPath from "@assets/academy_toolkit_logo_1776551500119.png";
+import { Loader2 } from "lucide-react";
+import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -25,9 +22,7 @@ export default function ForgotPassword() {
 
   const form = useForm<ForgotPasswordInput>({
     resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: {
-      email: "",
-    },
+    defaultValues: { email: "" },
   });
 
   const forgotPasswordMutation = useMutation({
@@ -51,92 +46,114 @@ export default function ForgotPassword() {
     forgotPasswordMutation.mutate(data);
   };
 
-  if (submitted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="container-forgot-password-success">
-        <Card className="w-full max-w-md" data-testid="card-success">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-900">
-              <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-            </div>
-            <CardTitle data-testid="text-success-title">Check Your Email</CardTitle>
-            <CardDescription data-testid="text-success-description">
-              If an account exists for that email, we sent a reset link. Check your inbox and follow the instructions.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground text-center" data-testid="text-expiry-notice">
-              The link will expire in 60 minutes.
-            </p>
-            <Button asChild className="w-full" variant="outline" data-testid="button-back-to-login">
-              <Link href="/login">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Login
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="container-forgot-password">
-      <Card className="w-full max-w-md" data-testid="card-forgot-password">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <img src={logoPath} alt="Academy Toolkit" className="h-12" data-testid="img-logo" />
-          </div>
-          <CardTitle data-testid="text-page-title">Forgot Password</CardTitle>
-          <CardDescription data-testid="text-page-description">
-            Enter your email address and we'll send you a link to reset your password.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                        <Input
-                          placeholder="you@example.com"
-                          type="email"
-                          className="pl-10"
-                          data-testid="input-email"
-                          {...field}
-                        />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+    <div
+      className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
+      style={{ background: "hsl(230,75%,10%)" }}
+      data-testid="container-forgot-password"
+    >
+      <div className="w-full max-w-sm flex flex-col items-center gap-8">
+        <img src={logoImage} alt="Academy Toolkit" className="h-14 w-auto" data-testid="img-logo" />
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={forgotPasswordMutation.isPending}
-                data-testid="button-submit"
-              >
-                {forgotPasswordMutation.isPending ? "Sending..." : "Send Reset Link"}
-              </Button>
-            </form>
-          </Form>
-
-          <div className="mt-6 text-center">
-            <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground" data-testid="link-login">
-              <ArrowLeft className="w-4 h-4 inline mr-1" />
+        {submitted ? (
+          <div className="w-full flex flex-col items-center gap-6 text-center" data-testid="container-forgot-password-success">
+            <div className="h-16 w-16 rounded-full bg-green-500/20 flex items-center justify-center">
+              <svg className="h-8 w-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div className="space-y-2">
+              <p className="text-white text-lg font-semibold" data-testid="text-success-title">Check Your Email</p>
+              <p className="text-white/60 text-sm leading-relaxed" data-testid="text-success-description">
+                If an account exists for that email, we sent a reset link. Check your inbox and follow the instructions.
+              </p>
+            </div>
+            <div className="w-full rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white/60 leading-relaxed" data-testid="text-expiry-notice">
+              The link will expire in 60 minutes.
+            </div>
+            <Link
+              href="/login"
+              className="w-full rounded-lg py-2.5 text-sm font-semibold text-white text-center transition-opacity hover:opacity-80 flex items-center justify-center gap-2 border border-white/20"
+              style={{ background: "hsl(230,75%,18%)" }}
+              data-testid="button-back-to-login"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
               Back to Login
             </Link>
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          <div
+            className="w-full rounded-2xl border border-white/10 p-8 space-y-6"
+            style={{ background: "hsl(230,75%,14%)" }}
+            data-testid="card-forgot-password"
+          >
+            <div className="text-center space-y-2">
+              <h1 className="text-xl font-semibold text-white" data-testid="text-page-title">Forgot Password</h1>
+              <p className="text-sm text-white/50 leading-relaxed" data-testid="text-page-description">
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
+            </div>
+
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-white/80 text-sm">Email address</FormLabel>
+                      <FormControl>
+                        <input
+                          type="email"
+                          placeholder="you@example.com"
+                          autoComplete="email"
+                          data-testid="input-email"
+                          className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 border border-white/15 focus:outline-none focus:border-[hsl(203,54%,53%)] focus:ring-1 focus:ring-[hsl(203,54%,53%)] transition-colors"
+                          style={{ background: "hsl(230,75%,10%)" }}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage className="text-red-400" />
+                    </FormItem>
+                  )}
+                />
+
+                <button
+                  type="submit"
+                  disabled={forgotPasswordMutation.isPending}
+                  data-testid="button-submit"
+                  className="w-full rounded-lg py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-60 flex items-center justify-center gap-2"
+                  style={{ background: "hsl(358,100%,43%)" }}
+                >
+                  {forgotPasswordMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Send Reset Link"
+                  )}
+                </button>
+              </form>
+            </Form>
+
+            <div className="text-center">
+              <Link
+                href="/login"
+                className="text-sm text-white/40 hover:text-white/70 transition-colors inline-flex items-center gap-1"
+                data-testid="link-login"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Login
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
