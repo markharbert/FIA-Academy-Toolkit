@@ -34,14 +34,6 @@ import {
   Users,
   BarChart2,
   ChevronDown,
-  Video,
-  Lightbulb,
-  ScrollText,
-  Inbox,
-  ShieldCheck,
-  Eye,
-  Youtube,
-  Globe,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -49,8 +41,6 @@ import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 type NavChild = {
   title: string;
   url: string;
-  icon: React.ElementType;
-  iconColor: string;
   testId: string;
   matchPaths?: string[];
   activeClass: string;
@@ -65,6 +55,7 @@ type NavItem = {
   collaboratorVisible: boolean;
   matchPaths?: string[];
   activeClass?: string;
+  subMenuBorderClass?: string;
   children?: NavChild[];
 };
 
@@ -102,31 +93,26 @@ const allNavItems: NavItem[] = [
     testId: "nav-video-tools",
     collaboratorVisible: false,
     activeClass: "!bg-rose-500/15",
+    subMenuBorderClass: "!border-rose-500/40",
     children: [
       {
         title: "Video Score",
         url: "/video-score",
-        icon: Video,
-        iconColor: "text-rose-400/70",
         testId: "nav-video-score",
         matchPaths: ["/video-score", "/video-score-upload"],
-        activeClass: "!bg-rose-500/10 !text-rose-200",
+        activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
       },
       {
         title: "Topic Pulse",
         url: "/video-trends",
-        icon: Lightbulb,
-        iconColor: "text-rose-400/70",
         testId: "nav-topic-pulse",
-        activeClass: "!bg-rose-500/10 !text-rose-200",
+        activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
       },
       {
         title: "Teleprompter",
         url: "/teleprompter",
-        icon: ScrollText,
-        iconColor: "text-rose-400/70",
         testId: "nav-teleprompter",
-        activeClass: "!bg-rose-500/10 !text-rose-200",
+        activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
       },
     ],
   },
@@ -138,30 +124,25 @@ const allNavItems: NavItem[] = [
     testId: "nav-email-tools",
     collaboratorVisible: false,
     activeClass: "!bg-teal-500/15",
+    subMenuBorderClass: "!border-teal-500/40",
     children: [
       {
         title: "Inbox Analyzer",
         url: "/email-tools/inbox-analyzer",
-        icon: Inbox,
-        iconColor: "text-teal-400/70",
         testId: "nav-inbox-analyzer",
-        activeClass: "!bg-teal-500/10 !text-teal-200",
+        activeClass: "!bg-teal-500/10 !text-teal-200 font-medium",
       },
       {
         title: "Sender Reputation",
         url: "/email-tools/sender-reputation",
-        icon: ShieldCheck,
-        iconColor: "text-teal-400/70",
         testId: "nav-sender-rep",
-        activeClass: "!bg-teal-500/10 !text-teal-200",
+        activeClass: "!bg-teal-500/10 !text-teal-200 font-medium",
       },
       {
         title: "Inbox Intel",
         url: "/email-tools/inbox-intel",
-        icon: Eye,
-        iconColor: "text-teal-400/70",
         testId: "nav-inbox-intel",
-        activeClass: "!bg-teal-500/10 !text-teal-200",
+        activeClass: "!bg-teal-500/10 !text-teal-200 font-medium",
       },
     ],
   },
@@ -173,22 +154,19 @@ const allNavItems: NavItem[] = [
     testId: "nav-analytics",
     collaboratorVisible: false,
     activeClass: "!bg-emerald-500/15",
+    subMenuBorderClass: "!border-emerald-500/40",
     children: [
       {
         title: "YouTube",
         url: "/analytics/youtube",
-        icon: Youtube,
-        iconColor: "text-emerald-400/70",
         testId: "nav-youtube",
-        activeClass: "!bg-emerald-500/10 !text-emerald-200",
+        activeClass: "!bg-emerald-500/10 !text-emerald-200 font-medium",
       },
       {
         title: "Search Console",
         url: "/analytics/search-console",
-        icon: Globe,
-        iconColor: "text-emerald-400/70",
         testId: "nav-search-console",
-        activeClass: "!bg-emerald-500/10 !text-emerald-200",
+        activeClass: "!bg-emerald-500/10 !text-emerald-200 font-medium",
       },
     ],
   },
@@ -314,7 +292,7 @@ export function AppSidebar() {
                           />
                         </SidebarMenuButton>
                         <CollapsibleContent>
-                          <SidebarMenuSub>
+                          <SidebarMenuSub className={item.subMenuBorderClass}>
                             {item.children.map((child) => {
                               const childIsActive = isChildActive(child, location);
                               return (
@@ -330,9 +308,6 @@ export function AppSidebar() {
                                         : "text-white/55 hover:!text-white"
                                     }
                                   >
-                                    <child.icon
-                                      className={childIsActive ? undefined : child.iconColor}
-                                    />
                                     <span>{child.title}</span>
                                   </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
