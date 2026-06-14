@@ -507,17 +507,23 @@ function CfIntegrationTab() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Integration Status</CardTitle>
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10">
+                <Zap className="h-3.5 w-3.5 text-emerald-500" />
+              </div>
+              Integration Status
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {statusLoading ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             ) : cfStatus?.allConfigured ? (
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span className="font-semibold text-green-600 dark:text-green-400">Configured</span>
+                <CheckCircle className="h-5 w-5 text-emerald-500" />
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">Configured</span>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -528,24 +534,36 @@ function CfIntegrationTab() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Enrolled Members</CardTitle>
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-400" />
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-500/10">
+                <UserCheck className="h-3.5 w-3.5 text-indigo-500" />
+              </div>
+              Enrolled Members
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
               {statusLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : cfStatus?.enrolledCount ?? 0}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Active CF access</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Revoked / Cancelled</CardTitle>
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-rose-500 to-red-400" />
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-rose-500/10">
+                <UserX className="h-3.5 w-3.5 text-rose-500" />
+              </div>
+              Revoked / Cancelled
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
               {statusLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : cfStatus?.revokedCount ?? 0}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Access removed</p>
@@ -555,9 +573,13 @@ function CfIntegrationTab() {
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Configuration Health */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Configuration Secrets</CardTitle>
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-violet-500 to-indigo-400" />
+          <CardHeader className="pt-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Key className="h-4 w-4 text-violet-500" />
+              Configuration Secrets
+            </CardTitle>
             <CardDescription>
               These secrets must be set in the Replit Secrets panel for the integration to work.
             </CardDescription>
@@ -601,10 +623,11 @@ function CfIntegrationTab() {
         </Card>
 
         {/* Webhook Setup */}
-        <Card>
-          <CardHeader>
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+          <CardHeader className="pt-4">
             <CardTitle className="text-base flex items-center gap-2">
-              <Webhook className="h-4 w-4" />
+              <Webhook className="h-4 w-4 text-emerald-500" />
               Webhook Setup
             </CardTitle>
             <CardDescription>
@@ -670,10 +693,11 @@ function CfIntegrationTab() {
       </div>
 
       {/* Webhook Tester */}
-      <Card>
-        <CardHeader>
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" />
+        <CardHeader className="pt-4">
           <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="h-4 w-4" />
+            <Zap className="h-4 w-4 text-amber-500" />
             Webhook Tester
           </CardTitle>
           <CardDescription>
@@ -1061,11 +1085,12 @@ function EmailTemplatesTab() {
       </Dialog>
 
       <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-teal-500 via-violet-500 to-indigo-400" />
         <CardHeader className="border-b">
           <div className="flex items-start justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-violet-500" />
+                <Mail className="h-5 w-5 text-teal-500" />
                 Email Templates
               </CardTitle>
               <CardDescription className="mt-1">
@@ -1785,9 +1810,13 @@ function AdminFeedbackTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">All Feedback</CardTitle>
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-amber-500 via-orange-400 to-rose-400" />
+          <CardHeader className="pb-3 pt-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-amber-500" />
+              All Feedback
+            </CardTitle>
             <CardDescription>
               Review and manage bug reports and feature requests from members.
             </CardDescription>
@@ -2416,82 +2445,118 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold" data-testid="text-admin-title">Admin Dashboard</h1>
-        <p className="mt-2 text-muted-foreground">Manage users, integrations, and system settings</p>
+    <div className="flex-1 overflow-auto bg-background">
+      {/* ── Admin hero banner ──────────────────────────────────────────── */}
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(252_60%_12%)] via-[hsl(262_55%_18%)] to-[hsl(230_60%_22%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-violet-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-rose-500/10 blur-3xl" />
+        <div className="absolute top-0 left-1/3 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/20 ring-1 ring-violet-400/30">
+              <Shield className="h-5 w-5 text-violet-300" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white" data-testid="text-admin-title">Admin Dashboard</h1>
+              <p className="text-sm text-white/60 mt-0.5">Manage users, integrations, and system settings</p>
+            </div>
+          </div>
+        </div>
       </div>
 
+      <div className="container mx-auto px-4 py-8">
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
-          <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
-          <TabsTrigger value="email-templates" data-testid="tab-email-templates">
-            <Mail className="h-3.5 w-3.5 mr-1.5" />
+        <TabsList className="h-auto flex-wrap">
+          <TabsTrigger value="overview" data-testid="tab-overview" className="gap-1.5">
+            <Activity className="h-3.5 w-3.5 text-indigo-400" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="users" data-testid="tab-users" className="gap-1.5">
+            <Users className="h-3.5 w-3.5 text-sky-400" />
+            Users
+          </TabsTrigger>
+          <TabsTrigger value="integrations" data-testid="tab-integrations" className="gap-1.5">
+            <Webhook className="h-3.5 w-3.5 text-emerald-400" />
+            Integrations
+          </TabsTrigger>
+          <TabsTrigger value="email-templates" data-testid="tab-email-templates" className="gap-1.5">
+            <Mail className="h-3.5 w-3.5 text-teal-400" />
             Email Templates
           </TabsTrigger>
-          <TabsTrigger value="feedback" data-testid="tab-feedback">
-            <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+          <TabsTrigger value="feedback" data-testid="tab-feedback" className="gap-1.5">
+            <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
             Feedback
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <Card className="overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-indigo-500 to-indigo-400" />
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 pt-4">
                 <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10">
+                  <Users className="h-4 w-4 text-indigo-500" />
+                </div>
               </CardHeader>
               <CardContent>
                 {overviewStatsLoading ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
-                  <div className="text-2xl font-bold" data-testid="stat-total-users">{overviewStats?.totalUsers || 0}</div>
+                  <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400" data-testid="stat-total-users">{overviewStats?.totalUsers || 0}</div>
                 )}
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <Card className="overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 pt-4">
                 <CardTitle className="text-sm font-medium">Active Members</CardTitle>
-                <UserCheck className="h-4 w-4 text-muted-foreground" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <UserCheck className="h-4 w-4 text-emerald-500" />
+                </div>
               </CardHeader>
               <CardContent>
                 {cfStatusLoading ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
-                  <div className="text-2xl font-bold" data-testid="stat-active-members">{cfStatus?.enrolledCount ?? 0}</div>
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400" data-testid="stat-active-members">{cfStatus?.enrolledCount ?? 0}</div>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">Enrolled in ClickFunnels</p>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <Card className="overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-400" />
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 pt-4">
                 <CardTitle className="text-sm font-medium">Sessions (Last 7 Days)</CardTitle>
-                <Video className="h-4 w-4 text-muted-foreground" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
+                  <Video className="h-4 w-4 text-violet-500" />
+                </div>
               </CardHeader>
               <CardContent>
                 {overviewStatsLoading ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
-                  <div className="text-2xl font-bold" data-testid="stat-sessions-7d">{overviewStats?.sessionsLast7Days || 0}</div>
+                  <div className="text-2xl font-bold text-violet-600 dark:text-violet-400" data-testid="stat-sessions-7d">{overviewStats?.sessionsLast7Days || 0}</div>
                 )}
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <Card className="overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" />
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 pt-4">
                 <CardTitle className="text-sm font-medium">New Users (Last 30 Days)</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
+                  <Users className="h-4 w-4 text-amber-500" />
+                </div>
               </CardHeader>
               <CardContent>
                 {overviewStatsLoading ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
-                  <div className="text-2xl font-bold" data-testid="stat-new-users-30d">{overviewStats?.newUsersLast30Days || 0}</div>
+                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="stat-new-users-30d">{overviewStats?.newUsersLast30Days || 0}</div>
                 )}
               </CardContent>
             </Card>
@@ -2502,11 +2567,12 @@ export default function AdminPage() {
 
           {/* Integration health strip */}
           <div className="grid gap-4 md:grid-cols-2">
-            <Card data-testid="health-clickfunnels">
-              <CardHeader className="pb-3">
+            <Card data-testid="health-clickfunnels" className="overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+              <CardHeader className="pb-3 pt-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Webhook className="h-4 w-4 text-muted-foreground" />
+                    <Webhook className="h-4 w-4 text-emerald-500" />
                     ClickFunnels
                   </CardTitle>
                   {cfStatusLoading ? (
@@ -2542,11 +2608,12 @@ export default function AdminPage() {
               </CardContent>
             </Card>
 
-            <Card data-testid="health-keywords-everywhere">
-              <CardHeader className="pb-3">
+            <Card data-testid="health-keywords-everywhere" className="overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-sky-500 to-indigo-400" />
+              <CardHeader className="pb-3 pt-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <Search className="h-4 w-4 text-sky-500" />
                     Keywords Everywhere
                   </CardTitle>
                   {keStatusLoading ? (
@@ -2583,11 +2650,15 @@ export default function AdminPage() {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-sky-500 via-indigo-500 to-violet-500" />
+            <CardHeader className="pt-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <CardTitle>Recent Activity</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-indigo-500" />
+                    Recent Activity
+                  </CardTitle>
                   <CardDescription>
                     Everything members do across the platform — login, uploads, scoring, folders, profile edits, and more.
                   </CardDescription>
@@ -2717,9 +2788,13 @@ export default function AdminPage() {
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Management</CardTitle>
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-sky-500 to-indigo-400" />
+            <CardHeader className="pt-4">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-sky-500" />
+                User Management
+              </CardTitle>
               <CardDescription>View and manage all registered users</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -4176,6 +4251,7 @@ export default function AdminPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   );
 }
