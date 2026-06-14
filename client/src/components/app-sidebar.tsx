@@ -1,5 +1,7 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { Collapsible, CollapsibleContent } from "@radix-ui/react-collapsible";
+import { cn } from "@/lib/utils";
 import {
   Sidebar,
   SidebarContent,
@@ -11,6 +13,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -28,15 +33,42 @@ import {
   MessageSquarePlus,
   Users,
   BarChart2,
+  ChevronDown,
+  Video,
+  Lightbulb,
+  ScrollText,
+  Inbox,
+  ShieldCheck,
+  Eye,
+  Youtube,
+  Globe,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 
-const VIDEO_TOOL_PATHS = ["/video-score", "/video-trends", "/video-trends/scripts", "/video-trends/explore", "/video-trends/saved", "/video-trends/settings", "/teleprompter"];
-const EMAIL_TOOL_PATHS = ["/email-tools/inbox-analyzer", "/email-tools/sender-reputation", "/email-tools/inbox-intel"];
-const ANALYTICS_TOOL_PATHS = ["/analytics/youtube", "/analytics/search-console"];
+type NavChild = {
+  title: string;
+  url: string;
+  icon: React.ElementType;
+  iconColor: string;
+  testId: string;
+  matchPaths?: string[];
+  activeClass: string;
+};
 
-const allNavItems = [
+type NavItem = {
+  title: string;
+  url: string;
+  icon: React.ElementType;
+  iconColor: string;
+  testId: string;
+  collaboratorVisible: boolean;
+  matchPaths?: string[];
+  activeClass?: string;
+  children?: NavChild[];
+};
+
+const allNavItems: NavItem[] = [
   {
     title: "Dashboard",
     url: "/dashboard",
@@ -68,8 +100,35 @@ const allNavItems = [
     icon: Wrench,
     iconColor: "text-rose-400",
     testId: "nav-video-tools",
-    matchPaths: VIDEO_TOOL_PATHS,
     collaboratorVisible: false,
+    activeClass: "!bg-rose-500/15",
+    children: [
+      {
+        title: "Video Score",
+        url: "/video-score",
+        icon: Video,
+        iconColor: "text-rose-400/70",
+        testId: "nav-video-score",
+        matchPaths: ["/video-score", "/video-score-upload"],
+        activeClass: "!bg-rose-500/10 !text-rose-200",
+      },
+      {
+        title: "Topic Pulse",
+        url: "/video-trends",
+        icon: Lightbulb,
+        iconColor: "text-rose-400/70",
+        testId: "nav-topic-pulse",
+        activeClass: "!bg-rose-500/10 !text-rose-200",
+      },
+      {
+        title: "Teleprompter",
+        url: "/teleprompter",
+        icon: ScrollText,
+        iconColor: "text-rose-400/70",
+        testId: "nav-teleprompter",
+        activeClass: "!bg-rose-500/10 !text-rose-200",
+      },
+    ],
   },
   {
     title: "Email Tools",
@@ -77,8 +136,34 @@ const allNavItems = [
     icon: Mail,
     iconColor: "text-teal-400",
     testId: "nav-email-tools",
-    matchPaths: EMAIL_TOOL_PATHS,
     collaboratorVisible: false,
+    activeClass: "!bg-teal-500/15",
+    children: [
+      {
+        title: "Inbox Analyzer",
+        url: "/email-tools/inbox-analyzer",
+        icon: Inbox,
+        iconColor: "text-teal-400/70",
+        testId: "nav-inbox-analyzer",
+        activeClass: "!bg-teal-500/10 !text-teal-200",
+      },
+      {
+        title: "Sender Reputation",
+        url: "/email-tools/sender-reputation",
+        icon: ShieldCheck,
+        iconColor: "text-teal-400/70",
+        testId: "nav-sender-rep",
+        activeClass: "!bg-teal-500/10 !text-teal-200",
+      },
+      {
+        title: "Inbox Intel",
+        url: "/email-tools/inbox-intel",
+        icon: Eye,
+        iconColor: "text-teal-400/70",
+        testId: "nav-inbox-intel",
+        activeClass: "!bg-teal-500/10 !text-teal-200",
+      },
+    ],
   },
   {
     title: "Analytics",
@@ -86,10 +171,53 @@ const allNavItems = [
     icon: BarChart2,
     iconColor: "text-emerald-400",
     testId: "nav-analytics",
-    matchPaths: ANALYTICS_TOOL_PATHS,
     collaboratorVisible: false,
+    activeClass: "!bg-emerald-500/15",
+    children: [
+      {
+        title: "YouTube",
+        url: "/analytics/youtube",
+        icon: Youtube,
+        iconColor: "text-emerald-400/70",
+        testId: "nav-youtube",
+        activeClass: "!bg-emerald-500/10 !text-emerald-200",
+      },
+      {
+        title: "Search Console",
+        url: "/analytics/search-console",
+        icon: Globe,
+        iconColor: "text-emerald-400/70",
+        testId: "nav-search-console",
+        activeClass: "!bg-emerald-500/10 !text-emerald-200",
+      },
+    ],
   },
 ];
+
+function isChildActive(child: NavChild, location: string) {
+  if (child.matchPaths) {
+    return child.matchPaths.some(
+      (p) => location === p || location.startsWith(p + "/") || location.startsWith(p + "-")
+    );
+  }
+  return location === child.url || location.startsWith(child.url + "/");
+}
+
+function isGroupActive(item: NavItem, location: string): boolean {
+  if (location === item.url) return true;
+  if (item.children) {
+    return item.children.some((child) => isChildActive(child, location));
+  }
+  if (item.matchPaths) {
+    return item.matchPaths.some(
+      (p) => location === p || location.startsWith(p + "/")
+    );
+  }
+  if (item.url !== "/dashboard") {
+    return location.startsWith(item.url);
+  }
+  return false;
+}
 
 export function AppSidebar() {
   const { user, logout } = useAuth();
@@ -163,18 +291,69 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
-                const isActive = location === item.url
-                  || (item.url !== "/dashboard" && !item.matchPaths && location.startsWith(item.url))
-                  || (item.matchPaths?.some(p => location === p || location.startsWith(p + "/")) ?? false);
+                const groupActive = isGroupActive(item, location);
+
+                if (item.children) {
+                  return (
+                    <Collapsible key={item.url} open={groupActive}>
+                      <SidebarMenuItem>
+                        <SidebarMenuButton
+                          isActive={groupActive}
+                          tooltip={item.title}
+                          onClick={() => setLocation(item.url)}
+                          data-testid={item.testId}
+                          className={groupActive && item.activeClass ? item.activeClass : ""}
+                        >
+                          <item.icon className={groupActive ? undefined : item.iconColor} />
+                          <span>{item.title}</span>
+                          <ChevronDown
+                            className={cn(
+                              "ml-auto h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform duration-200",
+                              groupActive && "rotate-180 text-current"
+                            )}
+                          />
+                        </SidebarMenuButton>
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {item.children.map((child) => {
+                              const childIsActive = isChildActive(child, location);
+                              return (
+                                <SidebarMenuSubItem key={child.url}>
+                                  <SidebarMenuSubButton
+                                    isActive={childIsActive}
+                                    onClick={() => setLocation(child.url)}
+                                    data-testid={child.testId}
+                                    style={{ cursor: "pointer" }}
+                                    className={
+                                      childIsActive
+                                        ? child.activeClass
+                                        : "text-white/55 hover:!text-white"
+                                    }
+                                  >
+                                    <child.icon
+                                      className={childIsActive ? undefined : child.iconColor}
+                                    />
+                                    <span>{child.title}</span>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              );
+                            })}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  );
+                }
+
                 return (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton
-                      isActive={isActive}
+                      isActive={groupActive}
                       tooltip={item.title}
                       onClick={() => setLocation(item.url)}
                       data-testid={item.testId}
                     >
-                      <item.icon className={isActive ? undefined : item.iconColor} />
+                      <item.icon className={groupActive ? undefined : item.iconColor} />
                       <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
