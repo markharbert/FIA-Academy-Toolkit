@@ -106,6 +106,13 @@ const allNavItems: NavItem[] = [
         title: "Topic Pulse",
         url: "/video-trends",
         testId: "nav-topic-pulse",
+        matchPaths: ["/video-trends", "/video-trends/explore", "/video-trends/saved", "/video-trends/settings"],
+        activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
+      },
+      {
+        title: "Video Scripts",
+        url: "/video-trends/scripts",
+        testId: "nav-video-scripts",
         activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
       },
       {
