@@ -405,10 +405,12 @@ export default function DashboardPage() {
   // ── render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex-1 overflow-auto bg-background">
-      {/* ── Hero header — single calm gradient ───────────────────────────── */}
+      {/* ── Hero header — multi-hue gradient ────────────────────────────── */}
       <div className="relative overflow-hidden border-b border-border">
-        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(230_70%_12%)] via-[hsl(230_55%_20%)] to-[hsl(230_45%_28%)]" />
-        <div className="absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-indigo-500/15 blur-3xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(230_75%_11%)] via-[hsl(240_65%_18%)] to-[hsl(252_55%_24%)]" />
+        <div className="absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-indigo-500/25 blur-3xl" />
+        <div className="absolute -top-20 -left-10 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl" />
+        <div className="absolute top-0 left-1/2 h-56 w-56 rounded-full bg-teal-500/8 blur-3xl" />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
@@ -442,20 +444,32 @@ export default function DashboardPage() {
           </div>
 
           {/* KPI ribbon */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
-            {headerKpis.map((k, i) => (
-              <div
-                key={i}
-                className="rounded-xl bg-white/8 backdrop-blur-md ring-1 ring-white/15 px-4 py-3"
-                data-testid={`kpi-${i}`}
-              >
-                <p className="text-[10px] uppercase tracking-wider text-white/70 font-medium">{k.label}</p>
-                <p className="mt-1 text-2xl font-bold tabular-nums text-white">
-                  {k.value}
-                </p>
+          {(() => {
+            const kpiStyles = [
+              { bg: "bg-amber-500/15 ring-amber-400/30", label: "text-amber-200/80", value: "text-amber-100" },
+              { bg: "bg-indigo-500/15 ring-indigo-400/30", label: "text-indigo-200/80", value: "text-indigo-100" },
+              { bg: "bg-violet-500/15 ring-violet-400/30", label: "text-violet-200/80", value: "text-violet-100" },
+            ];
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
+                {headerKpis.map((k, i) => {
+                  const s = kpiStyles[i] ?? kpiStyles[0];
+                  return (
+                    <div
+                      key={i}
+                      className={`rounded-xl backdrop-blur-md ring-1 px-4 py-3 ${s.bg}`}
+                      data-testid={`kpi-${i}`}
+                    >
+                      <p className={`text-[10px] uppercase tracking-wider font-medium ${s.label}`}>{k.label}</p>
+                      <p className={`mt-1 text-2xl font-bold tabular-nums ${s.value}`}>
+                        {k.value}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -629,9 +643,9 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Row 3 — Recent Activity (full width) ─────────────────────────── */}
-        <Tile accent="bg-slate-400" testId="card-recent-activity">
+        <Tile accent="bg-gradient-to-r from-sky-500 via-indigo-500 to-violet-500" testId="card-recent-activity">
           <div className="flex items-center justify-between">
-            <TileTitle icon={Activity} title="Recent Activity" accent="bg-muted text-muted-foreground" />
+            <TileTitle icon={Activity} title="Recent Activity" accent="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" />
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Last 7 events</span>
           </div>
           <div className="mt-3">

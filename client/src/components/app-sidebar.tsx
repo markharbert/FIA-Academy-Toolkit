@@ -41,6 +41,7 @@ const allNavItems = [
     title: "Dashboard",
     url: "/dashboard",
     icon: LayoutDashboard,
+    iconColor: "text-sky-400",
     testId: "nav-dashboard",
     collaboratorVisible: false,
   },
@@ -48,6 +49,7 @@ const allNavItems = [
     title: "DMO Tracker",
     url: "/dmo-tracker",
     icon: Target,
+    iconColor: "text-amber-400",
     testId: "nav-dmo-tracker",
     collaboratorVisible: false,
   },
@@ -55,6 +57,7 @@ const allNavItems = [
     title: "Projects",
     url: "/projects",
     icon: Briefcase,
+    iconColor: "text-indigo-400",
     testId: "nav-projects",
     matchPaths: ["/projects"],
     collaboratorVisible: true,
@@ -63,6 +66,7 @@ const allNavItems = [
     title: "Video Tools",
     url: "/video-tools",
     icon: Wrench,
+    iconColor: "text-rose-400",
     testId: "nav-video-tools",
     matchPaths: VIDEO_TOOL_PATHS,
     collaboratorVisible: false,
@@ -71,6 +75,7 @@ const allNavItems = [
     title: "Email Tools",
     url: "/email-tools",
     icon: Mail,
+    iconColor: "text-teal-400",
     testId: "nav-email-tools",
     matchPaths: EMAIL_TOOL_PATHS,
     collaboratorVisible: false,
@@ -79,6 +84,7 @@ const allNavItems = [
     title: "Analytics",
     url: "/analytics",
     icon: BarChart2,
+    iconColor: "text-emerald-400",
     testId: "nav-analytics",
     matchPaths: ANALYTICS_TOOL_PATHS,
     collaboratorVisible: false,
@@ -106,7 +112,6 @@ export function AppSidebar() {
       const data = await res.json();
       window.open(data.url, "_blank", "noopener,noreferrer");
     } catch {
-      // If CF not configured just open the workspace domain directly
       const domain = window.location.hostname;
       window.open(`https://${domain}`, "_blank", "noopener,noreferrer");
     }
@@ -116,7 +121,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="flex items-center justify-start">
+      <SidebarHeader
+        className="flex items-center justify-start border-b"
+        style={{ borderColor: "hsl(230 60% 16%)", background: "linear-gradient(180deg, hsl(230 75% 14%) 0%, hsl(230 75% 10%) 100%)" }}
+      >
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -166,7 +174,7 @@ export function AppSidebar() {
                       onClick={() => setLocation(item.url)}
                       data-testid={item.testId}
                     >
-                      <item.icon />
+                      <item.icon className={isActive ? undefined : item.iconColor} />
                       <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -188,7 +196,7 @@ export function AppSidebar() {
                   onClick={() => setLocation("/help")}
                   data-testid="nav-help"
                 >
-                  <BookOpen />
+                  <BookOpen className={location.startsWith("/help") ? undefined : "text-slate-400"} />
                   <span>Help Docs</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -199,7 +207,7 @@ export function AppSidebar() {
                   onClick={() => setLocation("/feedback")}
                   data-testid="nav-feedback"
                 >
-                  <MessageSquarePlus />
+                  <MessageSquarePlus className={location.startsWith("/feedback") ? undefined : "text-slate-400"} />
                   <span>Bug / Feature Requests</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -221,7 +229,7 @@ export function AppSidebar() {
                       onClick={() => setLocation("/admin")}
                       data-testid="nav-admin"
                     >
-                      <Shield />
+                      <Shield className={location === "/admin" ? undefined : "text-violet-400"} />
                       <span>Admin Panel</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -270,7 +278,7 @@ export function AppSidebar() {
               tooltip="Log out"
               data-testid="button-logout"
             >
-              <LogOut />
+              <LogOut className="text-slate-400" />
               <span>Log out</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
