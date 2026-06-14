@@ -2448,7 +2448,7 @@ export default function AdminPage() {
     <div className="flex-1 overflow-auto bg-background">
       {/* ── Admin hero banner ──────────────────────────────────────────── */}
       <div className="relative overflow-hidden border-b border-border">
-        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(252_60%_12%)] via-[hsl(262_55%_18%)] to-[hsl(230_60%_22%)]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(262_55%_17%)]" />
         <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-violet-500/20 blur-3xl" />
         <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-rose-500/10 blur-3xl" />
         <div className="absolute top-0 left-1/3 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl" />

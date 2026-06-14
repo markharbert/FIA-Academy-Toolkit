@@ -407,7 +407,7 @@ export default function DashboardPage() {
     <div className="flex-1 overflow-auto bg-background">
       {/* ── Hero header — multi-hue gradient ────────────────────────────── */}
       <div className="relative overflow-hidden border-b border-border">
-        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(230_75%_11%)] via-[hsl(240_65%_18%)] to-[hsl(252_55%_24%)]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(245_60%_18%)]" />
         <div className="absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-indigo-500/25 blur-3xl" />
         <div className="absolute -top-20 -left-10 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl" />
         <div className="absolute top-0 left-1/2 h-56 w-56 rounded-full bg-teal-500/8 blur-3xl" />

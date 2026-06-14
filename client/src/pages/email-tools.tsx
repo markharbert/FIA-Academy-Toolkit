@@ -54,15 +54,18 @@ export default function EmailToolsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Hero header */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 py-10">
-        <div className="max-w-5xl mx-auto">
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(175_55%_14%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-teal-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="relative max-w-5xl mx-auto px-6 py-10">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-              <Mail className="h-5 w-5 text-white" />
+            <div className="h-10 w-10 rounded-xl bg-teal-500/20 ring-1 ring-teal-400/30 flex items-center justify-center">
+              <Mail className="h-5 w-5 text-teal-300" />
             </div>
             <h1 className="text-3xl font-bold text-white tracking-tight">Email Tools</h1>
           </div>
-          <p className="text-white/50 text-sm mt-1.5 max-w-xl">
+          <p className="text-white/60 text-sm mt-1.5 max-w-xl">
             Everything you need to write, optimize, and grow through email marketing — all in one place.
           </p>
         </div>

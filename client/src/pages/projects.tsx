@@ -1123,8 +1123,11 @@ export default function ProjectsPage() {
   return (
     <div className="flex-1 overflow-auto bg-background">
       {/* Header */}
-      <div className="border-b border-border bg-gradient-to-br from-[hsl(230_60%_18%)] to-[hsl(245_60%_30%)] text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-7">
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(245_60%_18%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7">
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2 text-white/70 text-xs uppercase tracking-wide font-medium">

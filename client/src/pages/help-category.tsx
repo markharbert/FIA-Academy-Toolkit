@@ -30,44 +30,33 @@ export default function HelpCategoryPage() {
   const articles = category.articles;
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
-
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">
-        <button
-          onClick={() => setLocation("/help")}
-          className="hover:text-foreground transition-colors flex items-center gap-1"
-          data-testid="link-help-docs"
-        >
-          <BookOpen className="h-3.5 w-3.5" />
-          Help Docs
-        </button>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-foreground font-medium">{category.title}</span>
-      </div>
-
-      {/* Back button */}
-      <button
-        onClick={() => setLocation("/help")}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        data-testid="button-back-to-help"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        All categories
-      </button>
-
-      {/* Category header */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Icon className="h-5 w-5 text-primary" />
+    <div className="min-h-full flex flex-col">
+      {/* Hero header */}
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(200_60%_15%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="relative max-w-4xl mx-auto px-6 py-8">
+          <div className="flex items-center gap-1.5 text-sm text-white/50 flex-wrap mb-4">
+            <button onClick={() => setLocation("/help")} className="hover:text-white/80 transition-colors flex items-center gap-1" data-testid="link-help-docs">
+              <BookOpen className="h-3.5 w-3.5" />
+              Help Docs
+            </button>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <span className="text-white/80 font-medium">{category.title}</span>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground leading-tight" data-testid="text-category-title">{category.title}</h1>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-white/15 ring-1 ring-white/20 flex items-center justify-center">
+              <Icon className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white leading-tight" data-testid="text-category-title">{category.title}</h1>
+              <p className="text-sm text-white/60 mt-0.5">{category.description}</p>
+            </div>
           </div>
         </div>
-        <p className="text-base text-muted-foreground leading-relaxed">{category.description}</p>
       </div>
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 w-full">
 
       {/* Articles */}
       {articles.length === 0 ? (
@@ -105,6 +94,7 @@ export default function HelpCategoryPage() {
         </div>
       )}
 
+      </div>
     </div>
   );
 }

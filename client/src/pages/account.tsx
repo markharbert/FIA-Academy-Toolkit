@@ -381,37 +381,45 @@ export default function AccountPage() {
   const items = activity?.items ?? [];
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8">
-      {/* Page header with avatar */}
-      <div className="flex items-center gap-4 mb-8">
-        <Avatar className="h-14 w-14 shrink-0">
-          <AvatarImage
-            src={`${getGravatarUrl(account.gravatarHash)}&v=${gravatarKey}`}
-            alt={account.displayName || "Profile"}
-          />
-          <AvatarFallback>
-            <User className="h-6 w-6" />
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold leading-tight truncate" data-testid="text-account-title">
-            {account.displayName || account.firstName || "Account"}
-          </h1>
-          <p className="text-sm text-muted-foreground truncate" data-testid="text-profile-email">
-            {account.email || "No email on file"}
-          </p>
+    <div className="min-h-full flex flex-col">
+      {/* Hero header */}
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(200_60%_15%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="relative container mx-auto max-w-5xl px-4 py-8">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-14 w-14 shrink-0 ring-2 ring-white/20">
+              <AvatarImage
+                src={`${getGravatarUrl(account.gravatarHash)}&v=${gravatarKey}`}
+                alt={account.displayName || "Profile"}
+              />
+              <AvatarFallback className="bg-white/10">
+                <User className="h-6 w-6 text-white" />
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-white leading-tight truncate" data-testid="text-account-title">
+                {account.displayName || account.firstName || "Account"}
+              </h1>
+              <p className="text-sm text-white/60 truncate" data-testid="text-profile-email">
+                {account.email || "No email on file"}
+              </p>
+            </div>
+            {isMember && (
+              <Badge
+                variant="secondary"
+                className="ml-auto shrink-0 bg-emerald-400/20 text-emerald-300 border-emerald-400/30 gap-1"
+                data-testid="badge-membership-status"
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Active member
+              </Badge>
+            )}
+          </div>
         </div>
-        {isMember && (
-          <Badge
-            variant="secondary"
-            className="ml-auto shrink-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1"
-            data-testid="badge-membership-status"
-          >
-            <CheckCircle2 className="h-3 w-3" />
-            Active member
-          </Badge>
-        )}
       </div>
+      <div className="container mx-auto max-w-5xl px-4 py-8">
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex gap-8 items-start">
@@ -1168,6 +1176,7 @@ export default function AccountPage() {
           </div>{/* /right content */}
         </div>{/* /flex wrapper */}
       </Tabs>
+      </div>
     </div>
   );
 }

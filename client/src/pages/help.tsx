@@ -11,17 +11,21 @@ export default function HelpPage() {
   const articles = allArticles();
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
-
-      {/* Header */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          <BookOpen className="h-4 w-4" />
-          <span>Help &amp; Documentation</span>
+    <div className="min-h-full flex flex-col">
+      {/* Hero header */}
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(200_60%_15%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="relative max-w-4xl mx-auto px-6 py-10">
+          <div className="flex items-center gap-2 text-white/60 text-xs uppercase tracking-wide font-medium mb-2">
+            <BookOpen className="h-3.5 w-3.5" /> Help &amp; Documentation
+          </div>
+          <h1 className="text-3xl font-bold text-white">How can we help?</h1>
+          <p className="text-white/60 text-base mt-1">Step-by-step guides and documentation for every feature in Academy Toolkit.</p>
         </div>
-        <h1 className="text-3xl font-bold text-foreground">How can we help?</h1>
-        <p className="text-muted-foreground text-base">Step-by-step guides and documentation for every feature in Academy Toolkit.</p>
       </div>
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8 w-full">
 
       {/* Search (visual only — expandable later) */}
       <div className="relative">
@@ -96,6 +100,7 @@ export default function HelpPage() {
         </div>
       )}
 
+      </div>
     </div>
   );
 }

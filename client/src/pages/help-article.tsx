@@ -19,40 +19,39 @@ export default function HelpArticlePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
-
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">
-        <button onClick={() => setLocation("/help")} className="hover:text-foreground transition-colors flex items-center gap-1">
-          <BookOpen className="h-3.5 w-3.5" />
-          Help Docs
-        </button>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <button
-          onClick={() => setLocation(`/help/category/${article.categorySlug}`)}
-          className="hover:text-foreground transition-colors"
-          data-testid="link-category"
-        >
-          {article.category}
-        </button>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-foreground font-medium">{article.title}</span>
-      </div>
-
-      {/* Article header */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="inline-flex items-center gap-1 text-xs font-medium bg-primary/10 text-primary px-2.5 py-1 rounded-full">
-            {article.category}
-          </span>
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            {article.readMinutes} min read
-          </span>
+    <div className="min-h-full flex flex-col">
+      {/* Hero header */}
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(200_60%_15%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="relative max-w-4xl mx-auto px-6 py-8">
+          <div className="flex items-center gap-1.5 text-sm text-white/50 flex-wrap mb-4">
+            <button onClick={() => setLocation("/help")} className="hover:text-white/80 transition-colors flex items-center gap-1">
+              <BookOpen className="h-3.5 w-3.5" />
+              Help Docs
+            </button>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <button onClick={() => setLocation(`/help/category/${article.categorySlug}`)} className="hover:text-white/80 transition-colors" data-testid="link-category">
+              {article.category}
+            </button>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <span className="text-white/80 font-medium">{article.title}</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <span className="inline-flex items-center gap-1 text-xs font-medium bg-white/20 text-white px-2.5 py-1 rounded-full">
+              {article.category}
+            </span>
+            <span className="flex items-center gap-1 text-xs text-white/50">
+              <Clock className="h-3 w-3" />
+              {article.readMinutes} min read
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold text-white leading-tight">{article.title}</h1>
+          <p className="text-white/60 text-base mt-1 leading-relaxed">{article.subtitle}</p>
         </div>
-        <h1 className="text-3xl font-bold text-foreground leading-tight">{article.title}</h1>
-        <p className="text-lg text-muted-foreground leading-relaxed">{article.subtitle}</p>
       </div>
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8 w-full">
 
       {/* Overview box */}
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 flex gap-3">
@@ -187,6 +186,7 @@ export default function HelpArticlePage() {
         </div>
       </div>
 
+      </div>
     </div>
   );
 }

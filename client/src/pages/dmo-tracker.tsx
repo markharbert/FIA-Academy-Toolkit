@@ -1887,11 +1887,14 @@ export default function DmoTrackerPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Hero header */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 py-8">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-end justify-between gap-5">
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-amber-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="relative max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row sm:items-end justify-between gap-5">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight">Daily Method of Operation</h1>
-            <p className="text-white/50 text-sm mt-1">
+            <p className="text-white/60 text-sm mt-1">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
             </p>
             {/* Tab switcher + Pop Out button */}

@@ -331,8 +331,11 @@ export default function AnalyticsGscPage() {
     <div className="min-h-screen bg-background">
 
       {/* ── Header ── */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 py-8">
-        <div className="max-w-6xl mx-auto">
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(235_65%_17%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="relative max-w-6xl mx-auto px-6 py-8">
           <button onClick={() => setLocation("/analytics")}
             className="flex items-center gap-1.5 text-white/50 hover:text-white/80 text-sm mb-4 transition-colors"
             data-testid="button-back-analytics">
@@ -340,8 +343,8 @@ export default function AnalyticsGscPage() {
           </button>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                <Globe className="h-5 w-5 text-white" />
+              <div className="h-10 w-10 rounded-xl bg-blue-500/20 ring-1 ring-blue-400/30 flex items-center justify-center">
+                <Globe className="h-5 w-5 text-blue-300" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">Website Analytics</h1>

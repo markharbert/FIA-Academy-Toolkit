@@ -385,14 +385,17 @@ export default function TopicPulseSavedPage() {
 
   return (
     <div className="min-h-full flex flex-col">
-      <div className="border-b p-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/video-trends")} data-testid="button-back">
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
+        <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-amber-500/20 blur-3xl" />
+        <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="relative px-4 py-4 flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/video-trends")} className="text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-xl font-semibold" data-testid="text-page-title">Saved Topics</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-xl font-semibold text-white" data-testid="text-page-title">Saved Topics</h1>
+            <p className="text-sm text-white/60">
               {activeTopics.length} active, {completedTopics.length} completed
             </p>
           </div>

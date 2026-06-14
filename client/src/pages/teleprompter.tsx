@@ -259,12 +259,15 @@ export default function TeleprompterPage() {
   return (
     <div className="min-h-full flex flex-col">
       {/* Hero header */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 py-6 shrink-0">
-        <div className="max-w-6xl mx-auto flex items-center gap-3">
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(200_60%_15%)]" />
+        <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-sky-500/20 blur-3xl" />
+        <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-teal-500/10 blur-3xl" />
+        <div className="relative max-w-6xl mx-auto px-6 py-6 flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10"
+            className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10 shrink-0"
             onClick={() => navigate("/video-tools")}
             data-testid="button-back"
           >
@@ -272,10 +275,10 @@ export default function TeleprompterPage() {
           </Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-              <MonitorPlay className="h-5 w-5 text-white/80" />
+              <MonitorPlay className="h-5 w-5 text-sky-300" />
               Teleprompter
             </h1>
-            <p className="text-white/50 text-sm mt-0.5">
+            <p className="text-white/60 text-sm mt-0.5">
               Paste or upload any script and roll it through a distraction-free teleprompter. Your scripts save to your account.
             </p>
           </div>

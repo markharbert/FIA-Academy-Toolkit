@@ -2254,8 +2254,11 @@ export default function SenderReputationPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 py-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(158_55%_14%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-teal-500/10 blur-3xl" />
+        <div className="relative max-w-7xl mx-auto px-6 py-8">
           <button
             className="flex items-center gap-1.5 text-white/50 hover:text-white/80 text-xs mb-4 transition-colors"
             onClick={() => setLocation("/email-tools")}
@@ -2266,12 +2269,12 @@ export default function SenderReputationPage() {
           </button>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                <ShieldCheck className="h-5 w-5 text-white" />
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/20 ring-1 ring-emerald-400/30 flex items-center justify-center">
+                <ShieldCheck className="h-5 w-5 text-emerald-300" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">Sender Reputation</h1>
-                <p className="text-white/50 text-xs mt-0.5">Google Postmaster Tools — complete domain health dashboard</p>
+                <p className="text-white/60 text-xs mt-0.5">Google Postmaster Tools — complete domain health dashboard</p>
               </div>
             </div>
             {status?.connected && (

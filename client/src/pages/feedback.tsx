@@ -465,21 +465,31 @@ export default function FeedbackPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-feedback-title">
-            Bug Reports &amp; Feature Requests
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Report a problem or suggest a new feature. Vote on ideas you'd like to see built.
-          </p>
+    <div className="min-h-full flex flex-col">
+      {/* Hero header */}
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(262_55%_17%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-violet-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-purple-500/10 blur-3xl" />
+        <div className="relative max-w-3xl mx-auto px-4 py-8 flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-white/60 text-xs uppercase tracking-wide font-medium mb-1">
+              <MessageSquare className="h-3.5 w-3.5" /> Feedback
+            </div>
+            <h1 className="text-2xl font-bold text-white" data-testid="text-feedback-title">
+              Bug Reports &amp; Feature Requests
+            </h1>
+            <p className="mt-1 text-sm text-white/60">
+              Report a problem or suggest a new feature. Vote on ideas you'd like to see built.
+            </p>
+          </div>
+          <Button onClick={() => openSubmit(activeTab === "feature" ? "feature" : "bug")} className="shrink-0 bg-white/15 text-white hover:bg-white/25 border border-white/20" data-testid="button-new-feedback">
+            <Plus className="h-4 w-4 mr-1" />
+            {activeTab === "feature" ? "Request a Feature" : "Report a Bug"}
+          </Button>
         </div>
-        <Button onClick={() => openSubmit(activeTab === "feature" ? "feature" : "bug")} data-testid="button-new-feedback">
-          <Plus className="h-4 w-4 mr-1" />
-          {activeTab === "feature" ? "Request a Feature" : "Report a Bug"}
-        </Button>
       </div>
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-6 w-full">
 
       <Tabs
         value={activeTab}
@@ -752,6 +762,7 @@ export default function FeedbackPage() {
           />
         </div>
       )}
+      </div>
     </div>
   );
 }

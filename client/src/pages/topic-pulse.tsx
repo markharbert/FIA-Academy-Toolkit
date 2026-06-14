@@ -136,7 +136,11 @@ export default function TopicPulsePage() {
     <div className="min-h-full flex flex-col">
 
       {/* ── Hero / Search ── */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 pt-6 pb-7 shrink-0">
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
+        <div className="absolute -bottom-20 -right-10 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
+        <div className="absolute -top-14 -left-6 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="relative px-6 pt-6 pb-7">
         <div className="max-w-2xl mx-auto">
           <Link href="/video-tools">
             <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors mb-4" data-testid="button-back-video-tools">
@@ -146,10 +150,10 @@ export default function TopicPulsePage() {
           </Link>
           <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Sparkles className="h-5 w-5 text-violet-400" />
+            <Sparkles className="h-5 w-5 text-amber-400" />
             <h1 className="text-2xl font-bold text-white" data-testid="text-page-title">Video Trends</h1>
           </div>
-          <p className="text-white/50 text-sm mb-6">
+          <p className="text-white/60 text-sm mb-6">
             Find in-demand YouTube topics and generate scripts with Mark's 5-part formula
           </p>
 
@@ -226,6 +230,7 @@ export default function TopicPulsePage() {
           </div>
         </div>
       </div>
+    </div>
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-auto">

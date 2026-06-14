@@ -196,8 +196,11 @@ export default function InboxIntelTrackerPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 py-8">
-        <div className="max-w-5xl mx-auto">
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(262_55%_17%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-violet-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="relative max-w-5xl mx-auto px-6 py-8">
           <button
             onClick={() => setLocation("/email-tools/inbox-intel")}
             className="text-white/60 hover:text-white text-sm flex items-center gap-1 mb-4"
