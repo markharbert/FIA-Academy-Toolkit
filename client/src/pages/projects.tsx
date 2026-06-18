@@ -1133,7 +1133,7 @@ export default function ProjectsPage() {
               <div className="flex items-center gap-2 text-white/70 text-xs uppercase tracking-wide font-medium">
                 <Briefcase className="h-3.5 w-3.5" /> Projects
               </div>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight" data-testid="text-projects-title">{possessive} Projects</h1>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight text-white" data-testid="text-projects-title">{possessive} Projects</h1>
               <p className="mt-1 text-sm text-white/80">Plan, organize, and complete the work that runs your business.</p>
             </div>
             <div className="flex items-center gap-2">

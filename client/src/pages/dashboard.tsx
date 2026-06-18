@@ -420,7 +420,7 @@ export default function DashboardPage() {
                 <span className="opacity-50">·</span>
                 <span className="tabular-nums" data-testid="text-dashboard-time">{nowTime}</span>
               </p>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mt-1" data-testid="text-dashboard-title">
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mt-1 text-white" data-testid="text-dashboard-title">
                 {firstName ? `${timeGreeting(user?.timezone)}, ${firstName}` : timeGreeting(user?.timezone)}
               </h1>
               <p className="text-white/70 mt-1 text-sm">
