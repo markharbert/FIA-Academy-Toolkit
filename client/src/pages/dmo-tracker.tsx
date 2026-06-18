@@ -1434,7 +1434,7 @@ function LogTab({ entries, targets, todayKey }: {
   };
 
   const saveTimeEdits = (entry: DmoEntry | null, date: string) => {
-    const payload: Record<string, unknown> = { date, notes: entry?.notes ?? "" };
+    const payload: Record<string, unknown> = { date, notes: entry ? (entry.notes ?? "") : notesText };
     for (const a of DMO_ACTIVITIES) {
       const secs = parseTimeEditInput(timeEdits[a.key] ?? "");
       payload[a.secondsKey] = secs;
@@ -1645,9 +1645,26 @@ function LogTab({ entries, targets, todayKey }: {
                     })}
                   </div>
                   <p className="text-[10px] text-muted-foreground mb-3">Enter minutes (e.g. 45) or leave blank to skip that activity.</p>
+
+                  {/* Daily notes */}
+                  <div className="pt-4 border-t border-border mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <BookText className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Daily Notes</span>
+                    </div>
+                    <textarea
+                      value={notesText}
+                      onChange={e => setNotesText(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"
+                      placeholder="Add notes for this day… (optional)"
+                      data-testid="textarea-dmo-backfill-notes"
+                    />
+                  </div>
+
                   <div className="flex items-center gap-2 justify-end">
                     <button
-                      onClick={() => { setSelectedDate(null); setEditingTime(false); }}
+                      onClick={() => { setSelectedDate(null); setEditingTime(false); setNotesText(""); }}
                       className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       data-testid="button-dmo-backfill-cancel"
                     >
