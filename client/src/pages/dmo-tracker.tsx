@@ -1374,7 +1374,11 @@ function JournalTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSe
 
 // ─── Log Tab ──────────────────────────────────────────────────────────────────
 
-function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettings }) {
+function LogTab({ entries, targets, todayKey }: {
+  entries: DmoEntry[];
+  targets?: DmoSettings;
+  todayKey?: string;
+}) {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
@@ -1429,12 +1433,12 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
     setEditingNotes(false);
   };
 
-  const saveTimeEdits = (entry: DmoEntry, date: string) => {
-    const payload: Record<string, unknown> = { date, notes: entry.notes ?? "" };
+  const saveTimeEdits = (entry: DmoEntry | null, date: string) => {
+    const payload: Record<string, unknown> = { date, notes: entry?.notes ?? "" };
     for (const a of DMO_ACTIVITIES) {
       const secs = parseTimeEditInput(timeEdits[a.key] ?? "");
       payload[a.secondsKey] = secs;
-      payload[a.key] = secs > 0 ? true : ((entry[a.key as keyof DmoEntry] as boolean) ?? false);
+      payload[a.key] = secs > 0 ? true : ((entry?.[a.key as keyof DmoEntry] as boolean) ?? false);
     }
     timeMutation.mutate(payload);
   };
@@ -1442,7 +1446,11 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
   const entryMap = new Map<string, DmoEntry>();
   for (const e of entries) entryMap.set(e.date, e);
 
-  const allMonths = Array.from(new Set(entries.map(e => e.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a));
+  const currentMonthKey = todayKey ? todayKey.slice(0, 7) : "";
+  const allMonths = Array.from(new Set([
+    ...(currentMonthKey ? [currentMonthKey] : []),
+    ...entries.map(e => e.date.slice(0, 7)),
+  ])).sort((a, b) => b.localeCompare(a));
   const activeMonth = selectedMonth && allMonths.includes(selectedMonth) ? selectedMonth : (allMonths[0] ?? "");
 
   const getTarget = (a: typeof DMO_ACTIVITIES[number]) =>
@@ -1558,12 +1566,31 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
                       return (
                         <button
                           key={di}
-                          onClick={() => totalSecs > 0 && setSelectedDate(isSelected ? null : date)}
+                          onClick={() => {
+                            if (totalSecs > 0) {
+                              setSelectedDate(isSelected ? null : date);
+                              setEditingTime(false);
+                              setEditingNotes(false);
+                            } else if (!todayKey || date <= todayKey) {
+                              if (isSelected) {
+                                setSelectedDate(null);
+                              } else {
+                                setSelectedDate(date);
+                                const edits: Record<string, string> = {};
+                                for (const a of DMO_ACTIVITIES) edits[a.key] = "";
+                                setTimeEdits(edits);
+                                setEditingTime(true);
+                                setEditingNotes(false);
+                              }
+                            }
+                          }}
                           data-testid={`button-dmo-log-day-${date}`}
                           className={`relative rounded-lg py-1.5 px-0.5 text-center transition-all ${
                             totalSecs > 0
                               ? `${getHeatClass(totalSecs)} hover:ring-2 hover:ring-violet-400 cursor-pointer`
-                              : "bg-muted/30 text-muted-foreground/30 cursor-default"
+                              : (!todayKey || date <= todayKey)
+                                ? "bg-muted/20 border border-dashed border-border/50 text-muted-foreground/35 hover:border-violet-400/50 hover:text-muted-foreground/60 cursor-pointer"
+                                : "bg-muted/10 text-muted-foreground/15 cursor-default"
                           } ${isSelected ? "ring-2 ring-violet-500 shadow-md" : ""}`}
                         >
                           <span className="block text-[11px] font-semibold leading-tight">{dayNum}</span>
@@ -1580,6 +1607,65 @@ function LogTab({ entries, targets }: { entries: DmoEntry[]; targets?: DmoSettin
               </div>
 
               {/* Expanded day detail — time + journal notes */}
+              {selectedDate?.startsWith(activeMonth) && !selectedEntry && (
+                <div className="mt-4 rounded-xl border border-dashed border-violet-400/40 bg-violet-500/5 p-5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CalendarCheck className="h-4 w-4 text-violet-400 shrink-0" />
+                    <p className="text-sm font-bold text-foreground">
+                      Log {new Date(selectedDate + "T12:00:00").toLocaleDateString("en-US", {
+                        weekday: "long", month: "long", day: "numeric",
+                      })}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    No activities recorded for this day. Enter your time below to restore your streak.
+                  </p>
+                  <div className="space-y-2.5 mb-3">
+                    {DMO_ACTIVITIES.map(a => {
+                      const Icon = a.icon;
+                      return (
+                        <div key={a.key} className="flex items-center gap-3">
+                          <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${a.gradient} flex items-center justify-center shrink-0`}>
+                            <Icon className="h-3.5 w-3.5 text-white" />
+                          </div>
+                          <span className="text-xs text-foreground flex-1 min-w-0 truncate">{a.label}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <input
+                              type="text"
+                              value={timeEdits[a.key] ?? ""}
+                              onChange={e => setTimeEdits(prev => ({ ...prev, [a.key]: e.target.value }))}
+                              placeholder="min"
+                              className="w-16 h-7 rounded border border-border bg-background px-2 text-xs text-foreground text-center focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              data-testid={`input-dmo-backfill-${a.key}`}
+                            />
+                            <span className="text-[10px] text-muted-foreground">min</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mb-3">Enter minutes (e.g. 45) or leave blank to skip that activity.</p>
+                  <div className="flex items-center gap-2 justify-end">
+                    <button
+                      onClick={() => { setSelectedDate(null); setEditingTime(false); }}
+                      className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      data-testid="button-dmo-backfill-cancel"
+                    >
+                      Cancel
+                    </button>
+                    <Button
+                      size="sm"
+                      className="h-7 px-3 text-xs"
+                      disabled={timeMutation.isPending}
+                      onClick={() => saveTimeEdits(null, selectedDate)}
+                      data-testid="button-dmo-backfill-save"
+                    >
+                      {timeMutation.isPending ? "Saving…" : "Save Day"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {selectedDate?.startsWith(activeMonth) && selectedEntry && (
                 <div className="mt-4 rounded-xl border border-border bg-card p-5 animate-in fade-in slide-in-from-top-2 duration-200">
                   <div className="flex items-center justify-between mb-4">
@@ -1980,7 +2066,7 @@ export default function DmoTrackerPage() {
               ))}
             </div>
           ) : (
-            <LogTab entries={journalEntries} targets={dmoSettings} />
+            <LogTab entries={journalEntries} targets={dmoSettings} todayKey={today} />
           )}
         </div>
       )}
@@ -2010,6 +2096,7 @@ export default function DmoTrackerPage() {
             )}
           </div>
         )}
+
 
         {/* ── Full-width points history chart ── */}
         <Card className="border border-border">
