@@ -1851,6 +1851,19 @@ export const youtubeAnalyticsCache = pgTable("youtube_analytics_cache", {
 }, (t) => [unique("youtube_analytics_cache_user_key").on(t.userId, t.cacheKey)]);
 export type YoutubeAnalyticsCache = typeof youtubeAnalyticsCache.$inferSelect;
 
+// Tracks object paths issued by the attachment presigned-URL flow that have not
+// yet been confirmed.  Persisted in DB so orphaned objects are cleaned up even
+// after a process restart.  userId+taskId are stored at issuance time so the
+// confirm endpoint can reject any path that was not issued for the exact
+// caller/task, preventing object-path substitution attacks.
+export const pendingAttachmentUploads = pgTable("pending_attachment_uploads", {
+  objectPath: text("object_path").primaryKey(),
+  issuedAt: timestamp("issued_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  userId: text("user_id").notNull(),
+  taskId: text("task_id").notNull(),
+});
+export type PendingAttachmentUpload = typeof pendingAttachmentUploads.$inferSelect;
+
 export interface WorkspaceInviteWithMember {
   id: string;
   ownerId: string;

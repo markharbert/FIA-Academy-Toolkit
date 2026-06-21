@@ -292,6 +292,19 @@ export async function registerRoutes(
     message: { message: "Rate limit exceeded. Please slow down your requests." },
   });
 
+  // Per-user rate limiter for expensive video-ingestion routes (YouTube, upload,
+  // presign).  Keyed on session userId so that one member cannot flood the pipeline
+  // by rotating IP addresses.  Falls back to IP when no session exists (should not
+  // normally happen on authenticated routes, but ensures the limiter never crashes).
+  const videoIngestionLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: Request) => String(req.session?.userId ?? "anonymous"),
+    message: { message: "You have submitted too many videos in a short period. Please wait a few minutes before trying again." },
+  });
+
   app.post("/api/auth/signup", authLimiter, async (req: Request, res: Response) => {
     try {
       const parsed = signupSchema.safeParse(req.body);
@@ -2949,7 +2962,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/sessions/youtube", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/sessions/youtube", requireAuth, videoIngestionLimiter, async (req: Request, res: Response) => {
     const traceId = `yt-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     console.log(`[YouTube:${traceId}] Processing YouTube URL submission`);
     
@@ -3088,8 +3101,48 @@ export async function registerRoutes(
   // Request a presigned URL for direct-to-cloud video upload
   // This bypasses the Replit proxy size limit for large files
   const objectStorageService = new ObjectStorageService();
+
+  // In-process atomic gate: tracks which session IDs currently have a confirm
+  // in progress.  Because Node.js is single-threaded and there is no `await`
+  // between the `.has()` check and the `.add()` call, this is race-free on a
+  // single process.  It prevents concurrent confirm requests from racing on the
+  // same session and triggering multiple full-object downloads to disk.
+  const activeConfirming = new Set<string>();
+
+  // Scheduled sweep: delete cloud-storage objects for sessions that have been
+  // stuck in "uploading" status for longer than 45 minutes.  The presigned URL
+  // TTL is 15 minutes, so any object still unclaimed after 45 minutes will
+  // never be legitimately confirmed.  Cleaning them up prevents indefinite
+  // storage-cost accumulation from uploads that were never confirmed.
+  const STALE_UPLOAD_TTL_MS = 45 * 60 * 1000; // 45 minutes
+  setInterval(async () => {
+    try {
+      const staleSessions = await storage.getStaleUploadingSessions(STALE_UPLOAD_TTL_MS);
+      for (const staleSession of staleSessions) {
+        try {
+          if (staleSession.cloudStoragePath) {
+            await objectStorageService.deleteObject(staleSession.cloudStoragePath);
+            console.log(`[UploadCleanup] Deleted orphaned object for session ${staleSession.id}: ${staleSession.cloudStoragePath}`);
+          }
+          await storage.updateSession(staleSession.id, {
+            processingStatus: "failed",
+            processingMessage: "Upload timed out. Please try uploading your video again.",
+            processingError: "upload_timeout",
+            cloudStoragePath: null,
+          });
+        } catch (itemErr) {
+          console.warn(`[UploadCleanup] Failed to clean up session ${staleSession.id}:`, itemErr);
+        }
+      }
+      if (staleSessions.length > 0) {
+        console.log(`[UploadCleanup] Swept ${staleSessions.length} stale uploading session(s)`);
+      }
+    } catch (sweepErr) {
+      console.warn("[UploadCleanup] Sweep error:", sweepErr);
+    }
+  }, 15 * 60 * 1000); // run every 15 minutes
   
-  app.post("/api/sessions/:id/request-upload-url", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/sessions/:id/request-upload-url", requireAuth, videoIngestionLimiter, async (req: Request, res: Response) => {
     const traceId = `presign-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     console.log(`[Presign:${traceId}] Requesting upload URL for session ${req.params.id}`);
     
@@ -3129,6 +3182,18 @@ export async function registerRoutes(
         });
       }
 
+      // If a previous presigned URL was issued for this session and never confirmed,
+      // the old object in cloud storage is now orphaned.  Delete it proactively so
+      // it does not accumulate indefinitely and drive up storage costs.
+      if (session.cloudStoragePath && session.processingStatus === "uploading") {
+        try {
+          await objectStorageService.deleteObject(session.cloudStoragePath);
+          console.log(`[Presign:${traceId}] Deleted previous orphaned upload object: ${session.cloudStoragePath}`);
+        } catch (delErr) {
+          console.warn(`[Presign:${traceId}] Could not delete previous orphaned object (may already be gone):`, delErr);
+        }
+      }
+
       // Generate presigned URL for upload
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
@@ -3136,12 +3201,15 @@ export async function registerRoutes(
       console.log(`[Presign:${traceId}] Generated upload URL, objectPath: ${objectPath}`);
 
       // Store the pending upload info in session, including the issued object path
-      // so confirm-upload can verify it matches and prevent path substitution attacks
+      // so confirm-upload can verify it matches and prevent path substitution attacks.
+      // processingUpdatedAt is set here so the stale-upload sweep uses the upload-
+      // issuance timestamp rather than the session's original createdAt.
       await storage.updateSession(session.id, {
         processingStatus: "uploading",
         processingProgress: 0,
         processingMessage: "Preparing for upload...",
         cloudStoragePath: objectPath,
+        processingUpdatedAt: new Date(),
       });
 
       res.json({
@@ -3161,7 +3229,7 @@ export async function registerRoutes(
   });
 
   // Confirm upload completion and start processing (for direct-to-cloud uploads)
-  app.post("/api/sessions/:id/confirm-upload", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/sessions/:id/confirm-upload", requireAuth, videoIngestionLimiter, async (req: Request, res: Response) => {
     const traceId = `confirm-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     console.log(`[Confirm:${traceId}] Confirming upload for session ${req.params.id}`);
     
@@ -3177,6 +3245,32 @@ export async function registerRoutes(
         console.log(`[Confirm:${traceId}] Access denied`);
         return res.status(403).json({ message: "Access denied", traceId });
       }
+
+      // Idempotency gate: only accept a confirm when the session is actively awaiting
+      // an upload.  Any other status means the upload was already confirmed (or never
+      // requested), so further confirm calls are rejected.
+      if (session.processingStatus !== "uploading") {
+        console.warn(`[Confirm:${traceId}] Duplicate confirm rejected — session ${session.id} status is '${session.processingStatus}'`);
+        return res.status(409).json({
+          message: "Upload already confirmed or not in an uploadable state",
+          status: session.processingStatus,
+          traceId,
+        });
+      }
+
+      // Atomic in-process lock: because there is no `await` between the `.has()`
+      // check and the `.add()`, Node.js's single-threaded event loop guarantees
+      // this is race-free.  Concurrent confirm requests for the same session that
+      // both pass the DB status check above (before either updates the row) are
+      // stopped here — only the first caller proceeds to download.
+      if (activeConfirming.has(session.id)) {
+        console.warn(`[Confirm:${traceId}] Concurrent confirm blocked for session ${session.id}`);
+        return res.status(409).json({
+          message: "Upload confirmation already in progress for this session",
+          traceId,
+        });
+      }
+      activeConfirming.add(session.id);
 
       const { objectPath, filename, size, contentType } = req.body;
       
@@ -3371,10 +3465,15 @@ export async function registerRoutes(
         error: err instanceof Error ? err.message : "Unknown error",
         traceId,
       });
+    } finally {
+      // Release the in-process confirm lock regardless of how the handler exits.
+      // Set.delete is a no-op when the key was never added (early-rejection paths),
+      // so this is always safe to call unconditionally.
+      activeConfirming.delete(req.params.id);
     }
   });
 
-  app.post("/api/sessions/:id/upload", requireAuth, requireSessionOwnership, upload.single("video"), async (req: Request, res: Response) => {
+  app.post("/api/sessions/:id/upload", requireAuth, videoIngestionLimiter, requireSessionOwnership, upload.single("video"), async (req: Request, res: Response) => {
     const traceId = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     console.log(`[Upload:${traceId}] Starting upload for session ${req.params.id}`);
 
@@ -8137,7 +8236,45 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     "text/plain", "text/csv",
   ]);
 
-  app.post("/api/tasks/:id/attachments/request-url", requireAuth, async (req: Request, res: Response) => {
+  // Rate limiter for attachment upload issuance and confirmation.  Keyed on the
+  // authenticated user so one member cannot mint/upload many large blobs in
+  // parallel before TTL cleanup kicks in.
+  const attachmentIngestionLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: Request) => String(req.session?.userId ?? "anonymous"),
+    message: { message: "You have uploaded too many attachments in a short period. Please wait a few minutes before trying again." },
+  });
+
+  // TTL for attachment presigned URLs — objects not confirmed within this window
+  // are treated as orphans and deleted by the scheduled sweep below.
+  // Tracking is DB-backed (pending_attachment_uploads table) so orphan records
+  // survive process restarts; the sweep is idempotent and safe to run on every
+  // replica if the app scales horizontally.
+  const ATTACHMENT_UPLOAD_TTL_MS = 45 * 60 * 1000; // 45 minutes
+  setInterval(async () => {
+    try {
+      const stale = await storage.getExpiredPendingAttachmentUploads(ATTACHMENT_UPLOAD_TTL_MS);
+      for (const row of stale) {
+        await storage.removePendingAttachmentUpload(row.objectPath);
+        try {
+          await objectStorageService.deleteObject(row.objectPath);
+          console.log(`[AttachmentCleanup] Deleted orphaned attachment object: ${row.objectPath}`);
+        } catch (delErr) {
+          console.warn(`[AttachmentCleanup] Could not delete orphaned attachment object ${row.objectPath}:`, delErr);
+        }
+      }
+      if (stale.length > 0) {
+        console.log(`[AttachmentCleanup] Swept ${stale.length} orphaned attachment object(s)`);
+      }
+    } catch (sweepErr) {
+      console.error("[AttachmentCleanup] Sweep error:", sweepErr);
+    }
+  }, 15 * 60 * 1000); // run every 15 minutes
+
+  app.post("/api/tasks/:id/attachments/request-url", requireAuth, attachmentIngestionLimiter, async (req: Request, res: Response) => {
     try {
       const uid = getEffectiveUserId(req);
       const task = await storage.getTask(req.params.id, uid);
@@ -8158,6 +8295,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      // Register the issued objectPath in the DB, bound to this user+task, so the
+      // confirm endpoint can reject any path not issued for this exact caller/task.
+      // DB-backed tracking survives process restarts unlike an in-memory Map.
+      await storage.registerPendingAttachmentUpload(objectPath, uid, req.params.id);
       res.json({ uploadUrl: uploadURL, objectPath });
     } catch (err: any) {
       console.error("[attachments] request-url error:", err);
@@ -8165,21 +8306,26 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  app.post("/api/tasks/:id/attachments", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/tasks/:id/attachments", requireAuth, attachmentIngestionLimiter, async (req: Request, res: Response) => {
     try {
       const uid = getEffectiveUserId(req);
       const task = await storage.getTask(req.params.id, uid);
       if (!task) return res.status(404).json({ message: "Task not found" });
-      const { objectPath, filename, mimeType, size } = req.body ?? {};
-      if (!objectPath || !filename || !mimeType || !size) {
-        return res.status(400).json({ message: "objectPath, filename, mimeType, and size are required" });
+      const { objectPath, filename, mimeType } = req.body ?? {};
+      if (!objectPath || !filename || !mimeType) {
+        return res.status(400).json({ message: "objectPath, filename, and mimeType are required" });
       }
-      if (!String(objectPath).startsWith("/objects/")) {
-        return res.status(400).json({ message: "Invalid objectPath" });
+
+      // Verify this objectPath was issued by this app for exactly this user+task.
+      // Reject ANY path not found in pending_attachment_uploads or belonging to a
+      // different caller/task — this prevents object-path substitution attacks where
+      // a user supplies an arbitrary /objects/ path they did not upload.
+      const pending = await storage.getPendingAttachmentUpload(String(objectPath));
+      if (!pending || pending.userId !== uid || pending.taskId !== req.params.id) {
+        console.warn(`[attachments] rejected unissued/mismatched objectPath: ${objectPath} uid=${uid} taskId=${req.params.id}`);
+        return res.status(400).json({ message: "Invalid or expired upload token. Please request a new upload URL." });
       }
-      if (Number(size) > ATTACHMENT_MAX_SIZE) {
-        return res.status(400).json({ message: "File too large." });
-      }
+
       if (!ATTACHMENT_ALLOWED_TYPES.has(String(mimeType))) {
         return res.status(400).json({ message: "File type not allowed." });
       }
@@ -8187,12 +8333,45 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (existing.length >= ATTACHMENT_MAX_COUNT) {
         return res.status(400).json({ message: `Maximum ${ATTACHMENT_MAX_COUNT} attachments per task.` });
       }
+
+      // Verify the authoritative object size from cloud-storage metadata rather than
+      // trusting the client-supplied `size` field.  Without this, a user could upload
+      // a blob far exceeding 25 MB through the presigned URL and then register it as a
+      // supposedly compliant attachment by providing a small fake size value.
+      let actualSize: number;
+      try {
+        const objectFile = await objectStorageService.getObjectEntityFile(String(objectPath));
+        const [objectMetadata] = await objectFile.getMetadata();
+        actualSize = Number(objectMetadata.size);
+        if (isNaN(actualSize)) {
+          return res.status(500).json({ message: "Could not verify attachment size from storage" });
+        }
+      } catch (metaErr: any) {
+        console.error("[attachments] failed to fetch object metadata:", metaErr);
+        return res.status(400).json({ message: "Could not verify attachment in storage. Please re-upload the file." });
+      }
+
+      if (actualSize > ATTACHMENT_MAX_SIZE) {
+        // Immediately delete the non-compliant object from storage rather than
+        // waiting for the TTL sweep, so oversized blobs never linger.
+        await storage.removePendingAttachmentUpload(String(objectPath));
+        try {
+          await objectStorageService.deleteObject(String(objectPath));
+          console.warn(`[attachments] deleted oversized object (${actualSize} bytes): ${objectPath}`);
+        } catch (delErr) {
+          console.warn(`[attachments] could not delete oversized object ${objectPath}:`, delErr);
+        }
+        return res.status(400).json({ message: "File too large. Maximum is 25 MB." });
+      }
+
       const attachment = await storage.createTaskAttachment(req.params.id, uid, {
         objectPath: String(objectPath),
         filename: String(filename).slice(0, 255),
         mimeType: String(mimeType).slice(0, 100),
-        size: Number(size),
+        size: actualSize,
       });
+      // Remove from orphan-tracking now that the object is legitimately registered.
+      await storage.removePendingAttachmentUpload(String(objectPath));
       res.status(201).json(attachment);
     } catch (err: any) {
       console.error("[attachments] confirm error:", err);

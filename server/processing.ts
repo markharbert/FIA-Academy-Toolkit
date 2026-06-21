@@ -109,6 +109,33 @@ async function recordMetric(
 
 const activeProcessing = new Set<string>();
 
+// Per-user concurrency cap: track how many sessions each user has actively processing.
+// This prevents one member from monopolising CPU/disk/AI spend by submitting many
+// sessions in parallel.  The limit deliberately applies before the per-session
+// activeProcessing guard so that the budget is consumed at the point of acceptance,
+// not after the session lock is acquired.
+const MAX_CONCURRENT_SESSIONS_PER_USER = 2;
+const activeSessionsPerUser = new Map<string, number>();
+
+function incrementUserSessions(userId: string): boolean {
+  const current = activeSessionsPerUser.get(userId) ?? 0;
+  if (current >= MAX_CONCURRENT_SESSIONS_PER_USER) {
+    return false;
+  }
+  activeSessionsPerUser.set(userId, current + 1);
+  return true;
+}
+
+function decrementUserSessions(userId: string): void {
+  const current = activeSessionsPerUser.get(userId) ?? 0;
+  const next = Math.max(0, current - 1);
+  if (next === 0) {
+    activeSessionsPerUser.delete(userId);
+  } else {
+    activeSessionsPerUser.set(userId, next);
+  }
+}
+
 
 async function deleteOriginalUpload(
   sessionId: string, 
@@ -150,6 +177,18 @@ export async function processSession(sessionId: string, userId: string, preExtra
   
   if (activeProcessing.has(sessionId)) {
     console.log(`[Processing] Session ${sessionId} is already being processed, skipping`);
+    return;
+  }
+
+  // Enforce per-user concurrency cap before accepting any work.
+  if (!incrementUserSessions(userId)) {
+    console.warn(`[Processing] User ${userId} has reached the concurrent session limit (${MAX_CONCURRENT_SESSIONS_PER_USER}), rejecting session ${sessionId}`);
+    await storage.updateSession(sessionId, {
+      processingStatus: "failed",
+      processingProgress: 0,
+      processingMessage: "Too many videos are already being processed for your account. Please wait for a current video to finish before starting another.",
+      processingError: "per_user_concurrency_limit",
+    }).catch(() => {});
     return;
   }
   
@@ -459,5 +498,6 @@ export async function processSession(sessionId: string, userId: string, preExtra
     await recordMetric(sessionId, "full_pipeline", pipelineStart, false, errorMessage);
   } finally {
     activeProcessing.delete(sessionId);
+    decrementUserSessions(userId);
   }
 }

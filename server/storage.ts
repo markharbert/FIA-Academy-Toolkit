@@ -15,6 +15,7 @@ import {
   cannedResponses, type CannedResponse,
   youtubeCommentCache, type YoutubeCommentCache,
   youtubeAnalyticsCache,
+  pendingAttachmentUploads, type PendingAttachmentUpload,
   type User, type InsertUser, 
   type Session, type InsertSession,
   type ScoreResult,
@@ -99,9 +100,16 @@ export interface IStorage {
   // Sessions
   getSession(id: string): Promise<Session | undefined>;
   getSessionsByUser(userId: string): Promise<Session[]>;
+  getStaleUploadingSessions(olderThanMs: number): Promise<Session[]>;
   createSession(session: InsertSession): Promise<Session>;
   updateSession(id: string, updates: Partial<Session>): Promise<Session | undefined>;
   deleteSession(id: string): Promise<void>;
+
+  // Pending attachment upload orphan tracking (DB-backed)
+  registerPendingAttachmentUpload(objectPath: string, userId: string, taskId: string): Promise<void>;
+  getPendingAttachmentUpload(objectPath: string): Promise<PendingAttachmentUpload | undefined>;
+  removePendingAttachmentUpload(objectPath: string): Promise<void>;
+  getExpiredPendingAttachmentUploads(olderThanMs: number): Promise<PendingAttachmentUpload[]>;
 
   // Password Reset Tokens
   createPasswordResetToken(token: InsertPasswordResetToken): Promise<PasswordResetToken>;
@@ -642,6 +650,46 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(sessions)
       .where(eq(sessions.userId, userId))
       .orderBy(desc(sessions.createdAt));
+  }
+
+  async getStaleUploadingSessions(olderThanMs: number): Promise<Session[]> {
+    const cutoff = new Date(Date.now() - olderThanMs);
+    // Filter on processingUpdatedAt (the time when status was last changed to
+    // "uploading") rather than createdAt.  A session could have been created long
+    // ago but only recently entered "uploading" state, so createdAt is the wrong
+    // anchor for determining how long the upload has been pending.
+    return db.select().from(sessions).where(
+      and(
+        eq(sessions.processingStatus as any, "uploading"),
+        lt(sessions.processingUpdatedAt as any, cutoff),
+      )
+    );
+  }
+
+  async registerPendingAttachmentUpload(objectPath: string, userId: string, taskId: string): Promise<void> {
+    await db.insert(pendingAttachmentUploads)
+      .values({ objectPath, userId, taskId })
+      .onConflictDoUpdate({
+        target: pendingAttachmentUploads.objectPath,
+        set: { issuedAt: new Date(), userId, taskId },
+      });
+  }
+
+  async getPendingAttachmentUpload(objectPath: string): Promise<PendingAttachmentUpload | undefined> {
+    const [row] = await db.select().from(pendingAttachmentUploads)
+      .where(eq(pendingAttachmentUploads.objectPath, objectPath));
+    return row;
+  }
+
+  async removePendingAttachmentUpload(objectPath: string): Promise<void> {
+    await db.delete(pendingAttachmentUploads)
+      .where(eq(pendingAttachmentUploads.objectPath, objectPath));
+  }
+
+  async getExpiredPendingAttachmentUploads(olderThanMs: number): Promise<PendingAttachmentUpload[]> {
+    const cutoff = new Date(Date.now() - olderThanMs);
+    return db.select().from(pendingAttachmentUploads)
+      .where(lt(pendingAttachmentUploads.issuedAt, cutoff));
   }
 
   async createSession(insertSession: InsertSession): Promise<Session> {

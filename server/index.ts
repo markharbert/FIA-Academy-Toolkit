@@ -659,6 +659,18 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] analytics connections migration complete");
     console.log("[startup] youtube_comment_cache migration complete");
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS pending_attachment_uploads (
+        object_path TEXT PRIMARY KEY,
+        issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        user_id TEXT NOT NULL DEFAULT '',
+        task_id TEXT NOT NULL DEFAULT ''
+      )
+    `);
+    // Add columns if table was previously created without them (idempotent)
+    await db.execute(sql`ALTER TABLE pending_attachment_uploads ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT ''`);
+    await db.execute(sql`ALTER TABLE pending_attachment_uploads ADD COLUMN IF NOT EXISTS task_id TEXT NOT NULL DEFAULT ''`);
+    console.log("[startup] pending_attachment_uploads migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }
