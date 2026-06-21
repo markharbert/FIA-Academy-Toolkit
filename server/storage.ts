@@ -3396,8 +3396,11 @@ export class DatabaseStorage implements IStorage {
       SELECT
         eia.user_id                    AS "userId",
         eia.sending_from_address       AS "sendingFromAddress",
+        -- Security: effectiveSenderAddress MUST be derived only from the server-trusted
+        -- fromAddress on the pinned email analysis record (owned by the same user).
+        -- Do NOT use sending_from_address here — it is user-controlled and would allow
+        -- any member to probe shared seed inboxes with an arbitrary sender (oracle attack).
         COALESCE(
-          NULLIF(eia.sending_from_address, ''),
           ea.from_address,
           ''
         )                              AS "effectiveSenderAddress",

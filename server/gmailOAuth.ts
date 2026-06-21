@@ -288,7 +288,15 @@ export async function checkGmailPlacementServiceAccount(
     });
 
     const gmail      = google.gmail({ version: "v1", auth });
-    const safeSender = senderAddress.replace(/['"\\]/g, "");
+    // Defense-in-depth: only accept plain email addresses as the sender value.
+    // This prevents Gmail search-operator injection regardless of the call site.
+    const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+    const trimmed  = senderAddress.trim();
+    if (!EMAIL_RE.test(trimmed)) {
+      console.error("[GmailPlacement/SA] Rejected non-email senderAddress:", trimmed);
+      return { ...base, status: "error" };
+    }
+    const safeSender = trimmed;
     const tag        = `[GmailPlacement/SA] ${inbox.email} |`;
 
     const status = await runPlacementCascade(gmail, safeSender, inbox.email, tag, context);
@@ -337,7 +345,15 @@ export async function checkGmailPlacement(
     }
 
     const gmail      = google.gmail({ version: "v1", auth: oAuth2Client });
-    const safeSender = senderAddress.replace(/['"\\]/g, "");
+    // Defense-in-depth: only accept plain email addresses as the sender value.
+    // This prevents Gmail search-operator injection regardless of the call site.
+    const EMAIL_RE_OAUTH = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+    const trimmedOAuth   = senderAddress.trim();
+    if (!EMAIL_RE_OAUTH.test(trimmedOAuth)) {
+      console.error("[GmailPlacement] Rejected non-email senderAddress:", trimmedOAuth);
+      return { ...base, status: "error" };
+    }
+    const safeSender = trimmedOAuth;
     const tag        = `[GmailPlacement] ${inbox.email} |`;
 
     const status = await runPlacementCascade(gmail, safeSender, inbox.email, tag, context);

@@ -5382,12 +5382,19 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const addr = await storage.getOrCreateInboxAddress(req.session.userId);
       const { getInboxAddress } = await import("./inboxAnalyzer");
+      const user = await storage.getUser(req.session.userId);
+      const isAdmin = user?.isAdmin ?? false;
+      // Strip seed inbox email addresses from lastPlacementResults for non-admin users.
+      const rawResults = addr.lastPlacementResults as Array<Record<string, unknown>> | null;
+      const lastPlacementResults = rawResults
+        ? (isAdmin ? rawResults : rawResults.map(({ email: _e, ...rest }) => rest))
+        : null;
       res.json({
         token: addr.token,
         email: getInboxAddress(addr.token),
         createdAt: addr.createdAt,
         sendingFromAddress: addr.sendingFromAddress || "",
-        lastPlacementResults: addr.lastPlacementResults || null,
+        lastPlacementResults,
         lastPlacementCheckedAt: addr.lastPlacementCheckedAt || null,
         placementAutoCheckUntil: addr.placementAutoCheckUntil || null,
         placementCheckMessageId: addr.placementCheckMessageId || null,
@@ -5401,9 +5408,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.patch("/api/inbox-analyzer/address/sending-from", requireAuth, async (req: Request, res: Response) => {
     const { sendingFromAddress } = req.body;
     if (typeof sendingFromAddress !== "string") return res.status(400).json({ message: "sendingFromAddress required" });
+    const trimmed = sendingFromAddress.trim();
+    const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+    if (!EMAIL_RE.test(trimmed)) {
+      return res.status(400).json({ message: "sendingFromAddress must be a valid email address" });
+    }
     try {
       await storage.getOrCreateInboxAddress(req.session!.userId!);
-      await storage.updateInboxSendingFrom(req.session!.userId!, sendingFromAddress.trim());
+      await storage.updateInboxSendingFrom(req.session!.userId!, trimmed);
       res.json({ success: true });
     } catch (err) {
       console.error("[inbox-analyzer] sending-from error", err);
@@ -5419,12 +5431,21 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const inboxes = await storage.getSeedInboxes(activeOnly);
       const { isServiceAccountConfigured, isServiceAccountEligible } = await import("./gmailOAuth");
       const saConfigured = isServiceAccountConfigured();
-      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, imapPassword: _p, ...rest }) => ({
-        ...rest,
-        // Only mark as SA-configured if the inbox is a Workspace account (not @gmail.com).
-        // DWD cannot impersonate personal Gmail accounts.
-        serviceAccountConfigured: saConfigured && isServiceAccountEligible(rest.email),
-      }));
+      const sanitized = inboxes.map(({ oauthAccessToken: _a, oauthRefreshToken: _r, oauthTokenExpiry: _e, imapPassword: _p, ...rest }) => {
+        const base = {
+          ...rest,
+          serviceAccountConfigured: saConfigured && isServiceAccountEligible(rest.email),
+        };
+        // Non-admin members have no legitimate need for the actual seed inbox email
+        // addresses — exposing them turns the shared mailboxes into a cross-tenant
+        // deliverability oracle (attacker sets sendingFromAddress to a competitor's
+        // domain then calls placement-check against the known seed address).
+        if (!isAdmin) {
+          const { email: _email, ...memberSafe } = base;
+          return memberSafe;
+        }
+        return base;
+      });
       res.json(sanitized);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch seed inboxes" });
@@ -5635,11 +5656,13 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const address = await storage.getOrCreateInboxAddress(userId);
 
-      // Resolve the effective sender address: prefer user-configured sendingFromAddress,
-      // fall back to the actual from_address on the pinned email analysis record so
-      // placement checks still work when the user hasn't set their sending address yet.
-      let sendingFrom = address?.sendingFromAddress || "";
-      if (!sendingFrom && address?.placementCheckMessageId) {
+      // Security: ALWAYS derive sendingFrom from the server-verified fromAddress on the
+      // pinned email analysis record owned by this user.  We deliberately do NOT use
+      // the user-controlled sendingFromAddress profile field here — that field can be
+      // set to any arbitrary email (including a competitor's sender address) and would
+      // turn the shared seed inboxes into a cross-tenant deliverability oracle.
+      let sendingFrom = "";
+      if (address?.placementCheckMessageId) {
         const { db } = await import("./db");
         const { emailAnalyses } = await import("../shared/schema");
         const { eq, and } = await import("drizzle-orm");
@@ -5647,9 +5670,17 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           .from(emailAnalyses)
           .where(and(
             eq(emailAnalyses.messageId, address.placementCheckMessageId),
-            eq(emailAnalyses.userId, userId)
+            eq(emailAnalyses.userId, userId)          // ownership check — user must own this record
           ));
         sendingFrom = pinnedEmail?.fromAddress || "";
+      }
+
+      // Validate the server-derived sendingFrom value as a plain email address.
+      // Defense-in-depth: prevent any inadvertently stored operator string from
+      // reaching Gmail/IMAP search even if the DB record was written by older code.
+      const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+      if (!sendingFrom || !EMAIL_RE.test(sendingFrom)) {
+        return res.json({ results: [], sendingFrom, message: "No pinned email found — send a test email to your seed address first" });
       }
 
       const allInboxes = await storage.getSeedInboxes(true); // active only
@@ -5719,7 +5750,17 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       // Persist results so they survive page refresh
       await storage.saveLastPlacementResults(userId, results);
 
-      res.json({ results, sendingFrom });
+      // Strip seed inbox email addresses from the response for non-admin users.
+      // Members have no need for the actual mailbox addresses; including them in
+      // placement results would allow an attacker to enumerate shared seed inboxes
+      // even after the GET /seed-inboxes email-redaction fix.
+      const user = await storage.getUser(userId);
+      const isAdmin = user?.isAdmin ?? false;
+      const sanitizedResults = isAdmin
+        ? results
+        : results.map(({ email: _email, ...rest }) => rest);
+
+      res.json({ results: sanitizedResults, sendingFrom });
     } catch (err: any) {
       console.error("[PlacementCheck] error:", err?.message);
       res.status(500).json({ message: "Failed to check placement" });
@@ -5731,7 +5772,16 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     if (!req.session?.userId) return res.status(401).json({ message: "Unauthorized" });
     try {
       const emails = await storage.getEmailAnalyses(req.session.userId);
-      res.json(emails);
+      const user = await storage.getUser(req.session.userId);
+      const isAdmin = user?.isAdmin ?? false;
+      // Strip seed inbox email addresses from placementResults for non-admin users.
+      const sanitized = isAdmin ? emails : emails.map(e => ({
+        ...e,
+        placementResults: Array.isArray(e.placementResults)
+          ? (e.placementResults as Array<Record<string, unknown>>).map(({ email: _em, ...rest }) => rest)
+          : e.placementResults,
+      }));
+      res.json(sanitized);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch emails" });
     }
@@ -5743,7 +5793,16 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     try {
       const email = await storage.getEmailAnalysis(req.params.id, req.session.userId);
       if (!email) return res.status(404).json({ message: "Not found" });
-      res.json(email);
+      const user = await storage.getUser(req.session.userId);
+      const isAdmin = user?.isAdmin ?? false;
+      // Strip seed inbox email addresses from placementResults for non-admin users.
+      const sanitized = isAdmin ? email : {
+        ...email,
+        placementResults: Array.isArray(email.placementResults)
+          ? (email.placementResults as Array<Record<string, unknown>>).map(({ email: _em, ...rest }) => rest)
+          : email.placementResults,
+      };
+      res.json(sanitized);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch email" });
     }
@@ -5896,8 +5955,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           // truncation) take effect retroactively — don't skip even if we already
           // have confirmed results.
           try {
-            const addr = await storage.getOrCreateInboxAddress(userId);
-            const senderForPlacement = addr?.sendingFromAddress || fromAddress;
+            // Security: always derive the sender from the server-trusted fromAddress
+            // on the analysis record (owned by this user). Ignore sendingFromAddress —
+            // it's user-controlled and must not be used to query shared seed inboxes.
+            const EMAIL_RE_RA = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+            const senderForPlacement = EMAIL_RE_RA.test((fromAddress || "").trim()) ? fromAddress.trim() : "";
             const allInboxes = await storage.getSeedInboxes(true);
             const { checkGmailPlacement, checkGmailPlacementServiceAccount: saCheck2, isServiceAccountConfigured: isSA, isServiceAccountEligible: isSAEligible } = await import("./gmailOAuth");
             const { checkGmailPlacementImap: imapCheck2 } = await import("./imapPlacement");
@@ -5983,10 +6045,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const analysis = await storage.getEmailAnalysis(emailId, userId);
       if (!analysis) return res.status(404).json({ message: "Email not found" });
 
-      const addr = await storage.getOrCreateInboxAddress(userId);
-      const senderForPlacement = addr?.sendingFromAddress || analysis.fromAddress;
+      // Security: always derive the sender from the server-trusted fromAddress on
+      // the analysis record (owned by this user). Ignore sendingFromAddress —
+      // it's user-controlled and must not be used to query shared seed inboxes.
+      const EMAIL_RE_RP = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+      const senderForPlacement = EMAIL_RE_RP.test((analysis.fromAddress || "").trim())
+        ? analysis.fromAddress!.trim()
+        : "";
       if (!senderForPlacement) {
-        return res.status(400).json({ message: "No sending address configured. Set your From address in My Address first." });
+        return res.status(400).json({ message: "No valid sending address found on this email record." });
       }
 
       const allInboxes = await storage.getSeedInboxes(true);
@@ -6053,7 +6120,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
 
       console.log(`[retry-placement] email ${emailId}: ${results.map(r => `${r.label}:${r.status}`).join(", ")}`);
-      res.json({ results, sendingFrom: senderForPlacement });
+
+      // Strip seed inbox email addresses from the response for non-admin users.
+      const retryUser = await storage.getUser(userId);
+      const retryIsAdmin = retryUser?.isAdmin ?? false;
+      const sanitizedRetryResults = retryIsAdmin
+        ? results
+        : results.map(({ email: _email, ...rest }) => rest);
+
+      res.json({ results: sanitizedRetryResults, sendingFrom: senderForPlacement });
     } catch (err: any) {
       console.error("[retry-placement] error:", err?.message);
       res.status(500).json({ message: "Failed to retry placement check" });

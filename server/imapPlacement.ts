@@ -165,7 +165,15 @@ export async function checkGmailPlacementImap(
   try {
     await client.connect();
 
-    const safeSender  = senderAddress.replace(/["\\]/g, "");
+    // Defense-in-depth: only accept plain email addresses as the sender value.
+    // This prevents IMAP search-operator injection regardless of the call site.
+    const EMAIL_RE_IMAP = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+    const trimmedImap   = senderAddress.trim();
+    if (!EMAIL_RE_IMAP.test(trimmedImap)) {
+      console.error("[IMAP] Rejected non-email senderAddress:", trimmedImap);
+      return { ...base, status: "error" };
+    }
+    const safeSender  = trimmedImap;
     const safeSubject = context?.subject ? sanitizeForImap(context.subject) : null;
     const emailAgeMs  = context?.receivedAt
       ? Date.now() - new Date(context.receivedAt).getTime()
