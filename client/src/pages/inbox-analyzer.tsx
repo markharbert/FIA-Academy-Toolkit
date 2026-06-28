@@ -2486,6 +2486,90 @@ function SettingsTab() {
   );
 }
 
+// ── Emails tab with pagination ────────────────────────────────────────────────
+
+const EMAIL_PAGE_SIZE = 20;
+
+function EmailsTab({
+  emails,
+  addressData,
+  seedInboxes,
+  deleteMutation,
+  reanalyzeMutation,
+  retryPlacementMutation,
+}: {
+  emails: EmailAnalysis[];
+  addressData: { lastPlacementResults: PlacementResult[] | null; lastPlacementCheckedAt: string | null; placementAutoCheckUntil: string | null; placementCheckMessageId: string | null; sendingFromAddress: string } | undefined;
+  seedInboxes: SeedInbox[];
+  deleteMutation: { mutate: (id: string) => void };
+  reanalyzeMutation: { mutate: (id: string) => void };
+  retryPlacementMutation: { mutate: (id: string) => void };
+}) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.ceil(emails.length / EMAIL_PAGE_SIZE);
+  const pageEmails = emails.slice(page * EMAIL_PAGE_SIZE, (page + 1) * EMAIL_PAGE_SIZE);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3">
+        {pageEmails.map((email, localIndex) => {
+          const originalIndex = page * EMAIL_PAGE_SIZE + localIndex;
+          const placementMsgId = addressData?.placementCheckMessageId;
+          const isActivePlacement = placementMsgId
+            ? email.messageId === placementMsgId
+            : originalIndex === 0;
+          return (
+            <EmailRow
+              key={email.id}
+              email={email}
+              onDelete={(id) => deleteMutation.mutate(id)}
+              onReanalyze={(id) => reanalyzeMutation.mutate(id)}
+              onRetryPlacement={(id) => retryPlacementMutation.mutate(id)}
+              seedInboxes={seedInboxes}
+              sendingFromAddress={addressData?.sendingFromAddress || ""}
+              lastPlacementResults={isActivePlacement ? (addressData?.lastPlacementResults || null) : null}
+              lastPlacementCheckedAt={isActivePlacement ? (addressData?.lastPlacementCheckedAt || null) : null}
+              placementAutoCheckUntil={isActivePlacement ? (addressData?.placementAutoCheckUntil || null) : null}
+              isActivePlacementEmail={isActivePlacement}
+            />
+          );
+        })}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-sm text-muted-foreground">
+            Showing {page * EMAIL_PAGE_SIZE + 1}–{Math.min((page + 1) * EMAIL_PAGE_SIZE, emails.length)} of {emails.length} reports
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              data-testid="button-emails-prev-page"
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground px-1">
+              Page {page + 1} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              data-testid="button-emails-next-page"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function InboxAnalyzerPage() {
@@ -2662,31 +2746,14 @@ export default function InboxAnalyzerPage() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {emails.map((email, index) => {
-                  const placementMsgId = addressData?.placementCheckMessageId;
-                  // Only show live placement data on the email being actively monitored.
-                  // When a specific messageId is tracked, don't fall back to index 0.
-                  const isActivePlacement = placementMsgId
-                    ? email.messageId === placementMsgId
-                    : index === 0;
-                  return (
-                    <EmailRow
-                      key={email.id}
-                      email={email}
-                      onDelete={(id) => deleteMutation.mutate(id)}
-                      onReanalyze={(id) => reanalyzeMutation.mutate(id)}
-                      onRetryPlacement={(id) => retryPlacementMutation.mutate(id)}
-                      seedInboxes={seedInboxes}
-                      sendingFromAddress={addressData?.sendingFromAddress || ""}
-                      lastPlacementResults={isActivePlacement ? (addressData?.lastPlacementResults || null) : null}
-                      lastPlacementCheckedAt={isActivePlacement ? (addressData?.lastPlacementCheckedAt || null) : null}
-                      placementAutoCheckUntil={isActivePlacement ? (addressData?.placementAutoCheckUntil || null) : null}
-                      isActivePlacementEmail={isActivePlacement}
-                    />
-                  );
-                })}
-              </div>
+              <EmailsTab
+                emails={emails}
+                addressData={addressData}
+                seedInboxes={seedInboxes}
+                deleteMutation={deleteMutation}
+                reanalyzeMutation={reanalyzeMutation}
+                retryPlacementMutation={retryPlacementMutation}
+              />
             )}
           </TabsContent>
 
