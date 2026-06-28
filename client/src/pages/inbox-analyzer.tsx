@@ -2526,9 +2526,9 @@ function EmailAnalyticsOverview({ emails }: { emails: EmailAnalysis[] }) {
     ? Math.round(authScores.reduce((a, b) => a + b, 0) / authScores.length)
     : null;
 
-  const copyScores = completed.filter(e => e.copyScore != null).map(e => e.copyScore!);
-  const avgCopy = copyScores.length > 0
-    ? Math.round(copyScores.reduce((a, b) => a + b, 0) / copyScores.length)
+  const contentScores = completed.map(e => computeContentScore(e.contentQuality)).filter((s): s is number => s != null);
+  const avgCopy = contentScores.length > 0
+    ? Math.round(contentScores.reduce((a, b) => a + b, 0) / contentScores.length)
     : null;
 
   const chartData = [...completed]
@@ -2571,10 +2571,10 @@ function EmailAnalyticsOverview({ emails }: { emails: EmailAnalysis[] }) {
       trend: null,
     },
     {
-      label: "Avg. Copy Score",
+      label: "Avg. Content Quality",
       value: avgCopy != null ? String(avgCopy) : "—",
       suffix: avgCopy != null ? "/100" : "",
-      sub: "Content quality avg.",
+      sub: "Content quality score avg.",
       icon: <Type className="h-3.5 w-3.5 text-violet-400" />,
       iconBg: "bg-violet-500/15",
       gradient: "from-violet-500/10",
