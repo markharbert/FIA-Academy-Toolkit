@@ -79,11 +79,17 @@ const screenshotUpload = multer({
 });
 
 // Dedicated multer for the public inbound email webhook.
-// Uses memory storage with a strict 1 MB cap so no data ever touches disk
-// before the inbox token is validated.
+// All limits are set before any recipient-token validation so an unauthenticated
+// caller cannot exhaust heap by sending large or numerous multipart fields.
 const inboundUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 1 * 1024 * 1024, files: 5 },
+  limits: {
+    fileSize: 1 * 1024 * 1024, // 1 MB per attached file
+    files: 5,                   // max attached files
+    fields: 30,                 // max non-file form fields
+    fieldSize: 64 * 1024,       // 64 KB per text field value
+    parts: 35,                  // total parts (fields + files combined)
+  },
 });
 
 // Configure multer for video uploads with broad format support
@@ -1172,11 +1178,48 @@ export async function registerRoutes(
   app.post(
     "/api/webhooks/clickfunnels",
     (req: Request, res: Response, next: NextFunction) => {
-      // Collect raw body before JSON parsing
+      // Collect raw body for HMAC verification.
+      // Two guards prevent unauthenticated DoS on this public endpoint:
+      //   1. Absolute 30-second wall-clock deadline (global setTimeout, not
+      //      req.setTimeout which is an inactivity timer). Fires regardless of
+      //      whether bytes are still arriving — closes the socket even if an
+      //      attacker drip-feeds chunks below the inactivity threshold.
+      //   2. 1 MB body cap — abort immediately if cumulative body size exceeds
+      //      this limit before the signature is ever verified.
+      const MAX_CF_BODY = 1 * 1024 * 1024; // 1 MB
       let rawBody = "";
+      let byteCount = 0;
+      let aborted = false;
+
+      // Absolute wall-clock deadline: destroy the socket 30 s after the
+      // middleware is entered, regardless of ongoing data events.
+      const deadline = setTimeout(() => {
+        if (!aborted) {
+          aborted = true;
+          if (!res.headersSent) {
+            res.status(408).json({ message: "Request timeout" });
+          }
+          req.destroy();
+        }
+      }, 30_000);
+      // Always clear the timer so it does not prevent process exit.
+      req.on("close", () => clearTimeout(deadline));
+
       req.setEncoding("utf8");
-      req.on("data", (chunk) => { rawBody += chunk; });
+      req.on("data", (chunk: string) => {
+        if (aborted) return;
+        byteCount += Buffer.byteLength(chunk, "utf8");
+        if (byteCount > MAX_CF_BODY) {
+          aborted = true;
+          clearTimeout(deadline);
+          res.status(413).json({ message: "Request body too large" });
+          req.destroy();
+          return;
+        }
+        rawBody += chunk;
+      });
       req.on("end", () => {
+        if (aborted) return;
         (req as any).rawBody = rawBody;
         try {
           (req as any).parsedBody = JSON.parse(rawBody);

@@ -33,14 +33,20 @@ declare module "http" {
   }
 }
 
-app.use(
+// Skip global JSON parsing for the ClickFunnels webhook so the route's own
+// raw-body collector (with 1 MB cap + absolute timeout) has authoritative
+// control over that stream from the start. Regex handles trailing-slash
+// variants so the bypass is not circumventable by appending a slash.
+const CF_WEBHOOK_RE = /^\/api\/webhooks\/clickfunnels\/?$/;
+app.use((req, res, next) => {
+  if (CF_WEBHOOK_RE.test(req.path)) return next();
   express.json({
     limit: "50mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
-  }),
-);
+  })(req, res, next);
+});
 
 app.use(express.urlencoded({ extended: false }));
 
