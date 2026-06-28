@@ -9389,6 +9389,254 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── v1: Inbox Analyzer (read-only) ──────────────────────────────────────────
+
+  // GET /api/v1/inbox-analyzer/address
+  // Returns the user's seed address and current placement monitoring state.
+  app.get("/api/v1/inbox-analyzer/address", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const addr = await storage.getOrCreateInboxAddress(user.id);
+      const { getInboxAddress } = await import("./inboxAnalyzer");
+      const rawResults = addr.lastPlacementResults as Array<Record<string, unknown>> | null;
+      const lastPlacementResults = rawResults
+        ? rawResults.map(({ email: _e, ...rest }) => rest)
+        : null;
+      res.json({
+        token: addr.token,
+        email: getInboxAddress(addr.token),
+        sendingFromAddress: addr.sendingFromAddress || null,
+        lastPlacementResults,
+        lastPlacementCheckedAt: addr.lastPlacementCheckedAt || null,
+        placementAutoCheckUntil: addr.placementAutoCheckUntil || null,
+        placementCheckMessageId: addr.placementCheckMessageId || null,
+        placementCheckSubject: addr.placementCheckSubject || null,
+        placementCheckReceivedAt: addr.placementCheckReceivedAt || null,
+        createdAt: addr.createdAt,
+      });
+    } catch (err) {
+      console.error("[v1] inbox-analyzer address error:", err);
+      res.status(500).json({ message: "Failed to get inbox address" });
+    }
+  });
+
+  // GET /api/v1/inbox-analyzer/emails?limit=50&offset=0
+  // Paginated list of email analyses (summary fields only — no body HTML/raw headers).
+  app.get("/api/v1/inbox-analyzer/emails", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 100);
+      const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10) || 0, 0);
+      const all = await storage.getEmailAnalyses(user.id, 500);
+      const page = all.slice(offset, offset + limit);
+      res.json({
+        total: all.length,
+        limit,
+        offset,
+        emails: page.map(e => ({
+          id: e.id,
+          subject: e.subject,
+          fromAddress: e.fromAddress,
+          fromName: e.fromName || null,
+          receivedAt: e.receivedAt,
+          status: e.status,
+          overallScore: e.overallScore ?? null,
+          spamScore: e.spamScore ?? null,
+          copyScore: e.copyScore ?? null,
+          spfResult: e.spfResult || null,
+          dkimResult: e.dkimResult || null,
+          dmarcResult: e.dmarcResult || null,
+          sendingDomain: e.sendingDomain || null,
+          sendingIp: e.sendingIp || null,
+          hasPlacementResults: Array.isArray(e.placementResults) && (e.placementResults as unknown[]).length > 0,
+        })),
+      });
+    } catch (err) {
+      console.error("[v1] inbox-analyzer emails list error:", err);
+      res.status(500).json({ message: "Failed to load emails" });
+    }
+  });
+
+  // GET /api/v1/inbox-analyzer/emails/:id
+  // Full detail of a single email analysis including all AI insights and scores.
+  // bodyHtml and rawHeaders are excluded for payload size; use bodyText for content.
+  app.get("/api/v1/inbox-analyzer/emails/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const email = await storage.getEmailAnalysis(req.params.id, user.id);
+      if (!email) return res.status(404).json({ message: "Email not found" });
+      res.json({
+        id: email.id,
+        subject: email.subject,
+        fromAddress: email.fromAddress,
+        fromName: email.fromName || null,
+        replyTo: email.replyTo || null,
+        messageId: email.messageId || null,
+        receivedAt: email.receivedAt,
+        status: email.status,
+        bodyText: email.bodyText || null,
+        sendingDomain: email.sendingDomain || null,
+        sendingIp: email.sendingIp || null,
+        // Scores
+        overallScore: email.overallScore ?? null,
+        spamScore: email.spamScore ?? null,
+        copyScore: email.copyScore ?? null,
+        // Authentication
+        spfResult: email.spfResult || null,
+        dkimResult: email.dkimResult || null,
+        dmarcResult: email.dmarcResult || null,
+        spfRecordExists: email.spfRecordExists ?? null,
+        dkimRecordExists: email.dkimRecordExists ?? null,
+        dmarcRecordExists: email.dmarcRecordExists ?? null,
+        // AI insights (full JSONB objects)
+        spamFlags: email.spamFlags || null,
+        copyFeedback: email.copyFeedback || null,
+        subjectAnalysis: email.subjectAnalysis || null,
+        technicalHealth: email.technicalHealth || null,
+        senderTrust: email.senderTrust || null,
+        contentQuality: email.contentQuality || null,
+        canSpamCompliance: email.canSpamCompliance || null,
+        // Placement
+        placementResults: email.placementResults || null,
+        placementConfirmedAt: email.placementConfirmedAt || null,
+      });
+    } catch (err) {
+      console.error("[v1] inbox-analyzer email detail error:", err);
+      res.status(500).json({ message: "Failed to load email" });
+    }
+  });
+
+  // GET /api/v1/inbox-analyzer/emails/:id/placement
+  // Placement results for a specific email with a computed inboxRate percentage.
+  app.get("/api/v1/inbox-analyzer/emails/:id/placement", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const email = await storage.getEmailAnalysis(req.params.id, user.id);
+      if (!email) return res.status(404).json({ message: "Email not found" });
+      const results = email.placementResults as any[] | null;
+      if (!results || !Array.isArray(results) || results.length === 0) {
+        return res.json({
+          messageId: email.messageId,
+          subject: email.subject,
+          receivedAt: email.receivedAt,
+          placementRate: null,
+          results: null,
+          confirmedAt: null,
+        });
+      }
+      const definitive = results.filter((r: any) =>
+        ["primary", "promotions", "social", "updates", "forums", "spam"].includes(r.status)
+      );
+      const inboxCount = definitive.filter((r: any) => r.status !== "spam").length;
+      const placementRate = definitive.length > 0
+        ? Math.round((inboxCount / definitive.length) * 100)
+        : null;
+      res.json({
+        messageId: email.messageId,
+        subject: email.subject,
+        receivedAt: email.receivedAt,
+        placementRate,
+        results: results.map(({ email: _e, ...rest }: any) => rest),
+        confirmedAt: email.placementConfirmedAt || null,
+      });
+    } catch (err) {
+      console.error("[v1] inbox-analyzer placement error:", err);
+      res.status(500).json({ message: "Failed to load placement results" });
+    }
+  });
+
+  // GET /api/v1/inbox-analyzer/summary
+  // Computed analytics overview: avg scores, placement rate, and trend direction.
+  // Mirrors the analytics cards shown on the Inbox Analyzer web page.
+  app.get("/api/v1/inbox-analyzer/summary", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const all = await storage.getEmailAnalyses(user.id, 500);
+      const completed = all.filter(e => e.status === "complete" || e.overallScore != null);
+
+      // Avg overall score + trend (compare most-recent 5 vs previous 5)
+      const overallScores = completed.filter(e => e.overallScore != null).map(e => e.overallScore!);
+      const avgOverallScore = overallScores.length > 0
+        ? Math.round(overallScores.reduce((a, b) => a + b, 0) / overallScores.length)
+        : null;
+      let trend: string | null = null;
+      if (overallScores.length >= 6) {
+        const recentAvg = overallScores.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+        const prev = overallScores.slice(5, 10);
+        const prevAvg = prev.reduce((a, b) => a + b, 0) / prev.length;
+        trend = recentAvg > prevAvg + 2 ? "up" : recentAvg < prevAvg - 2 ? "down" : "flat";
+      }
+
+      // Avg auth score (SPF/DKIM/DMARC weighted, 0-100)
+      const authScores = completed.map(e => {
+        if (!e.spfResult && !e.dkimResult && !e.dmarcResult) return null;
+        let pts = 0;
+        if (e.spfResult === "pass") pts += 8;
+        else if (e.spfResult === "softfail") pts += 4;
+        if (e.dkimResult === "pass") pts += 8;
+        if (e.dmarcResult === "pass") pts += 7;
+        if (e.spfRecordExists) pts += 4;
+        if (e.dkimRecordExists) pts += 3;
+        return Math.round((pts / 30) * 100);
+      }).filter((s): s is number => s != null);
+      const avgAuthScore = authScores.length > 0
+        ? Math.round(authScores.reduce((a, b) => a + b, 0) / authScores.length)
+        : null;
+
+      // Avg content quality score (0-100)
+      const contentScores = completed.map(e => {
+        const cq = e.contentQuality as any;
+        if (!cq) return null;
+        let pts = 0;
+        if (!cq.hasUrlShortener) pts += 2;
+        const hidClass = cq.hiddenTextClassification ?? (cq.hasHiddenText ? "SPAM_SIGNAL" : "NONE");
+        if (hidClass === "NONE" || hidClass === "PREHEADER") pts += 2;
+        else if (hidClass === "AMBIGUOUS") pts += 1;
+        if (cq.htmlToTextRatio >= 0.3) pts += 1;
+        if (cq.linkToTextRatio <= 0.02) pts += 1;
+        const wc = cq.wordCount;
+        if (wc >= 50 && wc <= 500) pts += 2;
+        else if (wc > 500 && wc <= 900) pts += 1;
+        const sc = cq.subjectCharCount ?? 0;
+        if (sc >= 20 && sc <= 60) pts += 1;
+        if (cq.hasPersonalization || cq.hasPs) pts += 1;
+        return Math.round((pts / 10) * 100);
+      }).filter((s): s is number => s != null);
+      const avgContentQualityScore = contentScores.length > 0
+        ? Math.round(contentScores.reduce((a, b) => a + b, 0) / contentScores.length)
+        : null;
+
+      // Placement rate across emails that have definitive results
+      const withPlacement = completed.filter(e => Array.isArray(e.placementResults) && (e.placementResults as unknown[]).length > 0);
+      let placementRate: number | null = null;
+      if (withPlacement.length > 0) {
+        const inboxCount = withPlacement.filter(e => {
+          const results = e.placementResults as any[];
+          const definitive = results.filter((r: any) =>
+            ["primary", "promotions", "social", "updates", "forums", "spam"].includes(r.status)
+          );
+          return definitive.length > 0 && definitive.some((r: any) => r.status !== "spam");
+        }).length;
+        placementRate = Math.round((inboxCount / withPlacement.length) * 100);
+      }
+
+      res.json({
+        totalEmails: all.length,
+        completedEmails: completed.length,
+        avgOverallScore,
+        avgAuthScore,
+        avgContentQualityScore,
+        placementRate,
+        placementCheckedCount: withPlacement.length,
+        trend,
+        computedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("[v1] inbox-analyzer summary error:", err);
+      res.status(500).json({ message: "Failed to compute summary" });
+    }
+  });
+
   // ─── Feedback (Bug Reports & Feature Requests) ────────────────────────────────
   app.get("/api/feedback", async (req: Request, res: Response) => {
     if (!req.session.userId) return res.status(401).json({ message: "Unauthorized" });
