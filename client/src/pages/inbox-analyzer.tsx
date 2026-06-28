@@ -26,6 +26,7 @@ import {
   ExternalLink, FileText, Zap, Globe, Hash, HelpCircle, Smile,
   User, Reply, Server, Eye, Image, Link2, Type, BookOpen, MapPin, Star, RefreshCw,
   Plus, ToggleLeft, ToggleRight, AtSign, Tag, Users, Bell, MessageSquare, Scale, Key, Send,
+  TrendingUp, TrendingDown, Minus, BarChart3,
 } from "lucide-react";
 import { SiGmail } from "react-icons/si";
 import { apiRequest } from "@/lib/queryClient";
@@ -2486,6 +2487,174 @@ function SettingsTab() {
   );
 }
 
+// ── Analytics overview ────────────────────────────────────────────────────────
+
+function EmailAnalyticsOverview({ emails }: { emails: EmailAnalysis[] }) {
+  const completed = emails.filter(e => e.status === "complete" || e.overallScore != null);
+  if (completed.length < 2) return null;
+
+  const overallScores = completed.filter(e => e.overallScore != null).map(e => e.overallScore!);
+  const avgOverall = overallScores.length > 0
+    ? Math.round(overallScores.reduce((a, b) => a + b, 0) / overallScores.length)
+    : null;
+
+  let trend: "up" | "down" | "flat" | null = null;
+  if (overallScores.length >= 6) {
+    const recent = overallScores.slice(0, 5);
+    const prev = overallScores.slice(5, 10);
+    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const prevAvg = prev.reduce((a, b) => a + b, 0) / prev.length;
+    trend = recentAvg > prevAvg + 2 ? "up" : recentAvg < prevAvg - 2 ? "down" : "flat";
+  }
+
+  const withPlacement = completed.filter(e => {
+    const r = e.placementResults as PlacementResult[] | null;
+    return r && Array.isArray(r) && r.length > 0;
+  });
+  let placementRate: number | null = null;
+  if (withPlacement.length > 0) {
+    const inboxCount = withPlacement.filter(e => {
+      const results = e.placementResults as PlacementResult[];
+      const definitive = results.filter(r => ["primary","promotions","social","updates","forums","spam"].includes(r.status));
+      return definitive.length > 0 && definitive.some(r => r.status !== "spam");
+    }).length;
+    placementRate = Math.round((inboxCount / withPlacement.length) * 100);
+  }
+
+  const authScores = completed.map(e => computeAuthScore(e)).filter((s): s is number => s != null);
+  const avgAuth = authScores.length > 0
+    ? Math.round(authScores.reduce((a, b) => a + b, 0) / authScores.length)
+    : null;
+
+  const copyScores = completed.filter(e => e.copyScore != null).map(e => e.copyScore!);
+  const avgCopy = copyScores.length > 0
+    ? Math.round(copyScores.reduce((a, b) => a + b, 0) / copyScores.length)
+    : null;
+
+  const chartData = [...completed]
+    .filter(e => e.overallScore != null)
+    .slice(0, 10)
+    .reverse();
+
+  const cards = [
+    {
+      label: "Avg. Overall Score",
+      value: avgOverall != null ? String(avgOverall) : "—",
+      suffix: avgOverall != null ? "/100" : "",
+      sub: `${overallScores.length} email${overallScores.length !== 1 ? "s" : ""} analyzed`,
+      icon: <Star className="h-3.5 w-3.5 text-teal-400" />,
+      iconBg: "bg-teal-500/15",
+      gradient: "from-teal-500/10",
+      score: avgOverall,
+      trend,
+    },
+    {
+      label: "Inbox Placement",
+      value: placementRate != null ? `${placementRate}%` : "—",
+      suffix: "",
+      sub: withPlacement.length > 0 ? `${withPlacement.length} checked` : "No placement data yet",
+      icon: <Inbox className="h-3.5 w-3.5 text-indigo-400" />,
+      iconBg: "bg-indigo-500/15",
+      gradient: "from-indigo-500/10",
+      score: placementRate,
+      trend: null,
+    },
+    {
+      label: "Auth Health",
+      value: avgAuth != null ? String(avgAuth) : "—",
+      suffix: avgAuth != null ? "/100" : "",
+      sub: "SPF · DKIM · DMARC avg.",
+      icon: <ShieldCheck className="h-3.5 w-3.5 text-amber-400" />,
+      iconBg: "bg-amber-500/15",
+      gradient: "from-amber-500/10",
+      score: avgAuth,
+      trend: null,
+    },
+    {
+      label: "Avg. Copy Score",
+      value: avgCopy != null ? String(avgCopy) : "—",
+      suffix: avgCopy != null ? "/100" : "",
+      sub: "Content quality avg.",
+      icon: <Type className="h-3.5 w-3.5 text-violet-400" />,
+      iconBg: "bg-violet-500/15",
+      gradient: "from-violet-500/10",
+      score: avgCopy,
+      trend: null,
+    },
+  ];
+
+  return (
+    <div className="space-y-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {cards.map((card) => (
+          <div key={card.label} className="relative overflow-hidden rounded-xl border border-border bg-card p-4">
+            <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} to-transparent`} />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`h-7 w-7 rounded-lg ${card.iconBg} flex items-center justify-center flex-shrink-0`}>
+                  {card.icon}
+                </div>
+                <span className="text-xs font-medium text-muted-foreground leading-tight">{card.label}</span>
+              </div>
+              <div className="flex items-end gap-1.5">
+                <span className={`text-3xl font-bold tabular-nums ${card.score != null ? scoreColor(card.score) : "text-muted-foreground"}`}>
+                  {card.value}
+                </span>
+                {card.suffix && (
+                  <span className="text-sm text-muted-foreground mb-0.5">{card.suffix}</span>
+                )}
+                {card.trend === "up" && <TrendingUp className="h-4 w-4 text-emerald-500 mb-1 ml-auto" />}
+                {card.trend === "down" && <TrendingDown className="h-4 w-4 text-red-500 mb-1 ml-auto" />}
+                {card.trend === "flat" && <Minus className="h-4 w-4 text-muted-foreground mb-1 ml-auto" />}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 leading-snug">{card.sub}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {chartData.length >= 3 && (
+        <div className="rounded-xl border border-border bg-card px-4 pt-4 pb-3">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">Score Trend</span>
+            <span className="text-xs text-muted-foreground">— last {chartData.length} emails, oldest → newest</span>
+          </div>
+          <div className="flex items-end gap-1.5" style={{ height: "80px" }}>
+            {chartData.map((email) => {
+              const score = email.overallScore!;
+              const pct = Math.max(4, (score / 100) * 100);
+              const barColor =
+                score >= 80 ? "bg-emerald-500" :
+                score >= 60 ? "bg-yellow-500" :
+                "bg-red-500";
+              return (
+                <div key={email.id} className="group flex-1 flex flex-col items-center justify-end min-w-0 h-full relative">
+                  <div className="relative w-full flex flex-col justify-end" style={{ height: "100%" }}>
+                    <div
+                      className={`w-full rounded-t ${barColor} opacity-75 group-hover:opacity-100 transition-all`}
+                      style={{ height: `${pct}%` }}
+                    />
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-popover border border-border rounded px-1.5 py-0.5 text-xs font-semibold text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-sm">
+                      {score}
+                    </div>
+                  </div>
+                  <span
+                    className="text-[9px] text-muted-foreground truncate w-full text-center mt-1.5 leading-tight px-0.5"
+                    title={email.subject || ""}
+                  >
+                    {(email.subject || "—").substring(0, 12)}{(email.subject || "").length > 12 ? "…" : ""}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Emails tab with pagination ────────────────────────────────────────────────
 
 const EMAIL_PAGE_SIZE = 20;
@@ -2511,6 +2680,7 @@ function EmailsTab({
 
   return (
     <div className="space-y-4">
+      <EmailAnalyticsOverview emails={emails} />
       <div className="space-y-3">
         {pageEmails.map((email, localIndex) => {
           const originalIndex = page * EMAIL_PAGE_SIZE + localIndex;
