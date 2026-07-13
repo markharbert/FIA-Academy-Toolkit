@@ -1027,6 +1027,24 @@ function EditableContentSubSection({
   );
 }
 
+function formatForTeleprompter(text: string): string {
+  const sentences: string[] = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const parts = line.split(/(?<=[.!?])\s+/);
+    for (const part of parts) {
+      const s = part.trim();
+      if (s) sentences.push(s);
+    }
+  }
+  const paragraphs: string[] = [];
+  for (let i = 0; i < sentences.length; i += 2) {
+    const chunk = sentences.slice(i, i + 2).join(' ');
+    if (chunk.trim()) paragraphs.push(chunk.trim());
+  }
+  return paragraphs.join('\n\n');
+}
+
 function hasScriptChanged(original: ScriptJson | null, edited: ScriptJson | null): boolean {
   if (!original || !edited) return false;
   
@@ -1090,11 +1108,16 @@ export default function TopicPulseScriptPage() {
   useEffect(() => {
     if (script?.scriptJson) {
       const json = script.scriptJson as any;
+      let parsed: ScriptJson;
       if (json.scriptJson && json.scriptJson.fullScript) {
-        setEditedScriptJson(json.scriptJson as ScriptJson);
+        parsed = json.scriptJson as ScriptJson;
       } else {
-        setEditedScriptJson(json as ScriptJson);
+        parsed = json as ScriptJson;
       }
+      if (parsed.expandedScript) {
+        parsed = { ...parsed, expandedScript: formatForTeleprompter(parsed.expandedScript) };
+      }
+      setEditedScriptJson(parsed);
     }
     if (script && (script as any).teleprompterScriptId) {
       setSavedTeleprompterScriptId((script as any).teleprompterScriptId);
@@ -1173,7 +1196,8 @@ export default function TopicPulseScriptPage() {
       return res.json() as Promise<{ expandedScript: string }>;
     },
     onSuccess: (data) => {
-      setEditedScriptJson(prev => prev ? { ...prev, expandedScript: data.expandedScript } : prev);
+      const formatted = formatForTeleprompter(data.expandedScript);
+      setEditedScriptJson(prev => prev ? { ...prev, expandedScript: formatted } : prev);
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/scripts", scriptId] });
       toast({ title: "Full script generated!", description: "Your complete teleprompter script is ready. You can edit it and save it to the Teleprompter." });
     },
