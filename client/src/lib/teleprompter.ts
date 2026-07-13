@@ -90,10 +90,11 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     .fmt-btn:hover{color:rgba(255,255,255,.7);background:rgba(255,255,255,.06)}
     .fmt-btn.active{color:#fff;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
     .fmt-btn.locked{opacity:.3;cursor:not-allowed;pointer-events:none}
-    .fmt-icon{display:block;border:2px solid currentColor;border-radius:2px;margin:0 auto}
+    .fmt-icon-wrap{display:flex;align-items:center;justify-content:center;height:28px;width:100%;flex-shrink:0}
+    .fmt-icon{display:block;border:2px solid currentColor;border-radius:2px}
     .fmt-icon-land{width:28px;height:16px}
-    .fmt-icon-port{width:14px;height:25px}
-    .fmt-icon-sq{width:20px;height:20px}
+    .fmt-icon-port{width:14px;height:28px}
+    .fmt-icon-sq{width:22px;height:22px}
 
     /* ── Device selector bar ── */
     #device-bar{flex-shrink:0;display:none;flex-direction:column;gap:5px;padding:7px 10px;background:#0d0d0d;border-bottom:1px solid #1a1a1a}
@@ -214,13 +215,13 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       <!-- Format picker -->
       <div id="format-picker">
         <button class="fmt-btn active" id="fmt-btn-landscape" onclick="setFormat('landscape')" title="YouTube · Facebook · 16:9">
-          <span class="fmt-icon fmt-icon-land"></span>YouTube 16:9
+          <span class="fmt-icon-wrap"><span class="fmt-icon fmt-icon-land"></span></span>YouTube 16:9
         </button>
         <button class="fmt-btn" id="fmt-btn-portrait" onclick="setFormat('portrait')" title="TikTok · Instagram Reels · 9:16">
-          <span class="fmt-icon fmt-icon-port"></span>Portrait 9:16
+          <span class="fmt-icon-wrap"><span class="fmt-icon fmt-icon-port"></span></span>Portrait 9:16
         </button>
         <button class="fmt-btn" id="fmt-btn-square" onclick="setFormat('square')" title="Instagram Feed · Square · 1:1">
-          <span class="fmt-icon fmt-icon-sq"></span>Square 1:1
+          <span class="fmt-icon-wrap"><span class="fmt-icon fmt-icon-sq"></span></span>Square 1:1
         </button>
       </div>
       <!-- Video area -->
