@@ -376,26 +376,35 @@ export async function generateBulletPoints(scriptContent: string): Promise<strin
     messages: [
       {
         role: "system",
-        content: `You are a video script assistant. Extract the key elements from the provided script and format them exactly like this — no extra commentary, no numbering, no markdown:
+        content: `You are a video script assistant. Extract these three things from the script and return them as JSON:
+- "hook": The opening sentence that grabs attention (one sentence, no label)
+- "bullets": Array of 3 to 5 short talking points a presenter can ad-lib from (each 5-10 words)
+- "cta": The call to action at the end (one sentence, no label)
 
-HOOK: <one punchy sentence that grabs attention from the opening of the script>
-
-• <key talking point>
-• <key talking point>
-• <key talking point>
-(3–5 bullet points max — short, memorable phrases a presenter can ad-lib from)
-
-CTA: <the call to action from the script, one sentence>
-
-Follow this format exactly. HOOK first, then the bullet points, then CTA last.`,
+Return only valid JSON matching: { "hook": "...", "bullets": ["...", "..."], "cta": "..." }`,
       },
       {
         role: "user",
-        content: `Extract the hook, bullet points, and call to action from this script:\n\n${scriptContent.trim().slice(0, 20000)}`,
+        content: `Extract hook, bullets, and CTA from this script:\n\n${scriptContent.trim().slice(0, 20000)}`,
       },
     ],
+    response_format: { type: "json_object" },
     max_completion_tokens: 600,
-    temperature: 0.3,
+    temperature: 0.2,
   });
-  return response.choices[0]?.message?.content?.trim() || "";
+
+  const raw = response.choices[0]?.message?.content?.trim() || "{}";
+  const parsed = JSON.parse(raw) as { hook?: string; bullets?: string[]; cta?: string };
+
+  const hook = parsed.hook?.trim() || "";
+  const bullets = (parsed.bullets || []).slice(0, 5).map((b: string) => b.trim()).filter(Boolean);
+  const cta = parsed.cta?.trim() || "";
+
+  // Enforce 3-5 bullets
+  const lines: string[] = [];
+  if (hook) lines.push(hook);
+  bullets.slice(0, 5).forEach((b) => lines.push(b.startsWith("•") ? b : `• ${b}`));
+  if (cta) lines.push(cta);
+
+  return lines.join("\n");
 }

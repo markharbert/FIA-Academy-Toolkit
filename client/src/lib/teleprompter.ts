@@ -16,17 +16,19 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
   const esc = (t: string) =>
     t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  const bulletsHtml = bulletPoints
-    ? bulletPoints.split("\n").filter((l) => l.trim()).map((l) => {
-        const t = l.trim();
-        if (t.toUpperCase().startsWith("HOOK:")) {
-          return `<div class="bullet-hook">${esc(t)}</div>`;
-        } else if (t.toUpperCase().startsWith("CTA:")) {
-          return `<div class="bullet-cta">${esc(t)}</div>`;
-        }
-        return `<div class="bullet-line">${esc(t)}</div>`;
-      }).join("")
-    : "";
+  const bulletsHtml = (() => {
+    if (!bulletPoints) return "";
+    const lines = bulletPoints.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return "";
+    // First non-bullet line = hook, last non-bullet line = cta, rest = bullets
+    const firstNonBullet = lines.findIndex((l) => !l.startsWith("•"));
+    const lastNonBullet = lines.length - 1 - [...lines].reverse().findIndex((l) => !l.startsWith("•"));
+    return lines.map((l, i) => {
+      if (!l.startsWith("•") && i === firstNonBullet) return `<div class="bullet-hook">${esc(l)}</div>`;
+      if (!l.startsWith("•") && i === lastNonBullet && lastNonBullet !== firstNonBullet) return `<div class="bullet-cta">${esc(l)}</div>`;
+      return `<div class="bullet-line">${esc(l)}</div>`;
+    }).join("");
+  })();
 
   const sectionsHtml = cleaned
     .map((s) => {
