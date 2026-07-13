@@ -4925,6 +4925,86 @@ export async function registerRoutes(
     }
   });
 
+  // ── Teleprompter Recordings ──
+  app.post("/api/teleprompter/recordings", requireAuth, upload.single("video"), async (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ message: "No video file received" });
+    try {
+      const userId = req.session.userId!;
+      const scriptId = (typeof req.body.scriptId === "string" && req.body.scriptId) ? req.body.scriptId : null;
+      const title = (typeof req.body.title === "string" && req.body.title.trim()) ? req.body.title.trim().slice(0, 120) : "Untitled Take";
+      const durationSeconds = req.body.durationSeconds ? (parseInt(req.body.durationSeconds, 10) || null) : null;
+      const ext = path.extname(file.originalname).toLowerCase() || (file.mimetype.includes("mp4") ? ".mp4" : ".webm");
+      const objectId = crypto.randomUUID();
+      const storageKey = `/objects/recordings/${userId}/${objectId}${ext}`;
+      const fileBuffer = fs.readFileSync(file.path);
+      const objectStorage = new ObjectStorageService();
+      await objectStorage.uploadFile(storageKey, fileBuffer, file.mimetype || "video/webm");
+      try { fs.unlinkSync(file.path); } catch (_) {}
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      const recording = await storage.createTeleprompterRecording({
+        userId,
+        scriptId,
+        title,
+        storageKey,
+        mimeType: file.mimetype || "video/webm",
+        sizeBytes: file.size,
+        durationSeconds,
+        expiresAt,
+      });
+      res.json(recording);
+    } catch (err) {
+      try { if (req.file) fs.unlinkSync(req.file.path); } catch (_) {}
+      console.error("[Teleprompter] Upload recording error:", err);
+      res.status(500).json({ message: "Failed to upload recording" });
+    }
+  });
+
+  app.get("/api/teleprompter/recordings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Lazy-clean expired recordings
+      storage.deleteExpiredTeleprompterRecordings().catch(() => {});
+      const recordings = await storage.getTeleprompterRecordingsByUser(req.session.userId!);
+      res.json(recordings);
+    } catch (err) {
+      console.error("[Teleprompter] Get recordings error:", err);
+      res.status(500).json({ message: "Failed to get recordings" });
+    }
+  });
+
+  app.get("/api/teleprompter/recordings/:id/download", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
+      if (!recording) return res.status(404).json({ message: "Recording not found" });
+      const objectStorage = new ObjectStorageService();
+      const file = await objectStorage.getObjectEntityFile(recording.storageKey);
+      const ext = path.extname(recording.storageKey) || ".webm";
+      const safeTitle = recording.title.replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "recording";
+      res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}${ext}"`);
+      await objectStorage.downloadObject(file, res, 0);
+    } catch (err) {
+      console.error("[Teleprompter] Download recording error:", err);
+      if (!res.headersSent) res.status(500).json({ message: "Failed to download recording" });
+    }
+  });
+
+  app.delete("/api/teleprompter/recordings/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
+      if (!recording) return res.status(404).json({ message: "Recording not found" });
+      try {
+        const objectStorage = new ObjectStorageService();
+        await objectStorage.deleteObject(recording.storageKey);
+      } catch (_) {}
+      await storage.deleteTeleprompterRecording(req.params.id, req.session.userId!);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[Teleprompter] Delete recording error:", err);
+      res.status(500).json({ message: "Failed to delete recording" });
+    }
+  });
+
   app.get("/api/topic-pulse/links", requireAuth, async (req: Request, res: Response) => {
     try {
       const links = await storage.getLinkPlaceholdersByUser(req.session.userId!);

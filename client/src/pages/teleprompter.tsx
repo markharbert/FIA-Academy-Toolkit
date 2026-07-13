@@ -26,11 +26,14 @@ import {
   FileText,
   Loader2,
   MonitorPlay,
+  Download,
+  Video,
+  Clock,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { openTeleprompter } from "@/lib/teleprompter";
-import type { TeleprompterScript } from "@shared/schema";
+import type { TeleprompterScript, TeleprompterRecording } from "@shared/schema";
 
 const MAX_SCRIPT_CHARS = 100_000;
 const MAX_FILE_BYTES = 500_000;
@@ -217,6 +220,7 @@ export default function TeleprompterPage() {
     openTeleprompter({
       title: scriptToOpen?.title || title.trim() || "Untitled script",
       sections: [{ text: scriptToOpen?.content || trimmedContent }],
+      scriptId: scriptToOpen?.id,
     });
   };
 
@@ -252,9 +256,47 @@ export default function TeleprompterPage() {
     reader.readAsText(file);
   };
 
+  const { data: recordings, isLoading: recordingsLoading } = useQuery<TeleprompterRecording[]>({
+    queryKey: ["/api/teleprompter/recordings"],
+  });
+
+  const deleteRecordingMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/teleprompter/recordings/${id}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+      toast({ title: "Recording deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete recording", description: err.message, variant: "destructive" });
+    },
+  });
+
   const wc = wordCount(content);
   const reading = estimateMinutes(wc);
   const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function formatDuration(seconds: number | null | undefined): string {
+    if (!seconds) return "";
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  function formatDaysLeft(expiresAt: string | Date): string {
+    const exp = typeof expiresAt === "string" ? new Date(expiresAt) : expiresAt;
+    const days = Math.ceil((exp.getTime() - Date.now()) / 86400000);
+    if (days <= 0) return "Expired";
+    if (days === 1) return "Expires tomorrow";
+    return `Expires in ${days} days`;
+  }
 
   return (
     <div className="min-h-full flex flex-col">
@@ -459,6 +501,98 @@ export default function TeleprompterPage() {
                 <li>Inside the teleprompter use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">Space</kbd> to play/pause, <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">[</kbd>/<kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">]</kbd> to adjust scroll speed, and the slider in the toolbar for fine control.</li>
                 <li>Pop-ups must be allowed for this site so the teleprompter window can open.</li>
               </ul>
+            </div>
+
+            {/* ── Your Takes (Recordings) ── */}
+            <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+              <div className="relative">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-600 to-sky-700" />
+              </div>
+              <div className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                    <Video className="h-4 w-4 text-teal-500" />
+                    Your Takes
+                    {recordings && recordings.length > 0 && (
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">({recordings.length})</span>
+                    )}
+                  </h3>
+                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Recordings are kept for 30 days
+                  </span>
+                </div>
+
+                {recordingsLoading && (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+
+                {!recordingsLoading && (!recordings || recordings.length === 0) && (
+                  <div className="rounded-lg border border-dashed border-border p-5 text-center">
+                    <Video className="h-7 w-7 mx-auto text-muted-foreground/30 mb-2" />
+                    <p className="text-sm text-muted-foreground">No recordings yet.</p>
+                    <p className="text-xs text-muted-foreground/70 mt-0.5">Open the teleprompter and record a take — it'll appear here automatically.</p>
+                  </div>
+                )}
+
+                {recordings && recordings.length > 0 && (
+                  <div className="space-y-2">
+                    {recordings.map((rec) => {
+                      const daysLeft = formatDaysLeft(rec.expiresAt);
+                      const isExpiringSoon = new Date(rec.expiresAt).getTime() - Date.now() < 5 * 86400000;
+                      return (
+                        <div
+                          key={rec.id}
+                          className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5 hover:bg-muted/40 transition-colors"
+                          data-testid={`recording-item-${rec.id}`}
+                        >
+                          <div className="shrink-0 w-8 h-8 rounded-md bg-teal-500/10 flex items-center justify-center">
+                            <Video className="h-4 w-4 text-teal-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate" data-testid={`recording-title-${rec.id}`}>
+                              {rec.title || "Untitled Take"}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <span>{formatRelative(rec.createdAt)}</span>
+                              {rec.durationSeconds && (
+                                <><span>·</span><span>{formatDuration(rec.durationSeconds)}</span></>
+                              )}
+                              <span>·</span>
+                              <span>{formatBytes(rec.sizeBytes)}</span>
+                              <span>·</span>
+                              <span className={isExpiringSoon ? "text-amber-500 font-medium" : ""}>
+                                {daysLeft}
+                              </span>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <a
+                              href={`/api/teleprompter/recordings/${rec.id}/download`}
+                              download
+                              className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors"
+                              data-testid={`button-download-recording-${rec.id}`}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              Download
+                            </a>
+                            <button
+                              onClick={() => deleteRecordingMutation.mutate(rec.id)}
+                              disabled={deleteRecordingMutation.isPending}
+                              className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              aria-label="Delete recording"
+                              data-testid={`button-delete-recording-${rec.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

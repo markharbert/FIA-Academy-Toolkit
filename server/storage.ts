@@ -7,6 +7,7 @@ import {
   workspaceInvites, type WorkspaceInvite, type WorkspaceInviteWithMember,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
   teleprompterScripts, type TeleprompterScript, type InsertTeleprompterScript,
+  teleprompterRecordings, type TeleprompterRecording, type InsertTeleprompterRecording,
   type CompetitorTracker, type InsertCompetitorTracker, type CompetitorTrackerWithStats,
   type CompetitorSeedAddress, type CapturedCompetitorEmail, type CapturedCompetitorEmailLink,
   type TrackerAnalytics, type FeedResponse, type ScreenshotStatus,
@@ -321,6 +322,13 @@ export interface IStorage {
   createTeleprompterScript(userId: string, data: { title: string; content: string }): Promise<TeleprompterScript>;
   updateTeleprompterScript(id: string, userId: string, data: { title?: string; content?: string }): Promise<TeleprompterScript | undefined>;
   deleteTeleprompterScript(id: string, userId: string): Promise<boolean>;
+
+  // Teleprompter Recordings
+  getTeleprompterRecordingsByUser(userId: string): Promise<TeleprompterRecording[]>;
+  getTeleprompterRecording(id: string, userId: string): Promise<TeleprompterRecording | undefined>;
+  createTeleprompterRecording(data: InsertTeleprompterRecording): Promise<TeleprompterRecording>;
+  deleteTeleprompterRecording(id: string, userId: string): Promise<boolean>;
+  deleteExpiredTeleprompterRecordings(): Promise<TeleprompterRecording[]>;
 
   // Topic Pulse Finder: Link Placeholders
   createLinkPlaceholder(link: InsertLinkPlaceholder): Promise<LinkPlaceholder>;
@@ -1814,6 +1822,37 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(teleprompterScripts.id, id), eq(teleprompterScripts.userId, userId)))
       .returning();
     return !!result;
+  }
+
+  // Teleprompter Recordings
+  async getTeleprompterRecordingsByUser(userId: string): Promise<TeleprompterRecording[]> {
+    return db.select().from(teleprompterRecordings)
+      .where(eq(teleprompterRecordings.userId, userId))
+      .orderBy(desc(teleprompterRecordings.createdAt));
+  }
+
+  async getTeleprompterRecording(id: string, userId: string): Promise<TeleprompterRecording | undefined> {
+    const [result] = await db.select().from(teleprompterRecordings)
+      .where(and(eq(teleprompterRecordings.id, id), eq(teleprompterRecordings.userId, userId)));
+    return result;
+  }
+
+  async createTeleprompterRecording(data: InsertTeleprompterRecording): Promise<TeleprompterRecording> {
+    const [result] = await db.insert(teleprompterRecordings).values(data).returning();
+    return result;
+  }
+
+  async deleteTeleprompterRecording(id: string, userId: string): Promise<boolean> {
+    const [result] = await db.delete(teleprompterRecordings)
+      .where(and(eq(teleprompterRecordings.id, id), eq(teleprompterRecordings.userId, userId)))
+      .returning();
+    return !!result;
+  }
+
+  async deleteExpiredTeleprompterRecordings(): Promise<TeleprompterRecording[]> {
+    return db.delete(teleprompterRecordings)
+      .where(lt(teleprompterRecordings.expiresAt, new Date()))
+      .returning();
   }
 
   // Topic Pulse Finder: Link Placeholders

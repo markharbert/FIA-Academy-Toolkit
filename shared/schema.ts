@@ -739,6 +739,23 @@ export const upsertTeleprompterScriptSchema = z.object({
 export type InsertTeleprompterScript = z.infer<typeof insertTeleprompterScriptSchema>;
 export type TeleprompterScript = typeof teleprompterScripts.$inferSelect;
 
+// Teleprompter Recordings (30-day cloud takes)
+export const teleprompterRecordings = pgTable("teleprompter_recordings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  scriptId: varchar("script_id").references(() => teleprompterScripts.id, { onDelete: "set null" }),
+  title: text("title").notNull().default(""),
+  storageKey: text("storage_key").notNull(),
+  mimeType: text("mime_type").notNull().default("video/webm"),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  durationSeconds: integer("duration_seconds"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type TeleprompterRecording = typeof teleprompterRecordings.$inferSelect;
+export type InsertTeleprompterRecording = typeof teleprompterRecordings.$inferInsert;
+
 // Link placeholders for affiliate links
 export const linkPlaceholders = pgTable("link_placeholders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
