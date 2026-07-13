@@ -314,6 +314,9 @@ export default function TeleprompterPage() {
     queryKey: ["/api/teleprompter/recordings"],
   });
 
+  // Only show takes that belong to the currently selected script
+  const scriptRecordings = recordings?.filter((r) => r.scriptId === selectedId) ?? [];
+
   const deleteRecordingMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("DELETE", `/api/teleprompter/recordings/${id}`, {});
@@ -636,8 +639,8 @@ export default function TeleprompterPage() {
                   <h3 className="text-sm font-semibold flex items-center gap-1.5">
                     <Video className="h-4 w-4 text-teal-500" />
                     Your Takes
-                    {recordings && recordings.length > 0 && (
-                      <span className="ml-1 text-xs font-normal text-muted-foreground">({recordings.length})</span>
+                    {scriptRecordings.length > 0 && (
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">({scriptRecordings.length})</span>
                     )}
                   </h3>
                   <span className="text-[11px] text-muted-foreground flex items-center gap-1">
@@ -651,17 +654,17 @@ export default function TeleprompterPage() {
                   </div>
                 )}
 
-                {!recordingsLoading && (!recordings || recordings.length === 0) && (
+                {!recordingsLoading && scriptRecordings.length === 0 && (
                   <div className="rounded-lg border border-dashed border-border p-5 text-center">
                     <Video className="h-7 w-7 mx-auto text-muted-foreground/30 mb-2" />
-                    <p className="text-sm text-muted-foreground">No recordings yet.</p>
+                    <p className="text-sm text-muted-foreground">No takes for this script yet.</p>
                     <p className="text-xs text-muted-foreground/70 mt-0.5">Open the teleprompter and record a take — it'll appear here automatically.</p>
                   </div>
                 )}
 
-                {recordings && recordings.length > 0 && (
+                {scriptRecordings.length > 0 && (
                   <div className="space-y-2">
-                    {recordings.map((rec) => {
+                    {scriptRecordings.map((rec) => {
                       const daysLeft = formatDaysLeft(rec.expiresAt);
                       const isExpiringSoon = new Date(rec.expiresAt).getTime() - Date.now() < 5 * 86400000;
                       return (
