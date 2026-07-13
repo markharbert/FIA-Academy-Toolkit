@@ -425,7 +425,7 @@ export default function TeleprompterPage() {
 
       {/* Body */}
       <div className="flex-1 px-4 sm:px-6 py-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[325px_1fr] gap-6">
           {/* ── Saved scripts list ── */}
           <aside className="space-y-3">
             <div className="flex items-center justify-between">
@@ -471,7 +471,7 @@ export default function TeleprompterPage() {
                     data-testid={`script-item-${script.id}`}
                   >
                     <div className="pr-6">
-                      <p className="text-sm font-medium text-foreground truncate" data-testid={`script-title-${script.id}`}>
+                      <p className="text-sm font-medium text-foreground leading-snug" data-testid={`script-title-${script.id}`}>
                         {script.title}
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
