@@ -747,7 +747,6 @@ export default function TeleprompterPage() {
                 key={previewRec?.id}
                 src={previewUrl}
                 controls
-                autoPlay
                 className="w-full max-h-[60vh] outline-none"
                 data-testid="video-preview-player"
               />
