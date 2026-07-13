@@ -521,28 +521,9 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 
     function uploadRecording(){
       if(!recordedBlob)return;
-      var fd=new FormData();
-      var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';
-      var ts=new Date().toISOString().slice(0,19).replace(/[T:]/g,'-');
-      fd.append('video',recordedBlob,'recording-'+ts+ext);
-      if(SCRIPT_ID)fd.append('scriptId',SCRIPT_ID);
-      fd.append('title',SCRIPT_TITLE||'Untitled Take');
-      fd.append('durationSeconds',String(recSeconds));
 
       var bar=document.getElementById('upload-bar');
       var pct=document.getElementById('upload-pct');
-
-      // Use XHR instead of fetch so we get upload progress events
-      var xhr=new XMLHttpRequest();
-      xhr.open('POST','/api/teleprompter/recordings',true);
-      xhr.withCredentials=true;
-
-      xhr.upload.onprogress=function(e){
-        if(!e.lengthComputable)return;
-        var p=Math.round(e.loaded/e.total*100);
-        if(bar)bar.style.width=p+'%';
-        if(pct)pct.textContent=p+'%';
-      };
 
       function onSuccess(data){
         recordingId=data.id;
@@ -551,7 +532,6 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg success" style="font-size:11px">&#x2601; Saved to your account \u2014 available for 30 days.</p>';
         document.getElementById('review-warn').style.display='none';
         setCamState('review');
-        // Notify the parent page so it can refresh "Your Takes" without a reload
         try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
       }
 
@@ -562,15 +542,68 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         setCamState('review');
       }
 
-      xhr.onload=function(){
-        if(xhr.status>=200&&xhr.status<300){
-          try{onSuccess(JSON.parse(xhr.responseText));}catch(e){onFail();}
-        } else {
-          onFail();
-        }
-      };
-      xhr.onerror=function(){onFail();};
-      xhr.send(fd);
+      // ── Step 1: ask the server for a presigned GCS PUT URL ──
+      // This is a small JSON request that easily passes through the proxy.
+      // The actual video never goes through the proxy at all — it goes
+      // directly from the browser to Google Cloud Storage (step 2).
+      fetch('/api/teleprompter/recordings/prepare-upload',{
+        method:'POST',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:'{}'
+      })
+      .then(function(r){
+        if(!r.ok)return Promise.reject('prepare-upload failed: '+r.status);
+        return r.json();
+      })
+      .then(function(prep){
+        var uploadUrl=prep.uploadUrl;
+        var storageKey=prep.storageKey;
+
+        // ── Step 2: PUT the blob directly to GCS (bypasses deployment proxy) ──
+        var xhr=new XMLHttpRequest();
+        xhr.open('PUT',uploadUrl,true);
+        xhr.setRequestHeader('Content-Type',recMimeType||'video/webm');
+
+        xhr.upload.onprogress=function(e){
+          if(!e.lengthComputable)return;
+          var p=Math.round(e.loaded/e.total*100);
+          if(bar)bar.style.width=p+'%';
+          if(pct)pct.textContent=p+'%';
+        };
+
+        xhr.onload=function(){
+          if(xhr.status<200||xhr.status>=300){onFail();return;}
+
+          // ── Step 3: register the recording in the database ──
+          fetch('/api/teleprompter/recordings/confirm-upload',{
+            method:'POST',
+            credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              storageKey:storageKey,
+              title:SCRIPT_TITLE||'Untitled Take',
+              scriptId:SCRIPT_ID||null,
+              durationSeconds:recSeconds,
+              mimeType:recMimeType||'video/webm',
+              sizeBytes:recordedBlob?recordedBlob.size:null
+            })
+          })
+          .then(function(r){
+            if(!r.ok)return Promise.reject('confirm-upload failed: '+r.status);
+            return r.json();
+          })
+          .then(function(data){onSuccess(data);})
+          .catch(function(){onFail();});
+        };
+
+        xhr.onerror=function(){onFail();};
+        xhr.send(recordedBlob);
+      })
+      .catch(function(err){
+        console.error('[teleprompter] upload error:',err);
+        onFail();
+      });
     }
 
     function downloadRecording(){

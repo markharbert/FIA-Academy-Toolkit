@@ -4940,6 +4940,74 @@ export async function registerRoutes(
   });
 
   // ── Teleprompter Recordings ──
+
+  // Step 1 of the two-step signed-URL upload flow.
+  // Returns a presigned GCS PUT URL so the browser can push the video directly
+  // to cloud storage without routing through the deployment proxy (which has a
+  // request-body size limit that kills large video uploads in production).
+  app.post("/api/teleprompter/recordings/prepare-upload", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const objectStorage = new ObjectStorageService();
+      const uploadUrl = await objectStorage.getObjectEntityUploadURL();
+      const storageKey = objectStorage.normalizeObjectEntityPath(uploadUrl);
+      res.json({ uploadUrl, storageKey });
+    } catch (err) {
+      console.error("[Teleprompter] prepare-upload error:", err);
+      res.status(500).json({ message: "Failed to generate upload URL" });
+    }
+  });
+
+  // Step 2 of the two-step signed-URL upload flow.
+  // Called after the browser has PUT the video directly to GCS. Registers the
+  // recording in the database and increments the script take counter.
+  app.post("/api/teleprompter/recordings/confirm-upload", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { storageKey, title: rawTitle, scriptId: rawScriptId, durationSeconds: rawDuration, mimeType: rawMime, sizeBytes: rawSize } = req.body ?? {};
+
+      if (!storageKey || typeof storageKey !== "string" || !storageKey.startsWith("/objects/")) {
+        return res.status(400).json({ message: "Invalid storage key" });
+      }
+
+      const scriptId = (typeof rawScriptId === "string" && rawScriptId) ? rawScriptId : null;
+      const baseTitle = (typeof rawTitle === "string" && rawTitle.trim()) ? rawTitle.trim().slice(0, 100) : "Untitled";
+      const durationSeconds = rawDuration ? (parseInt(String(rawDuration), 10) || null) : null;
+      const mimeType = (typeof rawMime === "string" && rawMime) ? rawMime : "video/webm";
+      const sizeBytes = rawSize ? (parseInt(String(rawSize), 10) || null) : null;
+
+      let takeNumber: number;
+      if (scriptId) {
+        takeNumber = await storage.incrementTeleprompterScriptTakeCount(scriptId, userId);
+      } else {
+        const existingRecordings = await storage.getTeleprompterRecordingsByUser(userId);
+        const takeRegex = /^Take (\d+)\s*\u2014/;
+        const suffix = " \u2014 " + baseTitle;
+        const maxTake = existingRecordings
+          .filter((r) => r.title.endsWith(suffix))
+          .reduce((max, r) => { const m = takeRegex.exec(r.title); return m ? Math.max(max, parseInt(m[1], 10)) : max; }, 0);
+        takeNumber = maxTake + 1;
+      }
+      const title = `Take ${takeNumber} \u2014 ${baseTitle}`;
+
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      const recording = await storage.createTeleprompterRecording({
+        userId,
+        scriptId,
+        title,
+        storageKey,
+        mimeType,
+        sizeBytes,
+        durationSeconds,
+        expiresAt,
+      });
+      res.json(recording);
+    } catch (err) {
+      console.error("[Teleprompter] confirm-upload error:", err);
+      res.status(500).json({ message: "Failed to register recording" });
+    }
+  });
+
   app.post("/api/teleprompter/recordings", requireAuth, upload.single("video"), async (req: Request, res: Response) => {
     const file = req.file;
     if (!file) return res.status(400).json({ message: "No video file received" });
