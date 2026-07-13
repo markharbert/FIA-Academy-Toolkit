@@ -221,7 +221,8 @@ export default function TeleprompterPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/scripts"] });
       setDirty(false);
-      toast({ title: "Script saved" });
+      setAutoSaveStatus("saved");
+      setTimeout(() => setAutoSaveStatus("idle"), 2500);
     },
     onError: (err: Error) => {
       toast({ title: "Failed to save", description: err.message, variant: "destructive" });
@@ -754,7 +755,7 @@ export default function TeleprompterPage() {
                       className={`text-xs ml-1 ${autoSaveStatus === "saved" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}
                       data-testid="text-dirty"
                     >
-                      {autoSaveStatus === "saving" ? "Saving…" : autoSaveStatus === "saved" ? "✓ Saved" : "Unsaved changes"}
+                      {autoSaveStatus === "saving" ? "Saving…" : autoSaveStatus === "saved" ? "✓ Changes saved" : "Unsaved changes"}
                     </span>
                   )}
                 </div>
