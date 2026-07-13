@@ -97,6 +97,8 @@ export default function TeleprompterPage() {
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
   const [transcriptModal, setTranscriptModal] = useState<{ open: boolean; title: string; text: string }>({ open: false, title: "", text: "" });
   const [dirty, setDirty] = useState(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   // Fetch recording as a blob when preview opens — one continuous download instead
   // of the browser making multiple range requests hunting for the moov atom.
@@ -163,6 +165,33 @@ export default function TeleprompterPage() {
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+
+  // Auto-save: 5 seconds after the last change, silently PATCH the existing script.
+  // Only runs for scripts that already exist (selectedId set). New scripts require
+  // an explicit "Save to library" so the user can give them a title first.
+  useEffect(() => {
+    if (!dirty || !selectedId || !content.trim()) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      setAutoSaveStatus("saving");
+      try {
+        await apiRequest("PATCH", `/api/teleprompter/scripts/${selectedId}`, {
+          title: title.trim() || "Untitled script",
+          content: content.trim(),
+          bulletPoints: bulletPoints.trim() || null,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/scripts"] });
+        setDirty(false);
+        setAutoSaveStatus("saved");
+        setTimeout(() => setAutoSaveStatus("idle"), 2500);
+      } catch {
+        setAutoSaveStatus("idle");
+      }
+    }, 5000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [dirty, selectedId, title, content, bulletPoints]);
 
   const createMutation = useMutation({
     mutationFn: async (data: { title: string; content: string; bulletPoints?: string | null }) => {
@@ -267,6 +296,11 @@ export default function TeleprompterPage() {
   };
 
   const handleSave = async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setAutoSaveStatus("idle");
     await performSave();
   };
 
@@ -715,9 +749,12 @@ export default function TeleprompterPage() {
                     className="hidden"
                     data-testid="input-file"
                   />
-                  {dirty && selectedId && (
-                    <span className="text-xs text-amber-600 dark:text-amber-400 ml-1" data-testid="text-dirty">
-                      Unsaved changes
+                  {selectedId && (dirty || autoSaveStatus !== "idle") && (
+                    <span
+                      className={`text-xs ml-1 ${autoSaveStatus === "saved" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}
+                      data-testid="text-dirty"
+                    >
+                      {autoSaveStatus === "saving" ? "Saving…" : autoSaveStatus === "saved" ? "✓ Saved" : "Unsaved changes"}
                     </span>
                   )}
                 </div>
