@@ -17,7 +17,15 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   const bulletsHtml = bulletPoints
-    ? bulletPoints.split("\n").filter((l) => l.trim()).map((l) => `<div class="bullet-line">${esc(l.trim())}</div>`).join("")
+    ? bulletPoints.split("\n").filter((l) => l.trim()).map((l) => {
+        const t = l.trim();
+        if (t.toUpperCase().startsWith("HOOK:")) {
+          return `<div class="bullet-hook">${esc(t)}</div>`;
+        } else if (t.toUpperCase().startsWith("CTA:")) {
+          return `<div class="bullet-cta">${esc(t)}</div>`;
+        }
+        return `<div class="bullet-line">${esc(t)}</div>`;
+      }).join("")
     : "";
 
   const sectionsHtml = cleaned
@@ -126,6 +134,8 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     #bullets-view::-webkit-scrollbar{display:none}
     .bullet-line{font-size:var(--text-size,32px);line-height:2.2;color:#fff;white-space:pre-wrap;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:8px;margin-bottom:8px}
     .bullet-line:last-child{border-bottom:none}
+    .bullet-hook{font-size:var(--text-size,32px);line-height:1.8;color:#facc15;font-weight:700;white-space:pre-wrap;border-bottom:2px solid rgba(250,204,21,.25);padding-bottom:12px;margin-bottom:16px}
+    .bullet-cta{font-size:var(--text-size,32px);line-height:1.8;color:#4ade80;font-weight:700;white-space:pre-wrap;border-top:2px solid rgba(74,222,128,.25);padding-top:12px;margin-top:8px}
   </style>
 </head>
 <body>

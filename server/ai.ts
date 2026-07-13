@@ -376,11 +376,22 @@ export async function generateBulletPoints(scriptContent: string): Promise<strin
     messages: [
       {
         role: "system",
-        content: "You are a video script assistant. Extract 6-10 concise bullet points from the provided video script that capture the key talking points. Each bullet should be a short, memorable phrase (5-10 words max) that a presenter can ad-lib from naturally. Return only the bullet points, one per line, starting each with a • character. No numbering, no extra commentary, no headers.",
+        content: `You are a video script assistant. Extract the key elements from the provided script and format them exactly like this — no extra commentary, no numbering, no markdown:
+
+HOOK: <one punchy sentence that grabs attention from the opening of the script>
+
+• <key talking point>
+• <key talking point>
+• <key talking point>
+(3–5 bullet points max — short, memorable phrases a presenter can ad-lib from)
+
+CTA: <the call to action from the script, one sentence>
+
+Follow this format exactly. HOOK first, then the bullet points, then CTA last.`,
       },
       {
         role: "user",
-        content: `Extract bullet points from this script:\n\n${scriptContent.trim().slice(0, 20000)}`,
+        content: `Extract the hook, bullet points, and call to action from this script:\n\n${scriptContent.trim().slice(0, 20000)}`,
       },
     ],
     max_completion_tokens: 600,
