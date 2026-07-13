@@ -82,7 +82,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     #hint{flex-shrink:0;text-align:center;padding:4px;font-family:monospace;font-size:10px;color:#2d2d2d;background:#0a0a0a;border-top:1px solid #1a1a1a}
 
     /* ── Right: camera panel ── */
-    #camera-panel{width:420px;flex-shrink:0;background:#111;border-left:1px solid #1e1e1e;display:flex;flex-direction:column}
+    #camera-panel{width:35%;flex-shrink:0;background:#111;border-left:1px solid #1e1e1e;display:flex;flex-direction:column}
 
     /* video area */
     #video-wrap{position:relative;width:100%;background:#000;overflow:hidden;aspect-ratio:16/9;flex-shrink:0}
