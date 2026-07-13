@@ -93,6 +93,7 @@ export default function TeleprompterPage() {
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
+  const [transcriptModal, setTranscriptModal] = useState<{ open: boolean; title: string; text: string }>({ open: false, title: "", text: "" });
   const [dirty, setDirty] = useState(false);
 
   // Fetch recording as a blob when preview opens — one continuous download instead
@@ -364,9 +365,9 @@ export default function TeleprompterPage() {
   }
 
   async function handleGetTranscript(rec: TeleprompterRecording) {
-    // If transcript already exists, go straight to download
+    // If transcript already exists, show it immediately in the modal
     if (rec.transcriptText) {
-      window.location.href = `/api/teleprompter/recordings/${rec.id}/transcript.txt`;
+      setTranscriptModal({ open: true, title: rec.title, text: rec.transcriptText });
       return;
     }
     setTranscribingIds((prev) => new Set(prev).add(rec.id));
@@ -374,10 +375,10 @@ export default function TeleprompterPage() {
       const res = await apiRequest("POST", `/api/teleprompter/recordings/${rec.id}/transcribe`, {});
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Transcription failed");
-      // Invalidate recordings cache so transcriptText shows up on the record
+      // Invalidate recordings cache so the button label updates to "Transcript"
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
-      // Trigger the .txt download now that transcript is stored
-      window.location.href = `/api/teleprompter/recordings/${rec.id}/transcript.txt`;
+      // Show the result in the modal
+      setTranscriptModal({ open: true, title: rec.title, text: data.transcript });
     } catch (err: any) {
       toast({ title: "Transcription failed", description: err.message, variant: "destructive" });
     } finally {
@@ -831,6 +832,41 @@ export default function TeleprompterPage() {
               <Download className="h-3.5 w-3.5" />
               Download this take
             </a>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transcript viewer modal */}
+      <Dialog open={transcriptModal.open} onOpenChange={(open) => !open && setTranscriptModal((m) => ({ ...m, open: false }))}>
+        <DialogContent className="max-w-2xl w-full">
+          <DialogHeader>
+            <DialogTitle className="text-base leading-snug">{transcriptModal.title}</DialogTitle>
+            <DialogDescription>Transcript — select all text or use the Copy button below.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 max-h-[60vh] overflow-y-auto rounded-md border border-border bg-muted/40 p-4">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground select-all">{transcriptModal.text}</p>
+          </div>
+          <div className="flex justify-between items-center pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(transcriptModal.text).then(() => {
+                  toast({ title: "Copied to clipboard" });
+                });
+              }}
+              data-testid="button-copy-transcript"
+            >
+              Copy Transcript
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setTranscriptModal((m) => ({ ...m, open: false }))}
+              data-testid="button-close-transcript"
+            >
+              Close
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
