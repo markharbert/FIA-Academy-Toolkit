@@ -704,6 +704,7 @@ export const scripts = pgTable("scripts", {
   }>(),
   scriptJson: jsonb("script_json").$type<ScriptJson>(),
   notes: text("notes"),
+  teleprompterScriptId: varchar("teleprompter_script_id"),
 });
 
 export const insertScriptSchema = createInsertSchema(scripts).omit({

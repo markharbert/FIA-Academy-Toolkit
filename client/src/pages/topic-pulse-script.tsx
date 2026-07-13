@@ -1167,6 +1167,9 @@ export default function TopicPulseScriptPage() {
         setEditedScriptJson(json as ScriptJson);
       }
     }
+    if (script && (script as any).teleprompterScriptId) {
+      setSavedTeleprompterScriptId((script as any).teleprompterScriptId);
+    }
   }, [script]);
 
   const isAutoSaveRef = useRef(false);
@@ -1195,8 +1198,14 @@ export default function TopicPulseScriptPage() {
       const res = await apiRequest("POST", "/api/teleprompter/scripts", payload);
       return res.json();
     },
-    onSuccess: (data) => {
-      if (data?.id) setSavedTeleprompterScriptId(data.id);
+    onSuccess: async (data) => {
+      if (data?.id) {
+        setSavedTeleprompterScriptId(data.id);
+        await apiRequest("PATCH", `/api/topic-pulse/scripts/${scriptId}`, {
+          teleprompterScriptId: data.id,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/scripts", scriptId] });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/scripts"] });
       toast({
         title: "Saved to Teleprompter",

@@ -4830,11 +4830,14 @@ export async function registerRoutes(
 
   app.patch("/api/topic-pulse/scripts/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const updates: { notes?: string; title?: string; scriptJson?: any } = {};
+      const updates: { notes?: string; title?: string; scriptJson?: any; teleprompterScriptId?: string | null } = {};
       if (typeof req.body.notes === "string") updates.notes = req.body.notes;
       if (typeof req.body.title === "string") updates.title = req.body.title;
       if (req.body.scriptJson && typeof req.body.scriptJson === "object") {
         updates.scriptJson = req.body.scriptJson;
+      }
+      if ("teleprompterScriptId" in req.body) {
+        updates.teleprompterScriptId = req.body.teleprompterScriptId ?? null;
       }
 
       const script = await storage.updateScript(req.params.id, req.session.userId!, updates);
