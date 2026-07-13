@@ -4948,15 +4948,18 @@ export async function registerRoutes(
       const scriptId = (typeof req.body.scriptId === "string" && req.body.scriptId) ? req.body.scriptId : null;
       const baseTitle = (typeof req.body.title === "string" && req.body.title.trim()) ? req.body.title.trim().slice(0, 100) : "Untitled";
       const durationSeconds = req.body.durationSeconds ? (parseInt(req.body.durationSeconds, 10) || null) : null;
-      // Auto-number takes — count existing takes for this script (or same base title)
+      // Auto-number takes — find the highest existing take number and go one above it
+      // (using count+1 would decrease after deletions, so we track the max instead)
       const existingRecordings = await storage.getTeleprompterRecordingsByUser(userId);
-      let takeNumber: number;
-      if (scriptId) {
-        takeNumber = existingRecordings.filter((r) => r.scriptId === scriptId).length + 1;
-      } else {
-        const suffix = " \u2014 " + baseTitle;
-        takeNumber = existingRecordings.filter((r) => r.title.endsWith(suffix)).length + 1;
-      }
+      const takeRegex = /^Take (\d+)\s*\u2014/;
+      const relevantTitles = scriptId
+        ? existingRecordings.filter((r) => r.scriptId === scriptId).map((r) => r.title)
+        : existingRecordings.filter((r) => r.title.endsWith(" \u2014 " + baseTitle)).map((r) => r.title);
+      const maxTake = relevantTitles.reduce((max, t) => {
+        const m = takeRegex.exec(t);
+        return m ? Math.max(max, parseInt(m[1], 10)) : max;
+      }, 0);
+      const takeNumber = maxTake + 1;
       const title = `Take ${takeNumber} \u2014 ${baseTitle}`;
       const isMp4 = file.mimetype.includes("mp4") || file.originalname.toLowerCase().endsWith(".mp4");
       const ext = path.extname(file.originalname).toLowerCase() || (isMp4 ? ".mp4" : ".webm");
