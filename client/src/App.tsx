@@ -242,6 +242,9 @@ function ProtectedRoutes() {
       <Route path="/help">
         {() => <ProtectedRoute component={HelpPage} />}
       </Route>
+      <Route path="/help/video-trends">
+        <Redirect to="/help/research" />
+      </Route>
       <Route path="/help/category/:slug">
         {() => <ProtectedRoute component={HelpCategoryPage} />}
       </Route>

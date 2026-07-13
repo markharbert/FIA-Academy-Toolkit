@@ -3069,7 +3069,7 @@ export default function AdminPage() {
                 <div>
                   <CardTitle>Keywords Everywhere</CardTitle>
                   <CardDescription>
-                    API credits and user usage for Video Trends feature
+                    API credits and user usage for the Research feature
                   </CardDescription>
                 </div>
               </div>
@@ -3201,7 +3201,7 @@ export default function AdminPage() {
                         <div className="text-sm">
                           <p className="font-medium text-amber-800 dark:text-amber-200">API Not Configured</p>
                           <p className="mt-1 text-amber-700 dark:text-amber-300">
-                            Set KEYWORDS_EVERYWHERE_API_KEY in environment to enable Video Trends.
+                            Set KEYWORDS_EVERYWHERE_API_KEY in environment to enable Research.
                           </p>
                         </div>
                       </div>
@@ -3224,7 +3224,7 @@ export default function AdminPage() {
                 System API Status
               </CardTitle>
               <CardDescription>
-                Services powering Video Trends. Keys are managed via environment variables.
+                Services powering Video Studio. Keys are managed via environment variables.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

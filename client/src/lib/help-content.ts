@@ -317,23 +317,23 @@ const senderReputationDashboardArticle: HelpArticle = {
   ],
 };
 
-// ─── Video Trends Article ─────────────────────────────────────────────────────
+// ─── Research Article ─────────────────────────────────────────────────────────
 
 const videoTrendsArticle: HelpArticle = {
-  slug: "video-trends",
-  title: "How to Use Video Trends",
+  slug: "research",
+  title: "How to Use Research",
   subtitle: "Find in-demand YouTube topics with real search-volume data, then turn the best ones into a complete script using Mark's 5-part formula.",
   category: "Video Studio",
   categorySlug: "video-studio",
   readMinutes: 5,
   overview:
-    "Video Trends does two jobs in one place. First, it pulls real keyword data from Google, YouTube, Pinterest, and TikTok to show you what people are actually searching for around any niche or keyword. Second, once you find a topic worth recording, it generates a complete video script — Hook, Set the Hook, First CTA, Content, and Final CTA — that follows the same proven formula you score your videos against. This guide walks through every screen.",
+    "Research does two jobs in one place. First, it pulls real keyword data from Google, YouTube, Pinterest, and TikTok to show you what people are actually searching for around any niche or keyword. Second, once you find a topic worth recording, it generates a complete video script — Hook, Set the Hook, First CTA, Content, and Final CTA — that follows the same proven formula you score your videos against. This guide walks through every screen.",
   steps: [
     {
       number: 1,
-      title: "Open Video Trends and run a search",
+      title: "Open Research and run a search",
       body: [
-        'In the sidebar, click "Video Studio" and then open Research (Video Trends). You will land on the hub page.',
+        'In the sidebar, click "Video Studio" and then open Research. You will land on the hub page.',
         "In the search bar at the top, type a niche or keyword you want to research — for example a product, a problem your audience faces, or a topic you have been thinking about covering. Then click Find Topics. A run typically returns 24 topic ideas with full keyword data in under a minute.",
         "If you want to bias the results toward a specific style of video, click one of the Quick filter presets — Review, Comparison, How-To, or Problem Fix — before you search. Your monthly credits are shown above the search bar so you always know how many runs you have left this month.",
       ],
@@ -369,7 +369,7 @@ const videoTrendsArticle: HelpArticle = {
       number: 4,
       title: "Save topics for later",
       body: [
-        'When you find a topic you like but are not ready to record yet, click "Save" in the side panel. Saved topics live in your Saved Topics page, which you can open from the Video Trends sidebar at any time.',
+        'When you find a topic you like but are not ready to record yet, click "Save" in the side panel. Saved topics live in your Saved Topics page, which you can open from the Research page at any time.',
         "Saved topics are split into Active (still on your list) and Completed (you have already recorded a video for them). Mark a topic complete when you finish a video so the list stays focused on what is next.",
       ],
       illustrationKey: "vt-saved",
@@ -382,7 +382,7 @@ const videoTrendsArticle: HelpArticle = {
         "The script page opens with the topic stats pinned at the top so you keep the data in mind, and the script body laid out section-by-section with target durations on each part. Switch between Long Form and Shorts at the top to get a script tuned for the format you are recording.",
         "When you are happy with the script, use Copy Full Script to paste it into your teleprompter or notes app, or Download PDF to save a branded copy. The Description, Pinned Comment, and Call To Action tabs give you matching copy you can paste straight into YouTube when you upload.",
       ],
-      note: "Generated scripts are saved automatically — you can come back to them from the Generated Scripts page in the Video Trends sidebar at any time.",
+      note: "Generated scripts are saved automatically — you can come back to them from Scripts in the Video Studio sidebar at any time.",
       illustrationKey: "vt-script-detail",
     },
   ],
@@ -393,19 +393,19 @@ const videoTrendsArticle: HelpArticle = {
 const scriptsArticle: HelpArticle = {
   slug: "scripts",
   title: "How to Use Generated Scripts",
-  subtitle: "Edit, organize, and reuse the video scripts you generate from Video Trends — including matching descriptions, pinned comments, and CTAs.",
+  subtitle: "Edit, organize, and reuse the video scripts you generate from Research — including matching descriptions, pinned comments, and CTAs.",
   category: "Video Studio",
   categorySlug: "video-studio",
   readMinutes: 4,
   overview:
-    "Every time you click Generate Script in Video Trends, the result is saved to your Generated Scripts library so you can come back to it any time. The scripts page is where you edit the copy, switch between Long Form and Shorts versions, grab a matching YouTube description and pinned comment, plug in your offer for the CTAs, and export the final script for your teleprompter.",
+    "Every time you click Generate Script in Research, the result is saved to your Generated Scripts library so you can come back to it any time. The scripts page is where you edit the copy, switch between Long Form and Shorts versions, grab a matching YouTube description and pinned comment, plug in your offer for the CTAs, and export the final script for your teleprompter.",
   steps: [
     {
       number: 1,
       title: "Open your Generated Scripts library",
       body: [
         "From the sidebar, open Video Studio and click Scripts. This page lists every script you have generated, newest first.",
-        "Each card shows the script title, the date it was created, the target video length, and the same topic signals you saw in Video Trends — monthly search volume, trend arrow, and opportunity score — so you can quickly tell which scripts are still worth recording.",
+        "Each card shows the script title, the date it was created, the target video length, and the same topic signals you saw in Research — monthly search volume, trend arrow, and opportunity score — so you can quickly tell which scripts are still worth recording.",
         "Click any card to open the full script editor.",
       ],
       illustrationKey: "scripts-list",

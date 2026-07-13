@@ -176,7 +176,7 @@ export function SrP2InfrastructureIllustration() {
   return <ScreenshotIllustration src={srP2Step8} alt="Infrastructure tab annotated: red box on the Infrastructure tab, orange boxes highlighting the Sending IP Reputation card with 8 High and 2 Medium IPs, and the Delivery Errors card" />;
 }
 
-// ─── Video Trends Illustrations ───────────────────────────────────────────────
+// ─── Research Illustrations ───────────────────────────────────────────────────
 
 export function VtHubIllustration() {
   const annotations: Annotation[] = [
@@ -188,7 +188,7 @@ export function VtHubIllustration() {
   return (
     <AnnotatedScreenshot
       src={vtHub}
-      alt="Video Trends hub showing the keyword search bar, monthly credits badge, quick-filter preset pills, Saved Topics and Scripts stat cards, and a Recent Searches list with two prior runs"
+      alt="Research hub showing the keyword search bar, monthly credits badge, quick-filter preset pills, Saved Topics and Scripts stat cards, and a Recent Searches list with two prior runs"
       annotations={annotations}
     />
   );
@@ -202,7 +202,7 @@ export function VtExploreListIllustration() {
   return (
     <AnnotatedScreenshot
       src={vtExploreList}
-      alt="Video Trends results page for the seed query 'claude ai tutorial' showing 24 topic cards. Each card has the topic title, monthly search volume badge, intent badge (How-To, Beginner Guide), a trend arrow, and an opportunity score on the right"
+      alt="Research results page for the seed query 'claude ai tutorial' showing 24 topic cards. Each card has the topic title, monthly search volume badge, intent badge (How-To, Beginner Guide), a trend arrow, and an opportunity score on the right"
       annotations={annotations}
     />
   );
