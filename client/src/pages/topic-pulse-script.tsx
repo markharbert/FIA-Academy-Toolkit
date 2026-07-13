@@ -1657,22 +1657,6 @@ export default function TopicPulseScriptPage() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {editedScriptJson?.fullScript && (
-                <Button
-                  size="sm"
-                  onClick={handleSaveToTeleprompter}
-                  disabled={saveToTeleprompterMutation.isPending || overwriteTeleprompterMutation.isPending}
-                  className="bg-violet-600 hover:bg-violet-700 text-white border-0"
-                  data-testid="button-save-to-teleprompter"
-                >
-                  {(saveToTeleprompterMutation.isPending || overwriteTeleprompterMutation.isPending) ? (
-                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <BookmarkPlus className="h-4 w-4 mr-1.5" />
-                  )}
-                  Save to Teleprompter
-                </Button>
-              )}
               <Button
                 size="sm"
                 onClick={() => setShowResearchPanel(!showResearchPanel)}
@@ -1859,6 +1843,20 @@ export default function TopicPulseScriptPage() {
                         >
                           <FileDown className="h-4 w-4 mr-2" />
                           PDF
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSaveToTeleprompter}
+                          disabled={saveToTeleprompterMutation.isPending || overwriteTeleprompterMutation.isPending}
+                          className="bg-violet-600 hover:bg-violet-700 text-white border-0"
+                          data-testid="button-save-to-teleprompter"
+                        >
+                          {(saveToTeleprompterMutation.isPending || overwriteTeleprompterMutation.isPending) ? (
+                            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                          ) : (
+                            <BookmarkPlus className="h-4 w-4 mr-1.5" />
+                          )}
+                          Save to Teleprompter
                         </Button>
                       </div>
                     </div>
