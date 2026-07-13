@@ -4940,10 +4940,10 @@ export async function registerRoutes(
       if (scriptId) {
         takeNumber = existingRecordings.filter((r) => r.scriptId === scriptId).length + 1;
       } else {
-        const prefix = baseTitle + " \u2014 Take ";
-        takeNumber = existingRecordings.filter((r) => r.title.startsWith(prefix)).length + 1;
+        const suffix = " \u2014 " + baseTitle;
+        takeNumber = existingRecordings.filter((r) => r.title.endsWith(suffix)).length + 1;
       }
-      const title = `${baseTitle} \u2014 Take ${takeNumber}`;
+      const title = `Take ${takeNumber} \u2014 ${baseTitle}`;
       const ext = path.extname(file.originalname).toLowerCase() || (file.mimetype.includes("mp4") ? ".mp4" : ".webm");
       const objectId = crypto.randomUUID();
       const storageKey = `/objects/recordings/${userId}/${objectId}${ext}`;
