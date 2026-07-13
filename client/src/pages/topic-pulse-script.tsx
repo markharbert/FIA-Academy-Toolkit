@@ -77,60 +77,14 @@ function TrendIcon({ direction }: { direction: string }) {
   return <Minus className="h-4 w-4 text-muted-foreground" />;
 }
 
-function HeroIntentAnalysis({ topicId, existingAnalysis }: { topicId: string; existingAnalysis?: string | null }) {
-  const [analysis, setAnalysis] = useState<string | null>(existingAnalysis || null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    setAnalysis(existingAnalysis || null);
-  }, [topicId, existingAnalysis]);
-
-  const generate = async () => {
-    setIsLoading(true);
-    setError(false);
-    try {
-      const res = await fetch(`/api/topic-pulse/topics/${topicId}/intent-analysis`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setAnalysis(data.analysis);
-    } catch {
-      setError(true);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+function HeroIntentAnalysis({ analysis }: { analysis?: string | null }) {
+  if (!analysis) return null;
   return (
     <div className="mt-3 pt-3 border-t border-white/10 flex items-start gap-2.5">
       <Brain className="h-4 w-4 text-white/40 mt-0.5 shrink-0" />
       <div className="flex-1 min-w-0">
         <span className="text-white/40 text-xs font-semibold uppercase tracking-wider">Intent Analysis</span>
-        {analysis ? (
-          <p className="text-white/75 text-sm leading-relaxed mt-1" data-testid="text-hero-intent-analysis">{analysis}</p>
-        ) : isLoading ? (
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-white/40" />
-            <span className="text-white/40 text-xs">Analyzing search intent…</span>
-          </div>
-        ) : error ? (
-          <div className="flex items-center gap-2 mt-1.5">
-            <span className="text-white/40 text-xs">Failed to generate.</span>
-            <button onClick={generate} className="text-white/60 text-xs underline hover:text-white transition-colors">Try again</button>
-          </div>
-        ) : (
-          <button
-            onClick={generate}
-            className="mt-1.5 flex items-center gap-1.5 text-white/50 hover:text-white text-xs transition-colors"
-            data-testid="button-generate-intent-analysis"
-          >
-            <Sparkles className="h-3 w-3" />
-            Generate intent analysis
-          </button>
-        )}
+        <p className="text-white/75 text-sm leading-relaxed mt-1" data-testid="text-hero-intent-analysis">{analysis}</p>
       </div>
     </div>
   );
@@ -1729,12 +1683,7 @@ export default function TopicPulseScriptPage() {
           </div>
 
           {/* Intent analysis */}
-          {script.topic && (
-            <HeroIntentAnalysis
-              topicId={script.topic.id}
-              existingAnalysis={(script.topic as any).intentAnalysis}
-            />
-          )}
+          <HeroIntentAnalysis analysis={(script.topic as any)?.intentAnalysis} />
         </div>
       </div>
 
