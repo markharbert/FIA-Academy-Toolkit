@@ -244,9 +244,18 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 
         <!-- UPLOADING -->
         <div id="cam-uploading" class="cam-section">
-          <div class="upload-spinner"></div>
-          <p class="cam-msg" style="text-align:center;font-weight:600">Processing video…</p>
-          <p class="cam-msg" style="text-align:center;font-size:11px">Saving your take to your account. Hang tight.</p>
+          <p class="cam-msg warn" style="text-align:center;font-size:13px;font-weight:700">⚠ Don't close this window yet</p>
+          <p class="cam-msg" style="text-align:center;font-size:11px;margin-top:-4px">Your video is uploading. Closing now will lose your recording.</p>
+          <div style="margin:10px 0 4px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.45)">Uploading…</span>
+              <span id="upload-pct" style="font-family:monospace;font-size:11px;color:rgba(255,255,255,.7)">0%</span>
+            </div>
+            <div style="background:rgba(255,255,255,.1);border-radius:999px;height:7px;overflow:hidden">
+              <div id="upload-bar" style="height:100%;width:0%;background:#10b981;border-radius:999px;transition:width .25s ease"></div>
+            </div>
+          </div>
+          <p class="cam-msg" style="text-align:center;font-size:10px;color:rgba(255,255,255,.25);margin-top:4px">Large videos may take several minutes — this window will close automatically when done.</p>
         </div>
 
         <!-- REVIEW -->
@@ -519,27 +528,49 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       if(SCRIPT_ID)fd.append('scriptId',SCRIPT_ID);
       fd.append('title',SCRIPT_TITLE||'Untitled Take');
       fd.append('durationSeconds',String(recSeconds));
-      fetch('/api/teleprompter/recordings',{method:'POST',body:fd,credentials:'include'})
-        .then(function(r){
-          if(!r.ok)return Promise.reject(r.status);
-          return r.json();
-        })
-        .then(function(data){
-          recordingId=data.id;
-          uploadFailed=false;
-          hasUnsaved=false;
-          document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg success" style="font-size:11px">&#x2601; Saved to your account \u2014 available for 30 days.</p>';
-          document.getElementById('review-warn').style.display='none';
-          setCamState('review');
-          // Notify the parent page so it can refresh "Your Takes" without a reload
-          try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
-        })
-        .catch(function(){
-          uploadFailed=true;
-          document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg error" style="font-size:11px">\u26a0 Cloud save failed \u2014 download below to keep your take.</p>';
-          document.getElementById('review-warn').style.display='block';
-          setCamState('review');
-        });
+
+      var bar=document.getElementById('upload-bar');
+      var pct=document.getElementById('upload-pct');
+
+      // Use XHR instead of fetch so we get upload progress events
+      var xhr=new XMLHttpRequest();
+      xhr.open('POST','/api/teleprompter/recordings',true);
+      xhr.withCredentials=true;
+
+      xhr.upload.onprogress=function(e){
+        if(!e.lengthComputable)return;
+        var p=Math.round(e.loaded/e.total*100);
+        if(bar)bar.style.width=p+'%';
+        if(pct)pct.textContent=p+'%';
+      };
+
+      function onSuccess(data){
+        recordingId=data.id;
+        uploadFailed=false;
+        hasUnsaved=false;
+        document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg success" style="font-size:11px">&#x2601; Saved to your account \u2014 available for 30 days.</p>';
+        document.getElementById('review-warn').style.display='none';
+        setCamState('review');
+        // Notify the parent page so it can refresh "Your Takes" without a reload
+        try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
+      }
+
+      function onFail(){
+        uploadFailed=true;
+        document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg error" style="font-size:11px">\u26a0 Cloud save failed \u2014 download below to keep your take.</p>';
+        document.getElementById('review-warn').style.display='block';
+        setCamState('review');
+      }
+
+      xhr.onload=function(){
+        if(xhr.status>=200&&xhr.status<300){
+          try{onSuccess(JSON.parse(xhr.responseText));}catch(e){onFail();}
+        } else {
+          onFail();
+        }
+      };
+      xhr.onerror=function(){onFail();};
+      xhr.send(fd);
     }
 
     function downloadRecording(){
@@ -569,6 +600,11 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       camPlayback.src='';
       document.getElementById('review-cloud-msg').innerHTML='';
       document.getElementById('review-warn').style.display='block';
+      // Reset progress bar for the next take
+      var bar=document.getElementById('upload-bar');
+      var pct=document.getElementById('upload-pct');
+      if(bar)bar.style.width='0%';
+      if(pct)pct.textContent='0%';
       setCamState('ready');
     }
 
