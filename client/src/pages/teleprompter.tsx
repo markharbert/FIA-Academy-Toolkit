@@ -39,6 +39,7 @@ import {
   Clock,
   Sparkles,
   Eye,
+  Scissors,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -882,6 +883,20 @@ export default function TeleprompterPage() {
                                 </a>
                               </TooltipTrigger>
                               <TooltipContent>Download Video</TooltipContent>
+                            </Tooltip>
+
+                            {/* Edit in Descript — coming soon */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  disabled
+                                  className="p-2 rounded-md text-muted-foreground/40 cursor-not-allowed"
+                                  data-testid={`button-edit-in-descript-${rec.id}`}
+                                >
+                                  <Scissors className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>Edit in Descript — Coming soon</TooltipContent>
                             </Tooltip>
 
                             {/* Delete */}
