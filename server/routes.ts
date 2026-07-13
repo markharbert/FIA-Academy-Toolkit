@@ -4777,7 +4777,22 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Access denied" });
       }
 
-      const scriptJson = await generateScript(parsed.data, topic);
+      // Ensure intent analysis exists — generate and persist it if not
+      let intentAnalysis = topic.intentAnalysis;
+      if (!intentAnalysis) {
+        try {
+          intentAnalysis = await generateIntentAnalysis(topic);
+          const { db } = await import("./db");
+          const { topics } = await import("@shared/schema");
+          const { eq } = await import("drizzle-orm");
+          await db.update(topics).set({ intentAnalysis }).where(eq(topics.id, topic.id));
+        } catch (e) {
+          console.error("[TopicPulse] Intent analysis generation failed (non-fatal):", e);
+          intentAnalysis = null;
+        }
+      }
+
+      const scriptJson = await generateScript(parsed.data, topic, intentAnalysis);
 
       const script = await storage.createScript({
         userId: req.session.userId!,

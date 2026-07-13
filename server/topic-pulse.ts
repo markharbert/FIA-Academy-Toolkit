@@ -525,7 +525,7 @@ For questions, list common questions viewers have about this topic.`;
   }
 }
 
-export async function generateScript(input: ScriptGenerationInput, topic: Topic): Promise<ScriptJson> {
+export async function generateScript(input: ScriptGenerationInput, topic: Topic, intentAnalysis?: string | null): Promise<ScriptJson> {
   const durationGuide = {
     "3-5": { hook: "10-15 seconds", setHook: "20-30 seconds", firstCTA: "10 seconds", content: "2-3 minutes", finalCTA: "20-30 seconds" },
     "6-10": { hook: "15-20 seconds", setHook: "30-45 seconds", firstCTA: "15 seconds", content: "4-7 minutes", finalCTA: "30-45 seconds" },
@@ -549,6 +549,7 @@ PRIMARY PROMISE: ${primaryPromise}
 ${input.personalAngle ? `PERSONAL ANGLE: ${input.personalAngle}` : ""}
 TONE: ${input.tonePreference || "friendly"}
 TARGET LENGTH: ${input.videoLengthTarget} minutes
+${intentAnalysis ? `\nSEARCHER INTENT ANALYSIS (use this to deeply understand WHY people search this keyword and what they truly want — let it shape your hook, the pain you agitate, and every promise you make):\n${intentAnalysis}` : ""}
 
 Create a script with these exact sections and timing:
 1. HOOK (${durations.hook}): Strong promise, curiosity line, who this is for
