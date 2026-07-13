@@ -55,7 +55,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     #cd-num{font-weight:700;color:#fff;font-size:14px}
 
     /* ── Main two-panel layout ── */
-    #main{flex:1;display:flex;overflow:hidden;min-height:0}
+    #main{flex:1;display:flex;overflow:hidden;min-height:0;padding-right:16px;padding-bottom:12px}
 
     /* ── Left: teleprompter ── */
     #left{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
@@ -366,6 +366,8 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 
     function startRecording(){
       if(!mediaStream)return;
+      // Also kick off the teleprompter scroll if it isn't already running
+      if(!playing)togglePlay();
       recMimeType=getSupportedMimeType();
       var opts=recMimeType?{mimeType:recMimeType}:{};
       try{mediaRecorder=new MediaRecorder(mediaStream,opts);}
@@ -391,6 +393,8 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     }
 
     function stopRecording(){
+      // Also pause the teleprompter scroll when recording stops
+      if(playing)togglePlay();
       if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();
       clearInterval(timerInterval);
     }
