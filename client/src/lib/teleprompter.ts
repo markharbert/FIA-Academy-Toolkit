@@ -101,7 +101,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     #video-wrap.fmt-portrait{aspect-ratio:9/16;width:auto;height:clamp(180px,40vh,300px);align-self:center}
     #video-wrap.fmt-square{width:100%;aspect-ratio:1/1;align-self:stretch}
     #cam-preview{width:100%;height:100%;object-fit:cover;display:none;transform:scaleX(-1)}
-    #cam-playback{width:100%;height:100%;object-fit:contain;display:none;background:#000}
+    #cam-playback{width:100%;height:100%;object-fit:cover;display:none;background:#000}
     #cam-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#0d0d0d}
     #cam-placeholder svg{opacity:.15}
     #cam-placeholder span{font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.2);letter-spacing:.08em}
@@ -480,7 +480,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     }
 
     function setFormat(fmt){
-      if(camState!=='idle'&&camState!=='denied')return;
+      if(camState==='recording'||camState==='uploading')return;
       if(selectedFormat===fmt)return;
       selectedFormat=fmt;
       ['landscape','portrait','square'].forEach(function(f){
@@ -488,6 +488,12 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         if(btn)btn.className='fmt-btn'+(f===fmt?' active':'');
       });
       document.getElementById('video-wrap').className='fmt-'+fmt;
+      // If camera is already running, restart it with new constraints
+      if(camState==='ready'){
+        if(mediaStream){mediaStream.getTracks().forEach(function(t){t.stop();});mediaStream=null;}
+        camPreview.srcObject=null;
+        requestCamera();
+      }
     }
 
     function requestCamera(){
@@ -522,15 +528,62 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 
     function startRecording(){
       if(!mediaStream)return;
-      // Also kick off the teleprompter scroll if it isn't already running
       if(!playing)togglePlay();
+
       recMimeType=getSupportedMimeType();
+
+      // ── Canvas-based recording: crops the stream to the exact target dimensions
+      // so the saved file is truly 9:16, 1:1, or 16:9 with no black bars.
+      var FORMAT_DIMS={landscape:{w:1280,h:720},portrait:{w:720,h:1280},square:{w:720,h:720}};
+      var dims=FORMAT_DIMS[selectedFormat]||FORMAT_DIMS.landscape;
+
+      var recCanvas=document.createElement('canvas');
+      recCanvas.width=dims.w;
+      recCanvas.height=dims.h;
+      var ctx=recCanvas.getContext('2d');
+
+      // Hidden source video to draw frames from
+      var srcVid=document.createElement('video');
+      srcVid.srcObject=mediaStream;
+      srcVid.muted=true;
+      srcVid.play().catch(function(){});
+
+      var animId=null;
+      function drawFrame(){
+        if(srcVid&&srcVid.readyState>=2&&srcVid.videoWidth){
+          var vw=srcVid.videoWidth,vh=srcVid.videoHeight;
+          var cw=recCanvas.width,ch=recCanvas.height;
+          // object-fit:cover center-crop math
+          var scale=Math.max(cw/vw,ch/vh);
+          var sw=cw/scale,sh=ch/scale;
+          var sx=(vw-sw)/2,sy=(vh-sh)/2;
+          ctx.drawImage(srcVid,sx,sy,sw,sh,0,0,cw,ch);
+        }
+        animId=requestAnimationFrame(drawFrame);
+      }
+      drawFrame();
+
+      // Build recording stream: canvas video + original audio
+      var recordingStream=mediaStream; // fallback if captureStream unsupported
+      if(typeof recCanvas.captureStream==='function'){
+        try{
+          var canvasStream=recCanvas.captureStream(30);
+          mediaStream.getAudioTracks().forEach(function(t){canvasStream.addTrack(t);});
+          recordingStream=canvasStream;
+        }catch(e){/* fall through to direct stream */}
+      }
+
       var opts=recMimeType?{mimeType:recMimeType}:{};
-      try{mediaRecorder=new MediaRecorder(mediaStream,opts);}
-      catch(e){mediaRecorder=new MediaRecorder(mediaStream);recMimeType=mediaRecorder.mimeType||'video/webm';}
+      try{mediaRecorder=new MediaRecorder(recordingStream,opts);}
+      catch(e){mediaRecorder=new MediaRecorder(recordingStream);recMimeType=mediaRecorder.mimeType||'video/webm';}
+
       recordedChunks=[];
       mediaRecorder.ondataavailable=function(e){if(e.data&&e.data.size>0)recordedChunks.push(e.data);};
       mediaRecorder.onstop=function(){
+        // Stop canvas animation loop
+        if(animId){cancelAnimationFrame(animId);animId=null;}
+        if(srcVid){srcVid.srcObject=null;}
+
         recordedBlob=new Blob(recordedChunks,{type:recMimeType||'video/webm'});
         if(recordedUrl)URL.revokeObjectURL(recordedUrl);
         recordedUrl=URL.createObjectURL(recordedBlob);
@@ -540,10 +593,10 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         var mb=(recordedBlob.size/1048576).toFixed(1);
         var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';
         document.getElementById('download-info').textContent=mb+' MB \u00b7 '+ext.replace('.','').toUpperCase()+' file';
-        // Switch to uploading state and begin cloud upload
         setCamState('uploading');
         uploadRecording();
       };
+
       mediaRecorder.start(1000);
       recSeconds=0;updateRecTimer();
       timerInterval=setInterval(function(){recSeconds++;updateRecTimer();},1000);
