@@ -821,6 +821,14 @@ export default function TeleprompterPage() {
                               <span>·</span>
                               <span>{formatBytes(rec.sizeBytes)}</span>
                               <span>·</span>
+                              <span className={`font-mono text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                                rec.format === "portrait" ? "bg-violet-500/10 text-violet-500" :
+                                rec.format === "square"   ? "bg-blue-500/10 text-blue-500" :
+                                "bg-muted text-muted-foreground"
+                              }`}>
+                                {rec.format === "portrait" ? "9:16" : rec.format === "square" ? "1:1" : "16:9"}
+                              </span>
+                              <span>·</span>
                               <span className={isExpiringSoon ? "text-amber-500 font-medium" : ""}>
                                 {daysLeft}
                               </span>

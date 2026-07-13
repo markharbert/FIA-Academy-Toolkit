@@ -752,6 +752,7 @@ export const teleprompterRecordings = pgTable("teleprompter_recordings", {
   mimeType: text("mime_type").notNull().default("video/webm"),
   sizeBytes: integer("size_bytes").notNull().default(0),
   durationSeconds: integer("duration_seconds"),
+  format: text("format").notNull().default("landscape"),
   expiresAt: timestamp("expires_at").notNull(),
   transcriptText: text("transcript_text"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),

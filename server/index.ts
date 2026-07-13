@@ -185,7 +185,11 @@ async function runStartupMigrations() {
       ALTER TABLE teleprompter_recordings
         ADD COLUMN IF NOT EXISTS transcript_text TEXT
     `);
-    console.log("[startup] teleprompter_recordings transcript_text migration complete");
+    await db.execute(sql`
+      ALTER TABLE teleprompter_recordings
+        ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'landscape'
+    `);
+    console.log("[startup] teleprompter_recordings transcript_text + format migration complete");
     await db.execute(sql`
       ALTER TABLE teleprompter_scripts
         ADD COLUMN IF NOT EXISTS take_count INTEGER NOT NULL DEFAULT 0

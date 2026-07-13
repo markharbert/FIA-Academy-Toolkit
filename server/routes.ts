@@ -4974,6 +4974,8 @@ export async function registerRoutes(
       const durationSeconds = rawDuration ? (parseInt(String(rawDuration), 10) || null) : null;
       const mimeType = (typeof rawMime === "string" && rawMime) ? rawMime : "video/webm";
       const sizeBytes = rawSize ? (parseInt(String(rawSize), 10) || null) : null;
+      const format = (typeof req.body.format === "string" && ["landscape", "portrait", "square"].includes(req.body.format))
+        ? req.body.format : "landscape";
 
       let takeNumber: number;
       if (scriptId) {
@@ -4999,6 +5001,7 @@ export async function registerRoutes(
         mimeType,
         sizeBytes,
         durationSeconds,
+        format,
         expiresAt,
       });
       res.json(recording);

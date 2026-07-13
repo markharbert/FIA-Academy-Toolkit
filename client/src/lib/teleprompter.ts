@@ -84,8 +84,22 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     /* ── Right: camera panel ── */
     #camera-panel{width:35%;flex-shrink:0;background:#111;border-left:1px solid #1e1e1e;display:flex;flex-direction:column}
 
+    /* ── Format picker ── */
+    #format-picker{flex-shrink:0;display:flex;justify-content:center;gap:4px;padding:7px 10px 6px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
+    .fmt-btn{display:flex;flex-direction:column;align-items:center;gap:4px;font-family:Arial,sans-serif;font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.35);background:transparent;border:1px solid transparent;border-radius:6px;cursor:pointer;padding:5px 9px;transition:.15s;min-width:56px}
+    .fmt-btn:hover{color:rgba(255,255,255,.7);background:rgba(255,255,255,.06)}
+    .fmt-btn.active{color:#fff;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
+    .fmt-btn.locked{opacity:.3;cursor:not-allowed;pointer-events:none}
+    .fmt-icon{display:block;border:2px solid currentColor;border-radius:2px;margin:0 auto}
+    .fmt-icon-land{width:28px;height:16px}
+    .fmt-icon-port{width:14px;height:25px}
+    .fmt-icon-sq{width:20px;height:20px}
+
     /* video area */
-    #video-wrap{position:relative;width:100%;background:#000;overflow:hidden;aspect-ratio:16/9;flex-shrink:0}
+    #video-wrap{position:relative;background:#000;overflow:hidden;flex-shrink:0}
+    #video-wrap.fmt-landscape{width:100%;aspect-ratio:16/9;align-self:stretch}
+    #video-wrap.fmt-portrait{aspect-ratio:9/16;width:auto;height:clamp(180px,40vh,300px);align-self:center}
+    #video-wrap.fmt-square{width:100%;aspect-ratio:1/1;align-self:stretch}
     #cam-preview{width:100%;height:100%;object-fit:cover;display:none;transform:scaleX(-1)}
     #cam-playback{width:100%;height:100%;object-fit:contain;display:none;background:#000}
     #cam-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#0d0d0d}
@@ -187,8 +201,20 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 
     <!-- Right: camera + recording -->
     <div id="camera-panel">
-      <!-- 16:9 video area -->
-      <div id="video-wrap">
+      <!-- Format picker -->
+      <div id="format-picker">
+        <button class="fmt-btn active" id="fmt-btn-landscape" onclick="setFormat('landscape')" title="YouTube · Facebook · 16:9">
+          <span class="fmt-icon fmt-icon-land"></span>YouTube 16:9
+        </button>
+        <button class="fmt-btn" id="fmt-btn-portrait" onclick="setFormat('portrait')" title="TikTok · Instagram Reels · 9:16">
+          <span class="fmt-icon fmt-icon-port"></span>Portrait 9:16
+        </button>
+        <button class="fmt-btn" id="fmt-btn-square" onclick="setFormat('square')" title="Instagram Feed · Square · 1:1">
+          <span class="fmt-icon fmt-icon-sq"></span>Square 1:1
+        </button>
+      </div>
+      <!-- Video area -->
+      <div id="video-wrap" class="fmt-landscape">
         <div id="cam-placeholder">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5">
             <path d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
@@ -419,6 +445,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     var mediaStream=null,mediaRecorder=null,recordedChunks=[],recordedBlob=null,recordedUrl=null,recMimeType='';
     var timerInterval=null,recSeconds=0;
     var hasUnsaved=false,recordingId=null,uploadFailed=false;
+    var selectedFormat='landscape';
 
     var camPreview=document.getElementById('cam-preview');
     var camPlayback=document.getElementById('cam-playback');
@@ -452,14 +479,30 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       return '';
     }
 
+    function setFormat(fmt){
+      if(camState!=='idle'&&camState!=='denied')return;
+      if(selectedFormat===fmt)return;
+      selectedFormat=fmt;
+      ['landscape','portrait','square'].forEach(function(f){
+        var btn=document.getElementById('fmt-btn-'+f);
+        if(btn)btn.className='fmt-btn'+(f===fmt?' active':'');
+      });
+      document.getElementById('video-wrap').className='fmt-'+fmt;
+    }
+
     function requestCamera(){
       setCamState('loading');
       if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
         document.getElementById('denied-msg').textContent='Camera API not supported in this browser.';
         setCamState('denied');return;
       }
+      var vidConstraints={
+        landscape:{width:{ideal:1920},height:{ideal:1080}},
+        portrait:{width:{ideal:1080},height:{ideal:1920}},
+        square:{width:{ideal:1080},height:{ideal:1080}}
+      }[selectedFormat]||{width:{ideal:1920},height:{ideal:1080}};
       navigator.mediaDevices.getUserMedia({
-        video:{width:{ideal:1920},height:{ideal:1080},facingMode:'user'},
+        video:Object.assign({facingMode:'user'},vidConstraints),
         audio:true
       }).then(function(stream){
         mediaStream=stream;
@@ -586,7 +629,8 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
               scriptId:SCRIPT_ID||null,
               durationSeconds:recSeconds,
               mimeType:recMimeType||'video/webm',
-              sizeBytes:recordedBlob?recordedBlob.size:null
+              sizeBytes:recordedBlob?recordedBlob.size:null,
+              format:selectedFormat
             })
           })
           .then(function(r){
