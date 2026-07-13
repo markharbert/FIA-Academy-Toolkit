@@ -95,6 +95,16 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     .fmt-icon-port{width:14px;height:25px}
     .fmt-icon-sq{width:20px;height:20px}
 
+    /* ── Device selector bar ── */
+    #device-bar{flex-shrink:0;display:none;flex-direction:column;gap:5px;padding:7px 10px;background:#0d0d0d;border-bottom:1px solid #1a1a1a}
+    #device-bar.vis{display:flex}
+    .dev-row{display:flex;align-items:center;gap:7px}
+    .dev-icon{flex-shrink:0;color:rgba(255,255,255,.35)}
+    .dev-select{flex:1;background:#1c1c1c;color:rgba(255,255,255,.75);border:1px solid #333;border-radius:6px;font-family:Arial,sans-serif;font-size:11px;padding:5px 6px;cursor:pointer;outline:none;min-width:0;max-width:100%}
+    .dev-select option{background:#1c1c1c;color:#fff}
+    .dev-select:hover:not(:disabled){border-color:#555;background:#252525}
+    .dev-select:disabled{opacity:.35;cursor:not-allowed}
+
     /* video area */
     #video-wrap{position:relative;background:#000;overflow:hidden;flex-shrink:0}
     #video-wrap.fmt-landscape{width:100%;aspect-ratio:16/9;align-self:stretch}
@@ -225,6 +235,22 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         <video id="cam-playback" controls></video>
         <div id="rec-dot"><span class="dot"></span><span>REC</span></div>
         <div id="rec-timer">0:00</div>
+      </div>
+
+      <!-- Device selector (camera + mic) — visible once camera is active -->
+      <div id="device-bar">
+        <div class="dev-row">
+          <svg class="dev-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+          <select id="cam-select" class="dev-select" onchange="switchCamera(this.value)">
+            <option>Loading cameras\u2026</option>
+          </select>
+        </div>
+        <div class="dev-row">
+          <svg class="dev-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
+          <select id="mic-select" class="dev-select" onchange="switchMic(this.value)">
+            <option>Loading microphones\u2026</option>
+          </select>
+        </div>
       </div>
 
       <!-- State-driven controls -->
@@ -446,12 +472,16 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     var timerInterval=null,recSeconds=0;
     var hasUnsaved=false,recordingId=null,uploadFailed=false;
     var selectedFormat='landscape';
+    var selectedCameraId='',selectedMicId='';
 
     var camPreview=document.getElementById('cam-preview');
     var camPlayback=document.getElementById('cam-playback');
     var camPlaceholder=document.getElementById('cam-placeholder');
     var recDot=document.getElementById('rec-dot');
     var recTimerEl=document.getElementById('rec-timer');
+    var deviceBar=document.getElementById('device-bar');
+    var camSelect=document.getElementById('cam-select');
+    var micSelect=document.getElementById('mic-select');
 
     function setCamState(s){
       camState=s;
@@ -464,6 +494,11 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       // REC overlay
       recDot.style.display=(s==='recording')?'flex':'none';
       recTimerEl.style.display=(s==='recording')?'block':'none';
+      // device bar — show only when camera is active; disable selects while recording
+      var devVisible=(s==='ready'||s==='recording');
+      deviceBar.className=devVisible?'vis':'';
+      camSelect.disabled=(s==='recording'||s==='uploading');
+      micSelect.disabled=(s==='recording'||s==='uploading');
       // section panels
       ['idle','loading','denied','ready','recording','uploading','review'].forEach(function(name){
         var el=document.getElementById('cam-'+name);
@@ -488,15 +523,17 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         if(btn)btn.className='fmt-btn'+(f===fmt?' active':'');
       });
       document.getElementById('video-wrap').className='fmt-'+fmt;
-      // If camera is already running, restart it with new constraints
+      // If camera is already running, restart it preserving device selection
       if(camState==='ready'){
         if(mediaStream){mediaStream.getTracks().forEach(function(t){t.stop();});mediaStream=null;}
         camPreview.srcObject=null;
-        requestCamera();
+        openCamera(selectedCameraId,selectedMicId);
       }
     }
 
-    function requestCamera(){
+    // Open the camera with optional specific device IDs.
+    // cameraId / micId may be '' to let the browser pick defaults.
+    function openCamera(cameraId,micId){
       setCamState('loading');
       if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
         document.getElementById('denied-msg').textContent='Camera API not supported in this browser.';
@@ -507,14 +544,15 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         portrait:{width:{ideal:1080},height:{ideal:1920}},
         square:{width:{ideal:1080},height:{ideal:1080}}
       }[selectedFormat]||{width:{ideal:1920},height:{ideal:1080}};
-      navigator.mediaDevices.getUserMedia({
-        video:Object.assign({facingMode:'user'},vidConstraints),
-        audio:true
-      }).then(function(stream){
+      var videoConstraint=Object.assign(cameraId?{deviceId:{exact:cameraId}}:{facingMode:'user'},vidConstraints);
+      var audioConstraint=micId?{deviceId:{exact:micId}}:true;
+      navigator.mediaDevices.getUserMedia({video:videoConstraint,audio:audioConstraint})
+      .then(function(stream){
         mediaStream=stream;
         camPreview.srcObject=stream;
         camPreview.play().catch(function(){});
         setCamState('ready');
+        loadDevices(); // populate / refresh dropdowns now that permission is granted
       }).catch(function(err){
         var msg='Camera access was denied.';
         if(err.name==='NotFoundError'||err.name==='DevicesNotFoundError')msg='No camera found on this device.';
@@ -524,6 +562,59 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         document.getElementById('denied-msg').textContent=msg;
         setCamState('denied');
       });
+    }
+
+    function requestCamera(){openCamera('','');}
+
+    // Enumerate all video + audio input devices and populate the dropdowns.
+    // Labels are only available after permission has been granted.
+    function loadDevices(){
+      navigator.mediaDevices.enumerateDevices().then(function(devices){
+        var cams=devices.filter(function(d){return d.kind==='videoinput';});
+        var mics=devices.filter(function(d){return d.kind==='audioinput';});
+        // Find what device IDs the current stream is actually using
+        var activeCamId='',activeMicId='';
+        if(mediaStream){
+          var vt=mediaStream.getVideoTracks();
+          var at=mediaStream.getAudioTracks();
+          if(vt.length)activeCamId=vt[0].getSettings().deviceId||'';
+          if(at.length)activeMicId=at[0].getSettings().deviceId||'';
+        }
+        if(activeCamId)selectedCameraId=activeCamId;
+        if(activeMicId)selectedMicId=activeMicId;
+        // Build camera options
+        camSelect.innerHTML=cams.length?cams.map(function(d,i){
+          var lbl=d.label||('Camera '+(i+1));
+          var sel=(d.deviceId===activeCamId)?'selected':'';
+          return '<option value="'+d.deviceId+'" '+sel+'>'+lbl+'</option>';
+        }).join(''):'<option>No cameras found</option>';
+        // Build mic options
+        micSelect.innerHTML=mics.length?mics.map(function(d,i){
+          var lbl=d.label||('Microphone '+(i+1));
+          var sel=(d.deviceId===activeMicId)?'selected':'';
+          return '<option value="'+d.deviceId+'" '+sel+'>'+lbl+'</option>';
+        }).join(''):'<option>No microphones found</option>';
+      }).catch(function(err){
+        console.error('[teleprompter] enumerateDevices failed:',err);
+      });
+    }
+
+    // Switch to a different camera; restart the stream
+    function switchCamera(deviceId){
+      if(camState!=='ready')return;
+      selectedCameraId=deviceId;
+      if(mediaStream){mediaStream.getTracks().forEach(function(t){t.stop();});mediaStream=null;}
+      camPreview.srcObject=null;
+      openCamera(selectedCameraId,selectedMicId);
+    }
+
+    // Switch to a different microphone; restart the stream
+    function switchMic(deviceId){
+      if(camState!=='ready')return;
+      selectedMicId=deviceId;
+      if(mediaStream){mediaStream.getTracks().forEach(function(t){t.stop();});mediaStream=null;}
+      camPreview.srcObject=null;
+      openCamera(selectedCameraId,selectedMicId);
     }
 
     function startRecording(){
