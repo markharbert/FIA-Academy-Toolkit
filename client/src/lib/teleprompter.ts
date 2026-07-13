@@ -96,7 +96,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     #rec-dot{position:absolute;top:12px;left:14px;display:none;align-items:center;gap:8px;font-family:Arial,sans-serif;font-size:14px;font-weight:800;color:#fff;letter-spacing:.08em;background:#dc2626;padding:5px 12px 5px 10px;border-radius:999px;box-shadow:0 2px 12px rgba(220,38,38,.6)}
     #rec-dot .dot{width:11px;height:11px;border-radius:50%;background:#fff;flex-shrink:0;animation:rec-pulse 1.2s ease-in-out infinite}
     @keyframes rec-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.45);opacity:.55}}
-    #rec-timer{position:absolute;top:10px;right:12px;font-family:monospace;font-size:13px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);display:none;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:4px}
+    #rec-timer{position:absolute;top:12px;right:14px;font-family:monospace;font-size:18px;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.9);display:none;background:rgba(0,0,0,.65);padding:4px 10px;border-radius:6px;letter-spacing:.04em}
 
     /* cam body */
     #cam-body{flex:1;display:flex;flex-direction:column;padding:16px;gap:10px;overflow-y:auto;min-height:0}
