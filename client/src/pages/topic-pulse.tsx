@@ -142,10 +142,10 @@ export default function TopicPulsePage() {
         <div className="absolute -top-14 -left-6 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
         <div className="relative px-6 pt-6 pb-7">
         <div className="max-w-2xl mx-auto">
-          <Link href="/video-tools">
-            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors mb-4" data-testid="button-back-video-tools">
+          <Link href="/video-studio">
+            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors mb-4" data-testid="button-back-video-studio">
               <ArrowLeft className="h-4 w-4" />
-              Video Tools
+              Video Studio
             </button>
           </Link>
           <div className="text-center">

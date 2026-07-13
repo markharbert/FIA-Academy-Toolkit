@@ -579,10 +579,10 @@ export default function VideoScorePage() {
         <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-rose-500/20 blur-3xl" />
         <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
         <div className="relative max-w-4xl mx-auto px-6 py-6 flex items-center gap-4">
-          <Link href="/video-tools">
-            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors" data-testid="button-back-video-tools">
+          <Link href="/video-studio">
+            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors" data-testid="button-back-video-studio">
               <ArrowLeft className="h-4 w-4" />
-              Video Tools
+              Video Studio
             </button>
           </Link>
           <div className="flex-1">

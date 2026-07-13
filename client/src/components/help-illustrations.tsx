@@ -85,7 +85,7 @@ function ScreenshotIllustration({ src, alt }: { src: string; alt: string }) {
 }
 
 export function VideoToolsHubIllustration() {
-  return <ScreenshotIllustration src={step1} alt="Video Tools hub showing Video Score, Video Trends, and Scripts cards with sidebar highlighted" />;
+  return <ScreenshotIllustration src={step1} alt="Video Studio hub showing Research, Scripts, Record, and Video Score cards with sidebar highlighted" />;
 }
 
 export function SessionsListIllustration() {
@@ -798,7 +798,7 @@ export function DmoAiSummaryIllustration() {
 }
 
 export const ILLUSTRATIONS: Record<string, React.ComponentType> = {
-  "video-tools-hub": VideoToolsHubIllustration,
+  "video-studio-hub": VideoToolsHubIllustration,
   "sessions-list": SessionsListIllustration,
   "upload-page": UploadPageIllustration,
   "score-summary": ScoreSummaryIllustration,

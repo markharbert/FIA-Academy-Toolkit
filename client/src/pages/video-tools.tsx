@@ -1,7 +1,8 @@
 import { useLocation } from "wouter";
-import { Video, TrendingUp, FileText, MonitorPlay, ArrowRight, Clapperboard, type LucideIcon } from "lucide-react";
+import { Video, TrendingUp, FileText, MonitorPlay, ArrowRight, Clapperboard, ChevronDown, type LucideIcon } from "lucide-react";
 
-interface Tool {
+interface StageItem {
+  step: number;
   title: string;
   description: string;
   detail: string;
@@ -9,56 +10,46 @@ interface Tool {
   icon: LucideIcon;
   gradient: string;
   iconBg: string;
-  badge?: string;
   testId: string;
 }
 
-const VIDEO_TOOLS: Tool[] = [
+const PIPELINE_STAGES: StageItem[] = [
   {
-    title: "Video Score",
-    description: "AI-powered feedback on your videos",
-    detail: "Record or upload a short video and get instant scoring against the 5-part formula — Hook, Set the Hook, First CTA, Content, and Final CTA. See exactly where to improve.",
-    url: "/video-score",
-    icon: Video,
-    gradient: "from-violet-500 to-purple-600",
-    iconBg: "bg-violet-500/20",
-    badge: "AI Powered",
-    testId: "tool-video-score",
-  },
-  {
-    title: "Video Trends",
-    description: "Discover trending topics in your niche",
-    detail: "Research what your audience is searching for using YouTube data. Uncover high-opportunity keywords and topics before your competition does.",
+    step: 1,
+    title: "Research",
+    description: "Find your winning topic",
+    detail: "Discover high-demand YouTube topics using real search data. Uncover keyword opportunity scores, monthly volume, and trend direction before your competitors do.",
     url: "/video-trends",
     icon: TrendingUp,
     gradient: "from-blue-500 to-cyan-600",
     iconBg: "bg-blue-500/20",
-    badge: "YouTube Data",
-    testId: "tool-video-trends",
+    testId: "stage-research",
   },
   {
-    title: "Scripts",
-    description: "Write and manage your video scripts",
-    detail: "Turn your research into fully written scripts built around the 5-part formula. Save, organize, and revisit your best content ideas anytime.",
+    step: 2,
+    title: "Script",
+    description: "Build your 5-part formula script",
+    detail: "Turn your research into a fully written video script. AI generates your Hook, Set the Hook, CTAs, Content sections, Shorts version, and YouTube description — all at once.",
     url: "/video-trends/scripts",
     icon: FileText,
     gradient: "from-teal-500 to-emerald-600",
     iconBg: "bg-teal-500/20",
-    testId: "tool-scripts",
+    testId: "stage-scripts",
   },
   {
-    title: "Teleprompter",
-    description: "Scroll any script you've written",
-    detail: "Already wrote your own script? Paste it in or upload a .txt file and roll through it with our distraction-free teleprompter — adjustable speed, countdown, and keyboard controls. Saved scripts live in your account.",
+    step: 3,
+    title: "Record",
+    description: "Practice and deliver your script",
+    detail: "Use the distraction-free teleprompter to scroll your script while you record. Works with AI-generated scripts or any script you write yourself — paste or upload a .txt file.",
     url: "/teleprompter",
     icon: MonitorPlay,
-    gradient: "from-slate-500 to-zinc-700",
-    iconBg: "bg-slate-500/20",
-    testId: "tool-teleprompter",
+    gradient: "from-violet-500 to-purple-600",
+    iconBg: "bg-violet-500/20",
+    testId: "stage-record",
   },
 ];
 
-export default function VideoToolsPage() {
+export default function VideoStudioPage() {
   const [, setLocation] = useLocation();
 
   return (
@@ -73,63 +64,116 @@ export default function VideoToolsPage() {
             <div className="h-10 w-10 rounded-xl bg-rose-500/20 ring-1 ring-rose-400/30 flex items-center justify-center">
               <Clapperboard className="h-5 w-5 text-rose-300" />
             </div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Video Tools</h1>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Video Studio</h1>
           </div>
           <p className="text-white/60 text-sm mt-1.5 max-w-xl">
-            Everything you need to research, create, and improve your video content — all in one place.
+            Research a topic, build your script, then record — all in one place.
           </p>
         </div>
       </div>
 
-      {/* Tool grid */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {VIDEO_TOOLS.map((tool) => {
-            const Icon = tool.icon;
-            return (
-              <button
-                key={tool.url}
-                onClick={() => setLocation(tool.url)}
-                data-testid={tool.testId}
-                className="group relative text-left rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {/* Gradient accent bar */}
-                <div className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r ${tool.gradient}`} />
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-12">
 
-                {/* Icon + badge row */}
-                <div className="flex items-start justify-between mb-4 mt-1">
-                  <div className={`w-11 h-11 rounded-xl ${tool.iconBg} flex items-center justify-center`}>
-                    <div className={`bg-gradient-to-br ${tool.gradient} rounded-lg w-9 h-9 flex items-center justify-center`}>
-                      <Icon className="h-5 w-5 text-white" />
+        {/* ─── Zone 1: Workflow Pipeline ─── */}
+        <section>
+          <div className="flex items-center gap-3 mb-7">
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">The Workflow</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+
+          <div className="flex flex-col md:flex-row items-stretch gap-0">
+            {PIPELINE_STAGES.map((stage, idx) => {
+              const Icon = stage.icon;
+              return (
+                <div key={stage.url} className="flex flex-col md:flex-row items-stretch flex-1 min-w-0">
+                  <button
+                    onClick={() => setLocation(stage.url)}
+                    data-testid={stage.testId}
+                    className="group relative text-left rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring flex-1 min-w-0"
+                  >
+                    <div className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r ${stage.gradient}`} />
+
+                    <div className="flex items-start justify-between mb-4 mt-1">
+                      <div className={`w-11 h-11 rounded-xl ${stage.iconBg} flex items-center justify-center`}>
+                        <div className={`bg-gradient-to-br ${stage.gradient} rounded-lg w-9 h-9 flex items-center justify-center`}>
+                          <Icon className="h-5 w-5 text-white" />
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-gradient-to-r ${stage.gradient} text-white`}>
+                        Step {stage.step}
+                      </span>
                     </div>
-                  </div>
-                  {tool.badge && (
-                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
-                      {tool.badge}
-                    </span>
+
+                    <h2 className="text-base font-bold text-foreground mb-0.5">{stage.title}</h2>
+                    <p className="text-xs font-medium text-muted-foreground mb-3">{stage.description}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{stage.detail}</p>
+
+                    <div className="flex items-center justify-between mt-5">
+                      <span className={`text-sm font-semibold bg-gradient-to-r ${stage.gradient} bg-clip-text text-transparent`}>
+                        Open
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground/70 group-hover:translate-x-1 transition-all duration-200" />
+                    </div>
+                  </button>
+
+                  {idx < PIPELINE_STAGES.length - 1 && (
+                    <>
+                      <div className="hidden md:flex items-center justify-center px-3 shrink-0 text-muted-foreground/25">
+                        <ArrowRight className="h-5 w-5" />
+                      </div>
+                      <div className="flex md:hidden items-center justify-center py-2 text-muted-foreground/25">
+                        <ChevronDown className="h-5 w-5" />
+                      </div>
+                    </>
                   )}
                 </div>
+              );
+            })}
+          </div>
+        </section>
 
-                {/* Title + description */}
-                <h2 className="text-base font-bold text-foreground mb-1">{tool.title}</h2>
-                <p className="text-xs font-medium text-muted-foreground mb-3">{tool.description}</p>
-                <p className="text-sm text-muted-foreground leading-relaxed">{tool.detail}</p>
+        {/* ─── Zone 2: Standalone Tool ─── */}
+        <section>
+          <div className="flex items-center gap-3 mb-7">
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">After your video is recorded</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
 
-                {/* CTA row */}
-                <div className="flex items-center justify-between mt-5">
-                  <span className={`text-sm font-semibold bg-gradient-to-r ${tool.gradient} bg-clip-text text-transparent`}>
-                    Open tool
-                  </span>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground/70 group-hover:translate-x-1 transition-all duration-200" />
+          <div className="max-w-xs">
+            <button
+              onClick={() => setLocation("/video-score")}
+              data-testid="tool-video-score"
+              className="group relative text-left w-full rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <div className="absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r from-rose-500 to-pink-600" />
+
+              <div className="flex items-start justify-between mb-4 mt-1">
+                <div className="w-11 h-11 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                  <div className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-lg w-9 h-9 flex items-center justify-center">
+                    <Video className="h-5 w-5 text-white" />
+                  </div>
                 </div>
-              </button>
-            );
-          })}
-        </div>
+                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                  AI Powered
+                </span>
+              </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-10 opacity-60">
-          More tools coming soon
-        </p>
+              <h2 className="text-base font-bold text-foreground mb-0.5">Video Score</h2>
+              <p className="text-xs font-medium text-muted-foreground mb-3">AI-powered feedback on your videos</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                After you've recorded, upload your video and get instant AI scoring against the 5-part formula. See exactly where you nailed it and what to improve next time.
+              </p>
+
+              <div className="flex items-center justify-between mt-5">
+                <span className="text-sm font-semibold bg-gradient-to-r from-rose-500 to-pink-600 bg-clip-text text-transparent">
+                  Open tool
+                </span>
+                <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground/70 group-hover:translate-x-1 transition-all duration-200" />
+              </div>
+            </button>
+          </div>
+        </section>
+
       </div>
     </div>
   );

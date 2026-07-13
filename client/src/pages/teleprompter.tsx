@@ -268,7 +268,7 @@ export default function TeleprompterPage() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10 shrink-0"
-            onClick={() => navigate("/video-tools")}
+            onClick={() => navigate("/video-studio")}
             data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4" />

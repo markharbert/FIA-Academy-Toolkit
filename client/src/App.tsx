@@ -169,8 +169,11 @@ function ProtectedRoutes() {
       <Route path="/teleprompter">
         {() => <ProtectedRoute component={TeleprompterPage} />}
       </Route>
-      <Route path="/video-tools">
+      <Route path="/video-studio">
         {() => <ProtectedRoute component={VideoToolsPage} />}
+      </Route>
+      <Route path="/video-tools">
+        {() => <Redirect to="/video-studio" />}
       </Route>
       <Route path="/email-tools">
         {() => <ProtectedRoute component={EmailToolsPage} />}

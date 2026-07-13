@@ -1606,11 +1606,11 @@ export default function TopicPulseScriptPage() {
                 <Button
                   size="sm"
                   onClick={handleOpenTeleprompter}
-                  className="bg-white/10 hover:bg-white/20 text-white border-0"
-                  data-testid="button-teleprompter"
+                  className="bg-violet-600 hover:bg-violet-700 text-white border-0"
+                  data-testid="button-practice-record"
                 >
                   <MonitorPlay className="h-4 w-4 mr-1.5" />
-                  Teleprompter
+                  Practice &amp; Record
                 </Button>
               )}
               <Button

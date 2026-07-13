@@ -34,20 +34,20 @@ const videoScoringArticle: HelpArticle = {
   slug: "video-scoring",
   title: "How to Use Video Score",
   subtitle: "Upload a practice video, get it transcribed automatically, and receive AI-powered scoring and feedback based on the 5-part marketing video formula.",
-  category: "Video Tools",
-  categorySlug: "video-tools",
+  category: "Video Studio",
+  categorySlug: "video-studio",
   readMinutes: 3,
   overview:
     "Video Score is your private practice space. Upload any marketing video you have recorded, and within 1–2 minutes the AI reads your transcript and scores it against a proven 5-part formula — giving you a total score, part-by-part feedback, and specific suggestions for what to fix next. Everything stays completely private.",
   steps: [
     {
       number: 1,
-      title: "Go to Video Tools and open Video Score",
+      title: "Go to Video Studio and open Video Score",
       body: [
-        'Click "Video Tools" in the left sidebar. You\'ll land on the Video Tools hub, which shows all the available tools. Click "Open tool" under the Video Score card.',
+        'Click "Video Studio" in the left sidebar. You\'ll land on the Video Studio hub, which shows all the available tools. Click "Open tool" under the Video Score card.',
         "This takes you to your Video Score library — a list of all your recorded practice sessions.",
       ],
-      illustrationKey: "video-tools-hub",
+      illustrationKey: "video-studio-hub",
     },
     {
       number: 2,
@@ -323,8 +323,8 @@ const videoTrendsArticle: HelpArticle = {
   slug: "video-trends",
   title: "How to Use Video Trends",
   subtitle: "Find in-demand YouTube topics with real search-volume data, then turn the best ones into a complete script using Mark's 5-part formula.",
-  category: "Video Tools",
-  categorySlug: "video-tools",
+  category: "Video Studio",
+  categorySlug: "video-studio",
   readMinutes: 5,
   overview:
     "Video Trends does two jobs in one place. First, it pulls real keyword data from Google, YouTube, Pinterest, and TikTok to show you what people are actually searching for around any niche or keyword. Second, once you find a topic worth recording, it generates a complete video script — Hook, Set the Hook, First CTA, Content, and Final CTA — that follows the same proven formula you score your videos against. This guide walks through every screen.",
@@ -333,7 +333,7 @@ const videoTrendsArticle: HelpArticle = {
       number: 1,
       title: "Open Video Trends and run a search",
       body: [
-        'In the sidebar, click "Video Tools" and then open Video Trends. You will land on the hub page.',
+        'In the sidebar, click "Video Studio" and then open Research (Video Trends). You will land on the hub page.',
         "In the search bar at the top, type a niche or keyword you want to research — for example a product, a problem your audience faces, or a topic you have been thinking about covering. Then click Find Topics. A run typically returns 24 topic ideas with full keyword data in under a minute.",
         "If you want to bias the results toward a specific style of video, click one of the Quick filter presets — Review, Comparison, How-To, or Problem Fix — before you search. Your monthly credits are shown above the search bar so you always know how many runs you have left this month.",
       ],
@@ -394,8 +394,8 @@ const scriptsArticle: HelpArticle = {
   slug: "scripts",
   title: "How to Use Generated Scripts",
   subtitle: "Edit, organize, and reuse the video scripts you generate from Video Trends — including matching descriptions, pinned comments, and CTAs.",
-  category: "Video Tools",
-  categorySlug: "video-tools",
+  category: "Video Studio",
+  categorySlug: "video-studio",
   readMinutes: 4,
   overview:
     "Every time you click Generate Script in Video Trends, the result is saved to your Generated Scripts library so you can come back to it any time. The scripts page is where you edit the copy, switch between Long Form and Shorts versions, grab a matching YouTube description and pinned comment, plug in your offer for the CTAs, and export the final script for your teleprompter.",
@@ -404,7 +404,7 @@ const scriptsArticle: HelpArticle = {
       number: 1,
       title: "Open your Generated Scripts library",
       body: [
-        "From the sidebar, open Video Tools and click Generated Scripts. This page lists every script you have generated, newest first.",
+        "From the sidebar, open Video Studio and click Scripts. This page lists every script you have generated, newest first.",
         "Each card shows the script title, the date it was created, the target video length, and the same topic signals you saw in Video Trends — monthly search volume, trend arrow, and opportunity score — so you can quickly tell which scripts are still worth recording.",
         "Click any card to open the full script editor.",
       ],
@@ -812,9 +812,9 @@ const dmoTrackerArticle: HelpArticle = {
 
 export const helpCategories: HelpCategory[] = [
   {
-    slug: "video-tools",
-    title: "Video Tools",
-    description: "Record, transcribe, and score your practice videos. Research trending topics and generate scripts.",
+    slug: "video-studio",
+    title: "Video Studio",
+    description: "Research trending topics, generate scripts, practice with the teleprompter, and score your videos.",
     icon: "Video",
     articles: [videoScoringArticle, videoTrendsArticle, scriptsArticle],
   },
