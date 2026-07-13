@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { openTeleprompter } from "@/lib/teleprompter";
@@ -1178,6 +1178,23 @@ export default function TopicPulseScriptPage() {
     },
   });
 
+  const saveToTeleprompterMutation = useMutation({
+    mutationFn: async (payload: { title: string; content: string }) => {
+      const res = await apiRequest("POST", "/api/teleprompter/scripts", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/scripts"] });
+      toast({
+        title: "Saved to Teleprompter",
+        description: "Your script is ready in the Teleprompter library whenever you want to record it.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+    },
+  });
+
   // Auto-save: silently persist changes 5 seconds after the last edit
   useEffect(() => {
     if (!hasChanges || saveMutation.isPending) return;
@@ -1426,6 +1443,26 @@ export default function TopicPulseScriptPage() {
     openTeleprompter({ title: script?.title ?? "Script", sections });
   };
 
+  const handleSaveToTeleprompter = () => {
+    if (!editedScriptJson?.fullScript || !script) return;
+    const fs = editedScriptJson.fullScript;
+
+    const parts: string[] = [];
+    if (fs.hook.text)        parts.push(`HOOK\n${fs.hook.text}`);
+    if (fs.setHook.text)     parts.push(`SET THE HOOK\n${fs.setHook.text}`);
+    if (fs.firstCTA.text)    parts.push(`FIRST CALL TO ACTION\n${fs.firstCTA.text}`);
+    if (fs.content.text)     parts.push(`CONTENT\n${fs.content.text}`);
+    (fs.content.sections ?? []).forEach(s => {
+      if (s.content) parts.push(`${s.title.toUpperCase()}\n${s.content}`);
+    });
+    if (fs.finalCTA.text)    parts.push(`FINAL CALL TO ACTION\n${fs.finalCTA.text}`);
+
+    saveToTeleprompterMutation.mutate({
+      title: script.title,
+      content: parts.join("\n\n"),
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-full flex items-center justify-center">
@@ -1605,12 +1642,17 @@ export default function TopicPulseScriptPage() {
               {editedScriptJson?.fullScript && (
                 <Button
                   size="sm"
-                  onClick={handleOpenTeleprompter}
+                  onClick={handleSaveToTeleprompter}
+                  disabled={saveToTeleprompterMutation.isPending}
                   className="bg-violet-600 hover:bg-violet-700 text-white border-0"
-                  data-testid="button-practice-record"
+                  data-testid="button-save-to-teleprompter"
                 >
-                  <MonitorPlay className="h-4 w-4 mr-1.5" />
-                  Practice &amp; Record
+                  {saveToTeleprompterMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <BookmarkPlus className="h-4 w-4 mr-1.5" />
+                  )}
+                  Save to Teleprompter
                 </Button>
               )}
               <Button
