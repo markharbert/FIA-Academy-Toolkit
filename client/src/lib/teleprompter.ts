@@ -531,6 +531,8 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
           document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg success" style="font-size:11px">&#x2601; Saved to your account \u2014 available for 30 days.</p>';
           document.getElementById('review-warn').style.display='none';
           setCamState('review');
+          // Notify the parent page so it can refresh "Your Takes" without a reload
+          try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
         })
         .catch(function(){
           uploadFailed=true;

@@ -151,6 +151,18 @@ export default function TeleprompterPage() {
     }
   }, [scripts]);
 
+  // Listen for the teleprompter popup signalling a successful upload so "Your Takes"
+  // refreshes automatically without the user needing to reload the page.
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (e.data?.type === "teleprompter-recording-saved") {
+        queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
   const createMutation = useMutation({
     mutationFn: async (data: { title: string; content: string; bulletPoints?: string | null }) => {
       const res = await apiRequest("POST", "/api/teleprompter/scripts", data);
