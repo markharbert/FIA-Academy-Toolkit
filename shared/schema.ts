@@ -674,6 +674,7 @@ export const scriptSectionSchema = z.object({
 
 export const scriptJsonSchema = z.object({
   fullScript: scriptSectionSchema,
+  expandedScript: z.string().optional(),
   shortsScript: z.string().optional(),
   pinnedComment: z.string().optional(),
   description: z.object({

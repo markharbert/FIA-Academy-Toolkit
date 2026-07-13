@@ -596,6 +596,59 @@ Respond in valid JSON:
   return JSON.parse(content) as ScriptJson;
 }
 
+export async function generateFullScript(
+  fullScript: NonNullable<import("../shared/schema").ScriptJson["fullScript"]>,
+  inputsJson: { videoLengthTarget?: string; tonePreference?: string; affiliateOffer?: string },
+  topicTitle: string
+): Promise<string> {
+  const durationGuide: Record<string, string> = {
+    "3-5":   "approximately 3-5 minutes when read aloud at a natural pace",
+    "6-10":  "approximately 6-10 minutes when read aloud at a natural pace",
+    "10-15": "approximately 10-15 minutes when read aloud at a natural pace",
+  };
+  const targetLength = durationGuide[inputsJson.videoLengthTarget ?? "6-10"] ?? durationGuide["6-10"];
+
+  const outlineParts: string[] = [];
+  if (fullScript.hook.text)     outlineParts.push(`HOOK:\n${fullScript.hook.text}`);
+  if (fullScript.setHook.text)  outlineParts.push(`SET THE HOOK:\n${fullScript.setHook.text}`);
+  if (fullScript.firstCTA.text) outlineParts.push(`FIRST CALL TO ACTION:\n${fullScript.firstCTA.text}`);
+  if (fullScript.content.text)  outlineParts.push(`CONTENT INTRO:\n${fullScript.content.text}`);
+  (fullScript.content.sections ?? []).forEach(s => {
+    if (s.content) outlineParts.push(`CONTENT SECTION "${s.title}":\n${s.content}`);
+  });
+  if (fullScript.finalCTA.text) outlineParts.push(`FINAL CALL TO ACTION:\n${fullScript.finalCTA.text}`);
+
+  const prompt = `You are a professional scriptwriter. Expand the following video script outline into a complete, polished, word-for-word teleprompter script.
+
+TOPIC: ${topicTitle}
+TARGET LENGTH: ${targetLength}
+TONE: ${inputsJson.tonePreference ?? "friendly and conversational"}
+${inputsJson.affiliateOffer ? `AFFILIATE OFFER TO MENTION: ${inputsJson.affiliateOffer}` : ""}
+
+OUTLINE (expand each section into natural spoken language — do not skip any section):
+${outlineParts.join("\n\n")}
+
+RULES:
+- Output ONLY the spoken script — no section headers, labels, or stage directions
+- Write naturally flowing spoken sentences with smooth transitions between sections
+- Follow the 5-part order: Hook → Set the Hook → First CTA → Content → Final CTA
+- Use conversational language that sounds natural when read aloud
+- Expand the outline ideas into full, engaging sentences — not bullet points
+- Match the target length by elaborating appropriately on each section
+
+Return only the final script text. No headers, no labels, no JSON.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.7,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("Failed to generate full script");
+  return content.trim();
+}
+
 export async function generateIntentAnalysis(topic: Topic): Promise<string> {
   const prompt = `You are a YouTube growth strategist helping creators understand their audience. Analyze the search intent behind this keyword and provide deep psychological insights.
 

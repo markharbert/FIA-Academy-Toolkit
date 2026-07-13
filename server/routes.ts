@@ -4349,7 +4349,7 @@ export async function registerRoutes(
   // Topic Pulse Finder API Routes
   // ==========================================
   
-  const { generateTopics, enrichTopicDetails, generateScript, generateIntentAnalysis, getApiKeyStatus, getKeywordsEverywhereCredits } = await import("./topic-pulse");
+  const { generateTopics, enrichTopicDetails, generateScript, generateFullScript, generateIntentAnalysis, getApiKeyStatus, getKeywordsEverywhereCredits } = await import("./topic-pulse");
   const { topicSearchInputSchema, scriptGenerationInputSchema } = await import("@shared/schema");
 
   app.get("/api/topic-pulse/status", requireAuth, async (req: Request, res: Response) => {
@@ -4861,6 +4861,40 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[TopicPulse] Delete script error:", err);
       res.status(500).json({ message: "Failed to delete script" });
+    }
+  });
+
+  app.post("/api/topic-pulse/scripts/:id/generate-full", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const script = await storage.getScript(req.params.id);
+      if (!script || script.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Script not found" });
+      }
+
+      const rawJson = script.scriptJson as any;
+      const fullScript = rawJson?.fullScript ?? rawJson?.scriptJson?.fullScript;
+      if (!fullScript) {
+        return res.status(400).json({ message: "Script has no outline content yet" });
+      }
+
+      const topic = await storage.getTopic(script.topicId);
+      const inputsJson = (script.inputsJson ?? {}) as any;
+
+      const videoLengthTarget = req.body?.videoLengthTarget ?? inputsJson.videoLengthTarget ?? "6-10";
+
+      const expandedScript = await generateFullScript(
+        fullScript,
+        { ...inputsJson, videoLengthTarget },
+        topic?.topicTitle ?? script.title
+      );
+
+      const newScriptJson = { ...rawJson, expandedScript };
+      await storage.updateScript(req.params.id, req.session.userId!, { scriptJson: newScriptJson });
+
+      res.json({ expandedScript });
+    } catch (err) {
+      console.error("[TopicPulse] Generate full script error:", err);
+      res.status(500).json({ message: "Failed to generate full script" });
     }
   });
 

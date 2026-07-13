@@ -18,7 +18,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, Eye, ThumbsUp, MessageSquare, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, Eye, ThumbsUp, MessageSquare, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus, Wand2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { openTeleprompter } from "@/lib/teleprompter";
@@ -1029,6 +1030,7 @@ function EditableContentSubSection({
 function hasScriptChanged(original: ScriptJson | null, edited: ScriptJson | null): boolean {
   if (!original || !edited) return false;
   
+  if (original.expandedScript !== edited.expandedScript) return true;
   if (original.shortsScript !== edited.shortsScript) return true;
   if (original.pinnedComment !== edited.pinnedComment) return true;
   
@@ -1066,6 +1068,8 @@ export default function TopicPulseScriptPage() {
   const [savedNotice, setSavedNotice] = useState<"manual" | "auto" | null>(null);
   const [savedTeleprompterScriptId, setSavedTeleprompterScriptId] = useState<string | null>(null);
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
+  const [scriptView, setScriptView] = useState<"outline" | "full">("outline");
+  const [videoLengthTarget, setVideoLengthTarget] = useState<string>("6-10");
 
   const { data: script, isLoading } = useQuery<Script & { topic?: Topic }>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
@@ -1085,7 +1089,6 @@ export default function TopicPulseScriptPage() {
 
   useEffect(() => {
     if (script?.scriptJson) {
-      // Handle double-nested structure from previous bug
       const json = script.scriptJson as any;
       if (json.scriptJson && json.scriptJson.fullScript) {
         setEditedScriptJson(json.scriptJson as ScriptJson);
@@ -1095,6 +1098,10 @@ export default function TopicPulseScriptPage() {
     }
     if (script && (script as any).teleprompterScriptId) {
       setSavedTeleprompterScriptId((script as any).teleprompterScriptId);
+    }
+    if (script?.inputsJson) {
+      const inputs = script.inputsJson as any;
+      if (inputs.videoLengthTarget) setVideoLengthTarget(inputs.videoLengthTarget);
     }
   }, [script]);
 
@@ -1157,6 +1164,21 @@ export default function TopicPulseScriptPage() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to overwrite", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const generateFullMutation = useMutation({
+    mutationFn: async (vlt: string) => {
+      const res = await apiRequest("POST", `/api/topic-pulse/scripts/${scriptId}/generate-full`, { videoLengthTarget: vlt });
+      return res.json() as Promise<{ expandedScript: string }>;
+    },
+    onSuccess: (data) => {
+      setEditedScriptJson(prev => prev ? { ...prev, expandedScript: data.expandedScript } : prev);
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/scripts", scriptId] });
+      toast({ title: "Full script generated!", description: "Your complete teleprompter script is ready. You can edit it and save it to the Teleprompter." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to generate script", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1393,7 +1415,12 @@ export default function TopicPulseScriptPage() {
   };
 
   const buildTeleprompterContent = () => {
-    if (!editedScriptJson?.fullScript || !script) return null;
+    if (!script) return null;
+    // In full-script view, use the AI-generated expanded script if available
+    if (scriptView === "full" && editedScriptJson?.expandedScript) {
+      return { title: script.title, content: editedScriptJson.expandedScript };
+    }
+    if (!editedScriptJson?.fullScript) return null;
     const fs = editedScriptJson.fullScript;
     const parts: string[] = [];
     if (fs.hook.text)        parts.push(fs.hook.text);
@@ -1606,15 +1633,40 @@ export default function TopicPulseScriptPage() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {/* View toggle */}
+              <div className="flex items-center bg-white/10 rounded-lg p-0.5 gap-0.5" data-testid="toggle-script-view">
+                <button
+                  onClick={() => setScriptView("outline")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                    scriptView === "outline"
+                      ? "bg-white text-gray-900"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                  data-testid="button-view-outline"
+                >
+                  Outline
+                </button>
+                <button
+                  onClick={() => setScriptView("full")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                    scriptView === "full"
+                      ? "bg-white text-gray-900"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                  data-testid="button-view-full-script"
+                >
+                  Full Script
+                </button>
+              </div>
               {editedScriptJson?.fullScript && (
                 <Button
                   size="sm"
                   onClick={handleSaveToTeleprompter}
-                  disabled={saveToTeleprompterMutation.isPending}
+                  disabled={saveToTeleprompterMutation.isPending || overwriteTeleprompterMutation.isPending}
                   className="bg-violet-600 hover:bg-violet-700 text-white border-0"
                   data-testid="button-save-to-teleprompter"
                 >
-                  {saveToTeleprompterMutation.isPending ? (
+                  {(saveToTeleprompterMutation.isPending || overwriteTeleprompterMutation.isPending) ? (
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                   ) : (
                     <BookmarkPlus className="h-4 w-4 mr-1.5" />
@@ -1678,7 +1730,8 @@ export default function TopicPulseScriptPage() {
               </div>
             </div>
 
-            {fullScript && (
+            {/* ── OUTLINE VIEW ── */}
+            {scriptView === "outline" && fullScript && (
               <div className="rounded-xl border bg-card shadow-sm overflow-hidden space-y-px">
                 <EditableScriptSection 
                   title="1. Hook" 
@@ -1731,6 +1784,81 @@ export default function TopicPulseScriptPage() {
                   onChange={(v) => handleSectionChange("finalCTA", v)}
                   sectionKey="final-cta"
                 />
+              </div>
+            )}
+
+            {/* ── FULL SCRIPT VIEW ── */}
+            {scriptView === "full" && (
+              <div className="space-y-4">
+                {/* Generate controls card */}
+                <div className="rounded-xl border bg-card shadow-sm p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-sm mb-1">Generate Full Script</h3>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        AI will expand your outline into a complete, word-for-word teleprompter script based on your target video length.
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1">Video Length</label>
+                          <Select
+                            value={videoLengthTarget}
+                            onValueChange={setVideoLengthTarget}
+                          >
+                            <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-video-length">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="3-5">3–5 minutes</SelectItem>
+                              <SelectItem value="6-10">6–10 minutes</SelectItem>
+                              <SelectItem value="10-15">10–15 minutes</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="pt-5">
+                          <Button
+                            size="sm"
+                            onClick={() => generateFullMutation.mutate(videoLengthTarget)}
+                            disabled={generateFullMutation.isPending}
+                            className="bg-violet-600 hover:bg-violet-700 text-white"
+                            data-testid="button-generate-full-script"
+                          >
+                            {generateFullMutation.isPending ? (
+                              <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Generating…</>
+                            ) : (
+                              <><Wand2 className="h-4 w-4 mr-1.5" />{editedScriptJson?.expandedScript ? "Regenerate" : "Generate Full Script"}</>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded script editor */}
+                {editedScriptJson?.expandedScript ? (
+                  <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/30">
+                      <span className="text-sm font-semibold">Full Script</span>
+                      <CopyButton text={editedScriptJson.expandedScript} label="Copy" />
+                    </div>
+                    <Textarea
+                      value={editedScriptJson.expandedScript}
+                      onChange={(e) => setEditedScriptJson(prev => prev ? { ...prev, expandedScript: e.target.value } : prev)}
+                      className="min-h-[500px] rounded-none border-0 shadow-none focus-visible:ring-0 resize-none font-sans text-sm leading-relaxed p-5"
+                      placeholder="Your full script will appear here after generation…"
+                      data-testid="textarea-full-script"
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed bg-muted/20 p-10 text-center">
+                    <Wand2 className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-50" />
+                    <p className="text-sm font-medium text-muted-foreground mb-1">No full script yet</p>
+                    <p className="text-xs text-muted-foreground">
+                      Fill in your outline sections, then click <strong>Generate Full Script</strong> above.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
