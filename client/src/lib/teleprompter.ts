@@ -140,10 +140,10 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     .bullet-cta{font-size:var(--text-size,32px);line-height:1.8;color:#4ade80;font-weight:700;white-space:pre-wrap;border-top:2px solid rgba(74,222,128,.25);padding-top:12px;margin-top:8px}
 
     /* ── Resizable divider ── */
-    #resizer{width:6px;flex-shrink:0;background:transparent;cursor:col-resize;position:relative;transition:background .15s;z-index:10}
-    #resizer:hover,#resizer.dragging{background:rgba(255,255,255,.10)}
-    #resizer::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:48px;width:2px;border-radius:999px;background:rgba(255,255,255,.18);transition:background .15s}
-    #resizer:hover::after,#resizer.dragging::after{background:rgba(255,255,255,.50)}
+    #resizer{width:8px;flex-shrink:0;background:rgba(255,255,255,.08);border-left:1px solid rgba(255,255,255,.15);border-right:1px solid rgba(255,255,255,.15);cursor:col-resize;position:relative;transition:background .15s;z-index:10}
+    #resizer:hover,#resizer.dragging{background:rgba(255,255,255,.18)}
+    #resizer::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:56px;width:4px;border-radius:999px;background:rgba(255,255,255,.45);transition:background .15s}
+    #resizer:hover::after,#resizer.dragging::after{background:rgba(255,255,255,.85)}
   </style>
 </head>
 <body>
