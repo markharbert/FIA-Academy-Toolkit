@@ -23,6 +23,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ArrowLeft,
   Plus,
@@ -718,48 +719,72 @@ export default function TeleprompterPage() {
                               </span>
                             </p>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              onClick={() => setPreviewRec(rec)}
-                              className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors"
-                              data-testid={`button-preview-recording-${rec.id}`}
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              Preview
-                            </button>
-                            <button
-                              onClick={() => handleGetTranscript(rec)}
-                              disabled={transcribingIds.has(rec.id)}
-                              className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-60"
-                              title={rec.transcriptText ? "Download transcript" : "Generate & download transcript (30–60 sec)"}
-                              data-testid={`button-transcript-recording-${rec.id}`}
-                            >
-                              {transcribingIds.has(rec.id) ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <FileText className="h-3.5 w-3.5" />
-                              )}
-                              {transcribingIds.has(rec.id) ? "Transcribing…" : rec.transcriptText ? "Transcript" : "Get Transcript"}
-                            </button>
-                            <a
-                              href={`/api/teleprompter/recordings/${rec.id}/download`}
-                              download
-                              className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors"
-                              data-testid={`button-download-recording-${rec.id}`}
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                              Download
-                            </a>
-                            <button
-                              onClick={() => setPendingDeleteRecordingId(rec.id)}
-                              disabled={deleteRecordingMutation.isPending}
-                              className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                              aria-label="Delete recording"
-                              data-testid={`button-delete-recording-${rec.id}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                          <TooltipProvider delayDuration={300}>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {/* Preview */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={() => setPreviewRec(rec)}
+                                  className="p-2 rounded-md text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 transition-colors"
+                                  data-testid={`button-preview-recording-${rec.id}`}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>Preview</TooltipContent>
+                            </Tooltip>
+
+                            {/* Transcript */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={() => handleGetTranscript(rec)}
+                                  disabled={transcribingIds.has(rec.id)}
+                                  className="p-2 rounded-md text-violet-500 hover:text-violet-600 hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                                  data-testid={`button-transcript-recording-${rec.id}`}
+                                >
+                                  {transcribingIds.has(rec.id)
+                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                    : <FileText className="h-4 w-4" />}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {transcribingIds.has(rec.id) ? "Transcribing…" : rec.transcriptText ? "View Transcript" : "Get Transcript"}
+                              </TooltipContent>
+                            </Tooltip>
+
+                            {/* Download */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <a
+                                  href={`/api/teleprompter/recordings/${rec.id}/download`}
+                                  download
+                                  className="p-2 rounded-md text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+                                  data-testid={`button-download-recording-${rec.id}`}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent>Download Video</TooltipContent>
+                            </Tooltip>
+
+                            {/* Delete */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={() => setPendingDeleteRecordingId(rec.id)}
+                                  disabled={deleteRecordingMutation.isPending}
+                                  className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                  data-testid={`button-delete-recording-${rec.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete</TooltipContent>
+                            </Tooltip>
                           </div>
+                          </TooltipProvider>
                         </div>
                       );
                     })}
