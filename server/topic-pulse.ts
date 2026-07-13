@@ -596,6 +596,27 @@ Respond in valid JSON:
   return JSON.parse(content) as ScriptJson;
 }
 
+function formatForTeleprompter(text: string): string {
+  // Collect all sentences from the raw text (collapse any existing line structure)
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const sentences: string[] = [];
+  for (const line of lines) {
+    // Split each line into individual sentences on sentence-ending punctuation
+    const parts = line.split(/(?<=[.!?])\s+/);
+    for (const part of parts) {
+      const s = part.trim();
+      if (s) sentences.push(s);
+    }
+  }
+  // Group into paragraphs of 1-2 sentences separated by blank lines
+  const paragraphs: string[] = [];
+  for (let i = 0; i < sentences.length; i += 2) {
+    const chunk = sentences.slice(i, i + 2).join(' ');
+    if (chunk.trim()) paragraphs.push(chunk.trim());
+  }
+  return paragraphs.join('\n\n');
+}
+
 export async function generateFullScript(
   fullScript: NonNullable<import("../shared/schema").ScriptJson["fullScript"]>,
   inputsJson: { videoLengthTarget?: string; tonePreference?: string; affiliateOffer?: string },
@@ -635,10 +656,10 @@ RULES:
 - Use conversational language that sounds natural when read aloud
 - Expand the outline ideas into full, engaging sentences — not bullet points
 - Match the target length by elaborating appropriately on each section
+- CRITICAL FORMATTING: This is for a teleprompter. Put a blank line between every 1-2 sentences. Never write more than 2 sentences in a row without a blank line. Short, easy-to-read paragraphs only.
 
-Return only the final script text. No headers, no labels, no JSON.`;
+Return only the final script text. No headers, no labels, no JSON. Blank line between every 1-2 sentences.`;
 
-  console.log("[generateFullScript] Calling OpenAI gpt-4o, prompt length:", prompt.length);
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [{ role: "user", content: prompt }],
@@ -646,9 +667,8 @@ Return only the final script text. No headers, no labels, no JSON.`;
   });
 
   const content = response.choices[0]?.message?.content;
-  console.log("[generateFullScript] Response received, content length:", content?.length ?? "null");
   if (!content) throw new Error("Failed to generate full script");
-  return content.trim();
+  return formatForTeleprompter(content);
 }
 
 export async function generateIntentAnalysis(topic: Topic): Promise<string> {

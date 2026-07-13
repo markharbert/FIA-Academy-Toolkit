@@ -1,1 +1,2 @@
 - [Teleprompter recording upload](teleprompter-upload.md) — signed-URL direct-to-GCS is CORS-blocked; use server proxy route instead.
+- [Generate Full Script feature](generate-full-script.md) — how the feature works and a key debugging lesson about server restarts.

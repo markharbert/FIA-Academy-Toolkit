@@ -4865,17 +4865,14 @@ export async function registerRoutes(
   });
 
   app.post("/api/topic-pulse/scripts/:id/generate-full", requireAuth, async (req: Request, res: Response) => {
-    console.log("[generate-full] Request received, scriptId:", req.params.id, "userId:", req.session.userId);
     try {
       const script = await storage.getScript(req.params.id);
-      console.log("[generate-full] Script found:", !!script, "ownership match:", script?.userId === req.session.userId);
       if (!script || script.userId !== req.session.userId) {
         return res.status(404).json({ message: "Script not found" });
       }
 
       const rawJson = script.scriptJson as any;
       const fullScript = rawJson?.fullScript ?? rawJson?.scriptJson?.fullScript;
-      console.log("[generate-full] fullScript found:", !!fullScript);
       if (!fullScript) {
         return res.status(400).json({ message: "Script has no outline content yet" });
       }
@@ -4883,7 +4880,6 @@ export async function registerRoutes(
       const topic = await storage.getTopic(script.topicId);
       const inputsJson = (script.inputsJson ?? {}) as any;
       const videoLengthTarget = req.body?.videoLengthTarget ?? inputsJson.videoLengthTarget ?? "6-10";
-      console.log("[generate-full] Calling generateFullScript, videoLengthTarget:", videoLengthTarget);
 
       const expandedScript = await generateFullScript(
         fullScript,
@@ -4891,13 +4887,12 @@ export async function registerRoutes(
         topic?.topicTitle ?? script.title
       );
 
-      console.log("[generate-full] expandedScript length:", expandedScript?.length);
       const newScriptJson = { ...rawJson, expandedScript };
       await storage.updateScript(req.params.id, req.session.userId!, { scriptJson: newScriptJson });
 
       res.json({ expandedScript });
     } catch (err) {
-      console.error("[generate-full] Error:", err);
+      console.error("[TopicPulse] Generate full script error:", err);
       res.status(500).json({ message: "Failed to generate full script" });
     }
   });
