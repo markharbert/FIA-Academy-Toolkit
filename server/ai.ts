@@ -383,7 +383,7 @@ export async function generateBulletPoints(scriptContent: string): Promise<strin
         content: `Extract bullet points from this script:\n\n${scriptContent.trim().slice(0, 20000)}`,
       },
     ],
-    max_tokens: 600,
+    max_completion_tokens: 600,
     temperature: 0.3,
   });
   return response.choices[0]?.message?.content?.trim() || "";
