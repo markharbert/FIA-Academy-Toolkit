@@ -38,6 +38,34 @@ export interface ProbeResult {
   error?: string;
 }
 
+/**
+ * Re-mux an MP4 with -movflags +faststart so the moov atom is at the front.
+ * Returns the output path (a temp file). The caller is responsible for cleanup.
+ * Falls back silently (returns the original path) on any error.
+ */
+export async function faststartMp4(inputPath: string): Promise<string> {
+  const outputPath = inputPath + ".faststart.mp4";
+  return new Promise((resolve) => {
+    const ff = spawn("ffmpeg", [
+      "-i", inputPath,
+      "-c", "copy",
+      "-movflags", "+faststart",
+      "-y",
+      outputPath,
+    ]);
+    ff.on("close", (code) => {
+      if (code === 0 && fs.existsSync(outputPath)) {
+        resolve(outputPath);
+      } else {
+        // Fallback — just use the original
+        try { fs.unlinkSync(outputPath); } catch (_) {}
+        resolve(inputPath);
+      }
+    });
+    ff.on("error", () => resolve(inputPath));
+  });
+}
+
 export async function probeVideo(inputPath: string): Promise<ProbeResult> {
   return new Promise((resolve) => {
     if (!fs.existsSync(inputPath)) {

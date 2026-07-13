@@ -88,7 +88,37 @@ export default function TeleprompterPage() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingDeleteRecordingId, setPendingDeleteRecordingId] = useState<string | null>(null);
   const [previewRec, setPreviewRec] = useState<TeleprompterRecording | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [dirty, setDirty] = useState(false);
+
+  // Fetch recording as a blob when preview opens — one continuous download instead
+  // of the browser making multiple range requests hunting for the moov atom.
+  useEffect(() => {
+    if (!previewRec) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+      setPreviewLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewUrl(null);
+    fetch(`/api/teleprompter/recordings/${previewRec.id}/stream`, { credentials: "include" })
+      .then((r) => r.blob())
+      .then((blob) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
+        setPreviewLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewRec?.id]);
 
   const { data: scripts, isLoading } = useQuery<TeleprompterScript[]>({
     queryKey: ["/api/teleprompter/scripts"],
@@ -705,11 +735,17 @@ export default function TeleprompterPage() {
             </DialogTitle>
             <DialogDescription className="sr-only">Video preview player</DialogDescription>
           </DialogHeader>
-          <div className="bg-black w-full">
-            {previewRec && (
+          <div className="bg-black w-full flex items-center justify-center min-h-[200px]">
+            {previewLoading && (
+              <div className="flex flex-col items-center gap-2 text-white/60 py-12">
+                <div className="h-8 w-8 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+                <span className="text-sm">Loading video…</span>
+              </div>
+            )}
+            {previewUrl && (
               <video
-                key={previewRec.id}
-                src={`/api/teleprompter/recordings/${previewRec.id}/stream`}
+                key={previewRec?.id}
+                src={previewUrl}
                 controls
                 autoPlay
                 className="w-full max-h-[60vh] outline-none"

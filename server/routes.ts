@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints } from "./ai";
-import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
+import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
 import bcrypt from "bcrypt";
@@ -4958,13 +4958,29 @@ export async function registerRoutes(
         takeNumber = existingRecordings.filter((r) => r.title.endsWith(suffix)).length + 1;
       }
       const title = `Take ${takeNumber} \u2014 ${baseTitle}`;
-      const ext = path.extname(file.originalname).toLowerCase() || (file.mimetype.includes("mp4") ? ".mp4" : ".webm");
+      const isMp4 = file.mimetype.includes("mp4") || file.originalname.toLowerCase().endsWith(".mp4");
+      const ext = path.extname(file.originalname).toLowerCase() || (isMp4 ? ".mp4" : ".webm");
       const objectId = crypto.randomUUID();
-      const storageKey = `/objects/recordings/${userId}/${objectId}${ext}`;
-      const fileBuffer = fs.readFileSync(file.path);
+      const storageKey = `/objects/recordings/${userId}/${objectId}.mp4`;
+
+      // Move moov atom to the front so the browser can start playing immediately
+      let uploadPath = file.path;
+      let faststartPath: string | null = null;
+      if (isMp4) {
+        const processed = await faststartMp4(file.path);
+        if (processed !== file.path) {
+          faststartPath = processed;
+          uploadPath = processed;
+        }
+      }
+
+      const fileBuffer = fs.readFileSync(uploadPath);
+      const finalMime = isMp4 ? "video/mp4" : (file.mimetype || "video/webm");
       const objectStorage = new ObjectStorageService();
-      await objectStorage.uploadFile(storageKey, fileBuffer, file.mimetype || "video/webm");
+      await objectStorage.uploadFile(storageKey, fileBuffer, finalMime);
       try { fs.unlinkSync(file.path); } catch (_) {}
+      if (faststartPath) { try { fs.unlinkSync(faststartPath); } catch (_) {} }
+
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
       const recording = await storage.createTeleprompterRecording({
@@ -4972,8 +4988,8 @@ export async function registerRoutes(
         scriptId,
         title,
         storageKey,
-        mimeType: file.mimetype || "video/webm",
-        sizeBytes: file.size,
+        mimeType: finalMime,
+        sizeBytes: fileBuffer.length,
         durationSeconds,
         expiresAt,
       });
@@ -5001,15 +5017,17 @@ export async function registerRoutes(
     try {
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
       if (!recording) return res.status(404).json({ message: "Recording not found" });
+      // Use stored metadata — avoids a round-trip GCS getMetadata() call on every range request
+      const fileSize = recording.sizeBytes;
+      const mimeType = recording.mimeType || "video/mp4";
       const objectStorage = new ObjectStorageService();
       const file = await objectStorage.getObjectEntityFile(recording.storageKey);
-      const [metadata] = await file.getMetadata();
-      const fileSize = parseInt(metadata.size as string, 10);
-      const mimeType = (metadata.contentType as string) || recording.mimeType || "video/mp4";
 
       const rangeHeader = req.headers.range;
-      if (rangeHeader) {
-        // Handle byte-range request so browsers can stream/seek
+      const rangeStart = rangeHeader ? parseInt(rangeHeader.replace(/bytes=/, "").split("-")[0], 10) : 0;
+
+      if (rangeHeader && rangeStart > 0) {
+        // Mid-file seek request — serve the specific byte range (206)
         const parts = rangeHeader.replace(/bytes=/, "").split("-");
         const start = parseInt(parts[0], 10);
         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
@@ -5022,7 +5040,9 @@ export async function registerRoutes(
         });
         file.createReadStream({ start, end }).pipe(res);
       } else {
-        // Initial non-range request — advertise range support
+        // Initial request (no range or bytes=0-…): stream the full file in one shot.
+        // This avoids the multiple round-trip penalty from browsers hunting for the
+        // moov atom at the end of an mp4 recorded by MediaRecorder.
         res.writeHead(200, {
           "Content-Length": fileSize,
           "Content-Type": mimeType,
