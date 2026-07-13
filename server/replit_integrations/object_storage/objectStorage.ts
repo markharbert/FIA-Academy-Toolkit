@@ -295,6 +295,17 @@ export class ObjectStorageService {
     return `/objects/thumbnails/${objectName}`;
   }
 
+  // Generates a short-lived signed GET URL for streaming (e.g. video preview).
+  async getSignedReadUrl(objectPath: string, ttlSec: number = 300): Promise<string> {
+    const file = await this.getObjectEntityFile(objectPath);
+    // Re-derive bucket + object name the same way parseObjectPath does
+    const normalized = objectPath.startsWith("/") ? objectPath : `/${objectPath}`;
+    const parts = normalized.split("/");
+    const bucketName = parts[1];
+    const objectName = parts.slice(2).join("/");
+    return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
+  }
+
   // Deletes an object from the given path.
   async deleteObject(objectPath: string): Promise<void> {
     try {
