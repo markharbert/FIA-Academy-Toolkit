@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, Eye, ThumbsUp, MessageSquare, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { openTeleprompter } from "@/lib/teleprompter";
@@ -1396,14 +1396,14 @@ export default function TopicPulseScriptPage() {
     if (!editedScriptJson?.fullScript || !script) return null;
     const fs = editedScriptJson.fullScript;
     const parts: string[] = [];
-    if (fs.hook.text)        parts.push(`HOOK\n${fs.hook.text}`);
-    if (fs.setHook.text)     parts.push(`SET THE HOOK\n${fs.setHook.text}`);
-    if (fs.firstCTA.text)    parts.push(`FIRST CALL TO ACTION\n${fs.firstCTA.text}`);
-    if (fs.content.text)     parts.push(`CONTENT\n${fs.content.text}`);
+    if (fs.hook.text)        parts.push(fs.hook.text);
+    if (fs.setHook.text)     parts.push(fs.setHook.text);
+    if (fs.firstCTA.text)    parts.push(fs.firstCTA.text);
+    if (fs.content.text)     parts.push(fs.content.text);
     (fs.content.sections ?? []).forEach(s => {
-      if (s.content) parts.push(`${s.title.toUpperCase()}\n${s.content}`);
+      if (s.content) parts.push(s.content);
     });
-    if (fs.finalCTA.text)    parts.push(`FINAL CALL TO ACTION\n${fs.finalCTA.text}`);
+    if (fs.finalCTA.text)    parts.push(fs.finalCTA.text);
     return { title: script.title, content: parts.join("\n\n") };
   };
 
