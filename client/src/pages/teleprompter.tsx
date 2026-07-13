@@ -17,6 +17,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   ArrowLeft,
   Plus,
   Trash2,
@@ -30,6 +37,7 @@ import {
   Video,
   Clock,
   Sparkles,
+  Eye,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -79,6 +87,7 @@ export default function TeleprompterPage() {
   const [editorTab, setEditorTab] = useState<"script" | "bullets">("script");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingDeleteRecordingId, setPendingDeleteRecordingId] = useState<string | null>(null);
+  const [previewRec, setPreviewRec] = useState<TeleprompterRecording | null>(null);
   const [dirty, setDirty] = useState(false);
 
   const { data: scripts, isLoading } = useQuery<TeleprompterScript[]>({
@@ -649,6 +658,14 @@ export default function TeleprompterPage() {
                             </p>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              onClick={() => setPreviewRec(rec)}
+                              className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors"
+                              data-testid={`button-preview-recording-${rec.id}`}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              Preview
+                            </button>
                             <a
                               href={`/api/teleprompter/recordings/${rec.id}/download`}
                               download
@@ -678,6 +695,45 @@ export default function TeleprompterPage() {
           </div>
         </div>
       </div>
+
+      {/* Recording preview modal */}
+      <Dialog open={!!previewRec} onOpenChange={(open) => !open && setPreviewRec(null)}>
+        <DialogContent className="max-w-3xl w-full p-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3">
+            <DialogTitle className="text-base truncate">
+              {previewRec?.title || "Recording Preview"}
+            </DialogTitle>
+            <DialogDescription className="sr-only">Video preview player</DialogDescription>
+          </DialogHeader>
+          <div className="bg-black w-full">
+            {previewRec && (
+              <video
+                key={previewRec.id}
+                src={`/api/teleprompter/recordings/${previewRec.id}/stream`}
+                controls
+                autoPlay
+                className="w-full max-h-[60vh] outline-none"
+                data-testid="video-preview-player"
+              />
+            )}
+          </div>
+          <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+            <p className="text-xs text-muted-foreground">
+              {previewRec?.durationSeconds ? `${Math.floor(previewRec.durationSeconds / 60)}:${String(previewRec.durationSeconds % 60).padStart(2, "0")}` : ""}
+              {previewRec?.sizeBytes ? ` · ${(previewRec.sizeBytes / 1024 / 1024).toFixed(1)} MB` : ""}
+            </p>
+            <a
+              href={previewRec ? `/api/teleprompter/recordings/${previewRec.id}/download` : "#"}
+              download
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors"
+              data-testid="button-preview-download"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download this take
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Recording delete confirmation */}
       <AlertDialog open={!!pendingDeleteRecordingId} onOpenChange={(open) => !open && setPendingDeleteRecordingId(null)}>

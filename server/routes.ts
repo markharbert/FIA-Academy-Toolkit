@@ -4997,6 +4997,23 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/teleprompter/recordings/:id/stream", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
+      if (!recording) return res.status(404).json({ message: "Recording not found" });
+      const objectStorage = new ObjectStorageService();
+      const file = await objectStorage.getObjectEntityFile(recording.storageKey);
+      const mimeType = recording.mimeType || "video/mp4";
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("Accept-Ranges", "bytes");
+      await objectStorage.downloadObject(file, res, 0);
+    } catch (err) {
+      console.error("[Teleprompter] Stream recording error:", err);
+      if (!res.headersSent) res.status(500).json({ message: "Failed to stream recording" });
+    }
+  });
+
   app.get("/api/teleprompter/recordings/:id/download", requireAuth, async (req: Request, res: Response) => {
     try {
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
