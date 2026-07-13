@@ -4921,7 +4921,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "content is required" });
       }
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
