@@ -93,9 +93,9 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     #cam-placeholder span{font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.2);letter-spacing:.08em}
 
     /* recording overlay indicators */
-    #rec-dot{position:absolute;top:10px;left:12px;display:none;align-items:center;gap:5px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;color:#ff4444;letter-spacing:.05em;text-shadow:0 1px 3px rgba(0,0,0,.9)}
-    #rec-dot .dot{width:8px;height:8px;border-radius:50%;background:#ff4444;animation:blink 1s infinite}
-    @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+    #rec-dot{position:absolute;top:12px;left:14px;display:none;align-items:center;gap:8px;font-family:Arial,sans-serif;font-size:14px;font-weight:800;color:#fff;letter-spacing:.08em;background:#dc2626;padding:5px 12px 5px 10px;border-radius:999px;box-shadow:0 2px 12px rgba(220,38,38,.6)}
+    #rec-dot .dot{width:11px;height:11px;border-radius:50%;background:#fff;flex-shrink:0;animation:rec-pulse 1.2s ease-in-out infinite}
+    @keyframes rec-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.45);opacity:.55}}
     #rec-timer{position:absolute;top:10px;right:12px;font-family:monospace;font-size:13px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);display:none;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:4px}
 
     /* cam body */
