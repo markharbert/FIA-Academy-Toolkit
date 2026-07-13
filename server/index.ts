@@ -180,6 +180,11 @@ async function runStartupMigrations() {
         ON teleprompter_scripts(user_id, updated_at DESC)
     `);
     console.log("[startup] teleprompter_scripts migration complete");
+    await db.execute(sql`
+      ALTER TABLE teleprompter_recordings
+        ADD COLUMN IF NOT EXISTS transcript_text TEXT
+    `);
+    console.log("[startup] teleprompter_recordings transcript_text migration complete");
 
     // DMO Tracker: switch storage from rounded minutes to exact seconds.
     // Adds *_seconds columns alongside legacy *_minutes columns and backfills

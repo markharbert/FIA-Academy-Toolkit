@@ -92,6 +92,7 @@ export default function TeleprompterPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
   const [dirty, setDirty] = useState(false);
 
   // Fetch recording as a blob when preview opens — one continuous download instead
@@ -360,6 +361,28 @@ export default function TeleprompterPage() {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  async function handleGetTranscript(rec: TeleprompterRecording) {
+    // If transcript already exists, go straight to download
+    if (rec.transcriptText) {
+      window.location.href = `/api/teleprompter/recordings/${rec.id}/transcript.txt`;
+      return;
+    }
+    setTranscribingIds((prev) => new Set(prev).add(rec.id));
+    try {
+      const res = await apiRequest("POST", `/api/teleprompter/recordings/${rec.id}/transcribe`, {});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Transcription failed");
+      // Invalidate recordings cache so transcriptText shows up on the record
+      queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+      // Trigger the .txt download now that transcript is stored
+      window.location.href = `/api/teleprompter/recordings/${rec.id}/transcript.txt`;
+    } catch (err: any) {
+      toast({ title: "Transcription failed", description: err.message, variant: "destructive" });
+    } finally {
+      setTranscribingIds((prev) => { const s = new Set(prev); s.delete(rec.id); return s; });
+    }
   }
 
   function formatDaysLeft(expiresAt: string | Date): string {
@@ -702,6 +725,20 @@ export default function TeleprompterPage() {
                             >
                               <Eye className="h-3.5 w-3.5" />
                               Preview
+                            </button>
+                            <button
+                              onClick={() => handleGetTranscript(rec)}
+                              disabled={transcribingIds.has(rec.id)}
+                              className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-60"
+                              title={rec.transcriptText ? "Download transcript" : "Generate & download transcript (30–60 sec)"}
+                              data-testid={`button-transcript-recording-${rec.id}`}
+                            >
+                              {transcribingIds.has(rec.id) ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <FileText className="h-3.5 w-3.5" />
+                              )}
+                              {transcribingIds.has(rec.id) ? "Transcribing…" : rec.transcriptText ? "Transcript" : "Get Transcript"}
                             </button>
                             <a
                               href={`/api/teleprompter/recordings/${rec.id}/download`}

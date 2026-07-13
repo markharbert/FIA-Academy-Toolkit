@@ -5072,6 +5072,69 @@ export async function registerRoutes(
     }
   });
 
+  // Transcribe a teleprompter recording on demand — downloads from GCS, extracts audio,
+  // runs Gemini transcription, stores the text, then returns it.
+  app.post("/api/teleprompter/recordings/:id/transcribe", requireAuth, async (req: Request, res: Response) => {
+    const tmpVideoPath = path.join(UPLOADS_DIR, `rec_${req.params.id}_${Date.now()}.mp4`);
+    let tmpAudioPath: string | null = null;
+    try {
+      const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
+      if (!recording) return res.status(404).json({ message: "Recording not found" });
+
+      // If already transcribed, return cached version immediately
+      if (recording.transcriptText) {
+        return res.json({ transcript: recording.transcriptText });
+      }
+
+      // Download GCS object to a temp file so ffmpeg can process it
+      const objectStorage = new ObjectStorageService();
+      const file = await objectStorage.getObjectEntityFile(recording.storageKey);
+      const [buffer] = await file.download();
+      fs.writeFileSync(tmpVideoPath, buffer);
+
+      // Extract audio
+      const audioResult = await extractAudio(tmpVideoPath, UPLOADS_DIR);
+      if (!audioResult.success) {
+        return res.status(500).json({ message: audioResult.error || "Failed to extract audio from recording" });
+      }
+      tmpAudioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
+
+      // Transcribe with Gemini
+      const transcript = await transcribeAudio(tmpAudioPath);
+
+      // Persist transcript so subsequent requests are instant
+      await storage.updateTeleprompterRecording(recording.id, req.session.userId!, { transcriptText: transcript });
+
+      res.json({ transcript });
+    } catch (err) {
+      console.error("[Teleprompter] Transcribe recording error:", err);
+      if (!res.headersSent) res.status(500).json({ message: "Failed to transcribe recording" });
+    } finally {
+      try { if (fs.existsSync(tmpVideoPath)) fs.unlinkSync(tmpVideoPath); } catch (_) {}
+      try { if (tmpAudioPath && fs.existsSync(tmpAudioPath)) fs.unlinkSync(tmpAudioPath); } catch (_) {}
+    }
+  });
+
+  // Download the stored transcript for a recording as a .txt file
+  app.get("/api/teleprompter/recordings/:id/transcript.txt", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
+      if (!recording) return res.status(404).json({ message: "Recording not found" });
+      if (!recording.transcriptText) return res.status(404).json({ message: "No transcript yet — transcribe first" });
+
+      const safeTitle = recording.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().slice(0, 80) || `recording-${recording.id}`;
+      const dateStr = new Date(recording.createdAt).toLocaleDateString();
+      const content = `${recording.title}\nRecorded: ${dateStr}\n\n---\n\n${recording.transcriptText}`;
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.txt"`);
+      res.send(content);
+    } catch (err) {
+      console.error("[Teleprompter] Transcript download error:", err);
+      if (!res.headersSent) res.status(500).json({ message: "Failed to download transcript" });
+    }
+  });
+
   app.delete("/api/teleprompter/recordings/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);

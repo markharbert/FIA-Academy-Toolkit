@@ -326,6 +326,7 @@ export interface IStorage {
   // Teleprompter Recordings
   getTeleprompterRecordingsByUser(userId: string): Promise<TeleprompterRecording[]>;
   getTeleprompterRecording(id: string, userId: string): Promise<TeleprompterRecording | undefined>;
+  updateTeleprompterRecording(id: string, userId: string, data: Partial<InsertTeleprompterRecording>): Promise<TeleprompterRecording | undefined>;
   createTeleprompterRecording(data: InsertTeleprompterRecording): Promise<TeleprompterRecording>;
   deleteTeleprompterRecording(id: string, userId: string): Promise<boolean>;
   deleteExpiredTeleprompterRecordings(): Promise<TeleprompterRecording[]>;
@@ -1840,6 +1841,14 @@ export class DatabaseStorage implements IStorage {
 
   async createTeleprompterRecording(data: InsertTeleprompterRecording): Promise<TeleprompterRecording> {
     const [result] = await db.insert(teleprompterRecordings).values(data).returning();
+    return result;
+  }
+
+  async updateTeleprompterRecording(id: string, userId: string, data: Partial<InsertTeleprompterRecording>): Promise<TeleprompterRecording | undefined> {
+    const [result] = await db.update(teleprompterRecordings)
+      .set(data)
+      .where(and(eq(teleprompterRecordings.id, id), eq(teleprompterRecordings.userId, userId)))
+      .returning();
     return result;
   }
 
