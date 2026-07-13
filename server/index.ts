@@ -7,7 +7,8 @@ import { startNotificationScheduler } from "./notificationScheduler";
 import { configureEmailSender } from "./email-sendgrid";
 import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
 import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
+import { teleprompterScripts, teleprompterRecordings } from "@shared/schema";
 
 // Prevent stray async errors (e.g. TLS socket events fired after a promise
 // resolves) from crashing the entire process.
@@ -185,6 +186,32 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS transcript_text TEXT
     `);
     console.log("[startup] teleprompter_recordings transcript_text migration complete");
+    await db.execute(sql`
+      ALTER TABLE teleprompter_scripts
+        ADD COLUMN IF NOT EXISTS take_count INTEGER NOT NULL DEFAULT 0
+    `);
+    // Backfill take_count from existing recordings so the persistent counter
+    // starts above the highest take number ever recorded for each script.
+    {
+      const allRecs = await db.select({ scriptId: teleprompterRecordings.scriptId, title: teleprompterRecordings.title }).from(teleprompterRecordings);
+      const allScripts = await db.select({ id: teleprompterScripts.id, takeCount: teleprompterScripts.takeCount }).from(teleprompterScripts);
+      const takeRegex = /^Take (\d+)\s*\u2014/; // matches "Take N —"
+      const maxByScript = new Map<string, number>();
+      for (const rec of allRecs) {
+        if (!rec.scriptId) continue;
+        const m = takeRegex.exec(rec.title);
+        if (!m) continue;
+        const n = parseInt(m[1], 10);
+        if ((maxByScript.get(rec.scriptId) ?? 0) < n) maxByScript.set(rec.scriptId, n);
+      }
+      for (const script of allScripts) {
+        const max = maxByScript.get(script.id) ?? 0;
+        if (max > script.takeCount) {
+          await db.update(teleprompterScripts).set({ takeCount: max }).where(eq(teleprompterScripts.id, script.id));
+        }
+      }
+    }
+    console.log("[startup] teleprompter_scripts take_count migration complete");
 
     // DMO Tracker: switch storage from rounded minutes to exact seconds.
     // Adds *_seconds columns alongside legacy *_minutes columns and backfills

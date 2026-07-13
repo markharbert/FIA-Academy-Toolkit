@@ -321,6 +321,7 @@ export interface IStorage {
   getTeleprompterScript(id: string, userId: string): Promise<TeleprompterScript | undefined>;
   createTeleprompterScript(userId: string, data: { title: string; content: string; bulletPoints?: string | null }): Promise<TeleprompterScript>;
   updateTeleprompterScript(id: string, userId: string, data: { title?: string; content?: string; bulletPoints?: string | null }): Promise<TeleprompterScript | undefined>;
+  incrementTeleprompterScriptTakeCount(id: string, userId: string): Promise<number>;
   deleteTeleprompterScript(id: string, userId: string): Promise<boolean>;
 
   // Teleprompter Recordings
@@ -1817,6 +1818,14 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(teleprompterScripts.id, id), eq(teleprompterScripts.userId, userId)))
       .returning();
     return result || undefined;
+  }
+
+  async incrementTeleprompterScriptTakeCount(id: string, userId: string): Promise<number> {
+    const [result] = await db.update(teleprompterScripts)
+      .set({ takeCount: sql`take_count + 1` })
+      .where(and(eq(teleprompterScripts.id, id), eq(teleprompterScripts.userId, userId)))
+      .returning({ takeCount: teleprompterScripts.takeCount });
+    return result?.takeCount ?? 1;
   }
 
   async deleteTeleprompterScript(id: string, userId: string): Promise<boolean> {

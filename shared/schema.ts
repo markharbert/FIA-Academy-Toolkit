@@ -722,6 +722,7 @@ export const teleprompterScripts = pgTable("teleprompter_scripts", {
   title: text("title").notNull(),
   content: text("content").notNull(),
   bulletPoints: text("bullet_points"),
+  takeCount: integer("take_count").default(0).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

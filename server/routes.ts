@@ -4948,18 +4948,21 @@ export async function registerRoutes(
       const scriptId = (typeof req.body.scriptId === "string" && req.body.scriptId) ? req.body.scriptId : null;
       const baseTitle = (typeof req.body.title === "string" && req.body.title.trim()) ? req.body.title.trim().slice(0, 100) : "Untitled";
       const durationSeconds = req.body.durationSeconds ? (parseInt(req.body.durationSeconds, 10) || null) : null;
-      // Auto-number takes — find the highest existing take number and go one above it
-      // (using count+1 would decrease after deletions, so we track the max instead)
-      const existingRecordings = await storage.getTeleprompterRecordingsByUser(userId);
-      const takeRegex = /^Take (\d+)\s*\u2014/;
-      const relevantTitles = scriptId
-        ? existingRecordings.filter((r) => r.scriptId === scriptId).map((r) => r.title)
-        : existingRecordings.filter((r) => r.title.endsWith(" \u2014 " + baseTitle)).map((r) => r.title);
-      const maxTake = relevantTitles.reduce((max, t) => {
-        const m = takeRegex.exec(t);
-        return m ? Math.max(max, parseInt(m[1], 10)) : max;
-      }, 0);
-      const takeNumber = maxTake + 1;
+      // Auto-number takes using a persistent counter on the script that only ever
+      // increments — deletions never reduce it, so numbering is always correct.
+      let takeNumber: number;
+      if (scriptId) {
+        takeNumber = await storage.incrementTeleprompterScriptTakeCount(scriptId, userId);
+      } else {
+        // No script attached — fall back to scanning existing titles for max number
+        const existingRecordings = await storage.getTeleprompterRecordingsByUser(userId);
+        const takeRegex = /^Take (\d+)\s*\u2014/;
+        const suffix = " \u2014 " + baseTitle;
+        const maxTake = existingRecordings
+          .filter((r) => r.title.endsWith(suffix))
+          .reduce((max, r) => { const m = takeRegex.exec(r.title); return m ? Math.max(max, parseInt(m[1], 10)) : max; }, 0);
+        takeNumber = maxTake + 1;
+      }
       const title = `Take ${takeNumber} \u2014 ${baseTitle}`;
       const isMp4 = file.mimetype.includes("mp4") || file.originalname.toLowerCase().endsWith(".mp4");
       const ext = path.extname(file.originalname).toLowerCase() || (isMp4 ? ".mp4" : ".webm");
