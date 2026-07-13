@@ -377,9 +377,9 @@ export async function generateBulletPoints(scriptContent: string): Promise<strin
       {
         role: "system",
         content: `You are a video script assistant. Extract these three things from the script and return them as JSON:
-- "hook": A single punchy sentence that grabs attention immediately. Do NOT include the speaker's name or any self-introduction ("Hey, it's Mark..." or "Hi, I'm..."). Skip straight to the problem, question, or bold statement that hooks the viewer.
+- "hook": REWRITE the opening as one punchy sentence that jumps straight into the problem, question, or bold claim — NO names, NO greetings, NO "Hey", NO "Hi", NO "I'm", NO "it's [Name]". Start with the core tension or benefit. Example: if script opens with "Hey I'm Jane and today I'll show you why your emails go to spam", the hook should be "Your emails are going to spam — and here's exactly why."
 - "bullets": Array of 3 to 5 short talking points a presenter can ad-lib from (each 5-10 words, no names)
-- "cta": The call to action at the end (one sentence, no label)
+- "cta": The call to action at the end (one sentence, no label, no name)
 
 Return only valid JSON matching: { "hook": "...", "bullets": ["...", "..."], "cta": "..." }`,
       },
@@ -396,7 +396,13 @@ Return only valid JSON matching: { "hook": "...", "bullets": ["...", "..."], "ct
   const raw = response.choices[0]?.message?.content?.trim() || "{}";
   const parsed = JSON.parse(raw) as { hook?: string; bullets?: string[]; cta?: string };
 
-  const hook = parsed.hook?.trim() || "";
+  // Strip any greeting/name intro the AI included despite instructions.
+  // Handles: "Hey, it's Mark Harbert, and …" / "Hi, I'm Jane Smith, and …" / "Hello! It's Bob, …"
+  let hook = parsed.hook?.trim() || "";
+  hook = hook.replace(/^(hey|hi|hello)[,!.]?\s+(it'?s?|i'?m)\s+[\w]+(?:\s+[\w]+)?\s*[,!.]\s*(?:and\s+)?/i, "").trim();
+  // Capitalize first character after stripping
+  if (hook) hook = hook.charAt(0).toUpperCase() + hook.slice(1);
+
   const bullets = (parsed.bullets || []).slice(0, 5).map((b: string) => b.trim()).filter(Boolean);
   const cta = parsed.cta?.trim() || "";
 
