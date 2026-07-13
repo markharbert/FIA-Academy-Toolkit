@@ -29,6 +29,7 @@ import {
   Download,
   Video,
   Clock,
+  Sparkles,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -74,6 +75,8 @@ export default function TeleprompterPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [bulletPoints, setBulletPoints] = useState("");
+  const [editorTab, setEditorTab] = useState<"script" | "bullets">("script");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingDeleteRecordingId, setPendingDeleteRecordingId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -98,12 +101,13 @@ export default function TeleprompterPage() {
       setSelectedId(first.id);
       setTitle(first.title);
       setContent(first.content);
+      setBulletPoints(first.bulletPoints || "");
       setDirty(false);
     }
   }, [scripts]);
 
   const createMutation = useMutation({
-    mutationFn: async (data: { title: string; content: string }) => {
+    mutationFn: async (data: { title: string; content: string; bulletPoints?: string | null }) => {
       const res = await apiRequest("POST", "/api/teleprompter/scripts", data);
       return res.json() as Promise<TeleprompterScript>;
     },
@@ -119,10 +123,11 @@ export default function TeleprompterPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: { id: string; title: string; content: string }) => {
+    mutationFn: async (data: { id: string; title: string; content: string; bulletPoints?: string | null }) => {
       const res = await apiRequest("PATCH", `/api/teleprompter/scripts/${data.id}`, {
         title: data.title,
         content: data.content,
+        bulletPoints: data.bulletPoints ?? null,
       });
       return res.json() as Promise<TeleprompterScript>;
     },
@@ -162,6 +167,8 @@ export default function TeleprompterPage() {
     setSelectedId(null);
     setTitle("");
     setContent("");
+    setBulletPoints("");
+    setEditorTab("script");
     setDirty(false);
   };
 
@@ -171,6 +178,7 @@ export default function TeleprompterPage() {
     setSelectedId(script.id);
     setTitle(script.title);
     setContent(script.content);
+    setBulletPoints(script.bulletPoints || "");
     setDirty(false);
   };
 
@@ -190,11 +198,13 @@ export default function TeleprompterPage() {
         id: selectedId,
         title: trimmedTitle,
         content: trimmedContent,
+        bulletPoints: bulletPoints.trim() || null,
       });
     }
     return createMutation.mutateAsync({
       title: trimmedTitle,
       content: trimmedContent,
+      bulletPoints: bulletPoints.trim() || null,
     });
   };
 
@@ -222,6 +232,7 @@ export default function TeleprompterPage() {
       title: scriptToOpen?.title || title.trim() || "Untitled script",
       sections: [{ text: scriptToOpen?.content || trimmedContent }],
       scriptId: scriptToOpen?.id,
+      bulletPoints: scriptToOpen?.bulletPoints || bulletPoints.trim() || undefined,
     });
   };
 
@@ -272,6 +283,21 @@ export default function TeleprompterPage() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to delete recording", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const generateBulletsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/teleprompter/scripts/generate-bullets", { content });
+      return res.json() as Promise<{ bulletPoints: string }>;
+    },
+    onSuccess: (data) => {
+      setBulletPoints(data.bulletPoints);
+      setDirty(true);
+      toast({ title: "Bullet points generated", description: "Review and edit them as needed." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to generate bullets", description: err.message, variant: "destructive" });
     },
   });
 
@@ -424,25 +450,79 @@ export default function TeleprompterPage() {
                 </div>
 
                 <div>
-                  <div className="flex items-end justify-between mb-1.5">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Script
-                    </label>
-                    <span className="text-[11px] text-muted-foreground" data-testid="text-stats">
-                      {wc.toLocaleString()} words · ~{reading} read time
-                    </span>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 text-xs font-semibold transition-colors ${editorTab === "script" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted"}`}
+                        onClick={() => setEditorTab("script")}
+                        data-testid="tab-script"
+                      >
+                        Word-for-Word
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 text-xs font-semibold transition-colors border-l border-border ${editorTab === "bullets" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted"}`}
+                        onClick={() => setEditorTab("bullets")}
+                        data-testid="tab-bullets"
+                      >
+                        Bullet Points
+                      </button>
+                    </div>
+                    {editorTab === "script" && (
+                      <span className="text-[11px] text-muted-foreground" data-testid="text-stats">
+                        {wc.toLocaleString()} words · ~{reading} read time
+                      </span>
+                    )}
+                    {editorTab === "bullets" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2.5 text-xs gap-1"
+                        onClick={() => generateBulletsMutation.mutate()}
+                        disabled={!content.trim() || generateBulletsMutation.isPending}
+                        data-testid="button-generate-bullets"
+                        title={!content.trim() ? "Add a script first" : "Generate from your script using AI"}
+                      >
+                        {generateBulletsMutation.isPending ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-3 w-3" />
+                        )}
+                        AI Generate
+                      </Button>
+                    )}
                   </div>
-                  <Textarea
-                    value={content}
-                    onChange={(e) => {
-                      const next = e.target.value.slice(0, MAX_SCRIPT_CHARS);
-                      setContent(next);
-                      setDirty(true);
-                    }}
-                    placeholder="Paste your script here, or upload a .txt file below…"
-                    className="min-h-[360px] font-serif text-xl leading-relaxed resize-y"
-                    data-testid="input-content"
-                  />
+                  {editorTab === "script" ? (
+                    <Textarea
+                      value={content}
+                      onChange={(e) => {
+                        const next = e.target.value.slice(0, MAX_SCRIPT_CHARS);
+                        setContent(next);
+                        setDirty(true);
+                      }}
+                      placeholder="Paste your script here, or upload a .txt file below…"
+                      className="min-h-[360px] font-serif text-xl leading-relaxed resize-y"
+                      data-testid="input-content"
+                    />
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Textarea
+                        value={bulletPoints}
+                        onChange={(e) => {
+                          setBulletPoints(e.target.value);
+                          setDirty(true);
+                        }}
+                        placeholder={"• Opening hook\n• Key point 1\n• Key point 2\n• Key point 3\n• Call to action\n\nType bullet points manually, or click \"AI Generate\" to extract them from your script automatically."}
+                        className="min-h-[360px] text-base leading-relaxed resize-y"
+                        data-testid="input-bullets"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        One bullet per line. These appear as a reference card in the teleprompter so you can ad-lib naturally.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">

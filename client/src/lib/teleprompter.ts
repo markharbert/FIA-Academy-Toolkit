@@ -8,13 +8,17 @@ export type TeleprompterSection = {
   text: string;
 };
 
-export function openTeleprompter(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string }): void {
-  const { title, sections, scriptId } = opts;
+export function openTeleprompter(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): void {
+  const { title, sections, scriptId, bulletPoints } = opts;
   const cleaned = sections.filter((s) => s.text && s.text.trim());
   if (cleaned.length === 0) return;
 
   const esc = (t: string) =>
     t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const bulletsHtml = bulletPoints
+    ? bulletPoints.split("\n").filter((l) => l.trim()).map((l) => `<div class="bullet-line">${esc(l.trim())}</div>`).join("")
+    : "";
 
   const sectionsHtml = cleaned
     .map((s) => {
@@ -111,6 +115,17 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 
     #cam-footer{flex-shrink:0;padding:6px 12px;font-family:monospace;font-size:9px;color:#222;border-top:1px solid #1a1a1a;text-align:center}
     #download-info{font-family:monospace;font-size:11px;color:rgba(255,255,255,.3)}
+
+    /* ── Script / Bullets tabs ── */
+    #view-tabs{flex-shrink:0;display:none;gap:8px;padding:10px 60px 6px;background:#0a0a0a}
+    .view-tab{font-family:Arial,sans-serif;font-size:12px;font-weight:700;padding:6px 20px;border-radius:999px;border:none;cursor:pointer;transition:.15s;letter-spacing:.03em}
+    .view-tab.active{background:#fff;color:#000}
+    .view-tab:not(.active){background:rgba(255,255,255,.1);color:rgba(255,255,255,.5)}
+    .view-tab:hover:not(.active){background:rgba(255,255,255,.2);color:rgba(255,255,255,.9)}
+    #bullets-view{flex:1;overflow-y:auto;padding:40px 60px 0;scrollbar-width:none;display:none}
+    #bullets-view::-webkit-scrollbar{display:none}
+    .bullet-line{font-size:var(--text-size,32px);line-height:2.2;color:#fff;white-space:pre-wrap;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:8px;margin-bottom:8px}
+    .bullet-line:last-child{border-bottom:none}
   </style>
 </head>
 <body>
@@ -132,10 +147,18 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
   <!-- ── Main area ── -->
   <div id="main">
 
-    <!-- Left: scrolling script -->
+    <!-- Left: scrolling script / bullets -->
     <div id="left">
+      <div id="view-tabs">
+        <button class="view-tab active" id="tab-script" onclick="switchView('script')">&#x1F4C4; Script</button>
+        <button class="view-tab" id="tab-bullets" onclick="switchView('bullets')">&#x2022; Bullets</button>
+      </div>
       <div id="scroller">
         ${sectionsHtml}
+        <div class="bottom-pad"></div>
+      </div>
+      <div id="bullets-view">
+        ${bulletsHtml || '<div style="font-family:Arial,sans-serif;color:rgba(255,255,255,.25);font-size:16px;padding:20px 0">No bullet points added yet — save bullet points from the editor first.</div>'}
         <div class="bottom-pad"></div>
       </div>
       <div id="hint">Space = play/pause &nbsp;·&nbsp; [ / ] = slower / faster &nbsp;·&nbsp; +/− = font size</div>
@@ -316,6 +339,27 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     ══════════════════════════════════════════ */
     var SCRIPT_ID = ${JSON.stringify(scriptId || "")};
     var SCRIPT_TITLE = ${JSON.stringify(title)};
+    var BULLET_POINTS = ${JSON.stringify(bulletPoints || "")};
+
+    // Show view tabs only when bullet points are available
+    if(BULLET_POINTS.trim()){
+      document.getElementById('view-tabs').style.display='flex';
+    }
+
+    var activeView='script';
+    function switchView(v){
+      activeView=v;
+      var isScript=(v==='script');
+      document.getElementById('scroller').style.display=isScript?'block':'none';
+      document.getElementById('bullets-view').style.display=isScript?'none':'block';
+      document.getElementById('tab-script').className='view-tab'+(isScript?' active':'');
+      document.getElementById('tab-bullets').className='view-tab'+(!isScript?' active':'');
+      // Pause auto-scroll and disable play controls when on bullets view
+      if(!isScript&&playing)togglePlay();
+      playBtn.disabled=!isScript;
+      document.getElementById('speedWrap').style.opacity=isScript?'1':'0.3';
+      document.getElementById('speedWrap').style.pointerEvents=isScript?'':'none';
+    }
 
     var camState='idle';
     var mediaStream=null,mediaRecorder=null,recordedChunks=[],recordedBlob=null,recordedUrl=null,recMimeType='';

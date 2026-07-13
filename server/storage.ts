@@ -319,8 +319,8 @@ export interface IStorage {
   // Standalone teleprompter scripts
   getTeleprompterScriptsByUser(userId: string): Promise<TeleprompterScript[]>;
   getTeleprompterScript(id: string, userId: string): Promise<TeleprompterScript | undefined>;
-  createTeleprompterScript(userId: string, data: { title: string; content: string }): Promise<TeleprompterScript>;
-  updateTeleprompterScript(id: string, userId: string, data: { title?: string; content?: string }): Promise<TeleprompterScript | undefined>;
+  createTeleprompterScript(userId: string, data: { title: string; content: string; bulletPoints?: string | null }): Promise<TeleprompterScript>;
+  updateTeleprompterScript(id: string, userId: string, data: { title?: string; content?: string; bulletPoints?: string | null }): Promise<TeleprompterScript | undefined>;
   deleteTeleprompterScript(id: string, userId: string): Promise<boolean>;
 
   // Teleprompter Recordings
@@ -1799,17 +1799,18 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
-  async createTeleprompterScript(userId: string, data: { title: string; content: string }): Promise<TeleprompterScript> {
+  async createTeleprompterScript(userId: string, data: { title: string; content: string; bulletPoints?: string | null }): Promise<TeleprompterScript> {
     const [result] = await db.insert(teleprompterScripts)
-      .values({ userId, title: data.title, content: data.content })
+      .values({ userId, title: data.title, content: data.content, bulletPoints: data.bulletPoints ?? null })
       .returning();
     return result;
   }
 
-  async updateTeleprompterScript(id: string, userId: string, data: { title?: string; content?: string }): Promise<TeleprompterScript | undefined> {
+  async updateTeleprompterScript(id: string, userId: string, data: { title?: string; content?: string; bulletPoints?: string | null }): Promise<TeleprompterScript | undefined> {
     const updates: Partial<TeleprompterScript> = { updatedAt: new Date() };
     if (data.title !== undefined) updates.title = data.title;
     if (data.content !== undefined) updates.content = data.content;
+    if (data.bulletPoints !== undefined) updates.bulletPoints = data.bulletPoints;
     const [result] = await db.update(teleprompterScripts)
       .set(updates)
       .where(and(eq(teleprompterScripts.id, id), eq(teleprompterScripts.userId, userId)))

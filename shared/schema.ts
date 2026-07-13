@@ -721,6 +721,7 @@ export const teleprompterScripts = pgTable("teleprompter_scripts", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   content: text("content").notNull(),
+  bulletPoints: text("bullet_points"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -734,6 +735,7 @@ export const insertTeleprompterScriptSchema = createInsertSchema(teleprompterScr
 export const upsertTeleprompterScriptSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(120, "Title must be 120 characters or less"),
   content: z.string().min(1, "Script content is required").max(100000, "Script is too long (max 100,000 characters)"),
+  bulletPoints: z.string().max(50000).nullish(),
 });
 
 export type InsertTeleprompterScript = z.infer<typeof insertTeleprompterScriptSchema>;

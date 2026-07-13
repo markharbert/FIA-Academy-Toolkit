@@ -4914,6 +4914,35 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/teleprompter/scripts/generate-bullets", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { content } = req.body;
+      if (!content || typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({ message: "content is required" });
+      }
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are a video script assistant. Extract 6-10 concise bullet points from the provided video script that capture the key talking points. Each bullet should be a short, memorable phrase (5-10 words max) that a presenter can ad-lib from naturally. Return only the bullet points, one per line, starting each with a • character. No numbering, no extra commentary, no headers."
+          },
+          {
+            role: "user",
+            content: `Extract bullet points from this script:\n\n${content.trim().slice(0, 20000)}`
+          }
+        ],
+        max_tokens: 600,
+        temperature: 0.3,
+      });
+      const bullets = completion.choices[0]?.message?.content?.trim() || "";
+      res.json({ bulletPoints: bullets });
+    } catch (err) {
+      console.error("[Teleprompter] Generate bullets error:", err);
+      res.status(500).json({ message: "Failed to generate bullet points" });
+    }
+  });
+
   app.delete("/api/teleprompter/scripts/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const ok = await storage.deleteTeleprompterScript(req.params.id, req.session.userId!);
