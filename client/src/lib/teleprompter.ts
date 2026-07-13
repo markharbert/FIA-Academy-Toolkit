@@ -530,8 +530,6 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       if(!mediaStream)return;
       if(!playing)togglePlay();
 
-      recMimeType=getSupportedMimeType();
-
       // ── Canvas-based recording: crops the stream to the exact target dimensions
       // so the saved file is truly 9:16, 1:1, or 16:9 with no black bars.
       var FORMAT_DIMS={landscape:{w:1280,h:720},portrait:{w:720,h:1280},square:{w:720,h:720}};
@@ -564,13 +562,26 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       drawFrame();
 
       // Build recording stream: canvas video + original audio
+      // IMPORTANT: force WebM for canvas recording — MP4/H.264 is unreliable
+      // with captureStream even when isTypeSupported() returns true.
       var recordingStream=mediaStream; // fallback if captureStream unsupported
+      var usingCanvas=false;
       if(typeof recCanvas.captureStream==='function'){
         try{
           var canvasStream=recCanvas.captureStream(30);
           mediaStream.getAudioTracks().forEach(function(t){canvasStream.addTrack(t);});
           recordingStream=canvasStream;
+          usingCanvas=true;
         }catch(e){/* fall through to direct stream */}
+      }
+
+      // Pick mime type: WebM is the only reliable format for canvas streams
+      if(usingCanvas){
+        recMimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ?'video/webm;codecs=vp9'
+          :'video/webm';
+      } else {
+        recMimeType=getSupportedMimeType();
       }
 
       var opts=recMimeType?{mimeType:recMimeType}:{};
@@ -631,11 +642,19 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
       }
 
-      function onFail(){
+      function onFail(reason){
         uploadFailed=true;
-        document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg error" style="font-size:11px">\u26a0 Cloud save failed \u2014 download below to keep your take.</p>';
+        var msg=reason||'Cloud save failed';
+        document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg error" style="font-size:11px">\u26a0 '+msg+' \u2014 download below to keep your take.</p>';
         document.getElementById('review-warn').style.display='block';
         setCamState('review');
+      }
+
+      // Guard: if the blob is empty the recording failed silently
+      if(recordedBlob.size<2000){
+        console.error('[teleprompter] recording blob is too small:',recordedBlob.size,'bytes');
+        onFail('Recording was empty (codec issue)');
+        return;
       }
 
       // ── Step 1: ask the server for a presigned GCS PUT URL ──
@@ -669,7 +688,11 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         };
 
         xhr.onload=function(){
-          if(xhr.status<200||xhr.status>=300){onFail();return;}
+          if(xhr.status<200||xhr.status>=300){
+            console.error('[teleprompter] GCS PUT failed:',xhr.status,xhr.responseText?xhr.responseText.slice(0,300):'');
+            onFail('Upload failed (HTTP '+xhr.status+')');
+            return;
+          }
 
           // ── Step 3: register the recording in the database ──
           fetch('/api/teleprompter/recordings/confirm-upload',{
