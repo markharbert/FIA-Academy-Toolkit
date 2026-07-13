@@ -365,9 +365,10 @@ export default function TeleprompterPage() {
   function formatDaysLeft(expiresAt: string | Date): string {
     const exp = typeof expiresAt === "string" ? new Date(expiresAt) : expiresAt;
     const days = Math.ceil((exp.getTime() - Date.now()) / 86400000);
+    const dateStr = exp.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     if (days <= 0) return "Expired";
-    if (days === 1) return "Expires tomorrow";
-    return `Expires in ${days} days`;
+    if (days === 1) return `Expires tomorrow · ${dateStr}`;
+    return `Expires in ${days} day${days !== 1 ? "s" : ""} · ${dateStr}`;
   }
 
   return (
