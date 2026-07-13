@@ -75,6 +75,7 @@ export default function TeleprompterPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingDeleteRecordingId, setPendingDeleteRecordingId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
   const { data: scripts, isLoading } = useQuery<TeleprompterScript[]>({
@@ -578,7 +579,7 @@ export default function TeleprompterPage() {
                               Download
                             </a>
                             <button
-                              onClick={() => deleteRecordingMutation.mutate(rec.id)}
+                              onClick={() => setPendingDeleteRecordingId(rec.id)}
                               disabled={deleteRecordingMutation.isPending}
                               className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                               aria-label="Delete recording"
@@ -598,7 +599,34 @@ export default function TeleprompterPage() {
         </div>
       </div>
 
-      {/* Delete confirmation */}
+      {/* Recording delete confirmation */}
+      <AlertDialog open={!!pendingDeleteRecordingId} onOpenChange={(open) => !open && setPendingDeleteRecordingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this recording?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the video from your account and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-delete-recording-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingDeleteRecordingId) {
+                  deleteRecordingMutation.mutate(pendingDeleteRecordingId);
+                  setPendingDeleteRecordingId(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-delete-recording-confirm"
+            >
+              Yes, delete it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Script delete confirmation */}
       <AlertDialog open={!!pendingDeleteId} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
