@@ -117,7 +117,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     #download-info{font-family:monospace;font-size:11px;color:rgba(255,255,255,.3)}
 
     /* ── Script / Bullets tabs ── */
-    #view-tabs{flex-shrink:0;display:none;gap:8px;padding:10px 60px 6px;background:#0a0a0a}
+    #view-tabs{flex-shrink:0;display:flex;gap:8px;padding:10px 60px 6px;background:#0a0a0a}
     .view-tab{font-family:Arial,sans-serif;font-size:12px;font-weight:700;padding:6px 20px;border-radius:999px;border:none;cursor:pointer;transition:.15s;letter-spacing:.03em}
     .view-tab.active{background:#fff;color:#000}
     .view-tab:not(.active){background:rgba(255,255,255,.1);color:rgba(255,255,255,.5)}
@@ -340,11 +340,6 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     var SCRIPT_ID = ${JSON.stringify(scriptId || "")};
     var SCRIPT_TITLE = ${JSON.stringify(title)};
     var BULLET_POINTS = ${JSON.stringify(bulletPoints || "")};
-
-    // Show view tabs only when bullet points are available
-    if(BULLET_POINTS.trim()){
-      document.getElementById('view-tabs').style.display='flex';
-    }
 
     var activeView='script';
     function switchView(v){
