@@ -138,6 +138,12 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     .bullet-line:last-child{border-bottom:none}
     .bullet-hook{font-size:var(--text-size,32px);line-height:1.8;color:#facc15;font-weight:700;white-space:pre-wrap;border-bottom:2px solid rgba(250,204,21,.25);padding-bottom:12px;margin-bottom:16px}
     .bullet-cta{font-size:var(--text-size,32px);line-height:1.8;color:#4ade80;font-weight:700;white-space:pre-wrap;border-top:2px solid rgba(74,222,128,.25);padding-top:12px;margin-top:8px}
+
+    /* ── Resizable divider ── */
+    #resizer{width:6px;flex-shrink:0;background:transparent;cursor:col-resize;position:relative;transition:background .15s;z-index:10}
+    #resizer:hover,#resizer.dragging{background:rgba(255,255,255,.10)}
+    #resizer::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:48px;width:2px;border-radius:999px;background:rgba(255,255,255,.18);transition:background .15s}
+    #resizer:hover::after,#resizer.dragging::after{background:rgba(255,255,255,.50)}
   </style>
 </head>
 <body>
@@ -175,6 +181,9 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       </div>
       <div id="hint">Space = play/pause &nbsp;·&nbsp; [ / ] = slower / faster &nbsp;·&nbsp; +/− = font size</div>
     </div>
+
+    <!-- Draggable divider -->
+    <div id="resizer" title="Drag to resize"></div>
 
     <!-- Right: camera + recording -->
     <div id="camera-panel">
@@ -345,6 +354,35 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       if(e.key==='+'||e.key==='='){e.preventDefault();changeFont(1);}
       if(e.key==='-'||e.key==='_'){e.preventDefault();changeFont(-1);}
     });
+
+    /* ══════════════════════════════════════════
+       RESIZABLE DIVIDER
+    ══════════════════════════════════════════ */
+    (function(){
+      var resizer=document.getElementById('resizer');
+      var camPanel=document.getElementById('camera-panel');
+      var isResizing=false,startX=0,startW=0;
+      resizer.addEventListener('mousedown',function(e){
+        isResizing=true;startX=e.clientX;startW=camPanel.offsetWidth;
+        resizer.classList.add('dragging');
+        document.body.style.cursor='col-resize';
+        document.body.style.userSelect='none';
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove',function(e){
+        if(!isResizing)return;
+        var dx=startX-e.clientX; // dragging left widens camera panel
+        var newW=Math.max(220,Math.min(window.innerWidth*0.65,startW+dx));
+        camPanel.style.width=newW+'px';
+      });
+      document.addEventListener('mouseup',function(){
+        if(!isResizing)return;
+        isResizing=false;
+        resizer.classList.remove('dragging');
+        document.body.style.cursor='';
+        document.body.style.userSelect='';
+      });
+    })();
 
     /* ══════════════════════════════════════════
        CAMERA / RECORDING LOGIC
