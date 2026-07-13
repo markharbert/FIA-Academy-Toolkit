@@ -90,6 +90,8 @@ export default function TeleprompterPage() {
   const [previewRec, setPreviewRec] = useState<TeleprompterRecording | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
   const [dirty, setDirty] = useState(false);
 
   // Fetch recording as a blob when preview opens — one continuous download instead
@@ -104,6 +106,7 @@ export default function TeleprompterPage() {
     let cancelled = false;
     setPreviewLoading(true);
     setPreviewUrl(null);
+    setPreviewPlaying(false);
     fetch(`/api/teleprompter/recordings/${previewRec.id}/stream`, { credentials: "include" })
       .then((r) => r.blob())
       .then((blob) => {
@@ -735,7 +738,7 @@ export default function TeleprompterPage() {
             </DialogTitle>
             <DialogDescription className="sr-only">Video preview player</DialogDescription>
           </DialogHeader>
-          <div className="bg-black w-full flex items-center justify-center min-h-[200px]">
+          <div className="bg-black w-full flex items-center justify-center min-h-[200px] relative">
             {previewLoading && (
               <div className="flex flex-col items-center gap-2 text-white/60 py-12">
                 <div className="h-8 w-8 rounded-full border-2 border-white/20 border-t-white animate-spin" />
@@ -743,13 +746,34 @@ export default function TeleprompterPage() {
               </div>
             )}
             {previewUrl && (
-              <video
-                key={previewRec?.id}
-                src={previewUrl}
-                controls
-                className="w-full max-h-[60vh] outline-none"
-                data-testid="video-preview-player"
-              />
+              <>
+                <video
+                  ref={previewVideoRef}
+                  key={previewRec?.id}
+                  src={previewUrl}
+                  controls
+                  className="w-full max-h-[60vh] outline-none"
+                  data-testid="video-preview-player"
+                  onPlay={() => setPreviewPlaying(true)}
+                  onPause={() => setPreviewPlaying(false)}
+                  onEnded={() => setPreviewPlaying(false)}
+                />
+                {!previewPlaying && (
+                  <button
+                    onClick={() => previewVideoRef.current?.play()}
+                    className="absolute inset-0 flex items-center justify-center group"
+                    aria-label="Play video"
+                    data-testid="button-overlay-play"
+                  >
+                    <span className="relative flex items-center justify-center">
+                      <span className="absolute h-20 w-20 rounded-full bg-white/20 animate-ping" />
+                      <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-white/90 shadow-lg transition-transform group-hover:scale-110">
+                        <Play className="h-7 w-7 text-black fill-black ml-1" />
+                      </span>
+                    </span>
+                  </button>
+                )}
+              </>
             )}
           </div>
           <div className="flex items-center justify-between px-5 py-3 border-t border-border">
