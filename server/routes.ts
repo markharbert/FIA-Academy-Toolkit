@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary } from "./ai";
+import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
@@ -4920,25 +4920,10 @@ export async function registerRoutes(
       if (!content || typeof content !== "string" || !content.trim()) {
         return res.status(400).json({ message: "content is required" });
       }
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: "You are a video script assistant. Extract 6-10 concise bullet points from the provided video script that capture the key talking points. Each bullet should be a short, memorable phrase (5-10 words max) that a presenter can ad-lib from naturally. Return only the bullet points, one per line, starting each with a • character. No numbering, no extra commentary, no headers."
-          },
-          {
-            role: "user",
-            content: `Extract bullet points from this script:\n\n${content.trim().slice(0, 20000)}`
-          }
-        ],
-        max_tokens: 600,
-        temperature: 0.3,
-      });
-      const bullets = completion.choices[0]?.message?.content?.trim() || "";
+      const bullets = await generateBulletPoints(content);
       res.json({ bulletPoints: bullets });
-    } catch (err) {
-      console.error("[Teleprompter] Generate bullets error:", err);
+    } catch (err: any) {
+      console.error("[Teleprompter] Generate bullets error:", err?.message || err);
       res.status(500).json({ message: "Failed to generate bullet points" });
     }
   });

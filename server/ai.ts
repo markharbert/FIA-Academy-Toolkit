@@ -369,3 +369,22 @@ Be conversational and human. Reference specific things they wrote in their notes
     performanceScore: Math.min(10, Math.max(1, Number(parsed.performanceScore) || 5)),
   };
 }
+
+export async function generateBulletPoints(scriptContent: string): Promise<string> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.1",
+    messages: [
+      {
+        role: "system",
+        content: "You are a video script assistant. Extract 6-10 concise bullet points from the provided video script that capture the key talking points. Each bullet should be a short, memorable phrase (5-10 words max) that a presenter can ad-lib from naturally. Return only the bullet points, one per line, starting each with a • character. No numbering, no extra commentary, no headers.",
+      },
+      {
+        role: "user",
+        content: `Extract bullet points from this script:\n\n${scriptContent.trim().slice(0, 20000)}`,
+      },
+    ],
+    max_tokens: 600,
+    temperature: 0.3,
+  });
+  return response.choices[0]?.message?.content?.trim() || "";
+}
