@@ -377,8 +377,8 @@ export async function generateBulletPoints(scriptContent: string): Promise<strin
       {
         role: "system",
         content: `You are a video script assistant. Extract these three things from the script and return them as JSON:
-- "hook": The opening sentence that grabs attention (one sentence, no label)
-- "bullets": Array of 3 to 5 short talking points a presenter can ad-lib from (each 5-10 words)
+- "hook": A single punchy sentence that grabs attention immediately. Do NOT include the speaker's name or any self-introduction ("Hey, it's Mark..." or "Hi, I'm..."). Skip straight to the problem, question, or bold statement that hooks the viewer.
+- "bullets": Array of 3 to 5 short talking points a presenter can ad-lib from (each 5-10 words, no names)
 - "cta": The call to action at the end (one sentence, no label)
 
 Return only valid JSON matching: { "hook": "...", "bullets": ["...", "..."], "cta": "..." }`,
@@ -400,11 +400,12 @@ Return only valid JSON matching: { "hook": "...", "bullets": ["...", "..."], "ct
   const bullets = (parsed.bullets || []).slice(0, 5).map((b: string) => b.trim()).filter(Boolean);
   const cta = parsed.cta?.trim() || "";
 
-  // Enforce 3-5 bullets
-  const lines: string[] = [];
-  if (hook) lines.push(hook);
-  bullets.slice(0, 5).forEach((b) => lines.push(b.startsWith("•") ? b : `• ${b}`));
-  if (cta) lines.push(cta);
+  // Assemble with blank lines between sections
+  const parts: string[] = [];
+  if (hook) parts.push(hook);
+  const bulletLines = bullets.slice(0, 5).map((b) => b.startsWith("•") ? b : `• ${b}`);
+  if (bulletLines.length) parts.push(bulletLines.join("\n"));
+  if (cta) parts.push(cta);
 
-  return lines.join("\n");
+  return parts.join("\n\n");
 }
