@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useParams } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -127,6 +127,16 @@ function AuthenticatedCatchAll() {
   return <NotAuthenticated />;
 }
 
+function OldExploreRedirect() {
+  const params = useParams<{ runId: string }>();
+  return <Redirect to={`/video-studio/research/explore/${params.runId}`} />;
+}
+
+function OldScriptRedirect() {
+  const params = useParams<{ scriptId: string }>();
+  return <Redirect to={`/video-studio/scripts/${params.scriptId}`} />;
+}
+
 function ProtectedRoutes() {
   return (
     <Switch>
@@ -151,23 +161,41 @@ function ProtectedRoutes() {
       <Route path="/account">
         {() => <ProtectedRoute component={AccountPage} />}
       </Route>
-      <Route path="/video-trends">
+      <Route path="/video-studio/research">
         {() => <ProtectedRoute component={TopicPulsePage} />}
       </Route>
-      <Route path="/video-trends/explore/:runId">
+      <Route path="/video-studio/research/explore/:runId">
         {() => <ProtectedRoute component={TopicPulseExplorePage} />}
       </Route>
-      <Route path="/video-trends/scripts/:scriptId">
-        {() => <ProtectedRoute component={TopicPulseScriptPage} />}
-      </Route>
-      <Route path="/video-trends/scripts">
-        {() => <ProtectedRoute component={TopicPulseScriptsPage} />}
-      </Route>
-      <Route path="/video-trends/saved">
+      <Route path="/video-studio/research/saved">
         {() => <ProtectedRoute component={TopicPulseSavedPage} />}
       </Route>
-      <Route path="/teleprompter">
+      <Route path="/video-studio/scripts/:scriptId">
+        {() => <ProtectedRoute component={TopicPulseScriptPage} />}
+      </Route>
+      <Route path="/video-studio/scripts">
+        {() => <ProtectedRoute component={TopicPulseScriptsPage} />}
+      </Route>
+      <Route path="/video-studio/record">
         {() => <ProtectedRoute component={TeleprompterPage} />}
+      </Route>
+      <Route path="/video-trends">
+        {() => <Redirect to="/video-studio/research" />}
+      </Route>
+      <Route path="/video-trends/explore/:runId">
+        {() => <OldExploreRedirect />}
+      </Route>
+      <Route path="/video-trends/scripts/:scriptId">
+        {() => <OldScriptRedirect />}
+      </Route>
+      <Route path="/video-trends/scripts">
+        {() => <Redirect to="/video-studio/scripts" />}
+      </Route>
+      <Route path="/video-trends/saved">
+        {() => <Redirect to="/video-studio/research/saved" />}
+      </Route>
+      <Route path="/teleprompter">
+        {() => <Redirect to="/video-studio/record" />}
       </Route>
       <Route path="/video-studio">
         {() => <ProtectedRoute component={VideoToolsPage} />}

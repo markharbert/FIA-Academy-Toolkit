@@ -376,7 +376,7 @@ export default function DashboardPage() {
         label: s.title || "Untitled script",
         sub: "Script generated",
         ts: new Date(s.createdAt),
-        href: "/video-trends/scripts",
+        href: "/video-studio/scripts",
       });
     });
     insights?.anomalies?.slice(0, 4).forEach(a => {

@@ -451,7 +451,7 @@ export default function TopicPulseExplorePage() {
     },
     onSuccess: (data) => {
       toast({ title: "Script generated!" });
-      navigate(`/video-trends/scripts/${data.id}`);
+      navigate(`/video-studio/scripts/${data.id}`);
     },
     onError: (err: Error) => {
       toast({
@@ -470,7 +470,7 @@ export default function TopicPulseExplorePage() {
     onSuccess: (data: { runId: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
       toast({ title: "New search started!" });
-      navigate(`/video-trends/explore/${data.runId}`);
+      navigate(`/video-studio/research/explore/${data.runId}`);
     },
     onError: (err: Error) => {
       toast({
@@ -542,7 +542,7 @@ export default function TopicPulseExplorePage() {
         <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
         <div className="relative px-4 py-4 flex items-center gap-4 max-w-5xl mx-auto w-full">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/video-trends")} className="text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/video-studio/research")} className="text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">

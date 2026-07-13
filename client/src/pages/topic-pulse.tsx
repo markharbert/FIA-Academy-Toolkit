@@ -85,7 +85,7 @@ export default function TopicPulsePage() {
       setRunsPage(1);
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
-      navigate(`/video-trends/explore/${data.runId}`);
+      navigate(`/video-studio/research/explore/${data.runId}`);
     },
     onError: (err: Error) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
@@ -151,7 +151,7 @@ export default function TopicPulsePage() {
           <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Sparkles className="h-5 w-5 text-amber-400" />
-            <h1 className="text-2xl font-bold text-white" data-testid="text-page-title">Video Trends</h1>
+            <h1 className="text-2xl font-bold text-white" data-testid="text-page-title">Research</h1>
           </div>
           <p className="text-white/60 text-sm mb-6">
             Find in-demand YouTube topics and generate scripts with Mark's 5-part formula
@@ -240,7 +240,7 @@ export default function TopicPulsePage() {
           <div className="grid grid-cols-2 gap-4">
             <div
               className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
-              onClick={() => navigate("/video-trends/saved")}
+              onClick={() => navigate("/video-studio/research/saved")}
               data-testid="card-saved-topics"
             >
               <div className="h-1 bg-gradient-to-r from-teal-500 to-emerald-400" />
@@ -258,7 +258,7 @@ export default function TopicPulsePage() {
 
             <div
               className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
-              onClick={() => navigate("/video-trends/scripts")}
+              onClick={() => navigate("/video-studio/scripts")}
               data-testid="card-scripts"
             >
               <div className="h-1 bg-gradient-to-r from-violet-500 to-blue-400" />
@@ -319,7 +319,7 @@ export default function TopicPulsePage() {
                       <div
                         key={run.id}
                         className={`group relative rounded-xl border bg-card shadow-sm border-l-4 ${RUN_ACCENTS[globalIndex % RUN_ACCENTS.length]} cursor-pointer transition-all hover:shadow-md hover:-translate-y-px`}
-                        onClick={() => navigate(`/video-trends/explore/${run.id}`)}
+                        onClick={() => navigate(`/video-studio/research/explore/${run.id}`)}
                         data-testid={`card-run-${run.id}`}
                       >
                         <div className="px-5 py-3.5 flex items-center gap-4">

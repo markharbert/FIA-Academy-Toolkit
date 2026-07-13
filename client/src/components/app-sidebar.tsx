@@ -97,20 +97,20 @@ const allNavItems: NavItem[] = [
     children: [
       {
         title: "Research",
-        url: "/video-trends",
+        url: "/video-studio/research",
         testId: "nav-topic-pulse",
-        matchPaths: ["/video-trends", "/video-trends/explore", "/video-trends/saved", "/video-trends/settings"],
+        matchPaths: ["/video-studio/research", "/video-studio/research/explore", "/video-studio/research/saved"],
         activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
       },
       {
         title: "Scripts",
-        url: "/video-trends/scripts",
+        url: "/video-studio/scripts",
         testId: "nav-video-scripts",
         activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
       },
       {
         title: "Teleprompter",
-        url: "/teleprompter",
+        url: "/video-studio/record",
         testId: "nav-teleprompter",
         activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
       },

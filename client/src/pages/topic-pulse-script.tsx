@@ -1586,12 +1586,12 @@ export default function TopicPulseScriptPage() {
           {/* Top row: back + title + actions */}
           <div className="flex items-start gap-3">
             <button
-              onClick={() => navigate("/video-trends/scripts")}
+              onClick={() => navigate("/video-studio/scripts")}
               className="mt-0.5 flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors"
               data-testid="button-back"
             >
               <ArrowLeft className="h-4 w-4" />
-              Generated Scripts
+              Scripts
             </button>
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold text-white leading-tight truncate" data-testid="text-script-title">

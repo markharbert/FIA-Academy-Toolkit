@@ -141,7 +141,7 @@ export default function TopicPulseScriptsPage() {
                   <div
                     key={script.id}
                     className={`group relative rounded-xl border bg-card shadow-sm border-l-4 ${accent} cursor-pointer transition-all hover:shadow-md hover:-translate-y-px`}
-                    onClick={() => navigate(`/video-trends/scripts/${script.id}`)}
+                    onClick={() => navigate(`/video-studio/scripts/${script.id}`)}
                     data-testid={`card-script-${script.id}`}
                   >
                     <div className="px-5 py-4 flex items-start gap-4">
@@ -231,11 +231,11 @@ export default function TopicPulseScriptsPage() {
               </div>
               <p className="text-lg font-semibold text-foreground/80">No scripts yet</p>
               <p className="text-sm text-muted-foreground mt-1 max-w-xs">
-                Head over to Video Trends, find a great topic, and generate your first script.
+                Head over to Research, find a great topic, and generate your first script.
               </p>
               <Button
                 className="mt-5"
-                onClick={() => navigate("/video-trends")}
+                onClick={() => navigate("/video-studio/research")}
                 data-testid="button-go-to-trends"
               >
                 Explore Topics
