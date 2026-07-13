@@ -4932,8 +4932,18 @@ export async function registerRoutes(
     try {
       const userId = req.session.userId!;
       const scriptId = (typeof req.body.scriptId === "string" && req.body.scriptId) ? req.body.scriptId : null;
-      const title = (typeof req.body.title === "string" && req.body.title.trim()) ? req.body.title.trim().slice(0, 120) : "Untitled Take";
+      const baseTitle = (typeof req.body.title === "string" && req.body.title.trim()) ? req.body.title.trim().slice(0, 100) : "Untitled";
       const durationSeconds = req.body.durationSeconds ? (parseInt(req.body.durationSeconds, 10) || null) : null;
+      // Auto-number takes — count existing takes for this script (or same base title)
+      const existingRecordings = await storage.getTeleprompterRecordingsByUser(userId);
+      let takeNumber: number;
+      if (scriptId) {
+        takeNumber = existingRecordings.filter((r) => r.scriptId === scriptId).length + 1;
+      } else {
+        const prefix = baseTitle + " \u2014 Take ";
+        takeNumber = existingRecordings.filter((r) => r.title.startsWith(prefix)).length + 1;
+      }
+      const title = `${baseTitle} \u2014 Take ${takeNumber}`;
       const ext = path.extname(file.originalname).toLowerCase() || (file.mimetype.includes("mp4") ? ".mp4" : ".webm");
       const objectId = crypto.randomUUID();
       const storageKey = `/objects/recordings/${userId}/${objectId}${ext}`;
