@@ -83,6 +83,7 @@
     "hls.js": "^1.6.15",
     "imapflow": "^1.4.2",
     "input-otp": "^1.4.2",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.453.0",
     "memorystore": "^1.6.7",
     "multer": "^2.2.0",

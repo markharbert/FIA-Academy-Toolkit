@@ -43,6 +43,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { openTeleprompter } from "@/lib/teleprompter";
+import jsPDF from "jspdf";
 import type { TeleprompterScript, TeleprompterRecording } from "@shared/schema";
 
 const MAX_SCRIPT_CHARS = 100_000;
@@ -397,6 +398,73 @@ export default function TeleprompterPage() {
     } finally {
       setTranscribingIds((prev) => { const s = new Set(prev); s.delete(rec.id); return s; });
     }
+  }
+
+  function downloadTranscriptTxt(title: string, text: string) {
+    const blob = new Blob([`${title}\n${"=".repeat(title.length)}\n\n${text}`], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadTranscriptPdf(title: string, text: string) {
+    const doc = new jsPDF({ unit: "pt", format: "letter" });
+    const margin = 54;
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const contentW = pageW - margin * 2;
+
+    // Header bar
+    doc.setFillColor(30, 41, 59);
+    doc.rect(0, 0, pageW, 48, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text("Academy Toolkit", margin, 31);
+
+    // Title
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    const titleLines = doc.splitTextToSize(title, contentW);
+    doc.text(titleLines, margin, 82);
+    const titleBlockH = titleLines.length * 18;
+
+    // Divider
+    const divY = 82 + titleBlockH + 6;
+    doc.setDrawColor(203, 213, 225);
+    doc.line(margin, divY, pageW - margin, divY);
+
+    // Body text
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(30, 41, 59);
+    const bodyLines = doc.splitTextToSize(text, contentW);
+    let y = divY + 18;
+    for (const line of bodyLines) {
+      if (y > pageH - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(line, margin, y);
+      y += 15;
+    }
+
+    // Footer on each page
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(`Page ${i} of ${totalPages}`, pageW - margin, pageH - 24, { align: "right" });
+      doc.text("Academy Toolkit — Teleprompter Transcript", margin, pageH - 24);
+    }
+
+    const filename = `${title.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "")}.pdf`;
+    doc.save(filename);
   }
 
   function formatDaysLeft(expiresAt: string | Date): string {
@@ -906,19 +974,40 @@ export default function TeleprompterPage() {
           <div className="flex-1 overflow-y-auto rounded-md border border-border bg-muted/40 p-4 mt-2">
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcriptModal.text}</p>
           </div>
-          <div className="flex justify-between items-center pt-3 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard.writeText(transcriptModal.text).then(() => {
-                  toast({ title: "Copied to clipboard" });
-                });
-              }}
-              data-testid="button-copy-transcript"
-            >
-              Copy Transcript
-            </Button>
+          <div className="flex justify-between items-center pt-3 shrink-0 gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(transcriptModal.text).then(() => {
+                    toast({ title: "Copied to clipboard" });
+                  });
+                }}
+                data-testid="button-copy-transcript"
+              >
+                <FileText className="h-3.5 w-3.5 mr-1.5" />
+                Copy
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadTranscriptTxt(transcriptModal.title, transcriptModal.text)}
+                data-testid="button-download-transcript-txt"
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Download TXT
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadTranscriptPdf(transcriptModal.title, transcriptModal.text)}
+                data-testid="button-download-transcript-pdf"
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Download PDF
+              </Button>
+            </div>
             <Button
               variant="ghost"
               size="sm"
