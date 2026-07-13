@@ -14,12 +14,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, ArrowLeft, Copy, Check, Clock, FileText, MessageSquare, AlignLeft, Tags, Save, Pencil, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, Eye, ThumbsUp, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { openTeleprompter } from "@/lib/teleprompter";
@@ -914,15 +913,11 @@ function AutoTextarea({
 function EditableScriptSection({ 
   title, 
   content, 
-  duration, 
-  onScreenText,
   onChange,
   sectionKey,
 }: { 
   title: string; 
   content: string; 
-  duration?: string;
-  onScreenText?: string[];
   onChange: (value: string) => void;
   sectionKey: string;
 }) {
@@ -939,17 +934,10 @@ function EditableScriptSection({
 
   return (
     <div className={`border-l-4 ${style.border}`}>
-      <div className="px-5 pt-4 pb-5">
-        <div className="flex items-center gap-2.5 mb-3">
+      <div className="px-5 pt-5 pb-6">
+        <div className="mb-3">
           <span className={`text-xs font-bold px-2.5 py-1 rounded-full ring-1 ${style.badge}`}>{title}</span>
-          {duration && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              {duration}
-            </span>
-          )}
         </div>
-
         <AutoTextarea
           value={localValue}
           onChange={setLocalValue}
@@ -957,20 +945,6 @@ function EditableScriptSection({
           placeholder={`Enter ${title.toLowerCase()} content…`}
           testId={`textarea-${sectionKey}`}
         />
-
-        {onScreenText && onScreenText.length > 0 && (
-          <div className="mt-3 p-3 bg-muted/40 rounded-lg border border-border/50">
-            <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">On-Screen Text</p>
-            <ul className="text-sm space-y-1">
-              {onScreenText.map((text, i) => (
-                <li key={i} className="text-muted-foreground flex items-start gap-1.5">
-                  <span className="opacity-40 mt-0.5">›</span>
-                  {text}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -995,107 +969,59 @@ function EditableContentSubSection({
   onUpdate: (index: number, section: ContentSection) => void;
   onDelete: (index: number) => void;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(section.title);
-  const [editContent, setEditContent] = useState(section.content);
-  const [editTimestamp, setEditTimestamp] = useState(section.timestamp || "");
+  const [localTitle, setLocalTitle] = useState(section.title);
+  const [localContent, setLocalContent] = useState(section.content);
 
   useEffect(() => {
-    setEditTitle(section.title);
-    setEditContent(section.content);
-    setEditTimestamp(section.timestamp || "");
+    setLocalTitle(section.title);
+    setLocalContent(section.content);
   }, [section]);
 
-  const handleSave = () => {
-    onUpdate(index, {
-      ...section,
-      title: editTitle,
-      content: editContent,
-      timestamp: editTimestamp || undefined,
-    });
-    setIsEditing(false);
-  };
+  const handleTitleBlur = useCallback(() => {
+    if (localTitle !== section.title) {
+      onUpdate(index, { ...section, title: localTitle });
+    }
+  }, [localTitle, section, index, onUpdate]);
 
-  const handleCancel = () => {
-    setEditTitle(section.title);
-    setEditContent(section.content);
-    setEditTimestamp(section.timestamp || "");
-    setIsEditing(false);
-  };
+  const handleContentBlur = useCallback(() => {
+    if (localContent !== section.content) {
+      onUpdate(index, { ...section, content: localContent });
+    }
+  }, [localContent, section, index, onUpdate]);
+
+  const style = SECTION_STYLES["content"] ?? { border: "border-l-muted-foreground/30", badge: "bg-muted text-muted-foreground ring-muted", glow: "" };
 
   return (
-    <div className="p-4 bg-muted/30">
-      {isEditing ? (
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <Input
-              value={editTimestamp}
-              onChange={(e) => setEditTimestamp(e.target.value)}
-              placeholder="Timestamp (e.g., 2:30)"
-              className="w-24"
-              data-testid={`input-timestamp-${index}`}
-            />
-            <Input
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              placeholder="Section title"
-              className="flex-1"
-              data-testid={`input-title-${index}`}
-            />
-          </div>
-          <Textarea
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            className="min-h-[120px] font-mono text-sm"
-            placeholder="Section content..."
-            data-testid={`textarea-content-section-${index}`}
+    <div className={`border-l-4 ${style.border}`}>
+      <div className="px-5 pt-5 pb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ring-1 shrink-0 ${style.badge}`}>
+            Section {index + 1}
+          </span>
+          <input
+            value={localTitle}
+            onChange={(e) => setLocalTitle(e.target.value)}
+            onBlur={handleTitleBlur}
+            className="flex-1 text-sm font-semibold bg-transparent border-0 outline-none focus:ring-0 text-foreground/80 placeholder:text-muted-foreground/40 min-w-0"
+            placeholder="Section title…"
+            data-testid={`input-title-${index}`}
           />
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleSave} data-testid={`button-save-content-section-${index}`}>
-              <Check className="h-4 w-4 mr-1" />
-              Done
-            </Button>
-          </div>
+          <button
+            onClick={() => onDelete(index)}
+            className="p-1.5 rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+            data-testid={`button-delete-content-section-${index}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
-      ) : (
-        <>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">{section.timestamp || `Section ${index + 1}`}</Badge>
-              <span className="font-medium">{section.title}</span>
-            </div>
-            <div className="flex gap-1">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setIsEditing(true)}
-                data-testid={`button-edit-content-section-${index}`}
-              >
-                <Pencil className="h-4 w-4 mr-1" />
-                Edit
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => onDelete(index)}
-                className="text-destructive hover:text-destructive"
-                data-testid={`button-delete-content-section-${index}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <p className="text-sm whitespace-pre-wrap">{section.content}</p>
-          {section.brollIdeas && section.brollIdeas.length > 0 && (
-            <div className="mt-2 text-xs text-muted-foreground">
-              <strong>B-Roll:</strong> {section.brollIdeas.join(", ")}
-            </div>
-          )}
-        </>
-      )}
+        <AutoTextarea
+          value={localContent}
+          onChange={setLocalContent}
+          onBlur={handleContentBlur}
+          placeholder="Write this section's content…"
+          testId={`textarea-content-section-${index}`}
+        />
+      </div>
     </div>
   );
 }
@@ -1263,22 +1189,6 @@ export default function TopicPulseScriptPage() {
           text: value,
         },
       },
-    });
-  };
-
-  const handleShortsChange = (value: string) => {
-    if (!editedScriptJson) return;
-    setEditedScriptJson({
-      ...editedScriptJson,
-      shortsScript: value,
-    });
-  };
-
-  const handleCommentChange = (value: string) => {
-    if (!editedScriptJson) return;
-    setEditedScriptJson({
-      ...editedScriptJson,
-      pinnedComment: value,
     });
   };
 
@@ -1730,263 +1640,101 @@ export default function TopicPulseScriptPage() {
       </div>
 
       <div className="flex-1 overflow-hidden flex">
-        <Tabs defaultValue="full" className="flex-1 h-full flex flex-col overflow-hidden">
-          <div className="border-b bg-background px-4 shrink-0 flex justify-center">
-            <TabsList className="h-11 bg-transparent gap-1 p-0">
-              <TabsTrigger value="full" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-full-script">
-                <FileText className="h-3.5 w-3.5" />
-                Long Form
-              </TabsTrigger>
-              <TabsTrigger value="shorts" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-shorts">
-                <AlignLeft className="h-3.5 w-3.5" />
-                Shorts
-              </TabsTrigger>
-              <TabsTrigger value="description" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-description">
-                <Tags className="h-3.5 w-3.5" />
-                Description
-              </TabsTrigger>
-              <TabsTrigger value="comment" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-comment">
-                <MessageSquare className="h-3.5 w-3.5" />
-                Pinned Comment
-              </TabsTrigger>
-              <TabsTrigger value="cta" className="flex items-center gap-1.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none h-11 px-3" data-testid="tab-cta">
-                <Gift className="h-3.5 w-3.5" />
-                Call To Action
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          <TabsContent value="full" className="flex-1 overflow-hidden m-0">
-            <ScrollArea className="h-full">
-              <div className="p-4 max-w-3xl mx-auto">
-                <div className="flex items-center justify-between mb-4 gap-2">
-                  <div className="flex items-center gap-3">
-                    <Button
-                      size="sm"
-                      onClick={handleSave}
-                      disabled={saveMutation.isPending || !hasChanges}
-                      className="bg-red-600 hover:bg-red-700 text-white font-semibold"
-                      data-testid="button-save-script"
-                    >
-                      {saveMutation.isPending && isAutoSaveRef.current === false
-                        ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                        : <Save className="h-4 w-4 mr-1.5" />}
-                      Save Script
-                    </Button>
-                    {savedNotice && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1 animate-in fade-in duration-300" data-testid="text-saved-notice">
-                        <Check className="h-3.5 w-3.5 text-green-500" />
-                        {savedNotice === "auto" ? "Script auto-saved" : "Script saved"}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CopyButton text={getFullScriptText()} label="Copy Full Script" html={getFullScriptHtml()} />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDownloadPdf}
-                      disabled={!editedScriptJson?.fullScript}
-                      data-testid="button-download-pdf"
-                    >
-                      <FileDown className="h-4 w-4 mr-2" />
-                      Download PDF
-                    </Button>
-                  </div>
-                </div>
-
-                {fullScript && (
-                  <div className="rounded-xl border bg-card shadow-sm overflow-hidden space-y-px">
-                    <EditableScriptSection 
-                      title="1. Hook" 
-                      content={fullScript.hook.text} 
-                      duration={fullScript.hook.duration}
-                      onScreenText={fullScript.hook.onScreenText}
-                      onChange={(v) => handleSectionChange("hook", v)}
-                      sectionKey="hook"
-                    />
-                    <EditableScriptSection 
-                      title="2. Set the Hook" 
-                      content={fullScript.setHook.text} 
-                      duration={fullScript.setHook.duration}
-                      onScreenText={fullScript.setHook.onScreenText}
-                      onChange={(v) => handleSectionChange("setHook", v)}
-                      sectionKey="set-hook"
-                    />
-                    <EditableScriptSection 
-                      title="3. First CTA" 
-                      content={fullScript.firstCTA.text} 
-                      duration={fullScript.firstCTA.duration}
-                      onChange={(v) => handleSectionChange("firstCTA", v)}
-                      sectionKey="first-cta"
-                    />
-                    <EditableScriptSection 
-                      title="4. Content" 
-                      content={fullScript.content.text}
-                      onChange={(v) => handleSectionChange("content", v)}
-                      sectionKey="content"
-                    />
-                    {editedScriptJson?.fullScript?.content.sections?.map((section, i) => (
-                      <EditableContentSubSection
-                        key={i}
-                        section={section}
-                        index={i}
-                        onUpdate={handleContentSectionUpdate}
-                        onDelete={handleContentSectionDelete}
-                      />
-                    ))}
-                    <div className="px-5 py-3 bg-muted/30">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={handleAddContentSection}
-                        className="w-full border-dashed"
-                        data-testid="button-add-content-section"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Content Section
-                      </Button>
-                    </div>
-                    <EditableScriptSection 
-                      title="5. Final CTA" 
-                      content={fullScript.finalCTA.text} 
-                      duration={fullScript.finalCTA.duration}
-                      onChange={(v) => handleSectionChange("finalCTA", v)}
-                      sectionKey="final-cta"
-                    />
-                    {fullScript.finalCTA.nextVideoSuggestion && (
-                      <div className="px-5 py-4 bg-primary/5 border-t">
-                        <p className="text-sm">
-                          <strong className="text-primary">Next Video Suggestion:</strong>{" "}
-                          {fullScript.finalCTA.nextVideoSuggestion}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+        <ScrollArea className="flex-1 h-full">
+          <div className="p-5 max-w-3xl mx-auto">
+            <div className="flex items-center justify-between mb-5 gap-2">
+              <div className="flex items-center gap-3">
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saveMutation.isPending || !hasChanges}
+                  className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+                  data-testid="button-save-script"
+                >
+                  {saveMutation.isPending && isAutoSaveRef.current === false
+                    ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    : <Save className="h-4 w-4 mr-1.5" />}
+                  Save Script
+                </Button>
+                {savedNotice && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 animate-in fade-in duration-300" data-testid="text-saved-notice">
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                    {savedNotice === "auto" ? "Script auto-saved" : "Script saved"}
+                  </span>
                 )}
               </div>
-            </ScrollArea>
-          </TabsContent>
+              <div className="flex items-center gap-2">
+                <CopyButton text={getFullScriptText()} label="Copy Script" html={getFullScriptHtml()} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadPdf}
+                  disabled={!editedScriptJson?.fullScript}
+                  data-testid="button-download-pdf"
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
+              </div>
+            </div>
 
-          <TabsContent value="shorts" className="flex-1 overflow-hidden m-0">
-            <ScrollArea className="h-full">
-              <div className="p-4 max-w-3xl mx-auto">
-                <div className="flex justify-end mb-4">
-                  <CopyButton text={editedScriptJson?.shortsScript || ""} label="Copy Shorts Script" />
+            {fullScript && (
+              <div className="rounded-xl border bg-card shadow-sm overflow-hidden space-y-px">
+                <EditableScriptSection 
+                  title="1. Hook" 
+                  content={fullScript.hook.text}
+                  onChange={(v) => handleSectionChange("hook", v)}
+                  sectionKey="hook"
+                />
+                <EditableScriptSection 
+                  title="2. Set the Hook" 
+                  content={fullScript.setHook.text}
+                  onChange={(v) => handleSectionChange("setHook", v)}
+                  sectionKey="set-hook"
+                />
+                <EditableScriptSection 
+                  title="3. First CTA" 
+                  content={fullScript.firstCTA.text}
+                  onChange={(v) => handleSectionChange("firstCTA", v)}
+                  sectionKey="first-cta"
+                />
+                <EditableScriptSection 
+                  title="4. Content" 
+                  content={fullScript.content.text}
+                  onChange={(v) => handleSectionChange("content", v)}
+                  sectionKey="content"
+                />
+                {editedScriptJson?.fullScript?.content.sections?.map((section, i) => (
+                  <EditableContentSubSection
+                    key={i}
+                    section={section}
+                    index={i}
+                    onUpdate={handleContentSectionUpdate}
+                    onDelete={handleContentSectionDelete}
+                  />
+                ))}
+                <div className="px-5 py-4 bg-muted/20 border-t border-border/40">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleAddContentSection}
+                    className="w-full border-dashed text-muted-foreground hover:text-foreground"
+                    data-testid="button-add-content-section"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Content Section
+                  </Button>
                 </div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">YouTube Shorts Script</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Textarea
-                      value={editedScriptJson?.shortsScript || ""}
-                      onChange={(e) => handleShortsChange(e.target.value)}
-                      className="min-h-[200px] font-mono text-sm"
-                      placeholder="No shorts script available"
-                      data-testid="textarea-shorts"
-                    />
-                  </CardContent>
-                </Card>
-              </div>
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="comment" className="flex-1 overflow-hidden m-0">
-            <ScrollArea className="h-full">
-              <div className="p-4 max-w-3xl mx-auto">
-                <div className="flex justify-end mb-4">
-                  <CopyButton text={editedScriptJson?.pinnedComment || ""} label="Copy Comment" />
-                </div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Pinned Comment</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Textarea
-                      value={editedScriptJson?.pinnedComment || ""}
-                      onChange={(e) => handleCommentChange(e.target.value)}
-                      className="min-h-[150px] font-mono text-sm"
-                      placeholder="No pinned comment available"
-                      data-testid="textarea-comment"
-                    />
-                  </CardContent>
-                </Card>
-              </div>
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="description" className="flex-1 overflow-hidden m-0">
-            <ScrollArea className="h-full">
-              <div className="p-4 max-w-3xl mx-auto">
-                {editedScriptJson?.description && (
-                  <>
-                    <div className="flex justify-end mb-4">
-                      <CopyButton 
-                        text={`${editedScriptJson.description.summary}\n\n${editedScriptJson.description.affiliateDisclosure}\n\n${editedScriptJson.description.linkSection}\n\nTags: ${editedScriptJson.description.tags?.join(", ")}`} 
-                        label="Copy Description" 
-                      />
-                    </div>
-                    <div className="space-y-4">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Summary</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p>{editedScriptJson.description.summary}</p>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Affiliate Disclosure</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p>{editedScriptJson.description.affiliateDisclosure}</p>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Link Section</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p>{editedScriptJson.description.linkSection}</p>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Tags</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex flex-wrap gap-2">
-                            {editedScriptJson.description.tags?.map((tag, i) => (
-                              <Badge key={i} variant="secondary">{tag}</Badge>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </>
-                )}
-              </div>
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="cta" className="flex-1 overflow-hidden m-0">
-            <ScrollArea className="h-full">
-              <div className="p-4 max-w-3xl mx-auto">
-                <CallToActionTab 
-                  scriptId={script.id}
-                  editedScriptJson={editedScriptJson}
-                  setEditedScriptJson={setEditedScriptJson}
-                  updateScriptMutation={saveMutation}
+                <EditableScriptSection 
+                  title="5. Final CTA" 
+                  content={fullScript.finalCTA.text}
+                  onChange={(v) => handleSectionChange("finalCTA", v)}
+                  sectionKey="final-cta"
                 />
               </div>
-            </ScrollArea>
-          </TabsContent>
-        </Tabs>
+            )}
+          </div>
+        </ScrollArea>
 
         {showResearchPanel && (
           <div className="hidden md:block w-[525px] border-l flex-shrink-0 overflow-hidden">
