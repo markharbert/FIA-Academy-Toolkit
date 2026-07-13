@@ -644,17 +644,6 @@ export default function TeleprompterPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-muted/30 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                Tips
-              </h3>
-              <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
-                <li>Clicking <strong>Open Teleprompter</strong> auto-saves your script first.</li>
-                <li>Inside the teleprompter use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">Space</kbd> to play/pause, <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">[</kbd>/<kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">]</kbd> to adjust scroll speed, and the slider in the toolbar for fine control.</li>
-                <li>Pop-ups must be allowed for this site so the teleprompter window can open.</li>
-              </ul>
-            </div>
-
             {/* ── Your Takes (Recordings) ── */}
             <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
               <div className="relative">
@@ -792,6 +781,40 @@ export default function TeleprompterPage() {
                 )}
               </div>
             </div>
+
+            {/* ── Tips ── */}
+            <div className="rounded-xl border border-border bg-muted/30 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                Tips &amp; Shortcuts
+              </h3>
+              <ul className="text-sm text-muted-foreground space-y-2">
+                <li className="flex gap-2">
+                  <span className="shrink-0 text-primary">→</span>
+                  <span><strong className="text-foreground">Open Teleprompter</strong> auto-saves your script before launching so you're always reading the latest version.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 text-primary">→</span>
+                  <span>Hit <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">Space</kbd> to play/pause the scroll. Use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">[</kbd> and <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">]</kbd> to slow down or speed up, or drag the Speed slider in the toolbar.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 text-primary">→</span>
+                  <span>Use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">+</kbd> / <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">−</kbd> to make the script text larger or smaller while reading.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 text-primary">→</span>
+                  <span>The camera panel on the right lets you record directly. Each take is saved here automatically and kept for <strong className="text-foreground">30 days</strong>.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 text-primary">→</span>
+                  <span>Click the <strong className="text-foreground">violet transcript icon</strong> on any take to generate an AI transcript — then copy it or reference it while editing.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 text-primary">→</span>
+                  <span>Make sure your browser allows <strong className="text-foreground">pop-ups for this site</strong> — the teleprompter opens in a separate window by design so you can move it to a second screen.</span>
+                </li>
+              </ul>
+            </div>
+
           </div>
         </div>
       </div>
