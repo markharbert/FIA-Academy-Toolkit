@@ -1657,31 +1657,6 @@ export default function TopicPulseScriptPage() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {/* View toggle */}
-              <div className="flex items-center bg-white/10 rounded-lg p-0.5 gap-0.5" data-testid="toggle-script-view">
-                <button
-                  onClick={() => setScriptView("outline")}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                    scriptView === "outline"
-                      ? "bg-white text-gray-900"
-                      : "text-white/60 hover:text-white"
-                  }`}
-                  data-testid="button-view-outline"
-                >
-                  Outline
-                </button>
-                <button
-                  onClick={() => setScriptView("full")}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                    scriptView === "full"
-                      ? "bg-white text-gray-900"
-                      : "text-white/60 hover:text-white"
-                  }`}
-                  data-testid="button-view-full-script"
-                >
-                  Full Script
-                </button>
-              </div>
               {editedScriptJson?.fullScript && (
                 <Button
                   size="sm"
@@ -1710,8 +1685,6 @@ export default function TopicPulseScriptPage() {
             </div>
           </div>
 
-          {/* Keyword stats */}
-          {script.topic && <KeywordDataDisplay topic={script.topic} />}
         </div>
       </div>
 
@@ -1739,18 +1712,29 @@ export default function TopicPulseScriptPage() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <CopyButton text={getFullScriptText()} label="Copy Script" html={getFullScriptHtml()} />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadPdf}
-                  disabled={!editedScriptJson?.fullScript}
-                  data-testid="button-download-pdf"
+              <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0.5" data-testid="toggle-script-view">
+                <button
+                  onClick={() => setScriptView("outline")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                    scriptView === "outline"
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  data-testid="button-view-outline"
                 >
-                  <FileDown className="h-4 w-4 mr-2" />
-                  PDF
-                </Button>
+                  Outline
+                </button>
+                <button
+                  onClick={() => setScriptView("full")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                    scriptView === "full"
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  data-testid="button-view-full-script"
+                >
+                  Full Script
+                </button>
               </div>
             </div>
 
@@ -1864,7 +1848,19 @@ export default function TopicPulseScriptPage() {
                   <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/30">
                       <span className="text-sm font-semibold">Full Script</span>
-                      <CopyButton text={editedScriptJson.expandedScript} label="Copy" />
+                      <div className="flex items-center gap-2">
+                        <CopyButton text={getFullScriptText()} label="Copy Script" html={getFullScriptHtml()} />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadPdf}
+                          disabled={!editedScriptJson?.fullScript}
+                          data-testid="button-download-pdf"
+                        >
+                          <FileDown className="h-4 w-4 mr-2" />
+                          PDF
+                        </Button>
+                      </div>
                     </div>
                     <Textarea
                       value={editedScriptJson.expandedScript}
