@@ -5002,10 +5002,34 @@ export async function registerRoutes(
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
       if (!recording) return res.status(404).json({ message: "Recording not found" });
       const objectStorage = new ObjectStorageService();
-      // Generate a short-lived signed URL and redirect — gives the browser full
-      // byte-range support so <video> can seek and buffer correctly.
-      const signedUrl = await objectStorage.getSignedReadUrl(recording.storageKey, 300);
-      res.redirect(302, signedUrl);
+      const file = await objectStorage.getObjectEntityFile(recording.storageKey);
+      const [metadata] = await file.getMetadata();
+      const fileSize = parseInt(metadata.size as string, 10);
+      const mimeType = (metadata.contentType as string) || recording.mimeType || "video/mp4";
+
+      const rangeHeader = req.headers.range;
+      if (rangeHeader) {
+        // Handle byte-range request so browsers can stream/seek
+        const parts = rangeHeader.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = end - start + 1;
+        res.writeHead(206, {
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": chunkSize,
+          "Content-Type": mimeType,
+        });
+        file.createReadStream({ start, end }).pipe(res);
+      } else {
+        // Initial non-range request — advertise range support
+        res.writeHead(200, {
+          "Content-Length": fileSize,
+          "Content-Type": mimeType,
+          "Accept-Ranges": "bytes",
+        });
+        file.createReadStream().pipe(res);
+      }
     } catch (err) {
       console.error("[Teleprompter] Stream recording error:", err);
       if (!res.headersSent) res.status(500).json({ message: "Failed to stream recording" });
