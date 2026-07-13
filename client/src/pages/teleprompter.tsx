@@ -838,15 +838,15 @@ export default function TeleprompterPage() {
 
       {/* Transcript viewer modal */}
       <Dialog open={transcriptModal.open} onOpenChange={(open) => !open && setTranscriptModal((m) => ({ ...m, open: false }))}>
-        <DialogContent className="max-w-2xl w-full">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl w-full flex flex-col" style={{ maxHeight: "90vh" }}>
+          <DialogHeader className="shrink-0">
             <DialogTitle className="text-base leading-snug">{transcriptModal.title}</DialogTitle>
-            <DialogDescription>Transcript — select all text or use the Copy button below.</DialogDescription>
+            <DialogDescription>Transcript — use the Copy button or select and copy the text below.</DialogDescription>
           </DialogHeader>
-          <div className="mt-2 max-h-[60vh] overflow-y-auto rounded-md border border-border bg-muted/40 p-4">
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground select-all">{transcriptModal.text}</p>
+          <div className="flex-1 overflow-y-auto rounded-md border border-border bg-muted/40 p-4 mt-2">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcriptModal.text}</p>
           </div>
-          <div className="flex justify-between items-center pt-2">
+          <div className="flex justify-between items-center pt-3 shrink-0">
             <Button
               variant="outline"
               size="sm"
