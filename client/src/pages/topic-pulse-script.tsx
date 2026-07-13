@@ -4,6 +4,16 @@ import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -1128,6 +1138,8 @@ export default function TopicPulseScriptPage() {
   const [editedScriptJson, setEditedScriptJson] = useState<ScriptJson | null>(null);
   const [showResearchPanel, setShowResearchPanel] = useState(false);
   const [savedNotice, setSavedNotice] = useState<"manual" | "auto" | null>(null);
+  const [savedTeleprompterScriptId, setSavedTeleprompterScriptId] = useState<string | null>(null);
+  const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
 
   const { data: script, isLoading } = useQuery<Script & { topic?: Topic }>({
     queryKey: ["/api/topic-pulse/scripts", scriptId],
@@ -1183,7 +1195,8 @@ export default function TopicPulseScriptPage() {
       const res = await apiRequest("POST", "/api/teleprompter/scripts", payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.id) setSavedTeleprompterScriptId(data.id);
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/scripts"] });
       toast({
         title: "Saved to Teleprompter",
@@ -1192,6 +1205,23 @@ export default function TopicPulseScriptPage() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const overwriteTeleprompterMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: { title: string; content: string } }) => {
+      const res = await apiRequest("PATCH", `/api/teleprompter/scripts/${id}`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/scripts"] });
+      toast({
+        title: "Teleprompter script updated",
+        description: "Your changes have been saved over the previous version.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to overwrite", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1443,10 +1473,9 @@ export default function TopicPulseScriptPage() {
     openTeleprompter({ title: script?.title ?? "Script", sections });
   };
 
-  const handleSaveToTeleprompter = () => {
-    if (!editedScriptJson?.fullScript || !script) return;
+  const buildTeleprompterContent = () => {
+    if (!editedScriptJson?.fullScript || !script) return null;
     const fs = editedScriptJson.fullScript;
-
     const parts: string[] = [];
     if (fs.hook.text)        parts.push(`HOOK\n${fs.hook.text}`);
     if (fs.setHook.text)     parts.push(`SET THE HOOK\n${fs.setHook.text}`);
@@ -1456,11 +1485,30 @@ export default function TopicPulseScriptPage() {
       if (s.content) parts.push(`${s.title.toUpperCase()}\n${s.content}`);
     });
     if (fs.finalCTA.text)    parts.push(`FINAL CALL TO ACTION\n${fs.finalCTA.text}`);
+    return { title: script.title, content: parts.join("\n\n") };
+  };
 
-    saveToTeleprompterMutation.mutate({
-      title: script.title,
-      content: parts.join("\n\n"),
-    });
+  const handleSaveToTeleprompter = () => {
+    if (!editedScriptJson?.fullScript || !script) return;
+    if (savedTeleprompterScriptId) {
+      setShowOverwriteDialog(true);
+    } else {
+      const payload = buildTeleprompterContent();
+      if (payload) saveToTeleprompterMutation.mutate(payload);
+    }
+  };
+
+  const handleOverwriteConfirm = () => {
+    setShowOverwriteDialog(false);
+    if (!savedTeleprompterScriptId) return;
+    const payload = buildTeleprompterContent();
+    if (payload) overwriteTeleprompterMutation.mutate({ id: savedTeleprompterScriptId, payload });
+  };
+
+  const handleOverwriteCancel = () => {
+    setShowOverwriteDialog(false);
+    const payload = buildTeleprompterContent();
+    if (payload) saveToTeleprompterMutation.mutate(payload);
   };
 
   if (isLoading) {
@@ -1937,6 +1985,25 @@ export default function TopicPulseScriptPage() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={showOverwriteDialog} onOpenChange={setShowOverwriteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Already saved to Teleprompter</AlertDialogTitle>
+            <AlertDialogDescription>
+              You've already saved this script to your Teleprompter library. Do you want to overwrite it with your latest edits, or save a new copy?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleOverwriteCancel}>
+              Save as new copy
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleOverwriteConfirm}>
+              Yes, overwrite
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
