@@ -5035,6 +5035,8 @@ export async function registerRoutes(
         takeNumber = maxTake + 1;
       }
       const title = `Take ${takeNumber} \u2014 ${baseTitle}`;
+      const format = (typeof req.body.format === "string" && ["landscape", "portrait", "square"].includes(req.body.format))
+        ? req.body.format : "landscape";
       const isMp4 = file.mimetype.includes("mp4") || file.originalname.toLowerCase().endsWith(".mp4");
       const ext = path.extname(file.originalname).toLowerCase() || (isMp4 ? ".mp4" : ".webm");
       const objectId = crypto.randomUUID();
@@ -5068,6 +5070,7 @@ export async function registerRoutes(
         mimeType: finalMime,
         sizeBytes: fileBuffer.length,
         durationSeconds,
+        format,
         expiresAt,
       });
       res.json(recording);

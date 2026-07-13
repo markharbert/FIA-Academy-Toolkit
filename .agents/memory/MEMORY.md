@@ -1,0 +1,1 @@
+- [Teleprompter recording upload](teleprompter-upload.md) — signed-URL direct-to-GCS is CORS-blocked; use server proxy route instead.

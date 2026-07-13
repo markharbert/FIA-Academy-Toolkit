@@ -530,71 +530,18 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
       if(!mediaStream)return;
       if(!playing)togglePlay();
 
-      // ── Canvas-based recording: crops the stream to the exact target dimensions
-      // so the saved file is truly 9:16, 1:1, or 16:9 with no black bars.
-      var FORMAT_DIMS={landscape:{w:1280,h:720},portrait:{w:720,h:1280},square:{w:720,h:720}};
-      var dims=FORMAT_DIMS[selectedFormat]||FORMAT_DIMS.landscape;
-
-      var recCanvas=document.createElement('canvas');
-      recCanvas.width=dims.w;
-      recCanvas.height=dims.h;
-      var ctx=recCanvas.getContext('2d');
-
-      // Hidden source video to draw frames from
-      var srcVid=document.createElement('video');
-      srcVid.srcObject=mediaStream;
-      srcVid.muted=true;
-      srcVid.play().catch(function(){});
-
-      var animId=null;
-      function drawFrame(){
-        if(srcVid&&srcVid.readyState>=2&&srcVid.videoWidth){
-          var vw=srcVid.videoWidth,vh=srcVid.videoHeight;
-          var cw=recCanvas.width,ch=recCanvas.height;
-          // object-fit:cover center-crop math
-          var scale=Math.max(cw/vw,ch/vh);
-          var sw=cw/scale,sh=ch/scale;
-          var sx=(vw-sw)/2,sy=(vh-sh)/2;
-          ctx.drawImage(srcVid,sx,sy,sw,sh,0,0,cw,ch);
-        }
-        animId=requestAnimationFrame(drawFrame);
-      }
-      drawFrame();
-
-      // Build recording stream: canvas video + original audio
-      // IMPORTANT: force WebM for canvas recording — MP4/H.264 is unreliable
-      // with captureStream even when isTypeSupported() returns true.
-      var recordingStream=mediaStream; // fallback if captureStream unsupported
-      var usingCanvas=false;
-      if(typeof recCanvas.captureStream==='function'){
-        try{
-          var canvasStream=recCanvas.captureStream(30);
-          mediaStream.getAudioTracks().forEach(function(t){canvasStream.addTrack(t);});
-          recordingStream=canvasStream;
-          usingCanvas=true;
-        }catch(e){/* fall through to direct stream */}
-      }
-
-      // Pick mime type: WebM is the only reliable format for canvas streams
-      if(usingCanvas){
-        recMimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-          ?'video/webm;codecs=vp9'
-          :'video/webm';
-      } else {
-        recMimeType=getSupportedMimeType();
-      }
-
+      // Record directly from the camera stream — no canvas intermediary.
+      // This guarantees perfect A/V sync. The live preview uses CSS object-fit:cover
+      // on the aspect-ratio container to show the exact crop that matches the
+      // selected format, so the preview IS accurate with no black bars.
+      recMimeType=getSupportedMimeType();
       var opts=recMimeType?{mimeType:recMimeType}:{};
-      try{mediaRecorder=new MediaRecorder(recordingStream,opts);}
-      catch(e){mediaRecorder=new MediaRecorder(recordingStream);recMimeType=mediaRecorder.mimeType||'video/webm';}
+      try{mediaRecorder=new MediaRecorder(mediaStream,opts);}
+      catch(e){mediaRecorder=new MediaRecorder(mediaStream);recMimeType=mediaRecorder.mimeType||'video/webm';}
 
       recordedChunks=[];
       mediaRecorder.ondataavailable=function(e){if(e.data&&e.data.size>0)recordedChunks.push(e.data);};
       mediaRecorder.onstop=function(){
-        // Stop canvas animation loop
-        if(animId){cancelAnimationFrame(animId);animId=null;}
-        if(srcVid){srcVid.srcObject=null;}
-
         recordedBlob=new Blob(recordedChunks,{type:recMimeType||'video/webm'});
         if(recordedUrl)URL.revokeObjectURL(recordedUrl);
         recordedUrl=URL.createObjectURL(recordedBlob);
@@ -657,73 +604,44 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         return;
       }
 
-      // ── Step 1: ask the server for a presigned GCS PUT URL ──
-      // This is a small JSON request that easily passes through the proxy.
-      // The actual video never goes through the proxy at all — it goes
-      // directly from the browser to Google Cloud Storage (step 2).
-      fetch('/api/teleprompter/recordings/prepare-upload',{
-        method:'POST',
-        credentials:'include',
-        headers:{'Content-Type':'application/json'},
-        body:'{}'
-      })
-      .then(function(r){
-        if(!r.ok)return Promise.reject('prepare-upload failed: '+r.status);
-        return r.json();
-      })
-      .then(function(prep){
-        var uploadUrl=prep.uploadUrl;
-        var storageKey=prep.storageKey;
+      // Upload the blob to the server via multipart FormData.
+      // The server stores it in GCS and creates the DB record in one step.
+      // (Direct browser-to-GCS signed URL PUT is blocked by GCS CORS policy.)
+      var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';
+      var fd=new FormData();
+      fd.append('video',recordedBlob,'recording'+ext);
+      fd.append('title',SCRIPT_TITLE||'Untitled Take');
+      if(SCRIPT_ID)fd.append('scriptId',SCRIPT_ID);
+      fd.append('durationSeconds',String(recSeconds));
+      fd.append('format',selectedFormat);
 
-        // ── Step 2: PUT the blob directly to GCS (bypasses deployment proxy) ──
-        var xhr=new XMLHttpRequest();
-        xhr.open('PUT',uploadUrl,true);
-        xhr.setRequestHeader('Content-Type',recMimeType||'video/webm');
+      var xhr=new XMLHttpRequest();
+      xhr.open('POST','/api/teleprompter/recordings',true);
+      xhr.withCredentials=true;
 
-        xhr.upload.onprogress=function(e){
-          if(!e.lengthComputable)return;
-          var p=Math.round(e.loaded/e.total*100);
-          if(bar)bar.style.width=p+'%';
-          if(pct)pct.textContent=p+'%';
-        };
+      xhr.upload.onprogress=function(e){
+        if(!e.lengthComputable)return;
+        var p=Math.round(e.loaded/e.total*100);
+        if(bar)bar.style.width=p+'%';
+        if(pct)pct.textContent=p+'%';
+      };
 
-        xhr.onload=function(){
-          if(xhr.status<200||xhr.status>=300){
-            console.error('[teleprompter] GCS PUT failed:',xhr.status,xhr.responseText?xhr.responseText.slice(0,300):'');
-            onFail('Upload failed (HTTP '+xhr.status+')');
-            return;
-          }
+      xhr.onload=function(){
+        if(xhr.status<200||xhr.status>=300){
+          console.error('[teleprompter] upload failed:',xhr.status,xhr.responseText?xhr.responseText.slice(0,300):'');
+          onFail('Upload failed (HTTP '+xhr.status+')');
+          return;
+        }
+        try{onSuccess(JSON.parse(xhr.responseText));}
+        catch(e){onFail('Bad response from server');}
+      };
 
-          // ── Step 3: register the recording in the database ──
-          fetch('/api/teleprompter/recordings/confirm-upload',{
-            method:'POST',
-            credentials:'include',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({
-              storageKey:storageKey,
-              title:SCRIPT_TITLE||'Untitled Take',
-              scriptId:SCRIPT_ID||null,
-              durationSeconds:recSeconds,
-              mimeType:recMimeType||'video/webm',
-              sizeBytes:recordedBlob?recordedBlob.size:null,
-              format:selectedFormat
-            })
-          })
-          .then(function(r){
-            if(!r.ok)return Promise.reject('confirm-upload failed: '+r.status);
-            return r.json();
-          })
-          .then(function(data){onSuccess(data);})
-          .catch(function(){onFail();});
-        };
+      xhr.onerror=function(){
+        console.error('[teleprompter] upload network error');
+        onFail('Network error during upload');
+      };
 
-        xhr.onerror=function(){onFail();};
-        xhr.send(recordedBlob);
-      })
-      .catch(function(err){
-        console.error('[teleprompter] upload error:',err);
-        onFail();
-      });
+      xhr.send(fd);
     }
 
     function downloadRecording(){
