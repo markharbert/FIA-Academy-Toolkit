@@ -638,6 +638,7 @@ RULES:
 
 Return only the final script text. No headers, no labels, no JSON.`;
 
+  console.log("[generateFullScript] Calling OpenAI gpt-4o, prompt length:", prompt.length);
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [{ role: "user", content: prompt }],
@@ -645,6 +646,7 @@ Return only the final script text. No headers, no labels, no JSON.`;
   });
 
   const content = response.choices[0]?.message?.content;
+  console.log("[generateFullScript] Response received, content length:", content?.length ?? "null");
   if (!content) throw new Error("Failed to generate full script");
   return content.trim();
 }
