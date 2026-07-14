@@ -253,31 +253,23 @@ function EmailSequenceSVG({ c }: { c: string }) {
   );
 }
 
-/* EMAIL NODE SVG — looks like an email composition window */
+/* EMAIL NODE SVG — large bold envelope filling the visual area */
 function EmailNodeSVG({ c }: { c: string }) {
   return (
     <svg viewBox="0 0 148 96" width="148" height="96">
-      <Frame c={c}>
-        {/* Email pane background */}
-        <rect x="6" y="19" width="136" height="71" rx="3" fill="rgba(0,0,0,0.4)" />
-        {/* From row */}
-        <rect x="10" y="23" width="18" height="3" rx="1.5" fill={c} opacity="0.55" />
-        <rect x="32" y="23" width="55" height="3" rx="1.5" fill="white" opacity="0.22" />
-        <line x1="10" y1="29" x2="138" y2="29" stroke="white" strokeWidth="0.5" strokeOpacity="0.1" />
-        {/* Subject row */}
-        <rect x="10" y="32" width="22" height="3" rx="1.5" fill={c} opacity="0.55" />
-        <rect x="36" y="32" width="72" height="3" rx="1.5" fill="white" opacity="0.38" />
-        <line x1="10" y1="38" x2="138" y2="38" stroke="white" strokeWidth="0.5" strokeOpacity="0.1" />
-        {/* Body lines */}
-        <rect x="10" y="42" width="128" height="2.8" rx="1.4" fill="white" opacity="0.18" />
-        <rect x="10" y="47" width="118" height="2.8" rx="1.4" fill="white" opacity="0.16" />
-        <rect x="10" y="52" width="122" height="2.8" rx="1.4" fill="white" opacity="0.14" />
-        <rect x="10" y="57" width="90" height="2.8" rx="1.4" fill="white" opacity="0.12" />
-        <rect x="10" y="62" width="110" height="2.8" rx="1.4" fill="white" opacity="0.10" />
-        {/* CTA button */}
-        <rect x="10" y="70" width="60" height="13" rx="3" fill={c} opacity="0.7" />
-        <rect x="20" y="74.5" width="40" height="3.5" rx="1.5" fill="white" opacity="0.75" />
-      </Frame>
+      {/* Dark background */}
+      <rect x="0" y="0" width="148" height="96" fill="rgba(0,0,0,0.5)" />
+      {/* Envelope body — large, centred */}
+      <rect x="10" y="14" width="128" height="70" rx="6" fill="rgba(0,0,0,0.45)" stroke={c} strokeWidth="2.5" strokeOpacity="0.85" />
+      {/* Envelope flap — V shape pointing down */}
+      <path d="M10,14 L74,58 L138,14" stroke={c} strokeWidth="2.8" fill="none" strokeOpacity="0.95" strokeLinejoin="round" />
+      {/* Bottom left fold crease */}
+      <line x1="10" y1="84" x2="52" y2="52" stroke={c} strokeWidth="1.2" strokeOpacity="0.35" />
+      {/* Bottom right fold crease */}
+      <line x1="138" y1="84" x2="96" y2="52" stroke={c} strokeWidth="1.2" strokeOpacity="0.35" />
+      {/* Subtle glow dot in centre */}
+      <circle cx="74" cy="70" r="6" fill={c} opacity="0.12" />
+      <circle cx="74" cy="70" r="3" fill={c} opacity="0.25" />
     </svg>
   );
 }
