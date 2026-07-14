@@ -289,9 +289,11 @@ export function CustomEdge({
   // Purple "sequence" treatment:
   // • email → email  (chain between sequence steps)
   // • capturePage → email  (entry point into the sequence)
+  // • webinar → email  (webinar registrants enter the sequence)
   const isEmailSequence =
     (sourceNode?.type === "emailNode" && targetNode?.type === "emailNode") ||
-    (sourceNode?.type === "capturePage" && targetNode?.type === "emailNode");
+    (sourceNode?.type === "capturePage" && targetNode?.type === "emailNode") ||
+    (sourceNode?.type === "webinar" && targetNode?.type === "emailNode");
 
   // Amber "email traffic" treatment:
   // • email → any page  (sending your list to a destination)
