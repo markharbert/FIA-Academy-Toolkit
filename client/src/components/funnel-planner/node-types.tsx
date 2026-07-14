@@ -296,13 +296,23 @@ function EmailNodeSVG({ c }: { c: string }) {
 function SmsNodeSVG({ c }: { c: string }) {
   return (
     <svg viewBox="0 0 148 96" width="100%" height="100%">
-      <rect x="0" y="0" width="148" height="96" fill="rgba(0,0,0,0.5)" />
-      <rect x="44" y="6" width="60" height="84" rx="9" fill="white" fillOpacity="0.08" stroke={c} strokeWidth="1.5" strokeOpacity="0.5" />
-      <rect x="50" y="16" width="48" height="56" rx="3" fill="white" fillOpacity="0.05" />
-      <rect x="54" y="22" width="26" height="11" rx="5.5" fill={c} fillOpacity="0.65" />
-      <rect x="68" y="38" width="24" height="11" rx="5.5" fill="white" fillOpacity="0.22" />
-      <rect x="54" y="54" width="20" height="10" rx="5" fill={c} fillOpacity="0.45" />
-      <circle cx="74" cy="82" r="5" stroke={c} strokeWidth="1.2" fill="none" strokeOpacity="0.5" />
+      {/* Dark emerald background */}
+      <rect x="0" y="0" width="148" height="96" fill="#022c22" />
+      {/* Phone body */}
+      <rect x="38" y="4" width="72" height="88" rx="11" fill="#052e16" stroke={c} strokeWidth="2.5" />
+      {/* Screen */}
+      <rect x="44" y="14" width="60" height="64" rx="4" fill="#041f15" />
+      {/* Received bubble — bright solid green */}
+      <rect x="48" y="19" width="36" height="16" rx="8" fill={c} />
+      <polygon points="48,30 40,35 50,33" fill={c} />
+      {/* Sent bubble — dimmer white */}
+      <rect x="64" y="41" width="34" height="15" rx="7.5" fill="white" fillOpacity="0.28" />
+      <polygon points="98,52 106,56 96,54" fill="white" fillOpacity="0.28" />
+      {/* Received bubble — second, slightly smaller */}
+      <rect x="48" y="62" width="28" height="13" rx="6.5" fill={c} fillOpacity="0.75" />
+      <polygon points="48,72 40,76 50,74" fill={c} fillOpacity="0.75" />
+      {/* Home bar */}
+      <rect x="60" y="84" width="28" height="3.5" rx="1.75" fill={c} fillOpacity="0.5" />
     </svg>
   );
 }
