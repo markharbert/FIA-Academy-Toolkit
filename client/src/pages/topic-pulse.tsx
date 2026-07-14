@@ -135,145 +135,130 @@ export default function TopicPulsePage() {
   return (
     <div className="min-h-full flex flex-col">
 
-      {/* ── Hero / Search ── */}
+      {/* ── Hero header (left-justified) ── */}
       <div className="relative overflow-hidden border-b border-border shrink-0">
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
         <div className="absolute -bottom-20 -right-10 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="absolute -top-14 -left-6 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative px-6 pt-6 pb-7">
-        <div className="max-w-2xl mx-auto">
+        <div className="relative max-w-4xl mx-auto px-6 py-6 flex items-center gap-4">
           <Link href="/video-studio">
-            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors mb-4" data-testid="button-back-video-studio">
+            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors shrink-0" data-testid="button-back-video-studio">
               <ArrowLeft className="h-4 w-4" />
               Video Studio
             </button>
           </Link>
-          <div className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Sparkles className="h-5 w-5 text-amber-400" />
-            <h1 className="text-2xl font-bold text-white" data-testid="text-page-title">Research</h1>
-          </div>
-          <p className="text-white/60 text-sm mb-6">
-            Find in-demand YouTube topics and generate scripts with Mark's 5-part formula
-          </p>
-
-          {/* Credits badge */}
-          {creditsData && (
-            <div
-              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-5 ring-1 ${
-                creditsExhausted || creditsLow
-                  ? "bg-red-500/15 text-red-400 ring-red-500/30"
-                  : creditsMedium
-                  ? "bg-amber-500/15 text-amber-400 ring-amber-500/30"
-                  : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
-              }`}
-              data-testid="credits-display"
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${creditsExhausted || creditsLow ? "bg-red-400" : creditsMedium ? "bg-amber-400" : "bg-emerald-400"}`} />
-              {creditsExhausted
-                ? "Credits exhausted"
-                : `${creditsRemaining.toLocaleString()} / ${creditLimit.toLocaleString()} credits remaining`}
-              <span className="text-white/30">·</span>
-              <span className="font-normal text-white/40" data-testid="text-credits-reset">
-                Resets {new Date(creditsData.resetsAt).toLocaleDateString()}
-              </span>
-            </div>
-          )}
-
-          {/* Search bar */}
-          <div className="flex gap-2 mb-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
-              <Input
-                placeholder="Enter a niche or keyword (e.g. 'keto snacks')"
-                value={seedQuery}
-                onChange={(e) => setSeedQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                disabled={searchMutation.isPending}
-                className="pl-9 bg-white/10 border-white/15 text-white placeholder:text-white/30 focus-visible:ring-white/20 focus-visible:border-white/30"
-                data-testid="input-seed-query"
-              />
-            </div>
-            <Button
-              onClick={handleSearch}
-              disabled={searchMutation.isPending || !seedQuery.trim() || creditsExhausted}
-              className="bg-violet-500 hover:bg-violet-600 text-white border-0 font-semibold px-5"
-              data-testid="button-search"
-            >
-              {searchMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Search className="h-4 w-4 mr-2" />
-              )}
-              {creditsExhausted ? "No Credits" : "Find Topics"}
-            </Button>
-          </div>
-
-          {/* Preset pills */}
-          <div className="flex flex-wrap justify-center gap-2">
-            <span className="text-xs text-white/30 self-center">Quick filter:</span>
-            {PRESETS.map((preset) => {
-              const active = selectedType === preset.type;
-              return (
-                <button
-                  key={preset.type}
-                  onClick={() => handlePresetClick(preset.type)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ring-1 transition-all ${active ? preset.activeColor : preset.color}`}
-                  data-testid={`badge-preset-${preset.type}`}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
+              <h1 className="text-xl font-bold text-white" data-testid="text-page-title">Research</h1>
+              {creditsData && (
+                <div
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${
+                    creditsExhausted || creditsLow
+                      ? "bg-red-500/15 text-red-400 ring-red-500/30"
+                      : creditsMedium
+                      ? "bg-amber-500/15 text-amber-400 ring-amber-500/30"
+                      : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
+                  }`}
+                  data-testid="credits-display"
                 >
-                  <preset.icon className="h-3 w-3" />
-                  {preset.label}
-                </button>
-              );
-            })}
-          </div>
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${creditsExhausted || creditsLow ? "bg-red-400" : creditsMedium ? "bg-amber-400" : "bg-emerald-400"}`} />
+                  {creditsExhausted
+                    ? "Credits exhausted"
+                    : `${creditsRemaining.toLocaleString()} / ${creditLimit.toLocaleString()} credits`}
+                </div>
+              )}
+            </div>
+            <p className="text-white/50 text-xs mt-0.5">Find in-demand YouTube topics and generate scripts with Mark's 5-part formula</p>
           </div>
         </div>
       </div>
-    </div>
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-auto">
-        <div className="max-w-4xl mx-auto px-5 py-6 space-y-8">
+        <div className="max-w-4xl mx-auto px-5 py-6 space-y-6">
 
-          {/* Stat cards */}
-          <div className="grid grid-cols-2 gap-4">
-            <div
-              className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
+          {/* Search + filters */}
+          <div className="space-y-2.5">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Enter a niche or keyword (e.g. 'keto snacks')"
+                  value={seedQuery}
+                  onChange={(e) => setSeedQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  disabled={searchMutation.isPending}
+                  className="pl-9"
+                  data-testid="input-seed-query"
+                />
+              </div>
+              <Button
+                onClick={handleSearch}
+                disabled={searchMutation.isPending || !seedQuery.trim() || creditsExhausted}
+                className="bg-violet-500 hover:bg-violet-600 text-white border-0 font-semibold px-5"
+                data-testid="button-search"
+              >
+                {searchMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Search className="h-4 w-4 mr-2" />
+                )}
+                {creditsExhausted ? "No Credits" : "Find Topics"}
+              </Button>
+            </div>
+
+            {/* Preset pills */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Quick filter:</span>
+              {PRESETS.map((preset) => {
+                const active = selectedType === preset.type;
+                return (
+                  <button
+                    key={preset.type}
+                    onClick={() => handlePresetClick(preset.type)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ring-1 transition-all ${active ? preset.activeColor : preset.color}`}
+                    data-testid={`badge-preset-${preset.type}`}
+                  >
+                    <preset.icon className="h-3 w-3" />
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Compact quick-access row */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-card hover:shadow-sm hover:-translate-y-px transition-all text-left"
               onClick={() => navigate("/video-studio/research/saved")}
               data-testid="card-saved-topics"
             >
-              <div className="h-1 bg-gradient-to-r from-teal-500 to-emerald-400" />
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1.5 rounded-lg bg-teal-500/10">
-                    <TrendingUp className="h-4 w-4 text-teal-500" />
-                  </div>
-                  <span className="text-sm font-medium text-muted-foreground">Saved Topics</span>
-                </div>
-                <div className="text-3xl font-bold text-teal-600 dark:text-teal-400">{savedTopics?.length ?? 0}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">saved for later</p>
+              <div className="p-1.5 rounded-lg bg-teal-500/10 shrink-0">
+                <TrendingUp className="h-4 w-4 text-teal-500" />
               </div>
-            </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold">{savedTopics?.length ?? 0} Saved Topics</span>
+                <p className="text-xs text-muted-foreground">saved for later</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
 
-            <div
-              className="group rounded-xl border bg-card shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-px transition-all overflow-hidden"
+            <button
+              className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-card hover:shadow-sm hover:-translate-y-px transition-all text-left"
               onClick={() => navigate("/video-studio/scripts")}
               data-testid="card-scripts"
             >
-              <div className="h-1 bg-gradient-to-r from-violet-500 to-blue-400" />
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1.5 rounded-lg bg-violet-500/10">
-                    <Zap className="h-4 w-4 text-violet-500" />
-                  </div>
-                  <span className="text-sm font-medium text-muted-foreground">Scripts</span>
-                </div>
-                <div className="text-3xl font-bold text-violet-600 dark:text-violet-400">{scripts?.length ?? 0}</div>
-                <p className="text-xs text-muted-foreground mt-0.5">generated scripts</p>
+              <div className="p-1.5 rounded-lg bg-violet-500/10 shrink-0">
+                <Zap className="h-4 w-4 text-violet-500" />
               </div>
-            </div>
-
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold">{scripts?.length ?? 0} Scripts</span>
+                <p className="text-xs text-muted-foreground">generated scripts</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
           </div>
 
           {/* Recent searches */}
