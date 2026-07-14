@@ -93,16 +93,54 @@ export function CustomEdge({
   const adjSourceX = sourceOffsetOnX ? sourceX + sOff : sourceX;
   const adjSourceY = sourceOffsetOnX ? sourceY : sourceY + sOff;
 
-  // Right-angle routing with rounded corners — never crosses sibling edges
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX: adjSourceX,
-    sourceY: adjSourceY,
-    sourcePosition,
-    targetX: adjTargetX,
-    targetY: adjTargetY,
-    targetPosition,
-    borderRadius: 10,
-  });
+  // ── Path computation ──────────────────────────────────────
+  // Special case: "backward" bottom→top edge where the source is
+  // meaningfully to the RIGHT of the target (e.g. Capture Page bottom
+  // → Email 1 top when the capture page sits further right on canvas).
+  // Routing this through the normal smoothstep corridor puts it right
+  // on top of the email→sales-page bundle going through the same space.
+  // Fix: route it BELOW the target node's row so it bypasses the bundle.
+
+  const isBackwardBottomTop =
+    sourcePosition === "bottom" &&
+    targetPosition === "top" &&
+    adjSourceX > adjTargetX + 30;
+
+  let edgePath: string;
+  let labelX: number;
+  let labelY: number;
+
+  if (isBackwardBottomTop) {
+    const targetNode = getNode(target);
+    const targetNodeBottom =
+      (targetNode?.position?.y ?? adjTargetY) +
+      (targetNode?.measured?.height ?? 160);
+    const underY = targetNodeBottom + 30; // route below the target node row
+    const r = 10;
+
+    edgePath = [
+      `M ${adjSourceX},${adjSourceY}`,
+      `L ${adjSourceX},${underY - r}`,
+      `Q ${adjSourceX},${underY} ${adjSourceX - r},${underY}`,
+      `L ${adjTargetX + r},${underY}`,
+      `Q ${adjTargetX},${underY} ${adjTargetX},${underY - r}`,
+      `L ${adjTargetX},${adjTargetY}`,
+    ].join(" ");
+
+    labelX = (adjSourceX + adjTargetX) / 2;
+    labelY = underY;
+  } else {
+    // Right-angle routing with rounded corners — never crosses sibling edges
+    [edgePath, labelX, labelY] = getSmoothStepPath({
+      sourceX: adjSourceX,
+      sourceY: adjSourceY,
+      sourcePosition,
+      targetX: adjTargetX,
+      targetY: adjTargetY,
+      targetPosition,
+      borderRadius: 10,
+    });
+  }
 
   const defaultColor = theme === "light" ? "#64748b" : "#94a3b8";
   const selectedColor = theme === "light" ? "#6366f1" : "#818cf8";
