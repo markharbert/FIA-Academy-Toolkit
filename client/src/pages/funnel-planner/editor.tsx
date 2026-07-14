@@ -150,18 +150,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     [setEdges]
   );
 
-  const onEdgeClick = useCallback(
-    (_: React.MouseEvent, edge: Edge) => {
-      const current = (edge.data as { pathType?: string } | undefined)?.pathType;
-      const next = current === "yes" ? "no" : current === "no" ? undefined : "yes";
-      setEdges((eds) =>
-        eds.map((e) =>
-          e.id === edge.id ? { ...e, data: { ...e.data, pathType: next } } : e
-        )
-      );
-    },
-    [setEdges]
-  );
 
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
@@ -608,7 +596,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            onEdgeClick={onEdgeClick}
             onNodeDoubleClick={onNodeDoubleClick}
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
