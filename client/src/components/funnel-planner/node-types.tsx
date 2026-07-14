@@ -819,7 +819,15 @@ function NoteNode({ id, data, selected }: NodeProps) {
     [id, setNodes]
   );
 
-  // Sync external changes (e.g. undo) into DOM only when editor is not focused
+  // Initialize content on mount — never use dangerouslySetInnerHTML on a contentEditable
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.innerHTML = nodeData.notes ?? "";
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync external data changes (e.g. undo) only when the editor is not focused
   useEffect(() => {
     if (editorRef.current && document.activeElement !== editorRef.current) {
       editorRef.current.innerHTML = nodeData.notes ?? "";
@@ -904,7 +912,6 @@ function NoteNode({ id, data, selected }: NodeProps) {
             className="flex-1 min-h-0 w-full px-3 py-2 text-[11px] leading-snug outline-none overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-black/30 empty:before:pointer-events-none"
             style={{ color: "#1a1a1a", caretColor: "#1a1a1a" }}
             data-placeholder="Write your note here…"
-            dangerouslySetInnerHTML={{ __html: nodeData.notes ?? "" }}
           />
         </div>
 
