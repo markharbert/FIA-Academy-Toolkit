@@ -307,10 +307,10 @@ const MOCKUPS: Record<FunnelNodeType, (c: string) => React.ReactNode> = {
 
 const HANDLES = (
   <>
-    <Handle type="target" position={Position.Top}    className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
-    <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
-    <Handle type="target" position={Position.Left}   className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
-    <Handle type="source" position={Position.Right}  className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
+    <Handle id="top"    type="source" position={Position.Top}    className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
+    <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
+    <Handle id="left"   type="source" position={Position.Left}   className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
+    <Handle id="right"  type="source" position={Position.Right}  className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
   </>
 );
 

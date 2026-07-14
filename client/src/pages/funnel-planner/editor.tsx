@@ -614,6 +614,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: "custom", data: {} }}
+            connectionMode="loose"
             snapToGrid
             snapGrid={[10, 10]}
             fitView
