@@ -110,8 +110,9 @@ export function CustomEdge({
   let labelX: number;
   let labelY: number;
 
+  const targetNode = getNode(target);
+
   if (isBackwardBottomTop) {
-    const targetNode = getNode(target);
     const targetNodeBottom =
       (targetNode?.position?.y ?? adjTargetY) +
       (targetNode?.measured?.height ?? 160);
@@ -145,14 +146,28 @@ export function CustomEdge({
   const defaultColor = theme === "light" ? "#64748b" : "#94a3b8";
   const selectedColor = theme === "light" ? "#6366f1" : "#818cf8";
 
-  const strokeColor =
-    pathType === "yes" ? "#22c55e" : pathType === "no" ? "#ef4444" : selected ? selectedColor : defaultColor;
-  const strokeWidth = selected ? 2.5 : 1.5;
-
-  const visible = selected || hovered;
-
   const sourceNode = getNode(source);
   const isTrafficEdge = sourceNode?.type === "trafficSource";
+  const isEmailSequence = sourceNode?.type === "emailNode" && targetNode?.type === "emailNode";
+
+  // Email→email sequence edges: dashed indigo/violet to signal "chain"
+  const sequenceColor = theme === "light" ? "#8b5cf6" : "#a78bfa";
+
+  const strokeColor =
+    pathType === "yes"
+      ? "#22c55e"
+      : pathType === "no"
+      ? "#ef4444"
+      : selected
+      ? selectedColor
+      : isEmailSequence
+      ? sequenceColor
+      : defaultColor;
+
+  const strokeWidth = selected ? 2.5 : 1.5;
+  const strokeDasharray = isEmailSequence && !pathType ? "7 5" : undefined;
+
+  const visible = selected || hovered;
 
   function setPathType(next: "yes" | "no" | undefined) {
     setEdges((eds) =>
@@ -178,7 +193,7 @@ export function CustomEdge({
         id={id}
         path={edgePath}
         markerEnd={markerEnd}
-        style={{ stroke: strokeColor, strokeWidth }}
+        style={{ stroke: strokeColor, strokeWidth, strokeDasharray }}
       />
 
       {/* Animated traffic flow — only on edges coming from a traffic source node */}
