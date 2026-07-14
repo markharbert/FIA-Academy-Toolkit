@@ -1036,21 +1036,21 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 <div>
                   <Label className="text-xs text-white/50 uppercase tracking-wide">Direction</Label>
                   <div className="flex gap-1.5 mt-1.5">
-                    {(["before", "after"] as const).map((d) => {
+                    {([undefined, "before", "after"] as const).map((d) => {
                       const current = (selectedNode.data as FunnelNodeData).delayDirection;
                       const active = current === d;
                       return (
                         <button
-                          key={d}
-                          onClick={() => updateSelectedNodeData({ delayDirection: active ? undefined : d })}
+                          key={d ?? "none"}
+                          onClick={() => updateSelectedNodeData({ delayDirection: d, ...(d === undefined ? { delayReference: "" } : {}) })}
                           className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors capitalize ${
                             active
                               ? "bg-amber-500/25 border-amber-400/70 text-amber-200"
                               : "bg-white/[0.04] border-white/10 text-white/50 hover:text-white hover:border-white/25"
                           }`}
-                          data-testid={`button-delay-direction-${d}`}
+                          data-testid={`button-delay-direction-${d ?? "none"}`}
                         >
-                          {d}
+                          {d ?? "none"}
                         </button>
                       );
                     })}
