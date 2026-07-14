@@ -27,7 +27,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain, Wand2 } from "lucide-react";
+import dagre from "dagre";
 import { FunnelBrainPanel } from "@/components/funnel-planner/funnel-brain-panel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -53,7 +54,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getViewport } = useReactFlow();
+  const { screenToFlowPosition, getViewport, fitView } = useReactFlow();
 
   const initialCanvas = funnel.canvasData as { nodes?: Node[]; edges?: Edge[] } | null;
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialCanvas?.nodes ?? []);
@@ -351,6 +352,30 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     }
   }, [funnelName, toast]);
 
+  const handleAutoLayout = useCallback(() => {
+    if (nodes.length === 0) return;
+    const g = new dagre.graphlib.Graph();
+    g.setDefaultEdgeLabel(() => ({}));
+    g.setGraph({ rankdir: "LR", nodesep: 80, ranksep: 200, marginx: 40, marginy: 40 });
+    nodes.forEach((n) => {
+      g.setNode(n.id, { width: n.measured?.width ?? 148, height: n.measured?.height ?? 160 });
+    });
+    edges.forEach((e) => g.setEdge(e.source, e.target));
+    dagre.layout(g);
+    const laid = nodes.map((n) => {
+      const pos = g.node(n.id);
+      return {
+        ...n,
+        position: {
+          x: pos.x - (n.measured?.width ?? 148) / 2,
+          y: pos.y - (n.measured?.height ?? 160) / 2,
+        },
+      };
+    });
+    setNodes(laid);
+    setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 50);
+  }, [nodes, edges, setNodes, fitView]);
+
   const saveStatus2Icon = saveStatus === "saved"
     ? <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
     : saveStatus === "saving"
@@ -447,6 +472,15 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             >
               <Share2 className="h-3.5 w-3.5" />
               Share
+            </button>
+            <button
+              onClick={handleAutoLayout}
+              title="Auto-arrange nodes into a clean left-to-right layout"
+              className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition-colors"
+              data-testid="button-auto-layout"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              Auto-arrange
             </button>
             <button
               onClick={exportPng}
