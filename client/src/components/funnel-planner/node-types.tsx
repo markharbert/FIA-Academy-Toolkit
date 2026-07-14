@@ -409,8 +409,9 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
                 const maxed = !active && platforms.length >= 4;
                 return (
                   <button key={p} title={pc.label} onClick={maxed ? undefined : togglePlatform(p)}
-                    className={`flex flex-col items-center gap-0.5 rounded-md p-1 transition-colors border ${active ? "border-sky-400/60 bg-sky-500/25" : maxed ? "border-transparent opacity-30 cursor-not-allowed" : "border-transparent hover:bg-white/10"}`}>
-                    <pc.Icon style={{ color: active ? pc.color : "currentColor", width: 17, height: 17, opacity: active ? 1 : 0.55 }} />
+                    className={`flex flex-col items-center gap-0.5 rounded-md p-1 transition-all border ${active ? "border-sky-400/60 bg-sky-500/25" : maxed ? "border-transparent cursor-not-allowed" : "border-transparent hover:bg-white/10"}`}
+                    style={{ opacity: maxed ? 0.3 : active ? 1 : 0.6 }}>
+                    <pc.Icon style={{ color: pc.color, width: 17, height: 17 }} />
                     <span className="text-[7px] text-white/40 leading-none truncate w-full text-center">{pc.label.split(" ")[0]}</span>
                   </button>
                 );
