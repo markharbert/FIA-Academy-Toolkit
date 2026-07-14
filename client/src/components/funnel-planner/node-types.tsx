@@ -660,8 +660,8 @@ function DelayNode({ id, data, selected }: NodeProps) {
       style={{
         background: `rgba(0,0,0,0.65)`,
         borderColor: c,
-        minWidth: 110,
-        maxWidth: 160,
+        minWidth: 90,
+        maxWidth: 135,
         ...(selected ? { boxShadow: `0 0 0 3px ${c}50, 0 4px 20px rgba(0,0,0,0.5)` } : { boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }),
       }}
       data-testid="funnel-node-delay"
