@@ -46,6 +46,8 @@ export interface FunnelNodeData {
   emailDay?: number;
   delayAmount?: number;
   delayUnit?: string;
+  delayDirection?: "before" | "after";
+  delayReference?: string;
   [key: string]: unknown;
 }
 
@@ -637,6 +639,8 @@ function DelayNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
   const amount = (nodeData.delayAmount as number | undefined) ?? 1;
   const unit = (nodeData.delayUnit as string | undefined) ?? "days";
+  const direction = nodeData.delayDirection as "before" | "after" | undefined;
+  const reference = (nodeData.delayReference as string | undefined)?.trim();
   const accentColor = nodeData.accentColor as string | undefined;
   const c = accentColor ?? "#F59E0B";
 
@@ -645,6 +649,10 @@ function DelayNode({ id, data, selected }: NodeProps) {
     const base = unit.replace(/s$/, "");
     return n === 1 ? base : `${base}s`;
   })();
+
+  const mainLine = direction
+    ? `${amount} ${unitLabel} ${direction}${reference ? ` ${reference}` : ""}`
+    : `Wait ${amount} ${unitLabel}`;
 
   return (
     <div
@@ -667,9 +675,8 @@ function DelayNode({ id, data, selected }: NodeProps) {
       </div>
       <div className="flex flex-col leading-tight pr-1">
         <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: `${c}99` }}>Delay</span>
-        <span className="text-white font-bold text-sm leading-snug">
-          Wait{" "}
-          <span style={{ color: c }}>{amount} {unitLabel}</span>
+        <span className="text-white font-bold text-sm leading-snug" style={{ color: c }}>
+          {mainLine}
         </span>
       </div>
     </div>
