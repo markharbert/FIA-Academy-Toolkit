@@ -368,9 +368,8 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
       {HANDLES}
       <DeleteButton id={id} />
       {platformCfg ? (
-        <div className="flex flex-col items-center justify-center bg-black/35 py-2">
+        <div className="flex flex-col items-center justify-center bg-black/35 py-1">
           <platformCfg.Icon style={{ color: platformCfg.color, width: 108, height: 108 }} />
-          <div className="text-xs text-white/65 mt-2 font-semibold">{platformCfg.label}</div>
         </div>
       ) : (
         <div className="p-2 bg-black/35">
