@@ -6,6 +6,7 @@ import {
   SiPinterest, SiLinkedin, SiX, SiSnapchat, SiReddit,
   SiThreads, SiSpotify,
 } from "react-icons/si";
+import { useCanvasTheme } from "./canvas-theme-context";
 
 export type FunnelNodeType =
   | "trafficSource"
@@ -66,25 +67,27 @@ export const TRAFFIC_PLATFORMS: Record<string, {
 export const NODE_CONFIGS: Record<FunnelNodeType, {
   label: string;
   color: string;
+  lightColor: string;
   hexColor: string;
   bg: string;
   border: string;
+  lightBorder: string;
   icon: React.ElementType;
   description: string;
 }> = {
-  trafficSource: { label: "Traffic Source", color: "text-sky-300",     hexColor: "#38BDF8", bg: "bg-sky-950/80",     border: "border-sky-500/60",     icon: Globe,      description: "Ads, social, email, SEO" },
-  capturePage:   { label: "Capture Page",   color: "text-violet-300",  hexColor: "#A78BFA", bg: "bg-violet-950/80", border: "border-violet-500/60", icon: StickyNote, description: "Opt-in / lead capture" },
-  thankYouPage:  { label: "Thank-You Page", color: "text-emerald-300", hexColor: "#34D399", bg: "bg-emerald-950/80",border: "border-emerald-500/60",icon: StickyNote, description: "Confirmation after opt-in" },
-  emailSequence: { label: "Email Sequence", color: "text-teal-300",    hexColor: "#2DD4BF", bg: "bg-teal-950/80",   border: "border-teal-500/60",   icon: Mail,       description: "Follow-up email series (group)" },
-  emailNode:     { label: "Email",          color: "text-cyan-300",    hexColor: "#22D3EE", bg: "bg-cyan-950/80",   border: "border-cyan-500/60",   icon: Mail,       description: "Single email — write it right here" },
-  salesPage:     { label: "Sales Page",     color: "text-amber-300",   hexColor: "#FCD34D", bg: "bg-amber-950/80",  border: "border-amber-500/60",  icon: StickyNote, description: "Long-form sales letter" },
-  videoPage:     { label: "Video Page",     color: "text-rose-300",    hexColor: "#FB7185", bg: "bg-rose-950/80",   border: "border-rose-500/60",   icon: StickyNote, description: "Video sales letter (VSL)" },
-  webinar:       { label: "Webinar",        color: "text-indigo-300",  hexColor: "#818CF8", bg: "bg-indigo-950/80", border: "border-indigo-500/60", icon: StickyNote, description: "Live or automated webinar" },
-  orderForm:     { label: "Order Form",     color: "text-orange-300",  hexColor: "#FB923C", bg: "bg-orange-950/80", border: "border-orange-500/60", icon: StickyNote, description: "Checkout / payment page" },
-  upsell:        { label: "Upsell",         color: "text-green-300",   hexColor: "#4ADE80", bg: "bg-green-950/80",  border: "border-green-500/60",  icon: StickyNote, description: "One-click upsell offer" },
-  downsell:      { label: "Downsell",       color: "text-pink-300",    hexColor: "#F472B6", bg: "bg-pink-950/80",   border: "border-pink-500/60",   icon: StickyNote, description: "Fallback offer for declines" },
-  externalLink:  { label: "External Link",  color: "text-slate-300",   hexColor: "#94A3B8", bg: "bg-slate-800/80",  border: "border-slate-500/60",  icon: StickyNote, description: "Link to external resource" },
-  note:          { label: "Note",           color: "text-yellow-300",  hexColor: "#FDE047", bg: "bg-yellow-950/60", border: "border-yellow-500/50", icon: StickyNote, description: "Sticky note / annotation" },
+  trafficSource: { label: "Traffic Source", color: "text-sky-300",     lightColor: "text-sky-600",     hexColor: "#38BDF8", bg: "bg-sky-950/80",     border: "border-sky-500/60",     lightBorder: "border-sky-300",     icon: Globe,      description: "Ads, social, email, SEO" },
+  capturePage:   { label: "Capture Page",   color: "text-violet-300",  lightColor: "text-violet-600",  hexColor: "#A78BFA", bg: "bg-violet-950/80", border: "border-violet-500/60", lightBorder: "border-violet-300", icon: StickyNote, description: "Opt-in / lead capture" },
+  thankYouPage:  { label: "Thank-You Page", color: "text-emerald-300", lightColor: "text-emerald-600", hexColor: "#34D399", bg: "bg-emerald-950/80",border: "border-emerald-500/60",lightBorder: "border-emerald-300",icon: StickyNote, description: "Confirmation after opt-in" },
+  emailSequence: { label: "Email Sequence", color: "text-teal-300",    lightColor: "text-teal-600",    hexColor: "#2DD4BF", bg: "bg-teal-950/80",   border: "border-teal-500/60",   lightBorder: "border-teal-300",   icon: Mail,       description: "Follow-up email series (group)" },
+  emailNode:     { label: "Email",          color: "text-cyan-300",    lightColor: "text-cyan-600",    hexColor: "#22D3EE", bg: "bg-cyan-950/80",   border: "border-cyan-500/60",   lightBorder: "border-cyan-300",   icon: Mail,       description: "Single email — write it right here" },
+  salesPage:     { label: "Sales Page",     color: "text-amber-300",   lightColor: "text-amber-600",   hexColor: "#FCD34D", bg: "bg-amber-950/80",  border: "border-amber-500/60",  lightBorder: "border-amber-300",  icon: StickyNote, description: "Long-form sales letter" },
+  videoPage:     { label: "Video Page",     color: "text-rose-300",    lightColor: "text-rose-600",    hexColor: "#FB7185", bg: "bg-rose-950/80",   border: "border-rose-500/60",   lightBorder: "border-rose-300",   icon: StickyNote, description: "Video sales letter (VSL)" },
+  webinar:       { label: "Webinar",        color: "text-indigo-300",  lightColor: "text-indigo-600",  hexColor: "#818CF8", bg: "bg-indigo-950/80", border: "border-indigo-500/60", lightBorder: "border-indigo-300", icon: StickyNote, description: "Live or automated webinar" },
+  orderForm:     { label: "Order Form",     color: "text-orange-300",  lightColor: "text-orange-600",  hexColor: "#FB923C", bg: "bg-orange-950/80", border: "border-orange-500/60", lightBorder: "border-orange-300", icon: StickyNote, description: "Checkout / payment page" },
+  upsell:        { label: "Upsell",         color: "text-green-300",   lightColor: "text-green-600",   hexColor: "#4ADE80", bg: "bg-green-950/80",  border: "border-green-500/60",  lightBorder: "border-green-300",  icon: StickyNote, description: "One-click upsell offer" },
+  downsell:      { label: "Downsell",       color: "text-pink-300",    lightColor: "text-pink-600",    hexColor: "#F472B6", bg: "bg-pink-950/80",   border: "border-pink-500/60",   lightBorder: "border-pink-300",   icon: StickyNote, description: "Fallback offer for declines" },
+  externalLink:  { label: "External Link",  color: "text-slate-300",   lightColor: "text-slate-600",   hexColor: "#94A3B8", bg: "bg-slate-800/80",  border: "border-slate-500/60",  lightBorder: "border-slate-300",  icon: StickyNote, description: "Link to external resource" },
+  note:          { label: "Note",           color: "text-yellow-300",  lightColor: "text-yellow-700",  hexColor: "#FDE047", bg: "bg-yellow-950/60", border: "border-yellow-500/50", lightBorder: "border-yellow-300", icon: StickyNote, description: "Sticky note / annotation" },
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -255,17 +258,12 @@ function EmailSequenceSVG({ c }: { c: string }) {
   );
 }
 
-/* EMAIL NODE SVG — large bold white envelope with dark outline */
 function EmailNodeSVG({ c }: { c: string }) {
   return (
     <svg viewBox="0 0 148 96" width="148" height="96">
-      {/* Dark background */}
       <rect x="0" y="0" width="148" height="96" fill="rgba(0,0,0,0.5)" />
-      {/* Envelope body — white fill, dark outline */}
       <rect x="10" y="14" width="128" height="70" rx="6" fill="white" fillOpacity="0.92" stroke="rgba(0,0,0,0.6)" strokeWidth="2" />
-      {/* Envelope flap — V shape pointing down, drawn in dark so it reads on white */}
       <path d="M10,14 L74,56 L138,14" stroke="rgba(0,0,0,0.55)" strokeWidth="2.5" fill="none" strokeLinejoin="round" />
-      {/* Bottom corner fold creases */}
       <line x1="10" y1="84" x2="52" y2="52" stroke="rgba(0,0,0,0.22)" strokeWidth="1.5" />
       <line x1="138" y1="84" x2="96" y2="52" stroke="rgba(0,0,0,0.22)" strokeWidth="1.5" />
     </svg>
@@ -307,16 +305,23 @@ const MOCKUPS: Record<FunnelNodeType, (c: string) => React.ReactNode> = {
   note:          (_c) => null,
 };
 
-const HANDLES = (
-  <>
-    <Handle id="top"    type="source" position={Position.Top}    className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
-    <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
-    <Handle id="left"   type="source" position={Position.Left}   className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
-    <Handle id="right"  type="source" position={Position.Right}  className="!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900" />
-  </>
-);
+function Handles() {
+  const theme = useCanvasTheme();
+  const cls = theme === "light"
+    ? "!w-2.5 !h-2.5 !border-2 !border-gray-300 !bg-white"
+    : "!w-2.5 !h-2.5 !border-2 !border-white/30 !bg-slate-900";
+  return (
+    <>
+      <Handle id="top"    type="source" position={Position.Top}    className={cls} />
+      <Handle id="bottom" type="source" position={Position.Bottom} className={cls} />
+      <Handle id="left"   type="source" position={Position.Left}   className={cls} />
+      <Handle id="right"  type="source" position={Position.Right}  className={cls} />
+    </>
+  );
+}
 
 function DeleteButton({ id }: { id: string }) {
+  const theme = useCanvasTheme();
   const { deleteElements } = useReactFlow();
   const [confirming, setConfirming] = useState(false);
 
@@ -329,18 +334,24 @@ function DeleteButton({ id }: { id: string }) {
   if (confirming) {
     return (
       <div
-        className="absolute top-1 right-1 z-20 flex items-center gap-0.5 bg-gray-900/95 border border-white/15 rounded-lg px-1.5 py-1 shadow-xl nodrag nopan"
+        className={`absolute top-1 right-1 z-20 flex items-center gap-0.5 rounded-lg px-1.5 py-1 shadow-xl nodrag nopan border ${
+          theme === "light" ? "bg-white border-gray-200" : "bg-gray-900/95 border-white/15"
+        }`}
         onMouseDown={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="text-[9px] text-white/50 mr-1 whitespace-nowrap">Delete?</span>
+        <span className={`text-[9px] mr-1 whitespace-nowrap ${theme === "light" ? "text-gray-500" : "text-white/50"}`}>Delete?</span>
         <button
-          className="text-[9px] font-semibold text-red-400 hover:text-white bg-red-500/20 hover:bg-red-500/70 transition-colors px-1.5 py-0.5 rounded"
+          className="text-[9px] font-semibold text-red-500 hover:text-white bg-red-500/20 hover:bg-red-500/70 transition-colors px-1.5 py-0.5 rounded"
           data-testid={`button-confirm-delete-${id}`}
           onPointerDown={(e) => { stopAll(e); deleteElements({ nodes: [{ id }] }); }}
         >Yes</button>
         <button
-          className="text-[9px] text-white/40 hover:text-white/80 transition-colors px-1.5 py-0.5 rounded hover:bg-white/10"
+          className={`text-[9px] transition-colors px-1.5 py-0.5 rounded ${
+            theme === "light"
+              ? "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+              : "text-white/40 hover:text-white/80 hover:bg-white/10"
+          }`}
           data-testid={`button-cancel-delete-${id}`}
           onPointerDown={(e) => { stopAll(e); setConfirming(false); }}
         >No</button>
@@ -350,7 +361,11 @@ function DeleteButton({ id }: { id: string }) {
 
   return (
     <button
-      className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center bg-black/50 border border-white/15 text-white/40 hover:bg-red-500/80 hover:text-white hover:border-red-400/60 transition-colors cursor-pointer"
+      className={`absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center border transition-colors cursor-pointer hover:bg-red-500/80 hover:text-white hover:border-red-400/60 ${
+        theme === "light"
+          ? "bg-white border-gray-200 text-gray-400"
+          : "bg-black/50 border-white/15 text-white/40"
+      }`}
       title="Delete node"
       data-testid={`button-delete-node-${id}`}
       onPointerDown={(e) => { stopAll(e); setConfirming(true); }}
@@ -360,32 +375,41 @@ function DeleteButton({ id }: { id: string }) {
   );
 }
 
-function NodeLabel({ typeLabel, customLabel, typeColor, description }: {
-  typeLabel: string; customLabel: string; typeColor: string; description?: string;
+function NodeLabel({ typeLabel, customLabel, typeColor, lightTypeColor, description }: {
+  typeLabel: string;
+  customLabel: string;
+  typeColor: string;
+  lightTypeColor: string;
+  description?: string;
 }) {
+  const theme = useCanvasTheme();
+  const usedColor = theme === "light" ? lightTypeColor : typeColor;
   return (
-    <div className="px-2.5 py-2 border-t border-white/[0.08]">
-      <div className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${typeColor}`}>{typeLabel}</div>
-      <div className="text-white text-xs font-semibold leading-tight truncate">{customLabel}</div>
+    <div className={`px-2.5 py-2 border-t ${theme === "light" ? "border-gray-100" : "border-white/[0.08]"}`}>
+      <div className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${usedColor}`}>{typeLabel}</div>
+      <div className={`text-xs font-semibold leading-tight truncate ${theme === "light" ? "text-gray-900" : "text-white"}`}>{customLabel}</div>
       {description && (
-        <div className="text-white/40 text-[10px] mt-0.5 leading-tight line-clamp-1">{description}</div>
+        <div className={`text-[10px] mt-0.5 leading-tight line-clamp-1 ${theme === "light" ? "text-gray-500" : "text-white/40"}`}>{description}</div>
       )}
     </div>
   );
 }
 
-/* ─── TRAFFIC SOURCE NODE — platform picker ─── */
+/* ─── TRAFFIC SOURCE NODE ─── */
 function TrafficSourceNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
+  const theme = useCanvasTheme();
   const { setNodes } = useReactFlow();
 
-  // Support both legacy single-string and new multi-platform array
   const platforms: string[] = (nodeData.trafficPlatforms as string[] | undefined) ||
     (nodeData.trafficPlatform ? [nodeData.trafficPlatform as string] : []);
-
-  // pickingMode: true = show picker, false = show icons
-  // Default: true if no platforms yet (fresh node), false if platforms already set (loaded from saved data)
   const picking: boolean = (nodeData as any).pickingMode ?? (platforms.length === 0);
+
+  const containerCls = theme === "light"
+    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white border-sky-300 ${selected ? "ring-2 ring-sky-400 ring-offset-1" : ""}`
+    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden bg-sky-950/80 border-sky-500/60 ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
+
+  const iconBg = theme === "light" ? "bg-gray-50" : "bg-black/35";
 
   const togglePlatform = useCallback((p: string) => {
     const idx = platforms.indexOf(p);
@@ -415,66 +439,54 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
     ));
   }, [id, setNodes]);
 
-  const openPicker = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setNodes(nds => nds.map(n =>
-      n.id === id ? { ...n, data: { ...n.data, pickingMode: true } } : n
-    ));
-  }, [id, setNodes]);
-
   const ALL_PLATFORMS = Object.entries(TRAFFIC_PLATFORMS);
 
   function renderIconView() {
     const count = platforms.length;
     if (count === 1) {
       const cfg = TRAFFIC_PLATFORMS[platforms[0]];
-      return cfg ? <div className="flex items-center justify-center bg-black/35 py-2"><cfg.Icon style={{ color: cfg.color, width: 88, height: 88 }} /></div> : null;
+      return cfg ? <div className={`flex items-center justify-center py-2 ${iconBg}`}><cfg.Icon style={{ color: cfg.color, width: 88, height: 88 }} /></div> : null;
     }
     if (count === 2) {
       return (
-        <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
+        <div className={`grid grid-cols-2 gap-2 px-3 py-3 items-center justify-items-center ${iconBg}`}>
           {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 52, height: 52 }} /> : null; })}
         </div>
       );
     }
     if (count === 3) {
       return (
-        <div className="grid grid-cols-3 gap-1 bg-black/35 px-2 py-3 items-center justify-items-center">
+        <div className={`grid grid-cols-3 gap-1 px-2 py-3 items-center justify-items-center ${iconBg}`}>
           {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 38, height: 38 }} /> : null; })}
         </div>
       );
     }
     return (
-      <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
+      <div className={`grid grid-cols-2 gap-2 px-3 py-3 items-center justify-items-center ${iconBg}`}>
         {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 50, height: 50 }} /> : null; })}
       </div>
     );
   }
 
   return (
-    <div
-      className={`relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden bg-sky-950/80 border-sky-500/60 ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`}
-      style={{ width: 148 }}
-      data-testid="funnel-node-trafficSource"
-    >
-      {HANDLES}
+    <div className={containerCls} style={{ width: 148 }} data-testid="funnel-node-trafficSource">
+      <Handles />
       <DeleteButton id={id} />
-
       {!picking && platforms.length > 0 ? (
-        /* Icon view — show selected platforms */
         renderIconView()
       ) : (
-        /* Picker view — select platforms */
-        <div className="p-2 bg-black/35 nodrag nopan"
+        <div
+          className={`p-2 nodrag nopan ${iconBg}`}
           onMouseDown={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
-          onClick={(e) => e.stopPropagation()}>
+          onClick={(e) => e.stopPropagation()}
+        >
           {platforms.length > 0 && (
             <div className="flex items-center justify-center gap-1.5 mb-1.5">
               {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 20, height: 20 }} /> : null; })}
-              <span className="text-[8px] text-white/30 ml-0.5">{platforms.length}/4</span>
+              <span className={`text-[8px] ml-0.5 ${theme === "light" ? "text-gray-400" : "text-white/30"}`}>{platforms.length}/4</span>
             </div>
           )}
-          <div className="text-[9px] text-sky-300/75 font-bold uppercase tracking-widest mb-1.5 text-center">
+          <div className={`text-[9px] font-bold uppercase tracking-widest mb-1.5 text-center ${theme === "light" ? "text-sky-600" : "text-sky-300/75"}`}>
             {platforms.length === 0 ? "Choose Traffic Source" : "Add more (up to 4)"}
           </div>
           {[ALL_PLATFORMS.slice(0, 8), ALL_PLATFORMS.slice(8)].map((row, ri) => (
@@ -485,10 +497,16 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
                 return (
                   <button key={p} title={pc.label}
                     onPointerDown={maxed ? undefined : (e) => { e.stopPropagation(); e.preventDefault(); e.nativeEvent.stopImmediatePropagation(); togglePlatform(p); }}
-                    className={`flex flex-col items-center gap-0.5 rounded-md p-1 transition-all border ${active ? "border-sky-400/60 bg-sky-500/25" : maxed ? "border-transparent cursor-not-allowed" : "border-transparent hover:bg-white/10"}`}
+                    className={`flex flex-col items-center gap-0.5 rounded-md p-1 transition-all border ${
+                      active
+                        ? "border-sky-400/60 bg-sky-500/25"
+                        : maxed
+                          ? "border-transparent cursor-not-allowed"
+                          : `border-transparent ${theme === "light" ? "hover:bg-gray-100" : "hover:bg-white/10"}`
+                    }`}
                     style={{ opacity: maxed ? 0.3 : active ? 1 : 0.6 }}>
                     <pc.Icon style={{ color: pc.color, width: 17, height: 17 }} />
-                    <span className="text-[7px] text-white/40 leading-none truncate w-full text-center">{pc.label.split(" ")[0]}</span>
+                    <span className={`text-[7px] leading-none truncate w-full text-center ${theme === "light" ? "text-gray-500" : "text-white/40"}`}>{pc.label.split(" ")[0]}</span>
                   </button>
                 );
               })}
@@ -496,71 +514,72 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
           ))}
           {platforms.length >= 1 && (
             <button onClick={closePicker}
-              className="mt-2 w-full text-[10px] font-semibold text-sky-300 hover:text-white bg-sky-500/20 hover:bg-sky-500/40 transition-colors rounded-md py-1"
+              className="mt-2 w-full text-[10px] font-semibold text-sky-600 hover:text-white bg-sky-500/20 hover:bg-sky-500/40 transition-colors rounded-md py-1"
               data-testid="button-done-traffic-sources">
               ✓ Done
             </button>
           )}
         </div>
       )}
-
-      <NodeLabel typeLabel="Traffic Source" customLabel={nodeData.label} typeColor="text-sky-300" description={nodeData.description} />
+      <NodeLabel typeLabel="Traffic Source" customLabel={nodeData.label} typeColor="text-sky-300" lightTypeColor="text-sky-600" description={nodeData.description} />
     </div>
   );
 }
 
-/* ─── EMAIL NODE — individual email with subject + body ─── */
+/* ─── EMAIL NODE ─── */
 function EmailNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
+  const theme = useCanvasTheme();
   const cfg = NODE_CONFIGS.emailNode;
   const subject = nodeData.emailSubject as string | undefined;
   const day = nodeData.emailDay as number | undefined;
   const body = nodeData.emailBody as string | undefined;
 
+  const containerCls = theme === "light"
+    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${cfg.lightBorder} ${selected ? "ring-2 ring-cyan-400 ring-offset-1" : ""}`
+    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
+
   return (
-    <div
-      className={`relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`}
-      style={{ width: 148 }}
-      data-testid="funnel-node-emailNode"
-    >
-      {HANDLES}
+    <div className={containerCls} style={{ width: 148 }} data-testid="funnel-node-emailNode">
+      <Handles />
       <DeleteButton id={id} />
       <div className="overflow-hidden" style={{ height: 96 }}>
         <EmailNodeSVG c={cfg.hexColor} />
       </div>
-      <div className="px-2.5 py-2 border-t border-white/[0.08]">
+      <div className={`px-2.5 py-2 border-t ${theme === "light" ? "border-gray-100" : "border-white/[0.08]"}`}>
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className={`text-[9px] font-bold uppercase tracking-widest ${cfg.color}`}>Email</span>
+          <span className={`text-[9px] font-bold uppercase tracking-widest ${theme === "light" ? cfg.lightColor : cfg.color}`}>Email</span>
           {day !== undefined && (
-            <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full bg-white/10 ${cfg.color}`}>Day {day}</span>
+            <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full ${theme === "light" ? "bg-cyan-50 text-cyan-700" : `bg-white/10 ${cfg.color}`}`}>Day {day}</span>
           )}
         </div>
-        <div className="text-white text-xs font-semibold leading-tight truncate">
+        <div className={`text-xs font-semibold leading-tight truncate ${theme === "light" ? "text-gray-900" : "text-white"}`}>
           {subject || nodeData.label || "Untitled Email"}
         </div>
         {body ? (
-          <div className="text-white/40 text-[10px] mt-0.5 leading-tight line-clamp-1">{body}</div>
+          <div className={`text-[10px] mt-0.5 leading-tight line-clamp-1 ${theme === "light" ? "text-gray-500" : "text-white/40"}`}>{body}</div>
         ) : (
-          <div className="text-white/20 text-[10px] mt-0.5 italic">Double-click to write email</div>
+          <div className={`text-[10px] mt-0.5 italic ${theme === "light" ? "text-gray-400" : "text-white/20"}`}>Double-click to write email</div>
         )}
       </div>
     </div>
   );
 }
 
-/* ─── PAGE NODES — graphical SVG mockup ─── */
+/* ─── PAGE NODES ─── */
 function FunnelPageNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
+  const theme = useCanvasTheme();
   const cfg = NODE_CONFIGS[nodeData.nodeType] ?? NODE_CONFIGS.externalLink;
   const mockupFn = MOCKUPS[nodeData.nodeType];
 
+  const containerCls = theme === "light"
+    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${cfg.lightBorder} ${selected ? "ring-2 ring-indigo-400 ring-offset-1" : ""}`
+    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
+
   return (
-    <div
-      className={`relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`}
-      style={{ width: 148 }}
-      data-testid={`funnel-node-${nodeData.nodeType}`}
-    >
-      {HANDLES}
+    <div className={containerCls} style={{ width: 148 }} data-testid={`funnel-node-${nodeData.nodeType}`}>
+      <Handles />
       <DeleteButton id={id} />
       <div className="overflow-hidden" style={{ height: 96 }}>
         {nodeData.pagePreviewUrl ? (
@@ -571,12 +590,12 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
             style={{ display: "block" }}
           />
         ) : mockupFn ? mockupFn(cfg.hexColor) : (
-          <div className="flex items-center justify-center bg-black/35 h-full">
-            <cfg.icon className={`h-10 w-10 ${cfg.color} opacity-60`} />
+          <div className={`flex items-center justify-center h-full ${theme === "light" ? "bg-gray-50" : "bg-black/35"}`}>
+            <cfg.icon className={`h-10 w-10 ${theme === "light" ? cfg.lightColor : cfg.color} opacity-60`} />
           </div>
         )}
       </div>
-      <NodeLabel typeLabel={cfg.label} customLabel={nodeData.label} typeColor={cfg.color} description={nodeData.description} />
+      <NodeLabel typeLabel={cfg.label} customLabel={nodeData.label} typeColor={cfg.color} lightTypeColor={cfg.lightColor} description={nodeData.description} />
     </div>
   );
 }
@@ -586,7 +605,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
   return (
     <div
-      className={`relative border-2 shadow-lg bg-yellow-400/90 border-yellow-300 rounded-md ${selected ? "ring-2 ring-white/50" : ""}`}
+      className={`relative border-2 shadow-lg bg-yellow-400/90 border-yellow-300 rounded-md ${selected ? "ring-2 ring-yellow-600/50" : ""}`}
       style={{ width: 148, minHeight: 70 }}
       data-testid="funnel-node-note"
     >

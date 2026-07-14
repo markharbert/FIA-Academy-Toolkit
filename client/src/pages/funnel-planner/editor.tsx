@@ -27,7 +27,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain, Wand2 } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain, Wand2, Sun, Moon } from "lucide-react";
+import { CanvasThemeContext, type CanvasTheme } from "@/components/funnel-planner/canvas-theme-context";
 import dagre from "dagre";
 import { FunnelBrainPanel } from "@/components/funnel-planner/funnel-brain-panel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -66,6 +67,16 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>(() =>
+    (localStorage.getItem("funnelCanvasTheme") as CanvasTheme) || "dark"
+  );
+  const toggleCanvasTheme = useCallback(() => {
+    setCanvasTheme((prev) => {
+      const next: CanvasTheme = prev === "dark" ? "light" : "dark";
+      localStorage.setItem("funnelCanvasTheme", next);
+      return next;
+    });
+  }, []);
 
   // Close settings panel when the selected node is deleted
   useEffect(() => {
@@ -525,6 +536,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               Share
             </button>
             <button
+              onClick={toggleCanvasTheme}
+              title={canvasTheme === "dark" ? "Switch to light canvas" : "Switch to dark canvas"}
+              className="flex items-center justify-center w-7 h-7 rounded-md bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition-colors"
+              data-testid="button-toggle-canvas-theme"
+            >
+              {canvasTheme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+            </button>
+            <button
               onClick={exportPng}
               className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition-colors"
               data-testid="button-export-png"
@@ -684,40 +703,55 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           >
             <Wand2 className="w-3.5 h-3.5" />
           </button>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeDoubleClick={onNodeDoubleClick}
-            onPaneClick={onPaneClick}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            defaultEdgeOptions={{ type: "custom", data: {} }}
-            connectionMode="loose"
-            snapToGrid
-            snapGrid={[10, 10]}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
-            deleteKeyCode="Delete"
-            style={{ background: "#0d1424" }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e2d4a" />
-            <Controls className="!bg-[hsl(230,45%,11%)] !border-white/10" />
-            <MiniMap
-              className="!bg-[hsl(230,45%,9%)] !border-white/10"
-              nodeColor="#6366f1"
-              maskColor="rgba(0,0,0,0.6)"
-            />
-            {nodes.length === 0 && (
-              <Panel position="top-center">
-                <div className="text-white/25 text-sm mt-24 text-center select-none">
-                  Drag nodes from the left panel onto the canvas, or connect nodes by dragging between the handles
-                </div>
-              </Panel>
-            )}
-          </ReactFlow>
+          <CanvasThemeContext.Provider value={canvasTheme}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeDoubleClick={onNodeDoubleClick}
+              onPaneClick={onPaneClick}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              defaultEdgeOptions={{ type: "custom", data: {} }}
+              connectionMode="loose"
+              snapToGrid
+              snapGrid={[10, 10]}
+              fitView
+              fitViewOptions={{ padding: 0.2 }}
+              deleteKeyCode="Delete"
+              style={{ background: canvasTheme === "light" ? "#f8fafc" : "#0d1424" }}
+            >
+              <Background
+                variant={BackgroundVariant.Dots}
+                gap={20}
+                size={1}
+                color={canvasTheme === "light" ? "#cbd5e1" : "#1e2d4a"}
+              />
+              <Controls
+                className={canvasTheme === "light"
+                  ? "!bg-white !border-gray-200 [&>button]:!border-gray-200 [&>button]:!text-gray-500 [&>button:hover]:!bg-gray-100"
+                  : "!bg-[hsl(230,45%,11%)] !border-white/10"
+                }
+              />
+              <MiniMap
+                className={canvasTheme === "light"
+                  ? "!bg-gray-50 !border-gray-200"
+                  : "!bg-[hsl(230,45%,9%)] !border-white/10"
+                }
+                nodeColor={canvasTheme === "light" ? "#6366f1" : "#6366f1"}
+                maskColor={canvasTheme === "light" ? "rgba(200,210,220,0.5)" : "rgba(0,0,0,0.6)"}
+              />
+              {nodes.length === 0 && (
+                <Panel position="top-center">
+                  <div className={`text-sm mt-24 text-center select-none ${canvasTheme === "light" ? "text-gray-400" : "text-white/25"}`}>
+                    Drag nodes from the left panel onto the canvas, or connect nodes by dragging between the handles
+                  </div>
+                </Panel>
+              )}
+            </ReactFlow>
+          </CanvasThemeContext.Provider>
         </div>
 
         {/* Funnel Brain Panel - floats over canvas below toolbar */}
