@@ -213,6 +213,13 @@ export function CustomEdge({
 
   const sourceNode = getNode(source);
   const isTrafficEdge = sourceNode?.type === "trafficSource";
+
+  // Page node types (anything that isn't a source or an email step)
+  const PAGE_TYPES = new Set([
+    "capturePage","thankYouPage","salesPage","videoPage",
+    "webinar","orderForm","upsell","downsell","externalLink",
+  ]);
+
   // Purple "sequence" treatment:
   // • email → email  (chain between sequence steps)
   // • capturePage → email  (entry point into the sequence)
@@ -220,8 +227,16 @@ export function CustomEdge({
     (sourceNode?.type === "emailNode" && targetNode?.type === "emailNode") ||
     (sourceNode?.type === "capturePage" && targetNode?.type === "emailNode");
 
+  // Amber "email traffic" treatment:
+  // • email → any page  (sending your list to a destination)
+  const isEmailTrafficEdge =
+    sourceNode?.type === "emailNode" && PAGE_TYPES.has(targetNode?.type ?? "");
+
   // Email→email sequence edges: violet to signal "chain"
   const sequenceColor = theme === "light" ? "#8b5cf6" : "#a78bfa";
+
+  // Email→page traffic edges: amber to signal "warm list traffic"
+  const emailTrafficColor = theme === "light" ? "#d97706" : "#fbbf24";
 
   // Build manual dash+envelope items for email-sequence edges (only when no yes/no override)
   const emailSeqItems = useMemo(
@@ -238,11 +253,13 @@ export function CustomEdge({
       ? selectedColor
       : isEmailSequence
       ? sequenceColor
+      : isEmailTrafficEdge
+      ? emailTrafficColor
       : defaultColor;
 
-  const strokeWidth = selected ? 3 : isEmailSequence ? 2.5 : 1.5;
-  // Email sequence dashes are rendered manually; dasharray only for other edges
-  const strokeDasharray = (!isEmailSequence || pathType) ? undefined : undefined;
+  const strokeWidth = selected ? 3 : (isEmailSequence || isEmailTrafficEdge) ? 2.5 : 1.5;
+  // Email sequence dashes are rendered manually; no dasharray needed here
+  const strokeDasharray = undefined;
 
   const visible = selected || hovered;
 
@@ -294,7 +311,7 @@ export function CustomEdge({
         />
       )}
 
-      {/* Animated traffic flow — only on edges coming from a traffic source node */}
+      {/* Animated traffic flow — edges from a traffic source node (green) */}
       {isTrafficEdge && (
         <>
           <path
@@ -321,6 +338,37 @@ export function CustomEdge({
             strokeLinecap="round"
             strokeDasharray="10 16"
             style={{ animation: "traffic-flow 1.8s linear infinite", animationDelay: "-0.9s" }}
+          />
+        </>
+      )}
+
+      {/* Animated email traffic flow — email → page (amber, warm list traffic) */}
+      {isEmailTrafficEdge && !pathType && (
+        <>
+          <path
+            d={edgePath}
+            stroke="rgba(251,191,36,0.18)"
+            strokeWidth={8}
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d={edgePath}
+            stroke="rgba(217,119,6,0.95)"
+            strokeWidth={4}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray="10 16"
+            style={{ animation: "traffic-flow 2.2s linear infinite" }}
+          />
+          <path
+            d={edgePath}
+            stroke="rgba(251,191,36,0.55)"
+            strokeWidth={4}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray="10 16"
+            style={{ animation: "traffic-flow 2.2s linear infinite", animationDelay: "-1.1s" }}
           />
         </>
       )}
