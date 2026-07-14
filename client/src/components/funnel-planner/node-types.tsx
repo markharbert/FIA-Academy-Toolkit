@@ -340,7 +340,7 @@ function Handles() {
   );
 }
 
-function DuplicateButton({ id }: { id: string }) {
+function DuplicateButton({ id, positionCls = "absolute top-1.5 left-1.5 z-10" }: { id: string; positionCls?: string }) {
   const theme = useCanvasTheme();
   const { getNode, setNodes } = useReactFlow();
 
@@ -352,7 +352,7 @@ function DuplicateButton({ id }: { id: string }) {
 
   return (
     <button
-      className={`absolute top-1.5 left-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center border transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-indigo-500/80 hover:text-white hover:border-indigo-400/60 ${
+      className={`${positionCls} w-5 h-5 rounded-full flex items-center justify-center border transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-indigo-500/80 hover:text-white hover:border-indigo-400/60 ${
         theme === "light"
           ? "bg-white border-gray-200 text-gray-400"
           : "bg-black/50 border-white/15 text-white/40"
@@ -381,7 +381,7 @@ function DuplicateButton({ id }: { id: string }) {
   );
 }
 
-function DeleteButton({ id }: { id: string }) {
+function DeleteButton({ id, positionCls = "absolute top-1.5 right-1.5 z-10" }: { id: string; positionCls?: string }) {
   const theme = useCanvasTheme();
   const { deleteElements } = useReactFlow();
   const [confirming, setConfirming] = useState(false);
@@ -422,7 +422,7 @@ function DeleteButton({ id }: { id: string }) {
 
   return (
     <button
-      className={`absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center border transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-red-500/80 hover:text-white hover:border-red-400/60 ${
+      className={`${positionCls} w-5 h-5 rounded-full flex items-center justify-center border transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-red-500/80 hover:text-white hover:border-red-400/60 ${
         theme === "light"
           ? "bg-white border-gray-200 text-gray-400"
           : "bg-black/50 border-white/15 text-white/40"
@@ -697,31 +697,33 @@ function DelayNode({ id, data, selected }: NodeProps) {
     : `Wait ${amount} ${unitLabel}`;
 
   return (
-    <div
-      className={`relative flex items-center gap-2.5 px-3 py-2 border-2 border-dashed rounded-2xl shadow-lg transition-all select-none group`}
-      style={{
-        background: `rgba(0,0,0,0.65)`,
-        borderColor: c,
-        minWidth: 90,
-        maxWidth: 135,
-        ...(selected ? { boxShadow: `0 0 0 3px ${c}50, 0 4px 20px rgba(0,0,0,0.5)` } : { boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }),
-      }}
-      data-testid="funnel-node-delay"
-    >
-      <Handles />
-      <DuplicateButton id={id} />
-      <DeleteButton id={id} />
+    <div className="relative group" style={{ display: "inline-flex" }}>
+      <DuplicateButton id={id} positionCls="absolute left-0 -top-[26px] z-20" />
+      <DeleteButton    id={id} positionCls="absolute right-0 -top-[26px] z-20" />
       <div
-        className="flex items-center justify-center w-6 h-6 rounded-full shrink-0"
-        style={{ background: `${c}22`, border: `1.5px solid ${c}55` }}
+        className={`relative flex items-center gap-2 px-2 py-1.5 border-2 border-dashed rounded-2xl shadow-lg transition-all select-none`}
+        style={{
+          background: `rgba(0,0,0,0.65)`,
+          borderColor: c,
+          minWidth: 75,
+          maxWidth: 112,
+          ...(selected ? { boxShadow: `0 0 0 3px ${c}50, 0 4px 20px rgba(0,0,0,0.5)` } : { boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }),
+        }}
+        data-testid="funnel-node-delay"
       >
-        <Timer className="h-3 w-3" style={{ color: c }} />
-      </div>
-      <div className="flex flex-col leading-tight min-w-0">
-        <span className="text-[8px] font-bold uppercase tracking-widest" style={{ color: `${c}99` }}>Delay</span>
-        <span className="text-[11px] font-semibold leading-snug break-words" style={{ color: c }}>
-          {mainLine}
-        </span>
+        <Handles />
+        <div
+          className="flex items-center justify-center w-5 h-5 rounded-full shrink-0"
+          style={{ background: `${c}22`, border: `1.5px solid ${c}55` }}
+        >
+          <Timer className="h-2.5 w-2.5" style={{ color: c }} />
+        </div>
+        <div className="flex flex-col leading-tight min-w-0">
+          <span className="text-[7px] font-bold uppercase tracking-widest" style={{ color: `${c}99` }}>Delay</span>
+          <span className="text-[9px] font-semibold leading-snug break-words" style={{ color: c }}>
+            {mainLine}
+          </span>
+        </div>
       </div>
     </div>
   );
