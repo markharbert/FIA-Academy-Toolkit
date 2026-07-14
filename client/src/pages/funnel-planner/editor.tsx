@@ -402,7 +402,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
       )}
 
       {/* Canvas area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Top bar */}
         <div className="h-12 shrink-0 flex items-center gap-2 px-3 bg-[hsl(230,45%,11%)] border-b border-white/10 overflow-hidden">
           {!palettePinned && (
@@ -637,16 +637,17 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             )}
           </ReactFlow>
         </div>
-      </div>
 
-      {/* Funnel Brain Panel */}
-      {brainOpen && (
-        <FunnelBrainPanel funnelId={funnel.id} onClose={() => setBrainOpen(false)} />
-      )}
+        {/* Funnel Brain Panel - floats over canvas below toolbar */}
+        {brainOpen && (
+          <div className="absolute right-0 top-12 bottom-0 z-10 w-[400px]">
+            <FunnelBrainPanel funnelId={funnel.id} onClose={() => setBrainOpen(false)} />
+          </div>
+        )}
 
-      {/* Right Settings Panel */}
-      {selectedNode && (
-        <div className="w-[400px] shrink-0 bg-[hsl(230,45%,9%)] border-l border-white/10 overflow-y-auto">
+        {/* Right Settings Panel - floats over canvas below toolbar */}
+        {selectedNode && (
+          <div className={`absolute top-12 bottom-0 z-10 w-[400px] overflow-y-auto bg-[hsl(230,45%,9%)] border-l border-white/10 ${brainOpen ? "right-[400px]" : "right-0"}`}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <span className="text-sm font-semibold text-white">Node Settings</span>
             <button
@@ -884,8 +885,9 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               </p>
             </div>
           </div>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
