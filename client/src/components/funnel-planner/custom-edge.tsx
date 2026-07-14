@@ -289,26 +289,27 @@ export function CustomEdge({
   // Purple "sequence" treatment:
   // • email → email  (chain between sequence steps)
   // • capturePage → email  (entry point into the sequence)
-  // • webinar → email  (webinar registrants enter the sequence)
-  // • email → delay  (when that delay also leads to an email — delay sits between two emails)
-  // • delay → email  (when that delay also receives from an email)
-  const delayHasEmailNeighbour = (delayId: string, side: "incoming" | "outgoing") =>
+  // • webinar → email/sms  (webinar registrants enter the sequence)
+  // • email/sms → delay  (when that delay also leads to an email/sms)
+  // • delay → email/sms  (when that delay also receives from an email/sms)
+  const SEQUENCE_TYPES = new Set(["emailNode", "smsNode"]);
+  const delayHasSequenceNeighbour = (delayId: string, side: "incoming" | "outgoing") =>
     allEdges.some((e) => {
-      if (side === "incoming") return e.target === delayId && getNode(e.source)?.type === "emailNode";
-      return e.source === delayId && getNode(e.target)?.type === "emailNode";
+      if (side === "incoming") return e.target === delayId && SEQUENCE_TYPES.has(getNode(e.source)?.type ?? "");
+      return e.source === delayId && SEQUENCE_TYPES.has(getNode(e.target)?.type ?? "");
     });
 
   const isEmailSequence =
-    (sourceNode?.type === "emailNode" && targetNode?.type === "emailNode") ||
-    (sourceNode?.type === "capturePage" && targetNode?.type === "emailNode") ||
-    (sourceNode?.type === "webinar" && targetNode?.type === "emailNode") ||
-    (sourceNode?.type === "emailNode" && targetNode?.type === "delay" && delayHasEmailNeighbour(target, "outgoing")) ||
-    (sourceNode?.type === "delay" && targetNode?.type === "emailNode" && delayHasEmailNeighbour(source, "incoming"));
+    (SEQUENCE_TYPES.has(sourceNode?.type ?? "") && SEQUENCE_TYPES.has(targetNode?.type ?? "")) ||
+    (sourceNode?.type === "capturePage" && SEQUENCE_TYPES.has(targetNode?.type ?? "")) ||
+    (sourceNode?.type === "webinar" && SEQUENCE_TYPES.has(targetNode?.type ?? "")) ||
+    (SEQUENCE_TYPES.has(sourceNode?.type ?? "") && targetNode?.type === "delay" && delayHasSequenceNeighbour(target, "outgoing")) ||
+    (sourceNode?.type === "delay" && SEQUENCE_TYPES.has(targetNode?.type ?? "") && delayHasSequenceNeighbour(source, "incoming"));
 
-  // Amber "email traffic" treatment:
-  // • email → any page  (sending your list to a destination)
+  // Amber "email/sms traffic" treatment:
+  // • email/sms → any page  (sending your list to a destination)
   const isEmailTrafficEdge =
-    sourceNode?.type === "emailNode" && PAGE_TYPES.has(targetNode?.type ?? "");
+    SEQUENCE_TYPES.has(sourceNode?.type ?? "") && PAGE_TYPES.has(targetNode?.type ?? "");
 
   // Email→email sequence edges: violet to signal "chain"
   const sequenceColor = theme === "light" ? "#8b5cf6" : "#a78bfa";
