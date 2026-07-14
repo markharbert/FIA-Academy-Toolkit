@@ -62,29 +62,29 @@ export function CustomEdge({
           {/* Soft glow base */}
           <path
             d={edgePath}
-            stroke="rgba(56,189,248,0.18)"
-            strokeWidth={6}
+            stroke="rgba(56,189,248,0.25)"
+            strokeWidth={10}
             fill="none"
             strokeLinecap="round"
           />
           {/* Flowing dashes — stream 1 */}
           <path
             d={edgePath}
-            stroke="rgba(56,189,248,0.75)"
-            strokeWidth={2.5}
+            stroke="rgba(56,189,248,0.95)"
+            strokeWidth={5}
             fill="none"
             strokeLinecap="round"
-            strokeDasharray="8 18"
+            strokeDasharray="10 16"
             style={{ animation: "traffic-flow 1.8s linear infinite" }}
           />
           {/* Flowing dashes — stream 2 (offset by half a cycle for density) */}
           <path
             d={edgePath}
-            stroke="rgba(125,211,252,0.45)"
-            strokeWidth={2.5}
+            stroke="rgba(186,230,253,0.6)"
+            strokeWidth={5}
             fill="none"
             strokeLinecap="round"
-            strokeDasharray="8 18"
+            strokeDasharray="10 16"
             style={{ animation: "traffic-flow 1.8s linear infinite", animationDelay: "-0.9s" }}
           />
         </>
