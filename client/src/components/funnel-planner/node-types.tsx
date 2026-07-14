@@ -432,14 +432,7 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
 
       {!picking && platforms.length > 0 ? (
         /* Icon view — show selected platforms */
-        <div>
-          {renderIconView()}
-          <button onClick={openPicker}
-            className="w-full text-[9px] text-sky-400/50 hover:text-sky-300/80 transition-colors py-1 text-center bg-black/20"
-            data-testid="button-edit-traffic-sources">
-            ✎ Edit sources
-          </button>
-        </div>
+        renderIconView()
       ) : (
         /* Picker view — select platforms */
         <div className="p-2 bg-black/35 nodrag nopan"
