@@ -4926,15 +4926,24 @@ export async function registerRoutes(
       }
 
       const currentHook: string = fullScript.hook?.text ?? "";
-      const topic = await storage.getTopic(script.topicId);
+
+      let topic: import("../shared/schema").Topic | { topicTitle: string; keywordQuery: string; intents: string[] | null; intentAnalysis: string | null } | null = null;
+      if (script.topicId) {
+        topic = await storage.getTopic(script.topicId) ?? null;
+      }
       if (!topic) {
-        return res.status(404).json({ message: "Topic not found" });
+        topic = {
+          topicTitle: script.title ?? "this topic",
+          keywordQuery: script.title ?? "this topic",
+          intents: null,
+          intentAnalysis: null,
+        };
       }
 
-      const intentAnalysis: string | null = topic.intentAnalysis ?? null;
+      const intentAnalysis: string | null = (topic as any).intentAnalysis ?? null;
 
       const { generateHookVariations } = await import("./topic-pulse");
-      const newHook = await generateHookVariations(topic, currentHook, intentAnalysis);
+      const newHook = await generateHookVariations(topic as any, currentHook, intentAnalysis);
 
       res.json({ hook: newHook });
     } catch (err) {
