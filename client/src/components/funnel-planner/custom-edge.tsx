@@ -69,6 +69,72 @@ function EnvelopeIcon({ color }: { color: string }) {
   );
 }
 
+/* ── Email-traffic edge: manual dash + directional arrow rendering ─
+   Same rhythm as the envelope edges but every ARROW_EVERY positions
+   a small chevron arrow replaces a dash. The arrow is rotated to
+   match the local path direction so it always points the right way.
+──────────────────────────────────────────────────────────────────── */
+const ARROW_EVERY = 5; // every 5th dash slot → arrow
+
+type TrafficItem =
+  | { kind: "dash";  x1: number; y1: number; x2: number; y2: number }
+  | { kind: "arrow"; x:  number; y:  number; angle: number };
+
+function buildArrowItems(pathStr: string): TrafficItem[] {
+  try {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    el.setAttribute("d", pathStr);
+    const totalLen = el.getTotalLength();
+    if (totalLen < 1) return [];
+
+    const items: TrafficItem[] = [];
+    let pos = 0;
+    let idx = 0;
+
+    while (pos < totalLen) {
+      const end     = Math.min(pos + DASH_LEN, totalLen);
+      const isArrow = idx > 0 && idx % ARROW_EVERY === 0;
+
+      if (isArrow) {
+        const cp  = (pos + end) / 2;
+        const c   = el.getPointAtLength(cp);
+        // Sample two nearby points to get local tangent angle
+        const d   = Math.min(4, totalLen - cp);
+        const p1  = el.getPointAtLength(Math.max(0, cp - d));
+        const p2  = el.getPointAtLength(Math.min(totalLen, cp + d));
+        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI);
+        items.push({ kind: "arrow", x: c.x, y: c.y, angle });
+      } else {
+        const p1 = el.getPointAtLength(pos);
+        const p2 = el.getPointAtLength(end);
+        items.push({ kind: "dash", x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
+      }
+
+      pos += DASH_LEN + GAP_LEN;
+      idx++;
+    }
+    return items;
+  } catch {
+    return [];
+  }
+}
+
+/* Small chevron arrow centered at (0,0), pointing right → rotate to path angle */
+function ArrowIcon({ color }: { color: string }) {
+  return (
+    <g>
+      <polyline
+        points="-5,-4 1,0 -5,4"
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </g>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────
    EDGE BUNDLING — clean fan arrival
 
@@ -244,6 +310,12 @@ export function CustomEdge({
     [edgePath, isEmailSequence, pathType]
   );
 
+  // Build manual dash+arrow items for email-traffic edges (only when no yes/no override)
+  const emailTrafficItems = useMemo(
+    () => (isEmailTrafficEdge && !pathType ? buildArrowItems(edgePath) : []),
+    [edgePath, isEmailTrafficEdge, pathType]
+  );
+
   const strokeColor =
     pathType === "yes"
       ? "#22c55e"
@@ -283,7 +355,7 @@ export function CustomEdge({
 
   return (
     <>
-      {/* Email-sequence: manual dashes + envelope icons (no BaseEdge so dashes are real gaps) */}
+      {/* Email-sequence: manual dashes + envelope icons */}
       {isEmailSequence && !pathType ? (
         emailSeqItems.map((item, i) =>
           item.kind === "envelope" ? (
@@ -297,6 +369,25 @@ export function CustomEdge({
               x1={item.x1} y1={item.y1}
               x2={item.x2} y2={item.y2}
               stroke={selected ? selectedColor : sequenceColor}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+            />
+          )
+        )
+      ) : isEmailTrafficEdge && !pathType ? (
+        /* Email→page: manual dashes + directional arrow icons */
+        emailTrafficItems.map((item, i) =>
+          item.kind === "arrow" ? (
+            <g key={i} style={{ pointerEvents: "none" }}
+               transform={`translate(${item.x},${item.y}) rotate(${item.angle})`}>
+              <ArrowIcon color={selected ? selectedColor : emailTrafficColor} />
+            </g>
+          ) : (
+            <line
+              key={i}
+              x1={item.x1} y1={item.y1}
+              x2={item.x2} y2={item.y2}
+              stroke={selected ? selectedColor : emailTrafficColor}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
             />
@@ -342,36 +433,6 @@ export function CustomEdge({
         </>
       )}
 
-      {/* Animated email traffic flow — email → page (amber, warm list traffic) */}
-      {isEmailTrafficEdge && !pathType && (
-        <>
-          <path
-            d={edgePath}
-            stroke="rgba(251,191,36,0.18)"
-            strokeWidth={8}
-            fill="none"
-            strokeLinecap="round"
-          />
-          <path
-            d={edgePath}
-            stroke="rgba(217,119,6,0.95)"
-            strokeWidth={4}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray="10 16"
-            style={{ animation: "traffic-flow 2.2s linear infinite" }}
-          />
-          <path
-            d={edgePath}
-            stroke="rgba(251,191,36,0.55)"
-            strokeWidth={4}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray="10 16"
-            style={{ animation: "traffic-flow 2.2s linear infinite", animationDelay: "-1.1s" }}
-          />
-        </>
-      )}
       <EdgeLabelRenderer>
         <div
           style={{
