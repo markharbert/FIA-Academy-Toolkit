@@ -101,10 +101,15 @@ export function CustomEdge({
   // on top of the email→sales-page bundle going through the same space.
   // Fix: route it BELOW the target node's row so it bypasses the bundle.
 
+  // U-route: only when source is at the SAME level or BELOW the target
+  // (source bottom ≥ target top). When the source is naturally ABOVE the
+  // target (normal funnel layout), standard smoothstep handles it cleanly
+  // without creating a long detour that sweeps behind other nodes.
   const isBackwardBottomTop =
     sourcePosition === "bottom" &&
     targetPosition === "top" &&
-    adjSourceX > adjTargetX + 30;
+    adjSourceX > adjTargetX + 30 &&
+    adjSourceY >= adjTargetY;
 
   let edgePath: string;
   let labelX: number;
