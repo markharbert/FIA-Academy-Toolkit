@@ -28,6 +28,7 @@ export interface FunnelNodeData {
   description?: string;
   notes?: string;
   estimatedTraffic?: number;
+  costPerClick?: number;
   conversionRate?: number;
   trafficPlatform?: string;
   trafficPlatforms?: string[];

@@ -872,35 +872,56 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 data-testid="input-node-notes"
               />
             </div>
-            {(selectedNode.data as FunnelNodeData).nodeType !== "emailNode" && (
-            <div>
-              <Label className="text-xs text-white/50 uppercase tracking-wide">Est. Traffic / Visitors</Label>
-              <Input
-                type="number"
-                min={0}
-                value={(selectedNode.data as FunnelNodeData).estimatedTraffic ?? ""}
-                onChange={(e) => updateSelectedNodeData({ estimatedTraffic: e.target.value ? Number(e.target.value) : undefined })}
-                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
-                placeholder="e.g. 1000"
-                data-testid="input-node-traffic"
-              />
-            </div>
+            {/* Traffic source: estimated visitors + cost per click */}
+            {(selectedNode.data as FunnelNodeData).nodeType === "trafficSource" && (
+              <>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Est. Visitors / Day</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={(selectedNode.data as FunnelNodeData).estimatedTraffic ?? ""}
+                    onChange={(e) => updateSelectedNodeData({ estimatedTraffic: e.target.value ? Number(e.target.value) : undefined })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                    placeholder="e.g. 500"
+                    data-testid="input-node-traffic"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Cost Per Click ($)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={(selectedNode.data as FunnelNodeData).costPerClick ?? ""}
+                    onChange={(e) => updateSelectedNodeData({ costPerClick: e.target.value ? Number(e.target.value) : undefined })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                    placeholder="e.g. 1.25"
+                    data-testid="input-node-cpc"
+                  />
+                  <p className="text-[10px] text-white/25 mt-1 leading-snug">Average cost per visitor from this source.</p>
+                </div>
+              </>
             )}
-            {(selectedNode.data as FunnelNodeData).nodeType !== "emailNode" && (
-            <div>
-              <Label className="text-xs text-white/50 uppercase tracking-wide">Conv. Rate (%)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={0.1}
-                value={(selectedNode.data as FunnelNodeData).conversionRate ?? ""}
-                onChange={(e) => updateSelectedNodeData({ conversionRate: e.target.value ? Number(e.target.value) : undefined })}
-                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
-                placeholder="e.g. 30"
-                data-testid="input-node-conversion"
-              />
-            </div>
+            {/* Page nodes: conversion rate (how many visitors take the next step) */}
+            {(selectedNode.data as FunnelNodeData).nodeType !== "trafficSource" &&
+             (selectedNode.data as FunnelNodeData).nodeType !== "emailNode" &&
+             (selectedNode.data as FunnelNodeData).nodeType !== "note" && (
+              <div>
+                <Label className="text-xs text-white/50 uppercase tracking-wide">Conversion Rate (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={(selectedNode.data as FunnelNodeData).conversionRate ?? ""}
+                  onChange={(e) => updateSelectedNodeData({ conversionRate: e.target.value ? Number(e.target.value) : undefined })}
+                  className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                  placeholder="e.g. 35"
+                  data-testid="input-node-conversion"
+                />
+                <p className="text-[10px] text-white/25 mt-1 leading-snug">% of visitors who take the next step from this page.</p>
+              </div>
             )}
             <div className="pt-2 border-t border-white/10">
               <p className="text-xs text-white/30">
