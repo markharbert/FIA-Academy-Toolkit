@@ -46,6 +46,8 @@ export function CustomEdge({
   targetY,
   sourcePosition,
   targetPosition,
+  sourceHandle,
+  targetHandle,
   selected,
   data,
   markerEnd,
@@ -58,18 +60,21 @@ export function CustomEdge({
   const pathType = edgeData?.pathType;
 
   // ── Gather siblings ───────────────────────────────────────
+  // Only bundle edges that share the SAME target node AND the same
+  // target handle — e.g. emails→bottom and thank-you→left are
+  // separate groups even though they hit the same node.
   const allEdges = getEdges();
 
-  // Many → one: edges that share this target
+  // Many → one: same target node + same target handle
   const targetSiblings = allEdges
-    .filter((e) => e.target === target)
+    .filter((e) => e.target === target && e.targetHandle === targetHandle)
     .sort((a, b) => a.id.localeCompare(b.id));
   const targetRank = targetSiblings.findIndex((e) => e.id === id);
   const targetCount = targetSiblings.length;
 
-  // One → many: edges that share this source
+  // One → many: same source node + same source handle
   const sourceSiblings = allEdges
-    .filter((e) => e.source === source)
+    .filter((e) => e.source === source && e.sourceHandle === sourceHandle)
     .sort((a, b) => a.id.localeCompare(b.id));
   const sourceRank = sourceSiblings.findIndex((e) => e.id === id);
   const sourceCount = sourceSiblings.length;
