@@ -144,7 +144,7 @@ export function FunnelBrainPanel({ funnelId, onClose }: Props) {
   const fileCount = data?.files?.length ?? 0;
 
   return (
-    <div className="w-72 shrink-0 flex flex-col bg-[hsl(230,45%,9%)] border-l border-white/10 h-full">
+    <div className="w-[400px] shrink-0 flex flex-col bg-[hsl(230,45%,9%)] border-l border-white/10 h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2">
