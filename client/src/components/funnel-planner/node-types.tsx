@@ -444,7 +444,7 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
         </div>
       ) : (
         /* Picker view — select platforms */
-        <div className="p-2 bg-black/35">
+        <div className="p-2 bg-black/35" onMouseDown={(e) => e.stopPropagation()}>
           {platforms.length > 0 && (
             <div className="flex items-center justify-center gap-1.5 mb-1.5">
               {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 20, height: 20 }} /> : null; })}
