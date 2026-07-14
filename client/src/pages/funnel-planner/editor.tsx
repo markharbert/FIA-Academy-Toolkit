@@ -806,6 +806,52 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             </button>
           </div>
           <div className="px-4 py-4 space-y-4">
+            {/* ── Outline color picker ── */}
+            {(() => {
+              const SWATCH_COLORS = [
+                { hex: "#38BDF8", label: "Sky"     },
+                { hex: "#A78BFA", label: "Violet"  },
+                { hex: "#34D399", label: "Emerald" },
+                { hex: "#22D3EE", label: "Cyan"    },
+                { hex: "#FCD34D", label: "Amber"   },
+                { hex: "#FB7185", label: "Rose"    },
+                { hex: "#818CF8", label: "Indigo"  },
+                { hex: "#FB923C", label: "Orange"  },
+                { hex: "#4ADE80", label: "Green"   },
+                { hex: "#F472B6", label: "Pink"    },
+                { hex: "#94A3B8", label: "Slate"   },
+                { hex: "#FDE047", label: "Yellow"  },
+                { hex: "#F87171", label: "Red"     },
+                { hex: "#ffffff", label: "White"   },
+              ];
+              const current = (selectedNode.data as FunnelNodeData).accentColor as string | undefined;
+              return (
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Outline Color</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {/* Reset to default */}
+                    <button
+                      title="Default color"
+                      onClick={() => updateSelectedNodeData({ accentColor: undefined })}
+                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${!current ? "border-white/80 scale-110" : "border-white/20 hover:border-white/50"} bg-white/10`}
+                      data-testid="button-accent-color-default"
+                    >
+                      <X className="w-3 h-3 text-white/50" />
+                    </button>
+                    {SWATCH_COLORS.map(({ hex, label }) => (
+                      <button
+                        key={hex}
+                        title={label}
+                        onClick={() => updateSelectedNodeData({ accentColor: hex })}
+                        className={`w-6 h-6 rounded-full border-2 transition-all ${current === hex ? "border-white scale-110 shadow-lg" : "border-transparent hover:scale-105 hover:border-white/40"}`}
+                        style={{ background: hex }}
+                        data-testid={`button-accent-color-${label.toLowerCase()}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             {(selectedNode.data as FunnelNodeData).nodeType === "trafficSource" && (() => {
               const nd = selectedNode.data as FunnelNodeData;
               const platforms: string[] = (nd.trafficPlatforms as string[] | undefined) ||

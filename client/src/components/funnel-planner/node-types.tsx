@@ -31,6 +31,7 @@ export interface FunnelNodeData {
   nodeType: FunnelNodeType;
   description?: string;
   notes?: string;
+  accentColor?: string;
   estimatedTraffic?: number;
   costPerClick?: number;
   conversionRate?: number;
@@ -385,9 +386,11 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
     (nodeData.trafficPlatform ? [nodeData.trafficPlatform as string] : []);
   const picking: boolean = (nodeData as any).pickingMode ?? (platforms.length === 0);
 
+  const accentColor = nodeData.accentColor as string | undefined;
   const containerCls = theme === "light"
-    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white border-sky-300 ${selected ? "ring-2 ring-sky-400 ring-offset-1" : ""}`
-    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden bg-sky-950/80 border-sky-500/60 ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
+    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${accentColor ? "" : "border-sky-300"} ${selected ? "ring-2 ring-sky-400 ring-offset-1" : ""}`
+    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden bg-sky-950/80 ${accentColor ? "" : "border-sky-500/60"} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
+  const containerStyle = accentColor ? { borderColor: accentColor } : undefined;
 
   const iconBg = theme === "light" ? "bg-gray-50" : "bg-black/35";
 
@@ -449,7 +452,7 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
   }
 
   return (
-    <div className={containerCls} style={{ width: 148 }} data-testid="funnel-node-trafficSource">
+    <div className={containerCls} style={{ width: 148, ...containerStyle }} data-testid="funnel-node-trafficSource">
       <Handles />
       <DeleteButton id={id} />
       {!picking && platforms.length > 0 ? (
@@ -515,12 +518,13 @@ function EmailNode({ id, data, selected }: NodeProps) {
   const day = nodeData.emailDay as number | undefined;
   const body = nodeData.emailBody as string | undefined;
 
+  const accentColor = nodeData.accentColor as string | undefined;
   const containerCls = theme === "light"
-    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${cfg.lightBorder} ${selected ? "ring-2 ring-cyan-400 ring-offset-1" : ""}`
-    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
+    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${accentColor ? "" : cfg.lightBorder} ${selected ? "ring-2 ring-cyan-400 ring-offset-1" : ""}`
+    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${accentColor ? "" : cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
 
   return (
-    <div className={containerCls} style={{ width: 148 }} data-testid="funnel-node-emailNode">
+    <div className={containerCls} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid="funnel-node-emailNode">
       <Handles />
       <DeleteButton id={id} />
       <div className="overflow-hidden" style={{ height: 96 }}>
@@ -553,12 +557,13 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
   const cfg = NODE_CONFIGS[nodeData.nodeType] ?? NODE_CONFIGS.externalLink;
   const mockupFn = MOCKUPS[nodeData.nodeType];
 
+  const accentColor = nodeData.accentColor as string | undefined;
   const containerCls = theme === "light"
-    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${cfg.lightBorder} ${selected ? "ring-2 ring-indigo-400 ring-offset-1" : ""}`
-    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
+    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${accentColor ? "" : cfg.lightBorder} ${selected ? "ring-2 ring-indigo-400 ring-offset-1" : ""}`
+    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${accentColor ? "" : cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
 
   return (
-    <div className={containerCls} style={{ width: 148 }} data-testid={`funnel-node-${nodeData.nodeType}`}>
+    <div className={containerCls} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid={`funnel-node-${nodeData.nodeType}`}>
       <Handles />
       <DeleteButton id={id} />
       <div className="overflow-hidden" style={{ height: 96 }}>
@@ -604,7 +609,8 @@ function NoteNode({ id, data, selected }: NodeProps) {
         handleStyle={{ background: "#a16207", border: "1px solid #854d0e", width: 9, height: 9, borderRadius: 3 }}
       />
       <div
-        className={`relative w-full h-full flex flex-col border-2 shadow-lg bg-yellow-300/95 border-yellow-400/80 rounded-md overflow-hidden ${selected ? "ring-2 ring-yellow-700/40" : ""}`}
+        className={`relative w-full h-full flex flex-col border-2 shadow-lg bg-yellow-300/95 ${nodeData.accentColor ? "" : "border-yellow-400/80"} rounded-md overflow-hidden ${selected ? "ring-2 ring-yellow-700/40" : ""}`}
+        style={nodeData.accentColor ? { borderColor: nodeData.accentColor as string } : undefined}
         data-testid="funnel-node-note"
       >
         <DeleteButton id={id} />
