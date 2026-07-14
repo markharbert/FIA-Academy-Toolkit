@@ -226,6 +226,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           data: {
             label, nodeType, description: "",
             ...(nodeType === "trafficSource" ? { pickingMode: true } : {}),
+            ...(nodeType === "delay" ? { delayAmount: 1, delayUnit: "days" } : {}),
           } as FunnelNodeData,
         };
         return [...nds, newNode];
@@ -995,6 +996,55 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 </div>
               );
             })()}
+            {/* ── Delay node fields ── */}
+            {(selectedNode.data as FunnelNodeData).nodeType === "delay" && (
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Delay Amount</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={(selectedNode.data as FunnelNodeData).delayAmount ?? 1}
+                    onChange={(e) => updateSelectedNodeData({ delayAmount: e.target.value ? Math.max(1, Number(e.target.value)) : 1 })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                    placeholder="e.g. 3"
+                    data-testid="input-delay-amount"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Unit</Label>
+                  <div className="flex gap-1.5 mt-1.5">
+                    {(["minutes", "hours", "days", "weeks"] as const).map((u) => {
+                      const active = ((selectedNode.data as FunnelNodeData).delayUnit ?? "days") === u;
+                      return (
+                        <button
+                          key={u}
+                          onClick={() => updateSelectedNodeData({ delayUnit: u })}
+                          className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors capitalize ${
+                            active
+                              ? "bg-amber-500/25 border-amber-400/70 text-amber-200"
+                              : "bg-white/[0.04] border-white/10 text-white/50 hover:text-white hover:border-white/25"
+                          }`}
+                          data-testid={`button-delay-unit-${u}`}
+                        >
+                          {u}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Notes</Label>
+                  <Textarea
+                    value={(selectedNode.data as FunnelNodeData).notes || ""}
+                    onChange={(e) => updateSelectedNodeData({ notes: e.target.value })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none h-20"
+                    placeholder="Internal notes about this delay..."
+                    data-testid="input-delay-notes"
+                  />
+                </div>
+              </div>
+            )}
             {/* ── Email node fields ── */}
             {(selectedNode.data as FunnelNodeData).nodeType === "emailNode" && (
               <>
@@ -1050,7 +1100,8 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             )}
             {(selectedNode.data as FunnelNodeData).nodeType !== "trafficSource" &&
              (selectedNode.data as FunnelNodeData).nodeType !== "note" &&
-             (selectedNode.data as FunnelNodeData).nodeType !== "emailNode" && (
+             (selectedNode.data as FunnelNodeData).nodeType !== "emailNode" &&
+             (selectedNode.data as FunnelNodeData).nodeType !== "delay" && (
               <div>
                 <Label className="text-xs text-white/50 uppercase tracking-wide">Page Preview</Label>
                 <div className="mt-2 space-y-2">
@@ -1124,35 +1175,39 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 </div>
               </div>
             )}
-            <div>
-              <Label className="text-xs text-white/50 uppercase tracking-wide">Label</Label>
-              <Input
-                value={(selectedNode.data as FunnelNodeData).label || ""}
-                onChange={(e) => updateSelectedNodeData({ label: e.target.value })}
-                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
-                data-testid="input-node-label"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-white/50 uppercase tracking-wide">Description</Label>
-              <Textarea
-                value={(selectedNode.data as FunnelNodeData).description || ""}
-                onChange={(e) => updateSelectedNodeData({ description: e.target.value })}
-                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none h-20"
-                placeholder="Brief description..."
-                data-testid="input-node-description"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-white/50 uppercase tracking-wide">Notes</Label>
-              <Textarea
-                value={(selectedNode.data as FunnelNodeData).notes || ""}
-                onChange={(e) => updateSelectedNodeData({ notes: e.target.value })}
-                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none h-24"
-                placeholder="Internal notes..."
-                data-testid="input-node-notes"
-              />
-            </div>
+            {(selectedNode.data as FunnelNodeData).nodeType !== "delay" && (
+              <>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Label</Label>
+                  <Input
+                    value={(selectedNode.data as FunnelNodeData).label || ""}
+                    onChange={(e) => updateSelectedNodeData({ label: e.target.value })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                    data-testid="input-node-label"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Description</Label>
+                  <Textarea
+                    value={(selectedNode.data as FunnelNodeData).description || ""}
+                    onChange={(e) => updateSelectedNodeData({ description: e.target.value })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none h-20"
+                    placeholder="Brief description..."
+                    data-testid="input-node-description"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Notes</Label>
+                  <Textarea
+                    value={(selectedNode.data as FunnelNodeData).notes || ""}
+                    onChange={(e) => updateSelectedNodeData({ notes: e.target.value })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none h-24"
+                    placeholder="Internal notes..."
+                    data-testid="input-node-notes"
+                  />
+                </div>
+              </>
+            )}
             {/* Traffic source: estimated visitors + cost per click */}
             {(selectedNode.data as FunnelNodeData).nodeType === "trafficSource" && (
               <>
@@ -1187,7 +1242,8 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             {/* Page nodes: conversion rate (how many visitors take the next step) */}
             {(selectedNode.data as FunnelNodeData).nodeType !== "trafficSource" &&
              (selectedNode.data as FunnelNodeData).nodeType !== "emailNode" &&
-             (selectedNode.data as FunnelNodeData).nodeType !== "note" && (
+             (selectedNode.data as FunnelNodeData).nodeType !== "note" &&
+             (selectedNode.data as FunnelNodeData).nodeType !== "delay" && (
               <div>
                 <Label className="text-xs text-white/50 uppercase tracking-wide">Conversion Rate (%)</Label>
                 <Input

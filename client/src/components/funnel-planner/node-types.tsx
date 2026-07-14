@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import {
   Mail, MessageSquare, Search, Mic, StickyNote, Globe, X,
   UserPlus, CheckCircle, DollarSign, PlayCircle, Radio,
-  CreditCard, TrendingUp, TrendingDown, ExternalLink, Video,
+  CreditCard, TrendingUp, TrendingDown, ExternalLink, Video, Timer,
 } from "lucide-react";
 import {
   SiFacebook, SiInstagram, SiYoutube, SiTiktok, SiGoogle,
@@ -25,6 +25,7 @@ export type FunnelNodeType =
   | "upsell"
   | "downsell"
   | "externalLink"
+  | "delay"
   | "note";
 
 export interface FunnelNodeData {
@@ -43,6 +44,8 @@ export interface FunnelNodeData {
   emailSubject?: string;
   emailBody?: string;
   emailDay?: number;
+  delayAmount?: number;
+  delayUnit?: string;
   [key: string]: unknown;
 }
 
@@ -92,6 +95,7 @@ export const NODE_CONFIGS: Record<FunnelNodeType, {
   upsell:        { label: "Upsell",         color: "text-green-300",   lightColor: "text-green-600",   hexColor: "#4ADE80", bg: "bg-green-950/80",  border: "border-green-500/60",  lightBorder: "border-green-300",  icon: TrendingUp,    description: "One-click upsell offer" },
   downsell:      { label: "Downsell",       color: "text-pink-300",    lightColor: "text-pink-600",    hexColor: "#F472B6", bg: "bg-pink-950/80",   border: "border-pink-500/60",   lightBorder: "border-pink-300",   icon: TrendingDown,  description: "Fallback offer for declines" },
   externalLink:  { label: "External Link",  color: "text-slate-300",   lightColor: "text-slate-600",   hexColor: "#94A3B8", bg: "bg-slate-800/80",  border: "border-slate-500/60",  lightBorder: "border-slate-300",  icon: ExternalLink,  description: "Link to external resource" },
+  delay:         { label: "Delay",          color: "text-amber-300",   lightColor: "text-amber-600",   hexColor: "#F59E0B", bg: "bg-amber-950/60",  border: "border-amber-500/50",  lightBorder: "border-amber-400",  icon: Timer,         description: "Wait X hours / days / weeks" },
   note:          { label: "Note",           color: "text-yellow-300",  lightColor: "text-yellow-700",  hexColor: "#FDE047", bg: "bg-yellow-950/60", border: "border-yellow-500/50", lightBorder: "border-yellow-300", icon: StickyNote,    description: "Sticky note / annotation" },
 };
 
@@ -315,6 +319,7 @@ const MOCKUPS: Record<FunnelNodeType, (c: string) => React.ReactNode> = {
   emailNode:     (c) => <EmailNodeSVG c={c} />,
   externalLink:  (c) => <ExternalLinkSVG c={c} />,
   trafficSource: (_c) => null,
+  delay:         (_c) => null,
   note:          (_c) => null,
 };
 
@@ -627,6 +632,50 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
   );
 }
 
+/* ─── DELAY NODE ─── */
+function DelayNode({ id, data, selected }: NodeProps) {
+  const nodeData = data as FunnelNodeData;
+  const amount = (nodeData.delayAmount as number | undefined) ?? 1;
+  const unit = (nodeData.delayUnit as string | undefined) ?? "days";
+  const accentColor = nodeData.accentColor as string | undefined;
+  const c = accentColor ?? "#F59E0B";
+
+  const unitLabel = (() => {
+    const n = Number(amount);
+    const base = unit.replace(/s$/, "");
+    return n === 1 ? base : `${base}s`;
+  })();
+
+  return (
+    <div
+      className={`relative flex items-center gap-3 px-4 py-2.5 border-2 border-dashed rounded-full shadow-lg transition-all select-none`}
+      style={{
+        background: `rgba(0,0,0,0.65)`,
+        borderColor: c,
+        minWidth: 170,
+        ...(selected ? { boxShadow: `0 0 0 3px ${c}50, 0 4px 20px rgba(0,0,0,0.5)` } : { boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }),
+      }}
+      data-testid="funnel-node-delay"
+    >
+      <Handles />
+      <DeleteButton id={id} />
+      <div
+        className="flex items-center justify-center w-8 h-8 rounded-full shrink-0"
+        style={{ background: `${c}22`, border: `1.5px solid ${c}55` }}
+      >
+        <Timer className="h-4 w-4" style={{ color: c }} />
+      </div>
+      <div className="flex flex-col leading-tight pr-1">
+        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: `${c}99` }}>Delay</span>
+        <span className="text-white font-bold text-sm leading-snug">
+          Wait{" "}
+          <span style={{ color: c }}>{amount} {unitLabel}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ─── NOTE NODE ─── */
 function NoteNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
@@ -695,5 +744,6 @@ export const nodeTypes: Record<string, React.ComponentType<NodeProps>> = {
   upsell:        FunnelPageNode,
   downsell:      FunnelPageNode,
   externalLink:  FunnelPageNode,
+  delay:         DelayNode,
   note:          NoteNode,
 };
