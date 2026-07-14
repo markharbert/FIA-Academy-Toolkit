@@ -809,6 +809,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [popup, setPopup] = useState<{ x: number; y: number } | null>(null);
+  const [editMode, setEditMode] = useState(false);
 
   const updateData = useCallback(
     (updates: Partial<FunnelNodeData>) => {
@@ -819,20 +820,26 @@ function NoteNode({ id, data, selected }: NodeProps) {
     [id, setNodes]
   );
 
-  // Initialize content on mount — never use dangerouslySetInnerHTML on a contentEditable
+  // When entering edit mode: set innerHTML and focus
   useEffect(() => {
-    if (editorRef.current) {
+    if (editMode && editorRef.current) {
       editorRef.current.innerHTML = nodeData.notes ?? "";
+      editorRef.current.focus();
+      // Place cursor at end
+      const range = document.createRange();
+      range.selectNodeContents(editorRef.current);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [editMode]);
 
-  // Sync external data changes (e.g. undo) only when the editor is not focused
-  useEffect(() => {
-    if (editorRef.current && document.activeElement !== editorRef.current) {
-      editorRef.current.innerHTML = nodeData.notes ?? "";
-    }
-  }, [nodeData.notes]);
+  const exitEditMode = () => {
+    setPopup(null);
+    setEditMode(false);
+  };
 
   const fmt = (cmd: string, value?: string) => {
     editorRef.current?.focus();
@@ -874,7 +881,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
           style={{
             backgroundColor: accent + "e8",
             borderColor: accent,
-            ...(selected ? { outline: `2px solid ${accent}55`, outlineOffset: "2px" } : {}),
+            ...(editMode ? { outline: `2px solid ${accent}99`, outlineOffset: "2px" } : selected ? { outline: `2px solid ${accent}55`, outlineOffset: "2px" } : {}),
           }}
           data-testid="funnel-node-note"
         >
@@ -899,23 +906,39 @@ function NoteNode({ id, data, selected }: NodeProps) {
             />
           </div>
 
-          {/* Rich-text body */}
-          <div
-            ref={editorRef}
-            contentEditable
-            suppressContentEditableWarning
-            tabIndex={0}
-            onInput={() => { if (editorRef.current) updateData({ notes: editorRef.current.innerHTML }); }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); editorRef.current?.focus(); }}
-            onMouseUp={checkSelection}
-            onKeyUp={checkSelection}
-            onBlur={() => { setTimeout(() => setPopup(null), 120); }}
-            className="flex-1 min-h-0 w-full px-3 py-2 text-[11px] leading-snug outline-none overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-black/30 empty:before:pointer-events-none"
-            style={{ color: "#1a1a1a", caretColor: "#1a1a1a" }}
-            data-placeholder="Write your note here…"
-          />
+          {/* Body: view mode (read-only) vs edit mode (contentEditable) */}
+          {!editMode ? (
+            /* VIEW MODE — double-click to start editing */
+            <div
+              className="flex-1 min-h-0 w-full px-3 py-2 text-[11px] leading-snug overflow-y-auto cursor-text"
+              style={{ color: "#1a1a1a" }}
+              onDoubleClick={(e) => { e.stopPropagation(); setEditMode(true); }}
+              dangerouslySetInnerHTML={{
+                __html: nodeData.notes
+                  ? nodeData.notes
+                  : '<span style="color:rgba(0,0,0,0.3);font-style:italic">Double-click to write your note…</span>',
+              }}
+            />
+          ) : (
+            /* EDIT MODE — full contentEditable, ReactFlow bypassed */
+            <div
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              tabIndex={0}
+              onInput={() => { if (editorRef.current) updateData({ notes: editorRef.current.innerHTML }); }}
+              onPointerDown={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
+              onMouseDown={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
+              onPointerMove={(e) => { e.stopPropagation(); }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseUp={checkSelection}
+              onKeyUp={checkSelection}
+              onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); exitEditMode(); } }}
+              onBlur={() => { setTimeout(() => { if (!editorRef.current?.contains(document.activeElement)) exitEditMode(); }, 150); }}
+              className="nopan nodrag flex-1 min-h-0 w-full px-3 py-2 text-[11px] leading-snug outline-none overflow-y-auto"
+              style={{ color: "#1a1a1a", caretColor: "#1a1a1a", userSelect: "text" }}
+            />
+          )}
         </div>
 
         {/* Floating format popup — appears above selected text */}
