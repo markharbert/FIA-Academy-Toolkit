@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps, useReactFlow, NodeResizer } from "@xyflow/react";
 import { useCallback, useState } from "react";
 import {
-  Mail, MessageSquare, Search, Mic, StickyNote, Globe, X,
+  Mail, MessageSquare, Search, Mic, StickyNote, Globe, X, Copy,
   UserPlus, CheckCircle, DollarSign, PlayCircle, Radio,
   CreditCard, TrendingUp, TrendingDown, ExternalLink, Video, Timer,
 } from "lucide-react";
@@ -340,6 +340,47 @@ function Handles() {
   );
 }
 
+function DuplicateButton({ id }: { id: string }) {
+  const theme = useCanvasTheme();
+  const { getNode, setNodes } = useReactFlow();
+
+  const stopAll = (e: React.PointerEvent | React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    (e as React.PointerEvent).nativeEvent?.stopImmediatePropagation();
+  };
+
+  return (
+    <button
+      className={`absolute top-1.5 left-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center border transition-colors cursor-pointer hover:bg-indigo-500/80 hover:text-white hover:border-indigo-400/60 ${
+        theme === "light"
+          ? "bg-white border-gray-200 text-gray-400"
+          : "bg-black/50 border-white/15 text-white/40"
+      }`}
+      title="Duplicate node"
+      data-testid={`button-duplicate-node-${id}`}
+      onPointerDown={(e) => {
+        stopAll(e);
+        const node = getNode(id);
+        if (!node) return;
+        const newId = `n${Date.now()}${Math.floor(Math.random() * 1000)}`;
+        setNodes((nds) => [
+          ...nds,
+          {
+            ...node,
+            id: newId,
+            selected: false,
+            position: { x: node.position.x + 24, y: node.position.y + 24 },
+            data: { ...node.data },
+          },
+        ]);
+      }}
+    >
+      <Copy className="w-2.5 h-2.5" />
+    </button>
+  );
+}
+
 function DeleteButton({ id }: { id: string }) {
   const theme = useCanvasTheme();
   const { deleteElements } = useReactFlow();
@@ -497,6 +538,7 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
   return (
     <div className={containerCls} style={{ width: 148, ...containerStyle }} data-testid="funnel-node-trafficSource">
       <Handles />
+      <DuplicateButton id={id} />
       <DeleteButton id={id} />
       {!picking && platforms.length > 0 ? (
         renderIconView()
@@ -569,6 +611,7 @@ function EmailNode({ id, data, selected }: NodeProps) {
   return (
     <div className={containerCls} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid="funnel-node-emailNode">
       <Handles />
+      <DuplicateButton id={id} />
       <DeleteButton id={id} />
       <div className="overflow-hidden" style={{ height: 96 }}>
         <EmailNodeSVG c={accentColor ?? cfg.hexColor} />
@@ -611,6 +654,7 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
   return (
     <div className={containerCls} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid={`funnel-node-${nodeData.nodeType}`}>
       <Handles />
+      <DuplicateButton id={id} />
       <DeleteButton id={id} />
       <div className="overflow-hidden" style={{ height: 96 }}>
         {nodeData.pagePreviewUrl ? (
@@ -667,6 +711,7 @@ function DelayNode({ id, data, selected }: NodeProps) {
       data-testid="funnel-node-delay"
     >
       <Handles />
+      <DuplicateButton id={id} />
       <DeleteButton id={id} />
       <div
         className="flex items-center justify-center w-6 h-6 rounded-full shrink-0"
@@ -712,6 +757,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
         style={nodeData.accentColor ? { borderColor: nodeData.accentColor as string } : undefined}
         data-testid="funnel-node-note"
       >
+        <DuplicateButton id={id} />
         <DeleteButton id={id} />
         {/* Header strip */}
         <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 bg-yellow-400/60 border-b border-yellow-500/30 shrink-0">
