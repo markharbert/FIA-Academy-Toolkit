@@ -364,8 +364,13 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
     } else {
       return;
     }
+    const autoLabel = next.length === 0
+      ? "Traffic Source"
+      : next.length === 1
+        ? (TRAFFIC_PLATFORMS[next[0]]?.label ?? next[0])
+        : "Multiple Sources";
     setNodes(nds => nds.map(n =>
-      n.id === id ? { ...n, data: { ...n.data, trafficPlatforms: next, trafficPlatform: next[0] || undefined } } : n
+      n.id === id ? { ...n, data: { ...n.data, trafficPlatforms: next, trafficPlatform: next[0] || undefined, label: autoLabel } } : n
     ));
   }, [id, setNodes, platforms]);
 

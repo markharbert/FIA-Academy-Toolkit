@@ -661,7 +661,12 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 } else {
                   return;
                 }
-                updateSelectedNodeData({ trafficPlatforms: next, trafficPlatform: next[0] || undefined });
+                const autoLabel = next.length === 0
+                  ? "Traffic Source"
+                  : next.length === 1
+                    ? (TRAFFIC_PLATFORMS[next[0]]?.label ?? next[0])
+                    : "Multiple Sources";
+                updateSelectedNodeData({ trafficPlatforms: next, trafficPlatform: next[0] || undefined, label: autoLabel });
               };
               return (
                 <div>
@@ -690,7 +695,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                   </div>
                   {platforms.length > 0 && (
                     <button
-                      onClick={() => updateSelectedNodeData({ trafficPlatforms: [], trafficPlatform: undefined })}
+                      onClick={() => updateSelectedNodeData({ trafficPlatforms: [], trafficPlatform: undefined, label: "Traffic Source" })}
                       className="mt-1.5 text-[10px] text-white/30 hover:text-white/60 transition-colors"
                       data-testid="button-clear-platform"
                     >
