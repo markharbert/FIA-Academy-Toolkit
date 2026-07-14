@@ -290,10 +290,20 @@ export function CustomEdge({
   // • email → email  (chain between sequence steps)
   // • capturePage → email  (entry point into the sequence)
   // • webinar → email  (webinar registrants enter the sequence)
+  // • email → delay  (when that delay also leads to an email — delay sits between two emails)
+  // • delay → email  (when that delay also receives from an email)
+  const delayHasEmailNeighbour = (delayId: string, side: "incoming" | "outgoing") =>
+    allEdges.some((e) => {
+      if (side === "incoming") return e.target === delayId && getNode(e.source)?.type === "emailNode";
+      return e.source === delayId && getNode(e.target)?.type === "emailNode";
+    });
+
   const isEmailSequence =
     (sourceNode?.type === "emailNode" && targetNode?.type === "emailNode") ||
     (sourceNode?.type === "capturePage" && targetNode?.type === "emailNode") ||
-    (sourceNode?.type === "webinar" && targetNode?.type === "emailNode");
+    (sourceNode?.type === "webinar" && targetNode?.type === "emailNode") ||
+    (sourceNode?.type === "emailNode" && targetNode?.type === "delay" && delayHasEmailNeighbour(target, "outgoing")) ||
+    (sourceNode?.type === "delay" && targetNode?.type === "emailNode" && delayHasEmailNeighbour(source, "incoming"));
 
   // Amber "email traffic" treatment:
   // • email → any page  (sending your list to a destination)
