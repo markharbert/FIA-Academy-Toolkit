@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import {
   Mail, MessageSquare, Search, Mic, StickyNote, Globe, X,
   UserPlus, CheckCircle, DollarSign, PlayCircle, Radio,
-  CreditCard, TrendingUp, TrendingDown, ExternalLink,
+  CreditCard, TrendingUp, TrendingDown, ExternalLink, Video,
 } from "lucide-react";
 import {
   SiFacebook, SiInstagram, SiYoutube, SiTiktok, SiGoogle,
@@ -20,6 +20,7 @@ export type FunnelNodeType =
   | "salesPage"
   | "videoPage"
   | "webinar"
+  | "zoom"
   | "orderForm"
   | "upsell"
   | "downsell"
@@ -86,6 +87,7 @@ export const NODE_CONFIGS: Record<FunnelNodeType, {
   salesPage:     { label: "Sales Page",     color: "text-amber-300",   lightColor: "text-amber-600",   hexColor: "#FCD34D", bg: "bg-amber-950/80",  border: "border-amber-500/60",  lightBorder: "border-amber-300",  icon: DollarSign,    description: "Long-form sales letter" },
   videoPage:     { label: "Video Page",     color: "text-rose-300",    lightColor: "text-rose-600",    hexColor: "#FB7185", bg: "bg-rose-950/80",   border: "border-rose-500/60",   lightBorder: "border-rose-300",   icon: PlayCircle,    description: "Video sales letter (VSL)" },
   webinar:       { label: "Webinar",        color: "text-indigo-300",  lightColor: "text-indigo-600",  hexColor: "#818CF8", bg: "bg-indigo-950/80", border: "border-indigo-500/60", lightBorder: "border-indigo-300", icon: Radio,         description: "Live or automated webinar" },
+  zoom:          { label: "Zoom",           color: "text-blue-300",    lightColor: "text-blue-600",    hexColor: "#2D8CFF", bg: "bg-blue-950/80",   border: "border-blue-500/60",   lightBorder: "border-blue-300",   icon: Video,         description: "Zoom webinar or meeting" },
   orderForm:     { label: "Order Form",     color: "text-orange-300",  lightColor: "text-orange-600",  hexColor: "#FB923C", bg: "bg-orange-950/80", border: "border-orange-500/60", lightBorder: "border-orange-300", icon: CreditCard,    description: "Checkout / payment page" },
   upsell:        { label: "Upsell",         color: "text-green-300",   lightColor: "text-green-600",   hexColor: "#4ADE80", bg: "bg-green-950/80",  border: "border-green-500/60",  lightBorder: "border-green-300",  icon: TrendingUp,    description: "One-click upsell offer" },
   downsell:      { label: "Downsell",       color: "text-pink-300",    lightColor: "text-pink-600",    hexColor: "#F472B6", bg: "bg-pink-950/80",   border: "border-pink-500/60",   lightBorder: "border-pink-300",   icon: TrendingDown,  description: "Fallback offer for declines" },
@@ -239,6 +241,35 @@ function WebinarSVG({ c }: { c: string }) {
   );
 }
 
+function ZoomSVG({ c }: { c: string }) {
+  return (
+    <svg viewBox="0 0 148 96" width="148" height="96">
+      <rect x="0" y="0" width="148" height="96" rx="0" fill="rgba(0,0,0,0.75)" />
+      {/* Main speaker tile */}
+      <rect x="4" y="4" width="96" height="60" rx="4" fill="rgba(0,0,0,0.5)" stroke={c} strokeWidth="1" strokeOpacity="0.6" />
+      <circle cx="52" cy="24" r="10" fill={c} opacity="0.25" />
+      <path d="M34,44 Q52,34 70,44" stroke={c} strokeWidth="1.5" fill={c} fillOpacity="0.12" />
+      {/* Participant tiles on the right */}
+      <rect x="104" y="4" width="40" height="28" rx="3" fill="rgba(255,255,255,0.07)" stroke={c} strokeWidth="0.8" strokeOpacity="0.4" />
+      <circle cx="124" cy="14" r="5" fill={c} opacity="0.22" />
+      <path d="M114,26 Q124,20 134,26" stroke={c} strokeWidth="1" fill="none" strokeOpacity="0.4" />
+      <rect x="104" y="36" width="40" height="28" rx="3" fill="rgba(255,255,255,0.07)" stroke={c} strokeWidth="0.8" strokeOpacity="0.4" />
+      <circle cx="124" cy="46" r="5" fill={c} opacity="0.22" />
+      <path d="M114,58 Q124,52 134,58" stroke={c} strokeWidth="1" fill="none" strokeOpacity="0.4" />
+      {/* Controls bar */}
+      <rect x="4" y="70" width="140" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+      <circle cx="34" cy="81" r="7" fill={c} opacity="0.8" />
+      <line x1="30" y1="77" x2="38" y2="85" stroke="white" strokeWidth="1.5" strokeOpacity="0.7" />
+      <line x1="38" y1="77" x2="30" y2="85" stroke="white" strokeWidth="1.5" strokeOpacity="0.7" />
+      <circle cx="74" cy="81" r="7" fill={c} opacity="0.4" />
+      <rect cx="74" cy="81" x="69" y="77" width="8" height="5" rx="1.5" fill="white" opacity="0.55" />
+      <path d="M78,82 L83,79 L83,84 Z" fill="white" opacity="0.55" />
+      <circle cx="114" cy="81" r="7" fill={c} opacity="0.4" />
+      <rect x="110" y="78" width="8" height="6" rx="1.5" fill="white" opacity="0.5" />
+    </svg>
+  );
+}
+
 
 function EmailNodeSVG({ c }: { c: string }) {
   return (
@@ -280,6 +311,7 @@ const MOCKUPS: Record<FunnelNodeType, (c: string) => React.ReactNode> = {
   downsell:      (c) => <DownsellSVG c={c} />,
   videoPage:     (c) => <VideoPageSVG c={c} />,
   webinar:       (c) => <WebinarSVG c={c} />,
+  zoom:          (c) => <ZoomSVG c={c} />,
   emailNode:     (c) => <EmailNodeSVG c={c} />,
   externalLink:  (c) => <ExternalLinkSVG c={c} />,
   trafficSource: (_c) => null,
@@ -658,6 +690,7 @@ export const nodeTypes: Record<string, React.ComponentType<NodeProps>> = {
   salesPage:     FunnelPageNode,
   videoPage:     FunnelPageNode,
   webinar:       FunnelPageNode,
+  zoom:          FunnelPageNode,
   orderForm:     FunnelPageNode,
   upsell:        FunnelPageNode,
   downsell:      FunnelPageNode,
