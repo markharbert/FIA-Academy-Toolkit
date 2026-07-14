@@ -180,7 +180,10 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           id: genId(),
           type: nodeType,
           position,
-          data: { label, nodeType, description: "" } as FunnelNodeData,
+          data: {
+            label, nodeType, description: "",
+            ...(nodeType === "trafficSource" ? { pickingMode: true } : {}),
+          } as FunnelNodeData,
         };
         return [...nds, newNode];
       });
@@ -666,7 +669,8 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                   : next.length === 1
                     ? (TRAFFIC_PLATFORMS[next[0]]?.label ?? next[0])
                     : "Multiple Sources";
-                updateSelectedNodeData({ trafficPlatforms: next, trafficPlatform: next[0] || undefined, label: autoLabel });
+                // Setting from the panel always closes the inline picker
+                updateSelectedNodeData({ trafficPlatforms: next, trafficPlatform: next[0] || undefined, label: autoLabel, pickingMode: false });
               };
               return (
                 <div>

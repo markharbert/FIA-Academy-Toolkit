@@ -353,6 +353,10 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
   const platforms: string[] = (nodeData.trafficPlatforms as string[] | undefined) ||
     (nodeData.trafficPlatform ? [nodeData.trafficPlatform as string] : []);
 
+  // pickingMode: true = show picker, false = show icons
+  // Default: true if no platforms yet (fresh node), false if platforms already set (loaded from saved data)
+  const picking: boolean = (nodeData as any).pickingMode ?? (platforms.length === 0);
+
   const togglePlatform = useCallback((p: string) => (e: React.MouseEvent) => {
     e.stopPropagation();
     const idx = platforms.indexOf(p);
@@ -369,12 +373,55 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
       : next.length === 1
         ? (TRAFFIC_PLATFORMS[next[0]]?.label ?? next[0])
         : "Multiple Sources";
+    // Auto-close picker when all 4 selected
+    const pickingMode = next.length < 4 ? true : false;
     setNodes(nds => nds.map(n =>
-      n.id === id ? { ...n, data: { ...n.data, trafficPlatforms: next, trafficPlatform: next[0] || undefined, label: autoLabel } } : n
+      n.id === id ? { ...n, data: { ...n.data, trafficPlatforms: next, trafficPlatform: next[0] || undefined, label: autoLabel, pickingMode } } : n
     ));
   }, [id, setNodes, platforms]);
 
+  const closePicker = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNodes(nds => nds.map(n =>
+      n.id === id ? { ...n, data: { ...n.data, pickingMode: false } } : n
+    ));
+  }, [id, setNodes]);
+
+  const openPicker = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNodes(nds => nds.map(n =>
+      n.id === id ? { ...n, data: { ...n.data, pickingMode: true } } : n
+    ));
+  }, [id, setNodes]);
+
   const ALL_PLATFORMS = Object.entries(TRAFFIC_PLATFORMS);
+
+  function renderIconView() {
+    const count = platforms.length;
+    if (count === 1) {
+      const cfg = TRAFFIC_PLATFORMS[platforms[0]];
+      return cfg ? <div className="flex items-center justify-center bg-black/35 py-2"><cfg.Icon style={{ color: cfg.color, width: 88, height: 88 }} /></div> : null;
+    }
+    if (count === 2) {
+      return (
+        <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
+          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 52, height: 52 }} /> : null; })}
+        </div>
+      );
+    }
+    if (count === 3) {
+      return (
+        <div className="grid grid-cols-3 gap-1 bg-black/35 px-2 py-3 items-center justify-items-center">
+          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 38, height: 38 }} /> : null; })}
+        </div>
+      );
+    }
+    return (
+      <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
+        {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 50, height: 50 }} /> : null; })}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -385,17 +432,22 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
       {HANDLES}
       <DeleteButton id={id} />
 
-      {platforms.length === 4 ? (
-        /* All 4 picked — show the 2×2 icon grid */
-        <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
-          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 52, height: 52 }} /> : null; })}
+      {!picking && platforms.length > 0 ? (
+        /* Icon view — show selected platforms */
+        <div>
+          {renderIconView()}
+          <button onClick={openPicker}
+            className="w-full text-[9px] text-sky-400/50 hover:text-sky-300/80 transition-colors py-1 text-center bg-black/20"
+            data-testid="button-edit-traffic-sources">
+            ✎ Edit sources
+          </button>
         </div>
       ) : (
-        /* 0–3 picked — keep picker open; highlight selected items */
+        /* Picker view — select platforms */
         <div className="p-2 bg-black/35">
           {platforms.length > 0 && (
             <div className="flex items-center justify-center gap-1.5 mb-1.5">
-              {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 22, height: 22 }} /> : null; })}
+              {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 20, height: 20 }} /> : null; })}
               <span className="text-[8px] text-white/30 ml-0.5">{platforms.length}/4</span>
             </div>
           )}
@@ -418,6 +470,13 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
               })}
             </div>
           ))}
+          {platforms.length >= 1 && (
+            <button onClick={closePicker}
+              className="mt-2 w-full text-[10px] font-semibold text-sky-300 hover:text-white bg-sky-500/20 hover:bg-sky-500/40 transition-colors rounded-md py-1"
+              data-testid="button-done-traffic-sources">
+              ✓ Done
+            </button>
+          )}
         </div>
       )}
 
