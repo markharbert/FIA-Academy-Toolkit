@@ -232,13 +232,13 @@ export default function FunnelPlannerIndex() {
                   onClick={() => setSelectedTemplate(null)}
                   className={`text-left rounded-lg border p-3 text-sm transition-colors ${
                     selectedTemplate === null
-                      ? "border-violet-500 bg-violet-500/10 text-white"
-                      : "border-white/10 hover:border-white/20 text-white/60"
+                      ? "border-violet-500 bg-violet-500/10 text-foreground"
+                      : "border-border hover:border-border/60 text-muted-foreground hover:text-foreground"
                   }`}
                   data-testid="option-blank-canvas"
                 >
                   <div className="font-medium">Blank Canvas</div>
-                  <div className="text-xs text-white/40 mt-0.5">Start from scratch</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Start from scratch</div>
                 </button>
                 {FUNNEL_TEMPLATES.map((t) => (
                   <button
@@ -247,13 +247,13 @@ export default function FunnelPlannerIndex() {
                     onClick={() => setSelectedTemplate(t.id)}
                     className={`text-left rounded-lg border p-3 text-sm transition-colors ${
                       selectedTemplate === t.id
-                        ? "border-violet-500 bg-violet-500/10 text-white"
-                        : "border-white/10 hover:border-white/20 text-white/60"
+                        ? "border-violet-500 bg-violet-500/10 text-foreground"
+                        : "border-border hover:border-border/60 text-muted-foreground hover:text-foreground"
                     }`}
                     data-testid={`option-template-${t.id}`}
                   >
                     <div className="font-medium">{t.name}</div>
-                    <div className="text-xs text-white/40 mt-0.5">{t.description}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{t.description}</div>
                   </button>
                 ))}
               </div>
