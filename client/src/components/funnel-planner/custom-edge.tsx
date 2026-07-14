@@ -164,8 +164,8 @@ export function CustomEdge({
       ? sequenceColor
       : defaultColor;
 
-  const strokeWidth = selected ? 2.5 : 1.5;
-  const strokeDasharray = isEmailSequence && !pathType ? "7 5" : undefined;
+  const strokeWidth = selected ? 3 : isEmailSequence ? 2.5 : 1.5;
+  const strokeDasharray = isEmailSequence && !pathType ? "9 6" : undefined;
 
   const visible = selected || hovered;
 
