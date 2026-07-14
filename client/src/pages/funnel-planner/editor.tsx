@@ -354,27 +354,74 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
-    const g = new dagre.graphlib.Graph();
-    g.setDefaultEdgeLabel(() => ({}));
-    g.setGraph({ rankdir: "LR", nodesep: 80, ranksep: 200, marginx: 40, marginy: 40 });
-    nodes.forEach((n) => {
-      g.setNode(n.id, { width: n.measured?.width ?? 148, height: n.measured?.height ?? 160 });
+
+    const H_GAP = 60;   // horizontal space between nodes in the same row
+    const V_GAP = 160;  // vertical space between the two rows
+
+    // Split nodes into tiers:
+    //   Row 0 — funnel page nodes (traffic source + all actual pages)
+    //   Row 1 — email / follow-up nodes
+    //   Notes  — left as-is (they float wherever the user placed them)
+    const pageNodes = nodes
+      .filter((n) => {
+        const t = (n.data as FunnelNodeData).nodeType;
+        return t !== "emailNode" && t !== "note";
+      })
+      .sort((a, b) => a.position.x - b.position.x); // keep left-to-right order
+
+    const emailNodes = nodes
+      .filter((n) => (n.data as FunnelNodeData).nodeType === "emailNode")
+      .sort((a, b) => {
+        const da = (a.data as FunnelNodeData).emailDay ?? 0;
+        const db = (b.data as FunnelNodeData).emailDay ?? 0;
+        return da !== db ? da - db : a.position.x - b.position.x;
+      });
+
+    const noteNodes = nodes.filter((n) => (n.data as FunnelNodeData).nodeType === "note");
+
+    // Helper: compute total row width given a list of nodes
+    const rowWidth = (list: typeof nodes) =>
+      list.reduce((sum, n) => sum + (n.measured?.width ?? 148), 0) +
+      Math.max(0, list.length - 1) * H_GAP;
+
+    // Row 0: place page nodes starting at x = 0, y = 0
+    let maxRow0Height = 0;
+    let x = 0;
+    const row0Positions = pageNodes.map((n) => {
+      const w = n.measured?.width ?? 148;
+      const h = n.measured?.height ?? 160;
+      const pos = { x, y: 0 };
+      x += w + H_GAP;
+      maxRow0Height = Math.max(maxRow0Height, h);
+      return pos;
     });
-    edges.forEach((e) => g.setEdge(e.source, e.target));
-    dagre.layout(g);
+
+    // Row 1: center email nodes below row 0
+    const row1Y = maxRow0Height + V_GAP;
+    const row0W = rowWidth(pageNodes);
+    const row1W = rowWidth(emailNodes);
+    const row1StartX = Math.max(0, (row0W - row1W) / 2);
+    x = row1StartX;
+    const row1Positions = emailNodes.map((n) => {
+      const w = n.measured?.width ?? 148;
+      const pos = { x, y: row1Y };
+      x += w + H_GAP;
+      return pos;
+    });
+
+    // Build updated nodes array
+    const posMap = new Map<string, { x: number; y: number }>();
+    pageNodes.forEach((n, i) => posMap.set(n.id, row0Positions[i]));
+    emailNodes.forEach((n, i) => posMap.set(n.id, row1Positions[i]));
+
     const laid = nodes.map((n) => {
-      const pos = g.node(n.id);
-      return {
-        ...n,
-        position: {
-          x: pos.x - (n.measured?.width ?? 148) / 2,
-          y: pos.y - (n.measured?.height ?? 160) / 2,
-        },
-      };
+      const pos = posMap.get(n.id);
+      return pos ? { ...n, position: pos } : n; // notes keep their current position
     });
+
     setNodes(laid);
     setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 50);
-  }, [nodes, edges, setNodes, fitView]);
+  }, [nodes, setNodes, fitView]);
 
   const saveStatus2Icon = saveStatus === "saved"
     ? <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
