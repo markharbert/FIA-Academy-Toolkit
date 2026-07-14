@@ -603,7 +603,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: "custom", data: {} }}
             snapToGrid
-            snapGrid={[20, 20]}
+            snapGrid={[10, 10]}
             fitView
             fitViewOptions={{ padding: 0.2 }}
             deleteKeyCode="Delete"
