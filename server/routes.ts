@@ -10854,7 +10854,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   // Funnel planner: AI email draft (uses Funnel Brain context when available)
   app.post("/api/funnels/:id/draft-email", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
-    const { subject, emailDay, label } = req.body as { subject?: string; emailDay?: number; label?: string };
+    const { subject, emailDay, label, nodeId, nodes, edges } = req.body as {
+      subject?: string;
+      emailDay?: number;
+      label?: string;
+      nodeId?: string;
+      nodes?: Array<{ id: string; type?: string; data?: Record<string, unknown> }>;
+      edges?: Array<{ source: string; target: string }>;
+    };
     if (!subject || typeof subject !== "string") {
       return res.status(400).json({ message: "subject is required" });
     }
@@ -10884,12 +10891,60 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         brainContext = parts.join("\n\n");
       }
 
+      // Crawl the connected upstream page (capture page / opt-in page) if available
+      let pageContext = "";
+      if (nodeId && Array.isArray(nodes) && Array.isArray(edges)) {
+        const upstreamIds = (edges as Array<{ source: string; target: string }>)
+          .filter((e) => e.target === nodeId)
+          .map((e) => e.source);
+
+        const pageNode = (nodes as Array<{ id: string; data?: Record<string, unknown> }>)
+          .find((n) => upstreamIds.includes(n.id) && typeof n.data?.pageUrl === "string" && n.data.pageUrl);
+
+        if (pageNode) {
+          const rawPageUrl = pageNode.data!.pageUrl as string;
+          try {
+            const parsedUrl = new URL(rawPageUrl);
+            if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 8000);
+              const pageRes = await fetch(rawPageUrl, {
+                signal: controller.signal,
+                headers: { "User-Agent": "Mozilla/5.0 (compatible; FunnelBot/1.0)" },
+              }).finally(() => clearTimeout(timeout));
+
+              if (pageRes.ok) {
+                const html = await pageRes.text();
+                const pageText = html
+                  .replace(/<script[\s\S]*?<\/script>/gi, " ")
+                  .replace(/<style[\s\S]*?<\/style>/gi, " ")
+                  .replace(/<[^>]+>/g, " ")
+                  .replace(/&nbsp;/gi, " ")
+                  .replace(/&amp;/gi, "&")
+                  .replace(/&lt;/gi, "<")
+                  .replace(/&gt;/gi, ">")
+                  .replace(/\s+/g, " ")
+                  .trim()
+                  .slice(0, 3500);
+
+                if (pageText) {
+                  const pageLabel = (pageNode.data?.label as string) || "Connected Page";
+                  pageContext = `=== CONNECTED OPT-IN PAGE CONTENT ===\nThe subscriber just opted in on a page titled "${pageLabel}" (${rawPageUrl}). Here is the text from that page — use this to write an email that directly continues the conversation and delivers on what was promised:\n\n${pageText}\n=== END PAGE CONTENT ===\n\n`;
+                }
+              }
+            }
+          } catch (fetchErr) {
+            console.warn("[funnels/draft-email] could not crawl page:", rawPageUrl, (fetchErr as Error).message);
+          }
+        }
+      }
+
       const dayContext = emailDay ? `This is Day ${emailDay} of the email sequence.` : "";
       const labelContext = label && label !== "Email" ? `The email is labeled "${label}".` : "";
 
       const systemPrompt = `You are an expert email copywriter who writes high-converting marketing emails for coaches and private practice professionals. Write emails that are conversational, personal, and focused on building trust. Use clear paragraphs separated by line breaks. Output ONLY the email body — no subject line, no greeting like "Hi [Name]", no sign-off like "Best, [Name]". Just the body paragraphs and a call to action at the end.`;
 
-      const userPrompt = `${brainContext}Write a marketing email body for this subject line: "${subject}". ${dayContext} ${labelContext}
+      const userPrompt = `${brainContext}${pageContext}Write a marketing email body for this subject line: "${subject}". ${dayContext} ${labelContext}
 
 Write 3-4 conversational paragraphs. Make it feel personal and authentic. Focus on delivering value and end with a clear, natural call to action. Output only the body text — no subject line, no greeting, no sign-off.`;
 

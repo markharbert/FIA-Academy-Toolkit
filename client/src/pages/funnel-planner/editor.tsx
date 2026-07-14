@@ -328,6 +328,9 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
         subject: subject.trim(),
         emailDay: nodeData.emailDay,
         label: nodeData.label,
+        nodeId: selectedNode.id,
+        nodes,
+        edges,
       });
       const data = await res.json() as { body: string };
       updateSelectedNodeData({ emailBody: data.body });
