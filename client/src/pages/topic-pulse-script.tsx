@@ -929,11 +929,15 @@ function EditableScriptSection({
   content, 
   onChange,
   sectionKey,
+  onRegenerate,
+  isRegenerating,
 }: { 
   title: string; 
   content: string; 
   onChange: (value: string) => void;
   sectionKey: string;
+  onRegenerate?: () => void;
+  isRegenerating?: boolean;
 }) {
   const [localValue, setLocalValue] = useState(content);
   const style = SECTION_STYLES[sectionKey] ?? { border: "border-l-muted-foreground/30", badge: "bg-muted text-muted-foreground ring-muted", glow: "" };
@@ -949,8 +953,23 @@ function EditableScriptSection({
   return (
     <div className={`border-l-4 ${style.border}`}>
       <div className="px-5 pt-5 pb-6">
-        <div className="mb-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <span className={`text-xs font-bold px-2.5 py-1 rounded-full ring-1 ${style.badge}`}>{title}</span>
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              disabled={isRegenerating}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 transition-all bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/30 hover:bg-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="button-regenerate-hook"
+            >
+              {isRegenerating ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Sparkles className="h-3 w-3" />
+              )}
+              {isRegenerating ? "Generating…" : "AI Regenerate Hook"}
+            </button>
+          )}
         </div>
         <AutoTextarea
           value={localValue}
@@ -1200,6 +1219,30 @@ export default function TopicPulseScriptPage() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to overwrite", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const regenerateHookMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/topic-pulse/scripts/${scriptId}/regenerate-hook`, {});
+      return res.json() as Promise<{ hook: string }>;
+    },
+    onSuccess: (data) => {
+      if (!data.hook) return;
+      setEditedScriptJson((prev) => {
+        if (!prev?.fullScript) return prev;
+        return {
+          ...prev,
+          fullScript: {
+            ...prev.fullScript,
+            hook: { ...prev.fullScript.hook, text: data.hook },
+          },
+        };
+      });
+      toast({ title: "New hook generated!", description: "Review it above — click again for another variation." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Hook regeneration failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1762,6 +1805,8 @@ export default function TopicPulseScriptPage() {
                   content={fullScript.hook.text}
                   onChange={(v) => handleSectionChange("hook", v)}
                   sectionKey="hook"
+                  onRegenerate={() => regenerateHookMutation.mutate()}
+                  isRegenerating={regenerateHookMutation.isPending}
                 />
                 <EditableScriptSection 
                   title="2. Set the Hook" 

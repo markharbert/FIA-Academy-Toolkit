@@ -4912,6 +4912,37 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/topic-pulse/scripts/:id/regenerate-hook", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const script = await storage.getScript(req.params.id);
+      if (!script || script.userId !== req.session.userId) {
+        return res.status(404).json({ message: "Script not found" });
+      }
+
+      const rawJson = script.scriptJson as any;
+      const fullScript = rawJson?.fullScript ?? rawJson?.scriptJson?.fullScript;
+      if (!fullScript) {
+        return res.status(400).json({ message: "Script has no outline yet" });
+      }
+
+      const currentHook: string = fullScript.hook?.text ?? "";
+      const topic = await storage.getTopic(script.topicId);
+      if (!topic) {
+        return res.status(404).json({ message: "Topic not found" });
+      }
+
+      const intentAnalysis: string | null = topic.intentAnalysis ?? null;
+
+      const { generateHookVariations } = await import("./topic-pulse");
+      const newHook = await generateHookVariations(topic, currentHook, intentAnalysis);
+
+      res.json({ hook: newHook });
+    } catch (err) {
+      console.error("[TopicPulse] Regenerate hook error:", err);
+      res.status(500).json({ message: "Failed to regenerate hook" });
+    }
+  });
+
   // ── Standalone teleprompter scripts ──
   app.get("/api/teleprompter/scripts", requireAuth, async (req: Request, res: Response) => {
     try {

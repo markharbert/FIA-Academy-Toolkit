@@ -672,6 +672,53 @@ Return only the final script text. No headers, no labels, no JSON. Blank line be
   return formatForTeleprompter(content);
 }
 
+export async function generateHookVariations(
+  topic: Topic,
+  currentHook: string,
+  intentAnalysis?: string | null
+): Promise<string> {
+  const prompt = `You are a viral YouTube hook expert who studies the most successful hooks across millions of videos. Your job is to write ONE powerful new hook for a video about this topic.
+
+TOPIC: ${topic.topicTitle}
+KEYWORD: ${topic.keywordQuery}
+INTENTS: ${topic.intents?.join(", ") || "general"}
+${intentAnalysis ? `\nSEARCHER INTENT: ${intentAnalysis}` : ""}
+
+CURRENT HOOK (for reference — do NOT reuse this, write something genuinely different):
+${currentHook}
+
+Use one of these proven viral hook templates as your foundation:
+1. BOLD PROMISE: "In the next [X] minutes, you'll discover exactly how to [specific result]..."
+2. CURIOSITY GAP: "Most [audience] have no idea this exists — but it's the reason [result]..."
+3. PATTERN INTERRUPT: "Stop doing [common practice]. It's costing you [loss]. Here's what actually works..."
+4. PAIN AGITATION: "If you're struggling with [pain point], you're probably making one of these mistakes..."
+5. RELATABLE STORY: "I used to [struggle they relate to] — until I discovered [counterintuitive solution]..."
+6. SPECIFIC PROOF: "This single [strategy] is how I [specific measurable result] without [common objection]..."
+7. WARNING/SECRET: "Before you [do thing they plan to do], watch this. There's something [topic] gurus won't tell you..."
+8. IF-THEN: "If you want [desired outcome] but keep hitting [barrier], this changes everything..."
+
+Rules for a great hook:
+- Open with a punchy sentence under 15 words — make them feel it immediately
+- Address the viewer's specific pain or desire in the first 5 seconds
+- Create a strong reason to keep watching (curiosity, promise, or fear of missing out)
+- Be specific with numbers, timeframes, or outcomes — vague hooks don't work
+- Sound like a real person talking, not a marketer
+- Keep it to 2-4 sentences (15-25 seconds when spoken)
+
+Respond with ONLY the hook text — no labels, no JSON, no explanation.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.85,
+    max_tokens: 300,
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+  if (!content) throw new Error("Failed to generate hook");
+  return content;
+}
+
 export async function generateIntentAnalysis(topic: Topic): Promise<string> {
   const prompt = `You are a YouTube growth strategist helping creators understand their audience. Analyze the search intent behind this keyword and provide deep psychological insights.
 
