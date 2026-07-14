@@ -609,14 +609,14 @@ function EmailNode({ id, data, selected }: NodeProps) {
     : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${accentColor ? "" : cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
 
   return (
-    <div className={`${containerCls} group`} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid="funnel-node-emailNode">
+    <div className={`${containerCls} group`} style={{ width: 116, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid="funnel-node-emailNode">
       <Handles />
       <DuplicateButton id={id} />
       <DeleteButton id={id} />
-      <div className="overflow-hidden" style={{ height: 96 }}>
+      <div className="overflow-hidden" style={{ height: 74 }}>
         <EmailNodeSVG c={accentColor ?? cfg.hexColor} />
       </div>
-      <div className={`px-2.5 py-2 border-t ${theme === "light" ? "border-gray-100" : "border-white/[0.08]"}`}>
+      <div className={`px-2 py-1.5 border-t ${theme === "light" ? "border-gray-100" : "border-white/[0.08]"}`}>
         <div className="flex items-center gap-1.5 mb-0.5">
           <span
             className={`text-[9px] font-bold uppercase tracking-widest ${accentColor ? "" : (theme === "light" ? cfg.lightColor : cfg.color)}`}
@@ -629,10 +629,8 @@ function EmailNode({ id, data, selected }: NodeProps) {
         <div className={`text-xs font-semibold leading-tight truncate ${theme === "light" ? "text-gray-900" : "text-white"}`}>
           {subject || nodeData.label || "Untitled Email"}
         </div>
-        {body ? (
+        {body && (
           <div className={`text-[10px] mt-0.5 leading-tight line-clamp-1 ${theme === "light" ? "text-gray-500" : "text-white/40"}`}>{body}</div>
-        ) : (
-          <div className={`text-[10px] mt-0.5 italic ${theme === "light" ? "text-gray-400" : "text-white/20"}`}>Double-click to write email</div>
         )}
       </div>
     </div>
