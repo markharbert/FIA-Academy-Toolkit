@@ -66,6 +66,13 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Close settings panel when the selected node is deleted
+  useEffect(() => {
+    if (selectedNode && !nodes.some((n) => n.id === selectedNode.id)) {
+      setSelectedNode(null);
+    }
+  }, [nodes, selectedNode]);
+
   // Funnel Brain panel
   const [brainOpen, setBrainOpen] = useState(false);
 
