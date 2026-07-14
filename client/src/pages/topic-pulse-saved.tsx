@@ -389,7 +389,7 @@ export default function TopicPulseSavedPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
         <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative px-4 py-4 flex items-center gap-4">
+        <div className="relative max-w-4xl mx-auto w-full px-6 py-6 flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/video-studio/research")} className="text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -404,7 +404,7 @@ export default function TopicPulseSavedPage() {
 
       <div className="flex-1 flex overflow-hidden">
         <ScrollArea className="flex-1">
-          <div className="p-4 space-y-6">
+          <div className="max-w-4xl mx-auto px-5 py-6 space-y-6">
             {isLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
