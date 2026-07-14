@@ -10721,6 +10721,113 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── Funnel Brain ────────────────────────────────────────────────────────────
+
+  const brainUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024, files: 1 }, // 20 MB per file
+  });
+
+  // GET brain state (targeting + file list, no extracted text in list response)
+  app.get("/api/funnels/:id/brain", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const funnel = await storage.getFunnelById(req.params.id);
+      if (!funnel) return res.status(404).json({ message: "Funnel not found" });
+      if (funnel.userId !== userId) return res.status(403).json({ message: "Forbidden" });
+      const files = await storage.getFunnelBrainFiles(req.params.id, userId);
+      res.json({
+        targeting: funnel.brainTargeting ?? "",
+        files: files.map((f) => ({ id: f.id, filename: f.filename, fileSize: f.fileSize, mimeType: f.mimeType, createdAt: f.createdAt })),
+      });
+    } catch (err) {
+      console.error("[funnel-brain] get error:", err);
+      res.status(500).json({ message: "Failed to load funnel brain" });
+    }
+  });
+
+  // PATCH targeting description
+  app.patch("/api/funnels/:id/brain", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { targeting } = req.body as { targeting?: string };
+      const funnel = await storage.getFunnelById(req.params.id);
+      if (!funnel) return res.status(404).json({ message: "Funnel not found" });
+      if (funnel.userId !== userId) return res.status(403).json({ message: "Forbidden" });
+      await storage.updateFunnelBrainTargeting(req.params.id, userId, targeting ?? "");
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[funnel-brain] patch error:", err);
+      res.status(500).json({ message: "Failed to update targeting" });
+    }
+  });
+
+  // POST upload a context file — extract text, store, no raw file kept
+  app.post("/api/funnels/:id/brain/files", requireAuth, brainUpload.single("file"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const funnel = await storage.getFunnelById(req.params.id);
+      if (!funnel) return res.status(404).json({ message: "Funnel not found" });
+      if (funnel.userId !== userId) return res.status(403).json({ message: "Forbidden" });
+
+      const existing = await storage.countFunnelBrainFiles(req.params.id);
+      if (existing >= 25) return res.status(400).json({ message: "Maximum 25 context files per funnel" });
+
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+      const { originalname, mimetype, buffer, size } = req.file;
+      let extractedText = "";
+
+      try {
+        if (mimetype === "application/pdf") {
+          const pdfParse = (await import("pdf-parse")).default;
+          const data = await pdfParse(buffer);
+          extractedText = data.text ?? "";
+        } else if (
+          mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          originalname.toLowerCase().endsWith(".docx")
+        ) {
+          const mammoth = await import("mammoth");
+          const result = await mammoth.extractRawText({ buffer });
+          extractedText = result.value ?? "";
+        } else {
+          // Plain text, markdown, transcript files
+          extractedText = buffer.toString("utf-8");
+        }
+      } catch (extractErr) {
+        console.error("[funnel-brain] text extraction error:", extractErr);
+        extractedText = buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ");
+      }
+
+      const file = await storage.addFunnelBrainFile(req.params.id, userId, {
+        filename: originalname,
+        mimeType: mimetype,
+        fileSize: size,
+        extractedText: extractedText.trim(),
+      });
+
+      res.status(201).json({ id: file.id, filename: file.filename, fileSize: file.fileSize, mimeType: file.mimeType, createdAt: file.createdAt });
+    } catch (err) {
+      console.error("[funnel-brain] upload error:", err);
+      res.status(500).json({ message: "Failed to upload context file" });
+    }
+  });
+
+  // DELETE a context file
+  app.delete("/api/funnels/:id/brain/files/:fileId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const funnel = await storage.getFunnelById(req.params.id);
+      if (!funnel) return res.status(404).json({ message: "Funnel not found" });
+      if (funnel.userId !== userId) return res.status(403).json({ message: "Forbidden" });
+      await storage.deleteFunnelBrainFile(req.params.fileId, userId);
+      res.status(204).end();
+    } catch (err) {
+      console.error("[funnel-brain] delete file error:", err);
+      res.status(500).json({ message: "Failed to delete context file" });
+    }
+  });
+
   // Funnel planner: capture a page screenshot via Microlink
   app.post("/api/funnels/screenshot", requireAuth, async (req: Request, res: Response) => {
     const { url } = req.body as { url?: string };
@@ -10744,7 +10851,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
-  // Funnel planner: AI email draft
+  // Funnel planner: AI email draft (uses Funnel Brain context when available)
   app.post("/api/funnels/:id/draft-email", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
     const { subject, emailDay, label } = req.body as { subject?: string; emailDay?: number; label?: string };
@@ -10755,21 +10862,42 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const funnel = await storage.getFunnelById(req.params.id);
       if (!funnel) return res.status(404).json({ message: "Funnel not found" });
       if (funnel.userId !== userId) return res.status(403).json({ message: "Forbidden" });
+
+      // Build Funnel Brain context block
+      const targeting = funnel.brainTargeting?.trim() ?? "";
+      const brainFiles = await storage.getFunnelBrainFiles(req.params.id, userId);
+
+      let brainContext = "";
+      if (targeting || brainFiles.length > 0) {
+        const parts: string[] = ["=== FUNNEL BRAIN CONTEXT ==="];
+        if (targeting) parts.push(`TARGET AUDIENCE:\n${targeting}`);
+        if (brainFiles.length > 0) {
+          // Distribute up to 12000 chars across all files
+          const perFileLimit = Math.floor(12000 / brainFiles.length);
+          parts.push("CONTEXT DOCUMENTS:");
+          for (const f of brainFiles) {
+            const snippet = f.extractedText.slice(0, perFileLimit).trim();
+            if (snippet) parts.push(`--- ${f.filename} ---\n${snippet}`);
+          }
+        }
+        parts.push("=== END BRAIN CONTEXT ===\n");
+        brainContext = parts.join("\n\n");
+      }
+
       const dayContext = emailDay ? `This is Day ${emailDay} of the email sequence.` : "";
       const labelContext = label && label !== "Email" ? `The email is labeled "${label}".` : "";
+
+      const systemPrompt = `You are an expert email copywriter who writes high-converting marketing emails for coaches and private practice professionals. Write emails that are conversational, personal, and focused on building trust. Use clear paragraphs separated by line breaks. Output ONLY the email body — no subject line, no greeting like "Hi [Name]", no sign-off like "Best, [Name]". Just the body paragraphs and a call to action at the end.`;
+
+      const userPrompt = `${brainContext}Write a marketing email body for this subject line: "${subject}". ${dayContext} ${labelContext}
+
+Write 3-4 conversational paragraphs. Make it feel personal and authentic. Focus on delivering value and end with a clear, natural call to action. Output only the body text — no subject line, no greeting, no sign-off.`;
+
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          {
-            role: "system",
-            content: `You are an expert email copywriter who writes high-converting marketing emails for coaches and private practice professionals. Write emails that are conversational, personal, and focused on building trust. Use clear paragraphs separated by line breaks. Output ONLY the email body — no subject line, no greeting like "Hi [Name]", no sign-off like "Best, [Name]". Just the body paragraphs and a call to action at the end.`,
-          },
-          {
-            role: "user",
-            content: `Write a marketing email body for this subject line: "${subject}". ${dayContext} ${labelContext}
-
-Write 3-4 conversational paragraphs. Make it feel personal and authentic. Focus on delivering value and end with a clear, natural call to action. Output only the body text — no subject line, no greeting, no sign-off.`,
-          },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
         ],
         temperature: 0.8,
         max_tokens: 600,

@@ -741,6 +741,23 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE funnels ADD COLUMN IF NOT EXISTS share_token VARCHAR(64) UNIQUE`);
     await db.execute(sql`ALTER TABLE funnels ADD COLUMN IF NOT EXISTS share_password_hash TEXT`);
     console.log("[startup] funnels share columns migration complete");
+
+    // Funnel Brain: targeting field + context files table
+    await db.execute(sql`ALTER TABLE funnels ADD COLUMN IF NOT EXISTS brain_targeting TEXT`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS funnel_brain_files (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        funnel_id VARCHAR NOT NULL REFERENCES funnels(id) ON DELETE CASCADE,
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL DEFAULT 'text/plain',
+        file_size INTEGER NOT NULL DEFAULT 0,
+        extracted_text TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS funnel_brain_files_funnel_id_idx ON funnel_brain_files (funnel_id)`);
+    console.log("[startup] funnel brain migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

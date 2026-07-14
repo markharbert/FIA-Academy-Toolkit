@@ -49,6 +49,7 @@ import {
   feedbackPosts, feedbackVotes, feedbackComments,
   type FeedbackPost, type InsertFeedbackPost, type FeedbackPostWithMeta, type FeedbackCommentWithUser,
   funnels, type Funnel, type InsertFunnel,
+  funnelBrainFiles, type FunnelBrainFile,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
@@ -547,6 +548,11 @@ export interface IStorage {
   clearFunnelShareToken(id: string, userId: string): Promise<Funnel | undefined>;
   duplicateFunnel(id: string, userId: string): Promise<Funnel | undefined>;
   deleteFunnel(id: string, userId: string): Promise<void>;
+  updateFunnelBrainTargeting(id: string, userId: string, targeting: string): Promise<void>;
+  getFunnelBrainFiles(funnelId: string, userId: string): Promise<FunnelBrainFile[]>;
+  addFunnelBrainFile(funnelId: string, userId: string, data: { filename: string; mimeType: string; fileSize: number; extractedText: string }): Promise<FunnelBrainFile>;
+  deleteFunnelBrainFile(fileId: string, userId: string): Promise<void>;
+  countFunnelBrainFiles(funnelId: string): Promise<number>;
 
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
@@ -4752,6 +4758,39 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFunnel(id: string, userId: string): Promise<void> {
     await db.delete(funnels).where(and(eq(funnels.id, id), eq(funnels.userId, userId)));
+  }
+
+  async updateFunnelBrainTargeting(id: string, userId: string, targeting: string): Promise<void> {
+    await db.update(funnels)
+      .set({ brainTargeting: targeting, updatedAt: new Date() })
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)));
+  }
+
+  async getFunnelBrainFiles(funnelId: string, userId: string): Promise<FunnelBrainFile[]> {
+    return db.select().from(funnelBrainFiles)
+      .where(and(eq(funnelBrainFiles.funnelId, funnelId), eq(funnelBrainFiles.userId, userId)))
+      .orderBy(asc(funnelBrainFiles.createdAt));
+  }
+
+  async addFunnelBrainFile(funnelId: string, userId: string, data: { filename: string; mimeType: string; fileSize: number; extractedText: string }): Promise<FunnelBrainFile> {
+    const [row] = await db.insert(funnelBrainFiles).values({
+      funnelId,
+      userId,
+      filename: data.filename,
+      mimeType: data.mimeType,
+      fileSize: data.fileSize,
+      extractedText: data.extractedText,
+    }).returning();
+    return row;
+  }
+
+  async deleteFunnelBrainFile(fileId: string, userId: string): Promise<void> {
+    await db.delete(funnelBrainFiles).where(and(eq(funnelBrainFiles.id, fileId), eq(funnelBrainFiles.userId, userId)));
+  }
+
+  async countFunnelBrainFiles(funnelId: string): Promise<number> {
+    const [row] = await db.select({ cnt: count() }).from(funnelBrainFiles).where(eq(funnelBrainFiles.funnelId, funnelId));
+    return row?.cnt ?? 0;
   }
 }
 

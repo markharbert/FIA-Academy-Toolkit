@@ -1914,6 +1914,7 @@ export const funnels = pgTable("funnels", {
   thumbnailData: text("thumbnail_data"),
   shareToken: varchar("share_token", { length: 64 }).unique(),
   sharePasswordHash: text("share_password_hash"),
+  brainTargeting: text("brain_targeting"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -1926,3 +1927,16 @@ export const insertFunnelSchema = createInsertSchema(funnels).omit({
 
 export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
 export type Funnel = typeof funnels.$inferSelect;
+
+export const funnelBrainFiles = pgTable("funnel_brain_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  funnelId: varchar("funnel_id").notNull().references(() => funnels.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(),
+  mimeType: text("mime_type").notNull().default("text/plain"),
+  fileSize: integer("file_size").notNull().default(0),
+  extractedText: text("extracted_text").notNull().default(""),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type FunnelBrainFile = typeof funnelBrainFiles.$inferSelect;

@@ -27,7 +27,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain } from "lucide-react";
+import { FunnelBrainPanel } from "@/components/funnel-planner/funnel-brain-panel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { toPng } from "html-to-image";
@@ -64,6 +65,9 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Funnel Brain panel
+  const [brainOpen, setBrainOpen] = useState(false);
 
   // Share state
   const [shareOpen, setShareOpen] = useState(false);
@@ -431,6 +435,16 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             <Button
               size="sm"
               variant="outline"
+              onClick={() => setBrainOpen((v) => !v)}
+              className={`h-7 text-xs gap-1 ${brainOpen ? "border-violet-400/60 text-violet-300 bg-violet-500/10" : ""}`}
+              data-testid="button-funnel-brain"
+            >
+              <Brain className="h-3.5 w-3.5" />
+              Funnel Brain
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => setShareOpen(true)}
               className="h-7 text-xs"
               data-testid="button-share-funnel"
@@ -626,6 +640,11 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           </ReactFlow>
         </div>
       </div>
+
+      {/* Funnel Brain Panel */}
+      {brainOpen && (
+        <FunnelBrainPanel funnelId={funnel.id} onClose={() => setBrainOpen(false)} />
+      )}
 
       {/* Right Settings Panel */}
       {selectedNode && (
