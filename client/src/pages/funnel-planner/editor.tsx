@@ -679,7 +679,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             onClick={handleAutoLayout}
             title="Auto Arrange"
             className="absolute z-10 flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors shadow"
-            style={{ bottom: "106px", left: "10px" }}
+            style={{ bottom: "160px", left: "10px" }}
             data-testid="button-auto-layout"
           >
             <Wand2 className="w-3.5 h-3.5" />
