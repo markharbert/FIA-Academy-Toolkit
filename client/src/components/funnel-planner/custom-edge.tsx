@@ -283,7 +283,7 @@ export function CustomEdge({
   // Page node types (anything that isn't a source or an email step)
   const PAGE_TYPES = new Set([
     "capturePage","thankYouPage","salesPage","videoPage",
-    "webinar","orderForm","upsell","downsell","externalLink",
+    "webinar","zoom","orderForm","upsell","downsell","externalLink",
   ]);
 
   // Purple "sequence" treatment:
