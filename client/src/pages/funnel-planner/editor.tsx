@@ -404,11 +404,11 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
       {/* Canvas area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <div className="h-12 shrink-0 flex items-center gap-2 px-4 bg-[hsl(230,45%,11%)] border-b border-white/10">
+        <div className="h-12 shrink-0 flex items-center gap-2 px-3 bg-[hsl(230,45%,11%)] border-b border-white/10 overflow-hidden">
           {!palettePinned && (
             <button
               onClick={() => setPalettePinned(true)}
-              className="text-white/40 hover:text-white mr-1"
+              className="text-white/40 hover:text-white shrink-0"
               data-testid="button-open-palette"
             >
               <ChevronRight className="h-4 w-4" />
@@ -416,7 +416,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           )}
           <button
             onClick={handleBack}
-            className="flex items-center gap-1 text-white/40 hover:text-white text-sm mr-2"
+            className="text-white/40 hover:text-white shrink-0"
             data-testid="button-back-to-funnels"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -424,24 +424,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           <Input
             value={funnelName}
             onChange={(e) => { setFunnelName(e.target.value); setSaveStatus("unsaved"); }}
-            className="h-7 px-2 bg-transparent border-white/0 hover:border-white/20 focus:border-white/30 text-white font-semibold text-sm w-56"
+            className="h-7 px-2 bg-transparent border-white/0 hover:border-white/20 focus:border-white/30 text-white font-semibold text-sm min-w-0 flex-1 max-w-xs"
             data-testid="input-funnel-name-editor"
           />
-          <div className="ml-auto flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs text-white/40">
+          <div className="ml-auto shrink-0 flex items-center gap-2">
+            <span className="hidden sm:flex items-center gap-1.5 text-xs text-white/40">
               {saveStatus2Icon}
               {saveStatusText}
             </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setBrainOpen((v) => !v)}
-              className={`h-7 text-xs gap-1 ${brainOpen ? "border-violet-400/60 text-violet-300 bg-violet-500/10" : ""}`}
-              data-testid="button-funnel-brain"
-            >
-              <Brain className="h-3.5 w-3.5" />
-              Funnel Brain
-            </Button>
             <Button
               size="sm"
               variant="outline"
