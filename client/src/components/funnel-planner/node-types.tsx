@@ -12,7 +12,6 @@ export type FunnelNodeType =
   | "trafficSource"
   | "capturePage"
   | "thankYouPage"
-  | "emailSequence"
   | "emailNode"
   | "salesPage"
   | "videoPage"
@@ -78,7 +77,6 @@ export const NODE_CONFIGS: Record<FunnelNodeType, {
   trafficSource: { label: "Traffic Source", color: "text-sky-300",     lightColor: "text-sky-600",     hexColor: "#38BDF8", bg: "bg-sky-950/80",     border: "border-sky-500/60",     lightBorder: "border-sky-300",     icon: Globe,      description: "Ads, social, email, SEO" },
   capturePage:   { label: "Capture Page",   color: "text-violet-300",  lightColor: "text-violet-600",  hexColor: "#A78BFA", bg: "bg-violet-950/80", border: "border-violet-500/60", lightBorder: "border-violet-300", icon: StickyNote, description: "Opt-in / lead capture" },
   thankYouPage:  { label: "Thank-You Page", color: "text-emerald-300", lightColor: "text-emerald-600", hexColor: "#34D399", bg: "bg-emerald-950/80",border: "border-emerald-500/60",lightBorder: "border-emerald-300",icon: StickyNote, description: "Confirmation after opt-in" },
-  emailSequence: { label: "Email Sequence", color: "text-teal-300",    lightColor: "text-teal-600",    hexColor: "#2DD4BF", bg: "bg-teal-950/80",   border: "border-teal-500/60",   lightBorder: "border-teal-300",   icon: Mail,       description: "Follow-up email series (group)" },
   emailNode:     { label: "Email",          color: "text-cyan-300",    lightColor: "text-cyan-600",    hexColor: "#22D3EE", bg: "bg-cyan-950/80",   border: "border-cyan-500/60",   lightBorder: "border-cyan-300",   icon: Mail,       description: "Single email — write it right here" },
   salesPage:     { label: "Sales Page",     color: "text-amber-300",   lightColor: "text-amber-600",   hexColor: "#FCD34D", bg: "bg-amber-950/80",  border: "border-amber-500/60",  lightBorder: "border-amber-300",  icon: StickyNote, description: "Long-form sales letter" },
   videoPage:     { label: "Video Page",     color: "text-rose-300",    lightColor: "text-rose-600",    hexColor: "#FB7185", bg: "bg-rose-950/80",   border: "border-rose-500/60",   lightBorder: "border-rose-300",   icon: StickyNote, description: "Video sales letter (VSL)" },
@@ -236,27 +234,6 @@ function WebinarSVG({ c }: { c: string }) {
   );
 }
 
-function EmailSequenceSVG({ c }: { c: string }) {
-  return (
-    <svg viewBox="0 0 148 96" width="148" height="96">
-      <Frame c={c}>
-        <rect x="12" y="20" width="124" height="46" rx="4" fill="rgba(0,0,0,0.45)" stroke={c} strokeWidth="1.8" strokeOpacity="0.75" />
-        <path d="M12,22 L74,52 L136,22" stroke={c} strokeWidth="2.2" fill="none" strokeOpacity="0.9" />
-        <circle cx="24" cy="78" r="6.5" fill={c} opacity="0.9" />
-        <text x="24" y="81" textAnchor="middle" fontSize="7" fill="black" fontWeight="bold">1</text>
-        <line x1="31" y1="78" x2="47" y2="78" stroke={c} strokeWidth="1.5" strokeOpacity="0.5" />
-        <circle cx="54" cy="78" r="6.5" fill={c} opacity="0.72" />
-        <text x="54" y="81" textAnchor="middle" fontSize="7" fill="black" fontWeight="bold">2</text>
-        <line x1="61" y1="78" x2="77" y2="78" stroke={c} strokeWidth="1.5" strokeOpacity="0.4" />
-        <circle cx="84" cy="78" r="6.5" fill={c} opacity="0.54" />
-        <text x="84" y="81" textAnchor="middle" fontSize="7" fill="black" fontWeight="bold">3</text>
-        <line x1="91" y1="78" x2="107" y2="78" stroke={c} strokeWidth="1.5" strokeOpacity="0.3" />
-        <circle cx="114" cy="78" r="6.5" fill={c} opacity="0.36" />
-        <text x="114" y="81" textAnchor="middle" fontSize="7" fill="rgba(0,0,0,0.7)" fontWeight="bold">4</text>
-      </Frame>
-    </svg>
-  );
-}
 
 function EmailNodeSVG({ c }: { c: string }) {
   return (
@@ -298,7 +275,6 @@ const MOCKUPS: Record<FunnelNodeType, (c: string) => React.ReactNode> = {
   downsell:      (c) => <DownsellSVG c={c} />,
   videoPage:     (c) => <VideoPageSVG c={c} />,
   webinar:       (c) => <WebinarSVG c={c} />,
-  emailSequence: (c) => <EmailSequenceSVG c={c} />,
   emailNode:     (c) => <EmailNodeSVG c={c} />,
   externalLink:  (c) => <ExternalLinkSVG c={c} />,
   trafficSource: (_c) => null,
@@ -625,7 +601,6 @@ export const nodeTypes: Record<string, React.ComponentType<NodeProps>> = {
   trafficSource: TrafficSourceNode,
   capturePage:   FunnelPageNode,
   thankYouPage:  FunnelPageNode,
-  emailSequence: FunnelPageNode,
   emailNode:     EmailNode,
   salesPage:     FunnelPageNode,
   videoPage:     FunnelPageNode,
