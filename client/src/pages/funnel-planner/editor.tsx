@@ -368,36 +368,51 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
 
-    const H_GAP = 60;          // horizontal gap between nodes in the same row
-    const V_GAP = 100;         // vertical gap between detected rows
-    const ROW_THRESHOLD = 120; // nodes within this many px vertically are in the same row
+    const H_GAP = 60;  // horizontal gap between nodes in the same row
+    const V_GAP = 100; // vertical gap between rows
 
-    // Compute each node's vertical center
-    const withCenter = nodes.map((n) => ({
-      node: n,
-      centerY: n.position.y + (n.measured?.height ?? 160) / 2,
-    }));
+    // ── Step 1: Group nodes into rows via horizontal edges ─────────────
+    // Nodes connected by left/right handles always belong in the same row,
+    // regardless of where they were dragged. This prevents a node moved
+    // slightly out of Y-threshold from landing in its own spurious row.
 
-    // Sort by vertical center, then cluster into rows
-    withCenter.sort((a, b) => a.centerY - b.centerY);
+    const parent = new Map<string, string>();
+    const find = (id: string): string => {
+      if (!parent.has(id)) parent.set(id, id);
+      if (parent.get(id) !== id) parent.set(id, find(parent.get(id)!));
+      return parent.get(id)!;
+    };
+    const union = (a: string, b: string) => {
+      const ra = find(a), rb = find(b);
+      if (ra !== rb) parent.set(ra, rb);
+    };
 
-    const rows: (typeof withCenter)[] = [];
-    for (const item of withCenter) {
-      const lastRow = rows[rows.length - 1];
-      if (!lastRow) {
-        rows.push([item]);
-      } else {
-        const lastCenter = lastRow[lastRow.length - 1].centerY;
-        if (Math.abs(item.centerY - lastCenter) <= ROW_THRESHOLD) {
-          lastRow.push(item);
-        } else {
-          rows.push([item]);
-        }
+    nodes.forEach((n) => find(n.id));
+
+    edges.forEach((e) => {
+      const sh = e.sourceHandle ?? "";
+      const th = e.targetHandle ?? "";
+      // Only horizontal handle pairs (left↔right) define same-row membership
+      if ((sh === "left" || sh === "right") && (th === "left" || th === "right")) {
+        union(e.source, e.target);
       }
-    }
+    });
 
-    // For each row: sort left-to-right, compute the total row width,
-    // then center it around the global center X of all nodes.
+    // ── Step 2: Collect groups, sort rows top-to-bottom by avg Y ──────
+    const groupMap = new Map<string, typeof nodes>();
+    nodes.forEach((n) => {
+      const root = find(n.id);
+      if (!groupMap.has(root)) groupMap.set(root, []);
+      groupMap.get(root)!.push(n);
+    });
+
+    const avgY = (group: typeof nodes) =>
+      group.reduce((s, n) => s + n.position.y + (n.measured?.height ?? 160) / 2, 0) /
+      group.length;
+
+    const rows = [...groupMap.values()].sort((a, b) => avgY(a) - avgY(b));
+
+    // ── Step 3: Lay out each row ───────────────────────────────────────
     const allCenterX =
       nodes.reduce((sum, n) => sum + n.position.x + (n.measured?.width ?? 148) / 2, 0) /
       nodes.length;
@@ -407,28 +422,21 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
     rows.forEach((row) => {
       // Sort within row by X position
-      row.sort((a, b) => a.node.position.x - b.node.position.x);
+      row.sort((a, b) => a.position.x - b.position.x);
 
-      // Row height = tallest node in this row
-      const rowHeight = Math.max(...row.map((item) => item.node.measured?.height ?? 160));
-
-      // Total row width
+      const rowHeight = Math.max(...row.map((n) => n.measured?.height ?? 160));
       const totalW =
-        row.reduce((sum, item) => sum + (item.node.measured?.width ?? 148), 0) +
+        row.reduce((sum, n) => sum + (n.measured?.width ?? 148), 0) +
         Math.max(0, row.length - 1) * H_GAP;
 
-      // Start X so the row is centered on allCenterX
       let x = allCenterX - totalW / 2;
-      // Row Y: top of this row
-      const y = cursorY;
 
-      row.forEach((item) => {
-        const w = item.node.measured?.width ?? 148;
-        const h = item.node.measured?.height ?? 160;
-        // Center each node vertically within the row so all left/right
-        // handle mid-points share the same Y — horizontal connections
-        // will be perfectly straight lines.
-        posMap.set(item.node.id, { x, y: cursorY + (rowHeight - h) / 2 });
+      row.forEach((n) => {
+        const w = n.measured?.width ?? 148;
+        const h = n.measured?.height ?? 160;
+        // Center each node vertically so all left/right handles share the
+        // same Y → horizontal connections are perfectly straight lines.
+        posMap.set(n.id, { x, y: cursorY + (rowHeight - h) / 2 });
         x += w + H_GAP;
       });
 
@@ -442,7 +450,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
     setNodes(laid);
     setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 50);
-  }, [nodes, setNodes, fitView]);
+  }, [nodes, edges, setNodes, fitView]);
 
   const saveStatus2Icon = saveStatus === "saved"
     ? <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
