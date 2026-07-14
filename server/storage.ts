@@ -48,6 +48,7 @@ import {
   type ProjectTemplateTask, type InsertProjectTemplateTask, type UpdateProjectTemplateTask,
   feedbackPosts, feedbackVotes, feedbackComments,
   type FeedbackPost, type InsertFeedbackPost, type FeedbackPostWithMeta, type FeedbackCommentWithUser,
+  funnels, type Funnel, type InsertFunnel,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
@@ -534,6 +535,15 @@ export interface IStorage {
   createEmailResource(data: { description: string; url: string; anchorText: string; sortOrder: number }): Promise<{ id: string }>;
   updateEmailResource(id: string, data: Partial<{ description: string; url: string; anchorText: string; sortOrder: number; isActive: boolean }>): Promise<void>;
   deleteEmailResource(id: string): Promise<void>;
+
+  // Funnel Planner
+  getFunnelsByUser(userId: string): Promise<Funnel[]>;
+  getFunnelById(id: string): Promise<Funnel | undefined>;
+  getFunnel(id: string, userId: string): Promise<Funnel | undefined>;
+  createFunnel(userId: string, data: { name: string; description?: string; canvasData?: any }): Promise<Funnel>;
+  updateFunnel(id: string, userId: string, data: Partial<{ name: string; description: string; canvasData: any; thumbnailData: string }>): Promise<Funnel | undefined>;
+  duplicateFunnel(id: string, userId: string): Promise<Funnel | undefined>;
+  deleteFunnel(id: string, userId: string): Promise<void>;
 
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
@@ -4668,6 +4678,56 @@ export class DatabaseStorage implements IStorage {
       .from(workspaceInvites)
       .where(and(eq(workspaceInvites.memberId, userId), eq(workspaceInvites.status, "accepted")));
     return row?.ownerId ?? undefined;
+  }
+
+  // ─── Funnel Planner ───────────────────────────────────────────────────────
+
+  async getFunnelsByUser(userId: string): Promise<Funnel[]> {
+    return db.select().from(funnels).where(eq(funnels.userId, userId)).orderBy(desc(funnels.updatedAt));
+  }
+
+  async getFunnelById(id: string): Promise<Funnel | undefined> {
+    const [row] = await db.select().from(funnels).where(eq(funnels.id, id));
+    return row;
+  }
+
+  async getFunnel(id: string, userId: string): Promise<Funnel | undefined> {
+    const [row] = await db.select().from(funnels).where(and(eq(funnels.id, id), eq(funnels.userId, userId)));
+    return row;
+  }
+
+  async createFunnel(userId: string, data: { name: string; description?: string; canvasData?: any }): Promise<Funnel> {
+    const [row] = await db.insert(funnels).values({
+      userId,
+      name: data.name,
+      description: data.description ?? null,
+      canvasData: data.canvasData ?? { nodes: [], edges: [] },
+    }).returning();
+    return row;
+  }
+
+  async updateFunnel(id: string, userId: string, data: Partial<{ name: string; description: string; canvasData: any; thumbnailData: string }>): Promise<Funnel | undefined> {
+    const [row] = await db.update(funnels)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
+      .returning();
+    return row;
+  }
+
+  async duplicateFunnel(id: string, userId: string): Promise<Funnel | undefined> {
+    const original = await this.getFunnel(id, userId);
+    if (!original) return undefined;
+    const [row] = await db.insert(funnels).values({
+      userId,
+      name: `${original.name} (Copy)`,
+      description: original.description,
+      canvasData: original.canvasData,
+    }).returning();
+    return row;
+  }
+
+  async deleteFunnel(id: string, userId: string): Promise<void> {
+    await db.delete(funnels).where(and(eq(funnels.id, id), eq(funnels.userId, userId)));
   }
 }
 

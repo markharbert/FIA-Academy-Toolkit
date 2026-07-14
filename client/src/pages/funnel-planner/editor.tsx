@@ -1,0 +1,620 @@
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useParams, useLocation } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Funnel } from "@shared/schema";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  addEdge,
+  useNodesState,
+  useEdgesState,
+  type Connection,
+  type Edge,
+  type Node,
+  ReactFlowProvider,
+  useReactFlow,
+  Panel,
+  BackgroundVariant,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { nodeTypes, NODE_CONFIGS, TRAFFIC_PLATFORMS, type FunnelNodeType, type FunnelNodeData } from "@/components/funnel-planner/node-types";
+import { edgeTypes } from "@/components/funnel-planner/custom-edge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus } from "lucide-react";
+import { toPng } from "html-to-image";
+
+const NODE_TYPE_LIST = Object.entries(NODE_CONFIGS) as [FunnelNodeType, typeof NODE_CONFIGS[FunnelNodeType]][];
+
+let nodeIdCounter = Date.now();
+function genId() {
+  return `n${++nodeIdCounter}`;
+}
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
+function EditorInner({ funnel }: { funnel: Funnel }) {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition, getViewport } = useReactFlow();
+
+  const initialCanvas = funnel.canvasData as { nodes?: Node[]; edges?: Edge[] } | null;
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialCanvas?.nodes ?? []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialCanvas?.edges ?? []);
+  const [funnelName, setFunnelName] = useState(funnel.name);
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+  const [palettePinned, setPalettePinned] = useState(true);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Serialize to stable JSON string so debounce only fires on actual content changes,
+  // not on every render that recreates the object reference.
+  const canvasJson = useMemo(() => JSON.stringify({ nodes, edges }), [nodes, edges]);
+  const debouncedCanvasJson = useDebounce(canvasJson, 1200);
+  const debouncedName = useDebounce(funnelName, 1200);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { name?: string; canvasData?: unknown }) => {
+      const res = await apiRequest("PATCH", `/api/funnels/${funnel.id}`, data);
+      return res.json() as Promise<Funnel>;
+    },
+    onSuccess: (data) => {
+      setSaveStatus("saved");
+      queryClient.setQueryData(["/api/funnels", funnel.id], data);
+    },
+    onError: () => setSaveStatus("unsaved"),
+  });
+
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      return;
+    }
+    setSaveStatus("saving");
+    saveMutation.mutate({ name: debouncedName, canvasData: JSON.parse(debouncedCanvasJson) });
+  }, [debouncedCanvasJson, debouncedName]);
+
+  // Always-fresh ref so beforeunload closure is never stale
+  const latestRef = useRef({ name: funnelName, canvasJson });
+  useEffect(() => { latestRef.current = { name: funnelName, canvasJson }; });
+
+  // Flush latest state via sendBeacon on browser close / refresh
+  useEffect(() => {
+    const onUnload = () => {
+      const body = JSON.stringify({
+        name: latestRef.current.name,
+        canvasData: JSON.parse(latestRef.current.canvasJson),
+      });
+      navigator.sendBeacon(
+        `/api/funnels/${funnel.id}/beacon`,
+        new Blob([body], { type: "application/json" })
+      );
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [funnel.id]);
+
+  // Immediate flush-save before in-app navigation
+  const handleBack = useCallback(async () => {
+    setSaveStatus("saving");
+    try {
+      const res = await fetch(`/api/funnels/${funnel.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: funnelName, canvasData: JSON.parse(canvasJson) }),
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        queryClient.setQueryData(["/api/funnels", funnel.id], data);
+        setSaveStatus("saved");
+      }
+    } catch { /* navigate anyway */ }
+    setLocation("/funnel-planner");
+  }, [funnel.id, funnelName, canvasJson, setLocation]);
+
+  const onConnect = useCallback(
+    (connection: Connection) =>
+      setEdges((eds) => addEdge({ ...connection, type: "custom", data: {} }, eds)),
+    [setEdges]
+  );
+
+  const onEdgeClick = useCallback(
+    (_: React.MouseEvent, edge: Edge) => {
+      const current = (edge.data as { pathType?: string } | undefined)?.pathType;
+      const next = current === "yes" ? "no" : current === "no" ? undefined : "yes";
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === edge.id ? { ...e, data: { ...e.data, pathType: next } } : e
+        )
+      );
+    },
+    [setEdges]
+  );
+
+  const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setSelectedNode(node);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null);
+  }, []);
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const nodeType = event.dataTransfer.getData("application/funnel-node-type") as FunnelNodeType;
+      if (!nodeType) return;
+      const cfg = NODE_CONFIGS[nodeType];
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const newNode: Node = {
+        id: genId(),
+        type: nodeType,
+        position,
+        data: { label: cfg.label, nodeType, description: "" } as FunnelNodeData,
+      };
+      setNodes((nds) => [...nds, newNode]);
+    },
+    [screenToFlowPosition, setNodes]
+  );
+
+  const updateSelectedNodeData = useCallback(
+    (updates: Partial<FunnelNodeData>) => {
+      if (!selectedNode) return;
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === selectedNode.id ? { ...n, data: { ...n.data, ...updates } } : n
+        )
+      );
+      setSelectedNode((prev) => (prev ? { ...prev, data: { ...prev.data, ...updates } } : null));
+    },
+    [selectedNode, setNodes]
+  );
+
+  const generatePreview = useCallback(async () => {
+    const rawUrl = (selectedNode?.data as FunnelNodeData)?.pageUrl;
+    if (!rawUrl || isGeneratingPreview) return;
+    let url = rawUrl.trim();
+    if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://" + url;
+    setIsGeneratingPreview(true);
+    try {
+      const apiRes = await fetch(
+        `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true`
+      );
+      const json = await apiRes.json();
+      const screenshotUrl: string | undefined = json?.data?.screenshot?.url;
+      const ogImageUrl: string | undefined = json?.data?.image?.url;
+      const pageTitle: string | undefined = json?.data?.title;
+      const previewUrl = screenshotUrl || ogImageUrl;
+      if (previewUrl) {
+        const updates: Record<string, string | undefined> = { pagePreviewUrl: previewUrl, pageUrl: url };
+        if (pageTitle) updates.label = pageTitle;
+        updateSelectedNodeData(updates);
+        toast({ title: "Preview captured!", description: pageTitle ? `"${pageTitle}" added to node.` : "Page screenshot added to node." });
+      } else {
+        const reason = json?.message || "Page could not be captured — make sure it is publicly accessible.";
+        toast({ title: "Couldn't capture preview", description: reason, variant: "destructive" });
+      }
+    } catch (err) {
+      console.error("[generatePreview]", err);
+      toast({ title: "Capture failed", description: err instanceof Error ? err.message : "Network error — check your connection and try again.", variant: "destructive" });
+    } finally {
+      setIsGeneratingPreview(false);
+    }
+  }, [selectedNode, isGeneratingPreview, updateSelectedNodeData, toast]);
+
+  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!e.target) return;
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const src = ev.target?.result as string;
+      if (!src) return;
+      const img = new Image();
+      img.onload = () => {
+        const MAX_W = 800;
+        const scale = img.width > MAX_W ? MAX_W / img.width : 1;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        updateSelectedNodeData({ pagePreviewUrl: dataUrl });
+        toast({ title: "Image uploaded", description: "Custom image set on this node." });
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  }, [updateSelectedNodeData, toast]);
+
+  const exportPng = useCallback(async () => {
+    const el = document.querySelector(".react-flow__viewport") as HTMLElement | null;
+    if (!el) return;
+    try {
+      const dataUrl = await toPng(el, { backgroundColor: "#0f172a", quality: 1 });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `${funnelName.replace(/[^a-z0-9]/gi, "_") || "funnel"}.png`;
+      a.click();
+    } catch {
+      toast({ title: "Export failed", description: "Could not export canvas as PNG", variant: "destructive" });
+    }
+  }, [funnelName, toast]);
+
+  const saveStatus2Icon = saveStatus === "saved"
+    ? <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+    : saveStatus === "saving"
+    ? <Loader2 className="h-3.5 w-3.5 animate-spin text-white/40" />
+    : <Save className="h-3.5 w-3.5 text-amber-400" />;
+  const saveStatusText = saveStatus === "saved" ? "Saved" : saveStatus === "saving" ? "Saving…" : "Unsaved";
+
+  return (
+    <div className="flex h-full" style={{ height: "calc(100vh - 48px)" }}>
+      {/* Left Palette */}
+      {palettePinned && (
+        <div className="w-52 shrink-0 bg-[hsl(230,45%,9%)] border-r border-white/10 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-3 pt-3 pb-2">
+            <span className="text-xs font-semibold text-white/50 uppercase tracking-wide">Node Types</span>
+            <button
+              onClick={() => setPalettePinned(false)}
+              className="text-white/30 hover:text-white/60"
+              data-testid="button-close-palette"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
+            {NODE_TYPE_LIST.map(([type, cfg]) => {
+              const Icon = cfg.icon;
+              return (
+                <div
+                  key={type}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/funnel-node-type", type);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-grab active:cursor-grabbing select-none transition-colors hover:border-white/20 hover:bg-white/[0.06] ${cfg.bg} ${cfg.border}`}
+                  data-testid={`palette-node-${type}`}
+                  title={cfg.description}
+                >
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${cfg.color}`} />
+                  <span className="text-xs text-white/80 truncate">{cfg.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Canvas area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <div className="h-12 shrink-0 flex items-center gap-2 px-4 bg-[hsl(230,45%,11%)] border-b border-white/10">
+          {!palettePinned && (
+            <button
+              onClick={() => setPalettePinned(true)}
+              className="text-white/40 hover:text-white mr-1"
+              data-testid="button-open-palette"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-1 text-white/40 hover:text-white text-sm mr-2"
+            data-testid="button-back-to-funnels"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <Input
+            value={funnelName}
+            onChange={(e) => { setFunnelName(e.target.value); setSaveStatus("unsaved"); }}
+            className="h-7 px-2 bg-transparent border-white/0 hover:border-white/20 focus:border-white/30 text-white font-semibold text-sm w-56"
+            data-testid="input-funnel-name-editor"
+          />
+          <div className="ml-auto flex items-center gap-3">
+            <span className="flex items-center gap-1.5 text-xs text-white/40">
+              {saveStatus2Icon}
+              {saveStatusText}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={exportPng}
+              className="h-7 text-xs"
+              data-testid="button-export-png"
+            >
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Export PNG
+            </Button>
+          </div>
+        </div>
+
+        {/* ReactFlow Canvas */}
+        <div className="flex-1 relative" ref={reactFlowWrapper} onDragOver={onDragOver} onDrop={onDrop}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onEdgeClick={onEdgeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            defaultEdgeOptions={{ type: "custom", data: {} }}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+            deleteKeyCode="Delete"
+            style={{ background: "#0d1424" }}
+          >
+            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e2d4a" />
+            <Controls className="!bg-[hsl(230,45%,11%)] !border-white/10" />
+            <MiniMap
+              className="!bg-[hsl(230,45%,9%)] !border-white/10"
+              nodeColor="#6366f1"
+              maskColor="rgba(0,0,0,0.6)"
+            />
+            {nodes.length === 0 && (
+              <Panel position="top-center">
+                <div className="text-white/25 text-sm mt-24 text-center select-none">
+                  Drag nodes from the left panel onto the canvas, or connect nodes by dragging between the handles
+                </div>
+              </Panel>
+            )}
+          </ReactFlow>
+        </div>
+      </div>
+
+      {/* Right Settings Panel */}
+      {selectedNode && (
+        <div className="w-64 shrink-0 bg-[hsl(230,45%,9%)] border-l border-white/10 overflow-y-auto">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <span className="text-sm font-semibold text-white">Node Settings</span>
+            <button
+              onClick={() => setSelectedNode(null)}
+              className="text-white/30 hover:text-white"
+              data-testid="button-close-node-settings"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="px-4 py-4 space-y-4">
+            {(selectedNode.data as FunnelNodeData).nodeType === "trafficSource" && (
+              <div>
+                <Label className="text-xs text-white/50 uppercase tracking-wide">Traffic Platform</Label>
+                <div className="mt-2 grid grid-cols-4 gap-1.5">
+                  {Object.entries(TRAFFIC_PLATFORMS).map(([key, cfg]) => {
+                    const active = (selectedNode.data as FunnelNodeData).trafficPlatform === key;
+                    return (
+                      <button
+                        key={key}
+                        title={cfg.label}
+                        onClick={() => updateSelectedNodeData({ trafficPlatform: key })}
+                        className={`flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors border ${active ? "border-sky-400/60 bg-sky-500/15" : "border-white/10 hover:bg-white/8"}`}
+                        data-testid={`button-platform-${key}`}
+                      >
+                        <cfg.Icon style={{ color: cfg.color, fontSize: 16 }} />
+                        <span className="text-[8px] text-white/50 leading-none truncate w-full text-center">{cfg.label.split(" ")[0]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {(selectedNode.data as FunnelNodeData).trafficPlatform && (
+                  <button
+                    onClick={() => updateSelectedNodeData({ trafficPlatform: undefined })}
+                    className="mt-1.5 text-[10px] text-white/30 hover:text-white/60 transition-colors"
+                    data-testid="button-clear-platform"
+                  >
+                    ✕ Clear platform
+                  </button>
+                )}
+              </div>
+            )}
+            {(selectedNode.data as FunnelNodeData).nodeType !== "trafficSource" &&
+             (selectedNode.data as FunnelNodeData).nodeType !== "note" && (
+              <div>
+                <Label className="text-xs text-white/50 uppercase tracking-wide">Page Preview</Label>
+                <div className="mt-2 space-y-2">
+                  {(selectedNode.data as FunnelNodeData).pagePreviewUrl && (
+                    <div className="relative rounded-md overflow-hidden border border-white/10">
+                      <img
+                        src={(selectedNode.data as FunnelNodeData).pagePreviewUrl}
+                        alt="Page preview"
+                        className="w-full object-cover object-top"
+                        style={{ height: 112 }}
+                      />
+                      <button
+                        onClick={() => updateSelectedNodeData({ pagePreviewUrl: undefined, pageUrl: undefined })}
+                        className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-red-500/80 text-white/70 hover:text-white rounded-full w-5 h-5 flex items-center justify-center transition-colors"
+                        title="Remove preview"
+                        data-testid="button-remove-preview"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex gap-1.5">
+                    <Input
+                      type="url"
+                      value={(selectedNode.data as FunnelNodeData).pageUrl || ""}
+                      onChange={(e) => updateSelectedNodeData({ pageUrl: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === "Enter") generatePreview(); }}
+                      placeholder="https://yourpage.com"
+                      className="flex-1 bg-white/[0.04] border-white/10 text-white text-xs h-8 min-w-0"
+                      data-testid="input-node-page-url"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={generatePreview}
+                      disabled={isGeneratingPreview || !(selectedNode.data as FunnelNodeData).pageUrl}
+                      className="h-8 px-2.5 shrink-0"
+                      title="Capture page screenshot"
+                      data-testid="button-generate-preview"
+                    >
+                      {isGeneratingPreview
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Camera className="w-3.5 h-3.5" />}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-white/25 leading-snug">
+                    Paste your page URL and click <Camera className="inline w-2.5 h-2.5 mx-0.5 mb-0.5" /> to snapshot it onto the node.
+                  </p>
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <div className="flex-1 h-px bg-white/[0.07]" />
+                    <span className="text-[10px] text-white/25 shrink-0">or</span>
+                    <div className="flex-1 h-px bg-white/[0.07]" />
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                    data-testid="input-node-image-upload"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-8 bg-white/[0.03] border-white/10 hover:bg-white/[0.07] text-white/60 hover:text-white text-xs gap-1.5"
+                    data-testid="button-upload-image"
+                  >
+                    <ImagePlus className="w-3.5 h-3.5" />
+                    Upload your own image
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div>
+              <Label className="text-xs text-white/50 uppercase tracking-wide">Label</Label>
+              <Input
+                value={(selectedNode.data as FunnelNodeData).label || ""}
+                onChange={(e) => updateSelectedNodeData({ label: e.target.value })}
+                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                data-testid="input-node-label"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-white/50 uppercase tracking-wide">Description</Label>
+              <Textarea
+                value={(selectedNode.data as FunnelNodeData).description || ""}
+                onChange={(e) => updateSelectedNodeData({ description: e.target.value })}
+                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none h-20"
+                placeholder="Brief description..."
+                data-testid="input-node-description"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-white/50 uppercase tracking-wide">Notes</Label>
+              <Textarea
+                value={(selectedNode.data as FunnelNodeData).notes || ""}
+                onChange={(e) => updateSelectedNodeData({ notes: e.target.value })}
+                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none h-24"
+                placeholder="Internal notes..."
+                data-testid="input-node-notes"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-white/50 uppercase tracking-wide">Est. Traffic / Visitors</Label>
+              <Input
+                type="number"
+                min={0}
+                value={(selectedNode.data as FunnelNodeData).estimatedTraffic ?? ""}
+                onChange={(e) => updateSelectedNodeData({ estimatedTraffic: e.target.value ? Number(e.target.value) : undefined })}
+                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                placeholder="e.g. 1000"
+                data-testid="input-node-traffic"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-white/50 uppercase tracking-wide">Conv. Rate (%)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={(selectedNode.data as FunnelNodeData).conversionRate ?? ""}
+                onChange={(e) => updateSelectedNodeData({ conversionRate: e.target.value ? Number(e.target.value) : undefined })}
+                className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                placeholder="e.g. 30"
+                data-testid="input-node-conversion"
+              />
+            </div>
+            <div className="pt-2 border-t border-white/10">
+              <p className="text-xs text-white/30">
+                <strong className="text-white/50">Tip:</strong> Click a connection arrow to toggle Yes / No path labels.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function FunnelPlannerEditor() {
+  const params = useParams<{ id: string }>();
+  const [, setLocation] = useLocation();
+
+  const { data: funnel, isLoading, isError } = useQuery<Funnel>({
+    queryKey: ["/api/funnels", params.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/funnels/${params.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Not found");
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center" style={{ height: "calc(100vh - 48px)" }}>
+        <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+      </div>
+    );
+  }
+
+  if (isError || !funnel) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4" style={{ height: "calc(100vh - 48px)" }}>
+        <p className="text-white/50">Funnel not found.</p>
+        <Button variant="outline" onClick={() => setLocation("/funnel-planner")}>
+          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Funnel Planner
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <ReactFlowProvider>
+      <EditorInner funnel={funnel} />
+    </ReactFlowProvider>
+  );
+}

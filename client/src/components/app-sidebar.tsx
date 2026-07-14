@@ -34,6 +34,7 @@ import {
   Users,
   BarChart2,
   ChevronDown,
+  GitFork,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -84,6 +85,15 @@ const allNavItems: NavItem[] = [
     testId: "nav-projects",
     matchPaths: ["/projects"],
     collaboratorVisible: true,
+  },
+  {
+    title: "Funnel Planner",
+    url: "/funnel-planner",
+    icon: GitFork,
+    iconColor: "text-violet-400",
+    testId: "nav-funnel-planner",
+    matchPaths: ["/funnel-planner"],
+    collaboratorVisible: false,
   },
   {
     title: "Video Studio",

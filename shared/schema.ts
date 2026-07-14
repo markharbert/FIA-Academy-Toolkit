@@ -1900,3 +1900,27 @@ export interface WorkspaceInviteWithMember {
   memberDisplayName: string | null;
   memberEmail: string | null;
 }
+
+// ==========================================
+// Funnel Planner
+// ==========================================
+
+export const funnels = pgTable("funnels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default("Untitled Funnel"),
+  description: text("description"),
+  canvasData: jsonb("canvas_data").notNull().default(sql`'{"nodes":[],"edges":[]}'::jsonb`),
+  thumbnailData: text("thumbnail_data"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertFunnelSchema = createInsertSchema(funnels).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
+export type Funnel = typeof funnels.$inferSelect;

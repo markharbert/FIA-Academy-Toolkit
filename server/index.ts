@@ -718,6 +718,24 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE pending_attachment_uploads ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT ''`);
     await db.execute(sql`ALTER TABLE pending_attachment_uploads ADD COLUMN IF NOT EXISTS task_id TEXT NOT NULL DEFAULT ''`);
     console.log("[startup] pending_attachment_uploads migration complete");
+
+    // Funnel Planner
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS funnels (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(200) NOT NULL,
+        description TEXT,
+        canvas_data JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[]}'::jsonb,
+        thumbnail_data TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS funnels_user_id_updated_at_idx ON funnels (user_id, updated_at DESC)
+    `);
+    console.log("[startup] funnels migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

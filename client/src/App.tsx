@@ -38,6 +38,8 @@ import DmoTrackerPage from "@/pages/dmo-tracker";
 import ProjectsPage from "@/pages/projects";
 import ProjectDetailPage from "@/pages/project-detail";
 import TemplateDetailPage from "@/pages/template-detail";
+import FunnelPlannerIndexPage from "@/pages/funnel-planner/index";
+import FunnelPlannerEditorPage from "@/pages/funnel-planner/editor";
 import CfLoginPage from "@/pages/cf-login";
 import MemberLoginPage from "@/pages/member-login";
 import WorkspaceInviteAcceptPage from "@/pages/workspace-invite-accept";
@@ -238,6 +240,12 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/projects/:id">
         {() => <ProtectedRoute component={ProjectDetailPage} />}
+      </Route>
+      <Route path="/funnel-planner/:id">
+        {() => <ProtectedRoute component={FunnelPlannerEditorPage} />}
+      </Route>
+      <Route path="/funnel-planner">
+        {() => <ProtectedRoute component={FunnelPlannerIndexPage} />}
       </Route>
       <Route path="/help">
         {() => <ProtectedRoute component={HelpPage} />}

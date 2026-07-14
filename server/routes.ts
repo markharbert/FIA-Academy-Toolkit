@@ -10505,6 +10505,143 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── Funnel Planner ───────────────────────────────────────────────────────
+
+  app.get("/api/funnels", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const list = await storage.getFunnelsByUser(userId);
+      res.json(list);
+    } catch (err) {
+      console.error("[funnels] list error:", err);
+      res.status(500).json({ message: "Failed to load funnels" });
+    }
+  });
+
+  app.post("/api/funnels", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const schema = z.object({
+        name: z.string().min(1).max(200).default("Untitled Funnel"),
+        description: z.string().max(1000).optional(),
+        canvasData: z.any().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
+      const funnel = await storage.createFunnel(userId, parsed.data);
+      res.status(201).json(funnel);
+    } catch (err) {
+      console.error("[funnels] create error:", err);
+      res.status(500).json({ message: "Failed to create funnel" });
+    }
+  });
+
+  app.get("/api/funnels/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const funnel = await storage.getFunnelById(req.params.id);
+      if (!funnel) return res.status(404).json({ message: "Funnel not found" });
+      if (funnel.userId !== userId) return res.status(403).json({ message: "Access denied" });
+      res.json(funnel);
+    } catch (err) {
+      console.error("[funnels] get error:", err);
+      res.status(500).json({ message: "Failed to load funnel" });
+    }
+  });
+
+  app.patch("/api/funnels/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const schema = z.object({
+        name: z.string().min(1).max(200).optional(),
+        description: z.string().max(1000).optional().nullable(),
+        canvasData: z.any().optional(),
+        thumbnailData: z.string().optional().nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
+      const existing = await storage.getFunnelById(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Funnel not found" });
+      if (existing.userId !== userId) return res.status(403).json({ message: "Access denied" });
+      const updated = await storage.updateFunnel(req.params.id, userId, parsed.data as any);
+      res.json(updated);
+    } catch (err) {
+      console.error("[funnels] update error:", err);
+      res.status(500).json({ message: "Failed to update funnel" });
+    }
+  });
+
+  // Beacon endpoint — same logic as PATCH but accepts POST from sendBeacon on page unload
+  app.post("/api/funnels/:id/beacon", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const schema = z.object({
+        name: z.string().min(1).max(200).optional(),
+        canvasData: z.any().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data" });
+      const existing = await storage.getFunnelById(req.params.id);
+      if (!existing || existing.userId !== userId) return res.status(403).json({ message: "Access denied" });
+      await storage.updateFunnel(req.params.id, userId, parsed.data as any);
+      res.status(204).end();
+    } catch (err) {
+      console.error("[funnels] beacon error:", err);
+      res.status(500).end();
+    }
+  });
+
+  app.delete("/api/funnels/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const existing = await storage.getFunnelById(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Funnel not found" });
+      if (existing.userId !== userId) return res.status(403).json({ message: "Access denied" });
+      await storage.deleteFunnel(req.params.id, userId);
+      res.status(204).send();
+    } catch (err) {
+      console.error("[funnels] delete error:", err);
+      res.status(500).json({ message: "Failed to delete funnel" });
+    }
+  });
+
+  app.post("/api/funnels/:id/duplicate", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const existing = await storage.getFunnelById(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Funnel not found" });
+      if (existing.userId !== userId) return res.status(403).json({ message: "Access denied" });
+      const copy = await storage.duplicateFunnel(req.params.id, userId);
+      res.status(201).json(copy);
+    } catch (err) {
+      console.error("[funnels] duplicate error:", err);
+      res.status(500).json({ message: "Failed to duplicate funnel" });
+    }
+  });
+
+  // Funnel planner: capture a page screenshot via Microlink
+  app.post("/api/funnels/screenshot", requireAuth, async (req: Request, res: Response) => {
+    const { url } = req.body as { url?: string };
+    if (!url || typeof url !== "string") return res.status(400).json({ message: "url is required" });
+    let normalized = url.trim();
+    if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+      normalized = "https://" + normalized;
+    }
+    try {
+      const apiRes = await fetch(
+        `https://api.microlink.io/?url=${encodeURIComponent(normalized)}&screenshot=true&meta=false`
+      );
+      const json = await apiRes.json() as { status: string; data?: { screenshot?: { url?: string } } };
+      if (json.status !== "success" || !json.data?.screenshot?.url) {
+        return res.status(422).json({ message: "Could not capture a screenshot for that URL" });
+      }
+      res.json({ screenshotUrl: json.data.screenshot.url });
+    } catch (err) {
+      console.error("[funnels/screenshot] microlink error:", err);
+      res.status(500).json({ message: "Screenshot capture failed" });
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 
