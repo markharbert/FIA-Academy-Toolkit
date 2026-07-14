@@ -1,6 +1,10 @@
 import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
 import { useCallback, useState } from "react";
-import { Mail, MessageSquare, Search, Mic, StickyNote, Globe, X } from "lucide-react";
+import {
+  Mail, MessageSquare, Search, Mic, StickyNote, Globe, X,
+  UserPlus, CheckCircle, DollarSign, PlayCircle, Radio,
+  CreditCard, TrendingUp, TrendingDown, ExternalLink,
+} from "lucide-react";
 import {
   SiFacebook, SiInstagram, SiYoutube, SiTiktok, SiGoogle,
   SiPinterest, SiLinkedin, SiX, SiSnapchat, SiReddit,
@@ -74,18 +78,18 @@ export const NODE_CONFIGS: Record<FunnelNodeType, {
   icon: React.ElementType;
   description: string;
 }> = {
-  trafficSource: { label: "Traffic Source", color: "text-sky-300",     lightColor: "text-sky-600",     hexColor: "#38BDF8", bg: "bg-sky-950/80",     border: "border-sky-500/60",     lightBorder: "border-sky-300",     icon: Globe,      description: "Ads, social, email, SEO" },
-  capturePage:   { label: "Capture Page",   color: "text-violet-300",  lightColor: "text-violet-600",  hexColor: "#A78BFA", bg: "bg-violet-950/80", border: "border-violet-500/60", lightBorder: "border-violet-300", icon: StickyNote, description: "Opt-in / lead capture" },
-  thankYouPage:  { label: "Thank-You Page", color: "text-emerald-300", lightColor: "text-emerald-600", hexColor: "#34D399", bg: "bg-emerald-950/80",border: "border-emerald-500/60",lightBorder: "border-emerald-300",icon: StickyNote, description: "Confirmation after opt-in" },
-  emailNode:     { label: "Email",          color: "text-cyan-300",    lightColor: "text-cyan-600",    hexColor: "#22D3EE", bg: "bg-cyan-950/80",   border: "border-cyan-500/60",   lightBorder: "border-cyan-300",   icon: Mail,       description: "Single email — write it right here" },
-  salesPage:     { label: "Sales Page",     color: "text-amber-300",   lightColor: "text-amber-600",   hexColor: "#FCD34D", bg: "bg-amber-950/80",  border: "border-amber-500/60",  lightBorder: "border-amber-300",  icon: StickyNote, description: "Long-form sales letter" },
-  videoPage:     { label: "Video Page",     color: "text-rose-300",    lightColor: "text-rose-600",    hexColor: "#FB7185", bg: "bg-rose-950/80",   border: "border-rose-500/60",   lightBorder: "border-rose-300",   icon: StickyNote, description: "Video sales letter (VSL)" },
-  webinar:       { label: "Webinar",        color: "text-indigo-300",  lightColor: "text-indigo-600",  hexColor: "#818CF8", bg: "bg-indigo-950/80", border: "border-indigo-500/60", lightBorder: "border-indigo-300", icon: StickyNote, description: "Live or automated webinar" },
-  orderForm:     { label: "Order Form",     color: "text-orange-300",  lightColor: "text-orange-600",  hexColor: "#FB923C", bg: "bg-orange-950/80", border: "border-orange-500/60", lightBorder: "border-orange-300", icon: StickyNote, description: "Checkout / payment page" },
-  upsell:        { label: "Upsell",         color: "text-green-300",   lightColor: "text-green-600",   hexColor: "#4ADE80", bg: "bg-green-950/80",  border: "border-green-500/60",  lightBorder: "border-green-300",  icon: StickyNote, description: "One-click upsell offer" },
-  downsell:      { label: "Downsell",       color: "text-pink-300",    lightColor: "text-pink-600",    hexColor: "#F472B6", bg: "bg-pink-950/80",   border: "border-pink-500/60",   lightBorder: "border-pink-300",   icon: StickyNote, description: "Fallback offer for declines" },
-  externalLink:  { label: "External Link",  color: "text-slate-300",   lightColor: "text-slate-600",   hexColor: "#94A3B8", bg: "bg-slate-800/80",  border: "border-slate-500/60",  lightBorder: "border-slate-300",  icon: StickyNote, description: "Link to external resource" },
-  note:          { label: "Note",           color: "text-yellow-300",  lightColor: "text-yellow-700",  hexColor: "#FDE047", bg: "bg-yellow-950/60", border: "border-yellow-500/50", lightBorder: "border-yellow-300", icon: StickyNote, description: "Sticky note / annotation" },
+  trafficSource: { label: "Traffic Source", color: "text-sky-300",     lightColor: "text-sky-600",     hexColor: "#38BDF8", bg: "bg-sky-950/80",     border: "border-sky-500/60",     lightBorder: "border-sky-300",     icon: Globe,         description: "Ads, social, email, SEO" },
+  capturePage:   { label: "Capture Page",   color: "text-violet-300",  lightColor: "text-violet-600",  hexColor: "#A78BFA", bg: "bg-violet-950/80", border: "border-violet-500/60", lightBorder: "border-violet-300", icon: UserPlus,      description: "Opt-in / lead capture" },
+  thankYouPage:  { label: "Thank-You Page", color: "text-emerald-300", lightColor: "text-emerald-600", hexColor: "#34D399", bg: "bg-emerald-950/80",border: "border-emerald-500/60",lightBorder: "border-emerald-300",icon: CheckCircle,   description: "Confirmation after opt-in" },
+  emailNode:     { label: "Email",          color: "text-cyan-300",    lightColor: "text-cyan-600",    hexColor: "#22D3EE", bg: "bg-cyan-950/80",   border: "border-cyan-500/60",   lightBorder: "border-cyan-300",   icon: Mail,          description: "Single email — write it right here" },
+  salesPage:     { label: "Sales Page",     color: "text-amber-300",   lightColor: "text-amber-600",   hexColor: "#FCD34D", bg: "bg-amber-950/80",  border: "border-amber-500/60",  lightBorder: "border-amber-300",  icon: DollarSign,    description: "Long-form sales letter" },
+  videoPage:     { label: "Video Page",     color: "text-rose-300",    lightColor: "text-rose-600",    hexColor: "#FB7185", bg: "bg-rose-950/80",   border: "border-rose-500/60",   lightBorder: "border-rose-300",   icon: PlayCircle,    description: "Video sales letter (VSL)" },
+  webinar:       { label: "Webinar",        color: "text-indigo-300",  lightColor: "text-indigo-600",  hexColor: "#818CF8", bg: "bg-indigo-950/80", border: "border-indigo-500/60", lightBorder: "border-indigo-300", icon: Radio,         description: "Live or automated webinar" },
+  orderForm:     { label: "Order Form",     color: "text-orange-300",  lightColor: "text-orange-600",  hexColor: "#FB923C", bg: "bg-orange-950/80", border: "border-orange-500/60", lightBorder: "border-orange-300", icon: CreditCard,    description: "Checkout / payment page" },
+  upsell:        { label: "Upsell",         color: "text-green-300",   lightColor: "text-green-600",   hexColor: "#4ADE80", bg: "bg-green-950/80",  border: "border-green-500/60",  lightBorder: "border-green-300",  icon: TrendingUp,    description: "One-click upsell offer" },
+  downsell:      { label: "Downsell",       color: "text-pink-300",    lightColor: "text-pink-600",    hexColor: "#F472B6", bg: "bg-pink-950/80",   border: "border-pink-500/60",   lightBorder: "border-pink-300",   icon: TrendingDown,  description: "Fallback offer for declines" },
+  externalLink:  { label: "External Link",  color: "text-slate-300",   lightColor: "text-slate-600",   hexColor: "#94A3B8", bg: "bg-slate-800/80",  border: "border-slate-500/60",  lightBorder: "border-slate-300",  icon: ExternalLink,  description: "Link to external resource" },
+  note:          { label: "Note",           color: "text-yellow-300",  lightColor: "text-yellow-700",  hexColor: "#FDE047", bg: "bg-yellow-950/60", border: "border-yellow-500/50", lightBorder: "border-yellow-300", icon: StickyNote,    description: "Sticky note / annotation" },
 };
 
 /* ─────────────────────────────────────────────────────────────

@@ -463,7 +463,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     <div className="flex h-full" style={{ height: "calc(100vh - 48px)" }}>
       {/* Left Palette */}
       {palettePinned && (
-        <div className="w-52 shrink-0 bg-[hsl(230,45%,9%)] border-r border-white/10 flex flex-col overflow-hidden">
+        <div className="w-60 shrink-0 bg-[hsl(230,45%,9%)] border-r border-white/10 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-3 pt-3 pb-2">
             <span className="text-xs font-semibold text-white/50 uppercase tracking-wide">Node Types</span>
             <button
@@ -474,7 +474,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               <ChevronLeft className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1">
+          <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-1.5">
             {NODE_TYPE_LIST.map(([type, cfg]) => {
               const Icon = cfg.icon;
               return (
@@ -485,12 +485,19 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                     e.dataTransfer.setData("application/funnel-node-type", type);
                     e.dataTransfer.effectAllowed = "move";
                   }}
-                  className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-grab active:cursor-grabbing select-none transition-colors hover:border-white/20 hover:bg-white/[0.06] ${cfg.bg} ${cfg.border}`}
+                  className={`relative flex items-center gap-3 pl-4 pr-3 py-3 rounded-lg border cursor-grab active:cursor-grabbing select-none transition-all hover:border-white/25 hover:bg-white/[0.07] hover:scale-[1.01] ${cfg.bg} ${cfg.border}`}
                   data-testid={`palette-node-${type}`}
-                  title={cfg.description}
                 >
-                  <Icon className={`h-3.5 w-3.5 shrink-0 ${cfg.color}`} />
-                  <span className="text-xs text-white/80 truncate">{cfg.label}</span>
+                  {/* Color accent bar */}
+                  <div
+                    className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full"
+                    style={{ background: cfg.hexColor }}
+                  />
+                  <Icon className={`h-5 w-5 shrink-0 ${cfg.color}`} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-white/90 truncate leading-tight">{cfg.label}</div>
+                    <div className="text-[10px] text-white/40 truncate mt-0.5 leading-tight">{cfg.description}</div>
+                  </div>
                 </div>
               );
             })}
