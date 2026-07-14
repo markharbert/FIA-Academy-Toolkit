@@ -376,40 +376,6 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
 
   const ALL_PLATFORMS = Object.entries(TRAFFIC_PLATFORMS);
 
-  function renderIcons() {
-    const count = platforms.length;
-    if (count === 1) {
-      const cfg = TRAFFIC_PLATFORMS[platforms[0]];
-      return cfg ? (
-        <div className="flex items-center justify-center bg-black/35 py-1">
-          <cfg.Icon style={{ color: cfg.color, width: 108, height: 108 }} />
-        </div>
-      ) : null;
-    }
-    if (count === 2) {
-      return (
-        <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
-          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 56, height: 56 }} /> : null; })}
-        </div>
-      );
-    }
-    if (count === 3) {
-      return (
-        <div className="grid grid-cols-3 gap-1 bg-black/35 px-2 py-3 items-center justify-items-center">
-          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 40, height: 40 }} /> : null; })}
-        </div>
-      );
-    }
-    if (count === 4) {
-      return (
-        <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
-          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 52, height: 52 }} /> : null; })}
-        </div>
-      );
-    }
-    return null;
-  }
-
   return (
     <div
       className={`relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden bg-sky-950/80 border-sky-500/60 ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`}
@@ -418,29 +384,42 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
     >
       {HANDLES}
       <DeleteButton id={id} />
-      {platforms.length > 0 ? renderIcons() : (
+
+      {platforms.length === 4 ? (
+        /* All 4 picked — show the 2×2 icon grid */
+        <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
+          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 52, height: 52 }} /> : null; })}
+        </div>
+      ) : (
+        /* 0–3 picked — keep picker open; highlight selected items */
         <div className="p-2 bg-black/35">
-          <div className="text-[9px] text-sky-300/75 font-bold uppercase tracking-widest mb-2 text-center">Choose Traffic Source</div>
-          <div className="grid grid-cols-4 gap-1">
-            {ALL_PLATFORMS.slice(0, 8).map(([p, pc]) => (
-              <button key={p} title={pc.label} onClick={togglePlatform(p)}
-                className="flex flex-col items-center gap-0.5 rounded-md p-1 hover:bg-white/10 transition-colors">
-                <pc.Icon style={{ color: pc.color, width: 17, height: 17 }} />
-                <span className="text-[7px] text-white/40 leading-none truncate w-full text-center">{pc.label.split(" ")[0]}</span>
-              </button>
-            ))}
+          {platforms.length > 0 && (
+            <div className="flex items-center justify-center gap-1.5 mb-1.5">
+              {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 22, height: 22 }} /> : null; })}
+              <span className="text-[8px] text-white/30 ml-0.5">{platforms.length}/4</span>
+            </div>
+          )}
+          <div className="text-[9px] text-sky-300/75 font-bold uppercase tracking-widest mb-1.5 text-center">
+            {platforms.length === 0 ? "Choose Traffic Source" : "Add more (up to 4)"}
           </div>
-          <div className="grid grid-cols-4 gap-1 mt-0.5">
-            {ALL_PLATFORMS.slice(8).map(([p, pc]) => (
-              <button key={p} title={pc.label} onClick={togglePlatform(p)}
-                className="flex flex-col items-center gap-0.5 rounded-md p-1 hover:bg-white/10 transition-colors">
-                <pc.Icon style={{ color: pc.color, width: 17, height: 17 }} />
-                <span className="text-[7px] text-white/40 leading-none truncate w-full text-center">{pc.label.split(" ")[0]}</span>
-              </button>
-            ))}
-          </div>
+          {[ALL_PLATFORMS.slice(0, 8), ALL_PLATFORMS.slice(8)].map((row, ri) => (
+            <div key={ri} className={`grid grid-cols-4 gap-1 ${ri > 0 ? "mt-0.5" : ""}`}>
+              {row.map(([p, pc]) => {
+                const active = platforms.includes(p);
+                const maxed = !active && platforms.length >= 4;
+                return (
+                  <button key={p} title={pc.label} onClick={maxed ? undefined : togglePlatform(p)}
+                    className={`flex flex-col items-center gap-0.5 rounded-md p-1 transition-colors border ${active ? "border-sky-400/60 bg-sky-500/25" : maxed ? "border-transparent opacity-30 cursor-not-allowed" : "border-transparent hover:bg-white/10"}`}>
+                    <pc.Icon style={{ color: active ? pc.color : "currentColor", width: 17, height: 17, opacity: active ? 1 : 0.55 }} />
+                    <span className="text-[7px] text-white/40 leading-none truncate w-full text-center">{pc.label.split(" ")[0]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
+
       <NodeLabel typeLabel="Traffic Source" customLabel={nodeData.label} typeColor="text-sky-300" description={nodeData.description} />
     </div>
   );
