@@ -525,15 +525,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               Share
             </button>
             <button
-              onClick={handleAutoLayout}
-              title="Auto-arrange nodes into a clean left-to-right layout"
-              className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition-colors"
-              data-testid="button-auto-layout"
-            >
-              <Wand2 className="h-3.5 w-3.5" />
-              Auto-arrange
-            </button>
-            <button
               onClick={exportPng}
               className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition-colors"
               data-testid="button-export-png"
@@ -703,6 +694,16 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             style={{ background: "#0d1424" }}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e2d4a" />
+            <Panel position="bottom-left" style={{ marginBottom: "96px", marginLeft: "10px" }}>
+              <button
+                onClick={handleAutoLayout}
+                title="Auto Arrange"
+                className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors shadow"
+                data-testid="button-auto-layout"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+              </button>
+            </Panel>
             <Controls className="!bg-[hsl(230,45%,11%)] !border-white/10" />
             <MiniMap
               className="!bg-[hsl(230,45%,9%)] !border-white/10"
