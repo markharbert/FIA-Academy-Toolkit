@@ -27,7 +27,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain, Wand2, Sun, Moon } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain, Wand2, Sun, Moon, BookMarked } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { CanvasThemeContext, type CanvasTheme } from "@/components/funnel-planner/canvas-theme-context";
 import dagre from "dagre";
 import { FunnelBrainPanel } from "@/components/funnel-planner/funnel-brain-panel";
@@ -87,6 +88,28 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
   // Funnel Brain panel
   const [brainOpen, setBrainOpen] = useState(false);
+
+  // Save as Template (admin only)
+  const { user } = useAuth();
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDesc, setTemplateDesc] = useState("");
+  const saveTemplateMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", "/api/funnel-templates", {
+        name: templateName.trim() || funnelName,
+        description: templateDesc.trim(),
+        canvasData: JSON.parse(canvasJson),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/funnel-templates"] });
+      setSaveTemplateOpen(false);
+      setTemplateName("");
+      setTemplateDesc("");
+      toast({ title: "Template saved", description: "This funnel is now available as a template for all users." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save template", variant: "destructive" }),
+  });
 
   // Share state
   const [shareOpen, setShareOpen] = useState(false);
@@ -546,6 +569,16 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             {saveStatusText}
           </span>
           <div className="ml-auto shrink-0 flex items-center gap-2">
+            {user?.isAdmin && (
+              <button
+                onClick={() => { setTemplateName(funnelName); setTemplateDesc(""); setSaveTemplateOpen(true); }}
+                className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/35 hover:border-emerald-400/60 transition-colors"
+                data-testid="button-save-as-template"
+              >
+                <BookMarked className="h-3.5 w-3.5" />
+                Save as Template
+              </button>
+            )}
             <button
               onClick={() => setBrainOpen((v) => !v)}
               className={`flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium border transition-colors ${
@@ -583,6 +616,57 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               Export PNG
             </button>
           </div>
+
+          {/* Save as Template Dialog (admin only) */}
+          <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
+            <DialogContent className="bg-[hsl(230,45%,11%)] border-white/10 text-white max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-white">
+                  <BookMarked className="h-5 w-5 text-emerald-400" />
+                  Save as Template
+                </DialogTitle>
+                <DialogDescription className="text-white/40">
+                  This funnel's current canvas will be saved as a starting template for all users.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-1">
+                <div>
+                  <Label className="text-white/70 text-xs">Template Name</Label>
+                  <Input
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder={funnelName}
+                    className="mt-1 bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                    data-testid="input-template-name"
+                  />
+                </div>
+                <div>
+                  <Label className="text-white/70 text-xs">Description (optional)</Label>
+                  <Textarea
+                    value={templateDesc}
+                    onChange={(e) => setTemplateDesc(e.target.value)}
+                    placeholder="Brief description shown in the template picker..."
+                    className="mt-1 bg-white/5 border-white/10 text-white placeholder:text-white/30 resize-none h-20"
+                    data-testid="input-template-description"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSaveTemplateOpen(false)} className="border-white/10 text-white/70 hover:text-white">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => saveTemplateMutation.mutate()}
+                  disabled={saveTemplateMutation.isPending}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  data-testid="button-confirm-save-template"
+                >
+                  {saveTemplateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Save Template
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Share Dialog */}
           <Dialog open={shareOpen} onOpenChange={setShareOpen}>

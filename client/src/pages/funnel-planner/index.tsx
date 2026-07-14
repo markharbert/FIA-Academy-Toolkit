@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Funnel } from "@shared/schema";
-import { FUNNEL_TEMPLATES } from "@/components/funnel-planner/funnel-templates";
+import type { Funnel, FunnelTemplate } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { GitFork, Plus, MoreVertical, Trash2, Copy, Loader2, Calendar, Layers } from "lucide-react";
+import { GitFork, Plus, MoreVertical, Trash2, Copy, Loader2, Calendar, Layers, X } from "lucide-react";
 
 function formatDate(d: Date | string) {
   return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -31,6 +31,7 @@ function countNodes(funnel: Funnel): number {
 export default function FunnelPlannerIndex() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newName, setNewName] = useState("");
@@ -42,13 +43,26 @@ export default function FunnelPlannerIndex() {
     queryKey: ["/api/funnels"],
   });
 
+  const { data: templates = [], isLoading: templatesLoading } = useQuery<FunnelTemplate[]>({
+    queryKey: ["/api/funnel-templates"],
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/funnel-templates/${id}`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/funnel-templates"] });
+      toast({ title: "Template deleted" });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to delete template", variant: "destructive" }),
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      const template = FUNNEL_TEMPLATES.find((t) => t.id === selectedTemplate);
+      const template = templates.find((t) => t.id === selectedTemplate);
       return apiRequest("POST", "/api/funnels", {
         name: newName.trim() || "Untitled Funnel",
         description: newDescription.trim() || undefined,
-        canvasData: template ? template.canvas : { nodes: [], edges: [] },
+        canvasData: template ? template.canvasData : { nodes: [], edges: [] },
       });
     },
     onSuccess: async (res) => {
@@ -240,21 +254,37 @@ export default function FunnelPlannerIndex() {
                   <div className="font-medium">Blank Canvas</div>
                   <div className="text-xs text-muted-foreground mt-0.5">Start from scratch</div>
                 </button>
-                {FUNNEL_TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setSelectedTemplate(t.id)}
-                    className={`text-left rounded-lg border p-3 text-sm transition-colors ${
-                      selectedTemplate === t.id
-                        ? "border-violet-500 bg-violet-500/10 text-foreground"
-                        : "border-border hover:border-border/60 text-muted-foreground hover:text-foreground"
-                    }`}
-                    data-testid={`option-template-${t.id}`}
-                  >
-                    <div className="font-medium">{t.name}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{t.description}</div>
-                  </button>
+                {templatesLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : templates.map((t) => (
+                  <div key={t.id} className="relative group/tpl">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTemplate(t.id)}
+                      className={`w-full text-left rounded-lg border p-3 text-sm transition-colors pr-8 ${
+                        selectedTemplate === t.id
+                          ? "border-violet-500 bg-violet-500/10 text-foreground"
+                          : "border-border hover:border-border/60 text-muted-foreground hover:text-foreground"
+                      }`}
+                      data-testid={`option-template-${t.id}`}
+                    >
+                      <div className="font-medium">{t.name}</div>
+                      {t.description && <div className="text-xs text-muted-foreground mt-0.5">{t.description}</div>}
+                    </button>
+                    {user?.isAdmin && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); deleteTemplateMutation.mutate(t.id); }}
+                        className="absolute top-2 right-2 opacity-0 group-hover/tpl:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"
+                        title="Delete template"
+                        data-testid={`button-delete-template-${t.id}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

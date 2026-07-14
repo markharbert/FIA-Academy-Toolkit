@@ -10974,6 +10974,46 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // ── Funnel Templates (admin-managed) ──────────────────────────────────
+  app.get("/api/funnel-templates", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const templates = await storage.getFunnelTemplates();
+      res.json(templates);
+    } catch (err) {
+      console.error("[funnel-templates] list error:", err);
+      res.status(500).json({ message: "Failed to load templates" });
+    }
+  });
+
+  app.post("/api/funnel-templates", requireAdmin, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    const { name, description, canvasData } = req.body as { name?: string; description?: string; canvasData?: unknown };
+    if (!name?.trim()) return res.status(400).json({ message: "Name is required" });
+    if (!canvasData || typeof canvasData !== "object") return res.status(400).json({ message: "canvasData is required" });
+    try {
+      const template = await storage.createFunnelTemplate({
+        name: name.trim(),
+        description: (description ?? "").trim(),
+        canvasData,
+        createdBy: userId,
+      });
+      res.status(201).json(template);
+    } catch (err) {
+      console.error("[funnel-templates] create error:", err);
+      res.status(500).json({ message: "Failed to create template" });
+    }
+  });
+
+  app.delete("/api/funnel-templates/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteFunnelTemplate(req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[funnel-templates] delete error:", err);
+      res.status(500).json({ message: "Failed to delete template" });
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 

@@ -1940,3 +1940,14 @@ export const funnelBrainFiles = pgTable("funnel_brain_files", {
 });
 
 export type FunnelBrainFile = typeof funnelBrainFiles.$inferSelect;
+
+export const funnelTemplates = pgTable("funnel_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  canvasData: jsonb("canvas_data").notNull().default(sql`'{"nodes":[],"edges":[]}'::jsonb`),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type FunnelTemplate = typeof funnelTemplates.$inferSelect;

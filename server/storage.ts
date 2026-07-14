@@ -50,6 +50,7 @@ import {
   type FeedbackPost, type InsertFeedbackPost, type FeedbackPostWithMeta, type FeedbackCommentWithUser,
   funnels, type Funnel, type InsertFunnel,
   funnelBrainFiles, type FunnelBrainFile,
+  funnelTemplates, type FunnelTemplate,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
@@ -553,6 +554,9 @@ export interface IStorage {
   addFunnelBrainFile(funnelId: string, userId: string, data: { filename: string; mimeType: string; fileSize: number; extractedText: string }): Promise<FunnelBrainFile>;
   deleteFunnelBrainFile(fileId: string, userId: string): Promise<void>;
   countFunnelBrainFiles(funnelId: string): Promise<number>;
+  getFunnelTemplates(): Promise<import("@shared/schema").FunnelTemplate[]>;
+  createFunnelTemplate(data: { name: string; description: string; canvasData: any; createdBy: string }): Promise<import("@shared/schema").FunnelTemplate>;
+  deleteFunnelTemplate(id: string): Promise<void>;
 
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
@@ -4791,6 +4795,24 @@ export class DatabaseStorage implements IStorage {
   async countFunnelBrainFiles(funnelId: string): Promise<number> {
     const [row] = await db.select({ cnt: count() }).from(funnelBrainFiles).where(eq(funnelBrainFiles.funnelId, funnelId));
     return row?.cnt ?? 0;
+  }
+
+  async getFunnelTemplates(): Promise<FunnelTemplate[]> {
+    return db.select().from(funnelTemplates).orderBy(asc(funnelTemplates.createdAt));
+  }
+
+  async createFunnelTemplate(data: { name: string; description: string; canvasData: any; createdBy: string }): Promise<FunnelTemplate> {
+    const [row] = await db.insert(funnelTemplates).values({
+      name: data.name,
+      description: data.description,
+      canvasData: data.canvasData,
+      createdBy: data.createdBy,
+    }).returning();
+    return row;
+  }
+
+  async deleteFunnelTemplate(id: string): Promise<void> {
+    await db.delete(funnelTemplates).where(eq(funnelTemplates.id, id));
   }
 }
 
