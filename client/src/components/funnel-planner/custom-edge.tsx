@@ -5,9 +5,52 @@ import {
   type EdgeProps,
   useReactFlow,
 } from "@xyflow/react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { X } from "lucide-react";
 import { useCanvasTheme } from "./canvas-theme-context";
+
+/* ── Envelope icon along email-sequence edges ──────────────────
+   Computes evenly-spaced points along the SVG path and renders a
+   small envelope <g> at each one, rotated to follow the path.
+──────────────────────────────────────────────────────────────── */
+const ENVELOPE_INTERVAL = 90; // px between envelope icons
+
+function getEnvelopePoints(
+  pathStr: string
+): Array<{ x: number; y: number; angle: number }> {
+  try {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    el.setAttribute("d", pathStr);
+    const totalLen = el.getTotalLength();
+    const pts: Array<{ x: number; y: number; angle: number }> = [];
+    let dist = ENVELOPE_INTERVAL;
+    while (dist < totalLen - ENVELOPE_INTERVAL * 0.4) {
+      const p = el.getPointAtLength(dist);
+      const p1 = el.getPointAtLength(Math.max(0, dist - 6));
+      const p2 = el.getPointAtLength(Math.min(totalLen, dist + 6));
+      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI);
+      pts.push({ x: p.x, y: p.y, angle });
+      dist += ENVELOPE_INTERVAL;
+    }
+    return pts;
+  } catch {
+    return [];
+  }
+}
+
+/* Tiny envelope centered at (0,0), 12×8 px */
+function EnvelopeIcon({ color }: { color: string }) {
+  return (
+    <g>
+      {/* body */}
+      <rect x="-6" y="-4" width="12" height="8" rx="1"
+        fill={color} fillOpacity="0.18" stroke={color} strokeWidth="0.9" />
+      {/* flap V */}
+      <polyline points="-6,-4 0,1.5 6,-4"
+        fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
+    </g>
+  );
+}
 
 /* ─────────────────────────────────────────────────────────────
    EDGE BUNDLING — clean fan arrival
@@ -163,6 +206,12 @@ export function CustomEdge({
   // Email→email sequence edges: dashed indigo/violet to signal "chain"
   const sequenceColor = theme === "light" ? "#8b5cf6" : "#a78bfa";
 
+  // Small envelope icons spaced along email-sequence edges
+  const envelopePoints = useMemo(
+    () => (isEmailSequence ? getEnvelopePoints(edgePath) : []),
+    [edgePath, isEmailSequence]
+  );
+
   const strokeColor =
     pathType === "yes"
       ? "#22c55e"
@@ -205,6 +254,17 @@ export function CustomEdge({
         markerEnd={markerEnd}
         style={{ stroke: strokeColor, strokeWidth, strokeDasharray }}
       />
+
+      {/* Envelope icons along email-sequence edges */}
+      {isEmailSequence && envelopePoints.map((pt, i) => (
+        <g
+          key={i}
+          transform={`translate(${pt.x},${pt.y}) rotate(${pt.angle})`}
+          style={{ pointerEvents: "none" }}
+        >
+          <EnvelopeIcon color={sequenceColor} />
+        </g>
+      ))}
 
       {/* Animated traffic flow — only on edges coming from a traffic source node */}
       {isTrafficEdge && (
