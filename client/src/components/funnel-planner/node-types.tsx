@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Mail, MessageSquare, Search, Mic, StickyNote, Globe, X } from "lucide-react";
 import {
   SiFacebook, SiInstagram, SiYoutube, SiTiktok, SiGoogle,
@@ -317,12 +317,42 @@ const HANDLES = (
 
 function DeleteButton({ id }: { id: string }) {
   const { deleteElements } = useReactFlow();
+  const [confirming, setConfirming] = useState(false);
+
+  const stopAll = (e: React.PointerEvent | React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    (e as React.PointerEvent).nativeEvent?.stopImmediatePropagation();
+  };
+
+  if (confirming) {
+    return (
+      <div
+        className="absolute top-1 right-1 z-20 flex items-center gap-0.5 bg-gray-900/95 border border-white/15 rounded-lg px-1.5 py-1 shadow-xl nodrag nopan"
+        onMouseDown={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className="text-[9px] text-white/50 mr-1 whitespace-nowrap">Delete?</span>
+        <button
+          className="text-[9px] font-semibold text-red-400 hover:text-white bg-red-500/20 hover:bg-red-500/70 transition-colors px-1.5 py-0.5 rounded"
+          data-testid={`button-confirm-delete-${id}`}
+          onPointerDown={(e) => { stopAll(e); deleteElements({ nodes: [{ id }] }); }}
+        >Yes</button>
+        <button
+          className="text-[9px] text-white/40 hover:text-white/80 transition-colors px-1.5 py-0.5 rounded hover:bg-white/10"
+          data-testid={`button-cancel-delete-${id}`}
+          onPointerDown={(e) => { stopAll(e); setConfirming(false); }}
+        >No</button>
+      </div>
+    );
+  }
+
   return (
     <button
       className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center bg-black/50 border border-white/15 text-white/40 hover:bg-red-500/80 hover:text-white hover:border-red-400/60 transition-colors cursor-pointer"
       title="Delete node"
       data-testid={`button-delete-node-${id}`}
-      onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); e.nativeEvent.stopImmediatePropagation(); deleteElements({ nodes: [{ id }] }); }}
+      onPointerDown={(e) => { stopAll(e); setConfirming(true); }}
     >
       <X className="w-2.5 h-2.5" />
     </button>
