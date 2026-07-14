@@ -510,11 +510,11 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             className="h-7 px-2 bg-transparent border-white/0 hover:border-white/20 focus:border-white/30 text-white font-semibold text-sm min-w-0 flex-1 max-w-xs"
             data-testid="input-funnel-name-editor"
           />
+          <span className="hidden sm:flex items-center gap-1.5 text-xs text-white/40 shrink-0">
+            {saveStatus2Icon}
+            {saveStatusText}
+          </span>
           <div className="ml-auto shrink-0 flex items-center gap-2">
-            <span className="hidden sm:flex items-center gap-1.5 text-xs text-white/40">
-              {saveStatus2Icon}
-              {saveStatusText}
-            </span>
             <button
               onClick={() => setBrainOpen((v) => !v)}
               className={`flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium border transition-colors ${
