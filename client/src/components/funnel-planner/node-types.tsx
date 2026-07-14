@@ -30,6 +30,7 @@ export interface FunnelNodeData {
   estimatedTraffic?: number;
   conversionRate?: number;
   trafficPlatform?: string;
+  trafficPlatforms?: string[];
   pageUrl?: string;
   pagePreviewUrl?: string;
   emailSubject?: string;
@@ -347,17 +348,62 @@ function NodeLabel({ typeLabel, customLabel, typeColor, description }: {
 function TrafficSourceNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
   const { setNodes } = useReactFlow();
-  const platform = nodeData.trafficPlatform;
-  const platformCfg = platform ? TRAFFIC_PLATFORMS[platform] : null;
 
-  const setPlatform = useCallback((p: string) => (e: React.MouseEvent) => {
+  // Support both legacy single-string and new multi-platform array
+  const platforms: string[] = (nodeData.trafficPlatforms as string[] | undefined) ||
+    (nodeData.trafficPlatform ? [nodeData.trafficPlatform as string] : []);
+
+  const togglePlatform = useCallback((p: string) => (e: React.MouseEvent) => {
     e.stopPropagation();
+    const idx = platforms.indexOf(p);
+    let next: string[];
+    if (idx >= 0) {
+      next = platforms.filter(x => x !== p);
+    } else if (platforms.length < 4) {
+      next = [...platforms, p];
+    } else {
+      return;
+    }
     setNodes(nds => nds.map(n =>
-      n.id === id ? { ...n, data: { ...n.data, trafficPlatform: p } } : n
+      n.id === id ? { ...n, data: { ...n.data, trafficPlatforms: next, trafficPlatform: next[0] || undefined } } : n
     ));
-  }, [id, setNodes]);
+  }, [id, setNodes, platforms]);
 
   const ALL_PLATFORMS = Object.entries(TRAFFIC_PLATFORMS);
+
+  function renderIcons() {
+    const count = platforms.length;
+    if (count === 1) {
+      const cfg = TRAFFIC_PLATFORMS[platforms[0]];
+      return cfg ? (
+        <div className="flex items-center justify-center bg-black/35 py-1">
+          <cfg.Icon style={{ color: cfg.color, width: 108, height: 108 }} />
+        </div>
+      ) : null;
+    }
+    if (count === 2) {
+      return (
+        <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
+          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 56, height: 56 }} /> : null; })}
+        </div>
+      );
+    }
+    if (count === 3) {
+      return (
+        <div className="grid grid-cols-3 gap-1 bg-black/35 px-2 py-3 items-center justify-items-center">
+          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 40, height: 40 }} /> : null; })}
+        </div>
+      );
+    }
+    if (count === 4) {
+      return (
+        <div className="grid grid-cols-2 gap-2 bg-black/35 px-3 py-3 items-center justify-items-center">
+          {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 52, height: 52 }} /> : null; })}
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div
@@ -367,16 +413,12 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
     >
       {HANDLES}
       <DeleteButton id={id} />
-      {platformCfg ? (
-        <div className="flex flex-col items-center justify-center bg-black/35 py-1">
-          <platformCfg.Icon style={{ color: platformCfg.color, width: 108, height: 108 }} />
-        </div>
-      ) : (
+      {platforms.length > 0 ? renderIcons() : (
         <div className="p-2 bg-black/35">
           <div className="text-[9px] text-sky-300/75 font-bold uppercase tracking-widest mb-2 text-center">Choose Traffic Source</div>
           <div className="grid grid-cols-4 gap-1">
             {ALL_PLATFORMS.slice(0, 8).map(([p, pc]) => (
-              <button key={p} title={pc.label} onClick={setPlatform(p)}
+              <button key={p} title={pc.label} onClick={togglePlatform(p)}
                 className="flex flex-col items-center gap-0.5 rounded-md p-1 hover:bg-white/10 transition-colors">
                 <pc.Icon style={{ color: pc.color, width: 17, height: 17 }} />
                 <span className="text-[7px] text-white/40 leading-none truncate w-full text-center">{pc.label.split(" ")[0]}</span>
@@ -384,8 +426,8 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
             ))}
           </div>
           <div className="grid grid-cols-4 gap-1 mt-0.5">
-            {ALL_PLATFORMS.slice(8, 16).map(([p, pc]) => (
-              <button key={p} title={pc.label} onClick={setPlatform(p)}
+            {ALL_PLATFORMS.slice(8).map(([p, pc]) => (
+              <button key={p} title={pc.label} onClick={togglePlatform(p)}
                 className="flex flex-col items-center gap-0.5 rounded-md p-1 hover:bg-white/10 transition-colors">
                 <pc.Icon style={{ color: pc.color, width: 17, height: 17 }} />
                 <span className="text-[7px] text-white/40 leading-none truncate w-full text-center">{pc.label.split(" ")[0]}</span>

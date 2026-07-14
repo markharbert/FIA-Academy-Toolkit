@@ -647,37 +647,59 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             </button>
           </div>
           <div className="px-4 py-4 space-y-4">
-            {(selectedNode.data as FunnelNodeData).nodeType === "trafficSource" && (
-              <div>
-                <Label className="text-xs text-white/50 uppercase tracking-wide">Traffic Platform</Label>
-                <div className="mt-2 grid grid-cols-4 gap-1.5">
-                  {Object.entries(TRAFFIC_PLATFORMS).map(([key, cfg]) => {
-                    const active = (selectedNode.data as FunnelNodeData).trafficPlatform === key;
-                    return (
-                      <button
-                        key={key}
-                        title={cfg.label}
-                        onClick={() => updateSelectedNodeData({ trafficPlatform: key })}
-                        className={`flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors border ${active ? "border-sky-400/60 bg-sky-500/15" : "border-white/10 hover:bg-white/8"}`}
-                        data-testid={`button-platform-${key}`}
-                      >
-                        <cfg.Icon style={{ color: cfg.color, fontSize: 16 }} />
-                        <span className="text-[8px] text-white/50 leading-none truncate w-full text-center">{cfg.label.split(" ")[0]}</span>
-                      </button>
-                    );
-                  })}
+            {(selectedNode.data as FunnelNodeData).nodeType === "trafficSource" && (() => {
+              const nd = selectedNode.data as FunnelNodeData;
+              const platforms: string[] = (nd.trafficPlatforms as string[] | undefined) ||
+                (nd.trafficPlatform ? [nd.trafficPlatform as string] : []);
+              const togglePlatform = (key: string) => {
+                const idx = platforms.indexOf(key);
+                let next: string[];
+                if (idx >= 0) {
+                  next = platforms.filter(x => x !== key);
+                } else if (platforms.length < 4) {
+                  next = [...platforms, key];
+                } else {
+                  return;
+                }
+                updateSelectedNodeData({ trafficPlatforms: next, trafficPlatform: next[0] || undefined });
+              };
+              return (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-xs text-white/50 uppercase tracking-wide">Traffic Sources</Label>
+                    <span className="text-[10px] text-white/30">{platforms.length} / 4</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {Object.entries(TRAFFIC_PLATFORMS).map(([key, cfg]) => {
+                      const active = platforms.includes(key);
+                      const atMax = platforms.length >= 4 && !active;
+                      return (
+                        <button
+                          key={key}
+                          title={cfg.label}
+                          onClick={() => togglePlatform(key)}
+                          disabled={atMax}
+                          className={`flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors border ${active ? "border-sky-400/60 bg-sky-500/15" : atMax ? "border-white/5 opacity-30 cursor-not-allowed" : "border-white/10 hover:bg-white/8"}`}
+                          data-testid={`button-platform-${key}`}
+                        >
+                          <cfg.Icon style={{ color: cfg.color, fontSize: 16 }} />
+                          <span className="text-[8px] text-white/50 leading-none truncate w-full text-center">{cfg.label.split(" ")[0]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {platforms.length > 0 && (
+                    <button
+                      onClick={() => updateSelectedNodeData({ trafficPlatforms: [], trafficPlatform: undefined })}
+                      className="mt-1.5 text-[10px] text-white/30 hover:text-white/60 transition-colors"
+                      data-testid="button-clear-platform"
+                    >
+                      ✕ Clear all
+                    </button>
+                  )}
                 </div>
-                {(selectedNode.data as FunnelNodeData).trafficPlatform && (
-                  <button
-                    onClick={() => updateSelectedNodeData({ trafficPlatform: undefined })}
-                    className="mt-1.5 text-[10px] text-white/30 hover:text-white/60 transition-colors"
-                    data-testid="button-clear-platform"
-                  >
-                    ✕ Clear platform
-                  </button>
-                )}
-              </div>
-            )}
+              );
+            })()}
             {/* ── Email node fields ── */}
             {(selectedNode.data as FunnelNodeData).nodeType === "emailNode" && (
               <>
