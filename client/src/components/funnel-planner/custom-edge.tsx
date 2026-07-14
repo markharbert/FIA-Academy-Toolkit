@@ -9,45 +9,60 @@ import { useState, useMemo } from "react";
 import { X } from "lucide-react";
 import { useCanvasTheme } from "./canvas-theme-context";
 
-/* ── Envelope icon along email-sequence edges ──────────────────
-   Computes evenly-spaced points along the SVG path and renders a
-   small envelope <g> at each one, rotated to follow the path.
+/* ── Email-sequence edge: manual dash + envelope rendering ─────
+   Instead of a CSS strokeDasharray (which can't be interrupted),
+   we draw every dash as an individual <line> element and swap one
+   every ENVELOPE_EVERY positions for a tiny envelope icon.
+   The envelope is never rotated so it always stays upright.
 ──────────────────────────────────────────────────────────────── */
-const ENVELOPE_INTERVAL = 90; // px between envelope icons
+const DASH_LEN = 9;
+const GAP_LEN  = 6;
+const ENVELOPE_EVERY = 6; // every 6th dash slot → envelope
 
-function getEnvelopePoints(
-  pathStr: string
-): Array<{ x: number; y: number; angle: number }> {
+type SeqItem =
+  | { kind: "dash";     x1: number; y1: number; x2: number; y2: number }
+  | { kind: "envelope"; x:  number; y:  number };
+
+function buildEmailItems(pathStr: string): SeqItem[] {
   try {
     const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
     el.setAttribute("d", pathStr);
     const totalLen = el.getTotalLength();
-    const pts: Array<{ x: number; y: number; angle: number }> = [];
-    let dist = ENVELOPE_INTERVAL;
-    while (dist < totalLen - ENVELOPE_INTERVAL * 0.4) {
-      const p = el.getPointAtLength(dist);
-      const p1 = el.getPointAtLength(Math.max(0, dist - 6));
-      const p2 = el.getPointAtLength(Math.min(totalLen, dist + 6));
-      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI);
-      pts.push({ x: p.x, y: p.y, angle });
-      dist += ENVELOPE_INTERVAL;
+    if (totalLen < 1) return [];
+
+    const items: SeqItem[] = [];
+    let pos = 0;
+    let idx = 0;
+
+    while (pos < totalLen) {
+      const end   = Math.min(pos + DASH_LEN, totalLen);
+      const isEnv = idx > 0 && idx % ENVELOPE_EVERY === 0;
+
+      if (isEnv) {
+        const cp = (pos + end) / 2;
+        const c  = el.getPointAtLength(cp);
+        items.push({ kind: "envelope", x: c.x, y: c.y });
+      } else {
+        const p1 = el.getPointAtLength(pos);
+        const p2 = el.getPointAtLength(end);
+        items.push({ kind: "dash", x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
+      }
+
+      pos += DASH_LEN + GAP_LEN;
+      idx++;
     }
-    return pts;
+    return items;
   } catch {
     return [];
   }
 }
 
-/* Tiny envelope centered at (0,0), 12×8 px.
-   bgColor fills the body opaquely so it punches out the dash beneath it —
-   the envelope visually replaces one dash in the pattern. */
-function EnvelopeIcon({ color, bgColor }: { color: string; bgColor: string }) {
+/* Tiny envelope centered at (0,0), 12×8 px — always upright. */
+function EnvelopeIcon({ color }: { color: string }) {
   return (
     <g>
-      {/* opaque body — erases the dash line underneath */}
       <rect x="-6" y="-4" width="12" height="8" rx="1"
-        fill={bgColor} stroke={color} strokeWidth="0.9" />
-      {/* flap V on top */}
+        fill="none" stroke={color} strokeWidth="0.9" />
       <polyline points="-6,-4 0,1.5 6,-4"
         fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
     </g>
@@ -205,13 +220,13 @@ export function CustomEdge({
     (sourceNode?.type === "emailNode" && targetNode?.type === "emailNode") ||
     (sourceNode?.type === "capturePage" && targetNode?.type === "emailNode");
 
-  // Email→email sequence edges: dashed indigo/violet to signal "chain"
+  // Email→email sequence edges: violet to signal "chain"
   const sequenceColor = theme === "light" ? "#8b5cf6" : "#a78bfa";
 
-  // Small envelope icons spaced along email-sequence edges
-  const envelopePoints = useMemo(
-    () => (isEmailSequence ? getEnvelopePoints(edgePath) : []),
-    [edgePath, isEmailSequence]
+  // Build manual dash+envelope items for email-sequence edges (only when no yes/no override)
+  const emailSeqItems = useMemo(
+    () => (isEmailSequence && !pathType ? buildEmailItems(edgePath) : []),
+    [edgePath, isEmailSequence, pathType]
   );
 
   const strokeColor =
@@ -226,7 +241,8 @@ export function CustomEdge({
       : defaultColor;
 
   const strokeWidth = selected ? 3 : isEmailSequence ? 2.5 : 1.5;
-  const strokeDasharray = isEmailSequence && !pathType ? "9 6" : undefined;
+  // Email sequence dashes are rendered manually; dasharray only for other edges
+  const strokeDasharray = (!isEmailSequence || pathType) ? undefined : undefined;
 
   const visible = selected || hovered;
 
@@ -250,26 +266,33 @@ export function CustomEdge({
 
   return (
     <>
-      <BaseEdge
-        id={id}
-        path={edgePath}
-        markerEnd={markerEnd}
-        style={{ stroke: strokeColor, strokeWidth, strokeDasharray }}
-      />
-
-      {/* Envelope icons along email-sequence edges */}
-      {isEmailSequence && envelopePoints.map((pt, i) => (
-        <g
-          key={i}
-          transform={`translate(${pt.x},${pt.y}) rotate(${pt.angle})`}
-          style={{ pointerEvents: "none" }}
-        >
-          <EnvelopeIcon
-            color={sequenceColor}
-            bgColor={theme === "light" ? "#f8fafc" : "#0d1424"}
-          />
-        </g>
-      ))}
+      {/* Email-sequence: manual dashes + envelope icons (no BaseEdge so dashes are real gaps) */}
+      {isEmailSequence && !pathType ? (
+        emailSeqItems.map((item, i) =>
+          item.kind === "envelope" ? (
+            <g key={i} style={{ pointerEvents: "none" }}
+               transform={`translate(${item.x},${item.y})`}>
+              <EnvelopeIcon color={sequenceColor} />
+            </g>
+          ) : (
+            <line
+              key={i}
+              x1={item.x1} y1={item.y1}
+              x2={item.x2} y2={item.y2}
+              stroke={selected ? selectedColor : sequenceColor}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+            />
+          )
+        )
+      ) : (
+        <BaseEdge
+          id={id}
+          path={edgePath}
+          markerEnd={markerEnd}
+          style={{ stroke: strokeColor, strokeWidth, strokeDasharray }}
+        />
+      )}
 
       {/* Animated traffic flow — only on edges coming from a traffic source node */}
       {isTrafficEdge && (
