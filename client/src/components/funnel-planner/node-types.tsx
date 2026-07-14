@@ -357,8 +357,7 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
   // Default: true if no platforms yet (fresh node), false if platforms already set (loaded from saved data)
   const picking: boolean = (nodeData as any).pickingMode ?? (platforms.length === 0);
 
-  const togglePlatform = useCallback((p: string) => (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const togglePlatform = useCallback((p: string) => {
     const idx = platforms.indexOf(p);
     let next: string[];
     if (idx >= 0) {
@@ -373,8 +372,7 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
       : next.length === 1
         ? (TRAFFIC_PLATFORMS[next[0]]?.label ?? next[0])
         : "Multiple Sources";
-    // Auto-close picker when all 4 selected
-    const pickingMode = next.length < 4 ? true : false;
+    const pickingMode = next.length < 4;
     setNodes(nds => nds.map(n =>
       n.id === id ? { ...n, data: { ...n.data, trafficPlatforms: next, trafficPlatform: next[0] || undefined, label: autoLabel, pickingMode } } : n
     ));
@@ -444,7 +442,9 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
         </div>
       ) : (
         /* Picker view — select platforms */
-        <div className="p-2 bg-black/35" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="p-2 bg-black/35 nodrag nopan"
+          onMouseDown={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
+          onClick={(e) => e.stopPropagation()}>
           {platforms.length > 0 && (
             <div className="flex items-center justify-center gap-1.5 mb-1.5">
               {platforms.map(p => { const cfg = TRAFFIC_PLATFORMS[p]; return cfg ? <cfg.Icon key={p} style={{ color: cfg.color, width: 20, height: 20 }} /> : null; })}
@@ -460,7 +460,8 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
                 const active = platforms.includes(p);
                 const maxed = !active && platforms.length >= 4;
                 return (
-                  <button key={p} title={pc.label} onClick={maxed ? undefined : togglePlatform(p)}
+                  <button key={p} title={pc.label}
+                    onPointerDown={maxed ? undefined : (e) => { e.stopPropagation(); e.preventDefault(); e.nativeEvent.stopImmediatePropagation(); togglePlatform(p); }}
                     className={`flex flex-col items-center gap-0.5 rounded-md p-1 transition-all border ${active ? "border-sky-400/60 bg-sky-500/25" : maxed ? "border-transparent cursor-not-allowed" : "border-transparent hover:bg-white/10"}`}
                     style={{ opacity: maxed ? 0.3 : active ? 1 : 0.6 }}>
                     <pc.Icon style={{ color: pc.color, width: 17, height: 17 }} />
