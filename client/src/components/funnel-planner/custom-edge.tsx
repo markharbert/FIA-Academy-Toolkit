@@ -374,25 +374,6 @@ export function CustomEdge({
             />
           )
         )
-      ) : isEmailTrafficEdge && !pathType ? (
-        /* Email→page: manual dashes + directional arrow icons */
-        emailTrafficItems.map((item, i) =>
-          item.kind === "arrow" ? (
-            <g key={i} style={{ pointerEvents: "none" }}
-               transform={`translate(${item.x},${item.y}) rotate(${item.angle})`}>
-              <ArrowIcon color={selected ? selectedColor : emailTrafficColor} />
-            </g>
-          ) : (
-            <line
-              key={i}
-              x1={item.x1} y1={item.y1}
-              x2={item.x2} y2={item.y2}
-              stroke={selected ? selectedColor : emailTrafficColor}
-              strokeWidth={strokeWidth}
-              strokeLinecap="round"
-            />
-          )
-        )
       ) : (
         <BaseEdge
           id={id}
@@ -430,6 +411,53 @@ export function CustomEdge({
             strokeDasharray="10 16"
             style={{ animation: "traffic-flow 1.8s linear infinite", animationDelay: "-0.9s" }}
           />
+        </>
+      )}
+
+      {/* Animated email traffic flow — email → page (amber) with travelling arrows */}
+      {isEmailTrafficEdge && !pathType && (
+        <>
+          {/* Soft amber glow halo */}
+          <path
+            d={edgePath}
+            stroke="rgba(251,191,36,0.18)"
+            strokeWidth={8}
+            fill="none"
+            strokeLinecap="round"
+          />
+          {/* Flowing amber dashes */}
+          <path
+            d={edgePath}
+            stroke="rgba(217,119,6,0.9)"
+            strokeWidth={3}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray="10 22"
+            style={{ animation: "traffic-flow 2.2s linear infinite" }}
+          />
+          <path
+            d={edgePath}
+            stroke="rgba(251,191,36,0.5)"
+            strokeWidth={3}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray="10 22"
+            style={{ animation: "traffic-flow 2.2s linear infinite", animationDelay: "-1.1s" }}
+          />
+          {/* Arrows travelling along the path — 3 evenly staggered */}
+          {([-2.2 * 0, -2.2 / 3, -2.2 * 2 / 3] as number[]).map((delay, i) => (
+            <g key={i} style={{ pointerEvents: "none" }}>
+              <animateMotion
+                dur="2.2s"
+                repeatCount="indefinite"
+                begin={`${delay.toFixed(2)}s`}
+                rotate="auto"
+              >
+                <mpath href={`#${id}`} />
+              </animateMotion>
+              <ArrowIcon color="rgba(251,191,36,0.95)" />
+            </g>
+          ))}
         </>
       )}
 
