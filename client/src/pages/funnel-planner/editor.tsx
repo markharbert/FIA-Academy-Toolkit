@@ -645,6 +645,26 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             {saveStatus2Icon}
             {saveStatusText}
           </span>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              className="flex items-center justify-center w-7 h-7 rounded-md border transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-white/[0.04] border-white/10 text-white/50 hover:text-white hover:bg-white/10"
+              data-testid="button-undo"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Y)"
+              className="flex items-center justify-center w-7 h-7 rounded-md border transition-colors disabled:opacity-30 disabled:cursor-not-allowed bg-white/[0.04] border-white/10 text-white/50 hover:text-white hover:bg-white/10"
+              data-testid="button-redo"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <div className="ml-auto shrink-0 flex items-center gap-2">
             {user?.isAdmin && (
               <button
@@ -885,27 +905,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
         {/* ReactFlow Canvas */}
         <div className="flex-1 relative" ref={reactFlowWrapper} onDragOver={onDragOver} onDrop={onDrop}>
-          {/* Undo / Redo buttons */}
-          <div className="absolute z-10 flex gap-1" style={{ bottom: "200px", left: "10px" }}>
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              title="Undo (Ctrl+Z)"
-              className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors shadow disabled:opacity-30 disabled:cursor-not-allowed"
-              data-testid="button-undo"
-            >
-              <Undo2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              title="Redo (Ctrl+Y)"
-              className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors shadow disabled:opacity-30 disabled:cursor-not-allowed"
-              data-testid="button-redo"
-            >
-              <Redo2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
           {/* Auto-arrange button — sits above the zoom controls (bottom-left) */}
           <button
             onClick={handleAutoLayout}
