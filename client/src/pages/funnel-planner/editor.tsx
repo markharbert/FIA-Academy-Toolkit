@@ -827,7 +827,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               const current = (selectedNode.data as FunnelNodeData).accentColor as string | undefined;
               return (
                 <div>
-                  <Label className="text-xs text-white/50 uppercase tracking-wide">Outline Color</Label>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Color</Label>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {/* Reset to default */}
                     <button

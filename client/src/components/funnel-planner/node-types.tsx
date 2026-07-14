@@ -356,18 +356,22 @@ function DeleteButton({ id }: { id: string }) {
   );
 }
 
-function NodeLabel({ typeLabel, customLabel, typeColor, lightTypeColor, description }: {
+function NodeLabel({ typeLabel, customLabel, typeColor, lightTypeColor, description, accentHex }: {
   typeLabel: string;
   customLabel: string;
   typeColor: string;
   lightTypeColor: string;
   description?: string;
+  accentHex?: string;
 }) {
   const theme = useCanvasTheme();
   const usedColor = theme === "light" ? lightTypeColor : typeColor;
   return (
     <div className={`px-2.5 py-2 border-t ${theme === "light" ? "border-gray-100" : "border-white/[0.08]"}`}>
-      <div className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${usedColor}`}>{typeLabel}</div>
+      <div
+        className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${accentHex ? "" : usedColor}`}
+        style={accentHex ? { color: accentHex } : undefined}
+      >{typeLabel}</div>
       <div className={`text-xs font-semibold leading-tight truncate ${theme === "light" ? "text-gray-900" : "text-white"}`}>{customLabel}</div>
       {description && (
         <div className={`text-[10px] mt-0.5 leading-tight line-clamp-1 ${theme === "light" ? "text-gray-500" : "text-white/40"}`}>{description}</div>
@@ -504,7 +508,7 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
           )}
         </div>
       )}
-      <NodeLabel typeLabel="Traffic Source" customLabel={nodeData.label} typeColor="text-sky-300" lightTypeColor="text-sky-600" description={nodeData.description} />
+      <NodeLabel typeLabel="Traffic Source" customLabel={nodeData.label} typeColor="text-sky-300" lightTypeColor="text-sky-600" description={nodeData.description} accentHex={accentColor} />
     </div>
   );
 }
@@ -528,11 +532,14 @@ function EmailNode({ id, data, selected }: NodeProps) {
       <Handles />
       <DeleteButton id={id} />
       <div className="overflow-hidden" style={{ height: 96 }}>
-        <EmailNodeSVG c={cfg.hexColor} />
+        <EmailNodeSVG c={accentColor ?? cfg.hexColor} />
       </div>
       <div className={`px-2.5 py-2 border-t ${theme === "light" ? "border-gray-100" : "border-white/[0.08]"}`}>
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className={`text-[9px] font-bold uppercase tracking-widest ${theme === "light" ? cfg.lightColor : cfg.color}`}>Email</span>
+          <span
+            className={`text-[9px] font-bold uppercase tracking-widest ${accentColor ? "" : (theme === "light" ? cfg.lightColor : cfg.color)}`}
+            style={accentColor ? { color: accentColor } : undefined}
+          >Email</span>
           {day !== undefined && (
             <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full ${theme === "light" ? "bg-cyan-50 text-cyan-700" : `bg-white/10 ${cfg.color}`}`}>Day {day}</span>
           )}
@@ -574,13 +581,16 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
             className="w-full h-full object-cover object-top"
             style={{ display: "block" }}
           />
-        ) : mockupFn ? mockupFn(cfg.hexColor) : (
+        ) : mockupFn ? mockupFn(accentColor ?? cfg.hexColor) : (
           <div className={`flex items-center justify-center h-full ${theme === "light" ? "bg-gray-50" : "bg-black/35"}`}>
-            <cfg.icon className={`h-10 w-10 ${theme === "light" ? cfg.lightColor : cfg.color} opacity-60`} />
+            {accentColor
+              ? <cfg.icon className="h-10 w-10 opacity-60" style={{ color: accentColor }} />
+              : <cfg.icon className={`h-10 w-10 ${theme === "light" ? cfg.lightColor : cfg.color} opacity-60`} />
+            }
           </div>
         )}
       </div>
-      <NodeLabel typeLabel={cfg.label} customLabel={nodeData.label} typeColor={cfg.color} lightTypeColor={cfg.lightColor} description={nodeData.description} />
+      <NodeLabel typeLabel={cfg.label} customLabel={nodeData.label} typeColor={cfg.color} lightTypeColor={cfg.lightColor} description={nodeData.description} accentHex={accentColor} />
     </div>
   );
 }
