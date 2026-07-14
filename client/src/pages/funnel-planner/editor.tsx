@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { toPng } from "html-to-image";
@@ -62,6 +62,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const [palettePinned, setPalettePinned] = useState(true);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Share state
@@ -304,6 +305,31 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
       toast({ title: "Link copied to clipboard!" });
     });
   }, [shareUrl, toast]);
+
+  const handleDraftEmail = useCallback(async () => {
+    if (!selectedNode || isGeneratingEmail) return;
+    const nodeData = selectedNode.data as FunnelNodeData;
+    const subject = nodeData.emailSubject as string | undefined;
+    if (!subject?.trim()) {
+      toast({ title: "Add a subject line first", description: "The AI needs a subject to draft the email.", variant: "destructive" });
+      return;
+    }
+    setIsGeneratingEmail(true);
+    try {
+      const res = await apiRequest("POST", `/api/funnels/${funnel.id}/draft-email`, {
+        subject: subject.trim(),
+        emailDay: nodeData.emailDay,
+        label: nodeData.label,
+      });
+      const data = await res.json() as { body: string };
+      updateSelectedNodeData({ emailBody: data.body });
+      toast({ title: "Email drafted!", description: "Edit it as needed in the body below." });
+    } catch {
+      toast({ title: "Draft failed", description: "Could not generate email. Try again.", variant: "destructive" });
+    } finally {
+      setIsGeneratingEmail(false);
+    }
+  }, [selectedNode, isGeneratingEmail, funnel.id, updateSelectedNodeData, toast]);
 
   const exportPng = useCallback(async () => {
     const el = document.querySelector(".react-flow__viewport") as HTMLElement | null;
@@ -638,8 +664,63 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 )}
               </div>
             )}
+            {/* ── Email node fields ── */}
+            {(selectedNode.data as FunnelNodeData).nodeType === "emailNode" && (
+              <>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Day / Send Delay</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={(selectedNode.data as FunnelNodeData).emailDay ?? ""}
+                    onChange={(e) => updateSelectedNodeData({ emailDay: e.target.value ? Number(e.target.value) : undefined })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                    placeholder="e.g. 1"
+                    data-testid="input-email-day"
+                  />
+                  <p className="text-[10px] text-white/25 mt-1 leading-snug">Which day in the sequence this sends.</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Subject Line</Label>
+                  <Input
+                    value={((selectedNode.data as FunnelNodeData).emailSubject as string) || ""}
+                    onChange={(e) => updateSelectedNodeData({ emailSubject: e.target.value })}
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
+                    placeholder="Your subject line..."
+                    data-testid="input-email-subject"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs text-white/50 uppercase tracking-wide">Email Body</Label>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleDraftEmail}
+                      disabled={isGeneratingEmail || !((selectedNode.data as FunnelNodeData).emailSubject as string | undefined)?.trim()}
+                      className="h-6 px-2 text-xs text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1"
+                      data-testid="button-ai-draft-email"
+                    >
+                      {isGeneratingEmail
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <Sparkles className="w-3 h-3" />}
+                      AI Draft
+                    </Button>
+                  </div>
+                  <Textarea
+                    value={((selectedNode.data as FunnelNodeData).emailBody as string) || ""}
+                    onChange={(e) => updateSelectedNodeData({ emailBody: e.target.value })}
+                    className="bg-white/[0.04] border-white/10 text-white text-sm resize-none"
+                    style={{ minHeight: 200 }}
+                    placeholder="Write your email here, or click AI Draft above to generate one from the subject line..."
+                    data-testid="input-email-body"
+                  />
+                </div>
+              </>
+            )}
             {(selectedNode.data as FunnelNodeData).nodeType !== "trafficSource" &&
-             (selectedNode.data as FunnelNodeData).nodeType !== "note" && (
+             (selectedNode.data as FunnelNodeData).nodeType !== "note" &&
+             (selectedNode.data as FunnelNodeData).nodeType !== "emailNode" && (
               <div>
                 <Label className="text-xs text-white/50 uppercase tracking-wide">Page Preview</Label>
                 <div className="mt-2 space-y-2">
@@ -742,6 +823,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 data-testid="input-node-notes"
               />
             </div>
+            {(selectedNode.data as FunnelNodeData).nodeType !== "emailNode" && (
             <div>
               <Label className="text-xs text-white/50 uppercase tracking-wide">Est. Traffic / Visitors</Label>
               <Input
@@ -754,6 +836,8 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 data-testid="input-node-traffic"
               />
             </div>
+            )}
+            {(selectedNode.data as FunnelNodeData).nodeType !== "emailNode" && (
             <div>
               <Label className="text-xs text-white/50 uppercase tracking-wide">Conv. Rate (%)</Label>
               <Input
@@ -768,6 +852,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 data-testid="input-node-conversion"
               />
             </div>
+            )}
             <div className="pt-2 border-t border-white/10">
               <p className="text-xs text-white/30">
                 <strong className="text-white/50">Tip:</strong> Click a connection arrow to toggle Yes / No path labels.

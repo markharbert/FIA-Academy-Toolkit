@@ -10744,6 +10744,44 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // Funnel planner: AI email draft
+  app.post("/api/funnels/:id/draft-email", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    const { subject, emailDay, label } = req.body as { subject?: string; emailDay?: number; label?: string };
+    if (!subject || typeof subject !== "string") {
+      return res.status(400).json({ message: "subject is required" });
+    }
+    try {
+      const funnel = await storage.getFunnelById(req.params.id);
+      if (!funnel) return res.status(404).json({ message: "Funnel not found" });
+      if (funnel.userId !== userId) return res.status(403).json({ message: "Forbidden" });
+      const dayContext = emailDay ? `This is Day ${emailDay} of the email sequence.` : "";
+      const labelContext = label && label !== "Email" ? `The email is labeled "${label}".` : "";
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert email copywriter who writes high-converting marketing emails for coaches and private practice professionals. Write emails that are conversational, personal, and focused on building trust. Use clear paragraphs separated by line breaks. Output ONLY the email body — no subject line, no greeting like "Hi [Name]", no sign-off like "Best, [Name]". Just the body paragraphs and a call to action at the end.`,
+          },
+          {
+            role: "user",
+            content: `Write a marketing email body for this subject line: "${subject}". ${dayContext} ${labelContext}
+
+Write 3-4 conversational paragraphs. Make it feel personal and authentic. Focus on delivering value and end with a clear, natural call to action. Output only the body text — no subject line, no greeting, no sign-off.`,
+          },
+        ],
+        temperature: 0.8,
+        max_tokens: 600,
+      });
+      const body = response.choices[0]?.message?.content?.trim() ?? "";
+      res.json({ body });
+    } catch (err) {
+      console.error("[funnels/draft-email] error:", err);
+      res.status(500).json({ message: "Failed to draft email" });
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 
