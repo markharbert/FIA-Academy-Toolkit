@@ -38,14 +38,16 @@ function getEnvelopePoints(
   }
 }
 
-/* Tiny envelope centered at (0,0), 12×8 px */
-function EnvelopeIcon({ color }: { color: string }) {
+/* Tiny envelope centered at (0,0), 12×8 px.
+   bgColor fills the body opaquely so it punches out the dash beneath it —
+   the envelope visually replaces one dash in the pattern. */
+function EnvelopeIcon({ color, bgColor }: { color: string; bgColor: string }) {
   return (
     <g>
-      {/* body */}
+      {/* opaque body — erases the dash line underneath */}
       <rect x="-6" y="-4" width="12" height="8" rx="1"
-        fill={color} fillOpacity="0.18" stroke={color} strokeWidth="0.9" />
-      {/* flap V */}
+        fill={bgColor} stroke={color} strokeWidth="0.9" />
+      {/* flap V on top */}
       <polyline points="-6,-4 0,1.5 6,-4"
         fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
     </g>
@@ -262,7 +264,10 @@ export function CustomEdge({
           transform={`translate(${pt.x},${pt.y}) rotate(${pt.angle})`}
           style={{ pointerEvents: "none" }}
         >
-          <EnvelopeIcon color={sequenceColor} />
+          <EnvelopeIcon
+            color={sequenceColor}
+            bgColor={theme === "light" ? "#f8fafc" : "#0d1424"}
+          />
         </g>
       ))}
 
