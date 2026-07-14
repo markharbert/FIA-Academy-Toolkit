@@ -657,11 +657,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               </button>
             )}
             <button
-              onClick={() => setBrainOpen((v) => !v)}
+              onClick={() => user?.isAdmin && setBrainOpen((v) => !v)}
+              title={user?.isAdmin ? undefined : "Coming Soon"}
               className={`flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium border transition-colors ${
-                brainOpen
-                  ? "bg-violet-500/30 border-violet-400/60 text-violet-200"
-                  : "bg-indigo-500/20 border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60"
+                !user?.isAdmin
+                  ? "bg-white/[0.04] border-white/10 text-white/25 cursor-not-allowed"
+                  : brainOpen
+                    ? "bg-violet-500/30 border-violet-400/60 text-violet-200"
+                    : "bg-indigo-500/20 border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60"
               }`}
               data-testid="button-funnel-brain"
             >
