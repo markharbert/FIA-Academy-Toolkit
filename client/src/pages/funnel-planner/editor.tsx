@@ -237,12 +237,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
       const screenshotUrl: string | undefined = json?.data?.screenshot?.url;
       const ogImageUrl: string | undefined = json?.data?.image?.url;
       const pageTitle: string | undefined = json?.data?.title;
+      const pageDescription: string | undefined = json?.data?.description;
       const previewUrl = screenshotUrl || ogImageUrl;
       if (previewUrl) {
         const updates: Record<string, string | undefined> = { pagePreviewUrl: previewUrl, pageUrl: url };
         if (pageTitle) updates.label = pageTitle;
+        if (pageDescription) updates.description = pageDescription;
         updateSelectedNodeData(updates);
-        toast({ title: "Preview captured!", description: pageTitle ? `"${pageTitle}" added to node.` : "Page screenshot added to node." });
+        toast({ title: "Preview captured!", description: pageTitle ? `"${pageTitle}" imported.` : "Page screenshot added to node." });
       } else {
         const reason = json?.message || "Page could not be captured — make sure it is publicly accessible.";
         toast({ title: "Couldn't capture preview", description: reason, variant: "destructive" });
