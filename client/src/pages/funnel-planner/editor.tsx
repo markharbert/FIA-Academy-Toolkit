@@ -994,8 +994,46 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             </button>
           </div>
           <div className="px-4 py-4 space-y-4">
-            {/* ── Outline color picker ── */}
-            {(() => {
+            {/* ── Note color picker (notes only) ── */}
+            {(selectedNode.data as FunnelNodeData).nodeType === "note" && (() => {
+              const NOTE_COLORS = [
+                { hex: "#FDE047", label: "Yellow"   },
+                { hex: "#FDA4AF", label: "Pink"     },
+                { hex: "#93C5FD", label: "Blue"     },
+                { hex: "#86EFAC", label: "Green"    },
+                { hex: "#C4B5FD", label: "Purple"   },
+                { hex: "#FCA5A5", label: "Red"      },
+                { hex: "#6EE7B7", label: "Mint"     },
+                { hex: "#FED7AA", label: "Peach"    },
+                { hex: "#BAE6FD", label: "Sky"      },
+                { hex: "#D9F99D", label: "Lime"     },
+                { hex: "#E9D5FF", label: "Lavender" },
+                { hex: "#ffffff", label: "White"    },
+              ];
+              const current = (selectedNode.data as FunnelNodeData).accentColor as string | undefined;
+              return (
+                <div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Note Color</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {NOTE_COLORS.map(({ hex, label }) => {
+                      const isActive = current === hex || (!current && hex === "#FDE047");
+                      return (
+                        <button
+                          key={hex}
+                          title={label}
+                          onClick={() => updateSelectedNodeData({ accentColor: hex === "#FDE047" ? undefined : hex })}
+                          className={`w-7 h-7 rounded-md border-2 transition-all ${isActive ? "border-white scale-110 shadow-lg" : "border-white/20 hover:scale-105 hover:border-white/50"}`}
+                          style={{ background: hex }}
+                          data-testid={`button-note-color-${label.toLowerCase()}`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+            {/* ── Outline color picker (non-note nodes) ── */}
+            {(selectedNode.data as FunnelNodeData).nodeType !== "note" && (() => {
               const SWATCH_COLORS = [
                 { hex: "#38BDF8", label: "Sky"     },
                 { hex: "#A78BFA", label: "Violet"  },
