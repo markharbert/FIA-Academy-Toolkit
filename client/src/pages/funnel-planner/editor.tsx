@@ -504,12 +504,21 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <Input
-            value={funnelName}
-            onChange={(e) => { setFunnelName(e.target.value); setSaveStatus("unsaved"); }}
-            className="h-7 px-2 bg-transparent border-white/0 hover:border-white/20 focus:border-white/30 text-white font-semibold text-sm min-w-0 flex-1 max-w-xs"
-            data-testid="input-funnel-name-editor"
-          />
+          {/* Auto-sizing title — container grows with text, save status sits right beside it */}
+          <div className="relative inline-flex items-center shrink min-w-0 max-w-xs">
+            {/* Hidden mirror span that drives the container width */}
+            <span
+              aria-hidden
+              className="invisible whitespace-pre text-white font-semibold text-sm px-2 h-7 pointer-events-none select-none border border-transparent"
+            >{funnelName || "\u00a0"}</span>
+            {/* Real input overlaid on top */}
+            <input
+              value={funnelName}
+              onChange={(e) => { setFunnelName(e.target.value); setSaveStatus("unsaved"); }}
+              className="absolute inset-0 w-full h-full bg-transparent rounded border border-white/0 hover:border-white/20 focus:border-white/30 text-white font-semibold text-sm px-2 outline-none"
+              data-testid="input-funnel-name-editor"
+            />
+          </div>
           <span className="hidden sm:flex items-center gap-1.5 text-xs text-white/40 shrink-0">
             {saveStatus2Icon}
             {saveStatusText}
