@@ -891,7 +891,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               onClick={undo}
               disabled={!canUndo}
               title="Undo (Ctrl+Z)"
-              className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/15 text-white/70 shadow transition-colors hover:enabled:text-white hover:enabled:bg-white/10 disabled:text-white/25 disabled:border-white/8 disabled:cursor-not-allowed"
+              className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/15 text-white/70 shadow transition-colors hover:enabled:bg-red-500/20 hover:enabled:border-red-400/40 hover:enabled:text-red-300 disabled:text-white/25 disabled:border-white/8 disabled:cursor-not-allowed"
               data-testid="button-undo"
             >
               <Undo2 className="w-3.5 h-3.5" />
@@ -900,7 +900,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               onClick={redo}
               disabled={!canRedo}
               title="Redo (Ctrl+Y)"
-              className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/15 text-white/70 shadow transition-colors hover:enabled:text-white hover:enabled:bg-white/10 disabled:text-white/25 disabled:border-white/8 disabled:cursor-not-allowed"
+              className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/15 text-white/70 shadow transition-colors hover:enabled:bg-red-500/20 hover:enabled:border-red-400/40 hover:enabled:text-red-300 disabled:text-white/25 disabled:border-white/8 disabled:cursor-not-allowed"
               data-testid="button-redo"
             >
               <Redo2 className="w-3.5 h-3.5" />
