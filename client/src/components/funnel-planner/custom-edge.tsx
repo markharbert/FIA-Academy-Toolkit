@@ -62,7 +62,7 @@ export function CustomEdge({
           {/* Soft glow base */}
           <path
             d={edgePath}
-            stroke="rgba(56,189,248,0.25)"
+            stroke="rgba(74,222,128,0.22)"
             strokeWidth={10}
             fill="none"
             strokeLinecap="round"
@@ -70,7 +70,7 @@ export function CustomEdge({
           {/* Flowing dashes — stream 1 */}
           <path
             d={edgePath}
-            stroke="rgba(56,189,248,0.95)"
+            stroke="rgba(74,222,128,0.95)"
             strokeWidth={5}
             fill="none"
             strokeLinecap="round"
@@ -80,7 +80,7 @@ export function CustomEdge({
           {/* Flowing dashes — stream 2 (offset by half a cycle for density) */}
           <path
             d={edgePath}
-            stroke="rgba(186,230,253,0.6)"
+            stroke="rgba(134,239,172,0.55)"
             strokeWidth={5}
             fill="none"
             strokeLinecap="round"
