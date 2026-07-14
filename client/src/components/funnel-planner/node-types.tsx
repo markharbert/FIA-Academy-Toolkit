@@ -656,11 +656,12 @@ function DelayNode({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`relative flex items-center gap-3 px-4 py-2.5 border-2 border-dashed rounded-full shadow-lg transition-all select-none`}
+      className={`relative flex items-center gap-2.5 px-3 py-2 border-2 border-dashed rounded-2xl shadow-lg transition-all select-none`}
       style={{
         background: `rgba(0,0,0,0.65)`,
         borderColor: c,
-        minWidth: 170,
+        minWidth: 130,
+        maxWidth: 200,
         ...(selected ? { boxShadow: `0 0 0 3px ${c}50, 0 4px 20px rgba(0,0,0,0.5)` } : { boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }),
       }}
       data-testid="funnel-node-delay"
@@ -668,14 +669,14 @@ function DelayNode({ id, data, selected }: NodeProps) {
       <Handles />
       <DeleteButton id={id} />
       <div
-        className="flex items-center justify-center w-8 h-8 rounded-full shrink-0"
+        className="flex items-center justify-center w-6 h-6 rounded-full shrink-0"
         style={{ background: `${c}22`, border: `1.5px solid ${c}55` }}
       >
-        <Timer className="h-4 w-4" style={{ color: c }} />
+        <Timer className="h-3 w-3" style={{ color: c }} />
       </div>
-      <div className="flex flex-col leading-tight pr-1">
-        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: `${c}99` }}>Delay</span>
-        <span className="text-white font-bold text-sm leading-snug" style={{ color: c }}>
+      <div className="flex flex-col leading-tight min-w-0">
+        <span className="text-[8px] font-bold uppercase tracking-widest" style={{ color: `${c}99` }}>Delay</span>
+        <span className="text-[11px] font-semibold leading-snug break-words" style={{ color: c }}>
           {mainLine}
         </span>
       </div>
