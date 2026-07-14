@@ -322,8 +322,7 @@ function DeleteButton({ id }: { id: string }) {
       className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center bg-black/50 border border-white/15 text-white/40 hover:bg-red-500/80 hover:text-white hover:border-red-400/60 transition-colors cursor-pointer"
       title="Delete node"
       data-testid={`button-delete-node-${id}`}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => { e.stopPropagation(); deleteElements({ nodes: [{ id }] }); }}
+      onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); e.nativeEvent.stopImmediatePropagation(); deleteElements({ nodes: [{ id }] }); }}
     >
       <X className="w-2.5 h-2.5" />
     </button>
