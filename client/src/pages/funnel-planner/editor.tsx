@@ -179,13 +179,19 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
       if (!nodeType) return;
       const cfg = NODE_CONFIGS[nodeType];
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      const newNode: Node = {
-        id: genId(),
-        type: nodeType,
-        position,
-        data: { label: cfg.label, nodeType, description: "" } as FunnelNodeData,
-      };
-      setNodes((nds) => [...nds, newNode]);
+      setNodes((nds) => {
+        const label =
+          nodeType === "emailNode"
+            ? `Email ${nds.filter((n) => (n.data as FunnelNodeData).nodeType === "emailNode").length + 1}`
+            : cfg.label;
+        const newNode: Node = {
+          id: genId(),
+          type: nodeType,
+          position,
+          data: { label, nodeType, description: "" } as FunnelNodeData,
+        };
+        return [...nds, newNode];
+      });
     },
     [screenToFlowPosition, setNodes]
   );
