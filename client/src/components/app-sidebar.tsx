@@ -54,6 +54,7 @@ type NavItem = {
   iconColor: string;
   testId: string;
   collaboratorVisible: boolean;
+  adminOnly?: boolean;
   matchPaths?: string[];
   activeClass?: string;
   subMenuBorderClass?: string;
@@ -94,6 +95,7 @@ const allNavItems: NavItem[] = [
     testId: "nav-funnel-grid",
     matchPaths: ["/funnel-grid"],
     collaboratorVisible: false,
+    adminOnly: true,
   },
   {
     title: "Video Studio",
@@ -221,7 +223,7 @@ export function AppSidebar() {
   const isCollaborator = !!user?.isCollaborator;
   const navItems = isCollaborator
     ? allNavItems.filter((item) => item.collaboratorVisible)
-    : allNavItems;
+    : allNavItems.filter((item) => !item.adminOnly || user?.isAdmin);
 
   const handleLogout = async () => {
     await logout();
