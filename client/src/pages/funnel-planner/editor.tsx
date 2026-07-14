@@ -432,26 +432,22 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               {saveStatus2Icon}
               {saveStatusText}
             </span>
-            <Button
-              size="sm"
-              variant="outline"
+            <button
               onClick={() => setShareOpen(true)}
-              className="h-7 text-xs text-white border-white/30 hover:bg-white/10 hover:text-white bg-transparent"
+              className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition-colors"
               data-testid="button-share-funnel"
             >
-              <Share2 className="h-3.5 w-3.5 mr-1" />
+              <Share2 className="h-3.5 w-3.5" />
               Share
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
+            </button>
+            <button
               onClick={exportPng}
-              className="h-7 text-xs text-white border-white/30 hover:bg-white/10 hover:text-white bg-transparent"
+              className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition-colors"
               data-testid="button-export-png"
             >
-              <Download className="h-3.5 w-3.5 mr-1" />
+              <Download className="h-3.5 w-3.5" />
               Export PNG
-            </Button>
+            </button>
           </div>
 
           {/* Share Dialog */}
