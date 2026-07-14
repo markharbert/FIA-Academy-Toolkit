@@ -3,9 +3,31 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { useCanvasTheme } from "./canvas-theme-context";
 
+/* ─────────────────────────────────────────────────────────────
+   EDGE BUNDLING
+   When multiple edges share the same target node (many → one)
+   they all converge at the exact same point, creating spaghetti.
+   We detect sibling edges and apply a small perpendicular offset
+   so each edge arrives at a slightly different point on the node's
+   edge — turning tangled curves into a clean fan/bundle.
+
+   The same logic applies to source-side: one node → many targets.
+───────────────────────────────────────────────────────────── */
+
+const BUNDLE_SPACING = 12; // px between adjacent bundled edges
+const BUNDLE_MAX_SPAN = 64; // cap total spread at 64px
+
+function bundleOffset(rank: number, count: number): number {
+  if (count <= 1) return 0;
+  const span = Math.min((count - 1) * BUNDLE_SPACING, BUNDLE_MAX_SPAN);
+  const step = count > 1 ? span / (count - 1) : 0;
+  return rank * step - span / 2;
+}
+
 export function CustomEdge({
   id,
   source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -16,19 +38,46 @@ export function CustomEdge({
   data,
   markerEnd,
 }: EdgeProps) {
-  const { deleteElements, setEdges, getNode } = useReactFlow();
+  const { deleteElements, setEdges, getNode, getEdges } = useReactFlow();
   const [hovered, setHovered] = useState(false);
   const theme = useCanvasTheme();
 
   const edgeData = data as { pathType?: "yes" | "no" } | undefined;
   const pathType = edgeData?.pathType;
 
+  // ── Bundle: many → one (same target) ──────────────────────
+  const allEdges = getEdges();
+
+  const targetSiblings = allEdges
+    .filter((e) => e.target === target)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const targetRank = targetSiblings.findIndex((e) => e.id === id);
+  const targetCount = targetSiblings.length;
+
+  // ── Bundle: one → many (same source) ──────────────────────
+  const sourceSiblings = allEdges
+    .filter((e) => e.source === source)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const sourceRank = sourceSiblings.findIndex((e) => e.id === id);
+  const sourceCount = sourceSiblings.length;
+
+  // Determine dominant flow direction to pick offset axis
+  const isHorizontalFlow = Math.abs(targetX - sourceX) >= Math.abs(targetY - sourceY);
+
+  const tOff = bundleOffset(targetRank, targetCount);
+  const sOff = bundleOffset(sourceRank, sourceCount);
+
+  const adjTargetX = isHorizontalFlow ? targetX : targetX + tOff;
+  const adjTargetY = isHorizontalFlow ? targetY + tOff : targetY;
+  const adjSourceX = isHorizontalFlow ? sourceX : sourceX + sOff;
+  const adjSourceY = isHorizontalFlow ? sourceY + sOff : sourceY;
+
   const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
+    sourceX: adjSourceX,
+    sourceY: adjSourceY,
     sourcePosition,
-    targetX,
-    targetY,
+    targetX: adjTargetX,
+    targetY: adjTargetY,
     targetPosition,
   });
 
