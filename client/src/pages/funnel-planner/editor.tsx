@@ -424,7 +424,11 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
       row.forEach((item) => {
         const w = item.node.measured?.width ?? 148;
-        posMap.set(item.node.id, { x, y });
+        const h = item.node.measured?.height ?? 160;
+        // Center each node vertically within the row so all left/right
+        // handle mid-points share the same Y — horizontal connections
+        // will be perfectly straight lines.
+        posMap.set(item.node.id, { x, y: cursorY + (rowHeight - h) / 2 });
         x += w + H_GAP;
       });
 
