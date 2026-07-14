@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, useReactFlow, NodeResizer } from "@xyflow/react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import {
   Mail, MessageSquare, Search, Mic, StickyNote, Globe, X, Copy,
   UserPlus, CheckCircle, DollarSign, PlayCircle, Radio,
@@ -805,6 +805,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
   const { setNodes } = useReactFlow();
   const accent = (nodeData.accentColor as string | undefined) ?? "#FDE047";
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const updateData = useCallback(
     (updates: Partial<FunnelNodeData>) => {
@@ -815,12 +816,41 @@ function NoteNode({ id, data, selected }: NodeProps) {
     [id, setNodes]
   );
 
+  // Sync external changes (e.g. undo) into the DOM only when editor is not focused
+  useEffect(() => {
+    if (editorRef.current && document.activeElement !== editorRef.current) {
+      editorRef.current.innerHTML = nodeData.notes ?? "";
+    }
+  }, [nodeData.notes]);
+
+  const fmt = (cmd: string, value?: string) => {
+    editorRef.current?.focus();
+    document.execCommand(cmd, false, value);
+  };
+
+  const stopAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  const toolbarBtn = (label: string, cmd: string, value: string | undefined, extraCls: string, testId: string) => (
+    <button
+      onMouseDown={(e) => { stopAll(e); fmt(cmd, value); }}
+      className={`w-5 h-5 text-[10px] rounded flex items-center justify-center transition-colors hover:bg-black/15 active:bg-black/25 ${extraCls}`}
+      style={{ color: "rgba(0,0,0,0.6)" }}
+      title={label}
+      data-testid={testId}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <>
       <NodeResizer
         isVisible={selected}
         minWidth={150}
-        minHeight={90}
+        minHeight={110}
         lineStyle={{ border: `1.5px solid ${accent}99` }}
         handleStyle={{ background: accent, border: `1px solid ${accent}cc`, width: 9, height: 9, borderRadius: 3 }}
       />
@@ -835,6 +865,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
       >
         <DuplicateButton id={id} />
         <DeleteButton id={id} />
+
         {/* Header strip */}
         <div
           className="flex items-center gap-1.5 px-3 pt-2 pb-1 border-b shrink-0"
@@ -851,15 +882,43 @@ function NoteNode({ id, data, selected }: NodeProps) {
             placeholder="Title…"
           />
         </div>
-        {/* Body */}
-        <textarea
-          value={nodeData.notes ?? ""}
-          onChange={(e) => updateData({ notes: e.target.value })}
+
+        {/* Formatting toolbar */}
+        <div
+          className="flex items-center gap-0.5 px-2 py-1 border-b shrink-0"
+          style={{ backgroundColor: accent + "50", borderBottomColor: accent + "40" }}
+        >
+          {toolbarBtn("B", "bold",      undefined, "font-bold",   "button-note-bold")}
+          {toolbarBtn("I", "italic",    undefined, "italic",      "button-note-italic")}
+          {toolbarBtn("U", "underline", undefined, "underline",   "button-note-underline")}
+          <div className="w-px h-3 mx-0.5 shrink-0" style={{ backgroundColor: "rgba(0,0,0,0.2)" }} />
+          {/* Font size buttons */}
+          {(["S","M","L","XL"] as const).map((sz, i) => (
+            <button
+              key={sz}
+              onMouseDown={(e) => { stopAll(e); fmt("fontSize", String(i + 2)); }}
+              className="px-1 h-5 text-[8px] rounded flex items-center justify-center transition-colors hover:bg-black/15 active:bg-black/25"
+              style={{ color: "rgba(0,0,0,0.55)", fontSize: `${8 + i}px`, fontWeight: i >= 2 ? 600 : 400 }}
+              title={`Font size: ${sz}`}
+              data-testid={`button-note-size-${sz.toLowerCase()}`}
+            >
+              A
+            </button>
+          ))}
+        </div>
+
+        {/* Rich-text body */}
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={() => { if (editorRef.current) updateData({ notes: editorRef.current.innerHTML }); }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-h-0 w-full px-3 py-2 bg-transparent text-[11px] leading-snug outline-none border-none resize-none"
+          className="flex-1 min-h-0 w-full px-3 py-2 text-[11px] leading-snug outline-none overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-black/30 empty:before:pointer-events-none"
           style={{ color: "#1a1a1a", caretColor: "#1a1a1a" }}
-          placeholder="Write your note here…"
+          data-placeholder="Write your note here…"
+          dangerouslySetInnerHTML={{ __html: nodeData.notes ?? "" }}
         />
       </div>
     </>
