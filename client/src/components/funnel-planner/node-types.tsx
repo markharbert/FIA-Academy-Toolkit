@@ -253,23 +253,19 @@ function EmailSequenceSVG({ c }: { c: string }) {
   );
 }
 
-/* EMAIL NODE SVG — large bold envelope filling the visual area */
+/* EMAIL NODE SVG — large bold white envelope with dark outline */
 function EmailNodeSVG({ c }: { c: string }) {
   return (
     <svg viewBox="0 0 148 96" width="148" height="96">
       {/* Dark background */}
       <rect x="0" y="0" width="148" height="96" fill="rgba(0,0,0,0.5)" />
-      {/* Envelope body — large, centred */}
-      <rect x="10" y="14" width="128" height="70" rx="6" fill="rgba(0,0,0,0.45)" stroke={c} strokeWidth="2.5" strokeOpacity="0.85" />
-      {/* Envelope flap — V shape pointing down */}
-      <path d="M10,14 L74,58 L138,14" stroke={c} strokeWidth="2.8" fill="none" strokeOpacity="0.95" strokeLinejoin="round" />
-      {/* Bottom left fold crease */}
-      <line x1="10" y1="84" x2="52" y2="52" stroke={c} strokeWidth="1.2" strokeOpacity="0.35" />
-      {/* Bottom right fold crease */}
-      <line x1="138" y1="84" x2="96" y2="52" stroke={c} strokeWidth="1.2" strokeOpacity="0.35" />
-      {/* Subtle glow dot in centre */}
-      <circle cx="74" cy="70" r="6" fill={c} opacity="0.12" />
-      <circle cx="74" cy="70" r="3" fill={c} opacity="0.25" />
+      {/* Envelope body — white fill, dark outline */}
+      <rect x="10" y="14" width="128" height="70" rx="6" fill="white" fillOpacity="0.92" stroke="rgba(0,0,0,0.6)" strokeWidth="2" />
+      {/* Envelope flap — V shape pointing down, drawn in dark so it reads on white */}
+      <path d="M10,14 L74,56 L138,14" stroke="rgba(0,0,0,0.55)" strokeWidth="2.5" fill="none" strokeLinejoin="round" />
+      {/* Bottom corner fold creases */}
+      <line x1="10" y1="84" x2="52" y2="52" stroke="rgba(0,0,0,0.22)" strokeWidth="1.5" />
+      <line x1="138" y1="84" x2="96" y2="52" stroke="rgba(0,0,0,0.22)" strokeWidth="1.5" />
     </svg>
   );
 }
