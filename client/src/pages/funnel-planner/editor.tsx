@@ -317,30 +317,25 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const handleDraftEmail = useCallback(async () => {
     if (!selectedNode || isGeneratingEmail) return;
     const nodeData = selectedNode.data as FunnelNodeData;
-    const subject = nodeData.emailSubject as string | undefined;
-    if (!subject?.trim()) {
-      toast({ title: "Add a subject line first", description: "The AI needs a subject to draft the email.", variant: "destructive" });
-      return;
-    }
     setIsGeneratingEmail(true);
     try {
       const res = await apiRequest("POST", `/api/funnels/${funnel.id}/draft-email`, {
-        subject: subject.trim(),
+        subject: (nodeData.emailSubject as string | undefined)?.trim() ?? "",
         emailDay: nodeData.emailDay,
         label: nodeData.label,
         nodeId: selectedNode.id,
         nodes,
         edges,
       });
-      const data = await res.json() as { body: string };
-      updateSelectedNodeData({ emailBody: data.body });
-      toast({ title: "Email drafted!", description: "Edit it as needed in the body below." });
+      const data = await res.json() as { subject: string; body: string };
+      updateSelectedNodeData({ emailSubject: data.subject, emailBody: data.body });
+      toast({ title: "Email drafted!", description: "Subject and body generated — edit as needed." });
     } catch {
       toast({ title: "Draft failed", description: "Could not generate email. Try again.", variant: "destructive" });
     } finally {
       setIsGeneratingEmail(false);
     }
-  }, [selectedNode, isGeneratingEmail, funnel.id, updateSelectedNodeData, toast]);
+  }, [selectedNode, isGeneratingEmail, funnel.id, updateSelectedNodeData, toast, nodes, edges]);
 
   const exportPng = useCallback(async () => {
     const el = document.querySelector(".react-flow__viewport") as HTMLElement | null;
@@ -735,39 +730,38 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                   />
                   <p className="text-[10px] text-white/25 mt-1 leading-snug">Which day in the sequence this sends.</p>
                 </div>
+
+                {/* AI Draft button — generates subject + body together */}
+                <Button
+                  size="sm"
+                  onClick={handleDraftEmail}
+                  disabled={isGeneratingEmail}
+                  className="w-full gap-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 hover:text-cyan-200 border border-cyan-500/20 hover:border-cyan-400/30 transition-colors"
+                  data-testid="button-ai-draft-email"
+                >
+                  {isGeneratingEmail
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</>
+                    : <><Sparkles className="w-3.5 h-3.5" /> AI Draft Subject + Body</>}
+                </Button>
+
                 <div>
                   <Label className="text-xs text-white/50 uppercase tracking-wide">Subject Line</Label>
                   <Input
                     value={((selectedNode.data as FunnelNodeData).emailSubject as string) || ""}
                     onChange={(e) => updateSelectedNodeData({ emailSubject: e.target.value })}
                     className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm"
-                    placeholder="Your subject line..."
+                    placeholder="Your subject line…"
                     data-testid="input-email-subject"
                   />
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <Label className="text-xs text-white/50 uppercase tracking-wide">Email Body</Label>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={handleDraftEmail}
-                      disabled={isGeneratingEmail || !((selectedNode.data as FunnelNodeData).emailSubject as string | undefined)?.trim()}
-                      className="h-6 px-2 text-xs text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 gap-1"
-                      data-testid="button-ai-draft-email"
-                    >
-                      {isGeneratingEmail
-                        ? <Loader2 className="w-3 h-3 animate-spin" />
-                        : <Sparkles className="w-3 h-3" />}
-                      AI Draft
-                    </Button>
-                  </div>
+                  <Label className="text-xs text-white/50 uppercase tracking-wide">Email Body</Label>
                   <Textarea
                     value={((selectedNode.data as FunnelNodeData).emailBody as string) || ""}
                     onChange={(e) => updateSelectedNodeData({ emailBody: e.target.value })}
-                    className="bg-white/[0.04] border-white/10 text-white text-sm resize-none"
+                    className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none"
                     style={{ minHeight: 200 }}
-                    placeholder="Write your email here, or click AI Draft above to generate one from the subject line..."
+                    placeholder="Click AI Draft above to generate, or write your email here…"
                     data-testid="input-email-body"
                   />
                 </div>

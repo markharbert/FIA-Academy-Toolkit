@@ -10862,9 +10862,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       nodes?: Array<{ id: string; type?: string; data?: Record<string, unknown> }>;
       edges?: Array<{ source: string; target: string }>;
     };
-    if (!subject || typeof subject !== "string") {
-      return res.status(400).json({ message: "subject is required" });
-    }
+    const existingSubject = typeof subject === "string" ? subject.trim() : "";
     try {
       const funnel = await storage.getFunnelById(req.params.id);
       if (!funnel) return res.status(404).json({ message: "Funnel not found" });
@@ -10942,11 +10940,17 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const dayContext = emailDay ? `This is Day ${emailDay} of the email sequence.` : "";
       const labelContext = label && label !== "Email" ? `The email is labeled "${label}".` : "";
 
-      const systemPrompt = `You are an expert email copywriter who writes high-converting marketing emails for coaches and private practice professionals. Write emails that are conversational, personal, and focused on building trust. Use clear paragraphs separated by line breaks. Output ONLY the email body — no subject line, no greeting like "Hi [Name]", no sign-off like "Best, [Name]". Just the body paragraphs and a call to action at the end.`;
+      const systemPrompt = `You are an expert email copywriter who writes high-converting marketing emails for coaches and private practice professionals. Write emails that are conversational, personal, and focused on building trust. Use clear paragraphs separated by line breaks. Always respond with valid JSON containing exactly two keys: "subject" (a compelling email subject line string) and "body" (the email body string — no greeting like "Hi [Name]", no sign-off like "Best, [Name]", just 3-4 body paragraphs ending with a clear call to action).`;
 
-      const userPrompt = `${brainContext}${pageContext}Write a marketing email body for this subject line: "${subject}". ${dayContext} ${labelContext}
+      const subjectInstruction = existingSubject
+        ? `Use this subject line (do not change it): "${existingSubject}"`
+        : `Also write a compelling, curiosity-driven subject line that fits the email.`;
 
-Write 3-4 conversational paragraphs. Make it feel personal and authentic. Focus on delivering value and end with a clear, natural call to action. Output only the body text — no subject line, no greeting, no sign-off.`;
+      const userPrompt = `${brainContext}${pageContext}${subjectInstruction} ${dayContext} ${labelContext}
+
+Write 3-4 conversational body paragraphs. Make it feel personal and authentic. Focus on delivering value and end with a clear, natural call to action.
+
+Respond with JSON only: {"subject": "...", "body": "..."}`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -10954,11 +10958,16 @@ Write 3-4 conversational paragraphs. Make it feel personal and authentic. Focus 
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
+        response_format: { type: "json_object" },
         temperature: 0.8,
-        max_tokens: 600,
+        max_tokens: 700,
       });
-      const body = response.choices[0]?.message?.content?.trim() ?? "";
-      res.json({ body });
+      const raw = response.choices[0]?.message?.content?.trim() ?? "{}";
+      const parsed = JSON.parse(raw) as { subject?: string; body?: string };
+      res.json({
+        subject: parsed.subject?.trim() ?? existingSubject,
+        body: parsed.body?.trim() ?? "",
+      });
     } catch (err) {
       console.error("[funnels/draft-email] error:", err);
       res.status(500).json({ message: "Failed to draft email" });
