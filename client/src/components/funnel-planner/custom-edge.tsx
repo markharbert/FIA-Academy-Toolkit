@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 export function CustomEdge({
   id,
+  source,
   sourceX,
   sourceY,
   targetX,
@@ -14,7 +15,7 @@ export function CustomEdge({
   data,
   markerEnd,
 }: EdgeProps) {
-  const { deleteElements, setEdges } = useReactFlow();
+  const { deleteElements, setEdges, getNode } = useReactFlow();
   const [hovered, setHovered] = useState(false);
 
   const edgeData = data as { pathType?: "yes" | "no" } | undefined;
@@ -35,6 +36,9 @@ export function CustomEdge({
 
   const visible = selected || hovered;
 
+  const sourceNode = getNode(source);
+  const isTrafficEdge = sourceNode?.type === "trafficSource";
+
   function setPathType(next: "yes" | "no" | undefined) {
     setEdges((eds) =>
       eds.map((e) =>
@@ -51,6 +55,40 @@ export function CustomEdge({
         markerEnd={markerEnd}
         style={{ stroke: strokeColor, strokeWidth }}
       />
+
+      {/* Animated traffic flow — only on edges coming from a traffic source node */}
+      {isTrafficEdge && (
+        <>
+          {/* Soft glow base */}
+          <path
+            d={edgePath}
+            stroke="rgba(56,189,248,0.18)"
+            strokeWidth={6}
+            fill="none"
+            strokeLinecap="round"
+          />
+          {/* Flowing dashes — stream 1 */}
+          <path
+            d={edgePath}
+            stroke="rgba(56,189,248,0.75)"
+            strokeWidth={2.5}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray="8 18"
+            style={{ animation: "traffic-flow 1.8s linear infinite" }}
+          />
+          {/* Flowing dashes — stream 2 (offset by half a cycle for density) */}
+          <path
+            d={edgePath}
+            stroke="rgba(125,211,252,0.45)"
+            strokeWidth={2.5}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray="8 18"
+            style={{ animation: "traffic-flow 1.8s linear infinite", animationDelay: "-0.9s" }}
+          />
+        </>
+      )}
       <EdgeLabelRenderer>
         <div
           style={{

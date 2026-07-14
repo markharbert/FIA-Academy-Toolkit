@@ -314,3 +314,9 @@
   0%, 100% { opacity: 0.5; }
   50%       { opacity: 0.02; }
 }
+
+/* ─── Funnel Planner: traffic-source edge flow animation ────────────────── */
+@keyframes traffic-flow {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -26; }
+}
