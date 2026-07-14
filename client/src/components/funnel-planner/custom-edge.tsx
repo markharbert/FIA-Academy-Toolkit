@@ -1,26 +1,38 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps, useReactFlow } from "@xyflow/react";
+import {
+  BaseEdge,
+  EdgeLabelRenderer,
+  getSmoothStepPath,
+  type EdgeProps,
+  useReactFlow,
+} from "@xyflow/react";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useCanvasTheme } from "./canvas-theme-context";
 
 /* ─────────────────────────────────────────────────────────────
-   EDGE BUNDLING
-   When multiple edges share the same target node (many → one)
-   they all converge at the exact same point, creating spaghetti.
-   We detect sibling edges and apply a small perpendicular offset
-   so each edge arrives at a slightly different point on the node's
-   edge — turning tangled curves into a clean fan/bundle.
+   EDGE BUNDLING — clean fan arrival
 
-   The same logic applies to source-side: one node → many targets.
+   When multiple edges converge on the same target node they all
+   land at the exact same pixel, creating spaghetti. The fix:
+
+   1. getSmoothStepPath (right-angle routing) never crosses when
+      edges are ordered consistently — unlike bezier curves.
+
+   2. A small offset is applied perpendicular to the handle face:
+      • top/bottom handles  → offset X  (horizontal spread)
+      • left/right handles  → offset Y  (vertical spread)
+      Spacing: 5 px per edge, capped at 28 px total.
+
+   3. Same logic on the source side for one → many fan-outs.
 ───────────────────────────────────────────────────────────── */
 
-const BUNDLE_SPACING = 12; // px between adjacent bundled edges
-const BUNDLE_MAX_SPAN = 64; // cap total spread at 64px
+const BUNDLE_SPACING = 5;   // px between adjacent bundled edges
+const BUNDLE_MAX_SPAN = 28; // cap total spread
 
 function bundleOffset(rank: number, count: number): number {
   if (count <= 1) return 0;
   const span = Math.min((count - 1) * BUNDLE_SPACING, BUNDLE_MAX_SPAN);
-  const step = count > 1 ? span / (count - 1) : 0;
+  const step = span / (count - 1);
   return rank * step - span / 2;
 }
 
@@ -45,40 +57,46 @@ export function CustomEdge({
   const edgeData = data as { pathType?: "yes" | "no" } | undefined;
   const pathType = edgeData?.pathType;
 
-  // ── Bundle: many → one (same target) ──────────────────────
+  // ── Gather siblings ───────────────────────────────────────
   const allEdges = getEdges();
 
+  // Many → one: edges that share this target
   const targetSiblings = allEdges
     .filter((e) => e.target === target)
     .sort((a, b) => a.id.localeCompare(b.id));
   const targetRank = targetSiblings.findIndex((e) => e.id === id);
   const targetCount = targetSiblings.length;
 
-  // ── Bundle: one → many (same source) ──────────────────────
+  // One → many: edges that share this source
   const sourceSiblings = allEdges
     .filter((e) => e.source === source)
     .sort((a, b) => a.id.localeCompare(b.id));
   const sourceRank = sourceSiblings.findIndex((e) => e.id === id);
   const sourceCount = sourceSiblings.length;
 
-  // Determine dominant flow direction to pick offset axis
-  const isHorizontalFlow = Math.abs(targetX - sourceX) >= Math.abs(targetY - sourceY);
+  // ── Axis selection ────────────────────────────────────────
+  // top/bottom handles are entered vertically → spread horizontally (X)
+  // left/right handles are entered horizontally → spread vertically (Y)
+  const targetOffsetOnX = targetPosition === "top" || targetPosition === "bottom";
+  const sourceOffsetOnX = sourcePosition === "top" || sourcePosition === "bottom";
 
   const tOff = bundleOffset(targetRank, targetCount);
   const sOff = bundleOffset(sourceRank, sourceCount);
 
-  const adjTargetX = isHorizontalFlow ? targetX : targetX + tOff;
-  const adjTargetY = isHorizontalFlow ? targetY + tOff : targetY;
-  const adjSourceX = isHorizontalFlow ? sourceX : sourceX + sOff;
-  const adjSourceY = isHorizontalFlow ? sourceY + sOff : sourceY;
+  const adjTargetX = targetOffsetOnX ? targetX + tOff : targetX;
+  const adjTargetY = targetOffsetOnX ? targetY : targetY + tOff;
+  const adjSourceX = sourceOffsetOnX ? sourceX + sOff : sourceX;
+  const adjSourceY = sourceOffsetOnX ? sourceY : sourceY + sOff;
 
-  const [edgePath, labelX, labelY] = getBezierPath({
+  // Right-angle routing with rounded corners — never crosses sibling edges
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX: adjSourceX,
     sourceY: adjSourceY,
     sourcePosition,
     targetX: adjTargetX,
     targetY: adjTargetY,
     targetPosition,
+    borderRadius: 10,
   });
 
   const defaultColor = theme === "light" ? "#64748b" : "#94a3b8";
@@ -86,7 +104,7 @@ export function CustomEdge({
 
   const strokeColor =
     pathType === "yes" ? "#22c55e" : pathType === "no" ? "#ef4444" : selected ? selectedColor : defaultColor;
-  const strokeWidth = selected ? 2.5 : 2;
+  const strokeWidth = selected ? 2.5 : 1.5;
 
   const visible = selected || hovered;
 
@@ -126,14 +144,14 @@ export function CustomEdge({
           <path
             d={edgePath}
             stroke="rgba(74,222,128,0.22)"
-            strokeWidth={10}
+            strokeWidth={8}
             fill="none"
             strokeLinecap="round"
           />
           <path
             d={edgePath}
             stroke="rgba(74,222,128,0.95)"
-            strokeWidth={5}
+            strokeWidth={4}
             fill="none"
             strokeLinecap="round"
             strokeDasharray="10 16"
@@ -142,7 +160,7 @@ export function CustomEdge({
           <path
             d={edgePath}
             stroke="rgba(134,239,172,0.55)"
-            strokeWidth={5}
+            strokeWidth={4}
             fill="none"
             strokeLinecap="round"
             strokeDasharray="10 16"
