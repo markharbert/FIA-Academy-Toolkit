@@ -148,7 +148,12 @@ export function CustomEdge({
 
   const sourceNode = getNode(source);
   const isTrafficEdge = sourceNode?.type === "trafficSource";
-  const isEmailSequence = sourceNode?.type === "emailNode" && targetNode?.type === "emailNode";
+  // Purple "sequence" treatment:
+  // • email → email  (chain between sequence steps)
+  // • capturePage → email  (entry point into the sequence)
+  const isEmailSequence =
+    (sourceNode?.type === "emailNode" && targetNode?.type === "emailNode") ||
+    (sourceNode?.type === "capturePage" && targetNode?.type === "emailNode");
 
   // Email→email sequence edges: dashed indigo/violet to signal "chain"
   const sequenceColor = theme === "light" ? "#8b5cf6" : "#a78bfa";
