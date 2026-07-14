@@ -352,7 +352,7 @@ function DuplicateButton({ id }: { id: string }) {
 
   return (
     <button
-      className={`absolute top-1.5 left-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center border transition-colors cursor-pointer hover:bg-indigo-500/80 hover:text-white hover:border-indigo-400/60 ${
+      className={`absolute top-1.5 left-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center border transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-indigo-500/80 hover:text-white hover:border-indigo-400/60 ${
         theme === "light"
           ? "bg-white border-gray-200 text-gray-400"
           : "bg-black/50 border-white/15 text-white/40"
@@ -422,7 +422,7 @@ function DeleteButton({ id }: { id: string }) {
 
   return (
     <button
-      className={`absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center border transition-colors cursor-pointer hover:bg-red-500/80 hover:text-white hover:border-red-400/60 ${
+      className={`absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full flex items-center justify-center border transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-red-500/80 hover:text-white hover:border-red-400/60 ${
         theme === "light"
           ? "bg-white border-gray-200 text-gray-400"
           : "bg-black/50 border-white/15 text-white/40"
@@ -536,7 +536,7 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
   }
 
   return (
-    <div className={containerCls} style={{ width: 148, ...containerStyle }} data-testid="funnel-node-trafficSource">
+    <div className={`${containerCls} group`} style={{ width: 148, ...containerStyle }} data-testid="funnel-node-trafficSource">
       <Handles />
       <DuplicateButton id={id} />
       <DeleteButton id={id} />
@@ -609,7 +609,7 @@ function EmailNode({ id, data, selected }: NodeProps) {
     : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${accentColor ? "" : cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
 
   return (
-    <div className={containerCls} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid="funnel-node-emailNode">
+    <div className={`${containerCls} group`} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid="funnel-node-emailNode">
       <Handles />
       <DuplicateButton id={id} />
       <DeleteButton id={id} />
@@ -652,7 +652,7 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
     : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${accentColor ? "" : cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
 
   return (
-    <div className={containerCls} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid={`funnel-node-${nodeData.nodeType}`}>
+    <div className={`${containerCls} group`} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid={`funnel-node-${nodeData.nodeType}`}>
       <Handles />
       <DuplicateButton id={id} />
       <DeleteButton id={id} />
@@ -700,7 +700,7 @@ function DelayNode({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`relative flex items-center gap-2.5 px-3 py-2 border-2 border-dashed rounded-2xl shadow-lg transition-all select-none`}
+      className={`relative flex items-center gap-2.5 px-3 py-2 border-2 border-dashed rounded-2xl shadow-lg transition-all select-none group`}
       style={{
         background: `rgba(0,0,0,0.65)`,
         borderColor: c,
@@ -753,7 +753,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
         handleStyle={{ background: "#a16207", border: "1px solid #854d0e", width: 9, height: 9, borderRadius: 3 }}
       />
       <div
-        className={`relative w-full h-full flex flex-col border-2 shadow-lg bg-yellow-300/95 ${nodeData.accentColor ? "" : "border-yellow-400/80"} rounded-md overflow-hidden ${selected ? "ring-2 ring-yellow-700/40" : ""}`}
+        className={`relative w-full h-full flex flex-col border-2 shadow-lg bg-yellow-300/95 ${nodeData.accentColor ? "" : "border-yellow-400/80"} rounded-md overflow-hidden ${selected ? "ring-2 ring-yellow-700/40" : ""} group`}
         style={nodeData.accentColor ? { borderColor: nodeData.accentColor as string } : undefined}
         data-testid="funnel-node-note"
       >
