@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps, useReactFlow, NodeResizer } from "@xyflow/react";
+import { Handle, Position, type NodeProps, useReactFlow, NodeResizer, useStore } from "@xyflow/react";
 import { useCallback, useState, useRef, useEffect } from "react";
 import {
   Mail, MessageSquare, Search, Mic, StickyNote, Globe, X, Copy,
@@ -804,8 +804,11 @@ function DelayNode({ id, data, selected }: NodeProps) {
 function NoteNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
   const { setNodes } = useReactFlow();
+  const zoom = useStore((s) => s.transform[2]);
   const accent = (nodeData.accentColor as string | undefined) ?? "#FDE047";
   const editorRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [popup, setPopup] = useState<{ x: number; y: number } | null>(null);
 
   const updateData = useCallback(
     (updates: Partial<FunnelNodeData>) => {
@@ -816,7 +819,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
     [id, setNodes]
   );
 
-  // Sync external changes (e.g. undo) into the DOM only when editor is not focused
+  // Sync external changes (e.g. undo) into DOM only when editor is not focused
   useEffect(() => {
     if (editorRef.current && document.activeElement !== editorRef.current) {
       editorRef.current.innerHTML = nodeData.notes ?? "";
@@ -828,98 +831,150 @@ function NoteNode({ id, data, selected }: NodeProps) {
     document.execCommand(cmd, false, value);
   };
 
-  const stopAll = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const checkSelection = () => {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.toString().length === 0 || !editorRef.current?.contains(sel.anchorNode)) {
+        setPopup(null);
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const selRect = range.getBoundingClientRect();
+      const wrapRect = wrapperRef.current?.getBoundingClientRect();
+      if (!wrapRect) return;
+      setPopup({
+        x: (selRect.left - wrapRect.left + selRect.width / 2) / zoom,
+        y: (selRect.top - wrapRect.top) / zoom,
+      });
+    }, 10);
   };
-
-  const toolbarBtn = (label: string, cmd: string, value: string | undefined, extraCls: string, testId: string) => (
-    <button
-      onMouseDown={(e) => { stopAll(e); fmt(cmd, value); }}
-      className={`w-5 h-5 text-[10px] rounded flex items-center justify-center transition-colors hover:bg-black/15 active:bg-black/25 ${extraCls}`}
-      style={{ color: "rgba(0,0,0,0.6)" }}
-      title={label}
-      data-testid={testId}
-    >
-      {label}
-    </button>
-  );
 
   return (
     <>
       <NodeResizer
         isVisible={selected}
         minWidth={150}
-        minHeight={110}
+        minHeight={90}
         lineStyle={{ border: `1.5px solid ${accent}99` }}
         handleStyle={{ background: accent, border: `1px solid ${accent}cc`, width: 9, height: 9, borderRadius: 3 }}
       />
-      <div
-        className="relative w-full h-full flex flex-col border-2 shadow-lg rounded-md overflow-hidden group"
-        style={{
-          backgroundColor: accent + "e8",
-          borderColor: accent,
-          ...(selected ? { outline: `2px solid ${accent}55`, outlineOffset: "2px" } : {}),
-        }}
-        data-testid="funnel-node-note"
-      >
-        <DuplicateButton id={id} />
-        <DeleteButton id={id} />
-
-        {/* Header strip */}
+      {/* Outer wrapper — overflow visible so floating popup can escape the note box */}
+      <div ref={wrapperRef} style={{ position: "relative", width: "100%", height: "100%" }}>
+        {/* Note box */}
         <div
-          className="flex items-center gap-1.5 px-3 pt-2 pb-1 border-b shrink-0"
-          style={{ backgroundColor: accent + "70", borderBottomColor: accent + "55" }}
+          className="absolute inset-0 flex flex-col border-2 shadow-lg rounded-md overflow-hidden group"
+          style={{
+            backgroundColor: accent + "e8",
+            borderColor: accent,
+            ...(selected ? { outline: `2px solid ${accent}55`, outlineOffset: "2px" } : {}),
+          }}
+          data-testid="funnel-node-note"
         >
-          <StickyNote className="h-3 w-3 shrink-0" style={{ color: "rgba(0,0,0,0.45)" }} />
-          <input
-            value={nodeData.label ?? "Note"}
-            onChange={(e) => updateData({ label: e.target.value })}
+          <DuplicateButton id={id} />
+          <DeleteButton id={id} />
+
+          {/* Header strip */}
+          <div
+            className="flex items-center gap-1.5 px-3 pt-2 pb-1 border-b shrink-0"
+            style={{ backgroundColor: accent + "70", borderBottomColor: accent + "55" }}
+          >
+            <StickyNote className="h-3 w-3 shrink-0" style={{ color: "rgba(0,0,0,0.45)" }} />
+            <input
+              value={nodeData.label ?? "Note"}
+              onChange={(e) => updateData({ label: e.target.value })}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 bg-transparent text-[10px] font-bold uppercase tracking-widest outline-none border-none truncate"
+              style={{ color: "rgba(0,0,0,0.6)", caretColor: "rgba(0,0,0,0.6)" }}
+              placeholder="Title…"
+            />
+          </div>
+
+          {/* Rich-text body */}
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={() => { if (editorRef.current) updateData({ notes: editorRef.current.innerHTML }); }}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 bg-transparent text-[10px] font-bold uppercase tracking-widest outline-none border-none truncate"
-            style={{ color: "rgba(0,0,0,0.6)", caretColor: "rgba(0,0,0,0.6)" }}
-            placeholder="Title…"
+            onMouseUp={checkSelection}
+            onKeyUp={checkSelection}
+            onBlur={() => { setTimeout(() => setPopup(null), 120); }}
+            className="flex-1 min-h-0 w-full px-3 py-2 text-[11px] leading-snug outline-none overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-black/30 empty:before:pointer-events-none"
+            style={{ color: "#1a1a1a", caretColor: "#1a1a1a" }}
+            data-placeholder="Write your note here…"
+            dangerouslySetInnerHTML={{ __html: nodeData.notes ?? "" }}
           />
         </div>
 
-        {/* Formatting toolbar */}
-        <div
-          className="flex items-center gap-0.5 px-2 py-1 border-b shrink-0"
-          style={{ backgroundColor: accent + "50", borderBottomColor: accent + "40" }}
-        >
-          {toolbarBtn("B", "bold",      undefined, "font-bold",   "button-note-bold")}
-          {toolbarBtn("I", "italic",    undefined, "italic",      "button-note-italic")}
-          {toolbarBtn("U", "underline", undefined, "underline",   "button-note-underline")}
-          <div className="w-px h-3 mx-0.5 shrink-0" style={{ backgroundColor: "rgba(0,0,0,0.2)" }} />
-          {/* Font size buttons */}
-          {(["S","M","L","XL"] as const).map((sz, i) => (
-            <button
-              key={sz}
-              onMouseDown={(e) => { stopAll(e); fmt("fontSize", String(i + 2)); }}
-              className="px-1 h-5 text-[8px] rounded flex items-center justify-center transition-colors hover:bg-black/15 active:bg-black/25"
-              style={{ color: "rgba(0,0,0,0.55)", fontSize: `${8 + i}px`, fontWeight: i >= 2 ? 600 : 400 }}
-              title={`Font size: ${sz}`}
-              data-testid={`button-note-size-${sz.toLowerCase()}`}
+        {/* Floating format popup — appears above selected text */}
+        {popup && (
+          <div
+            style={{
+              position: "absolute",
+              left: popup.x,
+              top: popup.y,
+              transform: "translate(-50%, calc(-100% - 6px))",
+              zIndex: 1000,
+              pointerEvents: "all",
+            }}
+          >
+            <div
+              className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg shadow-2xl border"
+              style={{ backgroundColor: accent, borderColor: "rgba(0,0,0,0.15)" }}
             >
-              A
-            </button>
-          ))}
-        </div>
+              {/* B / I / U */}
+              {[
+                { label: "B", cmd: "bold",      cls: "font-bold" },
+                { label: "I", cmd: "italic",    cls: "italic"    },
+                { label: "U", cmd: "underline", cls: "underline" },
+              ].map(({ label, cmd, cls }) => (
+                <button
+                  key={cmd}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    fmt(cmd);
+                    checkSelection();
+                  }}
+                  className={`w-6 h-6 text-[11px] rounded flex items-center justify-center hover:bg-black/15 transition-colors ${cls}`}
+                  style={{ color: "rgba(0,0,0,0.7)" }}
+                  data-testid={`button-note-${cmd}`}
+                >
+                  {label}
+                </button>
+              ))}
 
-        {/* Rich-text body */}
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={() => { if (editorRef.current) updateData({ notes: editorRef.current.innerHTML }); }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-h-0 w-full px-3 py-2 text-[11px] leading-snug outline-none overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-black/30 empty:before:pointer-events-none"
-          style={{ color: "#1a1a1a", caretColor: "#1a1a1a" }}
-          data-placeholder="Write your note here…"
-          dangerouslySetInnerHTML={{ __html: nodeData.notes ?? "" }}
-        />
+              {/* Divider */}
+              <div className="w-px h-3.5 mx-0.5" style={{ backgroundColor: "rgba(0,0,0,0.2)" }} />
+
+              {/* Font size: A buttons, visually growing */}
+              {([
+                { label: "S", val: "2", size: 8  },
+                { label: "M", val: "3", size: 10 },
+                { label: "L", val: "4", size: 13 },
+                { label: "XL", val: "5", size: 16 },
+              ]).map(({ label, val, size }) => (
+                <button
+                  key={label}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    fmt("fontSize", val);
+                    checkSelection();
+                  }}
+                  className="w-6 h-6 rounded flex items-center justify-center hover:bg-black/15 transition-colors font-semibold"
+                  style={{ color: "rgba(0,0,0,0.65)", fontSize: size }}
+                  title={`Size ${label}`}
+                  data-testid={`button-note-size-${label.toLowerCase()}`}
+                >
+                  A
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
