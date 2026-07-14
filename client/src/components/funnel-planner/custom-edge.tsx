@@ -414,50 +414,46 @@ export function CustomEdge({
         </>
       )}
 
-      {/* Animated email traffic flow — email → page (amber) with travelling arrows */}
+      {/* Animated email traffic flow — email → page (amber).
+          15 items flow along the path together: every 5th is an arrow,
+          the rest are dashes — one unified stream, no secondary layer. */}
       {isEmailTrafficEdge && !pathType && (
         <>
           {/* Soft amber glow halo */}
           <path
             d={edgePath}
-            stroke="rgba(251,191,36,0.18)"
+            stroke="rgba(251,191,36,0.15)"
             strokeWidth={8}
             fill="none"
             strokeLinecap="round"
           />
-          {/* Flowing amber dashes */}
-          <path
-            d={edgePath}
-            stroke="rgba(217,119,6,0.9)"
-            strokeWidth={3}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray="10 22"
-            style={{ animation: "traffic-flow 2.2s linear infinite" }}
-          />
-          <path
-            d={edgePath}
-            stroke="rgba(251,191,36,0.5)"
-            strokeWidth={3}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray="10 22"
-            style={{ animation: "traffic-flow 2.2s linear infinite", animationDelay: "-1.1s" }}
-          />
-          {/* Arrows travelling along the path — 3 evenly staggered */}
-          {([-2.2 * 0, -2.2 / 3, -2.2 * 2 / 3] as number[]).map((delay, i) => (
-            <g key={i} style={{ pointerEvents: "none" }}>
-              <animateMotion
-                dur="2.2s"
-                repeatCount="indefinite"
-                begin={`${delay.toFixed(2)}s`}
-                rotate="auto"
-              >
-                <mpath href={`#${id}`} />
-              </animateMotion>
-              <ArrowIcon color="rgba(251,191,36,0.95)" />
-            </g>
-          ))}
+          {Array.from({ length: 15 }, (_, i) => {
+            const isArrow = i % 5 === 4;
+            const delay = -(i * (2.2 / 15));
+            const color = selected ? selectedColor : "rgba(217,119,6,0.92)";
+            return (
+              <g key={i} style={{ pointerEvents: "none" }}>
+                <animateMotion
+                  dur="2.2s"
+                  repeatCount="indefinite"
+                  begin={`${delay.toFixed(3)}s`}
+                  rotate="auto"
+                >
+                  <mpath href={`#${id}`} />
+                </animateMotion>
+                {isArrow ? (
+                  <ArrowIcon color={color} />
+                ) : (
+                  <line
+                    x1="-5" y1="0" x2="5" y2="0"
+                    stroke={color}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                )}
+              </g>
+            );
+          })}
         </>
       )}
 
