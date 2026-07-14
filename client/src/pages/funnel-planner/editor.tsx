@@ -436,7 +436,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               size="sm"
               variant="outline"
               onClick={() => setShareOpen(true)}
-              className="h-7 text-xs"
+              className="h-7 text-xs text-white border-white/30 hover:bg-white/10 hover:text-white bg-transparent"
               data-testid="button-share-funnel"
             >
               <Share2 className="h-3.5 w-3.5 mr-1" />
@@ -446,7 +446,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               size="sm"
               variant="outline"
               onClick={exportPng}
-              className="h-7 text-xs"
+              className="h-7 text-xs text-white border-white/30 hover:bg-white/10 hover:text-white bg-transparent"
               data-testid="button-export-png"
             >
               <Download className="h-3.5 w-3.5 mr-1" />
