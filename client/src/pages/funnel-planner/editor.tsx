@@ -674,6 +674,16 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
         {/* ReactFlow Canvas */}
         <div className="flex-1 relative" ref={reactFlowWrapper} onDragOver={onDragOver} onDrop={onDrop}>
+          {/* Auto-arrange button — sits above the zoom controls (bottom-left) */}
+          <button
+            onClick={handleAutoLayout}
+            title="Auto Arrange"
+            className="absolute z-10 flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors shadow"
+            style={{ bottom: "106px", left: "10px" }}
+            data-testid="button-auto-layout"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+          </button>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -694,16 +704,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             style={{ background: "#0d1424" }}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e2d4a" />
-            <Panel position="bottom-left" style={{ marginBottom: "96px", marginLeft: "10px" }}>
-              <button
-                onClick={handleAutoLayout}
-                title="Auto Arrange"
-                className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors shadow"
-                data-testid="button-auto-layout"
-              >
-                <Wand2 className="w-3.5 h-3.5" />
-              </button>
-            </Panel>
             <Controls className="!bg-[hsl(230,45%,11%)] !border-white/10" />
             <MiniMap
               className="!bg-[hsl(230,45%,9%)] !border-white/10"
