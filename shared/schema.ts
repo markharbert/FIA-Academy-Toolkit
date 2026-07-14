@@ -1912,6 +1912,8 @@ export const funnels = pgTable("funnels", {
   description: text("description"),
   canvasData: jsonb("canvas_data").notNull().default(sql`'{"nodes":[],"edges":[]}'::jsonb`),
   thumbnailData: text("thumbnail_data"),
+  shareToken: varchar("share_token", { length: 64 }).unique(),
+  sharePasswordHash: text("share_password_hash"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

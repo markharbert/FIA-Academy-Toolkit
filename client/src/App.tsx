@@ -40,6 +40,7 @@ import ProjectDetailPage from "@/pages/project-detail";
 import TemplateDetailPage from "@/pages/template-detail";
 import FunnelPlannerIndexPage from "@/pages/funnel-planner/index";
 import FunnelPlannerEditorPage from "@/pages/funnel-planner/editor";
+import FunnelSharePage from "@/pages/funnel-planner/share";
 import CfLoginPage from "@/pages/cf-login";
 import MemberLoginPage from "@/pages/member-login";
 import WorkspaceInviteAcceptPage from "@/pages/workspace-invite-accept";
@@ -381,6 +382,7 @@ function App() {
             <Route path="/cf-login">{() => <CfLoginPage />}</Route>
             <Route path="/member-login">{() => <MemberLoginPage />}</Route>
             <Route path="/workspace/accept">{() => <WorkspaceInviteAcceptPage />}</Route>
+            <Route path="/funnels/share/:token">{() => <FunnelSharePage />}</Route>
             <Route>{() => <AppLayout />}</Route>
           </Switch>
           <Toaster />

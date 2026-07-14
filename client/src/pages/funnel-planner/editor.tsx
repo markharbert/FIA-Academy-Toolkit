@@ -27,7 +27,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { toPng } from "html-to-image";
 
 const NODE_TYPE_LIST = Object.entries(NODE_CONFIGS) as [FunnelNodeType, typeof NODE_CONFIGS[FunnelNodeType]][];
@@ -61,6 +63,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [palettePinned, setPalettePinned] = useState(true);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Share state
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(funnel.shareToken ?? null);
+  const [hasPassword, setHasPassword] = useState(!!funnel.sharePasswordHash);
+  const [sharePassword, setSharePassword] = useState("");
+  const [usePassword, setUsePassword] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
 
   // Serialize to stable JSON string so debounce only fires on actual content changes,
   // not on every render that recreates the object reference.
@@ -252,6 +262,49 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     reader.readAsDataURL(file);
   }, [updateSelectedNodeData, toast]);
 
+  const shareUrl = shareToken ? `${window.location.origin}/funnels/share/${shareToken}` : null;
+
+  const handleGenerateShareLink = useCallback(async () => {
+    setShareLoading(true);
+    try {
+      const res = await apiRequest("POST", `/api/funnels/${funnel.id}/share`, {
+        password: usePassword && sharePassword ? sharePassword : null,
+      });
+      const data = await res.json() as { shareToken: string; hasPassword: boolean };
+      setShareToken(data.shareToken);
+      setHasPassword(data.hasPassword);
+      setSharePassword("");
+      queryClient.invalidateQueries({ queryKey: ["/api/funnels", funnel.id] });
+      toast({ title: "Share link created!", description: "Anyone with the link can view this funnel." });
+    } catch {
+      toast({ title: "Failed to create link", variant: "destructive" });
+    } finally {
+      setShareLoading(false);
+    }
+  }, [funnel.id, usePassword, sharePassword, toast]);
+
+  const handleRevokeShareLink = useCallback(async () => {
+    setShareLoading(true);
+    try {
+      await apiRequest("DELETE", `/api/funnels/${funnel.id}/share`);
+      setShareToken(null);
+      setHasPassword(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/funnels", funnel.id] });
+      toast({ title: "Share link revoked" });
+    } catch {
+      toast({ title: "Failed to revoke link", variant: "destructive" });
+    } finally {
+      setShareLoading(false);
+    }
+  }, [funnel.id, toast]);
+
+  const handleCopyLink = useCallback(() => {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast({ title: "Link copied to clipboard!" });
+    });
+  }, [shareUrl, toast]);
+
   const exportPng = useCallback(async () => {
     const el = document.querySelector(".react-flow__viewport") as HTMLElement | null;
     if (!el) return;
@@ -346,6 +399,16 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             <Button
               size="sm"
               variant="outline"
+              onClick={() => setShareOpen(true)}
+              className="h-7 text-xs"
+              data-testid="button-share-funnel"
+            >
+              <Share2 className="h-3.5 w-3.5 mr-1" />
+              Share
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={exportPng}
               className="h-7 text-xs"
               data-testid="button-export-png"
@@ -354,6 +417,143 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               Export PNG
             </Button>
           </div>
+
+          {/* Share Dialog */}
+          <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+            <DialogContent className="bg-[hsl(230,45%,11%)] border-white/10 text-white max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-white">
+                  <Share2 className="h-5 w-5 text-violet-400" />
+                  Share Funnel
+                </DialogTitle>
+                <DialogDescription className="text-white/40">
+                  Create a view-only link so clients can see this funnel without an account.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-1">
+                {shareToken ? (
+                  <>
+                    {/* Active link section */}
+                    <div className="rounded-lg bg-white/[0.04] border border-white/10 p-3 space-y-2">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                        <span className="text-xs text-emerald-400 font-medium">Link active</span>
+                        {hasPassword && (
+                          <span className="ml-1 flex items-center gap-0.5 text-xs text-amber-400">
+                            <Lock className="w-3 h-3" /> Password protected
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          readOnly
+                          value={shareUrl ?? ""}
+                          className="flex-1 bg-white/[0.04] border-white/10 text-white/70 text-xs h-8 font-mono"
+                          data-testid="input-share-url"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCopyLink}
+                          className="h-8 px-3 shrink-0 border-white/10 text-white/70 hover:text-white"
+                          data-testid="button-copy-share-link"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Regenerate section */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-white/50 uppercase tracking-wide flex items-center gap-1.5">
+                          <Lock className="w-3 h-3" /> Password protection
+                        </Label>
+                        <Switch
+                          checked={usePassword}
+                          onCheckedChange={setUsePassword}
+                          data-testid="switch-use-password"
+                        />
+                      </div>
+                      {usePassword && (
+                        <Input
+                          type="password"
+                          value={sharePassword}
+                          onChange={(e) => setSharePassword(e.target.value)}
+                          placeholder="Set a new password"
+                          className="bg-white/[0.04] border-white/10 text-white text-sm"
+                          data-testid="input-share-new-password"
+                        />
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleGenerateShareLink}
+                        disabled={shareLoading || (usePassword && !sharePassword)}
+                        className="w-full h-8 text-xs border-white/10 text-white/60 hover:text-white"
+                        data-testid="button-regenerate-share-link"
+                      >
+                        {shareLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+                        Regenerate link
+                      </Button>
+                    </div>
+
+                    <div className="h-px bg-white/[0.07]" />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleRevokeShareLink}
+                      disabled={shareLoading}
+                      className="w-full h-8 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      data-testid="button-revoke-share-link"
+                    >
+                      {shareLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Trash2 className="w-3.5 h-3.5 mr-1.5" />}
+                      Revoke link
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {/* No active link */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-white/50 uppercase tracking-wide flex items-center gap-1.5">
+                          <Lock className="w-3 h-3" /> Password protection
+                        </Label>
+                        <Switch
+                          checked={usePassword}
+                          onCheckedChange={setUsePassword}
+                          data-testid="switch-use-password"
+                        />
+                      </div>
+                      {usePassword && (
+                        <Input
+                          type="password"
+                          value={sharePassword}
+                          onChange={(e) => setSharePassword(e.target.value)}
+                          placeholder="Enter a password for this link"
+                          className="bg-white/[0.04] border-white/10 text-white text-sm"
+                          data-testid="input-share-password-set"
+                        />
+                      )}
+                    </div>
+                    <Button
+                      onClick={handleGenerateShareLink}
+                      disabled={shareLoading || (usePassword && !sharePassword)}
+                      className="w-full"
+                      data-testid="button-create-share-link"
+                    >
+                      {shareLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Share2 className="w-4 h-4 mr-2" />}
+                      Create share link
+                    </Button>
+                  </>
+                )}
+              </div>
+              <DialogFooter className="text-[11px] text-white/25">
+                Viewers can see the funnel but cannot edit it.
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* ReactFlow Canvas */}

@@ -10619,6 +10619,108 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── Funnel sharing ──────────────────────────────────────────────────────────
+
+  // Public endpoint — no auth required — returns read-only funnel data by share token
+  // Password-protected funnels require a follow-up POST to /unlock with { password } in body
+  app.get("/api/funnels/share/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const funnel = await storage.getFunnelByShareToken(token);
+      if (!funnel) return res.status(404).json({ message: "Share link not found or has been revoked." });
+
+      if (funnel.sharePasswordHash) {
+        return res.status(401).json({ message: "Password required", passwordRequired: true });
+      }
+
+      res.json({
+        id: funnel.id,
+        name: funnel.name,
+        description: funnel.description,
+        canvasData: funnel.canvasData,
+        thumbnailData: funnel.thumbnailData,
+        updatedAt: funnel.updatedAt,
+      });
+    } catch (err) {
+      console.error("[funnels/share] get error:", err);
+      res.status(500).json({ message: "Failed to load shared funnel" });
+    }
+  });
+
+  // Public endpoint — password unlock for protected share links (password in POST body, never in URL)
+  app.post("/api/funnels/share/:token/unlock", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body as { password?: string };
+      if (!password || typeof password !== "string") {
+        return res.status(400).json({ message: "Password is required" });
+      }
+      const funnel = await storage.getFunnelByShareToken(token);
+      if (!funnel) return res.status(404).json({ message: "Share link not found or has been revoked." });
+      if (!funnel.sharePasswordHash) {
+        return res.json({
+          id: funnel.id,
+          name: funnel.name,
+          description: funnel.description,
+          canvasData: funnel.canvasData,
+          thumbnailData: funnel.thumbnailData,
+          updatedAt: funnel.updatedAt,
+        });
+      }
+      const valid = await bcrypt.compare(password, funnel.sharePasswordHash);
+      if (!valid) return res.status(401).json({ message: "Incorrect password", passwordRequired: true });
+      res.json({
+        id: funnel.id,
+        name: funnel.name,
+        description: funnel.description,
+        canvasData: funnel.canvasData,
+        thumbnailData: funnel.thumbnailData,
+        updatedAt: funnel.updatedAt,
+      });
+    } catch (err) {
+      console.error("[funnels/share] unlock error:", err);
+      res.status(500).json({ message: "Failed to unlock shared funnel" });
+    }
+  });
+
+  // Generate (or regenerate) a share token for a funnel
+  app.post("/api/funnels/:id/share", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const schema = z.object({ password: z.string().max(100).optional().nullable() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
+
+      const existing = await storage.getFunnelById(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Funnel not found" });
+      if (existing.userId !== userId) return res.status(403).json({ message: "Access denied" });
+
+      const token = crypto.randomBytes(24).toString("hex");
+      const passwordHash = parsed.data.password ? await bcrypt.hash(parsed.data.password, 10) : null;
+
+      const updated = await storage.setFunnelShareToken(req.params.id, userId, token, passwordHash);
+      res.json({ shareToken: updated?.shareToken, hasPassword: !!updated?.sharePasswordHash });
+    } catch (err) {
+      console.error("[funnels/share] create error:", err);
+      res.status(500).json({ message: "Failed to create share link" });
+    }
+  });
+
+  // Revoke a share token
+  app.delete("/api/funnels/:id/share", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const existing = await storage.getFunnelById(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Funnel not found" });
+      if (existing.userId !== userId) return res.status(403).json({ message: "Access denied" });
+      await storage.clearFunnelShareToken(req.params.id, userId);
+      res.status(204).end();
+    } catch (err) {
+      console.error("[funnels/share] revoke error:", err);
+      res.status(500).json({ message: "Failed to revoke share link" });
+    }
+  });
+
   // Funnel planner: capture a page screenshot via Microlink
   app.post("/api/funnels/screenshot", requireAuth, async (req: Request, res: Response) => {
     const { url } = req.body as { url?: string };

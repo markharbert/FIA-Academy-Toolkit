@@ -540,8 +540,11 @@ export interface IStorage {
   getFunnelsByUser(userId: string): Promise<Funnel[]>;
   getFunnelById(id: string): Promise<Funnel | undefined>;
   getFunnel(id: string, userId: string): Promise<Funnel | undefined>;
+  getFunnelByShareToken(token: string): Promise<Funnel | undefined>;
   createFunnel(userId: string, data: { name: string; description?: string; canvasData?: any }): Promise<Funnel>;
   updateFunnel(id: string, userId: string, data: Partial<{ name: string; description: string; canvasData: any; thumbnailData: string }>): Promise<Funnel | undefined>;
+  setFunnelShareToken(id: string, userId: string, token: string, passwordHash: string | null): Promise<Funnel | undefined>;
+  clearFunnelShareToken(id: string, userId: string): Promise<Funnel | undefined>;
   duplicateFunnel(id: string, userId: string): Promise<Funnel | undefined>;
   deleteFunnel(id: string, userId: string): Promise<void>;
 
@@ -4723,6 +4726,27 @@ export class DatabaseStorage implements IStorage {
       description: original.description,
       canvasData: original.canvasData,
     }).returning();
+    return row;
+  }
+
+  async getFunnelByShareToken(token: string): Promise<Funnel | undefined> {
+    const [row] = await db.select().from(funnels).where(eq(funnels.shareToken, token));
+    return row;
+  }
+
+  async setFunnelShareToken(id: string, userId: string, token: string, passwordHash: string | null): Promise<Funnel | undefined> {
+    const [row] = await db.update(funnels)
+      .set({ shareToken: token, sharePasswordHash: passwordHash, updatedAt: new Date() })
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
+      .returning();
+    return row;
+  }
+
+  async clearFunnelShareToken(id: string, userId: string): Promise<Funnel | undefined> {
+    const [row] = await db.update(funnels)
+      .set({ shareToken: null, sharePasswordHash: null, updatedAt: new Date() })
+      .where(and(eq(funnels.id, id), eq(funnels.userId, userId)))
+      .returning();
     return row;
   }
 

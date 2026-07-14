@@ -736,6 +736,11 @@ async function runStartupMigrations() {
       CREATE INDEX IF NOT EXISTS funnels_user_id_updated_at_idx ON funnels (user_id, updated_at DESC)
     `);
     console.log("[startup] funnels migration complete");
+
+    // Add share token columns to funnels
+    await db.execute(sql`ALTER TABLE funnels ADD COLUMN IF NOT EXISTS share_token VARCHAR(64) UNIQUE`);
+    await db.execute(sql`ALTER TABLE funnels ADD COLUMN IF NOT EXISTS share_password_hash TEXT`);
+    console.log("[startup] funnels share columns migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }
