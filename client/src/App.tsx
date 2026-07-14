@@ -242,10 +242,10 @@ function ProtectedRoutes() {
       <Route path="/projects/:id">
         {() => <ProtectedRoute component={ProjectDetailPage} />}
       </Route>
-      <Route path="/funnel-planner/:id">
+      <Route path="/funnel-grid/:id">
         {() => <ProtectedRoute component={FunnelPlannerEditorPage} />}
       </Route>
-      <Route path="/funnel-planner">
+      <Route path="/funnel-grid">
         {() => <ProtectedRoute component={FunnelPlannerIndexPage} />}
       </Route>
       <Route path="/help">

@@ -87,12 +87,12 @@ const allNavItems: NavItem[] = [
     collaboratorVisible: true,
   },
   {
-    title: "Funnel Planner",
-    url: "/funnel-planner",
+    title: "Funnel Grid",
+    url: "/funnel-grid",
     icon: GitFork,
     iconColor: "text-violet-400",
-    testId: "nav-funnel-planner",
-    matchPaths: ["/funnel-planner"],
+    testId: "nav-funnel-grid",
+    matchPaths: ["/funnel-grid"],
     collaboratorVisible: false,
   },
   {

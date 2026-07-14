@@ -160,7 +160,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
         setSaveStatus("saved");
       }
     } catch { /* navigate anyway */ }
-    setLocation("/funnel-planner");
+    setLocation("/funnel-grid");
   }, [funnel.id, funnelName, canvasJson, setLocation]);
 
   const onConnect = useCallback(
@@ -1104,8 +1104,8 @@ export default function FunnelPlannerEditor() {
     return (
       <div className="flex flex-col items-center justify-center gap-4" style={{ height: "calc(100vh - 48px)" }}>
         <p className="text-white/50">Funnel not found.</p>
-        <Button variant="outline" onClick={() => setLocation("/funnel-planner")}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Funnel Planner
+        <Button variant="outline" onClick={() => setLocation("/funnel-grid")}>
+          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Funnel Grid
         </Button>
       </div>
     );

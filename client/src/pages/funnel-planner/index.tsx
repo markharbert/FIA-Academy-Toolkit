@@ -58,7 +58,7 @@ export default function FunnelPlannerIndex() {
       setNewName("");
       setNewDescription("");
       setSelectedTemplate(null);
-      setLocation(`/funnel-planner/${funnel.id}`);
+      setLocation(`/funnel-grid/${funnel.id}`);
     },
     onError: () => toast({ title: "Error", description: "Failed to create funnel", variant: "destructive" }),
   });
@@ -88,7 +88,7 @@ export default function FunnelPlannerIndex() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <GitFork className="h-6 w-6 text-violet-400" />
-            <h1 className="text-2xl font-bold text-white">Funnel Planner</h1>
+            <h1 className="text-2xl font-bold text-white">Funnel Grid</h1>
           </div>
           <p className="text-white/50 text-sm">Visualize and plan your sales funnels on a drag-and-drop canvas.</p>
         </div>
@@ -128,7 +128,7 @@ export default function FunnelPlannerIndex() {
               <Card
                 key={funnel.id}
                 className="bg-card border hover:border-violet-500/60 transition-all cursor-pointer group overflow-hidden"
-                onClick={() => setLocation(`/funnel-planner/${funnel.id}`)}
+                onClick={() => setLocation(`/funnel-grid/${funnel.id}`)}
                 data-testid={`card-funnel-${funnel.id}`}
               >
                 {/* Colored header strip */}
