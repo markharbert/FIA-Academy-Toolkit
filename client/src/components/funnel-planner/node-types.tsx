@@ -279,7 +279,7 @@ function ZoomSVG({ c }: { c: string }) {
 
 function EmailNodeSVG({ c }: { c: string }) {
   return (
-    <svg viewBox="0 0 148 96" width="148" height="96">
+    <svg viewBox="0 0 148 96" width="100%" height="100%">
       <rect x="0" y="0" width="148" height="96" fill="rgba(0,0,0,0.5)" />
       <rect x="10" y="14" width="128" height="70" rx="6" fill="white" fillOpacity="0.92" stroke="rgba(0,0,0,0.6)" strokeWidth="2" />
       <path d="M10,14 L74,56 L138,14" stroke="rgba(0,0,0,0.55)" strokeWidth="2.5" fill="none" strokeLinejoin="round" />
