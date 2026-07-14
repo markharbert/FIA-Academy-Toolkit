@@ -646,7 +646,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
       {/* Right Settings Panel */}
       {selectedNode && (
-        <div className="w-64 shrink-0 bg-[hsl(230,45%,9%)] border-l border-white/10 overflow-y-auto">
+        <div className="w-80 shrink-0 bg-[hsl(230,45%,9%)] border-l border-white/10 overflow-y-auto">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <span className="text-sm font-semibold text-white">Node Settings</span>
             <button
