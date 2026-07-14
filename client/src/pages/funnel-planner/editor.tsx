@@ -630,6 +630,20 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               nodeColor="#6366f1"
               maskColor="rgba(0,0,0,0.6)"
             />
+            <Panel position="top-right">
+              <button
+                onClick={() => setBrainOpen((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all shadow-lg ${
+                  brainOpen
+                    ? "bg-violet-600/90 border-violet-400/80 text-white"
+                    : "bg-[hsl(230,45%,13%)] border-white/20 text-white/70 hover:text-white hover:border-violet-400/60 hover:bg-violet-500/10"
+                }`}
+                data-testid="button-funnel-brain-canvas"
+              >
+                <Brain className="h-3.5 w-3.5 text-violet-300" />
+                Funnel Brain
+              </button>
+            </Panel>
             {nodes.length === 0 && (
               <Panel position="top-center">
                 <div className="text-white/25 text-sm mt-24 text-center select-none">
