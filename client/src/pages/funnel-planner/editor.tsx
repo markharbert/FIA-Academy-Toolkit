@@ -355,68 +355,72 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
 
-    const H_GAP = 60;   // horizontal space between nodes in the same row
-    const V_GAP = 160;  // vertical space between the two rows
+    const H_GAP = 60;          // horizontal gap between nodes in the same row
+    const V_GAP = 100;         // vertical gap between detected rows
+    const ROW_THRESHOLD = 120; // nodes within this many px vertically are in the same row
 
-    // Split nodes into tiers:
-    //   Row 0 — funnel page nodes (traffic source + all actual pages)
-    //   Row 1 — email / follow-up nodes
-    //   Notes  — left as-is (they float wherever the user placed them)
-    const pageNodes = nodes
-      .filter((n) => {
-        const t = (n.data as FunnelNodeData).nodeType;
-        return t !== "emailNode" && t !== "note";
-      })
-      .sort((a, b) => a.position.x - b.position.x); // keep left-to-right order
+    // Compute each node's vertical center
+    const withCenter = nodes.map((n) => ({
+      node: n,
+      centerY: n.position.y + (n.measured?.height ?? 160) / 2,
+    }));
 
-    const emailNodes = nodes
-      .filter((n) => (n.data as FunnelNodeData).nodeType === "emailNode")
-      .sort((a, b) => {
-        const da = (a.data as FunnelNodeData).emailDay ?? 0;
-        const db = (b.data as FunnelNodeData).emailDay ?? 0;
-        return da !== db ? da - db : a.position.x - b.position.x;
+    // Sort by vertical center, then cluster into rows
+    withCenter.sort((a, b) => a.centerY - b.centerY);
+
+    const rows: (typeof withCenter)[] = [];
+    for (const item of withCenter) {
+      const lastRow = rows[rows.length - 1];
+      if (!lastRow) {
+        rows.push([item]);
+      } else {
+        const lastCenter = lastRow[lastRow.length - 1].centerY;
+        if (Math.abs(item.centerY - lastCenter) <= ROW_THRESHOLD) {
+          lastRow.push(item);
+        } else {
+          rows.push([item]);
+        }
+      }
+    }
+
+    // For each row: sort left-to-right, compute the total row width,
+    // then center it around the global center X of all nodes.
+    const allCenterX =
+      nodes.reduce((sum, n) => sum + n.position.x + (n.measured?.width ?? 148) / 2, 0) /
+      nodes.length;
+
+    const posMap = new Map<string, { x: number; y: number }>();
+    let cursorY = 0;
+
+    rows.forEach((row) => {
+      // Sort within row by X position
+      row.sort((a, b) => a.node.position.x - b.node.position.x);
+
+      // Row height = tallest node in this row
+      const rowHeight = Math.max(...row.map((item) => item.node.measured?.height ?? 160));
+
+      // Total row width
+      const totalW =
+        row.reduce((sum, item) => sum + (item.node.measured?.width ?? 148), 0) +
+        Math.max(0, row.length - 1) * H_GAP;
+
+      // Start X so the row is centered on allCenterX
+      let x = allCenterX - totalW / 2;
+      // Row Y: top of this row
+      const y = cursorY;
+
+      row.forEach((item) => {
+        const w = item.node.measured?.width ?? 148;
+        posMap.set(item.node.id, { x, y });
+        x += w + H_GAP;
       });
 
-    const noteNodes = nodes.filter((n) => (n.data as FunnelNodeData).nodeType === "note");
-
-    // Helper: compute total row width given a list of nodes
-    const rowWidth = (list: typeof nodes) =>
-      list.reduce((sum, n) => sum + (n.measured?.width ?? 148), 0) +
-      Math.max(0, list.length - 1) * H_GAP;
-
-    // Row 0: place page nodes starting at x = 0, y = 0
-    let maxRow0Height = 0;
-    let x = 0;
-    const row0Positions = pageNodes.map((n) => {
-      const w = n.measured?.width ?? 148;
-      const h = n.measured?.height ?? 160;
-      const pos = { x, y: 0 };
-      x += w + H_GAP;
-      maxRow0Height = Math.max(maxRow0Height, h);
-      return pos;
+      cursorY += rowHeight + V_GAP;
     });
-
-    // Row 1: center email nodes below row 0
-    const row1Y = maxRow0Height + V_GAP;
-    const row0W = rowWidth(pageNodes);
-    const row1W = rowWidth(emailNodes);
-    const row1StartX = Math.max(0, (row0W - row1W) / 2);
-    x = row1StartX;
-    const row1Positions = emailNodes.map((n) => {
-      const w = n.measured?.width ?? 148;
-      const pos = { x, y: row1Y };
-      x += w + H_GAP;
-      return pos;
-    });
-
-    // Build updated nodes array
-    const posMap = new Map<string, { x: number; y: number }>();
-    pageNodes.forEach((n, i) => posMap.set(n.id, row0Positions[i]));
-    emailNodes.forEach((n, i) => posMap.set(n.id, row1Positions[i]));
 
     const laid = nodes.map((n) => {
       const pos = posMap.get(n.id);
-      return pos ? { ...n, position: pos } : n; // notes keep their current position
+      return pos ? { ...n, position: pos } : n;
     });
 
     setNodes(laid);
