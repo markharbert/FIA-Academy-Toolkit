@@ -890,6 +890,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
             <input
               value={nodeData.label ?? "Note"}
               onChange={(e) => updateData({ label: e.target.value })}
+              onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
               className="flex-1 bg-transparent text-[10px] font-bold uppercase tracking-widest outline-none border-none truncate"
@@ -903,9 +904,11 @@ function NoteNode({ id, data, selected }: NodeProps) {
             ref={editorRef}
             contentEditable
             suppressContentEditableWarning
+            tabIndex={0}
             onInput={() => { if (editorRef.current) updateData({ notes: editorRef.current.innerHTML }); }}
+            onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); editorRef.current?.focus(); }}
             onMouseUp={checkSelection}
             onKeyUp={checkSelection}
             onBlur={() => { setTimeout(() => setPopup(null), 120); }}
