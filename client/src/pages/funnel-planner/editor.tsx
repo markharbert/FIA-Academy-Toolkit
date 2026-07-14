@@ -293,6 +293,8 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
         const label =
           nodeType === "emailNode"
             ? `Email ${nds.filter((n) => (n.data as FunnelNodeData).nodeType === "emailNode").length + 1}`
+            : nodeType === "smsNode"
+            ? `SMS ${nds.filter((n) => (n.data as FunnelNodeData).nodeType === "smsNode").length + 1}`
             : cfg.label;
         const newNode: Node = {
           id: genId(),

@@ -26,7 +26,8 @@ export type FunnelNodeType =
   | "downsell"
   | "externalLink"
   | "delay"
-  | "note";
+  | "note"
+  | "smsNode";
 
 export interface FunnelNodeData {
   label: string;
@@ -44,6 +45,8 @@ export interface FunnelNodeData {
   emailSubject?: string;
   emailBody?: string;
   emailDay?: number;
+  smsBody?: string;
+  smsDay?: number;
   delayAmount?: number;
   delayUnit?: string;
   delayDirection?: "before" | "after";
@@ -99,6 +102,7 @@ export const NODE_CONFIGS: Record<FunnelNodeType, {
   externalLink:  { label: "External Link",  color: "text-slate-300",   lightColor: "text-slate-600",   hexColor: "#94A3B8", bg: "bg-slate-800/80",  border: "border-slate-500/60",  lightBorder: "border-slate-300",  icon: ExternalLink,  description: "Link to external resource" },
   delay:         { label: "Delay",          color: "text-amber-300",   lightColor: "text-amber-600",   hexColor: "#F59E0B", bg: "bg-amber-950/60",  border: "border-amber-500/50",  lightBorder: "border-amber-400",  icon: Timer,         description: "Wait X hours / days / weeks" },
   note:          { label: "Note",           color: "text-yellow-300",  lightColor: "text-yellow-700",  hexColor: "#FDE047", bg: "bg-yellow-950/60", border: "border-yellow-500/50", lightBorder: "border-yellow-300", icon: StickyNote,    description: "Sticky note / annotation" },
+  smsNode:       { label: "SMS",            color: "text-emerald-300", lightColor: "text-emerald-600", hexColor: "#10B981", bg: "bg-emerald-950/80",border: "border-emerald-500/60",lightBorder: "border-emerald-300",icon: MessageSquare, description: "Single SMS / text message" },
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -289,6 +293,20 @@ function EmailNodeSVG({ c }: { c: string }) {
   );
 }
 
+function SmsNodeSVG({ c }: { c: string }) {
+  return (
+    <svg viewBox="0 0 148 96" width="100%" height="100%">
+      <rect x="0" y="0" width="148" height="96" fill="rgba(0,0,0,0.5)" />
+      <rect x="44" y="6" width="60" height="84" rx="9" fill="white" fillOpacity="0.08" stroke={c} strokeWidth="1.5" strokeOpacity="0.5" />
+      <rect x="50" y="16" width="48" height="56" rx="3" fill="white" fillOpacity="0.05" />
+      <rect x="54" y="22" width="26" height="11" rx="5.5" fill={c} fillOpacity="0.65" />
+      <rect x="68" y="38" width="24" height="11" rx="5.5" fill="white" fillOpacity="0.22" />
+      <rect x="54" y="54" width="20" height="10" rx="5" fill={c} fillOpacity="0.45" />
+      <circle cx="74" cy="82" r="5" stroke={c} strokeWidth="1.2" fill="none" strokeOpacity="0.5" />
+    </svg>
+  );
+}
+
 function ExternalLinkSVG({ c }: { c: string }) {
   return (
     <svg viewBox="0 0 148 96" width="148" height="96">
@@ -319,6 +337,7 @@ const MOCKUPS: Record<FunnelNodeType, (c: string) => React.ReactNode> = {
   webinar:       (c) => <WebinarSVG c={c} />,
   zoom:          (c) => <ZoomSVG c={c} />,
   emailNode:     (c) => <EmailNodeSVG c={c} />,
+  smsNode:       (c) => <SmsNodeSVG c={c} />,
   externalLink:  (c) => <ExternalLinkSVG c={c} />,
   trafficSource: (_c) => null,
   delay:         (_c) => null,
@@ -637,6 +656,48 @@ function EmailNode({ id, data, selected }: NodeProps) {
   );
 }
 
+/* ─── SMS NODE ─── */
+function SmsNode({ id, data, selected }: NodeProps) {
+  const nodeData = data as FunnelNodeData;
+  const theme = useCanvasTheme();
+  const cfg = NODE_CONFIGS.smsNode;
+  const day = nodeData.smsDay as number | undefined;
+  const body = nodeData.smsBody as string | undefined;
+  const accentColor = nodeData.accentColor as string | undefined;
+
+  const containerCls = theme === "light"
+    ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${accentColor ? "" : cfg.lightBorder} ${selected ? "ring-2 ring-emerald-400 ring-offset-1" : ""}`
+    : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${accentColor ? "" : cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
+
+  return (
+    <div className={`${containerCls} group`} style={{ width: 96, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid="funnel-node-smsNode">
+      <Handles />
+      <DuplicateButton id={id} />
+      <DeleteButton id={id} />
+      <div className="overflow-hidden" style={{ height: 60 }}>
+        <SmsNodeSVG c={accentColor ?? cfg.hexColor} />
+      </div>
+      <div className={`px-2 py-1.5 border-t ${theme === "light" ? "border-gray-100" : "border-white/[0.08]"}`}>
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span
+            className={`text-[9px] font-bold uppercase tracking-widest ${accentColor ? "" : (theme === "light" ? cfg.lightColor : cfg.color)}`}
+            style={accentColor ? { color: accentColor } : undefined}
+          >SMS</span>
+          {day !== undefined && (
+            <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full ${theme === "light" ? "bg-emerald-50 text-emerald-700" : `bg-white/10 ${cfg.color}`}`}>Day {day}</span>
+          )}
+        </div>
+        <div className={`text-xs font-semibold leading-tight truncate ${theme === "light" ? "text-gray-900" : "text-white"}`}>
+          {nodeData.label || "Untitled SMS"}
+        </div>
+        {body && (
+          <div className={`text-[10px] mt-0.5 leading-tight line-clamp-1 ${theme === "light" ? "text-gray-500" : "text-white/40"}`}>{body}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── PAGE NODES ─── */
 function FunnelPageNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
@@ -800,4 +861,5 @@ export const nodeTypes: Record<string, React.ComponentType<NodeProps>> = {
   externalLink:  FunnelPageNode,
   delay:         DelayNode,
   note:          NoteNode,
+  smsNode:       SmsNode,
 };
