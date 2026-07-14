@@ -199,6 +199,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           id: genId(),
           type: nodeType,
           position,
+          ...(nodeType === "note" ? { style: { width: 220, height: 150 } } : {}),
           data: {
             label, nodeType, description: "",
             ...(nodeType === "trafficSource" ? { pickingMode: true } : {}),

@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
+import { Handle, Position, type NodeProps, useReactFlow, NodeResizer } from "@xyflow/react";
 import { useCallback, useState } from "react";
 import {
   Mail, MessageSquare, Search, Mic, StickyNote, Globe, X,
@@ -583,21 +583,54 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
 /* ─── NOTE NODE ─── */
 function NoteNode({ id, data, selected }: NodeProps) {
   const nodeData = data as FunnelNodeData;
+  const { setNodes } = useReactFlow();
+
+  const updateData = useCallback(
+    (updates: Partial<FunnelNodeData>) => {
+      setNodes((nds) =>
+        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...updates } } : n))
+      );
+    },
+    [id, setNodes]
+  );
+
   return (
-    <div
-      className={`relative border-2 shadow-lg bg-yellow-400/90 border-yellow-300 rounded-md ${selected ? "ring-2 ring-yellow-600/50" : ""}`}
-      style={{ width: 148, minHeight: 70 }}
-      data-testid="funnel-node-note"
-    >
-      <DeleteButton id={id} />
-      <div className="px-3 py-2.5">
-        <div className="text-[9px] font-bold uppercase tracking-widest text-yellow-900/70 mb-1">Note</div>
-        <div className="text-yellow-950 text-xs font-semibold leading-tight">{nodeData.label}</div>
-        {nodeData.notes && (
-          <div className="text-yellow-900/70 text-[10px] mt-1 leading-snug">{nodeData.notes}</div>
-        )}
+    <>
+      <NodeResizer
+        isVisible={selected}
+        minWidth={150}
+        minHeight={90}
+        lineStyle={{ border: "1.5px solid #a16207" }}
+        handleStyle={{ background: "#a16207", border: "1px solid #854d0e", width: 9, height: 9, borderRadius: 3 }}
+      />
+      <div
+        className={`relative w-full h-full flex flex-col border-2 shadow-lg bg-yellow-300/95 border-yellow-400/80 rounded-md overflow-hidden ${selected ? "ring-2 ring-yellow-700/40" : ""}`}
+        data-testid="funnel-node-note"
+      >
+        <DeleteButton id={id} />
+        {/* Header strip */}
+        <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 bg-yellow-400/60 border-b border-yellow-500/30 shrink-0">
+          <StickyNote className="h-3 w-3 text-yellow-800/70 shrink-0" />
+          <input
+            value={nodeData.label ?? "Note"}
+            onChange={(e) => updateData({ label: e.target.value })}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 bg-transparent text-[10px] font-bold uppercase tracking-widest text-yellow-900 outline-none border-none placeholder:text-yellow-800/40 truncate"
+            placeholder="Title…"
+          />
+        </div>
+        {/* Body */}
+        <textarea
+          value={nodeData.notes ?? ""}
+          onChange={(e) => updateData({ notes: e.target.value })}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="flex-1 min-h-0 w-full px-3 py-2 bg-transparent text-yellow-950 text-[11px] leading-snug outline-none border-none resize-none placeholder:text-yellow-800/40"
+          placeholder="Write your note here…"
+        />
       </div>
-    </div>
+    </>
   );
 }
 
