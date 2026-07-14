@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, Eye, ThumbsUp, MessageSquare, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus, Wand2, Brain, Clock, Tags } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, Eye, ThumbsUp, MessageSquare, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus, Wand2, Brain, Clock, Tags, Video } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1494,6 +1494,23 @@ export default function TopicPulseScriptPage() {
     if (payload) saveToTeleprompterMutation.mutate(payload);
   };
 
+  const handleSaveAndGoToTeleprompter = () => {
+    if (savedTeleprompterScriptId) {
+      navigate(`/teleprompter?script=${savedTeleprompterScriptId}`);
+      return;
+    }
+    if (!editedScriptJson?.fullScript || !script) return;
+    const payload = buildTeleprompterContent();
+    if (!payload) return;
+    saveToTeleprompterMutation.mutate(payload, {
+      onSuccess: (data: any) => {
+        const id = data?.id ?? null;
+        if (id) navigate(`/teleprompter?script=${id}`);
+        else navigate("/teleprompter");
+      },
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-full flex items-center justify-center">
@@ -1890,6 +1907,59 @@ export default function TopicPulseScriptPage() {
                     <p className="text-xs text-muted-foreground">
                       Fill in your outline sections, then click <strong>Generate Full Script</strong> above.
                     </p>
+                  </div>
+                )}
+
+                {/* ── Record CTA — appears once a full script exists ── */}
+                {editedScriptJson?.expandedScript && (
+                  <div className={`rounded-xl border p-5 flex flex-col sm:flex-row sm:items-center gap-4 ${
+                    savedTeleprompterScriptId
+                      ? "bg-emerald-500/8 border-emerald-500/20"
+                      : "bg-violet-500/8 border-violet-500/20"
+                  }`}>
+                    <div className="flex-1">
+                      {savedTeleprompterScriptId ? (
+                        <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 mb-0.5">
+                          <Check className="h-4 w-4 shrink-0" />
+                          <span className="font-semibold text-sm">Script saved to Teleprompter</span>
+                        </div>
+                      ) : (
+                        <p className="font-semibold text-sm text-violet-600 dark:text-violet-400 mb-0.5">
+                          Ready to record your video?
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {savedTeleprompterScriptId
+                          ? "Open the Teleprompter to scroll through your script while you record."
+                          : "Save your script to the Teleprompter, then scroll through it while you record your video."}
+                      </p>
+                    </div>
+                    <div className="shrink-0">
+                      {savedTeleprompterScriptId ? (
+                        <Button
+                          onClick={() => navigate(`/teleprompter?script=${savedTeleprompterScriptId}`)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-semibold"
+                          data-testid="button-open-teleprompter"
+                        >
+                          <Video className="h-4 w-4 mr-1.5" />
+                          Open in Teleprompter
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={handleSaveAndGoToTeleprompter}
+                          disabled={saveToTeleprompterMutation.isPending}
+                          className="bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold"
+                          data-testid="button-save-open-teleprompter"
+                        >
+                          {saveToTeleprompterMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                          ) : (
+                            <Video className="h-4 w-4 mr-1.5" />
+                          )}
+                          Save & Open in Teleprompter
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

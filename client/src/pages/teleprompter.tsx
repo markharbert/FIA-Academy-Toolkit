@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 // (initial auto-select uses a ref so explicit "New script" / delete actions
 //  aren't reverted by the effect)
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -139,18 +139,24 @@ export default function TeleprompterPage() {
     [scripts, selectedId],
   );
 
-  // Auto-select the most recent script only on first successful load.
+  const search = useSearch();
+
+  // Auto-select on first successful load. If a ?script=id param is present
+  // (e.g. arriving from the script editor flow), select that script; otherwise
+  // fall back to the most recently saved script.
   const didInitialSelectRef = useRef(false);
   useEffect(() => {
     if (didInitialSelectRef.current) return;
     if (!scripts) return;
     didInitialSelectRef.current = true;
     if (scripts.length > 0) {
-      const first = scripts[0];
-      setSelectedId(first.id);
-      setTitle(first.title);
-      setContent(first.content);
-      setBulletPoints(first.bulletPoints || "");
+      const params = new URLSearchParams(search);
+      const paramId = params.get("script");
+      const target = (paramId ? scripts.find((s) => s.id === paramId) : null) ?? scripts[0];
+      setSelectedId(target.id);
+      setTitle(target.title);
+      setContent(target.content);
+      setBulletPoints(target.bulletPoints || "");
       setDirty(false);
     }
   }, [scripts]);

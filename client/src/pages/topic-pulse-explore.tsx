@@ -649,6 +649,7 @@ export default function TopicPulseExplorePage() {
                     <Button 
                       onClick={() => scriptMutation.mutate(selectedTopic.id)}
                       disabled={scriptMutation.isPending}
+                      className="bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold"
                       data-testid="button-generate-script"
                     >
                       {scriptMutation.isPending ? (
@@ -656,7 +657,7 @@ export default function TopicPulseExplorePage() {
                       ) : (
                         <FileText className="h-4 w-4 mr-2" />
                       )}
-                      Generate Script
+                      {scriptMutation.isPending ? "Generating…" : "Generate Script →"}
                     </Button>
                     <Button 
                       variant="outline" 
