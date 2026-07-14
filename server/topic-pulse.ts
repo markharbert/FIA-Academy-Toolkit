@@ -682,7 +682,7 @@ export async function generateHookVariations(
 TOPIC: ${topic.topicTitle}
 KEYWORD: ${topic.keywordQuery}
 INTENTS: ${topic.intents?.join(", ") || "general"}
-${intentAnalysis ? `\nSEARCHER INTENT: ${intentAnalysis}` : ""}
+${intentAnalysis ? `\nSEARCHER INTENT ANALYSIS (this is critical — read it carefully before writing anything. Use it to understand the exact emotional state, hidden fear, core desire, and urgency driving someone to search this keyword. Every word of your hook should speak directly to what this analysis reveals):\n${intentAnalysis}` : ""}
 
 CURRENT HOOK (for reference — do NOT reuse this, write something genuinely different):
 ${currentHook}
