@@ -888,10 +888,10 @@ function NoteNode({ id, data, selected }: NodeProps) {
           <DuplicateButton id={id} />
           <DeleteButton id={id} />
 
-          {/* Header strip */}
+          {/* Header strip — slightly darker than body via black overlay */}
           <div
             className="flex items-center gap-1.5 px-3 pt-2 pb-1 border-b shrink-0"
-            style={{ backgroundColor: accent + "70", borderBottomColor: accent + "55" }}
+            style={{ background: `linear-gradient(rgba(0,0,0,0.18), rgba(0,0,0,0.18)), ${accent}`, borderBottomColor: `${accent}99` }}
           >
             <StickyNote className="h-3 w-3 shrink-0" style={{ color: "rgba(0,0,0,0.45)" }} />
             <input
