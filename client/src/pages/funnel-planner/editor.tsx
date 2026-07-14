@@ -14,6 +14,8 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type NodeChange,
+  type EdgeChange,
   ReactFlowProvider,
   useReactFlow,
   Panel,
@@ -27,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain, Wand2, Sun, Moon, BookMarked } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { CanvasThemeContext, type CanvasTheme } from "@/components/funnel-planner/canvas-theme-context";
 import dagre from "dagre";
@@ -78,6 +80,57 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
       return next;
     });
   }, []);
+
+  // ── Undo / Redo ───────────────────────────────────────────
+  type Snapshot = { nodes: Node[]; edges: Edge[] };
+  const pastRef  = useRef<Snapshot[]>([]);
+  const futureRef = useRef<Snapshot[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const pushHistory = useCallback(() => {
+    pastRef.current = [...pastRef.current.slice(-49), { nodes, edges }];
+    futureRef.current = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  }, [nodes, edges]);
+
+  const undo = useCallback(() => {
+    if (pastRef.current.length === 0) return;
+    const prev = pastRef.current[pastRef.current.length - 1];
+    pastRef.current = pastRef.current.slice(0, -1);
+    futureRef.current = [{ nodes, edges }, ...futureRef.current.slice(0, 49)];
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
+    setCanUndo(pastRef.current.length > 0);
+    setCanRedo(true);
+  }, [nodes, edges, setNodes, setEdges]);
+
+  const redo = useCallback(() => {
+    if (futureRef.current.length === 0) return;
+    const next = futureRef.current[0];
+    futureRef.current = futureRef.current.slice(1);
+    pastRef.current = [...pastRef.current.slice(-49), { nodes, edges }];
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setCanUndo(true);
+    setCanRedo(futureRef.current.length > 0);
+  }, [nodes, edges, setNodes, setEdges]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undo, redo]);
 
   // Close settings panel when the selected node is deleted
   useEffect(() => {
@@ -187,10 +240,32 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   }, [funnel.id, funnelName, canvasJson, setLocation]);
 
   const onConnect = useCallback(
-    (connection: Connection) =>
-      setEdges((eds) => addEdge({ ...connection, type: "custom", data: {} }, eds)),
-    [setEdges]
+    (connection: Connection) => {
+      pushHistory();
+      setEdges((eds) => addEdge({ ...connection, type: "custom", data: {} }, eds));
+    },
+    [setEdges, pushHistory]
   );
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      if (changes.some((c) => c.type === "remove")) pushHistory();
+      onNodesChange(changes);
+    },
+    [onNodesChange, pushHistory]
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      if (changes.some((c) => c.type === "remove")) pushHistory();
+      onEdgesChange(changes);
+    },
+    [onEdgesChange, pushHistory]
+  );
+
+  const onNodeDragStart = useCallback(() => {
+    pushHistory();
+  }, [pushHistory]);
 
 
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -211,6 +286,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
       event.preventDefault();
       const nodeType = event.dataTransfer.getData("application/funnel-node-type") as FunnelNodeType;
       if (!nodeType) return;
+      pushHistory();
       const cfg = NODE_CONFIGS[nodeType];
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       setNodes((nds) => {
@@ -809,6 +885,27 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
         {/* ReactFlow Canvas */}
         <div className="flex-1 relative" ref={reactFlowWrapper} onDragOver={onDragOver} onDrop={onDrop}>
+          {/* Undo / Redo buttons */}
+          <div className="absolute z-10 flex gap-1" style={{ bottom: "200px", left: "10px" }}>
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors shadow disabled:opacity-30 disabled:cursor-not-allowed"
+              data-testid="button-undo"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Y)"
+              className="flex items-center justify-center w-7 h-7 rounded bg-[hsl(230,45%,11%)] border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors shadow disabled:opacity-30 disabled:cursor-not-allowed"
+              data-testid="button-redo"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
           {/* Auto-arrange button — sits above the zoom controls (bottom-left) */}
           <button
             onClick={handleAutoLayout}
@@ -823,9 +920,10 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             <ReactFlow
               nodes={nodes}
               edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
+              onNodesChange={handleNodesChange}
+              onEdgesChange={handleEdgesChange}
               onConnect={onConnect}
+              onNodeDragStart={onNodeDragStart}
               onNodeDoubleClick={onNodeDoubleClick}
               onPaneClick={onPaneClick}
               nodeTypes={nodeTypes}
