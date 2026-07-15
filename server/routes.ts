@@ -8292,6 +8292,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   // ── Create project from funnel canvas ────────────────────────────────────────
   app.post("/api/projects/from-funnel", requireAuth, async (req: Request, res: Response) => {
+    console.log("[from-funnel] route hit, body:", JSON.stringify(req.body));
     try {
       const uid = getEffectiveUserId(req);
       const { funnelId } = req.body ?? {};
