@@ -29,7 +29,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2 } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2, ClipboardList } from "lucide-react";
+import { exportChecklist } from "@/components/funnel-planner/checklist-export";
 import { useAuth } from "@/lib/auth";
 import { CanvasThemeContext, type CanvasTheme } from "@/components/funnel-planner/canvas-theme-context";
 import dagre from "dagre";
@@ -665,6 +666,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               data-testid="button-toggle-canvas-theme"
             >
               {canvasTheme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              onClick={() => exportChecklist(nodes, funnelName)}
+              className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/35 hover:border-emerald-400/60 transition-colors"
+              data-testid="button-export-checklist"
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              Checklist PDF
             </button>
             <button
               onClick={exportPng}
