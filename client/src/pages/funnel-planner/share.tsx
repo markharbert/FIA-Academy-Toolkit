@@ -13,6 +13,7 @@ import type { Node, Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { nodeTypes } from "@/components/funnel-planner/node-types";
 import { edgeTypes } from "@/components/funnel-planner/custom-edge";
+import { CanvasThemeContext } from "@/components/funnel-planner/canvas-theme-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,27 +114,31 @@ function SharedCanvas({ funnel }: { funnel: SharedFunnel }) {
 
       {/* Canvas */}
       <div className="flex-1 relative">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          elementsSelectable={false}
-          zoomOnDoubleClick={false}
-          style={{ background: "#0d1424" }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e2d4a" />
-          <Controls showInteractive={false} className="!bg-[hsl(230,45%,11%)] !border-white/10" />
-          <MiniMap
-            className="!bg-[hsl(230,45%,9%)] !border-white/10"
-            nodeColor="#6366f1"
-            maskColor="rgba(0,0,0,0.6)"
-          />
-        </ReactFlow>
+        <CanvasThemeContext.Provider value="dark">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            defaultEdgeOptions={{ type: "custom", data: {} }}
+            connectionMode="loose"
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            zoomOnDoubleClick={false}
+            style={{ background: "#0d1424" }}
+          >
+            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e2d4a" />
+            <Controls showInteractive={false} className="!bg-[hsl(230,45%,11%)] !border-white/10" />
+            <MiniMap
+              className="!bg-[hsl(230,45%,9%)] !border-white/10"
+              nodeColor="#6366f1"
+              maskColor="rgba(0,0,0,0.6)"
+            />
+          </ReactFlow>
+        </CanvasThemeContext.Provider>
       </div>
     </div>
   );
