@@ -628,6 +628,41 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                   onDragStart={(e) => {
                     e.dataTransfer.setData("application/funnel-node-type", type);
                     e.dataTransfer.effectAllowed = "move";
+
+                    // Build a solid-background ghost so it stays visible over any canvas color
+                    const ghost = document.createElement("div");
+                    ghost.style.cssText = [
+                      "position:fixed",
+                      "top:-1000px",
+                      "left:-1000px",
+                      "display:flex",
+                      "align-items:center",
+                      "gap:10px",
+                      "padding:8px 14px 8px 10px",
+                      "background:hsl(230,45%,10%)",
+                      `border:1px solid ${cfg.hexColor}`,
+                      "border-radius:8px",
+                      "font-family:inherit",
+                      "font-size:13px",
+                      "font-weight:500",
+                      "white-space:nowrap",
+                      "pointer-events:none",
+                      "box-shadow:0 6px 24px rgba(0,0,0,0.7)",
+                      "opacity:0.95",
+                    ].join(";");
+
+                    const accent = document.createElement("div");
+                    accent.style.cssText = `width:3px;height:26px;border-radius:2px;background:${cfg.hexColor};flex-shrink:0`;
+                    ghost.appendChild(accent);
+
+                    const label = document.createElement("span");
+                    label.textContent = cfg.label;
+                    label.style.color = cfg.hexColor;
+                    ghost.appendChild(label);
+
+                    document.body.appendChild(ghost);
+                    e.dataTransfer.setDragImage(ghost, -12, 20);
+                    requestAnimationFrame(() => document.body.removeChild(ghost));
                   }}
                   className={`relative flex items-center gap-3 pl-4 pr-3 py-3 rounded-lg border cursor-grab active:cursor-grabbing select-none transition-all hover:border-white/25 hover:bg-white/[0.07] hover:scale-[1.01] ${cfg.bg} ${cfg.border}`}
                   data-testid={`palette-node-${type}`}
