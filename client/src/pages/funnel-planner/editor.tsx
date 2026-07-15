@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Sparkles, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2 } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { CanvasThemeContext, type CanvasTheme } from "@/components/funnel-planner/canvas-theme-context";
 import dagre from "dagre";
@@ -68,7 +68,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const [palettePinned, setPalettePinned] = useState(true);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
-  const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>(() =>
     (localStorage.getItem("funnelCanvasTheme") as CanvasTheme) || "dark"
@@ -431,28 +430,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     });
   }, [shareUrl, toast]);
 
-  const handleDraftEmail = useCallback(async () => {
-    if (!selectedNode || isGeneratingEmail) return;
-    const nodeData = selectedNode.data as FunnelNodeData;
-    setIsGeneratingEmail(true);
-    try {
-      const res = await apiRequest("POST", `/api/funnels/${funnel.id}/draft-email`, {
-        subject: (nodeData.emailSubject as string | undefined)?.trim() ?? "",
-        emailDay: nodeData.emailDay,
-        label: nodeData.label,
-        nodeId: selectedNode.id,
-        nodes,
-        edges,
-      });
-      const data = await res.json() as { subject: string; body: string };
-      updateSelectedNodeData({ emailSubject: data.subject, emailBody: data.body });
-      toast({ title: "Email drafted!", description: "Subject and body generated — edit as needed." });
-    } catch {
-      toast({ title: "Draft failed", description: "Could not generate email. Try again.", variant: "destructive" });
-    } finally {
-      setIsGeneratingEmail(false);
-    }
-  }, [selectedNode, isGeneratingEmail, funnel.id, updateSelectedNodeData, toast, nodes, edges]);
 
   const exportPng = useCallback(async () => {
     const el = document.querySelector(".react-flow__viewport") as HTMLElement | null;
@@ -1240,19 +1217,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                   <p className="text-[10px] text-white/25 mt-1 leading-snug">Which day in the sequence this sends.</p>
                 </div>
 
-                {/* AI Draft button — generates subject + body together */}
-                <Button
-                  size="sm"
-                  onClick={handleDraftEmail}
-                  disabled={isGeneratingEmail}
-                  className="w-full gap-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 hover:text-cyan-200 border border-cyan-500/20 hover:border-cyan-400/30 transition-colors"
-                  data-testid="button-ai-draft-email"
-                >
-                  {isGeneratingEmail
-                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</>
-                    : <><Sparkles className="w-3.5 h-3.5" /> AI Draft Subject + Body</>}
-                </Button>
-
                 <div>
                   <Label className="text-xs text-white/50 uppercase tracking-wide">Subject Line</Label>
                   <Input
@@ -1270,7 +1234,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                     onChange={(e) => updateSelectedNodeData({ emailBody: e.target.value })}
                     className="mt-1 bg-white/[0.04] border-white/10 text-white text-sm resize-none"
                     style={{ minHeight: 200 }}
-                    placeholder="Click AI Draft above to generate, or write your email here…"
+                    placeholder="Write your email body here…"
                     data-testid="input-email-body"
                   />
                 </div>
