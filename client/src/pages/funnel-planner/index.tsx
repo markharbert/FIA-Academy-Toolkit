@@ -116,26 +116,30 @@ export default function FunnelPlannerIndex() {
   });
 
   return (
-    <div className="min-h-full bg-[hsl(230,50%,6%)]">
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <GitFork className="h-6 w-6 text-violet-400" />
-            <h1 className="text-2xl font-bold text-white">Funnel Grid</h1>
+    <div className="min-h-full">
+      {/* Dark hero strip — title + actions only */}
+      <div className="bg-[hsl(230,50%,6%)] px-6 py-6 border-b border-white/10">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <GitFork className="h-6 w-6 text-violet-400" />
+              <h1 className="text-2xl font-bold text-white">Funnel Grid</h1>
+            </div>
+            <p className="text-white/50 text-sm">Visualize and plan your sales funnels on a drag-and-drop canvas.</p>
           </div>
-          <p className="text-white/50 text-sm">Visualize and plan your sales funnels on a drag-and-drop canvas.</p>
+          <Button
+            onClick={() => setShowNewDialog(true)}
+            className="bg-violet-600 hover:bg-violet-700 text-white"
+            data-testid="button-new-funnel"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New Funnel
+          </Button>
         </div>
-        <Button
-          onClick={() => setShowNewDialog(true)}
-          className="bg-violet-600 hover:bg-violet-700 text-white"
-          data-testid="button-new-funnel"
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          New Funnel
-        </Button>
       </div>
 
+      {/* Card grid — normal page background */}
+      <div className="p-6 max-w-6xl mx-auto">
       {isLoading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
