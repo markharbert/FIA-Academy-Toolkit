@@ -254,6 +254,46 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [funnel.id]);
 
+  // Auto-generate canvas thumbnail (once on mount; regenerate if older than 24 h)
+  const thumbnailSavedRef = useRef(false);
+  useEffect(() => {
+    const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+    let existing: { data: string; ts: number } | null = null;
+    try { if (funnel.thumbnailData) existing = JSON.parse(funnel.thumbnailData); } catch {}
+    if (existing && Date.now() - existing.ts < TWENTY_FOUR_H) return;
+
+    const timer = setTimeout(async () => {
+      if (thumbnailSavedRef.current) return;
+      try {
+        const bg = localStorage.getItem("funnelCanvasTheme") === "light" ? "#f8fafc" : "#0f172a";
+        fitView({ padding: 0.15, duration: 0 });
+        await new Promise<void>((r) => setTimeout(r, 800));
+        const el = document.querySelector(".react-flow__renderer") as HTMLElement | null;
+        if (!el) return;
+        const dataUrl = await toPng(el, {
+          backgroundColor: bg,
+          pixelRatio: 0.5,
+          filter: (node) => node.nodeName !== "IMG",
+          cacheBust: true,
+        });
+        const res = await fetch(`/api/funnels/${funnel.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ thumbnailData: JSON.stringify({ data: dataUrl, ts: Date.now() }) }),
+          credentials: "include",
+        });
+        if (res.ok) {
+          thumbnailSavedRef.current = true;
+          queryClient.invalidateQueries({ queryKey: ["/api/funnels"] });
+        }
+      } catch (e) {
+        console.error("[thumbnail]", e);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Immediate flush-save before in-app navigation
   const handleBack = useCallback(async () => {
     setSaveStatus("saving");

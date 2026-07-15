@@ -19,6 +19,11 @@ function formatDate(d: Date | string) {
   return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+function parseThumbnail(raw: string | null | undefined): { data: string; ts: number } | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
 function countNodes(funnel: Funnel): number {
   try {
     const data = funnel.canvasData as { nodes?: unknown[] };
@@ -138,6 +143,7 @@ export default function FunnelPlannerIndex() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {funnels.map((funnel) => {
             const nodeCount = countNodes(funnel);
+            const thumbnail = parseThumbnail(funnel.thumbnailData);
             return (
               <Card
                 key={funnel.id}
@@ -145,8 +151,24 @@ export default function FunnelPlannerIndex() {
                 onClick={() => setLocation(`/funnel-grid/${funnel.id}`)}
                 data-testid={`card-funnel-${funnel.id}`}
               >
-                {/* Colored header strip */}
-                <div className="h-1.5 w-full bg-gradient-to-r from-violet-600 to-violet-400" />
+                {/* Thumbnail preview */}
+                {thumbnail ? (
+                  <div className="h-40 w-full overflow-hidden relative">
+                    <img
+                      src={thumbnail.data}
+                      alt={funnel.name}
+                      className="w-full h-full object-cover object-center"
+                      data-testid={`img-thumbnail-${funnel.id}`}
+                    />
+                    <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
+                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-600 to-violet-400" />
+                  </div>
+                ) : (
+                  <div className="h-40 w-full overflow-hidden relative bg-gradient-to-br from-violet-950/50 via-slate-900 to-slate-900 flex items-center justify-center">
+                    <GitFork className="h-14 w-14 text-violet-400/15" />
+                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-600 to-violet-400" />
+                  </div>
+                )}
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
