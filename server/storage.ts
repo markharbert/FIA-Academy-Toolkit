@@ -556,6 +556,7 @@ export interface IStorage {
   countFunnelBrainFiles(funnelId: string): Promise<number>;
   getFunnelTemplates(): Promise<import("@shared/schema").FunnelTemplate[]>;
   createFunnelTemplate(data: { name: string; description: string; canvasData: any; createdBy: string }): Promise<import("@shared/schema").FunnelTemplate>;
+  updateFunnelTemplate(id: string, data: { name?: string; description?: string }): Promise<FunnelTemplate>;
   deleteFunnelTemplate(id: string): Promise<void>;
 
   // Inbox Intel (Competitor Email Intelligence)
@@ -4808,6 +4809,14 @@ export class DatabaseStorage implements IStorage {
       canvasData: data.canvasData,
       createdBy: data.createdBy,
     }).returning();
+    return row;
+  }
+
+  async updateFunnelTemplate(id: string, data: { name?: string; description?: string }): Promise<FunnelTemplate> {
+    const [row] = await db.update(funnelTemplates)
+      .set({ ...(data.name !== undefined && { name: data.name }), ...(data.description !== undefined && { description: data.description }) })
+      .where(eq(funnelTemplates.id, id))
+      .returning();
     return row;
   }
 

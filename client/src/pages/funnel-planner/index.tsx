@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { GitFork, Plus, MoreVertical, Trash2, Copy, Loader2, Calendar, Layers, X } from "lucide-react";
+import { GitFork, Plus, MoreVertical, Trash2, Copy, Loader2, Calendar, Layers, X, Pencil, Check } from "lucide-react";
 
 function formatDate(d: Date | string) {
   return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -43,6 +43,9 @@ export default function FunnelPlannerIndex() {
   const [newDescription, setNewDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Funnel | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editTplName, setEditTplName] = useState("");
+  const [editTplDesc, setEditTplDesc] = useState("");
 
   const { data: funnels = [], isLoading } = useQuery<Funnel[]>({
     queryKey: ["/api/funnels"],
@@ -59,6 +62,17 @@ export default function FunnelPlannerIndex() {
       toast({ title: "Template deleted" });
     },
     onError: () => toast({ title: "Error", description: "Failed to delete template", variant: "destructive" }),
+  });
+
+  const updateTemplateMutation = useMutation({
+    mutationFn: ({ id, name, description }: { id: string; name: string; description: string }) =>
+      apiRequest("PATCH", `/api/funnel-templates/${id}`, { name, description }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/funnel-templates"] });
+      setEditingTemplateId(null);
+      toast({ title: "Template updated" });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update template", variant: "destructive" }),
   });
 
   const createMutation = useMutation({
@@ -282,29 +296,83 @@ export default function FunnelPlannerIndex() {
                   </div>
                 ) : templates.map((t) => (
                   <div key={t.id} className="relative group/tpl">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTemplate(t.id)}
-                      className={`w-full text-left rounded-lg border p-3 text-sm transition-colors pr-8 ${
-                        selectedTemplate === t.id
-                          ? "border-violet-500 bg-violet-500/10 text-foreground"
-                          : "border-border hover:border-border/60 text-muted-foreground hover:text-foreground"
-                      }`}
-                      data-testid={`option-template-${t.id}`}
-                    >
-                      <div className="font-medium">{t.name}</div>
-                      {t.description && <div className="text-xs text-muted-foreground mt-0.5">{t.description}</div>}
-                    </button>
-                    {user?.isAdmin && (
+                    {editingTemplateId === t.id ? (
+                      <div className="rounded-lg border border-violet-500 bg-violet-500/10 p-3 space-y-2">
+                        <Input
+                          value={editTplName}
+                          onChange={(e) => setEditTplName(e.target.value)}
+                          placeholder="Template name"
+                          className="h-7 text-sm"
+                          data-testid={`input-edit-template-name-${t.id}`}
+                          autoFocus
+                        />
+                        <Input
+                          value={editTplDesc}
+                          onChange={(e) => setEditTplDesc(e.target.value)}
+                          placeholder="Description (optional)"
+                          className="h-7 text-sm"
+                          data-testid={`input-edit-template-desc-${t.id}`}
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 text-xs bg-violet-600 hover:bg-violet-700 text-white px-3"
+                            disabled={updateTemplateMutation.isPending || !editTplName.trim()}
+                            onClick={() => updateTemplateMutation.mutate({ id: t.id, name: editTplName.trim(), description: editTplDesc.trim() })}
+                            data-testid={`button-save-template-${t.id}`}
+                          >
+                            {updateTemplateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                            Save
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setEditingTemplateId(null)}
+                            data-testid={`button-cancel-edit-template-${t.id}`}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); deleteTemplateMutation.mutate(t.id); }}
-                        className="absolute top-2 right-2 opacity-0 group-hover/tpl:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"
-                        title="Delete template"
-                        data-testid={`button-delete-template-${t.id}`}
+                        onClick={() => setSelectedTemplate(t.id)}
+                        className={`w-full text-left rounded-lg border p-3 text-sm transition-colors pr-16 ${
+                          selectedTemplate === t.id
+                            ? "border-violet-500 bg-violet-500/10 text-foreground"
+                            : "border-border hover:border-border/60 text-muted-foreground hover:text-foreground"
+                        }`}
+                        data-testid={`option-template-${t.id}`}
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <div className="font-medium">{t.name}</div>
+                        {t.description && <div className="text-xs text-muted-foreground mt-0.5">{t.description}</div>}
                       </button>
+                    )}
+                    {user?.isAdmin && editingTemplateId !== t.id && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/tpl:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setEditTplName(t.name); setEditTplDesc(t.description ?? ""); setEditingTemplateId(t.id); }}
+                          className="text-muted-foreground hover:text-violet-400"
+                          title="Edit template"
+                          data-testid={`button-edit-template-${t.id}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); deleteTemplateMutation.mutate(t.id); }}
+                          className="text-muted-foreground hover:text-red-400"
+                          title="Delete template"
+                          data-testid={`button-delete-template-${t.id}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}

@@ -11252,6 +11252,20 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  app.patch("/api/funnel-templates/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const body = z.object({
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+      }).parse(req.body);
+      const template = await storage.updateFunnelTemplate(req.params.id, body);
+      res.json(template);
+    } catch (err) {
+      console.error("[funnel-templates] update error:", err);
+      res.status(500).json({ message: "Failed to update template" });
+    }
+  });
+
   app.delete("/api/funnel-templates/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       await storage.deleteFunnelTemplate(req.params.id);
