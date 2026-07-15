@@ -116,6 +116,7 @@ export default function FunnelPlannerIndex() {
   });
 
   return (
+    <div className="min-h-full bg-[hsl(230,50%,6%)]">
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -174,7 +175,7 @@ export default function FunnelPlannerIndex() {
                       className="w-full h-full object-cover object-center"
                       data-testid={`img-thumbnail-${funnel.id}`}
                     />
-                    <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[hsl(230,50%,8%)] to-transparent" />
                     <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-600 to-violet-400" />
                   </div>
                 ) : (
@@ -417,6 +418,7 @@ export default function FunnelPlannerIndex() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
     </div>
   );
 }
