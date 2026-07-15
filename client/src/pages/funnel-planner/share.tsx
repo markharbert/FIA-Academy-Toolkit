@@ -17,7 +17,8 @@ import { CanvasThemeContext } from "@/components/funnel-planner/canvas-theme-con
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Lock, AlertTriangle, GitFork } from "lucide-react";
+import { Loader2, Lock, AlertTriangle, GitFork, Sun, Moon } from "lucide-react";
+import type { CanvasTheme } from "@/components/funnel-planner/canvas-theme-context";
 
 interface SharedFunnel {
   id: string;
@@ -99,6 +100,20 @@ function SharedCanvas({ funnel }: { funnel: SharedFunnel }) {
   const nodes: Node[] = funnel.canvasData?.nodes ?? [];
   const edges: Edge[] = funnel.canvasData?.edges ?? [];
 
+  const [theme, setTheme] = useState<CanvasTheme>(() =>
+    (localStorage.getItem("funnelCanvasTheme") as CanvasTheme) || "dark"
+  );
+
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next: CanvasTheme = prev === "dark" ? "light" : "dark";
+      localStorage.setItem("funnelCanvasTheme", next);
+      return next;
+    });
+  };
+
+  const isLight = theme === "light";
+
   return (
     <div className="flex flex-col" style={{ height: "100vh" }}>
       {/* Header */}
@@ -109,12 +124,22 @@ function SharedCanvas({ funnel }: { funnel: SharedFunnel }) {
             {funnel.name}
           </span>
         </div>
-        <span className="ml-auto text-[11px] text-white/30 shrink-0">View only</span>
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={toggleTheme}
+            title={isLight ? "Switch to dark canvas" : "Switch to light canvas"}
+            className="flex items-center justify-center w-7 h-7 rounded-md bg-white/[0.06] border border-white/10 text-white/60 hover:bg-white/10 hover:text-white/90 transition-colors"
+            data-testid="button-share-toggle-theme"
+          >
+            {isLight ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
+          </button>
+          <span className="text-[11px] text-white/30">View only</span>
+        </div>
       </div>
 
       {/* Canvas */}
       <div className="flex-1 relative">
-        <CanvasThemeContext.Provider value="dark">
+        <CanvasThemeContext.Provider value={theme}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -128,14 +153,25 @@ function SharedCanvas({ funnel }: { funnel: SharedFunnel }) {
             nodesConnectable={false}
             elementsSelectable={false}
             zoomOnDoubleClick={false}
-            style={{ background: "#0d1424" }}
+            style={{ background: isLight ? "#f8fafc" : "#0d1424" }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e2d4a" />
-            <Controls showInteractive={false} className="!bg-[hsl(230,45%,11%)] !border-white/10" />
+            <Background
+              variant={BackgroundVariant.Dots}
+              gap={20}
+              size={1}
+              color={isLight ? "#cbd5e1" : "#1e2d4a"}
+            />
+            <Controls
+              showInteractive={false}
+              className={isLight
+                ? "!bg-white !border-gray-200 [&>button]:!border-gray-200 [&>button]:!text-gray-500 [&>button:hover]:!bg-gray-100"
+                : "!bg-[hsl(230,45%,11%)] !border-white/10"
+              }
+            />
             <MiniMap
-              className="!bg-[hsl(230,45%,9%)] !border-white/10"
+              className={isLight ? "!bg-gray-50 !border-gray-200" : "!bg-[hsl(230,45%,9%)] !border-white/10"}
               nodeColor="#6366f1"
-              maskColor="rgba(0,0,0,0.6)"
+              maskColor={isLight ? "rgba(200,210,220,0.5)" : "rgba(0,0,0,0.6)"}
             />
           </ReactFlow>
         </CanvasThemeContext.Provider>
