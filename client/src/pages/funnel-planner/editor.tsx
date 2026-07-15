@@ -174,7 +174,8 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
         setCreateProjectProgressOpen(false);
         setLocation(`/projects/${projectId}`);
       }, 900);
-    } catch {
+    } catch (err) {
+      console.error("[createProject] caught error:", err);
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
       setCreateProjectProgressOpen(false);
       toast({ title: "Could not create project", description: "Something went wrong. Please try again.", variant: "destructive" });
