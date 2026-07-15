@@ -699,21 +699,20 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                 Save as Template
               </button>
             )}
-            <button
-              onClick={() => user?.isAdmin && setBrainOpen((v) => !v)}
-              title={user?.isAdmin ? undefined : "Coming Soon"}
-              className={`flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium border transition-colors ${
-                !user?.isAdmin
-                  ? "bg-white/[0.04] border-white/10 text-white/25 cursor-not-allowed"
-                  : brainOpen
+            {user?.isAdmin && (
+              <button
+                onClick={() => setBrainOpen((v) => !v)}
+                className={`flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium border transition-colors ${
+                  brainOpen
                     ? "bg-violet-500/30 border-violet-400/60 text-violet-200"
                     : "bg-indigo-500/20 border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60"
-              }`}
-              data-testid="button-funnel-brain"
-            >
-              <Brain className="h-3.5 w-3.5" />
-              Funnel Brain
-            </button>
+                }`}
+                data-testid="button-funnel-brain"
+              >
+                <Brain className="h-3.5 w-3.5" />
+                Funnel Brain
+              </button>
+            )}
             <button
               onClick={() => setShareOpen(true)}
               className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 hover:bg-indigo-500/35 hover:border-indigo-400/60 transition-colors"
