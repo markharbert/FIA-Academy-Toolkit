@@ -260,10 +260,10 @@ export function CustomEdge({
 
   return (
     <>
-      {/* Email-sequence: animated dashes + envelope icons flowing along path */}
+      {/* Email-sequence: solid violet line with envelope icons flowing along it */}
       {isEmailSequence && !pathType ? (
         <>
-          {/* Hidden path so animateMotion mpath can reference it */}
+          {/* Hidden path for animateMotion mpath reference */}
           <path id={`seq-${id}`} d={edgePath} fill="none" stroke="none" />
           {/* Soft violet glow halo */}
           <path
@@ -273,29 +273,28 @@ export function CustomEdge({
             fill="none"
             strokeLinecap="round"
           />
-          {Array.from({ length: 14 }, (_, i) => {
-            const isEnv = i > 0 && i % 5 === 0;
-            const delay = -(i * (2.8 / 14));
+          {/* Solid violet line */}
+          <path
+            d={edgePath}
+            stroke={selected ? selectedColor : sequenceColor}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeLinecap="round"
+          />
+          {/* 4 envelopes evenly spaced, flowing continuously */}
+          {Array.from({ length: 4 }, (_, i) => {
+            const delay = -(i * (3 / 4));
             const color = selected ? selectedColor : sequenceColor;
             return (
               <g key={i} style={{ pointerEvents: "none" }}>
                 <animateMotion
-                  dur="2.8s"
+                  dur="3s"
                   repeatCount="indefinite"
                   begin={`${delay.toFixed(3)}s`}
                 >
                   <mpath href={`#seq-${id}`} />
                 </animateMotion>
-                {isEnv ? (
-                  <EnvelopeIcon color={color} />
-                ) : (
-                  <line
-                    x1="-5" y1="0" x2="5" y2="0"
-                    stroke={color}
-                    strokeWidth={strokeWidth}
-                    strokeLinecap="round"
-                  />
-                )}
+                <EnvelopeIcon color={color} />
               </g>
             );
           })}
