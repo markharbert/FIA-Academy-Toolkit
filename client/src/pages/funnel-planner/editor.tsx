@@ -85,6 +85,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   type Snapshot = { nodes: Node[]; edges: Edge[] };
   const pastRef  = useRef<Snapshot[]>([]);
   const futureRef = useRef<Snapshot[]>([]);
+
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
@@ -353,19 +354,44 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     setSelectedNode(null);
   }, []);
 
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-  }, []);
+  // ── Smooth pointer-drag: palette → canvas ─────────────────────────────────
+  // Ghost position is updated via direct DOM (requestAnimationFrame) so React
+  // never re-renders during the drag — giving butter-smooth 60fps movement.
+  const ghostRef = useRef<HTMLDivElement>(null);
+  const dragTypeRef = useRef<FunnelNodeType | null>(null);
+  const rafRef = useRef<number>(0);
+  // Keep latest stable refs so the effect dependency array stays empty
+  const pushHistoryRef = useRef(pushHistory);
+  pushHistoryRef.current = pushHistory;
+  const screenToFlowPositionRef = useRef(screenToFlowPosition);
+  screenToFlowPositionRef.current = screenToFlowPosition;
 
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-      const nodeType = event.dataTransfer.getData("application/funnel-node-type") as FunnelNodeType;
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!dragTypeRef.current) return;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        const g = ghostRef.current;
+        if (g) g.style.transform = `translate(${e.clientX + 14}px, ${e.clientY - 20}px)`;
+      });
+    };
+
+    const onUp = (e: PointerEvent) => {
+      const nodeType = dragTypeRef.current;
       if (!nodeType) return;
-      pushHistory();
+      dragTypeRef.current = null;
+      cancelAnimationFrame(rafRef.current);
+      const g = ghostRef.current;
+      if (g) g.style.display = "none";
+
+      const canvasEl = reactFlowWrapper.current;
+      if (!canvasEl) return;
+      const rect = canvasEl.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+
+      pushHistoryRef.current();
       const cfg = NODE_CONFIGS[nodeType];
-      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const position = screenToFlowPositionRef.current({ x: e.clientX, y: e.clientY });
       setNodes((nds) => {
         const label =
           nodeType === "emailNode"
@@ -386,9 +412,17 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
         };
         return [...nds, newNode];
       });
-    },
-    [screenToFlowPosition, setNodes]
-  );
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      cancelAnimationFrame(rafRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setNodes]);
 
   const updateSelectedNodeData = useCallback(
     (updates: Partial<FunnelNodeData>) => {
@@ -605,6 +639,30 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
   return (
     <div className="flex h-full" style={{ height: "calc(100vh - 48px)" }}>
+      {/* Pointer-drag ghost — positioned via direct DOM, never re-renders during drag */}
+      <div
+        ref={ghostRef}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          display: "none",
+          alignItems: "center",
+          padding: "6px 12px 6px 10px",
+          background: "hsl(230,45%,10%)",
+          border: "1px solid transparent",
+          borderRadius: "8px",
+          fontSize: "13px",
+          fontWeight: 500,
+          boxShadow: "0 6px 24px rgba(0,0,0,0.75)",
+          willChange: "transform",
+          fontFamily: "inherit",
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+          userSelect: "none",
+          zIndex: 9999,
+        }}
+      />
       {/* Left Palette */}
       {palettePinned && (
         <div className="w-60 shrink-0 bg-[hsl(230,45%,9%)] border-r border-white/10 flex flex-col overflow-hidden">
@@ -624,47 +682,20 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               return (
                 <div
                   key={type}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData("application/funnel-node-type", type);
-                    e.dataTransfer.effectAllowed = "move";
-
-                    // Build a solid-background ghost so it stays visible over any canvas color
-                    const ghost = document.createElement("div");
-                    ghost.style.cssText = [
-                      "position:fixed",
-                      "top:-1000px",
-                      "left:-1000px",
-                      "display:flex",
-                      "align-items:center",
-                      "gap:10px",
-                      "padding:8px 14px 8px 10px",
-                      "background:hsl(230,45%,10%)",
-                      `border:1px solid ${cfg.hexColor}`,
-                      "border-radius:8px",
-                      "font-family:inherit",
-                      "font-size:13px",
-                      "font-weight:500",
-                      "white-space:nowrap",
-                      "pointer-events:none",
-                      "box-shadow:0 6px 24px rgba(0,0,0,0.7)",
-                      "opacity:0.95",
-                    ].join(";");
-
-                    const accent = document.createElement("div");
-                    accent.style.cssText = `width:3px;height:26px;border-radius:2px;background:${cfg.hexColor};flex-shrink:0`;
-                    ghost.appendChild(accent);
-
-                    const label = document.createElement("span");
-                    label.textContent = cfg.label;
-                    label.style.color = cfg.hexColor;
-                    ghost.appendChild(label);
-
-                    document.body.appendChild(ghost);
-                    e.dataTransfer.setDragImage(ghost, -12, 20);
-                    requestAnimationFrame(() => document.body.removeChild(ghost));
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    dragTypeRef.current = type;
+                    const g = ghostRef.current;
+                    if (g) {
+                      g.style.borderColor = cfg.hexColor;
+                      g.style.display = "flex";
+                      g.style.transform = `translate(${e.clientX + 14}px, ${e.clientY - 20}px)`;
+                      g.innerHTML = `<div style="width:3px;height:22px;border-radius:2px;background:${cfg.hexColor};flex-shrink:0;margin-right:8px"></div><span style="color:${cfg.hexColor}">${cfg.label}</span>`;
+                    }
+                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                   }}
-                  className={`relative flex items-center gap-3 pl-4 pr-3 py-3 rounded-lg border cursor-grab active:cursor-grabbing select-none transition-all hover:border-white/25 hover:bg-white/[0.07] hover:scale-[1.01] ${cfg.bg} ${cfg.border}`}
+                  className={`relative flex items-center gap-3 pl-4 pr-3 py-3 rounded-lg border cursor-grab active:cursor-grabbing select-none transition-colors hover:border-white/25 hover:bg-white/[0.07] ${cfg.bg} ${cfg.border}`}
                   data-testid={`palette-node-${type}`}
                 >
                   {/* Color accent bar */}
@@ -1036,7 +1067,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
         </div>
 
         {/* ReactFlow Canvas */}
-        <div className="flex-1 relative" ref={reactFlowWrapper} onDragOver={onDragOver} onDrop={onDrop}>
+        <div className="flex-1 relative" ref={reactFlowWrapper}>
           {/* Undo / Redo — top-left corner of canvas */}
           <div className="absolute top-2 left-2 z-10 flex gap-1">
             <button
