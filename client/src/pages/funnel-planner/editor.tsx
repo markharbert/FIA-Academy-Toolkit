@@ -29,9 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2, ClipboardList, FolderPlus, ChevronDown } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { exportChecklist } from "@/components/funnel-planner/checklist-export";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2, FolderPlus } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { CanvasThemeContext, type CanvasTheme } from "@/components/funnel-planner/canvas-theme-context";
 import dagre from "dagre";
@@ -511,20 +509,6 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   }, [shareUrl, toast]);
 
 
-  const exportPng = useCallback(async () => {
-    const el = document.querySelector(".react-flow__viewport") as HTMLElement | null;
-    if (!el) return;
-    try {
-      const dataUrl = await toPng(el, { backgroundColor: "#0f172a", quality: 1 });
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = `${funnelName.replace(/[^a-z0-9]/gi, "_") || "funnel"}.png`;
-      a.click();
-    } catch {
-      toast({ title: "Export failed", description: "Could not export canvas as PNG", variant: "destructive" });
-    }
-  }, [funnelName, toast]);
-
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
 
@@ -738,45 +722,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               <Share2 className="h-3.5 w-3.5" />
               Share
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-violet-500/20 border border-violet-400/40 text-violet-200 hover:bg-violet-500/35 hover:border-violet-400/60 transition-colors"
-                  data-testid="button-export-actions-menu"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Export &amp; Actions
-                  <ChevronDown className="h-3 w-3 opacity-70" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-[hsl(230,45%,11%)] border-white/10 text-white min-w-[180px]">
-                <DropdownMenuItem
-                  onClick={() => setCreateProjectConfirmOpen(true)}
-                  className="text-violet-200 focus:bg-violet-500/20 focus:text-violet-100 cursor-pointer"
-                  data-testid="button-create-project-from-funnel"
-                >
-                  <FolderPlus className="h-3.5 w-3.5 mr-2" />
-                  Create Project
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-white/10" />
-                <DropdownMenuItem
-                  onClick={() => exportChecklist(nodes, funnelName)}
-                  className="focus:bg-white/10 focus:text-white cursor-pointer"
-                  data-testid="button-export-checklist"
-                >
-                  <ClipboardList className="h-3.5 w-3.5 mr-2" />
-                  Checklist PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={exportPng}
-                  className="focus:bg-white/10 focus:text-white cursor-pointer"
-                  data-testid="button-export-png"
-                >
-                  <Download className="h-3.5 w-3.5 mr-2" />
-                  Export PNG
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button
+              onClick={() => setCreateProjectConfirmOpen(true)}
+              className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-violet-500/20 border border-violet-400/40 text-violet-200 hover:bg-violet-500/35 hover:border-violet-400/60 transition-colors"
+              data-testid="button-create-project-from-funnel"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+              Create Project
+            </button>
             <button
               onClick={toggleCanvasTheme}
               title={canvasTheme === "dark" ? "Switch to light canvas" : "Switch to dark canvas"}
