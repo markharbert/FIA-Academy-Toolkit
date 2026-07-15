@@ -5,57 +5,9 @@ import {
   type EdgeProps,
   useReactFlow,
 } from "@xyflow/react";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { useCanvasTheme } from "./canvas-theme-context";
-
-/* ── Email-sequence edge: manual dash + envelope rendering ─────
-   Instead of a CSS strokeDasharray (which can't be interrupted),
-   we draw every dash as an individual <line> element and swap one
-   every ENVELOPE_EVERY positions for a tiny envelope icon.
-   The envelope is never rotated so it always stays upright.
-──────────────────────────────────────────────────────────────── */
-const DASH_LEN = 9;
-const GAP_LEN  = 6;
-const ENVELOPE_EVERY = 6; // every 6th dash slot → envelope
-
-type SeqItem =
-  | { kind: "dash";     x1: number; y1: number; x2: number; y2: number }
-  | { kind: "envelope"; x:  number; y:  number };
-
-function buildEmailItems(pathStr: string): SeqItem[] {
-  try {
-    const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    el.setAttribute("d", pathStr);
-    const totalLen = el.getTotalLength();
-    if (totalLen < 1) return [];
-
-    const items: SeqItem[] = [];
-    let pos = 0;
-    let idx = 0;
-
-    while (pos < totalLen) {
-      const end   = Math.min(pos + DASH_LEN, totalLen);
-      const isEnv = idx > 0 && idx % ENVELOPE_EVERY === 0;
-
-      if (isEnv) {
-        const cp = (pos + end) / 2;
-        const c  = el.getPointAtLength(cp);
-        items.push({ kind: "envelope", x: c.x, y: c.y });
-      } else {
-        const p1 = el.getPointAtLength(pos);
-        const p2 = el.getPointAtLength(end);
-        items.push({ kind: "dash", x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
-      }
-
-      pos += DASH_LEN + GAP_LEN;
-      idx++;
-    }
-    return items;
-  } catch {
-    return [];
-  }
-}
 
 /* Tiny envelope centered at (0,0), 12×8 px — always upright. */
 function EnvelopeIcon({ color }: { color: string }) {
@@ -67,56 +19,6 @@ function EnvelopeIcon({ color }: { color: string }) {
         fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
     </g>
   );
-}
-
-/* ── Email-traffic edge: manual dash + directional arrow rendering ─
-   Same rhythm as the envelope edges but every ARROW_EVERY positions
-   a small chevron arrow replaces a dash. The arrow is rotated to
-   match the local path direction so it always points the right way.
-──────────────────────────────────────────────────────────────────── */
-const ARROW_EVERY = 5; // every 5th dash slot → arrow
-
-type TrafficItem =
-  | { kind: "dash";  x1: number; y1: number; x2: number; y2: number }
-  | { kind: "arrow"; x:  number; y:  number; angle: number };
-
-function buildArrowItems(pathStr: string): TrafficItem[] {
-  try {
-    const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    el.setAttribute("d", pathStr);
-    const totalLen = el.getTotalLength();
-    if (totalLen < 1) return [];
-
-    const items: TrafficItem[] = [];
-    let pos = 0;
-    let idx = 0;
-
-    while (pos < totalLen) {
-      const end     = Math.min(pos + DASH_LEN, totalLen);
-      const isArrow = idx > 0 && idx % ARROW_EVERY === 0;
-
-      if (isArrow) {
-        const cp  = (pos + end) / 2;
-        const c   = el.getPointAtLength(cp);
-        // Sample two nearby points to get local tangent angle
-        const d   = Math.min(4, totalLen - cp);
-        const p1  = el.getPointAtLength(Math.max(0, cp - d));
-        const p2  = el.getPointAtLength(Math.min(totalLen, cp + d));
-        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI);
-        items.push({ kind: "arrow", x: c.x, y: c.y, angle });
-      } else {
-        const p1 = el.getPointAtLength(pos);
-        const p2 = el.getPointAtLength(end);
-        items.push({ kind: "dash", x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
-      }
-
-      pos += DASH_LEN + GAP_LEN;
-      idx++;
-    }
-    return items;
-  } catch {
-    return [];
-  }
 }
 
 /* Small chevron arrow centered at (0,0), pointing right → rotate to path angle */
@@ -317,17 +219,7 @@ export function CustomEdge({
   // Email→page traffic edges: amber to signal "warm list traffic"
   const emailTrafficColor = theme === "light" ? "#d97706" : "#fbbf24";
 
-  // Build manual dash+envelope items for email-sequence edges (only when no yes/no override)
-  const emailSeqItems = useMemo(
-    () => (isEmailSequence && !pathType ? buildEmailItems(edgePath) : []),
-    [edgePath, isEmailSequence, pathType]
-  );
-
-  // Build manual dash+arrow items for email-traffic edges (only when no yes/no override)
-  const emailTrafficItems = useMemo(
-    () => (isEmailTrafficEdge && !pathType ? buildArrowItems(edgePath) : []),
-    [edgePath, isEmailTrafficEdge, pathType]
-  );
+  // (static builders no longer used for rendering — animation replaces them)
 
   const strokeColor =
     pathType === "yes"
@@ -368,25 +260,46 @@ export function CustomEdge({
 
   return (
     <>
-      {/* Email-sequence: manual dashes + envelope icons */}
+      {/* Email-sequence: animated dashes + envelope icons flowing along path */}
       {isEmailSequence && !pathType ? (
-        emailSeqItems.map((item, i) =>
-          item.kind === "envelope" ? (
-            <g key={i} style={{ pointerEvents: "none" }}
-               transform={`translate(${item.x},${item.y})`}>
-              <EnvelopeIcon color={sequenceColor} />
-            </g>
-          ) : (
-            <line
-              key={i}
-              x1={item.x1} y1={item.y1}
-              x2={item.x2} y2={item.y2}
-              stroke={selected ? selectedColor : sequenceColor}
-              strokeWidth={strokeWidth}
-              strokeLinecap="round"
-            />
-          )
-        )
+        <>
+          {/* Hidden path so animateMotion mpath can reference it */}
+          <path id={`seq-${id}`} d={edgePath} fill="none" stroke="none" />
+          {/* Soft violet glow halo */}
+          <path
+            d={edgePath}
+            stroke="rgba(167,139,250,0.18)"
+            strokeWidth={8}
+            fill="none"
+            strokeLinecap="round"
+          />
+          {Array.from({ length: 14 }, (_, i) => {
+            const isEnv = i > 0 && i % 5 === 0;
+            const delay = -(i * (2.8 / 14));
+            const color = selected ? selectedColor : sequenceColor;
+            return (
+              <g key={i} style={{ pointerEvents: "none" }}>
+                <animateMotion
+                  dur="2.8s"
+                  repeatCount="indefinite"
+                  begin={`${delay.toFixed(3)}s`}
+                >
+                  <mpath href={`#seq-${id}`} />
+                </animateMotion>
+                {isEnv ? (
+                  <EnvelopeIcon color={color} />
+                ) : (
+                  <line
+                    x1="-5" y1="0" x2="5" y2="0"
+                    stroke={color}
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                  />
+                )}
+              </g>
+            );
+          })}
+        </>
       ) : (
         <BaseEdge
           id={id}
