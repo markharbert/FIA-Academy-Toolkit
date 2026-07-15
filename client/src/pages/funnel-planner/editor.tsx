@@ -69,6 +69,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const [palettePinned, setPalettePinned] = useState(true);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [flowInitialized, setFlowInitialized] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>(() =>
     (localStorage.getItem("funnelCanvasTheme") as CanvasTheme) || "dark"
@@ -254,22 +255,25 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [funnel.id]);
 
-  // Auto-generate canvas thumbnail (once on mount; regenerate if older than 24 h)
+  // Auto-generate canvas thumbnail — fires once after React Flow signals ready via onInit
   const thumbnailSavedRef = useRef(false);
   useEffect(() => {
+    if (!flowInitialized) return;
+
     const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
     let existing: { data: string; ts: number } | null = null;
     try { if (funnel.thumbnailData) existing = JSON.parse(funnel.thumbnailData); } catch {}
     if (existing && Date.now() - existing.ts < TWENTY_FOUR_H) return;
+    if (thumbnailSavedRef.current) return;
 
     const timer = setTimeout(async () => {
       if (thumbnailSavedRef.current) return;
       try {
-        const bg = localStorage.getItem("funnelCanvasTheme") === "light" ? "#f8fafc" : "#0f172a";
+        const bg = localStorage.getItem("funnelCanvasTheme") === "light" ? "#f8fafc" : "#0d1424";
         fitView({ padding: 0.15, duration: 0 });
-        await new Promise<void>((r) => setTimeout(r, 800));
-        const el = document.querySelector(".react-flow__renderer") as HTMLElement | null;
-        if (!el) return;
+        await new Promise<void>((r) => setTimeout(r, 600));
+        const el = document.querySelector(".react-flow__viewport") as HTMLElement | null;
+        if (!el) { console.warn("[thumbnail] .react-flow__viewport not found"); return; }
         const dataUrl = await toPng(el, {
           backgroundColor: bg,
           pixelRatio: 0.5,
@@ -289,10 +293,10 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
       } catch (e) {
         console.error("[thumbnail]", e);
       }
-    }, 2000);
+    }, 800);
 
     return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [flowInitialized]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Immediate flush-save before in-app navigation
   const handleBack = useCallback(async () => {
@@ -1081,6 +1085,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               fitViewOptions={{ padding: 0.2 }}
               deleteKeyCode="Delete"
               style={{ background: canvasTheme === "light" ? "#f8fafc" : "#0d1424" }}
+              onInit={() => setFlowInitialized(true)}
             >
               <Background
                 variant={BackgroundVariant.Dots}
