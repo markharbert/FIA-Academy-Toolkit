@@ -9,14 +9,18 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { useCanvasTheme } from "./canvas-theme-context";
 
-/* Tiny envelope centered at (0,0), 12×8 px — always upright. */
+/* Envelope icon centered at (0,0), 18×12 px.
+   Solid purple fill so it reads clearly on the violet line;
+   white stroke for body outline and flap. */
 function EnvelopeIcon({ color }: { color: string }) {
   return (
     <g>
-      <rect x="-6" y="-4" width="12" height="8" rx="1"
-        fill="none" stroke={color} strokeWidth="0.9" />
-      <polyline points="-6,-4 0,1.5 6,-4"
-        fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
+      {/* Body */}
+      <rect x="-9" y="-6" width="18" height="12" rx="1.5"
+        fill={color} stroke="white" strokeWidth="1.2" />
+      {/* Flap (V pointing down from top edge) */}
+      <polyline points="-9,-6 0,2 9,-6"
+        fill="none" stroke="white" strokeWidth="1.2" strokeLinejoin="round" />
     </g>
   );
 }
