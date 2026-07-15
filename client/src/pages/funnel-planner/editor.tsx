@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2, ClipboardList } from "lucide-react";
+import { ArrowLeft, Download, Save, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, Camera, ImagePlus, Share2, Copy, Lock, Trash2, Brain, Wand2, Sun, Moon, BookMarked, Undo2, Redo2, ClipboardList, FolderPlus } from "lucide-react";
 import { exportChecklist } from "@/components/funnel-planner/checklist-export";
 import { useAuth } from "@/lib/auth";
 import { CanvasThemeContext, type CanvasTheme } from "@/components/funnel-planner/canvas-theme-context";
@@ -147,6 +147,39 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateDesc, setTemplateDesc] = useState("");
+
+  // Create Project from funnel
+  const [createProjectConfirmOpen, setCreateProjectConfirmOpen] = useState(false);
+  const [createProjectProgressOpen, setCreateProjectProgressOpen] = useState(false);
+  const [createProjectProgress, setCreateProjectProgress] = useState(0);
+  const [createProjectStatus, setCreateProjectStatus] = useState("");
+
+  const handleCreateProject = useCallback(async () => {
+    setCreateProjectConfirmOpen(false);
+    setCreateProjectProgress(0);
+    setCreateProjectStatus("Preparing your project...");
+    setCreateProjectProgressOpen(true);
+
+    const t1 = setTimeout(() => { setCreateProjectProgress(20); setCreateProjectStatus("Creating sections..."); }, 400);
+    const t2 = setTimeout(() => { setCreateProjectProgress(50); setCreateProjectStatus("Adding tasks..."); }, 1100);
+    const t3 = setTimeout(() => { setCreateProjectProgress(80); setCreateProjectStatus("Almost there..."); }, 2000);
+
+    try {
+      const res = await apiRequest("POST", "/api/projects/from-funnel", { funnelId: funnel.id });
+      const { projectId } = await res.json();
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      setCreateProjectProgress(100);
+      setCreateProjectStatus("Project created! Opening now...");
+      setTimeout(() => {
+        setCreateProjectProgressOpen(false);
+        setLocation(`/projects/${projectId}`);
+      }, 900);
+    } catch {
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      setCreateProjectProgressOpen(false);
+      toast({ title: "Could not create project", description: "Something went wrong. Please try again.", variant: "destructive" });
+    }
+  }, [funnel.id, setLocation, toast]);
   const saveTemplateMutation = useMutation({
     mutationFn: () =>
       apiRequest("POST", "/api/funnel-templates", {
@@ -668,6 +701,14 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               {canvasTheme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
             </button>
             <button
+              onClick={() => setCreateProjectConfirmOpen(true)}
+              className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-violet-500/20 border border-violet-400/40 text-violet-200 hover:bg-violet-500/35 hover:border-violet-400/60 transition-colors"
+              data-testid="button-create-project-from-funnel"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+              Create Project
+            </button>
+            <button
               onClick={() => exportChecklist(nodes, funnelName)}
               className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/35 hover:border-emerald-400/60 transition-colors"
               data-testid="button-export-checklist"
@@ -684,6 +725,78 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
               Export PNG
             </button>
           </div>
+
+          {/* Create Project — Confirmation Dialog */}
+          <Dialog open={createProjectConfirmOpen} onOpenChange={setCreateProjectConfirmOpen}>
+            <DialogContent className="bg-[hsl(230,45%,11%)] border-white/10 text-white max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-white">
+                  <FolderPlus className="h-5 w-5 text-violet-400" />
+                  Create a Project from this Funnel
+                </DialogTitle>
+                <DialogDescription className="text-white/50">
+                  This will create a brand-new project in your Projects tab with all the funnel setup tasks pre-loaded and ready to check off.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-lg bg-white/[0.04] border border-white/10 p-3 text-sm text-white/70 space-y-1.5">
+                <p className="font-medium text-white/90">What gets created:</p>
+                <p>• A project named <span className="text-violet-300 font-medium">"{funnelName} — Launch Plan"</span></p>
+                <p>• Sections for Traffic, Pages, Emails, and SMS</p>
+                <p>• A full task checklist under each section</p>
+              </div>
+              <DialogFooter className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setCreateProjectConfirmOpen(false)}
+                  className="flex-1 h-9 rounded-md text-sm font-medium bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 hover:text-white/80 transition-colors"
+                  data-testid="button-create-project-cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateProject}
+                  className="flex-1 h-9 rounded-md text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+                  data-testid="button-create-project-confirm"
+                >
+                  Yes, create it
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Create Project — Progress Dialog */}
+          <Dialog open={createProjectProgressOpen} onOpenChange={() => {}}>
+            <DialogContent className="bg-[hsl(230,45%,11%)] border-white/10 text-white max-w-sm" hideClose>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-white">
+                  {createProjectProgress < 100
+                    ? <Loader2 className="h-5 w-5 text-violet-400 animate-spin" />
+                    : <CheckCircle className="h-5 w-5 text-emerald-400" />
+                  }
+                  {createProjectProgress < 100 ? "Creating your project..." : "Project created!"}
+                </DialogTitle>
+                <DialogDescription className="text-white/50">
+                  {createProjectStatus}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 py-2">
+                <div className="flex justify-between text-xs text-white/40 mb-1">
+                  <span>{createProjectStatus}</span>
+                  <span>{createProjectProgress}%</span>
+                </div>
+                <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500 ease-out"
+                    style={{
+                      width: `${createProjectProgress}%`,
+                      background: createProjectProgress === 100
+                        ? "linear-gradient(90deg, #10b981, #34d399)"
+                        : "linear-gradient(90deg, #7c3aed, #a78bfa)",
+                    }}
+                  />
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Save as Template Dialog (admin only) */}
           <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>

@@ -8290,6 +8290,253 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ── Create project from funnel canvas ────────────────────────────────────────
+  app.post("/api/projects/from-funnel", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const uid = getEffectiveUserId(req);
+      const { funnelId } = req.body ?? {};
+      if (!funnelId || typeof funnelId !== "string") {
+        return res.status(400).json({ message: "funnelId is required" });
+      }
+
+      const funnel = await storage.getFunnel(funnelId, uid);
+      if (!funnel) return res.status(404).json({ message: "Funnel not found" });
+
+      const canvas = funnel.canvasData as { nodes?: any[] } | null;
+      const rawNodes: any[] = canvas?.nodes ?? [];
+
+      const PAGE_TYPES = ["capturePage", "thankYouPage", "salesPage", "videoPage", "webinar", "zoom", "orderForm", "upsell", "downsell", "externalLink"];
+
+      const trafficNodes = rawNodes.filter((n) => n.data?.nodeType === "trafficSource");
+      const pageNodes    = rawNodes.filter((n) => PAGE_TYPES.includes(n.data?.nodeType));
+      const emailNodes   = rawNodes
+        .filter((n) => n.data?.nodeType === "emailNode")
+        .sort((a, b) => (a.data?.emailDay ?? 999) - (b.data?.emailDay ?? 999));
+      const smsNodes     = rawNodes
+        .filter((n) => n.data?.nodeType === "smsNode")
+        .sort((a, b) => (a.data?.smsDay ?? 999) - (b.data?.smsDay ?? 999));
+
+      const TASKS: Record<string, string[]> = {
+        trafficSource: [
+          "Define your ideal customer avatar (age, pain points, goals)",
+          "Create 3–5 ad creatives or content pieces to test",
+          "Write 2–3 variations of ad copy for A/B testing",
+          "Set your daily budget and campaign objective",
+          "Install your tracking pixel on all funnel pages",
+          "Set up a retargeting audience based on page visits",
+          "Add UTM tracking parameters to all funnel URLs",
+        ],
+        capturePage: [
+          "Build / confirm your page is live and accessible",
+          "Write a compelling headline focused on a specific transformation or benefit",
+          "Add a supporting sub-headline that reinforces the main promise",
+          "Include a mockup or visual of your lead magnet",
+          "Set up your opt-in form (name and/or email field)",
+          "Connect your email autoresponder to the form",
+          "Add a 'What You'll Get' bullet list (3–5 bullets max)",
+          "Remove all navigation links — distraction-free only",
+          "Add your privacy policy link (legally required)",
+          "Set the redirect URL to your Thank-You page",
+          "Test the opt-in flow on mobile and desktop",
+        ],
+        thankYouPage: [
+          "Build / confirm your page is live and accessible",
+          "Write a 'Check your inbox' confirmation message",
+          "Deliver or link directly to your lead magnet",
+          "Add a short welcome video introducing yourself (60–90 seconds)",
+          "Tell them what to expect from your email series",
+          "Add a soft One-Time Offer (OTO) or upsell if applicable",
+          "Link to your Facebook group or community",
+          "Add a follow button for your primary social media platform",
+        ],
+        salesPage: [
+          "Build / confirm your page is live and accessible",
+          "Write a powerful headline focused on the biggest transformation",
+          "Open with a story that connects with the reader's pain or desire",
+          "Clearly list what they get (lead with benefits, then features)",
+          "Add social proof: testimonials, case studies, or results screenshots",
+          "Include a prominent Call-To-Action button with your price",
+          "Add a FAQ section handling the top 5 objections",
+          "Set up your payment processor and checkout page",
+          "Add a money-back guarantee if applicable",
+          "Test the complete checkout flow end-to-end",
+          "Install conversion tracking (Facebook Pixel / Google Tag)",
+        ],
+        videoPage: [
+          "Build / confirm your page is live and accessible",
+          "Script and record your VSL",
+          "Upload to Vimeo or Wistia for full playback control",
+          "Disable video controls until the offer is revealed",
+          "Add a 'Buy Now' button that appears at the right moment",
+          "Write a supporting headline above the video",
+          "Add a brief text summary below the video for scanners",
+          "Install conversion tracking on the page",
+        ],
+        webinar: [
+          "Write your webinar title focused on a clear transformation",
+          "List 3–5 specific outcomes attendees will leave with",
+          "Set up your webinar platform (Zoom, EasyWebinar, or WebinarJam)",
+          "Create your slide deck for the presentation",
+          "Set up registration form and confirmation emails",
+          "Build a show-up reminder sequence (24h and 1h before start)",
+          "Prepare your offer presentation for the end of the webinar",
+        ],
+        zoom: [
+          "Write a clear headline that states who the call is for",
+          "Add 3–5 qualification questions to your application form",
+          "Set up your calendar booking tool (Calendly or Acuity)",
+          "Write a confirmation page with call preparation instructions",
+          "Create a pre-call questionnaire for serious applicants",
+          "Set up reminder emails 24 hours and 1 hour before the call",
+        ],
+        orderForm: [
+          "Connect your payment processor (Stripe, PayPal, or similar)",
+          "Write a brief order summary — clearly state what they're buying",
+          "Add a security badge and SSL indicator",
+          "Offer a payment plan option if the price warrants it",
+          "Add an order bump (a small complementary add-on offer)",
+          "Test the complete purchase flow from start to finish",
+          "Set up your post-purchase confirmation and delivery email",
+        ],
+        upsell: [
+          "Create an offer that directly complements the front-end purchase",
+          "Write a headline referencing the purchase they just completed",
+          "Keep the page short — one offer, one decision",
+          "Include a clear 'Yes, upgrade me!' and 'No thanks' link",
+          "Set up one-click order processing (no re-entering card details)",
+          "Test the upsell flow from the order form",
+        ],
+        downsell: [
+          "Create a lower-commitment version of the upsell offer",
+          "Write new copy emphasizing the reduced price and core value",
+          "Set up the trigger after the upsell 'No thanks' click",
+          "Include a clear 'Yes, I want this!' and 'No thanks' link",
+          "Test the complete OTO sequence end-to-end",
+        ],
+        externalLink: [
+          "Confirm the destination URL is correct and the page is live",
+          "Add UTM parameters to track traffic from your funnel",
+          "Ensure the linked page matches the visitor's expectations",
+        ],
+        emailNode: [
+          "Write your subject line (aim for curiosity, urgency, or a clear benefit)",
+          "Write your preview text / preheader (40–90 characters)",
+          "Write your email body",
+          "Include one clear call-to-action link",
+          "Add personalization with a first name merge tag",
+          "Schedule in your autoresponder at the correct delay",
+          "Send a test to yourself and check formatting on mobile",
+        ],
+        smsNode: [
+          "Write your SMS message body",
+          "Keep under 160 characters (single message segment)",
+          "Include subscriber's first name if your platform supports merge tags",
+          "Include one clear, shortened URL",
+          "Schedule in your SMS platform at the correct send delay",
+          "Confirm subscribers have opted in to receive SMS (TCPA / GDPR compliance)",
+        ],
+      };
+
+      const project = await storage.createProject(uid, {
+        name: `${funnel.name} — Launch Plan`,
+        description: `Created from Funnel Planner: ${funnel.name}`,
+        color: "#6366f1",
+        status: "active",
+      });
+
+      async function buildNodeTasks(
+        label: string,
+        nodeType: string,
+        columnId: string | null,
+        sortOrder: number,
+        status: "todo" | "in_progress" | "done",
+        notes: string,
+      ) {
+        const taskList = TASKS[nodeType] ?? [];
+        const parent = await storage.createTask(uid, project.id, {
+          title: label || nodeType,
+          notes,
+          status,
+          priority: "none",
+          columnId,
+          sortOrder,
+          tags: [],
+          links: [],
+        });
+        for (let i = 0; i < taskList.length; i++) {
+          await storage.createTask(uid, project.id, {
+            title: taskList[i],
+            notes: "",
+            status: "todo",
+            priority: "none",
+            parentTaskId: parent.id,
+            columnId: null,
+            sortOrder: i,
+            tags: [],
+            links: [],
+          });
+        }
+      }
+
+      let colOrder = 0;
+
+      if (trafficNodes.length > 0) {
+        const col = await storage.createColumn(uid, project.id, { name: "Traffic Sources", sortOrder: colOrder++ });
+        for (let i = 0; i < trafficNodes.length; i++) {
+          const n = trafficNodes[i];
+          const platforms = [
+            ...((n.data?.trafficPlatforms as string[] | undefined) ?? []),
+            ...(n.data?.trafficPlatform ? [n.data.trafficPlatform as string] : []),
+          ];
+          const unique = [...new Set(platforms)].filter(Boolean);
+          const notes = unique.length > 0 ? `Platforms: ${unique.join(", ")}` : "";
+          await buildNodeTasks(n.data?.label || "Traffic Source", "trafficSource", col.id, i, "todo", notes);
+        }
+      }
+
+      if (pageNodes.length > 0) {
+        const col = await storage.createColumn(uid, project.id, { name: "Funnel Pages", sortOrder: colOrder++ });
+        for (let i = 0; i < pageNodes.length; i++) {
+          const n = pageNodes[i];
+          const url = ((n.data?.pageUrl as string | undefined) ?? "").trim();
+          const hasUrl = !!url;
+          const notes = url ? `Page URL: ${url}` : "";
+          const status = hasUrl ? "in_progress" : "todo";
+          await buildNodeTasks(n.data?.label || n.data?.nodeType, n.data?.nodeType, col.id, i, status, notes);
+        }
+      }
+
+      if (emailNodes.length > 0) {
+        const col = await storage.createColumn(uid, project.id, { name: "Email Sequence", sortOrder: colOrder++ });
+        for (let i = 0; i < emailNodes.length; i++) {
+          const n = emailNodes[i];
+          const hasSubject = !!(n.data?.emailSubject as string | undefined)?.trim();
+          const hasBody    = !!(n.data?.emailBody    as string | undefined)?.trim();
+          const day        = (n.data?.emailDay as number | undefined) ?? (i + 1);
+          const subject    = (n.data?.emailSubject as string | undefined) ?? "";
+          const notes      = subject ? `Day ${day} — Subject: ${subject}` : `Day ${day}`;
+          const status     = hasSubject && hasBody ? "done" : hasSubject ? "in_progress" : "todo";
+          await buildNodeTasks(n.data?.label || `Email ${i + 1}`, "emailNode", col.id, i, status, notes);
+        }
+      }
+
+      if (smsNodes.length > 0) {
+        const col = await storage.createColumn(uid, project.id, { name: "SMS Sequence", sortOrder: colOrder++ });
+        for (let i = 0; i < smsNodes.length; i++) {
+          const n = smsNodes[i];
+          const hasBody = !!(n.data?.smsBody as string | undefined)?.trim();
+          const day     = (n.data?.smsDay  as number | undefined) ?? (i + 1);
+          await buildNodeTasks(n.data?.label || `SMS ${i + 1}`, "smsNode", col.id, i, hasBody ? "in_progress" : "todo", `Day ${day}`);
+        }
+      }
+
+      res.status(201).json({ projectId: project.id, projectName: project.name });
+    } catch (err: any) {
+      console.error("[projects] from-funnel error:", err);
+      res.status(500).json({ message: "Failed to create project from funnel" });
+    }
+  });
+
   app.get("/api/projects", requireAuth, async (req: Request, res: Response) => {
     try {
       const list = await storage.getProjectsForUser(getEffectiveUserId(req));
