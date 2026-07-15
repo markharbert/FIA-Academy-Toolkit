@@ -308,9 +308,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .note-title{font-weight:700;font-size:12px;color:#92400e;margin-bottom:5px}
 .note-body{font-size:12px;color:#78350f;line-height:1.65}
 .footer{text-align:center;color:#d1d5db;font-size:10px;margin-top:32px;padding-top:16px;border-top:1px solid #f3f4f6}
-.print-btn{position:fixed;bottom:24px;right:24px;background:#4f46e5;color:#fff;border:none;border-radius:9px;padding:13px 22px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,.38);z-index:1000;display:flex;align-items:center;gap:8px;transition:all .15s}
-.print-btn:hover{background:#4338ca;transform:translateY(-1px)}
-@media print{body{padding:16px;font-size:11px}.print-btn{display:none!important}.node-card,.section{break-inside:avoid;page-break-inside:avoid}}
+@media print{body{padding:16px;font-size:11px}.node-card,.section{break-inside:avoid;page-break-inside:avoid}}
 `;
 
 // ─── Main export function ─────────────────────────────────────────────────────
@@ -388,17 +386,16 @@ export function exportChecklist(nodes: Node[], funnelName: string): void {
   <meta charset="utf-8">
   <title>${esc(funnelName)} — Funnel Launch Checklist</title>
   <style>${CSS}</style>
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 400);
+    };
+    window.onafterprint = function() {
+      window.close();
+    };
+  </script>
 </head>
 <body>
-
-  <button class="print-btn" onclick="window.print()">
-    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-      <polyline points="6 9 6 2 18 2 18 9"/>
-      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-      <rect x="6" y="14" width="12" height="8"/>
-    </svg>
-    Save as PDF
-  </button>
 
   <div class="header">
     <div>
