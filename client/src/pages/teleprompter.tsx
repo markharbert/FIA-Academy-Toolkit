@@ -194,6 +194,9 @@ export default function TeleprompterPage() {
   const [modalPos, setModalPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const [modalSize, setModalSize] = useState({ w: 0, h: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef<{ corner: string; startX: number; startY: number; startW: number; startH: number; startPosX: number; startPosY: number } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -487,6 +490,7 @@ export default function TeleprompterPage() {
     if (!html) return;
     const mw = window.innerWidth * 0.75;
     const mh = window.innerHeight * 0.95;
+    setModalSize({ w: Math.round(mw), h: Math.round(mh) });
     setModalPos({
       x: Math.round((window.innerWidth - mw) / 2),
       y: Math.round((window.innerHeight - mh) / 2),
@@ -515,6 +519,43 @@ export default function TeleprompterPage() {
       document.removeEventListener("mouseup", onUp);
     };
   }, [isDragging]);
+
+  const handleResizeStart = (e: React.MouseEvent, corner: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = {
+      corner,
+      startX: e.clientX, startY: e.clientY,
+      startW: modalSize.w, startH: modalSize.h,
+      startPosX: modalPos.x, startPosY: modalPos.y,
+    };
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const MIN_W = 400, MIN_H = 300;
+    const onMove = (e: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = e.clientX - r.startX;
+      const dy = e.clientY - r.startY;
+      let newW = r.startW, newH = r.startH, newX = r.startPosX, newY = r.startPosY;
+      if (r.corner.includes("e")) newW = Math.max(MIN_W, r.startW + dx);
+      if (r.corner.includes("w")) { newW = Math.max(MIN_W, r.startW - dx); newX = r.startPosX + r.startW - newW; }
+      if (r.corner.includes("s")) newH = Math.max(MIN_H, r.startH + dy);
+      if (r.corner.includes("n")) { newH = Math.max(MIN_H, r.startH - dy); newY = r.startPosY + r.startH - newH; }
+      setModalSize({ w: newW, h: newH });
+      setModalPos({ x: newX, y: newY });
+    };
+    const onUp = () => { setIsResizing(false); resizeRef.current = null; };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [isResizing]);
 
   useEffect(() => {
     const handler = async (e: MessageEvent) => {
@@ -1219,8 +1260,35 @@ export default function TeleprompterPage() {
         <div className="fixed inset-0 z-[9999] pointer-events-none">
           <div
             className="absolute flex flex-col bg-black rounded-xl overflow-hidden pointer-events-auto shadow-2xl"
-            style={{ width: "75vw", height: "95vh", left: modalPos.x, top: modalPos.y }}
+            style={{ width: modalSize.w, height: modalSize.h, left: modalPos.x, top: modalPos.y }}
           >
+            {/* Corner resize handles */}
+            {(["nw","ne","sw","se"] as const).map((corner) => (
+              <div
+                key={corner}
+                className="absolute z-20 w-5 h-5 pointer-events-auto"
+                style={{
+                  top:    corner.startsWith("n") ? 0 : undefined,
+                  bottom: corner.startsWith("s") ? 0 : undefined,
+                  left:   corner.endsWith("w")   ? 0 : undefined,
+                  right:  corner.endsWith("e")   ? 0 : undefined,
+                  cursor: `${corner}-resize`,
+                }}
+                onMouseDown={(e) => handleResizeStart(e, corner)}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" style={{
+                  position: "absolute",
+                  opacity: 0.35,
+                  bottom: corner.startsWith("s") ? 3 : undefined,
+                  top:    corner.startsWith("n") ? 3 : undefined,
+                  left:   corner.endsWith("w")   ? 3 : undefined,
+                  right:  corner.endsWith("e")   ? 3 : undefined,
+                  transform: corner === "nw" ? "rotate(180deg)" : corner === "ne" ? "rotate(270deg)" : corner === "sw" ? "rotate(90deg)" : undefined,
+                }}>
+                  <path d="M0 10 L10 10 L10 0" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </div>
+            ))}
             {/* Drag handle */}
             <div
               className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-white/10 shrink-0 select-none"
@@ -1246,7 +1314,7 @@ export default function TeleprompterPage() {
             </div>
             {/* Iframe — transparent blocker overlay during drag prevents iframe swallowing mouse events */}
             <div className="relative flex-1 min-h-0">
-              {isDragging && <div className="absolute inset-0 z-10" />}
+              {(isDragging || isResizing) && <div className="absolute inset-0 z-10" />}
               <iframe
                 src={modalSrc}
                 allow="camera; microphone"
