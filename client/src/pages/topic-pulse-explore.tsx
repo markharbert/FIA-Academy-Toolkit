@@ -784,37 +784,6 @@ export default function TopicPulseExplorePage() {
                   </div>
                 )}
 
-                <IntentAnalysisSection 
-                  topicId={selectedTopic.id} 
-                  existingAnalysis={selectedTopic.intentAnalysis} 
-                />
-
-                {selectedTopic.whyText && (
-                  <div>
-                    <h3 className="font-medium mb-2 flex items-center gap-2">
-                      <Lightbulb className="h-4 w-4" />
-                      Why This Topic
-                    </h3>
-                    <p className="text-sm text-muted-foreground">{selectedTopic.whyText}</p>
-                  </div>
-                )}
-
-                {!selectedTopic.suggestedAngles && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => enrichMutation.mutate(selectedTopic.id)}
-                    disabled={enrichMutation.isPending}
-                    data-testid="button-enrich"
-                  >
-                    {enrichMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <Sparkles className="h-4 w-4 mr-2" />
-                    )}
-                    Generate Ideas
-                  </Button>
-                )}
 
                 {selectedTopic.suggestedAngles && (
                   <div>
