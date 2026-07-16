@@ -5330,39 +5330,13 @@ export async function registerRoutes(
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
       if (!recording) { console.log(`[rec-stream] not found id=${req.params.id}`); return res.status(404).json({ message: "Recording not found" }); }
       console.log(`[rec-stream] storageKey=${recording.storageKey} size=${recording.sizeBytes} status=${recording.processingStatus}`);
-      // Use stored metadata — avoids a round-trip GCS getMetadata() call on every range request
-      const fileSize = recording.sizeBytes;
-      const mimeType = recording.mimeType || "video/mp4";
       const objectStorage = new ObjectStorageService();
-      const file = await objectStorage.getObjectEntityFile(recording.storageKey);
-
-      const rangeHeader = req.headers.range;
-      const rangeStart = rangeHeader ? parseInt(rangeHeader.replace(/bytes=/, "").split("-")[0], 10) : 0;
-
-      if (rangeHeader && rangeStart > 0) {
-        // Mid-file seek request — serve the specific byte range (206)
-        const parts = rangeHeader.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunkSize = end - start + 1;
-        res.writeHead(206, {
-          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-          "Accept-Ranges": "bytes",
-          "Content-Length": chunkSize,
-          "Content-Type": mimeType,
-        });
-        file.createReadStream({ start, end }).pipe(res);
-      } else {
-        // Initial request (no range or bytes=0-…): stream the full file in one shot.
-        // This avoids the multiple round-trip penalty from browsers hunting for the
-        // moov atom at the end of an mp4 recorded by MediaRecorder.
-        res.writeHead(200, {
-          "Content-Length": fileSize,
-          "Content-Type": mimeType,
-          "Accept-Ranges": "bytes",
-        });
-        file.createReadStream().pipe(res);
-      }
+      // Generate a 1-hour signed GCS URL and redirect the browser directly to GCS.
+      // This avoids streaming 400 MB through the Express process and gives the
+      // browser native range-request support for seeking.
+      const signedUrl = await objectStorage.getSignedReadUrl(recording.storageKey, 3600);
+      console.log(`[rec-stream] redirecting to signed URL (ttl=3600s)`);
+      return res.redirect(302, signedUrl);
     } catch (err) {
       console.error("[Teleprompter] Stream recording error:", err);
       if (!res.headersSent) res.status(500).json({ message: "Failed to stream recording" });
@@ -5375,16 +5349,11 @@ export async function registerRoutes(
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
       if (!recording) { console.log(`[rec-download] not found id=${req.params.id}`); return res.status(404).json({ message: "Recording not found" }); }
       const objectStorage = new ObjectStorageService();
-      const file = await objectStorage.getObjectEntityFile(recording.storageKey);
-      const ext = path.extname(recording.storageKey) || ".webm";
-      const safeTitle = recording.title
-        .replace(/\u2014/g, " - ")        // em dash → " - "
-        .replace(/[^\w\s().,'&!-]/g, "")  // strip characters not safe in filenames
-        .replace(/\s+/g, " ")             // collapse runs of whitespace
-        .trim()
-        .slice(0, 100) || "recording";
-      res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}${ext}"`);
-      await objectStorage.downloadObject(file, res, 0);
+      // Generate a 5-minute signed GCS URL and redirect so the browser downloads
+      // directly from GCS — avoids the server-proxy 400 MB pipe issue.
+      const signedUrl = await objectStorage.getSignedReadUrl(recording.storageKey, 300);
+      console.log(`[rec-download] redirecting to signed URL (ttl=300s)`);
+      return res.redirect(302, signedUrl);
     } catch (err) {
       console.error("[Teleprompter] Download recording error:", err);
       if (!res.headersSent) res.status(500).json({ message: "Failed to download recording" });

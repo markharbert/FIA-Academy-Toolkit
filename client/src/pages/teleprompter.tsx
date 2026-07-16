@@ -1276,7 +1276,7 @@ export default function TeleprompterPage() {
                                 ) : (
                                   <a
                                     href={`/api/teleprompter/recordings/${rec.id}/download`}
-                                    download
+                                    download={`${rec.title.replace(/\u2014/g, " - ").replace(/[^\w\s().,'&!-]/g, "").trim()}.mp4`}
                                     className="p-2 rounded-md text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
                                     data-testid={`button-download-recording-${rec.id}`}
                                   >
@@ -1506,7 +1506,7 @@ export default function TeleprompterPage() {
             </p>
             <a
               href={previewRec ? `/api/teleprompter/recordings/${previewRec.id}/download` : "#"}
-              download
+              download={previewRec ? `${previewRec.title.replace(/\u2014/g, " - ").replace(/[^\w\s().,'&!-]/g, "").trim()}.mp4` : undefined}
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors"
               data-testid="button-preview-download"
             >

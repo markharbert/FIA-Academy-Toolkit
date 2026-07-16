@@ -298,12 +298,9 @@ export class ObjectStorageService {
   // Generates a short-lived signed GET URL for streaming (e.g. video preview).
   async getSignedReadUrl(objectPath: string, ttlSec: number = 300): Promise<string> {
     const file = await this.getObjectEntityFile(objectPath);
-    // Re-derive bucket + object name the same way parseObjectPath does
-    const normalized = objectPath.startsWith("/") ? objectPath : `/${objectPath}`;
-    const parts = normalized.split("/");
-    const bucketName = parts[1];
-    const objectName = parts.slice(2).join("/");
-    return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
+    // Use the actual GCS bucket/object from the file reference — the objectPath
+    // starts with "/objects/…" which is NOT the real GCS path.
+    return signObjectURL({ bucketName: file.bucket.name, objectName: file.name, method: "GET", ttlSec });
   }
 
   // Deletes an object from the given path.
