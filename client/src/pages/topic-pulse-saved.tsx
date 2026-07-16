@@ -396,8 +396,8 @@ export default function TopicPulseSavedPage() {
     return savedTopics?.find(s => s.topic.id === topicId);
   };
 
-  const activeTopics = savedTopics?.filter(s => !s.completedAt) || [];
-  const completedTopics = savedTopics?.filter(s => s.completedAt) || [];
+  const activeTopics = savedTopics?.filter(s => !s.completedAt && !topicHasScript(s.topic.id)) || [];
+  const completedTopics = savedTopics?.filter(s => s.completedAt && !topicHasScript(s.topic.id)) || [];
 
   const TopicCard = ({ saved, isCompleted }: { saved: SavedTopic & { topic: Topic }; isCompleted?: boolean }) => {
     const hasScript = topicHasScript(saved.topic.id);

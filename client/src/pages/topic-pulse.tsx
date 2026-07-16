@@ -721,14 +721,14 @@ export default function TopicPulsePage() {
                 {/* LEFT: topic list */}
                 <div className={`${selectedSavedItem ? "w-72 shrink-0" : "flex-1"} space-y-4`}>
                   {/* Active topics */}
-                  {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length > 0 && (
+                  {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed" && !topicHasScript(s.topic?.id)).length > 0 && (
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
                         <Bookmark className="h-3.5 w-3.5" />
-                        Saved ({(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length})
+                        Saved ({(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed" && !topicHasScript(s.topic?.id)).length})
                       </h3>
                       <div className="space-y-2">
-                        {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").map((saved) => (
+                        {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed" && !topicHasScript(s.topic?.id)).map((saved) => (
                           <button
                             key={saved.id}
                             className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-card hover:bg-muted/50 transition-all text-left ${selectedSavedItem?.id === saved.id ? "ring-2 ring-violet-500 bg-violet-500/5" : "hover:-translate-y-px"}`}
@@ -748,14 +748,14 @@ export default function TopicPulsePage() {
                   )}
 
                   {/* Completed topics */}
-                  {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length > 0 && (
+                  {(savedTopics as any[]).filter((s) => (s.completedAt || s.status === "completed") && !topicHasScript(s.topic?.id)).length > 0 && (
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
                         <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                        Done ({(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length})
+                        Done ({(savedTopics as any[]).filter((s) => (s.completedAt || s.status === "completed") && !topicHasScript(s.topic?.id)).length})
                       </h3>
                       <div className="space-y-2">
-                        {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").map((saved) => (
+                        {(savedTopics as any[]).filter((s) => (s.completedAt || s.status === "completed") && !topicHasScript(s.topic?.id)).map((saved) => (
                           <button
                             key={saved.id}
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border bg-card opacity-60 hover:opacity-100 transition-all text-left ${selectedSavedItem?.id === saved.id ? "ring-2 ring-violet-500 opacity-100" : "hover:-translate-y-px"}`}
