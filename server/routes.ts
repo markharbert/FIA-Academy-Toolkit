@@ -5352,8 +5352,21 @@ export async function registerRoutes(
       // Generate a 5-minute signed GCS URL and redirect so the browser downloads
       // directly from GCS — avoids the server-proxy 400 MB pipe issue.
       const signedUrl = await objectStorage.getSignedReadUrl(recording.storageKey, 300);
-      console.log(`[rec-download] redirecting to signed URL (ttl=300s)`);
-      return res.redirect(302, signedUrl);
+      // GCS response-content-disposition is NOT part of the V4 signature string, so
+      // appending it after signing is explicitly supported. This forces GCS to respond
+      // with Content-Disposition: attachment, making the browser download the file
+      // instead of playing it — even across the cross-origin redirect.
+      const ext = path.extname(recording.storageKey) || ".mp4";
+      const safeTitle = recording.title
+        .replace(/\u2014/g, " - ")
+        .replace(/[^\w\s().,'&!-]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 100) || "recording";
+      const disposition = `attachment; filename="${safeTitle}${ext}"`;
+      const downloadUrl = `${signedUrl}&response-content-disposition=${encodeURIComponent(disposition)}`;
+      console.log(`[rec-download] redirecting with Content-Disposition attachment`);
+      return res.redirect(302, downloadUrl);
     } catch (err) {
       console.error("[Teleprompter] Download recording error:", err);
       if (!res.headersSent) res.status(500).json({ message: "Failed to download recording" });
