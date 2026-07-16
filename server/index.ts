@@ -758,6 +758,16 @@ async function runStartupMigrations() {
     `);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS funnel_brain_files_funnel_id_idx ON funnel_brain_files (funnel_id)`);
     console.log("[startup] funnel brain migration complete");
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS teleprompter_score_usage (
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        date DATE NOT NULL DEFAULT CURRENT_DATE,
+        count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, date)
+      )
+    `);
+    console.log("[startup] teleprompter_score_usage migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

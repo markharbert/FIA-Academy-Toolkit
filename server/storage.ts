@@ -334,6 +334,8 @@ export interface IStorage {
   createTeleprompterRecording(data: InsertTeleprompterRecording): Promise<TeleprompterRecording>;
   deleteTeleprompterRecording(id: string, userId: string): Promise<boolean>;
   deleteExpiredTeleprompterRecordings(): Promise<TeleprompterRecording[]>;
+  getTodayScoreUsage(userId: string): Promise<number>;
+  incrementScoreUsage(userId: string): Promise<number>;
 
   // Topic Pulse Finder: Link Placeholders
   createLinkPlaceholder(link: InsertLinkPlaceholder): Promise<LinkPlaceholder>;
@@ -1890,6 +1892,24 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(teleprompterRecordings.id, id), eq(teleprompterRecordings.userId, userId)))
       .returning();
     return !!result;
+  }
+
+  async getTodayScoreUsage(userId: string): Promise<number> {
+    const result = await db.execute(sql`
+      SELECT count FROM teleprompter_score_usage
+      WHERE user_id = ${userId} AND date = CURRENT_DATE
+    `);
+    return Number((result.rows[0] as any)?.count ?? 0);
+  }
+
+  async incrementScoreUsage(userId: string): Promise<number> {
+    const result = await db.execute(sql`
+      INSERT INTO teleprompter_score_usage (user_id, date, count)
+      VALUES (${userId}, CURRENT_DATE, 1)
+      ON CONFLICT (user_id, date) DO UPDATE SET count = teleprompter_score_usage.count + 1
+      RETURNING count
+    `);
+    return Number((result.rows[0] as any)?.count ?? 1);
   }
 
   async deleteExpiredTeleprompterRecordings(): Promise<TeleprompterRecording[]> {

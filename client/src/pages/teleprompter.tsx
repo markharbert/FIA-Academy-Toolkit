@@ -502,6 +502,11 @@ export default function TeleprompterPage() {
     reader.readAsText(file);
   };
 
+  const { data: scoreUsage } = useQuery<{ used: number; limit: number | null; isAdmin: boolean }>({
+    queryKey: ["/api/teleprompter/score-usage"],
+    refetchOnWindowFocus: false,
+  });
+
   const { data: recordings, isLoading: recordingsLoading } = useQuery<TeleprompterRecording[]>({
     queryKey: ["/api/teleprompter/recordings"],
   });
@@ -600,6 +605,7 @@ export default function TeleprompterPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Scoring failed");
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/score-usage"] });
       setTranscriptModal((m) => ({ ...m, scoreJson: data }));
     } catch (err: any) {
       toast({ title: "Scoring failed", description: err.message, variant: "destructive" });
@@ -1320,15 +1326,33 @@ export default function TeleprompterPage() {
 
           {/* Footer */}
           <div className="flex justify-between items-center pt-3 shrink-0 border-t border-border mt-2">
-            <Button size="sm" disabled={isScoring} onClick={handleScoreTake} data-testid="button-score-take">
-              {isScoring ? (
-                <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Scoring…</>
-              ) : transcriptModal.scoreJson ? (
-                <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-score</>
-              ) : (
-                <><BarChart2 className="h-3.5 w-3.5 mr-1.5" />Score this take</>
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                disabled={isScoring || (!scoreUsage?.isAdmin && (scoreUsage?.used ?? 0) >= 5)}
+                onClick={handleScoreTake}
+                data-testid="button-score-take"
+              >
+                {isScoring ? (
+                  <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Scoring…</>
+                ) : transcriptModal.scoreJson ? (
+                  <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-score</>
+                ) : (
+                  <><BarChart2 className="h-3.5 w-3.5 mr-1.5" />Score this take</>
+                )}
+              </Button>
+              {scoreUsage && (
+                scoreUsage.isAdmin ? (
+                  <span className="text-xs text-muted-foreground">Admin — Unlimited</span>
+                ) : (
+                  <span className={`text-xs ${scoreUsage.used >= 5 ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                    {scoreUsage.used >= 5
+                      ? "Daily limit reached (5 of 5 used)"
+                      : `${scoreUsage.used} of 5 scores used today`}
+                  </span>
+                )
               )}
-            </Button>
+            </div>
             <Button variant="ghost" size="sm" onClick={() => setTranscriptModal((m) => ({ ...m, open: false }))} data-testid="button-close-transcript">
               Close
             </Button>

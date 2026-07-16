@@ -5305,9 +5305,36 @@ export async function registerRoutes(
     }
   });
 
+  // Daily score usage for the current user
+  app.get("/api/teleprompter/score-usage", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (user?.isAdmin) return res.json({ used: 0, limit: null, isAdmin: true });
+      const used = await storage.getTodayScoreUsage(req.session.userId!);
+      res.json({ used, limit: 5, isAdmin: false });
+    } catch (err) {
+      console.error("[Teleprompter] Score usage error:", err);
+      res.status(500).json({ message: "Failed to get score usage" });
+    }
+  });
+
   // Score a recording's transcript using the 5-part formula
   app.post("/api/teleprompter/recordings/:id/score", requireAuth, async (req: Request, res: Response) => {
     try {
+      const user = await storage.getUser(req.session.userId!);
+
+      // Enforce 5-per-day limit for non-admins
+      if (!user?.isAdmin) {
+        const used = await storage.getTodayScoreUsage(req.session.userId!);
+        if (used >= 5) {
+          return res.status(429).json({
+            message: "Daily limit reached — you've used all 5 scores for today. Come back tomorrow.",
+            used,
+            limit: 5,
+          });
+        }
+      }
+
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
       if (!recording) return res.status(404).json({ message: "Recording not found" });
       if (!recording.transcriptText) return res.status(400).json({ message: "No transcript yet — transcribe first" });
@@ -5322,6 +5349,11 @@ export async function registerRoutes(
         scoreJson: result,
         scoreGoalType: "sales" as GoalType,
       });
+
+      // Count this score (non-admins only)
+      if (!user?.isAdmin) {
+        await storage.incrementScoreUsage(req.session.userId!);
+      }
 
       res.json(result);
     } catch (err) {
