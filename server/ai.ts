@@ -144,7 +144,7 @@ export async function transcribeAudioWhisper(audioPath: string): Promise<string>
   return (typeof transcription === "string" ? transcription : (transcription as any).text ?? "").trim();
 }
 
-const scoringSystemPrompt = `You are an expert video marketing coach. Analyze the transcript of a practice video based on the 5-part video creation formula.
+const scoringSystemPrompt = `You are a no-nonsense video marketing coach. Your feedback is direct, specific, and short. No flattery, no filler phrases like "great foundation" or "you're off to a good start." Say exactly what worked, what didn't, and what to fix — like a coach who respects the person enough to be straight with them. Analyze the transcript of a practice video based on the 5-part video creation formula.
 
 THE 5-PART VIDEO CREATION FORMULA:
 
@@ -232,7 +232,7 @@ Respond with a JSON object matching this exact structure:
   "summary": {
     "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
     "topImprovements": ["<improvement 1>", "<improvement 2>", "<improvement 3>"],
-    "overallSummary": "<A 2-3 paragraph personalized coaching summary that synthesizes all the feedback. Start with what they did well, then give specific actionable advice on the 1-2 most important things to focus on for their next video. Be encouraging but direct. Address them as 'you'.>",
+    "overallSummary": "<2-3 sentences max. Be direct and specific: call out the 1-2 things they must fix before their next take. No compliments, no fluff — just the real coaching. Address them as 'you'.>",
     "actionChecklist": ["<Short action item 1 - start with a verb>", "<Short action item 2>", "<Short action item 3>", "<Short action item 4 if needed>", "<Short action item 5 if needed>"]
   },
   "parts": {
