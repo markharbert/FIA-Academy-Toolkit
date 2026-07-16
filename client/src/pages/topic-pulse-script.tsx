@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, Eye, ThumbsUp, MessageSquare, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus, Wand2, Brain, Clock, Tags, Video } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, Check, FileText, Save, Search, Youtube, ChevronLeft, ChevronRight, Eye, ThumbsUp, MessageSquare, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Minus, HelpCircle, FileDown, Play, Pause, X, RotateCcw, MonitorPlay, ChevronUp, ChevronDown, BookmarkPlus, Wand2, Brain, Clock, Tags, Video } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1756,27 +1756,25 @@ export default function TopicPulseScriptPage() {
   return (
     <div className="min-h-full flex flex-col">
       {/* ── Hero header ── */}
-      <div className="bg-sidebar text-sidebar-foreground px-6 py-6 shrink-0">
-        <div className="max-w-5xl mx-auto">
-          {/* Top row: back + title + actions */}
+      <div className="relative overflow-hidden border-b border-border shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(345_55%_16%)]" />
+        <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-rose-500/20 blur-3xl" />
+        <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-amber-500/10 blur-3xl" />
+        <div className="relative max-w-6xl mx-auto px-6 py-6">
+          {/* Title row + YouTube button */}
           <div className="flex items-start gap-3">
-            <button
-              onClick={() => navigate("/video-studio/scripts")}
-              className="mt-0.5 flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Scripts
-            </button>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold text-white leading-tight truncate" data-testid="text-script-title">
-                {script.title}
-              </h1>
-              <p className="text-white/40 text-xs mt-0.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <FileText className="h-4 w-4 text-amber-400 shrink-0" />
+                <h1 className="text-xl font-bold text-white leading-tight truncate" data-testid="text-script-title">
+                  {script.title}
+                </h1>
+              </div>
+              <p className="text-white/50 text-xs mt-0.5">
                 Created {new Date(script.createdAt).toLocaleDateString()}
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="shrink-0">
               <Button
                 size="sm"
                 onClick={() => setShowResearchPanel(!showResearchPanel)}
@@ -1788,9 +1786,32 @@ export default function TopicPulseScriptPage() {
               </Button>
             </div>
           </div>
-
-          {/* Intent analysis */}
-          <HeroIntentAnalysis analysis={(script.topic as any)?.intentAnalysis} />
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+            <button
+              onClick={() => navigate("/video-studio")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+              data-testid="button-back-video-studio"
+            >
+              Video Studio
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <button
+              onClick={() => navigate("/video-studio/research")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+            >
+              Research
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <button
+              onClick={() => navigate("/video-studio/scripts")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+            >
+              Generated Scripts
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <span className="text-white/75 text-xs font-medium truncate max-w-[200px]">{script.title}</span>
+          </div>
         </div>
       </div>
 
@@ -1843,6 +1864,17 @@ export default function TopicPulseScriptPage() {
                 </button>
               </div>
             </div>
+
+            {/* ── Intent Analysis ── */}
+            {(script.topic as any)?.intentAnalysis && (
+              <div className="mb-5 rounded-xl border bg-muted/40 p-4 flex items-start gap-3">
+                <Brain className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Audience Intent Analysis</p>
+                  <p className="text-sm leading-relaxed text-foreground/80" data-testid="text-hero-intent-analysis">{(script.topic as any).intentAnalysis}</p>
+                </div>
+              </div>
+            )}
 
             {/* ── OUTLINE VIEW ── */}
             {scriptView === "outline" && fullScript && (
