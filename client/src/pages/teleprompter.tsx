@@ -283,17 +283,7 @@ export default function TeleprompterPage() {
     }
   }, [scripts]);
 
-  // Listen for the teleprompter popup signalling a successful upload so "Your Takes"
-  // refreshes automatically without the user needing to reload the page.
-  useEffect(() => {
-    function onMessage(e: MessageEvent) {
-      if (e.data?.type === "teleprompter-recording-saved") {
-        queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
-      }
-    }
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
+  // postMessage handling is consolidated in the effect below (upload-request + recording-saved)
 
   // Auto-save: 5 seconds after the last change, silently PATCH the existing script.
   // Only runs for scripts that already exist (selectedId set). New scripts require

@@ -388,12 +388,20 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     function changeFont(d){var nx=fontIdx+d;if(nx<0||nx>=FONT_SIZES.length)return;fontIdx=nx;applyFont();}
     applyFont();
 
-    function hideCountdown(){if(cdTimer){clearInterval(cdTimer);cdTimer=null;}recCdEl.style.display='none';}
+    function hideCountdown(){
+      if(cdTimer){clearInterval(cdTimer);cdTimer=null;}
+      recCdEl.style.display='none';
+      // Always unlock the recording button so it's never permanently stuck
+      recCdActive=false;
+    }
     function resetScroll(){
       playing=false;if(raf){cancelAnimationFrame(raf);raf=null;}
       hideCountdown();lastTime=null;scrollAccum=0;scroller.scrollTop=0;playBtn.textContent='▶ Play';
     }
     function startCountdown(onDone,label){
+      // Clear any in-progress countdown before starting a new one — prevents
+      // leaked intervals if Play and Record countdowns stack on top of each other.
+      if(cdTimer){clearInterval(cdTimer);cdTimer=null;}
       var count=5;recCdNumEl.textContent=count;recCdLabel.textContent=label||'';recCdEl.style.display='flex';
       cdTimer=setInterval(function(){
         count--;
