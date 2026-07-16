@@ -163,7 +163,7 @@ export default function TopicPulseScriptsPage() {
                               className="h-7 w-7 text-muted-foreground hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deleteMutation.mutate(script.id);
+                                setPendingDeleteId(script.id);
                               }}
                               disabled={deleteMutation.isPending}
                               data-testid={`button-delete-${script.id}`}
