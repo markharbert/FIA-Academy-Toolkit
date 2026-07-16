@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
+import { Loader2, Search, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft, Bookmark, CheckCircle2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,6 +57,7 @@ export default function TopicPulsePage() {
   const [selectedType, setSelectedType] = useState<string | undefined>();
   const [runsPage, setRunsPage] = useState(1);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [activeTab, setActiveTab] = useState<"research" | "saved">("research");
   const PAGE_SIZE = 15;
 
   const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
@@ -86,6 +87,8 @@ export default function TopicPulsePage() {
   const creditsExhausted = creditsData !== undefined && creditsRemaining < 1;
   const creditsLow = creditLimit > 0 && creditsRemaining / creditLimit < 0.1;
   const creditsMedium = creditLimit > 0 && creditsRemaining / creditLimit < 0.2;
+
+  const topicHasScript = (topicId: string) => scripts?.some((s: any) => s.topicId === topicId) ?? false;
 
   const searchMutation = useMutation({
     mutationFn: async (input: { seedQuery: string; videoType?: string }) => {
@@ -185,38 +188,74 @@ export default function TopicPulsePage() {
         </div>
       </div>
 
-      {/* ── How it works strip ── */}
-      <div className="border-b bg-muted/20 shrink-0">
-        <div className="max-w-4xl mx-auto px-5 py-3">
-          <div className="grid grid-cols-3 divide-x divide-border">
-            <div className="flex items-center gap-2.5 pr-4">
-              <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">1</div>
-              <div>
-                <p className="text-xs font-semibold">Type a topic</p>
-                <p className="text-xs text-muted-foreground hidden sm:block">e.g. "keto snacks"</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 px-4">
-              <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">2</div>
-              <div>
-                <p className="text-xs font-semibold">Pick a topic</p>
-                <p className="text-xs text-muted-foreground hidden sm:block">choose from results</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 pl-4">
-              <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">3</div>
-              <div>
-                <p className="text-xs font-semibold">Generate your script</p>
-                <p className="text-xs text-muted-foreground hidden sm:block">ready in seconds</p>
-              </div>
-            </div>
+      {/* ── Tab bar ── */}
+      <div className="border-b shrink-0">
+        <div className="max-w-4xl mx-auto px-5">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab("research")}
+              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                activeTab === "research"
+                  ? "border-violet-500 text-violet-600 dark:text-violet-400"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              data-testid="tab-research"
+            >
+              <Search className="h-3.5 w-3.5" />
+              Research
+            </button>
+            <button
+              onClick={() => setActiveTab("saved")}
+              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                activeTab === "saved"
+                  ? "border-violet-500 text-violet-600 dark:text-violet-400"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              data-testid="tab-saved"
+            >
+              <Bookmark className="h-3.5 w-3.5" />
+              Saved Topics
+              {savedTopics && savedTopics.length > 0 && (
+                <span className="ml-0.5 text-xs px-1.5 py-0.5 rounded-full bg-muted font-medium">
+                  {savedTopics.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </div>
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-auto">
+        {activeTab === "research" ? (
         <div className="max-w-4xl mx-auto px-5 py-6 space-y-6">
+
+          {/* How it works (inline) */}
+          <div className="rounded-xl border bg-muted/20 p-3">
+            <div className="grid grid-cols-3 divide-x divide-border">
+              <div className="flex items-center gap-2.5 pr-4">
+                <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">1</div>
+                <div>
+                  <p className="text-xs font-semibold">Type a topic</p>
+                  <p className="text-xs text-muted-foreground hidden sm:block">e.g. "keto snacks"</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 px-4">
+                <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">2</div>
+                <div>
+                  <p className="text-xs font-semibold">Pick a topic</p>
+                  <p className="text-xs text-muted-foreground hidden sm:block">choose from results</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 pl-4">
+                <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">3</div>
+                <div>
+                  <p className="text-xs font-semibold">Generate your script</p>
+                  <p className="text-xs text-muted-foreground hidden sm:block">ready in seconds</p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Search + filters */}
           <div className="space-y-3">
@@ -269,45 +308,6 @@ export default function TopicPulsePage() {
                 })}
               </div>
             </div>
-          </div>
-
-          {/* Quick-access cards */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              className="group flex flex-col gap-2 p-4 rounded-xl border-2 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 hover:border-teal-500/40 hover:-translate-y-px transition-all text-left"
-              onClick={() => navigate("/video-studio/research/saved")}
-              data-testid="card-saved-topics"
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="p-2 rounded-lg bg-teal-500/15 shrink-0">
-                  <TrendingUp className="h-4 w-4 text-teal-500" />
-                </div>
-                <ChevronRight className="h-4 w-4 text-teal-500/50 group-hover:text-teal-500 transition-colors" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-teal-700 dark:text-teal-400">{savedTopics?.length ?? 0}</p>
-                <p className="text-xs font-semibold text-foreground">Saved Topics</p>
-                <p className="text-xs text-muted-foreground">bookmarked for scripting</p>
-              </div>
-            </button>
-
-            <button
-              className="group flex flex-col gap-2 p-4 rounded-xl border-2 border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 hover:border-violet-500/40 hover:-translate-y-px transition-all text-left"
-              onClick={() => navigate("/video-studio/scripts")}
-              data-testid="card-scripts"
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="p-2 rounded-lg bg-violet-500/15 shrink-0">
-                  <Zap className="h-4 w-4 text-violet-500" />
-                </div>
-                <ChevronRight className="h-4 w-4 text-violet-500/50 group-hover:text-violet-500 transition-colors" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-violet-700 dark:text-violet-400">{scripts?.length ?? 0}</p>
-                <p className="text-xs font-semibold text-foreground">Scripts Written</p>
-                <p className="text-xs text-muted-foreground">ready to record</p>
-              </div>
-            </button>
           </div>
 
           {/* Recent searches */}
@@ -450,6 +450,122 @@ export default function TopicPulsePage() {
             )}
           </div>
         </div>
+        ) : (
+          /* ── Saved Topics Tab ── */
+          <div className="max-w-4xl mx-auto px-5 py-6 space-y-4">
+            {savedTopics && savedTopics.length > 0 ? (
+              <>
+                {/* Progress bar */}
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">Your Progress</p>
+                    <p className="text-sm text-muted-foreground">
+                      {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length} of {savedTopics.length} scripted
+                    </p>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-violet-500 transition-all"
+                      style={{
+                        width: savedTopics.length > 0
+                          ? `${((savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length / savedTopics.length) * 100}%`
+                          : "0%"
+                      }}
+                    />
+                  </div>
+                  {(() => {
+                    const remaining = (savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length;
+                    return (
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        {remaining > 0 ? `${remaining} topic${remaining !== 1 ? "s" : ""} ready to script` : "All topics scripted! 🎉"}
+                      </p>
+                    );
+                  })()}
+                </div>
+
+                {/* Active topics */}
+                {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Bookmark className="h-3.5 w-3.5" />
+                      Saved ({(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length})
+                    </h3>
+                    <div className="space-y-2">
+                      {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").map((saved) => (
+                        <button
+                          key={saved.id}
+                          className="w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl border bg-card hover:bg-muted/50 hover:-translate-y-px transition-all text-left"
+                          onClick={() => navigate("/video-studio/research/saved")}
+                          data-testid={`card-saved-hub-${saved.id}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{saved.topic?.topicTitle ?? "Topic"}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {topicHasScript(saved.topic?.id) ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-600 dark:text-green-400">
+                                <CheckCircle2 className="h-3 w-3" />Scripted
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                                Ready to Script
+                              </span>
+                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed topics */}
+                {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                      Done ({(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length})
+                    </h3>
+                    <div className="space-y-2">
+                      {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").map((saved) => (
+                        <button
+                          key={saved.id}
+                          className="w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl border bg-card opacity-60 hover:opacity-100 hover:-translate-y-px transition-all text-left"
+                          onClick={() => navigate("/video-studio/research/saved")}
+                          data-testid={`card-saved-hub-done-${saved.id}`}
+                        >
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                            <p className="font-medium text-sm text-muted-foreground truncate">{saved.topic?.topicTitle ?? "Topic"}</p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="rounded-xl border bg-card py-16 flex flex-col items-center text-center px-6">
+                <div className="p-4 rounded-2xl bg-muted/50 mb-4">
+                  <Bookmark className="h-10 w-10 text-muted-foreground/40" />
+                </div>
+                <p className="font-semibold text-lg mb-1">No saved topics yet</p>
+                <p className="text-sm text-muted-foreground max-w-sm mb-5">
+                  Go to Research, run a search, then click "Save to My List" on any topic you want to come back to.
+                </p>
+                <button
+                  onClick={() => setActiveTab("research")}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 transition-colors"
+                  data-testid="button-go-research"
+                >
+                  <Search className="h-4 w-4" />
+                  Start Researching
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
