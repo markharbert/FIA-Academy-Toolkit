@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Trash2, FileText, Zap, Calendar, Clock, ChevronRight } from "lucide-react";
+import { Loader2, Trash2, FileText, Zap, Calendar, Clock, ChevronRight, CheckCircle2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Script, Topic } from "@shared/schema";
@@ -103,46 +103,54 @@ export default function TopicPulseScriptsPage() {
                     onClick={() => navigate(`/video-studio/scripts/${script.id}`)}
                     data-testid={`card-script-${script.id}`}
                   >
-                    <div className="px-4 py-3 flex items-center gap-3">
+                    <div className="px-4 py-2.5 flex items-center gap-3">
                       {/* Icon */}
                       <div className="p-1.5 rounded-md bg-muted/60 shrink-0">
                         <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                       </div>
 
-                      {/* Main content */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm leading-snug truncate group-hover:text-primary transition-colors">
+                      {/* Title + meta — all inline */}
+                      <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
+                        <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
                           {script.title}
                         </p>
-                        <div className="flex items-center gap-3 mt-0.5">
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Calendar className="h-3 w-3" />
-                            {new Date(script.createdAt).toLocaleDateString()}
-                          </span>
-                          {videoLength && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span className="text-muted-foreground/40 text-xs shrink-0">·</span>
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(script.createdAt).toLocaleDateString()}
+                        </span>
+                        {videoLength && (
+                          <>
+                            <span className="text-muted-foreground/40 text-xs shrink-0">·</span>
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
                               <Clock className="h-3 w-3" />
                               {videoLength} min
                             </span>
-                          )}
-                        </div>
+                          </>
+                        )}
                       </div>
 
-                      {/* Delete button */}
-                      <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteMutation.mutate(script.id);
-                          }}
-                          disabled={deleteMutation.isPending}
-                          data-testid={`button-delete-${script.id}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                      {/* Right: status pill + delete */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Generated
+                        </span>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteMutation.mutate(script.id);
+                            }}
+                            disabled={deleteMutation.isPending}
+                            data-testid={`button-delete-${script.id}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
