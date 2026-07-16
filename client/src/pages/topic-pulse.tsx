@@ -259,6 +259,7 @@ export default function TopicPulsePage() {
   const [overlayActive, setOverlayActive] = useState(false);
   const [searchProgress, setSearchProgress] = useState(0);
   const [msgIndex, setMsgIndex] = useState(0);
+  const [msgVisible, setMsgVisible] = useState(true);
   const apiDoneRef = useRef(false);
   const startTimeRef = useRef(0);
   const MIN_MS = 20000;
@@ -365,9 +366,13 @@ export default function TopicPulsePage() {
     let raf: number;
     let msgTimer: ReturnType<typeof setInterval>;
 
-    // Cycle through messages every 4s — one message per stage
+    // Cycle through messages every 4s with a 0.5s cross-fade
     msgTimer = setInterval(() => {
-      setMsgIndex((i) => (i + 1) % SEARCH_MESSAGES.length);
+      setMsgVisible(false);
+      setTimeout(() => {
+        setMsgIndex((i) => (i + 1) % SEARCH_MESSAGES.length);
+        setMsgVisible(true);
+      }, 500);
     }, 4000);
 
     const tick = () => {
@@ -1027,7 +1032,7 @@ export default function TopicPulsePage() {
       {/* ── Search Loading Overlay ── */}
       {overlayActive && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="relative w-full max-w-md mx-4 rounded-2xl overflow-hidden shadow-2xl">
+          <div className="relative w-full max-w-2xl mx-4 rounded-2xl overflow-hidden shadow-2xl">
             {/* gradient background */}
             <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] via-[hsl(260_50%_12%)] to-[hsl(345_55%_16%)]" />
             <div className="relative p-8 text-center space-y-6">
@@ -1039,8 +1044,8 @@ export default function TopicPulsePage() {
               </div>
 
               {/* Personalised message — fades between steps */}
-              <div className="space-y-1 min-h-[3rem]">
-                <p className="text-white font-semibold text-lg leading-snug transition-all duration-500">
+              <div className="space-y-1">
+                <p className={`text-white font-semibold text-lg whitespace-nowrap transition-opacity duration-500 ${msgVisible ? "opacity-100" : "opacity-0"}`}>
                   {SEARCH_MESSAGES[msgIndex](firstName)}
                 </p>
                 <p className="text-white/40 text-sm">
