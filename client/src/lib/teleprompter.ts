@@ -8,10 +8,10 @@ export type TeleprompterSection = {
   text: string;
 };
 
-export function openTeleprompter(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): boolean {
+export function buildTeleprompterHtml(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): string {
   const { title, sections, scriptId, bulletPoints } = opts;
   const cleaned = sections.filter((s) => s.text && s.text.trim());
-  if (cleaned.length === 0) return false;
+  if (cleaned.length === 0) return "";
 
   const esc = (t: string) =>
     t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -678,7 +678,7 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
         document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg success" style="font-size:11px">&#x2601; Saved to your account \u2014 available for 30 days.</p>';
         document.getElementById('review-warn').style.display='none';
         setCamState('review');
-        try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
+        try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');if(window.parent&&window.parent!==window)window.parent.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
       }
 
       function onFail(reason){
@@ -787,6 +787,13 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
 </body>
 </html>`;
 
+  return html;
+}
+
+export function openTeleprompter(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): boolean {
+  const cleaned = opts.sections.filter((s) => s.text && s.text.trim());
+  if (cleaned.length === 0) return false;
+  const html = buildTeleprompterHtml(opts);
   const twWidth = Math.min(1440, screen.availWidth - 40);
   const twHeight = Math.min(900, screen.availHeight - 60);
   const twLeft = Math.max(0, Math.round((screen.availWidth - twWidth) / 2));

@@ -53,7 +53,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { openTeleprompter } from "@/lib/teleprompter";
+import { openTeleprompter, buildTeleprompterHtml } from "@/lib/teleprompter";
 import jsPDF from "jspdf";
 import type { TeleprompterScript, TeleprompterRecording, ScoreResult, GoalType } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -190,6 +190,7 @@ export default function TeleprompterPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [showHelp, setShowHelp] = useState(false);
+  const [modalHtml, setModalHtml] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -472,6 +473,37 @@ export default function TeleprompterPage() {
       });
     }
   };
+
+  const handleOpenModal = async () => {
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      toast({ title: "Add some text first", description: "Paste or upload your script first.", variant: "destructive" });
+      return;
+    }
+    let scriptToOpen: TeleprompterScript | null = selected;
+    if (dirty || !selectedId) {
+      scriptToOpen = await performSave();
+      if (!scriptToOpen) return;
+    }
+    const html = buildTeleprompterHtml({
+      title: scriptToOpen?.title || title.trim() || "Untitled script",
+      sections: [{ text: scriptToOpen?.content || trimmedContent }],
+      scriptId: scriptToOpen?.id,
+      bulletPoints: scriptToOpen?.bulletPoints || bulletPoints.trim() || undefined,
+    });
+    if (!html) return;
+    setModalHtml(html);
+  };
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "teleprompter-recording-saved") {
+        queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -928,6 +960,17 @@ export default function TeleprompterPage() {
                   </Button>
                   <Button
                     variant="outline"
+                    onClick={handleOpenModal}
+                    disabled={!content.trim() || isSaving}
+                    data-testid="button-open-teleprompter-modal"
+                    className="text-xs"
+                    size="sm"
+                  >
+                    <Play className="h-3.5 w-3.5 mr-1.5" />
+                    Try in-page (Beta)
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={handleSave}
                     disabled={!content.trim() || isSaving || (!dirty && !!selectedId)}
                     data-testid="button-save"
@@ -1118,6 +1161,25 @@ export default function TeleprompterPage() {
           </div>
         </div>
       </div>
+
+      {/* In-page teleprompter overlay (Beta) */}
+      {modalHtml && (
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-black">
+          <button
+            onClick={() => setModalHtml(null)}
+            className="absolute top-3 right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
+            data-testid="button-close-teleprompter-modal"
+          >
+            ✕ Close
+          </button>
+          <iframe
+            srcDoc={modalHtml}
+            allow="camera; microphone"
+            className="flex-1 w-full border-0"
+            title="Teleprompter"
+          />
+        </div>
+      )}
 
       {/* Tips & Shortcuts help dialog */}
       <Dialog open={showHelp} onOpenChange={setShowHelp}>
