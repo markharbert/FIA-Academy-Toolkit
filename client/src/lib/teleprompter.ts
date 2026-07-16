@@ -501,7 +501,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     var camState='idle';
     var mediaStream=null,mediaRecorder=null,recordedChunks=[],recordedBlob=null,recordedUrl=null,recMimeType='';
     var timerInterval=null,recSeconds=0;
-    var hasUnsaved=false,recordingId=null,uploadFailed=false;
+    var hasUnsaved=false,recordingId=null,recordingTitle=null,uploadFailed=false;
     var selectedFormat='landscape';
     var selectedCameraId='',selectedMicId='';
     var audioCtx=null,audioAnalyser=null,micRaf=null,micLevelFill=null;
@@ -746,6 +746,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
       function onSuccess(data){
         recordingId=data.id;
+        recordingTitle=data.title||null;
         uploadFailed=false;
         hasUnsaved=false;
         document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg success" style="font-size:11px">&#x2601; Saved to your account \u2014 available for 30 days.</p>';
@@ -932,10 +933,15 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       // Fallback: download from local blob
       if(!recordedUrl)return;
       var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';
-      var ts=new Date().toISOString().slice(0,19).replace(/[T:]/g,'-');
+      var fallbackName=(recordingTitle||SCRIPT_TITLE||'recording')
+        .replace(/\u2014/g,' - ')
+        .replace(/[^\w\s().,'&!\-]/g,'')
+        .replace(/\s+/g,' ')
+        .trim()
+        .slice(0,100)||'recording';
       var a=document.createElement('a');
       a.href=recordedUrl;
-      a.download='recording-'+ts+ext;
+      a.download=fallbackName+ext;
       document.body.appendChild(a);a.click();document.body.removeChild(a);
       hasUnsaved=false;
     }

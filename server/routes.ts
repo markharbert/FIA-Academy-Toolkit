@@ -5340,7 +5340,12 @@ export async function registerRoutes(
       const objectStorage = new ObjectStorageService();
       const file = await objectStorage.getObjectEntityFile(recording.storageKey);
       const ext = path.extname(recording.storageKey) || ".webm";
-      const safeTitle = recording.title.replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "recording";
+      const safeTitle = recording.title
+        .replace(/\u2014/g, " - ")        // em dash → " - "
+        .replace(/[^\w\s().,'&!-]/g, "")  // strip characters not safe in filenames
+        .replace(/\s+/g, " ")             // collapse runs of whitespace
+        .trim()
+        .slice(0, 100) || "recording";
       res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}${ext}"`);
       await objectStorage.downloadObject(file, res, 0);
     } catch (err) {
