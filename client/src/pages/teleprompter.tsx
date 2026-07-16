@@ -23,6 +23,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ArrowLeft,
@@ -42,6 +48,11 @@ import {
   Star,
   BarChart2,
   RefreshCw,
+  Check,
+  AlertTriangle,
+  Quote,
+  Lightbulb,
+  TrendingUp,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -52,6 +63,125 @@ import { cn } from "@/lib/utils";
 
 const MAX_SCRIPT_CHARS = 100_000;
 const MAX_FILE_BYTES = 500_000;
+
+// ── Score report helpers ──────────────────────────────────────────────────────
+
+const PART_COLORS: Record<string, string> = {
+  hook: "#6366f1",
+  setHook: "#8b5cf6",
+  firstCTA: "#ec4899",
+  content: "#f59e0b",
+  finalCTA: "#10b981",
+};
+
+const partDefinitions: Record<string, { question: string; definition: string }> = {
+  hook: { question: "What is a Hook?", definition: "The opening moment that grabs attention and makes viewers want to keep watching." },
+  setHook: { question: "What is Setting the Hook?", definition: "The follow-up that builds on your hook by establishing credibility or deepening curiosity." },
+  firstCTA: { question: "What is the First CTA?", definition: "An early prompt that encourages engagement before delivering your main content." },
+  content: { question: "What is the Content?", definition: "The main body where you deliver value, teach, share your story, or make your case." },
+  finalCTA: { question: "What is the Final CTA?", definition: "Your closing request that tells viewers exactly what to do next." },
+};
+
+function TakeScoreCircle({ score }: { score: number }) {
+  const radius = 44;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (score / 100) * circumference;
+  const stroke = score >= 70 ? "#10b981" : score >= 40 ? "#f59e0b" : "#f43f5e";
+  const textColor = score >= 70 ? "text-emerald-500" : score >= 40 ? "text-amber-500" : "text-rose-500";
+  return (
+    <div className="relative h-24 w-24">
+      <svg className="h-24 w-24 -rotate-90" viewBox="0 0 104 104">
+        <circle strokeWidth="7" stroke="currentColor" fill="transparent" r={radius} cx="52" cy="52" className="text-muted" />
+        <circle strokeWidth="7" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" stroke={stroke} fill="transparent" r={radius} cx="52" cy="52" />
+      </svg>
+      <span className={cn("absolute inset-0 flex items-center justify-center text-2xl font-bold", textColor)}>{score}</span>
+    </div>
+  );
+}
+
+function TakePartBar({ label, score, partKey }: { label: string; score: number; partKey: string }) {
+  const pct = (score / 20) * 100;
+  const color = PART_COLORS[partKey] || "#6366f1";
+  const levelLabel = score >= 15 ? "Excellent" : score >= 10 ? "Good" : "Needs work";
+  const levelColor = score >= 15 ? "text-emerald-600 dark:text-emerald-400" : score >= 10 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400";
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs">
+        <span className="font-medium">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className={cn("font-semibold", levelColor)}>{levelLabel}</span>
+          <span className="font-bold tabular-nums text-foreground">{score}/20</span>
+        </div>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
+function TakePartDetail({
+  partKey, title, score, data,
+}: {
+  partKey: string; title: string; score: number;
+  data: { whatWorked: string[]; whatMissing: string[]; suggestions: string[]; exampleLines: string[] };
+}) {
+  const color = PART_COLORS[partKey] || "#6366f1";
+  const levelLabel = score >= 15 ? "Excellent" : score >= 10 ? "Good" : "Needs work";
+  const def = partDefinitions[partKey];
+  return (
+    <AccordionItem value={partKey} className="border-b-0 mb-2 last:mb-0">
+      <AccordionTrigger className="hover:no-underline rounded-xl border bg-card px-3 py-2.5 hover:bg-muted/40 transition-colors data-[state=open]:rounded-b-none data-[state=open]:border-b-0" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: color }}>{score}/20</span>
+          <span className="font-semibold text-sm">{title}</span>
+          <span className="text-xs text-muted-foreground font-normal">{levelLabel}</span>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="border border-t-0 rounded-b-xl px-3 pb-3 pt-2.5 space-y-3" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
+        {def && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 p-2.5">
+            <div className="flex items-start gap-2">
+              <Lightbulb className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-0.5">{def.question}</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300/80 leading-relaxed">{def.definition}</p>
+              </div>
+            </div>
+          </div>
+        )}
+        {data.whatWorked.length > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide"><Check className="h-3 w-3" />What Worked</div>
+            <ul className="space-y-0.5 pl-4">{data.whatWorked.map((item, i) => <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>)}</ul>
+          </div>
+        )}
+        {data.whatMissing.length > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide"><AlertTriangle className="h-3 w-3" />What's Missing</div>
+            <ul className="space-y-0.5 pl-4">{data.whatMissing.map((item, i) => <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>)}</ul>
+          </div>
+        )}
+        {data.suggestions.length > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide"><Lightbulb className="h-3 w-3" />Suggestions</div>
+            <ul className="space-y-0.5 pl-4">{data.suggestions.map((item, i) => <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>)}</ul>
+          </div>
+        )}
+        {data.exampleLines.length > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide"><Quote className="h-3 w-3" />Example Lines</div>
+            <div className="space-y-1.5 pl-3">{data.exampleLines.map((line, i) => (
+              <blockquote key={i} className="border-l-2 pl-2.5 text-xs italic text-muted-foreground" style={{ borderColor: color }}>"{line}"</blockquote>
+            ))}</div>
+          </div>
+        )}
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function formatRelative(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
@@ -109,6 +239,7 @@ export default function TeleprompterPage() {
     scoreGoalType: GoalType | null;
   }>({ open: false, title: "", text: "", recordingId: "", durationSeconds: null, scoreJson: null, scoreGoalType: null });
   const [isScoring, setIsScoring] = useState(false);
+  const [openFeedbackSections, setOpenFeedbackSections] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -1086,7 +1217,7 @@ export default function TeleprompterPage() {
       {/* Transcript viewer modal */}
       <Dialog open={transcriptModal.open} onOpenChange={(open) => !open && setTranscriptModal((m) => ({ ...m, open: false }))}>
         <DialogContent
-          className={cn("w-full flex flex-col transition-all", transcriptModal.scoreJson ? "max-w-5xl" : "max-w-2xl")}
+          className={cn("w-full flex flex-col transition-all", transcriptModal.scoreJson ? "max-w-7xl" : "max-w-2xl")}
           style={{ maxHeight: "90vh" }}
         >
           <DialogHeader className="shrink-0">
@@ -1101,137 +1232,181 @@ export default function TeleprompterPage() {
           {/* Two-panel body */}
           <div className={cn("flex-1 min-h-0 flex gap-4 mt-2", transcriptModal.scoreJson ? "flex-row" : "flex-col")}>
 
-            {/* ── Score panel (left) ── */}
+            {/* ── Score report panel (left, 60%) ── */}
             {transcriptModal.scoreJson && (() => {
               const sc = transcriptModal.scoreJson;
-              const total = sc.totalScore;
-              const scoreColor = total >= 80 ? "text-green-500" : total >= 60 ? "text-amber-500" : "text-red-500";
-              const ringColor = total >= 80 ? "border-green-500" : total >= 60 ? "border-amber-500" : "border-red-500";
-              const parts: { label: string; key: keyof typeof sc.partScores }[] = [
-                { label: "Hook", key: "hook" },
-                { label: "Set the Hook", key: "setHook" },
-                { label: "First CTA", key: "firstCTA" },
-                { label: "Content", key: "content" },
-                { label: "Final CTA", key: "finalCTA" },
-              ];
               return (
-                <div className="w-56 shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
-                  {/* Big score */}
-                  <div className="flex flex-col items-center gap-1 pt-1">
-                    <div className={cn("w-20 h-20 rounded-full border-4 flex items-center justify-center", ringColor)}>
-                      <span className={cn("text-2xl font-bold tabular-nums", scoreColor)}>{total}</span>
+                <div className="w-[60%] shrink-0 overflow-y-auto pr-1 flex flex-col gap-4">
+
+                  {/* Score circle + part bars */}
+                  <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                    <div className="h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+                    <div className="px-4 py-3 border-b flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-emerald-500" />
+                      <span className="font-semibold text-sm">Score Summary</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">out of 100</span>
-                  </div>
-
-                  {/* Part scores */}
-                  <div className="flex flex-col gap-2">
-                    {parts.map(({ label, key }) => {
-                      const val = sc.partScores[key];
-                      const pct = (val / 20) * 100;
-                      const barColor = val >= 16 ? "bg-green-500" : val >= 12 ? "bg-amber-500" : "bg-red-500";
-                      return (
-                        <div key={key} className="flex flex-col gap-0.5">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-medium">{label}</span>
-                            <span className="text-xs text-muted-foreground tabular-nums">{val}/20</span>
-                          </div>
-                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                            <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
-                          </div>
+                    <div className="p-4">
+                      <div className="flex gap-6 items-start">
+                        <div className="flex flex-col items-center gap-1 shrink-0">
+                          <TakeScoreCircle score={sc.totalScore} />
+                          <p className="text-xs font-semibold">Total Score</p>
+                          <p className="text-xs text-muted-foreground">out of 100</p>
                         </div>
-                      );
-                    })}
+                        <div className="flex-1 space-y-2.5 pt-1">
+                          <TakePartBar label="Hook" score={sc.partScores.hook} partKey="hook" />
+                          <TakePartBar label="Set the Hook" score={sc.partScores.setHook} partKey="setHook" />
+                          <TakePartBar label="First CTA" score={sc.partScores.firstCTA} partKey="firstCTA" />
+                          <TakePartBar label="Content" score={sc.partScores.content} partKey="content" />
+                          <TakePartBar label="Final CTA" score={sc.partScores.finalCTA} partKey="finalCTA" />
+                        </div>
+                      </div>
+                      {/* Strengths + improvements */}
+                      {(sc.summary.strengths.length > 0 || sc.summary.topImprovements.length > 0) && (
+                        <div className="mt-4 grid grid-cols-2 gap-4">
+                          {sc.summary.strengths.length > 0 && (
+                            <div className="space-y-1.5">
+                              <h4 className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                                <Check className="h-3.5 w-3.5" />What You Did Well
+                              </h4>
+                              <ul className="space-y-1">
+                                {sc.summary.strengths.map((s, i) => (
+                                  <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                    <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />{s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {sc.summary.topImprovements.length > 0 && (
+                            <div className="space-y-1.5">
+                              <h4 className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                                <Lightbulb className="h-3.5 w-3.5" />Top Improvements
+                              </h4>
+                              <ul className="space-y-1">
+                                {sc.summary.topImprovements.map((s, i) => (
+                                  <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                    <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />{s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Top improvements */}
-                  {sc.summary.topImprovements.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Top improvements</p>
-                      <ul className="flex flex-col gap-1.5">
-                        {sc.summary.topImprovements.slice(0, 3).map((item, i) => (
-                          <li key={i} className="flex gap-1.5 text-xs text-foreground/80 leading-snug">
-                            <span className="mt-0.5 text-amber-500 shrink-0">▸</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
+                  {/* Detailed feedback accordion */}
+                  <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                    <div className="h-1 bg-gradient-to-r from-orange-500 via-violet-500 to-pink-500" />
+                    <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
+                      <div>
+                        <span className="font-semibold text-sm">Detailed Feedback by Part</span>
+                        <p className="text-xs text-muted-foreground mt-0.5">Click each section to expand</p>
+                      </div>
+                      <Button variant="outline" size="sm" className="h-7 text-xs shrink-0"
+                        onClick={() => setOpenFeedbackSections(openFeedbackSections.length > 0 ? [] : ["hook","setHook","firstCTA","content","finalCTA"])}>
+                        {openFeedbackSections.length > 0 ? "Collapse All" : "Expand All"}
+                      </Button>
+                    </div>
+                    <div className="p-3">
+                      <Accordion type="multiple" value={openFeedbackSections} onValueChange={setOpenFeedbackSections} className="w-full space-y-0">
+                        {(["hook","setHook","firstCTA","content","finalCTA"] as const).map((key) => {
+                          const labels: Record<string,string> = { hook:"Hook", setHook:"Set the Hook", firstCTA:"First CTA", content:"Content", finalCTA:"Final CTA" };
+                          return <TakePartDetail key={key} partKey={key} title={labels[key]} score={sc.partScores[key]} data={sc.parts[key]} />;
+                        })}
+                      </Accordion>
+                    </div>
+                  </div>
+
+                  {/* AI Coach summary */}
+                  {sc.summary.overallSummary && (
+                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden" style={{ borderColor: "hsl(var(--primary) / 0.2)" }}>
+                      <div className="h-1 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500" />
+                      <div className="px-4 py-3 border-b flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-violet-500" />
+                        <span className="font-semibold text-sm">AI Coach Summary</span>
+                      </div>
+                      <div className="p-4">
+                        <p className="text-xs leading-relaxed text-muted-foreground">{sc.summary.overallSummary}</p>
+                      </div>
                     </div>
                   )}
 
-                  {/* Strengths */}
-                  {sc.summary.strengths.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What worked</p>
-                      <ul className="flex flex-col gap-1.5">
-                        {sc.summary.strengths.slice(0, 2).map((item, i) => (
-                          <li key={i} className="flex gap-1.5 text-xs text-foreground/80 leading-snug">
-                            <span className="mt-0.5 text-green-500 shrink-0">✓</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
+                  {/* Delivery stats */}
+                  {sc.delivery && (
+                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                      <div className="h-1 bg-gradient-to-r from-blue-500 to-cyan-500" />
+                      <div className="px-4 py-3 border-b flex items-center gap-2">
+                        <BarChart2 className="h-4 w-4 text-blue-500" />
+                        <span className="font-semibold text-sm">Delivery Stats</span>
+                      </div>
+                      <div className="p-4 flex flex-wrap gap-4">
+                        <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground">Words / min</span>
+                          <span className="text-lg font-bold tabular-nums">{sc.delivery.wordsPerMinute}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground">Filler words</span>
+                          <span className="text-lg font-bold tabular-nums">{sc.delivery.fillerWords.count}</span>
+                        </div>
+                        {sc.delivery.fillerWords.examples.length > 0 && (
+                          <div className="flex flex-col">
+                            <span className="text-xs text-muted-foreground">Examples</span>
+                            <span className="text-xs text-foreground/70">{sc.delivery.fillerWords.examples.slice(0,5).join(", ")}</span>
+                          </div>
+                        )}
+                        {sc.delivery.clarityNotes.length > 0 && (
+                          <div className="w-full space-y-1">
+                            <span className="text-xs text-muted-foreground font-medium">Clarity notes</span>
+                            <ul className="space-y-0.5 pl-3">
+                              {sc.delivery.clarityNotes.map((n,i) => (
+                                <li key={i} className="text-xs text-muted-foreground list-disc">{n}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
               );
             })()}
 
-            {/* ── Transcript panel (right or full) ── */}
-            <div className="flex-1 overflow-y-auto rounded-md border border-border bg-muted/40 p-4">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcriptModal.text}</p>
+            {/* ── Transcript panel (right, 40% or full when no score) ── */}
+            <div className={cn("flex flex-col gap-2", transcriptModal.scoreJson ? "w-[40%]" : "flex-1")}>
+              <div className="flex-1 overflow-y-auto rounded-md border border-border bg-muted/40 p-4 min-h-0">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcriptModal.text}</p>
+              </div>
+              {/* Copy / download row inside transcript panel */}
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <Button variant="outline" size="sm"
+                  onClick={() => navigator.clipboard.writeText(transcriptModal.text).then(() => toast({ title: "Copied to clipboard" }))}
+                  data-testid="button-copy-transcript">
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />Copy
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadTranscriptTxt(transcriptModal.title, transcriptModal.text)} data-testid="button-download-transcript-txt">
+                  <Download className="h-3.5 w-3.5 mr-1.5" />TXT
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadTranscriptPdf(transcriptModal.title, transcriptModal.text)} data-testid="button-download-transcript-pdf">
+                  <Download className="h-3.5 w-3.5 mr-1.5" />PDF
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-start pt-3 shrink-0 gap-3 flex-wrap border-t border-border mt-2">
-            <div className="flex flex-col gap-2 flex-1">
-              {/* Copy / download row */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigator.clipboard.writeText(transcriptModal.text).then(() => toast({ title: "Copied to clipboard" }))}
-                  data-testid="button-copy-transcript"
-                >
-                  <FileText className="h-3.5 w-3.5 mr-1.5" />
-                  Copy
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => downloadTranscriptTxt(transcriptModal.title, transcriptModal.text)} data-testid="button-download-transcript-txt">
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
-                  TXT
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => downloadTranscriptPdf(transcriptModal.title, transcriptModal.text)} data-testid="button-download-transcript-pdf">
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
-                  PDF
-                </Button>
-              </div>
-
-              {/* Score section */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  size="sm"
-                  disabled={isScoring}
-                  onClick={handleScoreTake}
-                  data-testid="button-score-take"
-                >
-                  {isScoring ? (
-                    <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Scoring…</>
-                  ) : transcriptModal.scoreJson ? (
-                    <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-score</>
-                  ) : (
-                    <><BarChart2 className="h-3.5 w-3.5 mr-1.5" />Score this take</>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setTranscriptModal((m) => ({ ...m, open: false }))}
-              data-testid="button-close-transcript"
-            >
+          <div className="flex justify-between items-center pt-3 shrink-0 border-t border-border mt-2">
+            <Button size="sm" disabled={isScoring} onClick={handleScoreTake} data-testid="button-score-take">
+              {isScoring ? (
+                <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Scoring…</>
+              ) : transcriptModal.scoreJson ? (
+                <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-score</>
+              ) : (
+                <><BarChart2 className="h-3.5 w-3.5 mr-1.5" />Score this take</>
+              )}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setTranscriptModal((m) => ({ ...m, open: false }))} data-testid="button-close-transcript">
               Close
             </Button>
           </div>
