@@ -83,7 +83,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     .section-label{font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:20px}
     .section-text{font-size:var(--text-size,32px);line-height:1.85;white-space:pre-wrap;color:#fff}
     .bottom-pad{height:80vh}
-    #hint{flex-shrink:0;text-align:center;padding:4px;font-family:monospace;font-size:10px;color:#2d2d2d;background:#0a0a0a;border-top:1px solid #1a1a1a}
+    #hint{flex-shrink:0;text-align:center;padding:6px 10px;font-family:monospace;font-size:10px;color:rgba(255,255,255,.22);background:#0d0d0d;border-bottom:1px solid #1e1e1e}
 
     /* ── Right: camera panel ── */
     #camera-panel{width:35%;flex-shrink:0;background:#111;border-left:1px solid #1e1e1e;display:flex;flex-direction:column}
@@ -157,7 +157,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     #download-info{font-family:monospace;font-size:11px;color:rgba(255,255,255,.3)}
 
     /* ── Script / Bullets tabs ── */
-    #view-tabs{flex-shrink:0;display:flex;gap:8px;padding:6px 60px 10px;background:#0a0a0a;border-top:1px solid #1a1a1a}
+    #view-tabs{flex-shrink:0;display:flex;justify-content:center;gap:8px;padding:6px 24px 10px;background:#0a0a0a;border-top:1px solid #1a1a1a}
     .view-tab{font-family:Arial,sans-serif;font-size:12px;font-weight:700;padding:6px 20px;border-radius:999px;border:none;cursor:pointer;transition:.15s;letter-spacing:.03em}
     .view-tab.active{background:#fff;color:#000}
     .view-tab:not(.active){background:rgba(255,255,255,.1);color:rgba(255,255,255,.5)}
@@ -201,7 +201,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <button class="view-tab active" id="tab-script" onclick="switchView('script')">&#x1F4C4; Script</button>
         <button class="view-tab" id="tab-bullets" onclick="switchView('bullets')">&#x2022; Bullets</button>
       </div>
-      <div id="hint">Space = play/pause &nbsp;·&nbsp; ↑ / ↓ = faster / slower &nbsp;·&nbsp; +/− = font size</div>
     </div>
 
     <!-- Draggable divider -->
@@ -234,6 +233,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <div id="rec-dot"><span class="dot"></span><span>REC</span></div>
         <div id="rec-timer">0:00</div>
       </div>
+      <!-- Keyboard hint — centered under the video -->
+      <div id="hint">Space = play/pause &nbsp;·&nbsp; ↑ / ↓ = faster / slower &nbsp;·&nbsp; +/− = font size</div>
 
       <!-- Device selector (camera + mic) — visible once camera is active -->
       <div id="device-bar">
