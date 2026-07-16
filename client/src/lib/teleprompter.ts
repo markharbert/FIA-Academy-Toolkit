@@ -110,6 +110,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     .dev-select option{background:#1c1c1c;color:#fff}
     .dev-select:hover:not(:disabled){border-color:#555;background:#252525}
     .dev-select:disabled{opacity:.35;cursor:not-allowed}
+    /* ── Mic level meter ── */
+    #mic-meter-row{padding:1px 0 3px}
+    #mic-level-track{flex:1;height:5px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden}
+    #mic-level-fill{height:100%;width:0%;border-radius:999px;background:linear-gradient(to right,#ef4444 0%,#facc15 50%,#22c55e 100%);transition:width 60ms ease-out}
 
     /* video area */
     #video-wrap{position:relative;background:#000;overflow:hidden;flex-shrink:0}
@@ -262,6 +266,11 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           <select id="mic-select" class="dev-select" onchange="switchMic(this.value)">
             <option>Loading microphones\u2026</option>
           </select>
+        </div>
+        <!-- Microphone level meter (red → yellow → green) -->
+        <div id="mic-meter-row" class="dev-row">
+          <svg class="dev-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.35"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
+          <div id="mic-level-track"><div id="mic-level-fill"></div></div>
         </div>
       </div>
 
@@ -495,6 +504,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     var hasUnsaved=false,recordingId=null,uploadFailed=false;
     var selectedFormat='landscape';
     var selectedCameraId='',selectedMicId='';
+    var audioCtx=null,audioAnalyser=null,micRaf=null,micLevelFill=null;
 
     var camPreview=document.getElementById('cam-preview');
     var camPlayback=document.getElementById('cam-playback');
@@ -574,6 +584,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         camPreview.srcObject=stream;
         camPreview.play().catch(function(){});
         setCamState('ready');
+        startMicMeter(stream); // start live mic level indicator
         loadDevices(); // populate / refresh dropdowns now that permission is granted
       }).catch(function(err){
         var msg='Camera access was denied.';
@@ -587,6 +598,39 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     }
 
     function requestCamera(){openCamera('','');}
+
+    // ── Mic level meter ──────────────────────────────────────────────────────
+    function stopMicMeter(){
+      if(micRaf){cancelAnimationFrame(micRaf);micRaf=null;}
+      if(audioCtx){try{audioCtx.close();}catch(e){} audioCtx=null;}
+      audioAnalyser=null;
+      if(micLevelFill)micLevelFill.style.width='0%';
+    }
+    function startMicMeter(stream){
+      stopMicMeter();
+      micLevelFill=document.getElementById('mic-level-fill');
+      if(!micLevelFill||!stream)return;
+      try{
+        audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+        audioAnalyser=audioCtx.createAnalyser();
+        audioAnalyser.fftSize=256;
+        audioAnalyser.smoothingTimeConstant=0.7;
+        var src=audioCtx.createMediaStreamSource(stream);
+        src.connect(audioAnalyser);
+        var buf=new Uint8Array(audioAnalyser.frequencyBinCount);
+        function tick(){
+          if(!audioAnalyser){return;}
+          audioAnalyser.getByteFrequencyData(buf);
+          var sum=0;for(var i=0;i<buf.length;i++)sum+=buf[i];
+          var avg=sum/buf.length;
+          var pct=Math.min(100,avg*2.2); // 0-255 byte avg scaled to 0-100%
+          micLevelFill.style.width=pct+'%';
+          micRaf=requestAnimationFrame(tick);
+        }
+        tick();
+      }catch(e){console.warn('[mic-meter]',e);}
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Enumerate all video + audio input devices and populate the dropdowns.
     // Labels are only available after permission has been granted.
