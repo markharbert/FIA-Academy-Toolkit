@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft, Bookmark, CheckCircle2, FileText, Check, RotateCcw, X } from "lucide-react";
+import { Loader2, Search, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft, Bookmark, CheckCircle2, FileText, Check, RotateCcw, X, TrendingUp, TrendingDown, Minus, Lightbulb, Brain, ChevronDown, AlertCircle } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,9 +29,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SiGoogle } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { TopicRun } from "@shared/schema";
+import type { TopicRun, Topic, TrendDataPoint, DemandSignals } from "@shared/schema";
 
 interface RunsPage {
   runs: TopicRun[];
@@ -64,6 +68,175 @@ const RUN_ACCENTS = [
   "border-l-amber-500",
   "border-l-indigo-500",
 ];
+
+function getOpportunityLevel(score: number): { color: string; label: string; bgClass: string } {
+  if (score >= 70) return { color: "text-green-600 dark:text-green-400", label: "Great opportunity", bgClass: "bg-green-500/10" };
+  if (score >= 50) return { color: "text-yellow-600 dark:text-yellow-400", label: "Good potential", bgClass: "bg-yellow-500/10" };
+  return { color: "text-red-600 dark:text-red-400", label: "Challenging", bgClass: "bg-red-500/10" };
+}
+
+function formatSearchVolume(volume: number | string | null | undefined): string {
+  if (volume === null || volume === undefined) return "N/A";
+  const n = typeof volume === "string" ? parseFloat(volume) : volume;
+  if (isNaN(n)) return "N/A";
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return n.toString();
+}
+
+function formatCPC(cpc: number | string | null | undefined): string {
+  if (cpc === null || cpc === undefined) return "N/A";
+  const n = typeof cpc === "string" ? parseFloat(cpc) : cpc;
+  if (isNaN(n)) return "N/A";
+  return `$${n.toFixed(2)}`;
+}
+
+function formatCompetition(comp: number | string | null | undefined): { label: string; color: string; value: string } {
+  if (comp === null || comp === undefined) return { label: "N/A", color: "text-muted-foreground", value: "" };
+  const n = typeof comp === "string" ? parseFloat(comp) : comp;
+  if (isNaN(n)) return { label: "N/A", color: "text-muted-foreground", value: "" };
+  const pct = Math.round(n * 100);
+  if (n <= 0.33) return { label: "Low", color: "text-green-600 dark:text-green-400", value: `${pct}%` };
+  if (n <= 0.66) return { label: "Medium", color: "text-yellow-600 dark:text-yellow-400", value: `${pct}%` };
+  return { label: "High", color: "text-red-600 dark:text-red-400", value: `${pct}%` };
+}
+
+function getTrendFromData(trend: TrendDataPoint[] | null | undefined): { direction: string; label: string } {
+  if (!trend || trend.length < 6) return { direction: "unknown", label: "Unknown" };
+  const recent = trend.slice(-3);
+  const older = trend.slice(-6, -3);
+  const rAvg = recent.reduce((s, t) => s + t.value, 0) / recent.length;
+  const oAvg = older.reduce((s, t) => s + t.value, 0) / older.length;
+  if (oAvg === 0) return { direction: "unknown", label: "Unknown" };
+  const growth = (rAvg - oAvg) / oAvg;
+  const pct = Math.round(growth * 100);
+  if (growth > 0.1) return { direction: "rising", label: `+${pct}%` };
+  if (growth < -0.1) return { direction: "falling", label: `${pct}%` };
+  return { direction: "steady", label: "Steady" };
+}
+
+function TrendIcon({ direction }: { direction: string }) {
+  if (direction === "rising") return <TrendingUp className="h-4 w-4 text-green-500" />;
+  if (direction === "falling") return <TrendingDown className="h-4 w-4 text-red-500" />;
+  return <Minus className="h-4 w-4 text-muted-foreground" />;
+}
+
+function PlatformMetricCard({ label, value, helpText, colorClass = "text-foreground" }: { label: string; value: string; helpText: string; colorClass?: string }) {
+  return (
+    <div className="p-2 rounded-md bg-muted/30">
+      <div className="flex items-center gap-1 mb-0.5">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs"><p className="text-xs">{helpText}</p></TooltipContent>
+        </Tooltip>
+      </div>
+      <p className={`font-mono text-sm font-semibold ${colorClass}`}>{value}</p>
+    </div>
+  );
+}
+
+function GoogleSearchDataSection({ topic }: { topic: Topic }) {
+  const trendInfo = getTrendFromData(topic.trendData as TrendDataPoint[] | null);
+  const compInfo = formatCompetition(topic.competition);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+        <span className="text-blue-500"><SiGoogle className="h-4 w-4" /></span>
+        <div>
+          <span className="text-sm font-semibold">Google Search Data</span>
+          <p className="text-xs text-muted-foreground">Google Search keyword metrics</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <PlatformMetricCard label="Monthly Volume" value={formatSearchVolume(topic.monthlySearchVolume)} helpText="Estimated monthly searches on Google" colorClass={topic.monthlySearchVolume ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"} />
+        <PlatformMetricCard label="CPC" value={formatCPC(topic.cpc)} helpText="Cost per click on Google. Higher = more commercial value." />
+        <PlatformMetricCard label="Competition" value={compInfo.value ? `${compInfo.label} (${compInfo.value})` : compInfo.label} helpText="Ad competition on Google (0–1 scale)" colorClass={compInfo.color} />
+        <div className="p-2 rounded-md bg-muted/30">
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="text-xs text-muted-foreground">Trend</span>
+            <Tooltip>
+              <TooltipTrigger asChild><HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" /></TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs"><p className="text-xs">Search interest trend over recent months</p></TooltipContent>
+            </Tooltip>
+          </div>
+          <div className="flex items-center gap-1">
+            <TrendIcon direction={trendInfo.direction} />
+            <span className={`font-mono text-sm font-semibold ${trendInfo.direction === "rising" ? "text-green-600 dark:text-green-400" : trendInfo.direction === "falling" ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>{trendInfo.label}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IntentAnalysisSectionHub({ topicId, existingAnalysis }: { topicId: string; existingAnalysis?: string | null }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [analysis, setAnalysis] = useState<string | null>(existingAnalysis || null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [hasRequested, setHasRequested] = useState(false);
+
+  useEffect(() => {
+    setAnalysis(existingAnalysis || null);
+    setIsOpen(false);
+    setIsLoading(false);
+    setError(false);
+    setHasRequested(false);
+  }, [topicId, existingAnalysis]);
+
+  const fetchAnalysis = async () => {
+    if (analysis || isLoading || hasRequested) return;
+    setHasRequested(true);
+    setIsLoading(true);
+    setError(false);
+    try {
+      const res = await fetch(`/api/topic-pulse/topics/${topicId}/intent-analysis`, { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setAnalysis(data.analysis);
+    } catch {
+      setError(true);
+      setHasRequested(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (open && !analysis && !isLoading) fetchAnalysis();
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
+      <CollapsibleTrigger asChild>
+        <div role="button" tabIndex={0} className="flex items-center justify-between w-full p-3 rounded-md bg-muted/50 hover:bg-muted/80 text-left cursor-pointer" onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpenChange(!isOpen); } }}>
+          <div className="flex items-center gap-2">
+            <Brain className="h-4 w-4 text-purple-500" />
+            <span className="font-medium text-sm">Intent Analysis</span>
+          </div>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2">
+        <div className="p-3 rounded-md bg-muted/30 border border-border/50">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Analyzing search intent...</div>
+          ) : error ? (
+            <div className="text-sm text-destructive">Failed to generate. <Button variant="ghost" size="sm" className="p-0 h-auto ml-1 underline" onClick={() => { setHasRequested(false); fetchAnalysis(); }}>Try again</Button></div>
+          ) : analysis ? (
+            <p className="text-sm text-muted-foreground leading-relaxed">{analysis}</p>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading...</div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export default function TopicPulsePage() {
   const [, navigate] = useLocation();
@@ -221,12 +394,6 @@ export default function TopicPulsePage() {
       toast({ title: "Failed", description: err.message, variant: "destructive" });
     },
   });
-
-  const getOpportunityLabel = (score: number) => {
-    if (score >= 70) return { label: "Great opportunity", color: "text-green-600 dark:text-green-400" };
-    if (score >= 40) return { label: "Good potential", color: "text-amber-600 dark:text-amber-400" };
-    return { label: "Challenging", color: "text-rose-600 dark:text-rose-400" };
-  };
 
   return (
     <div className="min-h-full flex flex-col">
@@ -674,39 +841,74 @@ export default function TopicPulsePage() {
                       </Button>
                     </div>
 
-                    {/* Stats */}
+                    {/* Full topic data — matches the explore panel */}
                     {selectedSavedItem?.topic && (
                       <div className="space-y-3 pt-1 border-t">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">Topic Stats</p>
-                        <div className="grid grid-cols-2 gap-3">
-                          {selectedSavedItem.topic.monthlySearchVolume != null && (
-                            <div className="p-3 rounded-xl border bg-muted/30">
-                              <p className="text-xs text-muted-foreground mb-1">Monthly Searches</p>
-                              <p className="font-mono text-lg font-bold text-blue-600 dark:text-blue-400">
-                                {selectedSavedItem.topic.monthlySearchVolume >= 1000
-                                  ? `${Math.round(selectedSavedItem.topic.monthlySearchVolume / 1000)}K`
-                                  : selectedSavedItem.topic.monthlySearchVolume}
-                              </p>
+
+                        {/* Opportunity Rating */}
+                        <div className="p-3 rounded-md bg-muted/50">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div>
+                              <span className="text-sm font-medium">Opportunity Rating</span>
+                              <p className="text-xs text-muted-foreground mt-0.5">High demand + low competition = better score</p>
                             </div>
-                          )}
-                          {selectedSavedItem.topic.opportunityScore != null && (
-                            <div className="p-3 rounded-xl border bg-muted/30">
-                              <p className="text-xs text-muted-foreground mb-1">Opportunity</p>
-                              <p className={`font-mono text-lg font-bold ${getOpportunityLabel(selectedSavedItem.topic.opportunityScore).color}`}>
+                            <div className="flex items-center gap-2">
+                              <p className={`font-mono text-2xl font-bold ${getOpportunityLevel(selectedSavedItem.topic.opportunityScore || 0).color}`}>
                                 {selectedSavedItem.topic.opportunityScore}/100
                               </p>
-                              <p className={`text-xs ${getOpportunityLabel(selectedSavedItem.topic.opportunityScore).color}`}>
-                                {getOpportunityLabel(selectedSavedItem.topic.opportunityScore).label}
-                              </p>
+                              <Badge variant="outline" className={`${getOpportunityLevel(selectedSavedItem.topic.opportunityScore || 0).bgClass} ${getOpportunityLevel(selectedSavedItem.topic.opportunityScore || 0).color} border-0`}>
+                                {getOpportunityLevel(selectedSavedItem.topic.opportunityScore || 0).label}
+                              </Badge>
                             </div>
-                          )}
+                          </div>
+                          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${(selectedSavedItem.topic.opportunityScore || 0) >= 70 ? "bg-green-500" : (selectedSavedItem.topic.opportunityScore || 0) >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
+                              style={{ width: `${selectedSavedItem.topic.opportunityScore || 0}%` }}
+                            />
+                          </div>
                         </div>
-                        {selectedSavedItem.topic.competitionLevel && (
-                          <div className="p-3 rounded-xl border bg-muted/30">
-                            <p className="text-xs text-muted-foreground mb-1">Competition</p>
-                            <p className="font-medium text-sm capitalize">{selectedSavedItem.topic.competitionLevel}</p>
+
+                        {/* Google Search Data */}
+                        <div className="rounded-lg border border-border/50 p-3">
+                          <GoogleSearchDataSection topic={selectedSavedItem.topic as Topic} />
+                        </div>
+
+                        {/* Additional Signals */}
+                        {selectedSavedItem.topic.demandSignalsJson && (
+                          <div className="rounded-lg border border-border/50 p-3">
+                            <h3 className="font-medium mb-2">Additional Signals</h3>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">In YouTube Autocomplete</span>
+                              {(selectedSavedItem.topic.demandSignalsJson as DemandSignals).autocompletePresent ? (
+                                <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                                  <CheckCircle2 className="h-4 w-4" />Yes
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1.5 text-muted-foreground">
+                                  <AlertCircle className="h-4 w-4" />No
+                                </span>
+                              )}
+                            </div>
                           </div>
                         )}
+
+                        {/* Intent Analysis */}
+                        <IntentAnalysisSectionHub
+                          topicId={selectedSavedItem.topic.id}
+                          existingAnalysis={selectedSavedItem.topic.intentAnalysis}
+                        />
+
+                        {/* Why This Topic */}
+                        {selectedSavedItem.topic.whyText && (
+                          <div>
+                            <h3 className="font-medium mb-2 flex items-center gap-2">
+                              <Lightbulb className="h-4 w-4" />Why This Topic
+                            </h3>
+                            <p className="text-sm text-muted-foreground">{selectedSavedItem.topic.whyText}</p>
+                          </div>
+                        )}
+
                       </div>
                     )}
                   </div>
