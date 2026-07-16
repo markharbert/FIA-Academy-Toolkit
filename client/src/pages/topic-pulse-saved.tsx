@@ -346,7 +346,7 @@ export default function TopicPulseSavedPage() {
   const [pendingUnsaveId, setPendingUnsaveId] = useState<string | null>(null);
 
   const scriptMutation = useMutation({
-    mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string }) => {
+    mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string; savedTopicId?: string }) => {
       const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", {
         topicId,
         videoLengthTarget,
@@ -354,7 +354,12 @@ export default function TopicPulseSavedPage() {
       });
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
+      if (variables.savedTopicId) {
+        apiRequest("DELETE", `/api/topic-pulse/saved-topics/${variables.savedTopicId}`, {})
+          .then(() => queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/saved-topics"] }))
+          .catch(() => {});
+      }
       toast({ title: "Script generated!" });
       navigate(`/video-studio/scripts/${data.id}`);
     },
@@ -554,7 +559,7 @@ export default function TopicPulseSavedPage() {
                       <div className="space-y-2 mb-5">
                         <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a full video script.</p>
                         <Button 
-                          onClick={() => scriptMutation.mutate({ topicId: selectedTopic.id, videoLengthTarget: "6-10", tonePreference: "friendly" })}
+                          onClick={() => scriptMutation.mutate({ topicId: selectedTopic.id, videoLengthTarget: "6-10", tonePreference: "friendly", savedTopicId: getSavedEntryForTopic(selectedTopic.id)?.id })}
                           disabled={scriptMutation.isPending}
                           className="w-full bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold h-11"
                           data-testid="button-generate-script"

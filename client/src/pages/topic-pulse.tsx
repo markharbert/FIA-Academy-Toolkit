@@ -338,11 +338,16 @@ export default function TopicPulsePage() {
   };
 
   const scriptMutation = useMutation({
-    mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string }) => {
+    mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string; savedTopicId?: string }) => {
       const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", { topicId, videoLengthTarget, tonePreference });
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
+      if (variables.savedTopicId) {
+        apiRequest("DELETE", `/api/topic-pulse/saved-topics/${variables.savedTopicId}`, {})
+          .then(() => queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/saved-topics"] }))
+          .catch(() => {});
+      }
       toast({ title: "Script outline generated!" });
       navigate(`/video-studio/scripts/${data.id}`);
     },
@@ -786,7 +791,7 @@ export default function TopicPulsePage() {
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a video script outline.</p>
                       <Button
-                        onClick={() => { if (selectedSavedItem?.topic?.id) scriptMutation.mutate({ topicId: selectedSavedItem.topic.id, videoLengthTarget: "6-10", tonePreference: "friendly" }); }}
+                        onClick={() => { if (selectedSavedItem?.topic?.id) scriptMutation.mutate({ topicId: selectedSavedItem.topic.id, videoLengthTarget: "6-10", tonePreference: "friendly", savedTopicId: selectedSavedItem.id }); }}
                         disabled={scriptMutation.isPending}
                         className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold h-11"
                         data-testid="button-detail-generate"
