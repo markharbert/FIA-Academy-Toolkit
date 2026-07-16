@@ -249,6 +249,12 @@ export default function TopicPulseSavedPage() {
     queryKey: ["/api/topic-pulse/saved-topics"],
   });
 
+  const { data: scripts } = useQuery<any[]>({
+    queryKey: ["/api/topic-pulse/scripts"],
+  });
+
+  const topicHasScript = (topicId: string) => scripts?.some((s: any) => s.topicId === topicId) ?? false;
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("DELETE", `/api/topic-pulse/saved-topics/${id}`, {});
@@ -381,36 +387,42 @@ export default function TopicPulseSavedPage() {
   const activeTopics = savedTopics?.filter(s => !s.completedAt) || [];
   const completedTopics = savedTopics?.filter(s => s.completedAt) || [];
 
-  const TopicCard = ({ saved, isCompleted }: { saved: SavedTopic & { topic: Topic }; isCompleted?: boolean }) => (
-    <Card 
-      key={saved.id} 
-      className={`cursor-pointer transition-colors ${selectedTopic?.id === saved.topic.id ? "ring-2 ring-primary" : "hover-elevate"}`}
-      onClick={() => setSelectedTopic(saved.topic)}
-      data-testid={`card-saved-${saved.id}`}
-    >
-      <CardContent className="py-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              {isCompleted && <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />}
-              <p className={`font-medium ${isCompleted ? "text-muted-foreground" : ""}`}>{saved.topic.topicTitle}</p>
+  const TopicCard = ({ saved, isCompleted }: { saved: SavedTopic & { topic: Topic }; isCompleted?: boolean }) => {
+    const hasScript = topicHasScript(saved.topic.id);
+    return (
+      <Card 
+        key={saved.id} 
+        className={`cursor-pointer transition-colors ${selectedTopic?.id === saved.topic.id ? "ring-2 ring-primary" : "hover-elevate"}`}
+        onClick={() => setSelectedTopic(saved.topic)}
+        data-testid={`card-saved-${saved.id}`}
+      >
+        <CardContent className="py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                {isCompleted && <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />}
+                <p className={`font-medium ${isCompleted ? "text-muted-foreground" : ""}`}>{saved.topic.topicTitle}</p>
+              </div>
+              <p className="text-sm text-muted-foreground truncate">{saved.topic.keywordQuery}</p>
             </div>
-            <p className="text-sm text-muted-foreground truncate">{saved.topic.keywordQuery}</p>
+            <div className="flex items-center gap-2 shrink-0">
+              {hasScript ? (
+                <Badge className="bg-green-500/10 text-green-600 dark:text-green-400 border-0 text-xs gap-1">
+                  <CheckCircle2 className="h-3 w-3" />Scripted
+                </Badge>
+              ) : (
+                <Badge className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-0 text-xs">
+                  Ready to Script
+                </Badge>
+              )}
+              <SearchVolumeBadge volume={saved.topic.monthlySearchVolume} />
+              <OpportunityBadge score={saved.topic.opportunityScore || 0} />
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <SearchVolumeBadge volume={saved.topic.monthlySearchVolume} />
-            {(saved.topic.intents || []).map((intent) => (
-              <Badge key={intent} variant="outline" className={intentColors[intent]}>
-                {intentLabels[intent]}
-              </Badge>
-            ))}
-            <TrendIcon direction={getTrendFromData(saved.topic.trendData as TrendDataPoint[] | null).direction} />
-            <OpportunityBadge score={saved.topic.opportunityScore || 0} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="min-h-full flex flex-col">
@@ -440,6 +452,27 @@ export default function TopicPulseSavedPage() {
               </div>
             ) : savedTopics && savedTopics.length > 0 ? (
               <>
+                {/* Progress bar */}
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">Your Progress</p>
+                    <p className="text-sm text-muted-foreground">
+                      {completedTopics.length} of {savedTopics.length} scripted
+                    </p>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-violet-500 transition-all"
+                      style={{ width: `${savedTopics.length > 0 ? (completedTopics.length / savedTopics.length) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {savedTopics.length - completedTopics.length > 0
+                      ? `${savedTopics.length - completedTopics.length} topic${savedTopics.length - completedTopics.length !== 1 ? "s" : ""} ready to script`
+                      : "All topics scripted! 🎉"}
+                  </p>
+                </div>
+
                 <div>
                   <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
                     <Bookmark className="h-4 w-4" />
@@ -471,12 +504,19 @@ export default function TopicPulseSavedPage() {
                 )}
               </>
             ) : (
-              <Card>
-                <CardContent className="py-8 text-center">
-                  <Bookmark className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No saved topics yet. Save topics from your search results!</p>
-                </CardContent>
-              </Card>
+              <div className="rounded-xl border bg-card py-14 flex flex-col items-center text-center px-6">
+                <div className="p-4 rounded-2xl bg-muted/50 mb-4">
+                  <Bookmark className="h-10 w-10 text-muted-foreground/50" />
+                </div>
+                <p className="font-semibold text-foreground/80 text-lg mb-1">No saved topics yet</p>
+                <p className="text-sm text-muted-foreground max-w-sm mb-5">
+                  Go explore a search, then tap "Save to My List" on any topic that catches your eye — it'll appear here.
+                </p>
+                <Button onClick={() => navigate("/video-studio/research")} className="bg-violet-500 hover:bg-violet-600 text-white">
+                  <Search className="h-4 w-4 mr-2" />
+                  Find Topics to Save
+                </Button>
+              </div>
             )}
           </div>
         </ScrollArea>
@@ -515,11 +555,12 @@ export default function TopicPulseSavedPage() {
                     const savedEntry = getSavedEntryForTopic(selectedTopic.id);
                     const isCompleted = savedEntry?.completedAt;
                     return (
-                      <div className="flex gap-2 mb-4 flex-wrap">
+                      <div className="space-y-2 mb-5">
+                        <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a full video script.</p>
                         <Button 
                           onClick={() => { setPendingGenerateTopicId(selectedTopic.id); setShowGenerateDialog(true); }}
                           disabled={scriptMutation.isPending}
-                          className="bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold"
+                          className="w-full bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold h-11"
                           data-testid="button-generate-script"
                         >
                           {scriptMutation.isPending ? (
@@ -529,55 +570,64 @@ export default function TopicPulseSavedPage() {
                           )}
                           {scriptMutation.isPending ? "Generating…" : "Generate Script →"}
                         </Button>
-                        {isCompleted ? (
-                          <Button 
-                            variant="outline" 
-                            onClick={() => {
-                              if (savedEntry) resetMutation.mutate(savedEntry.id);
-                            }}
-                            disabled={resetMutation.isPending}
-                            data-testid="button-reset-topic"
-                          >
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                            Reset
-                          </Button>
-                        ) : (
-                          <Button 
-                            variant="outline" 
-                            onClick={() => {
-                              if (savedEntry) completeMutation.mutate(savedEntry.id);
-                            }}
-                            disabled={completeMutation.isPending}
-                            data-testid="button-mark-complete"
-                          >
-                            <Check className="h-4 w-4 mr-2" />
-                            Mark Complete
-                          </Button>
-                        )}
-                        <Button 
-                          variant="outline" 
-                          onClick={() => { setPendingResearchQuery(selectedTopic.keywordQuery); setShowResearchConfirm(true); }}
-                          disabled={researchDeeperMutation.isPending}
-                          data-testid="button-research-deeper"
-                        >
-                          {researchDeeperMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <div className="flex gap-2">
+                          {isCompleted ? (
+                            <Button 
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => {
+                                if (savedEntry) resetMutation.mutate(savedEntry.id);
+                              }}
+                              disabled={resetMutation.isPending}
+                              data-testid="button-reset-topic"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                              Reset to Active
+                            </Button>
                           ) : (
-                            <Search className="h-4 w-4 mr-2" />
+                            <Button 
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => {
+                                if (savedEntry) completeMutation.mutate(savedEntry.id);
+                              }}
+                              disabled={completeMutation.isPending}
+                              data-testid="button-mark-complete"
+                            >
+                              <Check className="h-3.5 w-3.5 mr-1.5" />
+                              Mark Done
+                            </Button>
                           )}
-                          Research Deeper
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => {
-                            if (savedEntry) { setPendingUnsaveId(savedEntry.id); setShowUnsaveConfirm(true); }
-                          }}
-                          disabled={deleteMutation.isPending}
-                          data-testid="button-remove-saved"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                          <Button 
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => { setPendingResearchQuery(selectedTopic.keywordQuery); setShowResearchConfirm(true); }}
+                            disabled={researchDeeperMutation.isPending}
+                            data-testid="button-research-deeper"
+                          >
+                            {researchDeeperMutation.isPending ? (
+                              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                            ) : (
+                              <Search className="h-3.5 w-3.5 mr-1.5" />
+                            )}
+                            Find More Topics
+                          </Button>
+                          <Button 
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => {
+                              if (savedEntry) { setPendingUnsaveId(savedEntry.id); setShowUnsaveConfirm(true); }
+                            }}
+                            disabled={deleteMutation.isPending}
+                            data-testid="button-remove-saved"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                     );
                   })()}

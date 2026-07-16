@@ -35,10 +35,10 @@ interface CreditsData {
 }
 
 const PRESETS = [
-  { label: "Review",      icon: ShoppingBag, type: "review",       color: "bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/30 hover:bg-violet-500/20",       activeColor: "bg-violet-500 text-white ring-violet-500" },
-  { label: "Comparison",  icon: ListChecks,  type: "comparison",   color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30 hover:bg-blue-500/20",                 activeColor: "bg-blue-500 text-white ring-blue-500" },
-  { label: "How-To",      icon: BookOpen,    type: "how-to",       color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 ring-teal-500/30 hover:bg-teal-500/20",                 activeColor: "bg-teal-500 text-white ring-teal-500" },
-  { label: "Problem Fix", icon: HelpCircle,  type: "problem-fix",  color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/30 hover:bg-amber-500/20",            activeColor: "bg-amber-500 text-white ring-amber-500" },
+  { label: "Product Review",     description: "Review or compare a product",    icon: ShoppingBag, type: "review",       color: "bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/30 hover:bg-violet-500/20", activeColor: "bg-violet-500 text-white ring-violet-500" },
+  { label: "Compare Options",    description: "Side-by-side comparison",         icon: ListChecks,  type: "comparison",   color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30 hover:bg-blue-500/20",           activeColor: "bg-blue-500 text-white ring-blue-500" },
+  { label: "How-To Tutorial",    description: "Teach something step by step",    icon: BookOpen,    type: "how-to",       color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 ring-teal-500/30 hover:bg-teal-500/20",           activeColor: "bg-teal-500 text-white ring-teal-500" },
+  { label: "Solve a Problem",    description: "Fix a common frustration",        icon: HelpCircle,  type: "problem-fix",  color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/30 hover:bg-amber-500/20",       activeColor: "bg-amber-500 text-white ring-amber-500" },
 ];
 
 const RUN_ACCENTS = [
@@ -175,12 +175,41 @@ export default function TopicPulsePage() {
                 >
                   <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${creditsExhausted || creditsLow ? "bg-red-400" : creditsMedium ? "bg-amber-400" : "bg-emerald-400"}`} />
                   {creditsExhausted
-                    ? "Credits exhausted"
-                    : `${creditsRemaining.toLocaleString()} / ${creditLimit.toLocaleString()} credits`}
+                    ? "No searches left this month"
+                    : `${creditsRemaining.toLocaleString()} search${creditsRemaining !== 1 ? "es" : ""} left`}
                 </div>
               )}
             </div>
             <p className="text-white/50 text-xs mt-0.5">Find in-demand YouTube topics and generate scripts with Mark's 5-part formula</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── How it works strip ── */}
+      <div className="border-b bg-muted/20 shrink-0">
+        <div className="max-w-4xl mx-auto px-5 py-3">
+          <div className="grid grid-cols-3 divide-x divide-border">
+            <div className="flex items-center gap-2.5 pr-4">
+              <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">1</div>
+              <div>
+                <p className="text-xs font-semibold">Type a topic</p>
+                <p className="text-xs text-muted-foreground hidden sm:block">e.g. "keto snacks"</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 px-4">
+              <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">2</div>
+              <div>
+                <p className="text-xs font-semibold">Pick a topic</p>
+                <p className="text-xs text-muted-foreground hidden sm:block">choose from results</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 pl-4">
+              <div className="h-7 w-7 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0">3</div>
+              <div>
+                <p className="text-xs font-semibold">Generate your script</p>
+                <p className="text-xs text-muted-foreground hidden sm:block">ready in seconds</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -190,12 +219,12 @@ export default function TopicPulsePage() {
         <div className="max-w-4xl mx-auto px-5 py-6 space-y-6">
 
           {/* Search + filters */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
-                  placeholder="Enter a niche or keyword (e.g. 'keto snacks')"
+                  placeholder="What do you want to make a video about? (e.g. 'keto snacks')"
                   value={seedQuery}
                   onChange={(e) => setSeedQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -215,60 +244,69 @@ export default function TopicPulsePage() {
                 ) : (
                   <Search className="h-4 w-4 mr-2" />
                 )}
-                {creditsExhausted ? "No Credits" : "Find Topics"}
+                {creditsExhausted ? "No Searches Left" : "Find Topics"}
               </Button>
             </div>
 
             {/* Preset pills */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Quick filter:</span>
-              {PRESETS.map((preset) => {
-                const active = selectedType === preset.type;
-                return (
-                  <button
-                    key={preset.type}
-                    onClick={() => handlePresetClick(preset.type)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ring-1 transition-all ${active ? preset.activeColor : preset.color}`}
-                    data-testid={`badge-preset-${preset.type}`}
-                  >
-                    <preset.icon className="h-3 w-3" />
-                    {preset.label}
-                  </button>
-                );
-              })}
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">What type of video are you making? <span className="italic">(optional)</span></p>
+              <div className="flex flex-wrap gap-2">
+                {PRESETS.map((preset) => {
+                  const active = selectedType === preset.type;
+                  return (
+                    <button
+                      key={preset.type}
+                      onClick={() => handlePresetClick(preset.type)}
+                      title={preset.description}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ring-1 transition-all ${active ? preset.activeColor : preset.color}`}
+                      data-testid={`badge-preset-${preset.type}`}
+                    >
+                      <preset.icon className="h-3 w-3" />
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* Compact quick-access row */}
+          {/* Quick-access cards */}
           <div className="grid grid-cols-2 gap-3">
             <button
-              className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-card hover:shadow-sm hover:-translate-y-px transition-all text-left"
+              className="group flex flex-col gap-2 p-4 rounded-xl border-2 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 hover:border-teal-500/40 hover:-translate-y-px transition-all text-left"
               onClick={() => navigate("/video-studio/research/saved")}
               data-testid="card-saved-topics"
             >
-              <div className="p-1.5 rounded-lg bg-teal-500/10 shrink-0">
-                <TrendingUp className="h-4 w-4 text-teal-500" />
+              <div className="flex items-center justify-between w-full">
+                <div className="p-2 rounded-lg bg-teal-500/15 shrink-0">
+                  <TrendingUp className="h-4 w-4 text-teal-500" />
+                </div>
+                <ChevronRight className="h-4 w-4 text-teal-500/50 group-hover:text-teal-500 transition-colors" />
               </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-semibold">{savedTopics?.length ?? 0} Saved Topics</span>
-                <p className="text-xs text-muted-foreground">saved for later</p>
+              <div>
+                <p className="text-lg font-bold text-teal-700 dark:text-teal-400">{savedTopics?.length ?? 0}</p>
+                <p className="text-xs font-semibold text-foreground">Saved Topics</p>
+                <p className="text-xs text-muted-foreground">bookmarked for scripting</p>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </button>
 
             <button
-              className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-card hover:shadow-sm hover:-translate-y-px transition-all text-left"
+              className="group flex flex-col gap-2 p-4 rounded-xl border-2 border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 hover:border-violet-500/40 hover:-translate-y-px transition-all text-left"
               onClick={() => navigate("/video-studio/scripts")}
               data-testid="card-scripts"
             >
-              <div className="p-1.5 rounded-lg bg-violet-500/10 shrink-0">
-                <Zap className="h-4 w-4 text-violet-500" />
+              <div className="flex items-center justify-between w-full">
+                <div className="p-2 rounded-lg bg-violet-500/15 shrink-0">
+                  <Zap className="h-4 w-4 text-violet-500" />
+                </div>
+                <ChevronRight className="h-4 w-4 text-violet-500/50 group-hover:text-violet-500 transition-colors" />
               </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-semibold">{scripts?.length ?? 0} Scripts</span>
-                <p className="text-xs text-muted-foreground">generated scripts</p>
+              <div>
+                <p className="text-lg font-bold text-violet-700 dark:text-violet-400">{scripts?.length ?? 0}</p>
+                <p className="text-xs font-semibold text-foreground">Scripts Written</p>
+                <p className="text-xs text-muted-foreground">ready to record</p>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </button>
           </div>
 

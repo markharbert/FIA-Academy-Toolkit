@@ -6,7 +6,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -409,7 +408,7 @@ export default function TopicPulseExplorePage() {
   
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [intentFilter, setIntentFilter] = useState<string>("all");
-  const [minScore, setMinScore] = useState(0);
+  const [scorePreset, setScorePreset] = useState<"all" | "great" | "popular" | "untapped">("all");
   const [sortBy, setSortBy] = useState<"score" | "volume" | "competition">("score");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
 
@@ -509,7 +508,12 @@ export default function TopicPulseExplorePage() {
 
   const filteredTopics = (topics?.filter((topic) => {
     if (intentFilter !== "all" && !(topic.intents || []).includes(intentFilter as any)) return false;
-    if ((topic.opportunityScore || 0) < minScore) return false;
+    if (scorePreset === "great" && (topic.opportunityScore || 0) < 70) return false;
+    if (scorePreset === "popular" && (topic.monthlySearchVolume || 0) < 10000) return false;
+    if (scorePreset === "untapped") {
+      const comp = typeof topic.competition === "string" ? parseFloat(topic.competition as string) : (topic.competition || 0);
+      if (comp > 0.33) return false;
+    }
     return true;
   }) || []).sort((a, b) => {
     let aVal = 0, bVal = 0;
@@ -597,19 +601,27 @@ export default function TopicPulseExplorePage() {
             </Select>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Min Score:</span>
-            <div className="flex items-center gap-2 w-40">
-              <Slider
-                value={[minScore]}
-                onValueChange={([v]) => setMinScore(v)}
-                max={100}
-                step={5}
-                className="flex-1"
-                data-testid="slider-min-score"
-              />
-              <span className="text-sm font-mono w-8 text-right">{minScore}</span>
-            </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-muted-foreground">Show:</span>
+            {([
+              { key: "all", label: "All Topics" },
+              { key: "great", label: "🟢 Easy Wins" },
+              { key: "popular", label: "📈 High Volume" },
+              { key: "untapped", label: "💎 Untapped" },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setScorePreset(key)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold ring-1 transition-all ${
+                  scorePreset === key
+                    ? "bg-violet-500 text-white ring-violet-500"
+                    : "bg-muted text-muted-foreground ring-border hover:bg-muted/80"
+                }`}
+                data-testid={`button-preset-${key}`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center gap-1 ml-auto">
@@ -654,7 +666,7 @@ export default function TopicPulseExplorePage() {
           </div>
         </ScrollArea>
 
-        {selectedTopic && (
+        {selectedTopic ? (
           <div className="w-[480px] border-l flex flex-col">
             <div className="flex items-start justify-between gap-2 p-4 border-b">
               <h2 className="text-lg font-semibold" data-testid="text-topic-title">{selectedTopic.topicTitle}</h2>
@@ -671,11 +683,12 @@ export default function TopicPulseExplorePage() {
               <div className="p-4 space-y-6">
                 <div>
                   
-                  <div className="flex gap-2 mb-4 flex-wrap">
+                  <div className="space-y-2 mb-5">
+                    <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a full video script.</p>
                     <Button 
                       onClick={() => { setPendingGenerateTopicId(selectedTopic.id); setShowGenerateDialog(true); }}
                       disabled={scriptMutation.isPending}
-                      className="bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold"
+                      className="w-full bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold h-11"
                       data-testid="button-generate-script"
                     >
                       {scriptMutation.isPending ? (
@@ -685,43 +698,46 @@ export default function TopicPulseExplorePage() {
                       )}
                       {scriptMutation.isPending ? "Generating…" : "Generate Script →"}
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => saveMutation.mutate(selectedTopic.id)}
-                      disabled={saveMutation.isPending}
-                      data-testid="button-save-topic"
-                    >
-                      <Bookmark className="h-4 w-4 mr-2" />
-                      Save
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => { setPendingResearchQuery(selectedTopic.keywordQuery); setShowResearchConfirm(true); }}
-                      disabled={researchDeeperMutation.isPending}
-                      data-testid="button-research-deeper"
-                    >
-                      {researchDeeperMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Search className="h-4 w-4 mr-2" />
-                      )}
-                      Research Deeper
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => saveMutation.mutate(selectedTopic.id)}
+                        disabled={saveMutation.isPending}
+                        data-testid="button-save-topic"
+                      >
+                        {saveMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                        ) : (
+                          <Bookmark className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        Save to My List
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => { setPendingResearchQuery(selectedTopic.keywordQuery); setShowResearchConfirm(true); }}
+                        disabled={researchDeeperMutation.isPending}
+                        data-testid="button-research-deeper"
+                      >
+                        {researchDeeperMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                        ) : (
+                          <Search className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        Find More Topics
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
                 <div className="p-3 rounded-md bg-muted/50">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium">Opportunity Score</span>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs">
-                          <p className="text-xs">Composite score based on volume, competition, CPC value, and trend</p>
-                        </TooltipContent>
-                      </Tooltip>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div>
+                      <span className="text-sm font-medium">Opportunity Rating</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">High demand + low competition = better score</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <p className={`font-mono text-2xl font-bold ${getOpportunityLevel(selectedTopic.opportunityScore || 0).color}`} data-testid="text-opportunity-score">
@@ -731,6 +747,15 @@ export default function TopicPulseExplorePage() {
                         {getOpportunityLevel(selectedTopic.opportunityScore || 0).label}
                       </Badge>
                     </div>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        (selectedTopic.opportunityScore || 0) >= 70 ? "bg-green-500" :
+                        (selectedTopic.opportunityScore || 0) >= 50 ? "bg-yellow-500" : "bg-red-500"
+                      }`}
+                      style={{ width: `${selectedTopic.opportunityScore || 0}%` }}
+                    />
                   </div>
                 </div>
 
@@ -837,6 +862,16 @@ export default function TopicPulseExplorePage() {
                 )}
               </div>
             </ScrollArea>
+          </div>
+        ) : (
+          <div className="hidden lg:flex w-[480px] border-l flex-col items-center justify-center text-center p-8 bg-muted/10">
+            <div className="p-4 rounded-2xl bg-muted/50 mb-3">
+              <FileText className="h-8 w-8 text-muted-foreground/40" />
+            </div>
+            <p className="font-medium text-foreground/60 mb-1">Pick a topic to explore it</p>
+            <p className="text-xs text-muted-foreground max-w-xs">
+              Click any topic on the left to see its scores and turn it into a script.
+            </p>
           </div>
         )}
       </div>
