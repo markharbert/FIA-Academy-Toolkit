@@ -53,16 +53,22 @@ export async function faststartMp4(inputPath: string): Promise<string> {
       "-y",
       outputPath,
     ]);
+    // Kill after 30 s and fall back to the original file
+    const killTimer = setTimeout(() => {
+      try { ff.kill("SIGKILL"); } catch (_) {}
+      try { fs.unlinkSync(outputPath); } catch (_) {}
+      resolve(inputPath);
+    }, 30_000);
     ff.on("close", (code) => {
+      clearTimeout(killTimer);
       if (code === 0 && fs.existsSync(outputPath)) {
         resolve(outputPath);
       } else {
-        // Fallback — just use the original
         try { fs.unlinkSync(outputPath); } catch (_) {}
         resolve(inputPath);
       }
     });
-    ff.on("error", () => resolve(inputPath));
+    ff.on("error", () => { clearTimeout(killTimer); resolve(inputPath); });
   });
 }
 

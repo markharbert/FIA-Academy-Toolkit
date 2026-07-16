@@ -310,6 +310,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <!-- REVIEW -->
         <div id="cam-review" class="cam-section">
           <div id="review-cloud-msg"></div>
+          <button id="retry-upload-btn" class="cam-btn cam-btn-dark" style="display:none;margin-bottom:4px" onclick="retryUpload()">↑ Retry Upload</button>
           <p class="cam-msg warn" id="review-warn">⚠ Download before closing this window.</p>
           <div id="download-info"></div>
           <button class="cam-btn cam-btn-green" onclick="downloadRecording()">
@@ -697,6 +698,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         uploadFailed=false;
         hasUnsaved=false;
         document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg success" style="font-size:11px">&#x2601; Saved to your account \u2014 available for 30 days.</p>';
+        document.getElementById('retry-upload-btn').style.display='none';
         document.getElementById('review-warn').style.display='none';
         setCamState('review');
         try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');if(window.parent&&window.parent!==window)window.parent.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
@@ -706,6 +708,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         uploadFailed=true;
         var msg=reason||'Cloud save failed';
         document.getElementById('review-cloud-msg').innerHTML='<p class="cam-msg error" style="font-size:11px">\u26a0 '+msg+' \u2014 download below to keep your take.</p>';
+        document.getElementById('retry-upload-btn').style.display='block';
         document.getElementById('review-warn').style.display='block';
         setCamState('review');
       }
@@ -754,7 +757,23 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         onFail('Network error during upload');
       };
 
+      xhr.timeout=120000;
+      xhr.ontimeout=function(){
+        console.error('[teleprompter] upload timed out');
+        onFail('Upload timed out — tap Retry Upload to try again');
+      };
+
       xhr.send(fd);
+    }
+
+    function retryUpload(){
+      uploadFailed=false;
+      document.getElementById('retry-upload-btn').style.display='none';
+      document.getElementById('review-cloud-msg').innerHTML='';
+      var bar=document.getElementById('upload-bar');var pct=document.getElementById('upload-pct');
+      if(bar)bar.style.width='0%';if(pct)pct.textContent='0%';
+      setCamState('uploading');
+      uploadRecording();
     }
 
     function downloadRecording(){
