@@ -73,8 +73,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     /* ── Centered countdown overlay ── */
     #rec-countdown{display:none;position:absolute;inset:0;align-items:center;justify-content:center;pointer-events:none;z-index:20}
-    #rec-cd-num{font-family:Arial,sans-serif;font-size:200px;font-weight:900;color:rgba(255,255,255,.35);line-height:1;animation:cdPulse 1s ease-in-out infinite}
-    @keyframes cdPulse{0%{opacity:.1;transform:scale(.8)}40%{opacity:.45;transform:scale(1.05)}60%{opacity:.45;transform:scale(1.05)}100%{opacity:.1;transform:scale(.8)}}
+    #rec-cd-card{background:rgba(0,0,0,.88);border-radius:20px;padding:24px 52px 20px;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:0 8px 48px rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.08)}
+    #rec-cd-num{font-family:Arial,sans-serif;font-size:110px;font-weight:900;color:#fff;line-height:1;animation:cdPulse .9s ease-in-out infinite}
+    #rec-cd-label{font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+    @keyframes cdPulse{0%{transform:scale(.88);opacity:.7}45%{transform:scale(1.04);opacity:1}55%{transform:scale(1.04);opacity:1}100%{transform:scale(.88);opacity:.7}}
     #scroller{flex:1;overflow-y:scroll;padding:12px 60px 0;scrollbar-width:none}
     #scroller::-webkit-scrollbar{display:none}
     .section{margin-bottom:72px}
@@ -180,7 +182,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     <!-- Left: scrolling script / bullets -->
     <div id="left">
       <!-- Centered countdown overlay -->
-      <div id="rec-countdown"><span id="rec-cd-num">5</span></div>
+      <div id="rec-countdown">
+        <div id="rec-cd-card">
+          <span id="rec-cd-num">5</span>
+          <span id="rec-cd-label">Starting in…</span>
+        </div>
+      </div>
       <div id="scroller">
         ${sectionsHtml}
         <div class="bottom-pad"></div>
@@ -342,6 +349,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     var playBtn=document.getElementById('playBtn');
     var recCdEl=document.getElementById('rec-countdown');
     var recCdNumEl=document.getElementById('rec-cd-num');
+    var recCdLabel=document.getElementById('rec-cd-label');
     var fontLabel=document.getElementById('fontLabel');
     var fontDown=document.getElementById('fontDown');
     var fontUp=document.getElementById('fontUp');
@@ -385,8 +393,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       playing=false;if(raf){cancelAnimationFrame(raf);raf=null;}
       hideCountdown();lastTime=null;scrollAccum=0;scroller.scrollTop=0;playBtn.textContent='▶ Play';
     }
-    function startCountdown(onDone){
-      var count=5;recCdNumEl.textContent=count;recCdEl.style.display='flex';
+    function startCountdown(onDone,label){
+      var count=5;recCdNumEl.textContent=count;recCdLabel.textContent=label||'';recCdEl.style.display='flex';
       cdTimer=setInterval(function(){
         count--;
         if(count<=0){hideCountdown();if(onDone)onDone();}
@@ -397,7 +405,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       playing=!playing;
       if(playing){
         playBtn.textContent='⏸ Pause';if(raf){cancelAnimationFrame(raf);raf=null;}
-        startCountdown(function(){if(playing){lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);}});
+        startCountdown(function(){if(playing){lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);}},'Scroll starts in…');
       }else{playBtn.textContent='▶ Play';if(raf){cancelAnimationFrame(raf);raf=null;}hideCountdown();}
     }
     function tick(now){
@@ -627,13 +635,9 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     function startRecording(){
       if(!mediaStream||recCdActive)return;
       recCdActive=true;
-      // Countdown first, then start recorder + scroll simultaneously
+      // Phase 1: countdown → recording starts
       startCountdown(function(){
         recCdActive=false;
-        // Record directly from the camera stream — no canvas intermediary.
-        // This guarantees perfect A/V sync. The live preview uses CSS object-fit:cover
-        // on the aspect-ratio container to show the exact crop that matches the
-        // selected format, so the preview IS accurate with no black bars.
         recMimeType=getSupportedMimeType();
         var opts=recMimeType?{mimeType:recMimeType}:{};
         try{mediaRecorder=new MediaRecorder(mediaStream,opts);}
@@ -659,12 +663,15 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         recSeconds=0;updateRecTimer();
         timerInterval=setInterval(function(){recSeconds++;updateRecTimer();},1000);
         setCamState('recording');
-        // Start scroll at the same moment recording begins
-        if(!playing){
-          playing=true;playBtn.textContent='⏸ Pause';
-          lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);
-        }
-      });
+
+        // Phase 2: 5-second pause so they can settle, then scroll starts
+        startCountdown(function(){
+          if(!playing){
+            playing=true;playBtn.textContent='⏸ Pause';
+            lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);
+          }
+        },'Scroll starts in…');
+      },'Recording starts in…');
     }
 
     function stopRecording(){
