@@ -5312,20 +5312,15 @@ export async function registerRoutes(
       if (!recording) return res.status(404).json({ message: "Recording not found" });
       if (!recording.transcriptText) return res.status(400).json({ message: "No transcript yet — transcribe first" });
 
-      const { goalType } = req.body;
-      if (!goalType || !goalTypes.includes(goalType)) {
-        return res.status(400).json({ message: "Invalid goal type" });
-      }
-
       const result = await scoreTranscript(
         recording.transcriptText,
-        goalType as GoalType,
+        "sales" as GoalType,
         recording.durationSeconds ?? 60
       );
 
       await storage.updateTeleprompterRecording(recording.id, req.session.userId!, {
         scoreJson: result,
-        scoreGoalType: goalType as GoalType,
+        scoreGoalType: "sales" as GoalType,
       });
 
       res.json(result);

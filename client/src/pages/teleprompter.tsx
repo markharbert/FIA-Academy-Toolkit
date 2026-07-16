@@ -48,7 +48,6 @@ import { useToast } from "@/hooks/use-toast";
 import { openTeleprompter } from "@/lib/teleprompter";
 import jsPDF from "jspdf";
 import type { TeleprompterScript, TeleprompterRecording, ScoreResult, GoalType } from "@shared/schema";
-import { goalTypes, goalTypeLabels } from "@shared/schema";
 import { cn } from "@/lib/utils";
 
 const MAX_SCRIPT_CHARS = 100_000;
@@ -109,7 +108,6 @@ export default function TeleprompterPage() {
     scoreJson: ScoreResult | null;
     scoreGoalType: GoalType | null;
   }>({ open: false, title: "", text: "", recordingId: "", durationSeconds: null, scoreJson: null, scoreGoalType: null });
-  const [selectedGoal, setSelectedGoal] = useState<GoalType | null>(null);
   const [isScoring, setIsScoring] = useState(false);
   const [dirty, setDirty] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -458,7 +456,6 @@ export default function TeleprompterPage() {
   async function handleGetTranscript(rec: TeleprompterRecording) {
     // If transcript already exists, show it immediately in the modal
     if (rec.transcriptText) {
-      setSelectedGoal((rec.scoreGoalType as GoalType) ?? null);
       setTranscriptModal({
         open: true,
         title: rec.title,
@@ -478,7 +475,6 @@ export default function TeleprompterPage() {
       // Invalidate recordings cache so the button label updates to "Transcript"
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
       // Show the result in the modal
-      setSelectedGoal(null);
       setTranscriptModal({
         open: true,
         title: rec.title,
@@ -496,14 +492,14 @@ export default function TeleprompterPage() {
   }
 
   async function handleScoreTake() {
-    if (!selectedGoal || !transcriptModal.recordingId) return;
+    if (!transcriptModal.recordingId) return;
     setIsScoring(true);
     try {
-      const res = await apiRequest("POST", `/api/teleprompter/recordings/${transcriptModal.recordingId}/score`, { goalType: selectedGoal });
+      const res = await apiRequest("POST", `/api/teleprompter/recordings/${transcriptModal.recordingId}/score`, {});
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Scoring failed");
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
-      setTranscriptModal((m) => ({ ...m, scoreJson: data, scoreGoalType: selectedGoal }));
+      setTranscriptModal((m) => ({ ...m, scoreJson: data }));
     } catch (err: any) {
       toast({ title: "Scoring failed", description: err.message, variant: "destructive" });
     } finally {
@@ -1097,7 +1093,7 @@ export default function TeleprompterPage() {
             <DialogTitle className="text-base leading-snug">{transcriptModal.title}</DialogTitle>
             <DialogDescription>
               {transcriptModal.scoreJson
-                ? `Score: ${transcriptModal.scoreJson.totalScore}/100 · ${goalTypeLabels[transcriptModal.scoreGoalType!]}`
+                ? `Score: ${transcriptModal.scoreJson.totalScore}/100`
                 : "Transcript — score your take or copy below."}
             </DialogDescription>
           </DialogHeader>
@@ -1213,25 +1209,9 @@ export default function TeleprompterPage() {
 
               {/* Score section */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-muted-foreground shrink-0">Score as:</span>
-                {goalTypes.map((g) => (
-                  <button
-                    key={g}
-                    onClick={() => setSelectedGoal(g)}
-                    className={cn(
-                      "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                      selectedGoal === g
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                    )}
-                    data-testid={`button-goal-${g}`}
-                  >
-                    {g === "sales" ? "Sales" : g === "lead" ? "Lead" : g === "education" ? "Education" : "Recruit"}
-                  </button>
-                ))}
                 <Button
                   size="sm"
-                  disabled={!selectedGoal || isScoring}
+                  disabled={isScoring}
                   onClick={handleScoreTake}
                   data-testid="button-score-take"
                 >
