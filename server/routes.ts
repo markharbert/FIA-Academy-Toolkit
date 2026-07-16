@@ -4430,6 +4430,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/topic-pulse/runs/:runId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const run = await storage.getTopicRun(req.params.runId);
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      if (run.userId !== req.session.userId) return res.status(403).json({ message: "Forbidden" });
+      res.json(run);
+    } catch (err) {
+      console.error("[TopicPulse] Get run error:", err);
+      res.status(500).json({ message: "Failed to get run" });
+    }
+  });
+
   app.post("/api/topic-pulse/search", requireAuth, async (req: Request, res: Response) => {
     try {
       const parsed = topicSearchInputSchema.safeParse(req.body);
