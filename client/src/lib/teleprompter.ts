@@ -84,7 +84,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     .section-label{font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:20px}
     .section-text{font-size:var(--text-size,32px);line-height:1.85;white-space:pre-wrap;color:#fff}
     .bottom-pad{height:80vh}
-    #hint{flex-shrink:0;text-align:center;padding:6px 10px;font-family:monospace;font-size:10px;color:rgba(255,255,255,.22);background:#0d0d0d;border-bottom:1px solid #1e1e1e}
+    #hint{flex-shrink:0;text-align:center;padding:5px 10px;font-family:monospace;font-size:10px;color:rgba(255,255,255,.6);background:#0a0a0a;border-top:1px solid #1a1a1a;border-bottom:1px solid #1a1a1a}
 
     /* ── Right: camera panel ── */
     #camera-panel{width:35%;flex-shrink:0;background:#111;border-left:1px solid #1e1e1e;display:flex;flex-direction:column}
@@ -202,6 +202,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <button class="view-tab active" id="tab-script" onclick="switchView('script')">&#x1F4C4; Script</button>
         <button class="view-tab" id="tab-bullets" onclick="switchView('bullets')">&#x2022; Bullets</button>
       </div>
+      <div id="hint">Space = play/pause &nbsp;·&nbsp; ↑ / ↓ = faster / slower &nbsp;·&nbsp; +/− = font size</div>
       <div id="controls">
         <div id="speedWrap">
           <span id="speedLabel">Scroll Speed</span>
@@ -245,9 +246,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <div id="rec-dot"><span class="dot"></span><span>REC</span></div>
         <div id="rec-timer">0:00</div>
       </div>
-      <!-- Keyboard hint — centered under the video -->
-      <div id="hint">Space = play/pause &nbsp;·&nbsp; ↑ / ↓ = faster / slower &nbsp;·&nbsp; +/− = font size</div>
-      <!-- Topic / keyword title — centered under the hint -->
+      <!-- Topic / keyword title — centered under the video -->
       <div id="cam-title">${esc(title)}</div>
 
       <!-- Device selector (camera + mic) — visible once camera is active -->
