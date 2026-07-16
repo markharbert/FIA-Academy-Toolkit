@@ -49,6 +49,7 @@ import {
   Lightbulb,
   TrendingUp,
   HelpCircle,
+  ChevronRight,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -699,34 +700,32 @@ export default function TeleprompterPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(200_60%_15%)]" />
         <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-sky-500/20 blur-3xl" />
         <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-teal-500/10 blur-3xl" />
-        <div className="relative max-w-6xl mx-auto px-6 py-6 flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10 shrink-0"
-            onClick={() => navigate("/video-studio")}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-              <MonitorPlay className="h-5 w-5 text-sky-300" />
-              Teleprompter
-            </h1>
-            <p className="text-white/60 text-sm mt-0.5">
-              Paste or upload any script and roll it through a distraction-free teleprompter. Your scripts save to your account.
-            </p>
+        <div className="relative max-w-6xl mx-auto px-6 py-6">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <MonitorPlay className="h-4 w-4 text-sky-300 shrink-0" />
+            <h1 className="text-xl font-bold text-white" data-testid="text-page-title">Teleprompter</h1>
+            <button
+              onClick={() => setShowHelp(true)}
+              className="ml-auto text-white/45 hover:text-white/75 transition-colors"
+              data-testid="button-help"
+              title="Tips & Shortcuts"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10 shrink-0"
-            onClick={() => setShowHelp(true)}
-            data-testid="button-help"
-          >
-            <HelpCircle className="h-4 w-4" />
-          </Button>
+          <p className="text-white/50 text-xs mt-0.5">Paste or upload any script and roll it through a distraction-free teleprompter. Your scripts save to your account.</p>
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 mt-2.5">
+            <button
+              onClick={() => navigate("/video-studio")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+              data-testid="button-back-video-studio"
+            >
+              Video Studio
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <span className="text-white/75 text-xs font-medium">Teleprompter</span>
+          </div>
         </div>
       </div>
 
