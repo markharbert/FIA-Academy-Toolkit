@@ -23,12 +23,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ArrowLeft,
@@ -121,50 +116,39 @@ function TakePartBar({ label, score, partKey }: { label: string; score: number; 
 }
 
 function TakePartDetail({
-  partKey, title, score, data,
+  partKey, data,
 }: {
-  partKey: string; title: string; score: number;
+  partKey: string;
   data: { whatWorked: string[]; whatMissing: string[]; suggestions: string[]; exampleLines: string[] };
 }) {
   const color = PART_COLORS[partKey] || "#6366f1";
-  const levelLabel = score >= 15 ? "Excellent" : score >= 10 ? "Good" : "Needs work";
-  const def = partDefinitions[partKey];
   return (
-    <AccordionItem value={partKey} className="border-b-0 mb-2 last:mb-0">
-      <AccordionTrigger className="hover:no-underline rounded-xl border bg-card px-3 py-2.5 hover:bg-muted/40 transition-colors data-[state=open]:rounded-b-none data-[state=open]:border-b-0" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-        <div className="flex items-center gap-2.5">
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: color }}>{score}/20</span>
-          <span className="font-semibold text-sm">{title}</span>
-          <span className="text-xs text-muted-foreground font-normal">{levelLabel}</span>
+    <div className="space-y-3">
+      {(data.whatMissing.length > 0 || data.suggestions.length > 0) && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+            <Lightbulb className="h-3 w-3" />How to Improve
+          </div>
+          <ul className="space-y-1 pl-4">
+            {[...data.whatMissing, ...data.suggestions].map((item, i) => (
+              <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>
+            ))}
+          </ul>
         </div>
-      </AccordionTrigger>
-      <AccordionContent className="border border-t-0 rounded-b-xl px-3 pb-3 pt-2.5 space-y-2.5" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-        {(data.whatMissing.length > 0 || data.suggestions.length > 0) && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
-              <Lightbulb className="h-3 w-3" />How to Improve
-            </div>
-            <ul className="space-y-0.5 pl-4">
-              {[...data.whatMissing, ...data.suggestions].map((item, i) => (
-                <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>
-              ))}
-            </ul>
+      )}
+      {data.exampleLines.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <Quote className="h-3 w-3" />Try Something Like This
           </div>
-        )}
-        {data.exampleLines.length > 0 && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              <Quote className="h-3 w-3" />Try Something Like This
-            </div>
-            <div className="space-y-1.5 pl-3">
-              {data.exampleLines.slice(0, 2).map((line, i) => (
-                <blockquote key={i} className="border-l-2 pl-2.5 text-xs italic text-muted-foreground" style={{ borderColor: color }}>"{line}"</blockquote>
-              ))}
-            </div>
+          <div className="space-y-2 pl-3">
+            {data.exampleLines.slice(0, 2).map((line, i) => (
+              <blockquote key={i} className="border-l-2 pl-2.5 text-xs italic text-muted-foreground" style={{ borderColor: color }}>"{line}"</blockquote>
+            ))}
           </div>
-        )}
-      </AccordionContent>
-    </AccordionItem>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -226,7 +210,6 @@ export default function TeleprompterPage() {
     scoreGoalType: GoalType | null;
   }>({ open: false, title: "", text: "", recordingId: "", durationSeconds: null, scoreJson: null, scoreGoalType: null });
   const [isScoring, setIsScoring] = useState(false);
-  const [openFeedbackSections, setOpenFeedbackSections] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -1284,20 +1267,29 @@ export default function TeleprompterPage() {
                   {/* Detailed feedback accordion */}
                   <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                     <div className="h-1 bg-gradient-to-r from-orange-500 via-violet-500 to-pink-500" />
-                    <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
+                    <div className="px-4 py-3 border-b">
                       <span className="font-semibold text-sm">Detailed Feedback by Part</span>
-                      <Button variant="outline" size="sm" className="h-7 text-xs shrink-0"
-                        onClick={() => setOpenFeedbackSections(openFeedbackSections.length > 0 ? [] : ["hook","setHook","firstCTA","content","finalCTA"])}>
-                        {openFeedbackSections.length > 0 ? "Collapse All" : "Expand All"}
-                      </Button>
                     </div>
                     <div className="p-3">
-                      <Accordion type="multiple" value={openFeedbackSections} onValueChange={setOpenFeedbackSections} className="w-full space-y-0">
-                        {(["hook","setHook","firstCTA","content","finalCTA"] as const).map((key) => {
-                          const labels: Record<string,string> = { hook:"Hook", setHook:"Set the Hook", firstCTA:"First CTA", content:"Content", finalCTA:"Final CTA" };
-                          return <TakePartDetail key={key} partKey={key} title={labels[key]} score={sc.partScores[key]} data={sc.parts[key]} />;
-                        })}
-                      </Accordion>
+                      <Tabs defaultValue="hook">
+                        <TabsList className="grid grid-cols-5 w-full h-auto mb-3">
+                          {(["hook","setHook","firstCTA","content","finalCTA"] as const).map((key) => {
+                            const labels: Record<string,string> = { hook:"Hook", setHook:"Set the Hook", firstCTA:"First CTA", content:"Content", finalCTA:"Final CTA" };
+                            const color = PART_COLORS[key] || "#6366f1";
+                            return (
+                              <TabsTrigger key={key} value={key} className="flex flex-col gap-0.5 py-1.5 h-auto">
+                                <span className="text-xs">{labels[key]}</span>
+                                <span className="text-[10px] font-bold tabular-nums" style={{ color }}>{sc.partScores[key]}/20</span>
+                              </TabsTrigger>
+                            );
+                          })}
+                        </TabsList>
+                        {(["hook","setHook","firstCTA","content","finalCTA"] as const).map((key) => (
+                          <TabsContent key={key} value={key} className="mt-0">
+                            <TakePartDetail partKey={key} data={sc.parts[key]} />
+                          </TabsContent>
+                        ))}
+                      </Tabs>
                     </div>
                   </div>
                 </div>
