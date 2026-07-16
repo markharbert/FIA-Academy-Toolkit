@@ -5349,13 +5349,11 @@ export async function registerRoutes(
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
       if (!recording) { console.log(`[rec-download] not found id=${req.params.id}`); return res.status(404).json({ message: "Recording not found" }); }
       const objectStorage = new ObjectStorageService();
-      // Generate a 5-minute signed GCS URL and redirect so the browser downloads
-      // directly from GCS — avoids the server-proxy 400 MB pipe issue.
+      // Generate a signed URL that we know works (same mechanism as the working stream/preview).
+      // We can't redirect to it for downloads because GCS V4 includes response-content-disposition
+      // in the signature — we can't append it after signing. Instead, proxy the GCS stream
+      // through Express so we can set Content-Disposition: attachment ourselves.
       const signedUrl = await objectStorage.getSignedReadUrl(recording.storageKey, 300);
-      // GCS response-content-disposition is NOT part of the V4 signature string, so
-      // appending it after signing is explicitly supported. This forces GCS to respond
-      // with Content-Disposition: attachment, making the browser download the file
-      // instead of playing it — even across the cross-origin redirect.
       const ext = path.extname(recording.storageKey) || ".mp4";
       const safeTitle = recording.title
         .replace(/\u2014/g, " - ")
@@ -5363,10 +5361,21 @@ export async function registerRoutes(
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 100) || "recording";
-      const disposition = `attachment; filename="${safeTitle}${ext}"`;
-      const downloadUrl = `${signedUrl}&response-content-disposition=${encodeURIComponent(disposition)}`;
-      console.log(`[rec-download] redirecting with Content-Disposition attachment`);
-      return res.redirect(302, downloadUrl);
+      // Fetch directly from GCS using the signed URL (bypasses the Replit sidecar
+      // which was causing createReadStream to fail silently on large files).
+      const gcsRes = await fetch(signedUrl);
+      if (!gcsRes.ok || !gcsRes.body) {
+        return res.status(502).json({ message: "Failed to fetch recording from storage" });
+      }
+      res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}${ext}"`);
+      res.setHeader("Content-Type", gcsRes.headers.get("content-type") || recording.mimeType || "video/mp4");
+      const cl = gcsRes.headers.get("content-length");
+      if (cl) res.setHeader("Content-Length", cl);
+      console.log(`[rec-download] proxying ${cl ?? "??"} bytes from GCS`);
+      const { Readable } = await import("node:stream");
+      const nodeStream = Readable.fromWeb(gcsRes.body as any);
+      nodeStream.on("error", (err) => console.error("[rec-download] stream error:", err));
+      nodeStream.pipe(res);
     } catch (err) {
       console.error("[Teleprompter] Download recording error:", err);
       if (!res.headersSent) res.status(500).json({ message: "Failed to download recording" });
