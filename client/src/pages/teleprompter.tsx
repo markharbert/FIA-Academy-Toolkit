@@ -1236,63 +1236,53 @@ export default function TeleprompterPage() {
             {transcriptModal.scoreJson && (() => {
               const sc = transcriptModal.scoreJson;
               return (
-                <div className="w-[60%] shrink-0 overflow-y-auto pr-1 flex flex-col gap-4">
+                <div className="w-[60%] shrink-0 overflow-y-auto pr-2 flex flex-col gap-3">
 
-                  {/* Score circle + part bars */}
+                  {/* Score circle + strengths/improvements */}
                   <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                     <div className="h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
                     <div className="px-4 py-3 border-b flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-emerald-500" />
                       <span className="font-semibold text-sm">Score Summary</span>
                     </div>
-                    <div className="p-4">
-                      <div className="flex gap-6 items-start">
-                        <div className="flex flex-col items-center gap-1 shrink-0">
-                          <TakeScoreCircle score={sc.totalScore} />
-                          <p className="text-xs font-semibold">Total Score</p>
-                          <p className="text-xs text-muted-foreground">out of 100</p>
-                        </div>
-                        <div className="flex-1 space-y-2.5 pt-1">
-                          <TakePartBar label="Hook" score={sc.partScores.hook} partKey="hook" />
-                          <TakePartBar label="Set the Hook" score={sc.partScores.setHook} partKey="setHook" />
-                          <TakePartBar label="First CTA" score={sc.partScores.firstCTA} partKey="firstCTA" />
-                          <TakePartBar label="Content" score={sc.partScores.content} partKey="content" />
-                          <TakePartBar label="Final CTA" score={sc.partScores.finalCTA} partKey="finalCTA" />
-                        </div>
+                    <div className="p-4 flex gap-5 items-start">
+                      {/* Circle */}
+                      <div className="flex flex-col items-center gap-1 shrink-0">
+                        <TakeScoreCircle score={sc.totalScore} />
+                        <p className="text-xs font-semibold">Total Score</p>
+                        <p className="text-xs text-muted-foreground">out of 100</p>
                       </div>
-                      {/* Strengths + improvements */}
-                      {(sc.summary.strengths.length > 0 || sc.summary.topImprovements.length > 0) && (
-                        <div className="mt-4 grid grid-cols-2 gap-4">
-                          {sc.summary.strengths.length > 0 && (
-                            <div className="space-y-1.5">
-                              <h4 className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-                                <Check className="h-3.5 w-3.5" />What You Did Well
-                              </h4>
-                              <ul className="space-y-1">
-                                {sc.summary.strengths.map((s, i) => (
-                                  <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                    <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />{s}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {sc.summary.topImprovements.length > 0 && (
-                            <div className="space-y-1.5">
-                              <h4 className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
-                                <Lightbulb className="h-3.5 w-3.5" />Top Improvements
-                              </h4>
-                              <ul className="space-y-1">
-                                {sc.summary.topImprovements.map((s, i) => (
-                                  <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                    <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />{s}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {/* Strengths + improvements side-by-side */}
+                      <div className="flex-1 grid grid-cols-2 gap-3 pt-1">
+                        {sc.summary.strengths.length > 0 && (
+                          <div className="space-y-1.5">
+                            <h4 className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                              <Check className="h-3 w-3" />What You Did Well
+                            </h4>
+                            <ul className="space-y-1">
+                              {sc.summary.strengths.map((s, i) => (
+                                <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                  <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />{s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {sc.summary.topImprovements.length > 0 && (
+                          <div className="space-y-1.5">
+                            <h4 className="flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                              <Lightbulb className="h-3 w-3" />Top Improvements
+                            </h4>
+                            <ul className="space-y-1">
+                              {sc.summary.topImprovements.map((s, i) => (
+                                <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                  <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />{s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1300,10 +1290,7 @@ export default function TeleprompterPage() {
                   <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                     <div className="h-1 bg-gradient-to-r from-orange-500 via-violet-500 to-pink-500" />
                     <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
-                      <div>
-                        <span className="font-semibold text-sm">Detailed Feedback by Part</span>
-                        <p className="text-xs text-muted-foreground mt-0.5">Click each section to expand</p>
-                      </div>
+                      <span className="font-semibold text-sm">Detailed Feedback by Part</span>
                       <Button variant="outline" size="sm" className="h-7 text-xs shrink-0"
                         onClick={() => setOpenFeedbackSections(openFeedbackSections.length > 0 ? [] : ["hook","setHook","firstCTA","content","finalCTA"])}>
                         {openFeedbackSections.length > 0 ? "Collapse All" : "Expand All"}
@@ -1329,43 +1316,6 @@ export default function TeleprompterPage() {
                       </div>
                       <div className="p-4">
                         <p className="text-xs leading-relaxed text-muted-foreground">{sc.summary.overallSummary}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Delivery stats */}
-                  {sc.delivery && (
-                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-                      <div className="h-1 bg-gradient-to-r from-blue-500 to-cyan-500" />
-                      <div className="px-4 py-3 border-b flex items-center gap-2">
-                        <BarChart2 className="h-4 w-4 text-blue-500" />
-                        <span className="font-semibold text-sm">Delivery Stats</span>
-                      </div>
-                      <div className="p-4 flex flex-wrap gap-4">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-muted-foreground">Words / min</span>
-                          <span className="text-lg font-bold tabular-nums">{sc.delivery.wordsPerMinute}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-xs text-muted-foreground">Filler words</span>
-                          <span className="text-lg font-bold tabular-nums">{sc.delivery.fillerWords.count}</span>
-                        </div>
-                        {sc.delivery.fillerWords.examples.length > 0 && (
-                          <div className="flex flex-col">
-                            <span className="text-xs text-muted-foreground">Examples</span>
-                            <span className="text-xs text-foreground/70">{sc.delivery.fillerWords.examples.slice(0,5).join(", ")}</span>
-                          </div>
-                        )}
-                        {sc.delivery.clarityNotes.length > 0 && (
-                          <div className="w-full space-y-1">
-                            <span className="text-xs text-muted-foreground font-medium">Clarity notes</span>
-                            <ul className="space-y-0.5 pl-3">
-                              {sc.delivery.clarityNotes.map((n,i) => (
-                                <li key={i} className="text-xs text-muted-foreground list-disc">{n}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
