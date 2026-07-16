@@ -725,7 +725,7 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
       <Handles />
       <DuplicateButton id={id} />
       <DeleteButton id={id} />
-      <div className="overflow-hidden" style={{ height: 96 }}>
+      <div className="overflow-hidden" style={{ height: nodeData.nodeType === "upsell" ? 110 : 96 }}>
         {nodeData.pagePreviewUrl ? (
           <img
             src={nodeData.pagePreviewUrl}
