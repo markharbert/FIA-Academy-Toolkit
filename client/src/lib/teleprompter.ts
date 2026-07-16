@@ -190,8 +190,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       <!-- Centered countdown overlay -->
       <div id="rec-countdown">
         <div id="rec-cd-card">
-          <span id="rec-cd-num">5</span>
           <span id="rec-cd-label">Starting in…</span>
+          <span id="rec-cd-num">5</span>
         </div>
       </div>
       <div id="scroller">
