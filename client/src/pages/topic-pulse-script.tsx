@@ -397,7 +397,7 @@ function YouTubeResearchPanel({ defaultKeyword }: { defaultKeyword?: string }) {
                   <img
                     src={video.thumbnail}
                     alt={video.title}
-                    className="w-48 h-32 object-cover rounded flex-shrink-0"
+                    className="w-48 aspect-video object-contain bg-black rounded flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <h4 className="text-sm font-semibold line-clamp-2">{video.title}</h4>
