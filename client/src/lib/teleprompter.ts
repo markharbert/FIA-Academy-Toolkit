@@ -73,7 +73,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     /* ── Left: teleprompter ── */
     #left{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
-    #scroller{flex:1;overflow-y:scroll;padding:40px 60px 0;scrollbar-width:none}
+    #scroller{flex:1;overflow-y:scroll;padding:12px 60px 0;scrollbar-width:none}
     #scroller::-webkit-scrollbar{display:none}
     .section{margin-bottom:72px}
     .section-label{font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:20px}
@@ -152,7 +152,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     #download-info{font-family:monospace;font-size:11px;color:rgba(255,255,255,.3)}
 
     /* ── Script / Bullets tabs ── */
-    #view-tabs{flex-shrink:0;display:flex;gap:8px;padding:10px 60px 6px;background:#0a0a0a}
+    #view-tabs{flex-shrink:0;display:flex;gap:8px;padding:6px 60px 10px;background:#0a0a0a;border-top:1px solid #1a1a1a}
     .view-tab{font-family:Arial,sans-serif;font-size:12px;font-weight:700;padding:6px 20px;border-radius:999px;border:none;cursor:pointer;transition:.15s;letter-spacing:.03em}
     .view-tab.active{background:#fff;color:#000}
     .view-tab:not(.active){background:rgba(255,255,255,.1);color:rgba(255,255,255,.5)}
@@ -177,10 +177,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     <!-- Left: scrolling script / bullets -->
     <div id="left">
-      <div id="view-tabs">
-        <button class="view-tab active" id="tab-script" onclick="switchView('script')">&#x1F4C4; Script</button>
-        <button class="view-tab" id="tab-bullets" onclick="switchView('bullets')">&#x2022; Bullets</button>
-      </div>
       <div id="scroller">
         ${sectionsHtml}
         <div class="bottom-pad"></div>
@@ -188,6 +184,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       <div id="bullets-view">
         ${bulletsHtml || '<div style="font-family:Arial,sans-serif;color:rgba(255,255,255,.25);font-size:16px;padding:20px 0">No bullet points added yet — save bullet points from the editor first.</div>'}
         <div class="bottom-pad"></div>
+      </div>
+      <div id="view-tabs">
+        <button class="view-tab active" id="tab-script" onclick="switchView('script')">&#x1F4C4; Script</button>
+        <button class="view-tab" id="tab-bullets" onclick="switchView('bullets')">&#x2022; Bullets</button>
       </div>
       <div id="hint">Space = play/pause &nbsp;·&nbsp; [ / ] = slower / faster &nbsp;·&nbsp; +/− = font size</div>
     </div>
