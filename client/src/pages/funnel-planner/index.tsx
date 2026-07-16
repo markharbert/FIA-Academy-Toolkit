@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { GitFork, Plus, MoreVertical, Trash2, Copy, Loader2, Calendar, Layers, X, Pencil, Check } from "lucide-react";
+import { GitFork, Plus, MoreVertical, Trash2, Copy, Loader2, Calendar, Layers, X, Pencil, Check, RefreshCw } from "lucide-react";
 
 function formatDate(d: Date | string) {
   return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -113,6 +113,17 @@ export default function FunnelPlannerIndex() {
       toast({ title: "Deleted", description: "Funnel deleted" });
     },
     onError: () => toast({ title: "Error", description: "Failed to delete funnel", variant: "destructive" }),
+  });
+
+  const refreshThumbnailMutation = useMutation({
+    mutationFn: async (id: string) =>
+      apiRequest("PATCH", `/api/funnels/${id}`, { thumbnailData: null }),
+    onSuccess: async (_res, id) => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/funnels"] });
+      // Navigate to the editor — it will auto-capture a fresh thumbnail on load
+      setLocation(`/funnel-grid/${id}`);
+    },
+    onError: () => toast({ title: "Error", description: "Failed to refresh thumbnail", variant: "destructive" }),
   });
 
   return (
@@ -229,6 +240,14 @@ export default function FunnelPlannerIndex() {
                         >
                           <Copy className="h-4 w-4 mr-2" />
                           Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => refreshThumbnailMutation.mutate(funnel.id)}
+                          disabled={refreshThumbnailMutation.isPending}
+                          data-testid={`button-refresh-thumbnail-${funnel.id}`}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-2 ${refreshThumbnailMutation.isPending ? "animate-spin" : ""}`} />
+                          Refresh thumbnail
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
