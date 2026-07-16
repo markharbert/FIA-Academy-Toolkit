@@ -348,6 +348,8 @@ export function CustomEdge({
           the rest are dashes — one unified stream, no secondary layer. */}
       {isEmailTrafficEdge && !pathType && (
         <>
+          {/* Hidden path for animateMotion mpath reference */}
+          <path id={id} d={edgePath} fill="none" stroke="none" />
           {/* Soft amber glow halo */}
           <path
             d={edgePath}

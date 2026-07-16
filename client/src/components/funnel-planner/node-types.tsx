@@ -522,11 +522,13 @@ function TrafficSourceNode({ id, data, selected }: NodeProps) {
       : next.length === 1
         ? (TRAFFIC_PLATFORMS[next[0]]?.label ?? next[0])
         : "Multiple Sources";
-    const pickingMode = next.length < 4;
+    // Only auto-open picker if already in picker mode, or all platforms were cleared.
+    // Prevents the picker from unexpectedly reopening when a user removes one of 4 platforms.
+    const pickingMode = picking || next.length === 0;
     setNodes(nds => nds.map(n =>
       n.id === id ? { ...n, data: { ...n.data, trafficPlatforms: next, trafficPlatform: next[0] || undefined, label: autoLabel, pickingMode } } : n
     ));
-  }, [id, setNodes, platforms]);
+  }, [id, setNodes, platforms, picking]);
 
   const closePicker = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -732,6 +734,7 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
             alt="Page preview"
             className="w-full h-full object-cover object-top"
             style={{ display: "block" }}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
           />
         ) : mockupFn ? mockupFn(accentColor ?? cfg.hexColor) : (
           <div className={`flex items-center justify-center h-full ${theme === "light" ? "bg-gray-50" : "bg-black/35"}`}>
@@ -842,8 +845,33 @@ function NoteNode({ id, data, selected }: NodeProps) {
   };
 
   const fmt = (cmd: string, value?: string) => {
-    editorRef.current?.focus();
-    document.execCommand(cmd, false, value);
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+
+    if (cmd === "fontSize" && value) {
+      const sizeMap: Record<string, string> = { "2": "10px", "3": "13px", "4": "16px", "5": "20px" };
+      const span = document.createElement("span");
+      span.style.fontSize = sizeMap[value] ?? value;
+      try { range.surroundContents(span); } catch { const f = range.extractContents(); span.appendChild(f); range.insertNode(span); }
+    } else {
+      const tagMap: Record<string, string> = { bold: "strong", italic: "em", underline: "u" };
+      const tag = tagMap[cmd];
+      if (!tag) return;
+      const existing = sel.anchorNode?.parentElement?.closest(tag as keyof HTMLElementTagNameMap);
+      if (existing && el.contains(existing)) {
+        const parent = existing.parentNode;
+        if (parent) { while (existing.firstChild) parent.insertBefore(existing.firstChild, existing); parent.removeChild(existing); }
+      } else {
+        const wrapper = document.createElement(tag);
+        try { range.surroundContents(wrapper); } catch { const f = range.extractContents(); wrapper.appendChild(f); range.insertNode(wrapper); }
+      }
+    }
+    updateData({ notes: el.innerHTML });
   };
 
   const checkSelection = () => {
@@ -934,7 +962,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
               onMouseUp={checkSelection}
               onKeyUp={checkSelection}
               onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); exitEditMode(); } }}
-              onBlur={() => { setTimeout(() => { if (!editorRef.current?.contains(document.activeElement)) exitEditMode(); }, 150); }}
+              onBlur={() => { setTimeout(() => { if (!wrapperRef.current?.contains(document.activeElement)) exitEditMode(); }, 150); }}
               className="nopan nodrag flex-1 min-h-0 w-full px-3 py-2 text-[11px] leading-snug outline-none overflow-y-auto"
               style={{ color: "#1a1a1a", caretColor: "#1a1a1a", userSelect: "text" }}
             />
