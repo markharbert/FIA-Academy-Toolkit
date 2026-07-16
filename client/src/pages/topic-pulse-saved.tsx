@@ -568,7 +568,7 @@ export default function TopicPulseSavedPage() {
                           ) : (
                             <FileText className="h-4 w-4 mr-2" />
                           )}
-                          {scriptMutation.isPending ? "Generating…" : "Generate Script →"}
+                          {scriptMutation.isPending ? "Generating…" : "Generate Script Outline →"}
                         </Button>
                         <div className="flex gap-2">
                           {isCompleted ? (
@@ -839,11 +839,11 @@ export default function TopicPulseSavedPage() {
         )}
       </div>
 
-      {/* Generate Script options dialog */}
+      {/* Generate Script Outline options dialog */}
       <Dialog open={showGenerateDialog} onOpenChange={(open) => { if (!open) setShowGenerateDialog(false); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Generate Script</DialogTitle>
+            <DialogTitle>Generate Script Outline</DialogTitle>
             <DialogDescription>Choose your video settings before generating.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -889,7 +889,7 @@ export default function TopicPulseSavedPage() {
               data-testid="button-confirm-generate-script"
             >
               {scriptMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-              Generate Script
+              Generate Script Outline
             </Button>
           </DialogFooter>
         </DialogContent>
