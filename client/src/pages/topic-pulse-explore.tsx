@@ -8,25 +8,6 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { 
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Minus, Bookmark, 
   FileText, Sparkles, Lightbulb, HelpCircle, CheckCircle2, AlertCircle,
@@ -458,10 +439,6 @@ export default function TopicPulseExplorePage() {
     },
   });
 
-  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
-  const [pendingGenerateTopicId, setPendingGenerateTopicId] = useState<string | null>(null);
-  const [genVideoLength, setGenVideoLength] = useState("6-10");
-  const [genTone, setGenTone] = useState("friendly");
   const scriptMutation = useMutation({
     mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string }) => {
       const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", {
@@ -691,7 +668,7 @@ export default function TopicPulseExplorePage() {
                   <div className="space-y-2 mb-5">
                     <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a full video script.</p>
                     <Button 
-                      onClick={() => { setPendingGenerateTopicId(selectedTopic.id); setShowGenerateDialog(true); }}
+                      onClick={() => scriptMutation.mutate({ topicId: selectedTopic.id, videoLengthTarget: "6-10", tonePreference: "friendly" })}
                       disabled={scriptMutation.isPending}
                       className="w-full bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold h-11"
                       data-testid="button-generate-script"
@@ -835,61 +812,6 @@ export default function TopicPulseExplorePage() {
         )}
       </div>
 
-      {/* Generate Script Outline options dialog */}
-      <Dialog open={showGenerateDialog} onOpenChange={(open) => { if (!open) setShowGenerateDialog(false); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Generate Script Outline</DialogTitle>
-            <DialogDescription>Choose your video settings before generating.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Video Length</Label>
-              <Select value={genVideoLength} onValueChange={setGenVideoLength}>
-                <SelectTrigger data-testid="select-gen-video-length">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="3-5">3–5 minutes</SelectItem>
-                  <SelectItem value="6-10">6–10 minutes</SelectItem>
-                  <SelectItem value="10-15">10–15 minutes</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Tone</Label>
-              <Select value={genTone} onValueChange={setGenTone}>
-                <SelectTrigger data-testid="select-gen-tone">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="friendly">Friendly</SelectItem>
-                  <SelectItem value="professional">Professional</SelectItem>
-                  <SelectItem value="casual">Casual</SelectItem>
-                  <SelectItem value="energetic">Energetic</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowGenerateDialog(false)} data-testid="button-gen-dialog-cancel">Cancel</Button>
-            <Button
-              onClick={() => {
-                if (pendingGenerateTopicId) {
-                  scriptMutation.mutate({ topicId: pendingGenerateTopicId, videoLengthTarget: genVideoLength, tonePreference: genTone });
-                  setShowGenerateDialog(false);
-                }
-              }}
-              disabled={scriptMutation.isPending}
-              className="bg-violet-600 hover:bg-violet-700 text-white"
-              data-testid="button-confirm-generate-script"
-            >
-              {scriptMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-              Generate Script Outline
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
     </div>
   );
