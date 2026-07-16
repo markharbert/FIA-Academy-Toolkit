@@ -756,6 +756,7 @@ export const teleprompterRecordings = pgTable("teleprompter_recordings", {
   durationSeconds: integer("duration_seconds"),
   format: text("format").notNull().default("landscape"),
   expiresAt: timestamp("expires_at").notNull(),
+  processingStatus: text("processing_status").default("complete").$type<"processing" | "complete" | "failed">(),
   transcriptText: text("transcript_text"),
   scoreGoalType: text("score_goal_type").$type<GoalType>(),
   scoreJson: jsonb("score_json").$type<ScoreResult>(),

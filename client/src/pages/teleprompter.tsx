@@ -688,6 +688,11 @@ export default function TeleprompterPage() {
 
   const { data: recordings, isLoading: recordingsLoading } = useQuery<TeleprompterRecording[]>({
     queryKey: ["/api/teleprompter/recordings"],
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      return data.some((r) => r.processingStatus === "processing") ? 4000 : false;
+    },
   });
 
   // Only show takes that belong to the currently selected script
@@ -1193,6 +1198,8 @@ export default function TeleprompterPage() {
                     {scriptRecordings.map((rec) => {
                       const daysLeft = formatDaysLeft(rec.expiresAt);
                       const isExpiringSoon = new Date(rec.expiresAt).getTime() - Date.now() < 5 * 86400000;
+                      const isProcessing = rec.processingStatus === "processing";
+                      const isFailed = rec.processingStatus === "failed";
                       return (
                         <div
                           key={rec.id}
@@ -1203,16 +1210,27 @@ export default function TeleprompterPage() {
                             <Video className="h-4 w-4 text-teal-600" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate" data-testid={`recording-title-${rec.id}`}>
+                            <p className="text-sm font-medium truncate flex items-center gap-2" data-testid={`recording-title-${rec.id}`}>
                               {rec.title || "Untitled Take"}
+                              {isProcessing && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-red-500 animate-pulse" data-testid={`status-processing-${rec.id}`}>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                                  Processing…
+                                </span>
+                              )}
+                              {isFailed && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-red-600" data-testid={`status-failed-${rec.id}`}>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-600 inline-block" />
+                                  Upload failed
+                                </span>
+                              )}
                             </p>
                             <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
                               <span>{formatRelative(rec.createdAt)}</span>
                               {rec.durationSeconds && (
                                 <><span>·</span><span>{formatDuration(rec.durationSeconds)}</span></>
                               )}
-                              <span>·</span>
-                              <span>{formatBytes(rec.sizeBytes)}</span>
+                              {!isProcessing && <><span>·</span><span>{formatBytes(rec.sizeBytes)}</span></>}
                               <span>·</span>
                               <span className={`font-mono text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
                                 rec.format === "portrait" ? "bg-violet-500/10 text-violet-500" :
@@ -1221,10 +1239,7 @@ export default function TeleprompterPage() {
                               }`}>
                                 {rec.format === "portrait" ? "9:16" : rec.format === "square" ? "1:1" : "16:9"}
                               </span>
-                              <span>·</span>
-                              <span className={isExpiringSoon ? "text-amber-500 font-medium" : ""}>
-                                {daysLeft}
-                              </span>
+                              {!isProcessing && <><span>·</span><span className={isExpiringSoon ? "text-amber-500 font-medium" : ""}>{daysLeft}</span></>}
                             </p>
                           </div>
                           <TooltipProvider delayDuration={300}>
@@ -1233,14 +1248,15 @@ export default function TeleprompterPage() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <button
-                                  onClick={() => setPreviewRec(rec)}
-                                  className="p-2 rounded-md text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 transition-colors"
+                                  onClick={() => !isProcessing && !isFailed && setPreviewRec(rec)}
+                                  disabled={isProcessing || isFailed}
+                                  className="p-2 rounded-md text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                   data-testid={`button-preview-recording-${rec.id}`}
                                 >
                                   <Eye className="h-4 w-4" />
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent>Preview</TooltipContent>
+                              <TooltipContent>{isProcessing ? "Available when processing completes" : "Preview"}</TooltipContent>
                             </Tooltip>
 
                             {/* Transcript */}
@@ -1248,8 +1264,8 @@ export default function TeleprompterPage() {
                               <TooltipTrigger asChild>
                                 <button
                                   onClick={() => handleGetTranscript(rec)}
-                                  disabled={transcribingIds.has(rec.id)}
-                                  className="p-2 rounded-md text-violet-500 hover:text-violet-600 hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                                  disabled={transcribingIds.has(rec.id) || isProcessing || isFailed}
+                                  className="p-2 rounded-md text-violet-500 hover:text-violet-600 hover:bg-violet-500/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                   data-testid={`button-transcript-recording-${rec.id}`}
                                 >
                                   {transcribingIds.has(rec.id)
@@ -1258,23 +1274,33 @@ export default function TeleprompterPage() {
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {transcribingIds.has(rec.id) ? "Transcribing…" : rec.transcriptText ? "View Transcript" : "Get Transcript"}
+                                {isProcessing ? "Available when processing completes" : transcribingIds.has(rec.id) ? "Transcribing…" : rec.transcriptText ? "View Transcript" : "Get Transcript"}
                               </TooltipContent>
                             </Tooltip>
 
                             {/* Download */}
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <a
-                                  href={`/api/teleprompter/recordings/${rec.id}/download`}
-                                  download
-                                  className="p-2 rounded-md text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
-                                  data-testid={`button-download-recording-${rec.id}`}
-                                >
-                                  <Download className="h-4 w-4" />
-                                </a>
+                                {isProcessing || isFailed ? (
+                                  <button
+                                    disabled
+                                    className="p-2 rounded-md text-emerald-500 opacity-30 cursor-not-allowed"
+                                    data-testid={`button-download-recording-${rec.id}`}
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </button>
+                                ) : (
+                                  <a
+                                    href={`/api/teleprompter/recordings/${rec.id}/download`}
+                                    download
+                                    className="p-2 rounded-md text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+                                    data-testid={`button-download-recording-${rec.id}`}
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </a>
+                                )}
                               </TooltipTrigger>
-                              <TooltipContent>Download Video</TooltipContent>
+                              <TooltipContent>{isProcessing ? "Available when processing completes" : "Download Video"}</TooltipContent>
                             </Tooltip>
 
 

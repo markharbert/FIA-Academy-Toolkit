@@ -5193,28 +5193,47 @@ export async function registerRoutes(
       const objectId = crypto.randomUUID();
       const storageKey = `/objects/recordings/${userId}/${objectId}.mp4`;
 
-      let uploadPath = assembledPath;
-      let faststartPath: string | null = null;
-      if (isMp4) {
-        const processed = await faststartMp4(assembledPath);
-        if (processed !== assembledPath) { faststartPath = processed; uploadPath = processed; }
-      }
-
-      const fileBuffer = fs.readFileSync(uploadPath);
       const finalMime = isMp4 ? "video/mp4" : (mimeType || "video/webm");
-      const objectStorage = new ObjectStorageService();
-      await objectStorage.uploadFile(storageKey, fileBuffer, finalMime);
-      try { fs.unlinkSync(assembledPath); } catch (_) {}
-      if (faststartPath) { try { fs.unlinkSync(faststartPath); } catch (_) {} }
+      const sizeEstimate = rawSize ? (parseInt(String(rawSize), 10) || 0) : 0;
 
+      // Create the DB record immediately so the take appears in the list right away
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
       const recording = await storage.createTeleprompterRecording({
         userId, scriptId, title, storageKey,
-        mimeType: finalMime, sizeBytes: fileBuffer.length,
+        mimeType: finalMime, sizeBytes: sizeEstimate,
         durationSeconds, format, expiresAt,
+        processingStatus: "processing",
       });
+
+      // Respond immediately so the client can show the take as "Processing"
       res.json(recording);
+
+      // Finish the heavy work in the background
+      (async () => {
+        let uploadPath = assembledPath;
+        let faststartPath: string | null = null;
+        try {
+          if (isMp4) {
+            const processed = await faststartMp4(assembledPath);
+            if (processed !== assembledPath) { faststartPath = processed; uploadPath = processed; }
+          }
+          const fileBuffer = fs.readFileSync(uploadPath);
+          const objectStorage = new ObjectStorageService();
+          await objectStorage.uploadFile(storageKey, fileBuffer, finalMime);
+          await storage.updateTeleprompterRecording(recording.id, userId, {
+            processingStatus: "complete",
+            sizeBytes: fileBuffer.length,
+          });
+          console.log(`[Teleprompter] finalize-chunked-upload complete: ${recording.id} (${fileBuffer.length} bytes)`);
+        } catch (bgErr) {
+          console.error("[Teleprompter] background GCS upload failed:", bgErr);
+          try { await storage.updateTeleprompterRecording(recording.id, userId, { processingStatus: "failed" }); } catch (_) {}
+        } finally {
+          try { fs.unlinkSync(assembledPath); } catch (_) {}
+          if (faststartPath) { try { fs.unlinkSync(faststartPath); } catch (_) {} }
+        }
+      })();
     } catch (err) {
       try { fs.unlinkSync(assembledPath); } catch (_) {}
       try { fs.rmSync(chunkDir, { recursive: true }); } catch (_) {}
