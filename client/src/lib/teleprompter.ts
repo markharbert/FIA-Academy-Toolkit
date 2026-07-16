@@ -48,12 +48,13 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     *{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%;background:#0a0a0a;color:#fff;font-family:Georgia,"Times New Roman",serif;overflow:hidden;display:flex;flex-direction:column}
 
-    /* ── Controls bar ── */
+    /* ── Controls bar (lives inside left column) ── */
     #controls{
       flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
-      padding:10px 18px;background:#111;border-top:1px solid #333;
+      padding:8px 16px;background:#0a0a0a;border-top:1px solid #1a1a1a;
     }
-    #controls .title{font-family:Arial,sans-serif;font-size:12px;color:#555;margin-right:6px;white-space:nowrap;overflow:hidden;max-width:180px}
+    /* ── Topic title (lives inside right column, under the hint) ── */
+    #cam-title{flex-shrink:0;text-align:center;padding:5px 10px;font-family:Arial,sans-serif;font-size:11px;font-weight:600;color:rgba(255,255,255,.35);background:#0d0d0d;border-bottom:1px solid #1e1e1e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.02em}
     #speedWrap{display:flex;flex-direction:column;align-items:center;gap:3px}
     #speedLabel{font-family:Arial,sans-serif;font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
     #speedSlider{width:100px;cursor:pointer;accent-color:#fff;height:4px;border-radius:2px}
@@ -66,7 +67,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     .font-btn:disabled{opacity:.3;cursor:not-allowed}
     #fontLabel{font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.55);min-width:54px;text-align:center;white-space:nowrap}
     /* ── Main two-panel layout ── */
-    #main{flex:1;display:flex;overflow:hidden;min-height:0;padding-right:16px;padding-bottom:12px}
+    #main{flex:1;display:flex;overflow:hidden;min-height:0;padding-right:16px}
 
     /* ── Left: teleprompter ── */
     #left{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;position:relative}
@@ -201,6 +202,17 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <button class="view-tab active" id="tab-script" onclick="switchView('script')">&#x1F4C4; Script</button>
         <button class="view-tab" id="tab-bullets" onclick="switchView('bullets')">&#x2022; Bullets</button>
       </div>
+      <div id="controls">
+        <div id="speedWrap">
+          <span id="speedLabel">Scroll Speed</span>
+          <input type="range" id="speedSlider" min="1" max="8" value="3" step="1">
+        </div>
+        <button class="font-btn" id="fontDown" onclick="changeFont(-1)" title="Smaller text">A−</button>
+        <span id="fontLabel">Medium</span>
+        <button class="font-btn" id="fontUp" onclick="changeFont(1)" title="Larger text">A+</button>
+        <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
+        <button id="playBtn" onclick="togglePlay()">▶ Play</button>
+      </div>
     </div>
 
     <!-- Draggable divider -->
@@ -235,6 +247,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       </div>
       <!-- Keyboard hint — centered under the video -->
       <div id="hint">Space = play/pause &nbsp;·&nbsp; ↑ / ↓ = faster / slower &nbsp;·&nbsp; +/− = font size</div>
+      <!-- Topic / keyword title — centered under the hint -->
+      <div id="cam-title">${esc(title)}</div>
 
       <!-- Device selector (camera + mic) — visible once camera is active -->
       <div id="device-bar">
@@ -324,20 +338,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       <div id="cam-footer">saves to your account for 30 days · download any time from your teleprompter page</div>
     </div>
 
-  </div>
-
-  <!-- ── Bottom controls (full-width) ── -->
-  <div id="controls">
-    <span class="title">${esc(title)}</span>
-    <div id="speedWrap">
-      <span id="speedLabel">Scroll Speed</span>
-      <input type="range" id="speedSlider" min="1" max="8" value="3" step="1">
-    </div>
-    <button class="font-btn" id="fontDown" onclick="changeFont(-1)" title="Smaller text">A−</button>
-    <span id="fontLabel">Medium</span>
-    <button class="font-btn" id="fontUp" onclick="changeFont(1)" title="Larger text">A+</button>
-    <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
-    <button id="playBtn" onclick="togglePlay()">▶ Play</button>
   </div>
 
   <script>
