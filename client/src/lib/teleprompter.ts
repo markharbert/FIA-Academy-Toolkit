@@ -53,8 +53,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
       padding:8px 16px;background:#0a0a0a;border-top:1px solid #1a1a1a;
     }
-    /* ── Topic title (lives inside right column, under the hint) ── */
-    #cam-title{flex-shrink:0;text-align:center;padding:5px 10px;font-family:Arial,sans-serif;font-size:11px;font-weight:600;color:rgba(255,255,255,.35);background:#0d0d0d;border-bottom:1px solid #1e1e1e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.02em}
+    /* ── Topic title (top of right column, above format picker) ── */
+    #cam-title{flex-shrink:0;text-align:center;padding:7px 12px;font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);background:#0d0d0d;border-bottom:1px solid #1e1e1e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em}
     #speedWrap{display:flex;flex-direction:column;align-items:center;gap:3px}
     #speedLabel{font-family:Arial,sans-serif;font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
     #speedSlider{width:100px;cursor:pointer;accent-color:#fff;height:4px;border-radius:2px}
@@ -221,6 +221,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     <!-- Right: camera + recording -->
     <div id="camera-panel">
+      <!-- Topic / keyword title — top of the right column, near the window close button -->
+      <div id="cam-title">${esc(title)}</div>
       <!-- Format picker -->
       <div id="format-picker">
         <button class="fmt-btn active" id="fmt-btn-landscape" onclick="setFormat('landscape')" title="YouTube · Facebook · 16:9">
@@ -246,8 +248,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <div id="rec-dot"><span class="dot"></span><span>REC</span></div>
         <div id="rec-timer">0:00</div>
       </div>
-      <!-- Topic / keyword title — centered under the video -->
-      <div id="cam-title">${esc(title)}</div>
 
       <!-- Device selector (camera + mic) — visible once camera is active -->
       <div id="device-bar">
