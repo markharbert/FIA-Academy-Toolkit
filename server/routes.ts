@@ -11085,11 +11085,22 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       normalized = "https://" + normalized;
     }
     try {
-      const apiRes = await fetch(
-        `https://api.microlink.io/?url=${encodeURIComponent(normalized)}&screenshot=true`
-      );
-      const json = await apiRes.json() as {
+      // First try: full screenshot + metadata (30s timeout)
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      let screenshotRes: Response;
+      try {
+        screenshotRes = await fetch(
+          `https://api.microlink.io/?url=${encodeURIComponent(normalized)}&screenshot=true&force=true`,
+          { signal: controller.signal }
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+
+      type MicrolinkJson = {
         status: string;
+        message?: string;
         data?: {
           screenshot?: { url?: string };
           image?: { url?: string };
@@ -11097,21 +11108,58 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
           description?: string;
         };
       };
-      if (json.status !== "success") {
-        return res.status(422).json({ message: "Could not capture a screenshot for that URL" });
-      }
-      const previewUrl = json.data?.screenshot?.url || json.data?.image?.url;
+      const json = await screenshotRes.json() as MicrolinkJson;
+      console.log("[funnels/screenshot] microlink status:", json.status, "| message:", json.message ?? "(none)");
+
+      let previewUrl = json.data?.screenshot?.url || json.data?.image?.url;
+
+      // Fallback: if screenshot failed, try metadata-only to at least get OG image
       if (!previewUrl) {
-        return res.status(422).json({ message: "Could not capture a screenshot for that URL" });
+        console.log("[funnels/screenshot] screenshot failed, trying OG image fallback");
+        const fallbackController = new AbortController();
+        const fallbackTimer = setTimeout(() => fallbackController.abort(), 15000);
+        try {
+          const fallbackRes = await fetch(
+            `https://api.microlink.io/?url=${encodeURIComponent(normalized)}&screenshot=false&force=true`,
+            { signal: fallbackController.signal }
+          );
+          const fallbackJson = await fallbackRes.json() as MicrolinkJson;
+          console.log("[funnels/screenshot] fallback status:", fallbackJson.status);
+          previewUrl = fallbackJson.data?.image?.url;
+          if (previewUrl) {
+            return res.json({
+              screenshotUrl: previewUrl,
+              title: fallbackJson.data?.title ?? json.data?.title ?? null,
+              description: fallbackJson.data?.description ?? json.data?.description ?? null,
+            });
+          }
+        } catch (fbErr) {
+          console.error("[funnels/screenshot] fallback error:", fbErr);
+        } finally {
+          clearTimeout(fallbackTimer);
+        }
+
+        // Identify likely causes for a clearer user message
+        const isCFPage = /clickfunnels\.com|myclickfunnels\.com/i.test(normalized);
+        const userMsg = isCFPage
+          ? "ClickFunnels checkout pages block automated screenshots. Use 'Upload your own image' instead — take a screenshot of the page and upload it."
+          : "This page could not be captured automatically. It may require a login or block screenshot tools. Try 'Upload your own image' instead.";
+        return res.status(422).json({ message: userMsg, canUpload: true });
       }
+
       res.json({
         screenshotUrl: previewUrl,
         title: json.data?.title ?? null,
         description: json.data?.description ?? null,
       });
-    } catch (err) {
-      console.error("[funnels/screenshot] microlink error:", err);
-      res.status(500).json({ message: "Screenshot capture failed" });
+    } catch (err: unknown) {
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      console.error("[funnels/screenshot] error:", isAbort ? "request timed out" : err);
+      res.status(isAbort ? 504 : 500).json({
+        message: isAbort
+          ? "The page took too long to load — make sure the URL is publicly accessible."
+          : "Screenshot capture failed. Make sure the page is publicly accessible.",
+      });
     }
   });
 

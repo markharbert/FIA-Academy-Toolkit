@@ -68,6 +68,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const [palettePinned, setPalettePinned] = useState(true);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [previewCaptureFailed, setPreviewCaptureFailed] = useState(false);
   const [flowInitialized, setFlowInitialized] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>(() =>
@@ -348,10 +349,12 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
 
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
+    setPreviewCaptureFailed(false);
   }, []);
 
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
+    setPreviewCaptureFailed(false);
   }, []);
 
   // ── Smooth pointer-drag: palette → canvas ─────────────────────────────────
@@ -449,23 +452,27 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
-      const json = await apiRes.json() as { screenshotUrl?: string; title?: string | null; description?: string | null; message?: string };
+      const json = await apiRes.json() as { screenshotUrl?: string; title?: string | null; description?: string | null; message?: string; canUpload?: boolean };
       if (!apiRes.ok) {
-        toast({ title: "Couldn't capture preview", description: json.message || "Page could not be captured — make sure it is publicly accessible.", variant: "destructive" });
+        setPreviewCaptureFailed(true);
+        toast({ title: "Can't auto-capture this page", description: json.message || "Page could not be captured — make sure it is publicly accessible.", variant: "destructive" });
         return;
       }
       const { screenshotUrl, title, description } = json;
       if (screenshotUrl) {
+        setPreviewCaptureFailed(false);
         const updates: Record<string, string | undefined> = { pagePreviewUrl: screenshotUrl, pageUrl: url };
         if (title) updates.label = title;
         if (description) updates.description = description;
         updateSelectedNodeData(updates);
         toast({ title: "Preview captured!", description: title ? `"${title}" imported.` : "Page screenshot added to node." });
       } else {
-        toast({ title: "Couldn't capture preview", description: "Page could not be captured — make sure it is publicly accessible.", variant: "destructive" });
+        setPreviewCaptureFailed(true);
+        toast({ title: "Can't auto-capture this page", description: "Page could not be captured — try uploading your own screenshot instead.", variant: "destructive" });
       }
     } catch (err) {
       console.error("[generatePreview]", err);
+      setPreviewCaptureFailed(true);
       toast({ title: "Capture failed", description: err instanceof Error ? err.message : "Network error — check your connection and try again.", variant: "destructive" });
     } finally {
       setIsGeneratingPreview(false);
@@ -1511,13 +1518,22 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full h-8 bg-white/[0.03] border-white/10 hover:bg-white/[0.07] text-white/60 hover:text-white text-xs gap-1.5"
+                    onClick={() => { setPreviewCaptureFailed(false); fileInputRef.current?.click(); }}
+                    className={`w-full h-8 text-xs gap-1.5 transition-all ${
+                      previewCaptureFailed
+                        ? "bg-violet-500/20 border-violet-400/60 text-violet-200 hover:bg-violet-500/30 hover:text-white animate-pulse"
+                        : "bg-white/[0.03] border-white/10 hover:bg-white/[0.07] text-white/60 hover:text-white"
+                    }`}
                     data-testid="button-upload-image"
                   >
                     <ImagePlus className="w-3.5 h-3.5" />
-                    Upload your own image
+                    {previewCaptureFailed ? "Upload a screenshot instead" : "Upload your own image"}
                   </Button>
+                  {previewCaptureFailed && (
+                    <p className="text-[10px] text-violet-300/70 leading-snug">
+                      This page blocks auto-capture. Take a screenshot of it and upload here.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
