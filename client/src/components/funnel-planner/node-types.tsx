@@ -722,19 +722,27 @@ function FunnelPageNode({ id, data, selected }: NodeProps) {
     ? `relative rounded-xl border-2 shadow-md transition-all duration-150 overflow-hidden bg-white ${accentColor ? "" : cfg.lightBorder} ${selected ? "ring-2 ring-indigo-400 ring-offset-1" : ""}`
     : `relative rounded-xl border-2 shadow-xl transition-all duration-150 overflow-hidden ${cfg.bg} ${accentColor ? "" : cfg.border} ${selected ? "ring-2 ring-white/50 ring-offset-1 ring-offset-transparent" : ""}`;
 
+  const [imgError, setImgError] = useState(false);
+  const prevUrl = useRef(nodeData.pagePreviewUrl);
+  if (prevUrl.current !== nodeData.pagePreviewUrl) {
+    prevUrl.current = nodeData.pagePreviewUrl;
+    setImgError(false);
+  }
+
+  const showPreview = !!nodeData.pagePreviewUrl && !imgError;
+
   return (
     <div className={`${containerCls} group`} style={{ width: 148, ...(accentColor ? { borderColor: accentColor } : {}) }} data-testid={`funnel-node-${nodeData.nodeType}`}>
       <Handles />
       <DuplicateButton id={id} />
       <DeleteButton id={id} />
       <div className="overflow-hidden" style={{ height: nodeData.nodeType === "upsell" ? 110 : 96 }}>
-        {nodeData.pagePreviewUrl ? (
+        {showPreview ? (
           <img
-            src={nodeData.pagePreviewUrl}
+            src={nodeData.pagePreviewUrl as string}
             alt="Page preview"
             className="w-full h-full object-cover object-top"
-            style={{ display: "block" }}
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+            onError={() => setImgError(true)}
           />
         ) : mockupFn ? mockupFn(accentColor ?? cfg.hexColor) : (
           <div className={`flex items-center justify-center h-full ${theme === "light" ? "bg-gray-50" : "bg-black/35"}`}>
