@@ -478,8 +478,8 @@ export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
 export const topicIntents = ["review", "comparison", "how-to", "problem-fix", "beginner-guide", "top-list", "buyer"] as const;
 export type TopicIntent = typeof topicIntents[number];
 
-// Video type preferences
-export const videoTypes = ["review", "top-list", "vs", "tutorial", "problem-fix", "beginner-guide"] as const;
+// Video type preferences — must stay in sync with topicIntents
+export const videoTypes = ["review", "comparison", "how-to", "problem-fix", "beginner-guide", "top-list", "buyer"] as const;
 export type VideoType = typeof videoTypes[number];
 
 // Audience levels
