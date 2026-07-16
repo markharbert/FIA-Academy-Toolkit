@@ -772,41 +772,28 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         return;
       }
 
-      // ── iframe context: chunked upload through parent page ──
-      // The blob is sliced into 5 MB pieces. Each piece is postMessage'd to the
-      // parent, which POSTs it to Express. 5 MB is well under the deployment
-      // ingress body-size limit, so there is no 413. Direct signed-URL uploads
-      // to GCS are CORS-blocked from blob-URL iframes and cannot be used.
-      var inIframe=!!(window.parent&&window.parent!==window);
-      if(inIframe){
-        var CHUNK_SIZE=5*1024*1024; // 5 MB
+      // ── chunked upload — direct fetch from iframe ──
+      // Blob-URL iframes share the creating page's origin, so fetch() with
+      // credentials:"include" sends the session cookie to the same-origin
+      // Express server just like the parent page would. No postMessage relay
+      // needed. Chunks are ≤ 5 MB each, safely under any ingress size limit.
+      // GCS signed-URL direct PUT is NOT used here — that is CORS-blocked.
+      (function(){
+        var CHUNK_SIZE=5*1024*1024;
         var uploadId=Math.random().toString(36).slice(2)+Date.now().toString(36);
         var totalChunks=Math.ceil(recordedBlob.size/CHUNK_SIZE);
-        var currentChunk=0;
+        var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';
+        var chunkIdx=0;
 
-        function uploadNextChunk(){
-          if(currentChunk>=totalChunks){
-            // All chunks sent — ask parent to assemble + register
-            var finalizeTimer;
-            function onFinalizeResult(ev){
-              if(!ev.data||ev.data.type!=='teleprompter-finalize-upload-result')return;
-              clearTimeout(finalizeTimer);
-              window.removeEventListener('message',onFinalizeResult);
-              if(ev.data.success){
-                if(bar)bar.style.width='100%';if(pct)pct.textContent='100%';
-                setTimeout(function(){onSuccess(ev.data.data);},300);
-              }else{
-                onFail(ev.data.error||'Failed to save recording');
-              }
-            }
-            window.addEventListener('message',onFinalizeResult);
-            finalizeTimer=setTimeout(function(){
-              window.removeEventListener('message',onFinalizeResult);
-              onFail('Upload timed out — tap Retry Upload to try again');
-            },120000);
-            try{
-              window.parent.postMessage({
-                type:'teleprompter-finalize-upload-request',
+        function sendNextChunk(){
+          if(chunkIdx>=totalChunks){
+            // All chunks stored — ask server to assemble and register
+            var p=97;if(bar)bar.style.width=p+'%';if(pct)pct.textContent=p+'%';
+            fetch('/api/teleprompter/recordings/finalize-chunked-upload',{
+              method:'POST',
+              credentials:'include',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({
                 uploadId:uploadId,
                 totalChunks:totalChunks,
                 title:SCRIPT_TITLE||'Untitled Take',
@@ -815,57 +802,50 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
                 format:selectedFormat,
                 mimeType:recMimeType||'video/webm',
                 sizeBytes:recordedBlob.size,
-              },'*');
-            }catch(err){
-              clearTimeout(finalizeTimer);
-              window.removeEventListener('message',onFinalizeResult);
-              onFail('Could not communicate with parent window');
-            }
+              }),
+            }).then(function(r){
+              if(!r.ok){return r.text().then(function(t){throw new Error('Save failed ('+r.status+')'+(t?': '+t.slice(0,120):''));});}
+              return r.json();
+            }).then(function(data){
+              if(bar)bar.style.width='100%';if(pct)pct.textContent='100%';
+              setTimeout(function(){onSuccess(data);},300);
+              try{if(window.parent&&window.parent!==window)window.parent.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
+            }).catch(function(err){
+              onFail(err.message||'Failed to save recording');
+            });
             return;
           }
 
-          // Update progress (chunks cover 0–95%; finalize covers the last 5%)
-          var p=Math.round(currentChunk/totalChunks*95);
+          var p=Math.round(chunkIdx/totalChunks*95);
           if(bar)bar.style.width=p+'%';if(pct)pct.textContent=p+'%';
 
-          var start=currentChunk*CHUNK_SIZE;
+          var start=chunkIdx*CHUNK_SIZE;
           var end=Math.min(start+CHUNK_SIZE,recordedBlob.size);
-          var chunk=recordedBlob.slice(start,end);
+          var blob=recordedBlob.slice(start,end);
+          var fd=new FormData();
+          fd.append('chunk',blob,'chunk-'+chunkIdx+ext);
+          fd.append('uploadId',uploadId);
+          fd.append('chunkIndex',String(chunkIdx));
+          fd.append('totalChunks',String(totalChunks));
 
-          var chunkTimer;
-          function onChunkResult(ev){
-            if(!ev.data||ev.data.type!=='teleprompter-chunk-upload-result')return;
-            if(ev.data.uploadId!==uploadId||ev.data.chunkIndex!==currentChunk)return;
-            clearTimeout(chunkTimer);
-            window.removeEventListener('message',onChunkResult);
-            if(!ev.data.success){onFail(ev.data.error||'Upload failed');return;}
-            currentChunk++;
-            uploadNextChunk();
-          }
-          window.addEventListener('message',onChunkResult);
-          chunkTimer=setTimeout(function(){
-            window.removeEventListener('message',onChunkResult);
-            onFail('Upload timed out — tap Retry Upload to try again');
-          },60000);
-          try{
-            window.parent.postMessage({
-              type:'teleprompter-chunk-upload-request',
-              uploadId:uploadId,
-              chunkIndex:currentChunk,
-              totalChunks:totalChunks,
-              chunk:chunk,
-              mimeType:recMimeType||'video/webm',
-            },'*');
-          }catch(err){
-            clearTimeout(chunkTimer);
-            window.removeEventListener('message',onChunkResult);
-            onFail('Could not communicate with parent window');
-          }
+          fetch('/api/teleprompter/recordings/upload-chunk',{
+            method:'POST',
+            credentials:'include',
+            body:fd,
+          }).then(function(r){
+            if(!r.ok){return r.text().then(function(t){throw new Error('Chunk '+(chunkIdx+1)+'/'+totalChunks+' failed ('+r.status+')'+(t?': '+t.slice(0,80):''));});}
+            return r.json();
+          }).then(function(){
+            chunkIdx++;
+            sendNextChunk();
+          }).catch(function(err){
+            onFail(err.message||'Upload failed');
+          });
         }
 
-        uploadNextChunk();
-        return;
-      }
+        sendNextChunk();
+      })();
+      return;
 
       // ── popup window context: direct XHR (session cookie available) ──
       var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';

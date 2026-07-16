@@ -78,6 +78,18 @@ const screenshotUpload = multer({
   },
 });
 
+// Dedicated multer for teleprompter recording chunks — no fileFilter so any
+// MIME type (including codec-qualified types like video/mp4;codecs=avc1) is accepted.
+const chunkUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOADS_DIR,
+    filename: (_req, _file, cb) => {
+      cb(null, `chunk-tmp-${Date.now()}-${Math.round(Math.random() * 1e9)}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per chunk (generous cap)
+});
+
 // Dedicated multer for the public inbound email webhook.
 // All limits are set before any recipient-token validation so an unauthenticated
 // caller cannot exhaust heap by sending large or numerous multipart fields.
@@ -5116,19 +5128,21 @@ export async function registerRoutes(
 
   // Chunked upload — Step A: receive one chunk and write it to a temp dir.
   // Each chunk is ≤ 5 MB so it passes through the deployment ingress without a 413.
-  app.post("/api/teleprompter/recordings/upload-chunk", requireAuth, upload.single("chunk"), async (req: Request, res: Response) => {
+  app.post("/api/teleprompter/recordings/upload-chunk", requireAuth, chunkUpload.single("chunk"), async (req: Request, res: Response) => {
     const file = req.file;
-    if (!file) return res.status(400).json({ message: "No chunk received" });
+    console.log("[chunk-upload] hit — file:", file?.originalname, "body:", req.body);
+    if (!file) return res.status(400).json({ message: "No chunk received — multer found no file field named 'chunk'" });
     try {
       const { uploadId, chunkIndex, totalChunks } = req.body;
       if (!uploadId || chunkIndex === undefined || !totalChunks) {
-        fs.unlinkSync(file.path);
+        try { fs.unlinkSync(file.path); } catch (_) {}
         return res.status(400).json({ message: "Missing uploadId, chunkIndex, or totalChunks" });
       }
       const chunkDir = path.join(UPLOADS_DIR, "chunks", uploadId);
       fs.mkdirSync(chunkDir, { recursive: true });
       const chunkPath = path.join(chunkDir, `chunk-${String(chunkIndex).padStart(6, "0")}`);
       fs.renameSync(file.path, chunkPath);
+      console.log("[chunk-upload] ok — uploadId:", uploadId, "chunk:", chunkIndex, "/", totalChunks);
       res.json({ ok: true, chunkIndex });
     } catch (err) {
       try { if (req.file) fs.unlinkSync(req.file.path); } catch (_) {}
@@ -5139,6 +5153,7 @@ export async function registerRoutes(
 
   // Chunked upload — Step B: assemble all chunks, faststart, push to GCS, register in DB.
   app.post("/api/teleprompter/recordings/finalize-chunked-upload", requireAuth, async (req: Request, res: Response) => {
+    console.log("[finalize-upload] hit — body keys:", Object.keys(req.body ?? {}));
     const chunkDir = path.join(UPLOADS_DIR, "chunks", req.body?.uploadId ?? "");
     const assembledPath = path.join(UPLOADS_DIR, `assembled-${req.body?.uploadId ?? "bad"}`);
     try {
