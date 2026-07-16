@@ -403,7 +403,7 @@ export default function TopicPulsePage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
         <div className="absolute -bottom-20 -right-10 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="absolute -top-14 -left-6 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative max-w-4xl mx-auto px-6 py-6">
+        <div className="relative max-w-6xl mx-auto px-6 py-6">
           <div className="flex items-center gap-2.5 flex-wrap">
             <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
             <h1 className="text-xl font-bold text-white" data-testid="text-page-title">Research</h1>
@@ -452,7 +452,7 @@ export default function TopicPulsePage() {
 
       {/* ── Tab bar ── */}
       <div className="border-b shrink-0">
-        <div className="max-w-4xl mx-auto px-5">
+        <div className="max-w-6xl mx-auto px-5">
           <div className="flex">
             <button
               onClick={() => setActiveTab("research")}
@@ -490,7 +490,7 @@ export default function TopicPulsePage() {
       {/* ── Body ── */}
       <div className="flex-1 overflow-auto">
         {activeTab === "research" ? (
-        <div className="max-w-4xl mx-auto px-5 py-6 space-y-6">
+        <div className="max-w-6xl mx-auto px-5 py-6 space-y-6">
 
           {/* How it works (inline) */}
           <div className="rounded-xl border bg-muted/20 p-3">
@@ -711,7 +711,7 @@ export default function TopicPulsePage() {
         </div>
         ) : (
           /* ── Saved Topics Tab ── */
-          <div className="max-w-4xl mx-auto px-5 py-6">
+          <div className="max-w-6xl mx-auto px-5 py-6">
             {savedTopics && savedTopics.length > 0 ? (
               <div className="flex gap-6 items-start">
 
