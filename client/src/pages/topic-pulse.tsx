@@ -280,6 +280,9 @@ export default function TopicPulsePage() {
   const creditsMedium = creditLimit > 0 && creditsRemaining / creditLimit < 0.2;
 
   const topicHasScript = (topicId: string) => scripts?.some((s: any) => s.topicId === topicId) ?? false;
+  const visibleSavedTopics = (savedTopics ?? []).filter((s: any) => !topicHasScript(s.topic?.id));
+  const visibleActiveTopics = visibleSavedTopics.filter((s: any) => !s.completedAt && s.status !== "completed");
+  const visibleDoneTopics = visibleSavedTopics.filter((s: any) => s.completedAt || s.status === "completed");
 
   const searchMutation = useMutation({
     mutationFn: async (input: { seedQuery: string; videoType?: string }) => {
@@ -480,9 +483,9 @@ export default function TopicPulsePage() {
             >
               <Bookmark className="h-3.5 w-3.5" />
               Saved Topics
-              {savedTopics && savedTopics.length > 0 && (
+              {visibleSavedTopics.length > 0 && (
                 <span className="ml-0.5 text-xs px-1.5 py-0.5 rounded-full bg-muted font-medium">
-                  {savedTopics.length}
+                  {visibleSavedTopics.length}
                 </span>
               )}
             </button>
@@ -715,20 +718,20 @@ export default function TopicPulsePage() {
         ) : (
           /* ── Saved Topics Tab ── */
           <div className="max-w-6xl mx-auto px-5 py-6">
-            {savedTopics && savedTopics.length > 0 ? (
+            {visibleSavedTopics.length > 0 ? (
               <div className="flex gap-6 items-start">
 
                 {/* LEFT: topic list */}
                 <div className={`${selectedSavedItem ? "w-72 shrink-0" : "flex-1"} space-y-4`}>
                   {/* Active topics */}
-                  {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed" && !topicHasScript(s.topic?.id)).length > 0 && (
+                  {visibleActiveTopics.length > 0 && (
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
                         <Bookmark className="h-3.5 w-3.5" />
-                        Saved ({(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed" && !topicHasScript(s.topic?.id)).length})
+                        Saved ({visibleActiveTopics.length})
                       </h3>
                       <div className="space-y-2">
-                        {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed" && !topicHasScript(s.topic?.id)).map((saved) => (
+                        {visibleActiveTopics.map((saved) => (
                           <button
                             key={saved.id}
                             className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-card hover:bg-muted/50 transition-all text-left ${selectedSavedItem?.id === saved.id ? "ring-2 ring-violet-500 bg-violet-500/5" : "hover:-translate-y-px"}`}
@@ -748,14 +751,14 @@ export default function TopicPulsePage() {
                   )}
 
                   {/* Completed topics */}
-                  {(savedTopics as any[]).filter((s) => (s.completedAt || s.status === "completed") && !topicHasScript(s.topic?.id)).length > 0 && (
+                  {visibleDoneTopics.length > 0 && (
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
                         <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                        Done ({(savedTopics as any[]).filter((s) => (s.completedAt || s.status === "completed") && !topicHasScript(s.topic?.id)).length})
+                        Done ({visibleDoneTopics.length})
                       </h3>
                       <div className="space-y-2">
-                        {(savedTopics as any[]).filter((s) => (s.completedAt || s.status === "completed") && !topicHasScript(s.topic?.id)).map((saved) => (
+                        {visibleDoneTopics.map((saved) => (
                           <button
                             key={saved.id}
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border bg-card opacity-60 hover:opacity-100 transition-all text-left ${selectedSavedItem?.id === saved.id ? "ring-2 ring-violet-500 opacity-100" : "hover:-translate-y-px"}`}
