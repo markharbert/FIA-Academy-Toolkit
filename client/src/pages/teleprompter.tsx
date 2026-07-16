@@ -1217,8 +1217,8 @@ export default function TeleprompterPage() {
       {/* Transcript viewer modal */}
       <Dialog open={transcriptModal.open} onOpenChange={(open) => !open && setTranscriptModal((m) => ({ ...m, open: false }))}>
         <DialogContent
-          className={cn("w-full flex flex-col transition-all", transcriptModal.scoreJson ? "max-w-7xl" : "max-w-2xl")}
-          style={{ maxHeight: "90vh" }}
+          className={cn("w-full flex flex-col overflow-hidden transition-all", transcriptModal.scoreJson ? "max-w-7xl" : "max-w-2xl")}
+          style={{ maxHeight: "90vh", height: "90vh" }}
         >
           <DialogHeader className="shrink-0">
             <DialogTitle className="text-base leading-snug">{transcriptModal.title}</DialogTitle>
@@ -1230,7 +1230,7 @@ export default function TeleprompterPage() {
           </DialogHeader>
 
           {/* Two-panel body */}
-          <div className={cn("flex-1 min-h-0 flex gap-4 mt-2", transcriptModal.scoreJson ? "flex-row" : "flex-col")}>
+          <div className={cn("flex-1 min-h-0 overflow-hidden flex gap-4 mt-2", transcriptModal.scoreJson ? "flex-row" : "flex-col")}>
 
             {/* ── Score report panel (left, 60%) ── */}
             {transcriptModal.scoreJson && (() => {
@@ -1374,7 +1374,7 @@ export default function TeleprompterPage() {
             })()}
 
             {/* ── Transcript panel (right, 40% or full when no score) ── */}
-            <div className={cn("flex flex-col gap-2", transcriptModal.scoreJson ? "w-[40%]" : "flex-1")}>
+            <div className={cn("flex flex-col gap-2 min-h-0 overflow-hidden", transcriptModal.scoreJson ? "w-[40%]" : "flex-1")}>
               <div className="flex-1 overflow-y-auto rounded-md border border-border bg-muted/40 p-4 min-h-0">
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcriptModal.text}</p>
               </div>
