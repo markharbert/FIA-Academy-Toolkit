@@ -1238,7 +1238,7 @@ export default function TeleprompterPage() {
               return (
                 <div className="w-[60%] shrink-0 overflow-y-auto pr-2 flex flex-col gap-3">
 
-                  {/* Score circle + strengths/improvements */}
+                  {/* Score Summary card — circle, strengths/improvements, AI coach summary */}
                   <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                     <div className="h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
                     <div className="px-4 py-3 border-b flex items-center gap-2">
@@ -1252,34 +1252,42 @@ export default function TeleprompterPage() {
                         <p className="text-xs font-semibold">Total Score</p>
                         <p className="text-xs text-muted-foreground">out of 100</p>
                       </div>
-                      {/* Strengths + improvements side-by-side */}
-                      <div className="flex-1 grid grid-cols-2 gap-3 pt-1">
-                        {sc.summary.strengths.length > 0 && (
-                          <div className="space-y-1.5">
-                            <h4 className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-                              <Check className="h-3 w-3" />What You Did Well
-                            </h4>
-                            <ul className="space-y-1">
-                              {sc.summary.strengths.map((s, i) => (
-                                <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                  <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />{s}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {sc.summary.topImprovements.length > 0 && (
-                          <div className="space-y-1.5">
-                            <h4 className="flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
-                              <Lightbulb className="h-3 w-3" />Top Improvements
-                            </h4>
-                            <ul className="space-y-1">
-                              {sc.summary.topImprovements.map((s, i) => (
-                                <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                  <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />{s}
-                                </li>
-                              ))}
-                            </ul>
+                      {/* Right column: strengths + improvements + AI summary */}
+                      <div className="flex-1 flex flex-col gap-3 pt-1">
+                        <div className="grid grid-cols-2 gap-3">
+                          {sc.summary.strengths.length > 0 && (
+                            <div className="space-y-1.5">
+                              <h4 className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+                                <Check className="h-3 w-3" />What You Did Well
+                              </h4>
+                              <ul className="space-y-1">
+                                {sc.summary.strengths.map((s, i) => (
+                                  <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                    <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />{s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {sc.summary.topImprovements.length > 0 && (
+                            <div className="space-y-1.5">
+                              <h4 className="flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                                <Lightbulb className="h-3 w-3" />Top Improvements
+                              </h4>
+                              <ul className="space-y-1">
+                                {sc.summary.topImprovements.map((s, i) => (
+                                  <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                    <span className="shrink-0 mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />{s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                        {sc.summary.overallSummary && (
+                          <div className="pt-2 border-t flex items-start gap-2">
+                            <Sparkles className="h-3.5 w-3.5 text-violet-500 mt-0.5 shrink-0" />
+                            <p className="text-xs leading-relaxed text-muted-foreground">{sc.summary.overallSummary}</p>
                           </div>
                         )}
                       </div>
@@ -1305,20 +1313,6 @@ export default function TeleprompterPage() {
                       </Accordion>
                     </div>
                   </div>
-
-                  {/* AI Coach summary */}
-                  {sc.summary.overallSummary && (
-                    <div className="rounded-xl border bg-card shadow-sm overflow-hidden" style={{ borderColor: "hsl(var(--primary) / 0.2)" }}>
-                      <div className="h-1 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500" />
-                      <div className="px-4 py-3 border-b flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-violet-500" />
-                        <span className="font-semibold text-sm">AI Coach Summary</span>
-                      </div>
-                      <div className="p-4">
-                        <p className="text-xs leading-relaxed text-muted-foreground">{sc.summary.overallSummary}</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })()}
