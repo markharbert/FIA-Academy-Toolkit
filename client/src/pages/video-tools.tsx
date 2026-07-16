@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { useLocation } from "wouter";
 import { Video, TrendingUp, FileText, MonitorPlay, ArrowRight, Clapperboard, ChevronDown, type LucideIcon } from "lucide-react";
 
@@ -85,7 +86,7 @@ export default function VideoStudioPage() {
             {PIPELINE_STAGES.map((stage, idx) => {
               const Icon = stage.icon;
               return (
-                <div key={stage.url} className="flex flex-col md:flex-row items-stretch flex-1 min-w-0">
+                <Fragment key={stage.url}>
                   <button
                     onClick={() => setLocation(stage.url)}
                     data-testid={stage.testId}
@@ -126,7 +127,7 @@ export default function VideoStudioPage() {
                       </div>
                     </>
                   )}
-                </div>
+                </Fragment>
               );
             })}
           </div>
