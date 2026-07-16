@@ -1109,6 +1109,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
           </button>
           <CanvasThemeContext.Provider value={canvasTheme}>
             <ReactFlow
+              proOptions={{ hideAttribution: true }}
               nodes={nodes}
               edges={edges}
               onNodesChange={handleNodesChange}

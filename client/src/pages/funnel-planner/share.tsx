@@ -141,6 +141,7 @@ function SharedCanvas({ funnel }: { funnel: SharedFunnel }) {
       <div className="flex-1 relative">
         <CanvasThemeContext.Provider value={theme}>
           <ReactFlow
+            proOptions={{ hideAttribution: true }}
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
