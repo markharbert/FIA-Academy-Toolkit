@@ -65,14 +65,16 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     .font-btn:hover{background:rgba(255,255,255,.22);color:#fff}
     .font-btn:disabled{opacity:.3;cursor:not-allowed}
     #fontLabel{font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.55);min-width:54px;text-align:center;white-space:nowrap}
-    #countdown{display:none;margin-left:auto;font-family:Arial,sans-serif;font-size:12px;color:rgba(255,255,255,.55);white-space:nowrap}
-    #cd-num{font-weight:700;color:#fff;font-size:14px}
-
     /* ── Main two-panel layout ── */
     #main{flex:1;display:flex;overflow:hidden;min-height:0;padding-right:16px;padding-bottom:12px}
 
     /* ── Left: teleprompter ── */
-    #left{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+    #left{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;position:relative}
+
+    /* ── Centered countdown overlay ── */
+    #rec-countdown{display:none;position:absolute;inset:0;align-items:center;justify-content:center;pointer-events:none;z-index:20}
+    #rec-cd-num{font-family:Arial,sans-serif;font-size:200px;font-weight:900;color:rgba(255,255,255,.35);line-height:1;animation:cdPulse 1s ease-in-out infinite}
+    @keyframes cdPulse{0%{opacity:.1;transform:scale(.8)}40%{opacity:.45;transform:scale(1.05)}60%{opacity:.45;transform:scale(1.05)}100%{opacity:.1;transform:scale(.8)}}
     #scroller{flex:1;overflow-y:scroll;padding:12px 60px 0;scrollbar-width:none}
     #scroller::-webkit-scrollbar{display:none}
     .section{margin-bottom:72px}
@@ -177,6 +179,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     <!-- Left: scrolling script / bullets -->
     <div id="left">
+      <!-- Centered countdown overlay -->
+      <div id="rec-countdown"><span id="rec-cd-num">5</span></div>
       <div id="scroller">
         ${sectionsHtml}
         <div class="bottom-pad"></div>
@@ -326,7 +330,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     <button class="font-btn" id="fontUp" onclick="changeFont(1)" title="Larger text">A+</button>
     <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
     <button id="playBtn" onclick="togglePlay()">▶ Play</button>
-    <span id="countdown">Scrolling begins in <span id="cd-num">5</span></span>
   </div>
 
   <script>
@@ -337,8 +340,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     var playing=false,speed=SPEEDS[2],lastTime=null,raf=null,scrollAccum=0,cdTimer=null;
     var scroller=document.getElementById('scroller');
     var playBtn=document.getElementById('playBtn');
-    var cdEl=document.getElementById('countdown');
-    var cdNumEl=document.getElementById('cd-num');
+    var recCdEl=document.getElementById('rec-countdown');
+    var recCdNumEl=document.getElementById('rec-cd-num');
     var fontLabel=document.getElementById('fontLabel');
     var fontDown=document.getElementById('fontDown');
     var fontUp=document.getElementById('fontUp');
@@ -377,23 +380,25 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     function changeFont(d){var nx=fontIdx+d;if(nx<0||nx>=FONT_SIZES.length)return;fontIdx=nx;applyFont();}
     applyFont();
 
-    function hideCountdown(){if(cdTimer){clearInterval(cdTimer);cdTimer=null;}cdEl.style.display='none';}
+    function hideCountdown(){if(cdTimer){clearInterval(cdTimer);cdTimer=null;}recCdEl.style.display='none';}
     function resetScroll(){
       playing=false;if(raf){cancelAnimationFrame(raf);raf=null;}
       hideCountdown();lastTime=null;scrollAccum=0;scroller.scrollTop=0;playBtn.textContent='▶ Play';
     }
-    function startCountdown(){
-      var count=5;cdNumEl.textContent=count;cdEl.style.display='block';
+    function startCountdown(onDone){
+      var count=5;recCdNumEl.textContent=count;recCdEl.style.display='flex';
       cdTimer=setInterval(function(){
         count--;
-        if(count<=0){hideCountdown();if(playing){lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);}}
-        else cdNumEl.textContent=count;
+        if(count<=0){hideCountdown();if(onDone)onDone();}
+        else recCdNumEl.textContent=count;
       },1000);
     }
     function togglePlay(){
       playing=!playing;
-      if(playing){playBtn.textContent='⏸ Pause';if(raf){cancelAnimationFrame(raf);raf=null;}startCountdown();}
-      else{playBtn.textContent='▶ Play';if(raf){cancelAnimationFrame(raf);raf=null;}hideCountdown();}
+      if(playing){
+        playBtn.textContent='⏸ Pause';if(raf){cancelAnimationFrame(raf);raf=null;}
+        startCountdown(function(){if(playing){lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);}});
+      }else{playBtn.textContent='▶ Play';if(raf){cancelAnimationFrame(raf);raf=null;}hideCountdown();}
     }
     function tick(now){
       if(!playing)return;
@@ -618,39 +623,48 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       openCamera(selectedCameraId,selectedMicId);
     }
 
+    var recCdActive=false;
     function startRecording(){
-      if(!mediaStream)return;
-      if(!playing)togglePlay();
+      if(!mediaStream||recCdActive)return;
+      recCdActive=true;
+      // Countdown first, then start recorder + scroll simultaneously
+      startCountdown(function(){
+        recCdActive=false;
+        // Record directly from the camera stream — no canvas intermediary.
+        // This guarantees perfect A/V sync. The live preview uses CSS object-fit:cover
+        // on the aspect-ratio container to show the exact crop that matches the
+        // selected format, so the preview IS accurate with no black bars.
+        recMimeType=getSupportedMimeType();
+        var opts=recMimeType?{mimeType:recMimeType}:{};
+        try{mediaRecorder=new MediaRecorder(mediaStream,opts);}
+        catch(e){mediaRecorder=new MediaRecorder(mediaStream);recMimeType=mediaRecorder.mimeType||'video/webm';}
 
-      // Record directly from the camera stream — no canvas intermediary.
-      // This guarantees perfect A/V sync. The live preview uses CSS object-fit:cover
-      // on the aspect-ratio container to show the exact crop that matches the
-      // selected format, so the preview IS accurate with no black bars.
-      recMimeType=getSupportedMimeType();
-      var opts=recMimeType?{mimeType:recMimeType}:{};
-      try{mediaRecorder=new MediaRecorder(mediaStream,opts);}
-      catch(e){mediaRecorder=new MediaRecorder(mediaStream);recMimeType=mediaRecorder.mimeType||'video/webm';}
+        recordedChunks=[];
+        mediaRecorder.ondataavailable=function(e){if(e.data&&e.data.size>0)recordedChunks.push(e.data);};
+        mediaRecorder.onstop=function(){
+          recordedBlob=new Blob(recordedChunks,{type:recMimeType||'video/webm'});
+          if(recordedUrl)URL.revokeObjectURL(recordedUrl);
+          recordedUrl=URL.createObjectURL(recordedBlob);
+          camPlayback.src=recordedUrl;
+          hasUnsaved=true;
+          clearInterval(timerInterval);
+          var mb=(recordedBlob.size/1048576).toFixed(1);
+          var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';
+          document.getElementById('download-info').textContent=mb+' MB \u00b7 '+ext.replace('.','').toUpperCase()+' file';
+          setCamState('uploading');
+          uploadRecording();
+        };
 
-      recordedChunks=[];
-      mediaRecorder.ondataavailable=function(e){if(e.data&&e.data.size>0)recordedChunks.push(e.data);};
-      mediaRecorder.onstop=function(){
-        recordedBlob=new Blob(recordedChunks,{type:recMimeType||'video/webm'});
-        if(recordedUrl)URL.revokeObjectURL(recordedUrl);
-        recordedUrl=URL.createObjectURL(recordedBlob);
-        camPlayback.src=recordedUrl;
-        hasUnsaved=true;
-        clearInterval(timerInterval);
-        var mb=(recordedBlob.size/1048576).toFixed(1);
-        var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';
-        document.getElementById('download-info').textContent=mb+' MB \u00b7 '+ext.replace('.','').toUpperCase()+' file';
-        setCamState('uploading');
-        uploadRecording();
-      };
-
-      mediaRecorder.start(1000);
-      recSeconds=0;updateRecTimer();
-      timerInterval=setInterval(function(){recSeconds++;updateRecTimer();},1000);
-      setCamState('recording');
+        mediaRecorder.start(1000);
+        recSeconds=0;updateRecTimer();
+        timerInterval=setInterval(function(){recSeconds++;updateRecTimer();},1000);
+        setCamState('recording');
+        // Start scroll at the same moment recording begins
+        if(!playing){
+          playing=true;playBtn.textContent='⏸ Pause';
+          lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);
+        }
+      });
     }
 
     function stopRecording(){
