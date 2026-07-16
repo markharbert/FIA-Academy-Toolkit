@@ -23,12 +23,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -540,99 +534,185 @@ export default function TopicPulsePage() {
         </div>
         ) : (
           /* ── Saved Topics Tab ── */
-          <div className="max-w-4xl mx-auto px-5 py-6 space-y-4">
+          <div className="max-w-4xl mx-auto px-5 py-6">
             {savedTopics && savedTopics.length > 0 ? (
-              <>
-                {/* Progress bar */}
-                <div className="rounded-xl border bg-card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold">Your Progress</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length} of {savedTopics.length} scripted
-                    </p>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-violet-500 transition-all"
-                      style={{
-                        width: savedTopics.length > 0
-                          ? `${((savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length / savedTopics.length) * 100}%`
-                          : "0%"
-                      }}
-                    />
-                  </div>
-                  {(() => {
-                    const remaining = (savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length;
-                    return (
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        {remaining > 0 ? `${remaining} topic${remaining !== 1 ? "s" : ""} ready to script` : "All topics scripted! 🎉"}
+              <div className="flex gap-6 items-start">
+
+                {/* LEFT: topic list */}
+                <div className={`${selectedSavedItem ? "w-72 shrink-0" : "flex-1"} space-y-4`}>
+                  {/* Progress bar */}
+                  <div className="rounded-xl border bg-card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-semibold">Your Progress</p>
+                      <p className="text-sm text-muted-foreground">
+                        {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length} of {savedTopics.length} scripted
                       </p>
-                    );
-                  })()}
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-violet-500 transition-all"
+                        style={{
+                          width: savedTopics.length > 0
+                            ? `${((savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length / savedTopics.length) * 100}%`
+                            : "0%"
+                        }}
+                      />
+                    </div>
+                    {(() => {
+                      const remaining = (savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length;
+                      return (
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          {remaining > 0 ? `${remaining} topic${remaining !== 1 ? "s" : ""} ready to script` : "All topics scripted! 🎉"}
+                        </p>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Active topics */}
+                  {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                        <Bookmark className="h-3.5 w-3.5" />
+                        Saved ({(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length})
+                      </h3>
+                      <div className="space-y-2">
+                        {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").map((saved) => (
+                          <button
+                            key={saved.id}
+                            className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-card hover:bg-muted/50 transition-all text-left ${selectedSavedItem?.id === saved.id ? "ring-2 ring-violet-500 bg-violet-500/5" : "hover:-translate-y-px"}`}
+                            onClick={() => setSelectedSavedItem(selectedSavedItem?.id === saved.id ? null : saved)}
+                            data-testid={`card-saved-hub-${saved.id}`}
+                          >
+                            <p className="font-medium text-sm truncate flex-1 min-w-0">{saved.topic?.topicTitle ?? "Topic"}</p>
+                            {topicHasScript(saved.topic?.id) ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Completed topics */}
+                  {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                        Done ({(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length})
+                      </h3>
+                      <div className="space-y-2">
+                        {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").map((saved) => (
+                          <button
+                            key={saved.id}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border bg-card opacity-60 hover:opacity-100 transition-all text-left ${selectedSavedItem?.id === saved.id ? "ring-2 ring-violet-500 opacity-100" : "hover:-translate-y-px"}`}
+                            onClick={() => setSelectedSavedItem(selectedSavedItem?.id === saved.id ? null : saved)}
+                            data-testid={`card-saved-hub-done-${saved.id}`}
+                          >
+                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                            <p className="font-medium text-sm text-muted-foreground truncate flex-1 min-w-0">{saved.topic?.topicTitle ?? "Topic"}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Active topics */}
-                {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-                      <Bookmark className="h-3.5 w-3.5" />
-                      Saved ({(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length})
-                    </h3>
-                    <div className="space-y-2">
-                      {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").map((saved) => (
-                        <button
-                          key={saved.id}
-                          className="w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl border bg-card hover:bg-muted/50 hover:-translate-y-px transition-all text-left"
-                          onClick={() => setSelectedSavedItem(saved)}
-                          data-testid={`card-saved-hub-${saved.id}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{saved.topic?.topicTitle ?? "Topic"}</p>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {topicHasScript(saved.topic?.id) ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-600 dark:text-green-400">
-                                <CheckCircle2 className="h-3 w-3" />Scripted
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400">
-                                Ready to Script
-                              </span>
-                            )}
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </button>
-                      ))}
+                {/* RIGHT: inline detail panel */}
+                {selectedSavedItem && (
+                  <div className="flex-1 rounded-xl border bg-card p-5 space-y-5 self-start">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="font-semibold text-base leading-snug">{selectedSavedItem.topic?.topicTitle}</h2>
+                        {selectedSavedItem.topic?.keywordQuery && (
+                          <p className="text-sm text-muted-foreground mt-0.5">{selectedSavedItem.topic.keywordQuery}</p>
+                        )}
+                      </div>
+                      <Button variant="ghost" size="icon" className="-mt-1 -mr-1 shrink-0" onClick={() => setSelectedSavedItem(null)} data-testid="button-close-detail">
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
+
+                    {/* Generate CTA */}
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a video script outline.</p>
+                      <Button
+                        onClick={() => setShowGenerateDialog(true)}
+                        disabled={scriptMutation.isPending}
+                        className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold h-11"
+                        data-testid="button-detail-generate"
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Generate Script Outline →
+                      </Button>
+                    </div>
+
+                    {/* Secondary actions */}
+                    <div className="flex gap-2">
+                      {(selectedSavedItem?.completedAt || selectedSavedItem?.status === "completed") ? (
+                        <Button variant="outline" size="sm" className="flex-1"
+                          onClick={() => resetSavedMutation.mutate(selectedSavedItem.id)}
+                          disabled={resetSavedMutation.isPending}
+                          data-testid="button-detail-reset">
+                          <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Reset to Active
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" className="flex-1"
+                          onClick={() => completeSavedMutation.mutate(selectedSavedItem.id)}
+                          disabled={completeSavedMutation.isPending}
+                          data-testid="button-detail-done">
+                          <Check className="h-3.5 w-3.5 mr-1.5" />Mark Done
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setShowUnsaveConfirm(true)}
+                        disabled={unsaveMutation.isPending}
+                        data-testid="button-detail-remove">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
+                    {/* Stats */}
+                    {selectedSavedItem?.topic && (
+                      <div className="space-y-3 pt-1 border-t">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">Topic Stats</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {selectedSavedItem.topic.monthlySearchVolume != null && (
+                            <div className="p-3 rounded-xl border bg-muted/30">
+                              <p className="text-xs text-muted-foreground mb-1">Monthly Searches</p>
+                              <p className="font-mono text-lg font-bold text-blue-600 dark:text-blue-400">
+                                {selectedSavedItem.topic.monthlySearchVolume >= 1000
+                                  ? `${Math.round(selectedSavedItem.topic.monthlySearchVolume / 1000)}K`
+                                  : selectedSavedItem.topic.monthlySearchVolume}
+                              </p>
+                            </div>
+                          )}
+                          {selectedSavedItem.topic.opportunityScore != null && (
+                            <div className="p-3 rounded-xl border bg-muted/30">
+                              <p className="text-xs text-muted-foreground mb-1">Opportunity</p>
+                              <p className={`font-mono text-lg font-bold ${getOpportunityLabel(selectedSavedItem.topic.opportunityScore).color}`}>
+                                {selectedSavedItem.topic.opportunityScore}/100
+                              </p>
+                              <p className={`text-xs ${getOpportunityLabel(selectedSavedItem.topic.opportunityScore).color}`}>
+                                {getOpportunityLabel(selectedSavedItem.topic.opportunityScore).label}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        {selectedSavedItem.topic.competitionLevel && (
+                          <div className="p-3 rounded-xl border bg-muted/30">
+                            <p className="text-xs text-muted-foreground mb-1">Competition</p>
+                            <p className="font-medium text-sm capitalize">{selectedSavedItem.topic.competitionLevel}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Completed topics */}
-                {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                      Done ({(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length})
-                    </h3>
-                    <div className="space-y-2">
-                      {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").map((saved) => (
-                        <button
-                          key={saved.id}
-                          className="w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl border bg-card opacity-60 hover:opacity-100 hover:-translate-y-px transition-all text-left"
-                          onClick={() => setSelectedSavedItem(saved)}
-                          data-testid={`card-saved-hub-done-${saved.id}`}
-                        >
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                            <p className="font-medium text-sm text-muted-foreground truncate">{saved.topic?.topicTitle ?? "Topic"}</p>
-                          </div>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
+              </div>
             ) : (
               <div className="rounded-xl border bg-card py-16 flex flex-col items-center text-center px-6">
                 <div className="p-4 rounded-2xl bg-muted/50 mb-4">
@@ -758,113 +838,6 @@ export default function TopicPulsePage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Saved topic detail sheet ── */}
-      <Sheet open={!!selectedSavedItem} onOpenChange={(open) => { if (!open) setSelectedSavedItem(null); }}>
-        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-0 p-0">
-          <SheetHeader className="px-5 py-4 border-b shrink-0">
-            <div className="flex items-start justify-between gap-3">
-              <SheetTitle className="text-base leading-snug">{selectedSavedItem?.topic?.topicTitle}</SheetTitle>
-              <Button variant="ghost" size="icon" className="shrink-0 -mr-1 -mt-1" onClick={() => setSelectedSavedItem(null)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            {selectedSavedItem?.topic?.keywordQuery && (
-              <p className="text-sm text-muted-foreground">{selectedSavedItem.topic.keywordQuery}</p>
-            )}
-          </SheetHeader>
-
-          <div className="flex-1 overflow-auto px-5 py-5 space-y-5">
-            {/* Primary CTA */}
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a video script outline.</p>
-              <Button
-                onClick={() => setShowGenerateDialog(true)}
-                disabled={scriptMutation.isPending}
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold h-11"
-                data-testid="button-sheet-generate"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Generate Script Outline →
-              </Button>
-            </div>
-
-            {/* Secondary actions */}
-            <div className="flex gap-2">
-              {(selectedSavedItem?.completedAt || selectedSavedItem?.status === "completed") ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => resetSavedMutation.mutate(selectedSavedItem.id)}
-                  disabled={resetSavedMutation.isPending}
-                  data-testid="button-sheet-reset"
-                >
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                  Reset to Active
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => completeSavedMutation.mutate(selectedSavedItem.id)}
-                  disabled={completeSavedMutation.isPending}
-                  data-testid="button-sheet-done"
-                >
-                  <Check className="h-3.5 w-3.5 mr-1.5" />
-                  Mark Done
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                onClick={() => setShowUnsaveConfirm(true)}
-                disabled={unsaveMutation.isPending}
-                data-testid="button-sheet-remove"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-
-            {/* Stats */}
-            {selectedSavedItem?.topic && (
-              <div className="space-y-3 pt-1">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Topic Stats</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {selectedSavedItem.topic.monthlySearchVolume != null && (
-                    <div className="p-3 rounded-xl border bg-muted/30">
-                      <p className="text-xs text-muted-foreground mb-1">Monthly Searches</p>
-                      <p className="font-mono text-lg font-bold text-blue-600 dark:text-blue-400">
-                        {selectedSavedItem.topic.monthlySearchVolume >= 1000
-                          ? `${Math.round(selectedSavedItem.topic.monthlySearchVolume / 1000)}K`
-                          : selectedSavedItem.topic.monthlySearchVolume}
-                      </p>
-                    </div>
-                  )}
-                  {selectedSavedItem.topic.opportunityScore != null && (
-                    <div className="p-3 rounded-xl border bg-muted/30">
-                      <p className="text-xs text-muted-foreground mb-1">Opportunity</p>
-                      <p className={`font-mono text-lg font-bold ${getOpportunityLabel(selectedSavedItem.topic.opportunityScore).color}`}>
-                        {selectedSavedItem.topic.opportunityScore}/100
-                      </p>
-                      <p className={`text-xs ${getOpportunityLabel(selectedSavedItem.topic.opportunityScore).color}`}>
-                        {getOpportunityLabel(selectedSavedItem.topic.opportunityScore).label}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                {selectedSavedItem.topic.competitionLevel && (
-                  <div className="p-3 rounded-xl border bg-muted/30">
-                    <p className="text-xs text-muted-foreground mb-1">Competition</p>
-                    <p className="font-medium text-sm capitalize">{selectedSavedItem.topic.competitionLevel}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
