@@ -623,7 +623,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           audioAnalyser.getByteFrequencyData(buf);
           var sum=0;for(var i=0;i<buf.length;i++)sum+=buf[i];
           var avg=sum/buf.length;
-          var pct=Math.min(100,avg*2.2); // 0-255 byte avg scaled to 0-100%
+          var pct=Math.min(100,avg*1.5); // 0-255 byte avg → normal speech ≈ 65-75%, very loud → 100%
           micLevelFill.style.width=pct+'%';
           micRaf=requestAnimationFrame(tick);
         }
