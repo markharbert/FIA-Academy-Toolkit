@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -231,9 +232,20 @@ function IntentAnalysisSectionHub({ topicId, existingAnalysis }: { topicId: stri
   );
 }
 
+const SEARCH_MESSAGES = [
+  (name: string) => `Hang tight, ${name}! Firing up the search engines… 🚀`,
+  (_: string) => `Scanning YouTube's autocomplete data… 🔍`,
+  (_: string) => `Crunching keyword volumes & competition scores… 📊`,
+  (name: string) => `Finding the juiciest topics for you, ${name}… 🍊`,
+  (_: string) => `Almost done! Sorting your best opportunities… ✨`,
+];
+
 export default function TopicPulsePage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const firstName = user?.firstName || user?.displayName?.split(" ")[0] || "friend";
+
   const [seedQuery, setSeedQuery] = useState("");
   const [runsPage, setRunsPage] = useState(1);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -242,6 +254,14 @@ export default function TopicPulsePage() {
   const [showUnsaveConfirm, setShowUnsaveConfirm] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
   const PAGE_SIZE = 15;
+
+  // Search overlay state
+  const [overlayActive, setOverlayActive] = useState(false);
+  const [searchProgress, setSearchProgress] = useState(0);
+  const [msgIndex, setMsgIndex] = useState(0);
+  const apiDoneRef = useRef(false);
+  const startTimeRef = useRef(0);
+  const MIN_MS = 5500;
 
   const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
     queryKey: ["/api/topic-pulse/runs", runsPage],
@@ -282,12 +302,17 @@ export default function TopicPulsePage() {
       return res.json();
     },
     onSuccess: (data: { runId: string }) => {
+      apiDoneRef.current = true;
       setRunsPage(1);
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
-      navigate(`/video-studio/research/explore/${data.runId}`);
+      // Navigation happens after the overlay finishes (handled in the effect)
+      apiDoneRef.current = data.runId as any; // store runId in ref for navigation
     },
     onError: (err: Error) => {
+      apiDoneRef.current = true;
+      setOverlayActive(false);
+      setSearchProgress(0);
       queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/credits"] });
       toast({ title: "Search failed", description: err.message, variant: "destructive" });
     },
@@ -325,8 +350,60 @@ export default function TopicPulsePage() {
       toast({ title: "Enter a topic", description: "Please enter a niche or keyword to search", variant: "destructive" });
       return;
     }
+    apiDoneRef.current = false;
+    startTimeRef.current = Date.now();
+    setSearchProgress(0);
+    setMsgIndex(0);
+    setOverlayActive(true);
     searchMutation.mutate({ seedQuery: seedQuery.trim() });
   };
+
+  // Animated progress bar for the search overlay
+  useEffect(() => {
+    if (!overlayActive) return;
+
+    let raf: number;
+    let msgTimer: ReturnType<typeof setInterval>;
+
+    // Cycle through messages every ~1.1s
+    msgTimer = setInterval(() => {
+      setMsgIndex((i) => (i + 1) % SEARCH_MESSAGES.length);
+    }, 1100);
+
+    const tick = () => {
+      const elapsed = Date.now() - startTimeRef.current;
+      const runId = typeof apiDoneRef.current === "string" ? apiDoneRef.current : null;
+      const done = runId !== null;
+
+      // Progress curve: rushes to ~88% then holds, jumps to 100 when ready
+      let target: number;
+      if (elapsed < 1200)      target = (elapsed / 1200) * 35;
+      else if (elapsed < 2600) target = 35 + ((elapsed - 1200) / 1400) * 25;
+      else if (elapsed < 4200) target = 60 + ((elapsed - 2600) / 1600) * 20;
+      else if (elapsed < 5500) target = 80 + ((elapsed - 4200) / 1300) * 8;
+      else                     target = 88;
+
+      if (done && elapsed >= MIN_MS) {
+        setSearchProgress(100);
+        clearInterval(msgTimer);
+        setTimeout(() => {
+          setOverlayActive(false);
+          setSearchProgress(0);
+          navigate(`/video-studio/research/explore/${runId}`);
+        }, 550);
+        return; // stop the loop
+      }
+
+      setSearchProgress(Math.min(88, Math.round(target)));
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(msgTimer);
+    };
+  }, [overlayActive]);
 
 
   const scriptMutation = useMutation({
@@ -947,6 +1024,49 @@ export default function TopicPulsePage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* ── Search Loading Overlay ── */}
+      {overlayActive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="relative w-full max-w-md mx-4 rounded-2xl overflow-hidden shadow-2xl">
+            {/* gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] via-[hsl(260_50%_12%)] to-[hsl(345_55%_16%)]" />
+            <div className="relative p-8 text-center space-y-6">
+              {/* Animated icon */}
+              <div className="flex justify-center">
+                <div className="relative h-16 w-16 flex items-center justify-center rounded-full bg-amber-400/10 ring-2 ring-amber-400/30">
+                  <Sparkles className="h-8 w-8 text-amber-400 animate-pulse" />
+                </div>
+              </div>
+
+              {/* Personalised message — fades between steps */}
+              <div className="space-y-1 min-h-[3rem]">
+                <p className="text-white font-semibold text-lg leading-snug transition-all duration-500">
+                  {SEARCH_MESSAGES[msgIndex](firstName)}
+                </p>
+                <p className="text-white/40 text-sm">
+                  {searchProgress < 100 ? `Searching "${seedQuery}"` : "Done! Taking you there now…"}
+                </p>
+              </div>
+
+              {/* Progress bar */}
+              <div className="space-y-2">
+                <div className="h-2.5 w-full rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-400 to-rose-500 transition-all duration-300 ease-out"
+                    style={{ width: `${searchProgress}%` }}
+                  />
+                </div>
+                <p className="text-white/50 text-xs tabular-nums">{searchProgress}%</p>
+              </div>
+
+              {/* Fun sub-line */}
+              <p className="text-white/25 text-xs italic">
+                Good things take a moment — yours are almost here.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
