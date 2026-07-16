@@ -247,9 +247,6 @@ export default function TopicPulsePage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<"research" | "saved">("research");
   const [selectedSavedItem, setSelectedSavedItem] = useState<any | null>(null);
-  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
-  const [genVideoLength, setGenVideoLength] = useState("6-10");
-  const [genTone, setGenTone] = useState("friendly");
   const [showUnsaveConfirm, setShowUnsaveConfirm] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
   const PAGE_SIZE = 15;
@@ -789,13 +786,13 @@ export default function TopicPulsePage() {
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a video script outline.</p>
                       <Button
-                        onClick={() => setShowGenerateDialog(true)}
+                        onClick={() => { if (selectedSavedItem?.topic?.id) scriptMutation.mutate({ topicId: selectedSavedItem.topic.id, videoLengthTarget: "6-10", tonePreference: "friendly" }); }}
                         disabled={scriptMutation.isPending}
                         className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold h-11"
                         data-testid="button-detail-generate"
                       >
-                        <FileText className="h-4 w-4 mr-2" />
-                        Generate Script Outline →
+                        {scriptMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+                        {scriptMutation.isPending ? "Generating…" : "Generate Script Outline →"}
                       </Button>
                     </div>
 
@@ -974,60 +971,6 @@ export default function TopicPulsePage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Generate Script Outline options dialog ── */}
-      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
-        <DialogContent className="max-w-sm" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>Generate Script Outline</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Video Length</Label>
-              <Select value={genVideoLength} onValueChange={setGenVideoLength}>
-                <SelectTrigger data-testid="select-video-length">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="3-5">Short (3–5 min)</SelectItem>
-                  <SelectItem value="6-10">Medium (6–10 min)</SelectItem>
-                  <SelectItem value="11-20">Long (11–20 min)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Tone</Label>
-              <Select value={genTone} onValueChange={setGenTone}>
-                <SelectTrigger data-testid="select-tone">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="friendly">Friendly &amp; Conversational</SelectItem>
-                  <SelectItem value="professional">Professional</SelectItem>
-                  <SelectItem value="educational">Educational</SelectItem>
-                  <SelectItem value="entertaining">Entertaining</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>Cancel</Button>
-            <Button
-              onClick={() => {
-                if (selectedSavedItem?.topic?.id) {
-                  scriptMutation.mutate({ topicId: selectedSavedItem.topic.id, videoLengthTarget: genVideoLength, tonePreference: genTone });
-                  setShowGenerateDialog(false);
-                }
-              }}
-              disabled={scriptMutation.isPending}
-              className="bg-violet-600 hover:bg-violet-700 text-white"
-              data-testid="button-confirm-generate"
-            >
-              {scriptMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Generate Script Outline
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
     </div>
   );
