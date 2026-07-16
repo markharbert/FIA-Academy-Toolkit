@@ -1815,6 +1815,19 @@ export default function TopicPulseScriptPage() {
         </div>
       </div>
 
+      {/* ── Intent Analysis sub-hero ── */}
+      {(script.topic as any)?.intentAnalysis && (
+        <div className="shrink-0 border-b border-border bg-background">
+          <div className="max-w-6xl mx-auto px-6 py-4 flex items-start gap-3">
+            <Brain className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Audience Intent Analysis</p>
+              <p className="text-sm leading-relaxed text-foreground/80" data-testid="text-hero-intent-analysis">{(script.topic as any).intentAnalysis}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-hidden flex">
         <ScrollArea className="flex-1 h-full">
           <div className="p-5 max-w-3xl mx-auto">
@@ -1864,17 +1877,6 @@ export default function TopicPulseScriptPage() {
                 </button>
               </div>
             </div>
-
-            {/* ── Intent Analysis ── */}
-            {(script.topic as any)?.intentAnalysis && (
-              <div className="mb-5 rounded-xl border bg-muted/40 p-4 flex items-start gap-3">
-                <Brain className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Audience Intent Analysis</p>
-                  <p className="text-sm leading-relaxed text-foreground/80" data-testid="text-hero-intent-analysis">{(script.topic as any).intentAnalysis}</p>
-                </div>
-              </div>
-            )}
 
             {/* ── OUTLINE VIEW ── */}
             {scriptView === "outline" && fullScript && (
