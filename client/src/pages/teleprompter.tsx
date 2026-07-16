@@ -1236,7 +1236,7 @@ export default function TeleprompterPage() {
             {transcriptModal.scoreJson && (() => {
               const sc = transcriptModal.scoreJson;
               return (
-                <div className="w-[60%] shrink-0 overflow-y-auto pr-2 flex flex-col gap-3">
+                <div className="w-[60%] shrink-0 min-h-0 overflow-y-auto pr-2 flex flex-col gap-3">
 
                   {/* Score Summary card — circle, strengths/improvements, AI coach summary */}
                   <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
