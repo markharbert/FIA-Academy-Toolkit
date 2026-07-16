@@ -527,9 +527,39 @@ export default function TeleprompterPage() {
   }, [isDragging]);
 
   useEffect(() => {
-    const handler = (e: MessageEvent) => {
+    const handler = async (e: MessageEvent) => {
       if (e.data?.type === "teleprompter-recording-saved") {
         queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+      }
+
+      if (e.data?.type === "teleprompter-upload-request") {
+        const { blob, title, scriptId, durationSeconds, format, mimeType } = e.data;
+        const source = e.source as Window | null;
+        const reply = (payload: object) => { try { source?.postMessage(payload, "*"); } catch (_) {} };
+        try {
+          const ext = (mimeType && mimeType.includes("mp4")) ? ".mp4" : ".webm";
+          const fd = new FormData();
+          fd.append("video", blob, "recording" + ext);
+          fd.append("title", title || "Untitled Take");
+          if (scriptId) fd.append("scriptId", scriptId);
+          fd.append("durationSeconds", String(durationSeconds || 0));
+          fd.append("format", format || "landscape");
+          const res = await fetch("/api/teleprompter/recordings", {
+            method: "POST",
+            body: fd,
+            credentials: "include",
+          });
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            reply({ type: "teleprompter-upload-result", success: false, error: `Upload failed (${res.status})${errText ? ": " + errText.slice(0, 120) : ""}` });
+            return;
+          }
+          const data = await res.json();
+          queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+          reply({ type: "teleprompter-upload-result", success: true, data });
+        } catch (err: any) {
+          reply({ type: "teleprompter-upload-result", success: false, error: err?.message || "Upload failed" });
+        }
       }
     };
     window.addEventListener("message", handler);

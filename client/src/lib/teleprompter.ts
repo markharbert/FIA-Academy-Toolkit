@@ -720,9 +720,42 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         return;
       }
 
-      // Upload the blob to the server via multipart FormData.
-      // The server stores it in GCS and creates the DB record in one step.
-      // (Direct browser-to-GCS signed URL PUT is blocked by GCS CORS policy.)
+      // ── iframe context: delegate upload to the parent page via postMessage ──
+      // This avoids all cookie/origin issues when running inside a blob-URL iframe.
+      var inIframe=!!(window.parent&&window.parent!==window);
+      if(inIframe){
+        var parentReplyTimer;
+        function onUploadResult(ev){
+          if(!ev.data||ev.data.type!=='teleprompter-upload-result')return;
+          clearTimeout(parentReplyTimer);
+          window.removeEventListener('message',onUploadResult);
+          if(ev.data.success){onSuccess(ev.data.data);}
+          else{onFail(ev.data.error||'Upload failed');}
+        }
+        window.addEventListener('message',onUploadResult);
+        parentReplyTimer=setTimeout(function(){
+          window.removeEventListener('message',onUploadResult);
+          onFail('Upload timed out — tap Retry Upload to try again');
+        },120000);
+        try{
+          window.parent.postMessage({
+            type:'teleprompter-upload-request',
+            blob:recordedBlob,
+            title:SCRIPT_TITLE||'Untitled Take',
+            scriptId:SCRIPT_ID||'',
+            durationSeconds:recSeconds,
+            format:selectedFormat,
+            mimeType:recMimeType||'video/webm',
+          },'*');
+        }catch(err){
+          clearTimeout(parentReplyTimer);
+          window.removeEventListener('message',onUploadResult);
+          onFail('Could not communicate with parent window');
+        }
+        return;
+      }
+
+      // ── popup window context: direct XHR (session cookie available) ──
       var ext=(recMimeType&&recMimeType.indexOf('mp4')!==-1)?'.mp4':'.webm';
       var fd=new FormData();
       fd.append('video',recordedBlob,'recording'+ext);
