@@ -5282,16 +5282,23 @@ export async function registerRoutes(
       }
       tmpAudioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
 
-      // Transcribe with OpenAI Whisper (avoids Gemini quota limits for short takes)
-      const transcript = await transcribeAudioWhisper(tmpAudioPath);
+      // Transcribe with Gemini
+      const transcript = await transcribeAudio(tmpAudioPath);
 
       // Persist transcript so subsequent requests are instant
       await storage.updateTeleprompterRecording(recording.id, req.session.userId!, { transcriptText: transcript });
 
       res.json({ transcript });
-    } catch (err) {
+    } catch (err: any) {
       console.error("[Teleprompter] Transcribe recording error:", err);
-      if (!res.headersSent) res.status(500).json({ message: "Failed to transcribe recording" });
+      if (!res.headersSent) {
+        const isQuota = err?.status === 429 || err?.message?.includes("RESOURCE_EXHAUSTED") || err?.message?.includes("quota");
+        res.status(isQuota ? 429 : 500).json({
+          message: isQuota
+            ? "Transcription limit reached — please try again in a minute."
+            : "Failed to transcribe recording",
+        });
+      }
     } finally {
       try { if (fs.existsSync(tmpVideoPath)) fs.unlinkSync(tmpVideoPath); } catch (_) {}
       try { if (tmpAudioPath && fs.existsSync(tmpAudioPath)) fs.unlinkSync(tmpAudioPath); } catch (_) {}
