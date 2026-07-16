@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, ArrowLeft, Trash2, FileText, Zap, Calendar, Clock } from "lucide-react";
+import { Loader2, Trash2, FileText, Zap, Calendar, Clock, ChevronRight } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Script, Topic } from "@shared/schema";
@@ -51,31 +51,41 @@ export default function TopicPulseScriptsPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(345_55%_16%)]" />
         <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-rose-500/20 blur-3xl" />
         <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-amber-500/10 blur-3xl" />
-        <div className="relative max-w-4xl mx-auto px-6 py-6 flex items-center gap-3">
-          <button
-            onClick={() => navigate("/video-studio")}
-            className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors shrink-0"
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Video Studio
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-white" data-testid="text-page-title">Generated Scripts</h1>
-              {!isLoading && count > 0 && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/10 text-white/70">
-                  {count} {count === 1 ? "script" : "scripts"}
-                </span>
-              )}
-            </div>
-            <p className="text-white/60 text-xs mt-0.5">Your saved scripts, ready to edit and use</p>
+        <div className="relative max-w-6xl mx-auto px-6 py-6">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <FileText className="h-4 w-4 text-amber-400 shrink-0" />
+            <h1 className="text-xl font-bold text-white" data-testid="text-page-title">Generated Scripts</h1>
+            {!isLoading && count > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 text-white/70 ring-1 ring-white/15">
+                {count} {count === 1 ? "script" : "scripts"}
+              </span>
+            )}
+          </div>
+          <p className="text-white/50 text-xs mt-0.5">Your saved script outlines, ready to open and develop</p>
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 mt-2.5">
+            <button
+              onClick={() => navigate("/video-studio")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+              data-testid="button-back-video-studio"
+            >
+              Video Studio
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <button
+              onClick={() => navigate("/video-studio/research")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+            >
+              Research
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <span className="text-white/75 text-xs font-medium">Generated Scripts</span>
           </div>
         </div>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-5 max-w-4xl mx-auto">
+        <div className="p-5 max-w-6xl mx-auto">
           {isLoading ? (
             <div className="flex justify-center py-16">
               <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
