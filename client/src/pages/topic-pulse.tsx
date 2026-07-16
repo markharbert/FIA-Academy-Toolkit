@@ -606,18 +606,19 @@ export default function TopicPulsePage() {
                         data-testid={`card-run-${run.id}`}
                       >
                         <div className="px-5 py-3.5 flex items-center gap-4">
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
                             <p className="font-semibold text-sm group-hover:text-primary transition-colors truncate">
                               {run.seedQuery}
                             </p>
-                            <div className="flex items-center gap-3 mt-0.5">
-                              <span className="text-xs text-muted-foreground">
-                                {run.topicCount} topics found
-                                {run.runtimeMs && ` · ${(run.runtimeMs / 1000).toFixed(1)}s`}
-                              </span>
-                            </div>
+                            {run.topicCount != null && (
+                              <span className="text-xs text-muted-foreground shrink-0">{run.topicCount} topics</span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              {new Date(run.createdAt).toLocaleDateString()}
+                            </span>
                             <span
                               className={`text-xs font-semibold px-2 py-0.5 rounded-full ring-1 ${
                                 run.status === "complete"
@@ -626,10 +627,6 @@ export default function TopicPulsePage() {
                               }`}
                             >
                               {run.status}
-                            </span>
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              {new Date(run.createdAt).toLocaleDateString()}
                             </span>
                             <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button
