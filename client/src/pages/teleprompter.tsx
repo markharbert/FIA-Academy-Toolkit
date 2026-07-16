@@ -724,6 +724,22 @@ export default function TeleprompterPage() {
               Video Studio
             </button>
             <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <button
+              onClick={() => navigate("/video-studio/research")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+              data-testid="button-back-research"
+            >
+              Research
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <button
+              onClick={() => navigate("/video-studio/scripts")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+              data-testid="button-back-scripts"
+            >
+              Scripts
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
             <span className="text-white/75 text-xs font-medium">Teleprompter</span>
           </div>
         </div>
