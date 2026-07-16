@@ -48,6 +48,7 @@ import {
   Quote,
   Lightbulb,
   TrendingUp,
+  HelpCircle,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -187,6 +188,7 @@ export default function TeleprompterPage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [showHelp, setShowHelp] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -716,6 +718,15 @@ export default function TeleprompterPage() {
               Paste or upload any script and roll it through a distraction-free teleprompter. Your scripts save to your account.
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10 shrink-0"
+            onClick={() => setShowHelp(true)}
+            data-testid="button-help"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
@@ -1088,42 +1099,49 @@ export default function TeleprompterPage() {
               </div>
             </div>
 
-            {/* ── Tips ── */}
-            <div className="rounded-xl border border-border bg-muted/30 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Tips &amp; Shortcuts
-              </h3>
-              <ul className="text-sm text-muted-foreground space-y-2">
-                <li className="flex gap-2">
-                  <span className="shrink-0 text-primary">→</span>
-                  <span><strong className="text-foreground">Open Teleprompter</strong> auto-saves your script before launching so you're always reading the latest version.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 text-primary">→</span>
-                  <span>Hit <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">Space</kbd> to play/pause the scroll. Use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">[</kbd> and <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">]</kbd> to slow down or speed up, or drag the Speed slider in the toolbar.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 text-primary">→</span>
-                  <span>Use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">+</kbd> / <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-background border border-border">−</kbd> to make the script text larger or smaller while reading.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 text-primary">→</span>
-                  <span>The camera panel on the right lets you record directly. Each take is saved here automatically and kept for <strong className="text-foreground">30 days</strong>.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 text-primary">→</span>
-                  <span>Click the <strong className="text-foreground">violet transcript icon</strong> on any take to generate an AI transcript — then copy it or reference it while editing.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 text-primary">→</span>
-                  <span>Make sure your browser allows <strong className="text-foreground">pop-ups for this site</strong> — the teleprompter opens in a separate window by design so you can move it to a second screen.</span>
-                </li>
-              </ul>
-            </div>
 
           </div>
         </div>
       </div>
+
+      {/* Tips & Shortcuts help dialog */}
+      <Dialog open={showHelp} onOpenChange={setShowHelp}>
+        <DialogContent className="max-w-lg w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HelpCircle className="h-4 w-4 text-primary" />
+              Tips &amp; Shortcuts
+            </DialogTitle>
+            <DialogDescription className="sr-only">Teleprompter tips and keyboard shortcuts</DialogDescription>
+          </DialogHeader>
+          <ul className="text-sm text-muted-foreground space-y-3 pt-1">
+            <li className="flex gap-2">
+              <span className="shrink-0 text-primary">→</span>
+              <span><strong className="text-foreground">Open Teleprompter</strong> auto-saves your script before launching so you're always reading the latest version.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-primary">→</span>
+              <span>Hit <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">Space</kbd> to play/pause the scroll. Use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">[</kbd> and <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">]</kbd> to slow down or speed up, or drag the Speed slider in the toolbar.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-primary">→</span>
+              <span>Use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">+</kbd> / <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">−</kbd> to make the script text larger or smaller while reading.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-primary">→</span>
+              <span>The camera panel on the right lets you record directly. Each take is saved here automatically and kept for <strong className="text-foreground">30 days</strong>.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-primary">→</span>
+              <span>Click the <strong className="text-foreground">violet transcript icon</strong> on any take to generate an AI transcript — then copy it or reference it while editing.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="shrink-0 text-primary">→</span>
+              <span>Make sure your browser allows <strong className="text-foreground">pop-ups for this site</strong> — the teleprompter opens in a separate window by design so you can move it to a second screen.</span>
+            </li>
+          </ul>
+        </DialogContent>
+      </Dialog>
 
       {/* Recording preview modal */}
       <Dialog open={!!previewRec} onOpenChange={(open) => !open && setPreviewRec(null)}>
