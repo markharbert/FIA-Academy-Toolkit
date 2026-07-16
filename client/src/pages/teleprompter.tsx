@@ -486,6 +486,7 @@ export default function TeleprompterPage() {
       sections: [{ text: scriptToOpen?.content || trimmedContent }],
       scriptId: scriptToOpen?.id,
       bulletPoints: scriptToOpen?.bulletPoints || bulletPoints.trim() || undefined,
+      baseUrl: window.location.origin,
     });
     if (!html) return;
     const mw = window.innerWidth * 0.75;

@@ -8,8 +8,8 @@ export type TeleprompterSection = {
   text: string;
 };
 
-export function buildTeleprompterHtml(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): string {
-  const { title, sections, scriptId, bulletPoints } = opts;
+export function buildTeleprompterHtml(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string; baseUrl?: string }): string {
+  const { title, sections, scriptId, bulletPoints, baseUrl } = opts;
   const cleaned = sections.filter((s) => s.text && s.text.trim());
   if (cleaned.length === 0) return "";
 
@@ -481,6 +481,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     ══════════════════════════════════════════ */
     var SCRIPT_ID = ${JSON.stringify(scriptId || "")};
     var SCRIPT_TITLE = ${JSON.stringify(title)};
+    var APP_BASE_URL = ${JSON.stringify(baseUrl || "")};
     var BULLET_POINTS = ${JSON.stringify(bulletPoints || "")};
 
     var activeView='script';
@@ -789,7 +790,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           if(chunkIdx>=totalChunks){
             // All chunks stored — ask server to assemble and register
             var p=97;if(bar)bar.style.width=p+'%';if(pct)pct.textContent=p+'%';
-            fetch('/api/teleprompter/recordings/finalize-chunked-upload',{
+            fetch((APP_BASE_URL||'')+'/api/teleprompter/recordings/finalize-chunked-upload',{
               method:'POST',
               credentials:'include',
               headers:{'Content-Type':'application/json'},
@@ -828,7 +829,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           fd.append('chunkIndex',String(chunkIdx));
           fd.append('totalChunks',String(totalChunks));
 
-          fetch('/api/teleprompter/recordings/upload-chunk',{
+          fetch((APP_BASE_URL||'')+'/api/teleprompter/recordings/upload-chunk',{
             method:'POST',
             credentials:'include',
             body:fd,
