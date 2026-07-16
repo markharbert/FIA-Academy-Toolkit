@@ -72,7 +72,7 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
     
     try {
       response = await gemini.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.0-flash",
         contents: [
           {
             role: "user",
@@ -103,7 +103,7 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
     const base64Audio = audioBuffer.toString("base64");
     
     response = await gemini.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [
         {
           role: "user",
