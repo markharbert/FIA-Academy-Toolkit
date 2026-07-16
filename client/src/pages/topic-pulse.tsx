@@ -893,22 +893,6 @@ export default function TopicPulsePage() {
                           </div>
                         )}
 
-                        {/* Intent Analysis */}
-                        <IntentAnalysisSectionHub
-                          topicId={selectedSavedItem.topic.id}
-                          existingAnalysis={selectedSavedItem.topic.intentAnalysis}
-                        />
-
-                        {/* Why This Topic */}
-                        {selectedSavedItem.topic.whyText && (
-                          <div>
-                            <h3 className="font-medium mb-2 flex items-center gap-2">
-                              <Lightbulb className="h-4 w-4" />Why This Topic
-                            </h3>
-                            <p className="text-sm text-muted-foreground">{selectedSavedItem.topic.whyText}</p>
-                          </div>
-                        )}
-
                       </div>
                     )}
                   </div>
