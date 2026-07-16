@@ -4,13 +4,10 @@ import type { ScoreResult, GoalType } from "@shared/schema";
 import fs from "fs";
 import path from "path";
 
-// Gemini client for transcription (supports audio input)
+// Gemini client for transcription — uses the user's own API key (GEMINI_API_KEY)
+// so it is not subject to Replit's managed-key quota limits.
 const gemini = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY!,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL!,
-  },
+  apiKey: (process.env.GEMINI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY)!,
 });
 
 // OpenAI client for scoring
