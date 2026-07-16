@@ -11086,13 +11086,29 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
     try {
       const apiRes = await fetch(
-        `https://api.microlink.io/?url=${encodeURIComponent(normalized)}&screenshot=true&meta=false`
+        `https://api.microlink.io/?url=${encodeURIComponent(normalized)}&screenshot=true`
       );
-      const json = await apiRes.json() as { status: string; data?: { screenshot?: { url?: string } } };
-      if (json.status !== "success" || !json.data?.screenshot?.url) {
+      const json = await apiRes.json() as {
+        status: string;
+        data?: {
+          screenshot?: { url?: string };
+          image?: { url?: string };
+          title?: string;
+          description?: string;
+        };
+      };
+      if (json.status !== "success") {
         return res.status(422).json({ message: "Could not capture a screenshot for that URL" });
       }
-      res.json({ screenshotUrl: json.data.screenshot.url });
+      const previewUrl = json.data?.screenshot?.url || json.data?.image?.url;
+      if (!previewUrl) {
+        return res.status(422).json({ message: "Could not capture a screenshot for that URL" });
+      }
+      res.json({
+        screenshotUrl: previewUrl,
+        title: json.data?.title ?? null,
+        description: json.data?.description ?? null,
+      });
     } catch (err) {
       console.error("[funnels/screenshot] microlink error:", err);
       res.status(500).json({ message: "Screenshot capture failed" });

@@ -444,24 +444,25 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
     if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://" + url;
     setIsGeneratingPreview(true);
     try {
-      const apiRes = await fetch(
-        `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true`
-      );
-      const json = await apiRes.json();
-      const screenshotUrl: string | undefined = json?.data?.screenshot?.url;
-      const ogImageUrl: string | undefined = json?.data?.image?.url;
-      const pageTitle: string | undefined = json?.data?.title;
-      const pageDescription: string | undefined = json?.data?.description;
-      const previewUrl = screenshotUrl || ogImageUrl;
-      if (previewUrl) {
-        const updates: Record<string, string | undefined> = { pagePreviewUrl: previewUrl, pageUrl: url };
-        if (pageTitle) updates.label = pageTitle;
-        if (pageDescription) updates.description = pageDescription;
+      const apiRes = await fetch("/api/funnels/screenshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const json = await apiRes.json() as { screenshotUrl?: string; title?: string | null; description?: string | null; message?: string };
+      if (!apiRes.ok) {
+        toast({ title: "Couldn't capture preview", description: json.message || "Page could not be captured — make sure it is publicly accessible.", variant: "destructive" });
+        return;
+      }
+      const { screenshotUrl, title, description } = json;
+      if (screenshotUrl) {
+        const updates: Record<string, string | undefined> = { pagePreviewUrl: screenshotUrl, pageUrl: url };
+        if (title) updates.label = title;
+        if (description) updates.description = description;
         updateSelectedNodeData(updates);
-        toast({ title: "Preview captured!", description: pageTitle ? `"${pageTitle}" imported.` : "Page screenshot added to node." });
+        toast({ title: "Preview captured!", description: title ? `"${title}" imported.` : "Page screenshot added to node." });
       } else {
-        const reason = json?.message || "Page could not be captured — make sure it is publicly accessible.";
-        toast({ title: "Couldn't capture preview", description: reason, variant: "destructive" });
+        toast({ title: "Couldn't capture preview", description: "Page could not be captured — make sure it is publicly accessible.", variant: "destructive" });
       }
     } catch (err) {
       console.error("[generatePreview]", err);
@@ -1445,6 +1446,7 @@ function EditorInner({ funnel }: { funnel: Funnel }) {
             {(selectedNode.data as FunnelNodeData).nodeType !== "trafficSource" &&
              (selectedNode.data as FunnelNodeData).nodeType !== "note" &&
              (selectedNode.data as FunnelNodeData).nodeType !== "emailNode" &&
+             (selectedNode.data as FunnelNodeData).nodeType !== "smsNode" &&
              (selectedNode.data as FunnelNodeData).nodeType !== "delay" && (
               <div>
                 <Label className="text-xs text-white/50 uppercase tracking-wide">Page Preview</Label>
