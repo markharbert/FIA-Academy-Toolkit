@@ -664,13 +664,13 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         timerInterval=setInterval(function(){recSeconds++;updateRecTimer();},1000);
         setCamState('recording');
 
-        // Phase 2: 5-second pause so they can settle, then scroll starts
-        startCountdown(function(){
+        // Phase 2: silent 5-second pause, then scroll starts
+        setTimeout(function(){
           if(!playing){
             playing=true;playBtn.textContent='⏸ Pause';
             lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);
           }
-        },'Scroll starts in…');
+        },5000);
       },'Recording starts in…');
     }
 
