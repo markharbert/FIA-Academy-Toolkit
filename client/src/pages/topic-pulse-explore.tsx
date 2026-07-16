@@ -571,7 +571,7 @@ export default function TopicPulseExplorePage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
         <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative px-4 py-4 flex items-center gap-4 max-w-5xl mx-auto w-full">
+        <div className="relative px-4 py-4 flex items-center gap-4 max-w-6xl mx-auto w-full">
           <Button variant="ghost" size="icon" onClick={() => navigate("/video-studio/research")} className="text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -585,7 +585,7 @@ export default function TopicPulseExplorePage() {
       </div>
 
       <div className="border-b bg-muted/30 p-3">
-        <div className="flex flex-wrap items-center gap-4 max-w-5xl mx-auto">
+        <div className="flex flex-wrap items-center gap-4 max-w-6xl mx-auto">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">Filter:</span>
             <Select value={intentFilter} onValueChange={setIntentFilter}>
@@ -633,7 +633,7 @@ export default function TopicPulseExplorePage() {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden max-w-5xl mx-auto w-full">
+      <div className="flex-1 flex overflow-hidden max-w-6xl mx-auto w-full">
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-2">
             {filteredTopics.map((topic) => (
@@ -646,7 +646,7 @@ export default function TopicPulseExplorePage() {
                 <CardContent className="py-3">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium">{topic.topicTitle}</p>
+                      <p className="text-sm font-medium">{topic.topicTitle}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <SearchVolumeBadge volume={topic.monthlySearchVolume} testId={`badge-volume-${topic.id}`} />
