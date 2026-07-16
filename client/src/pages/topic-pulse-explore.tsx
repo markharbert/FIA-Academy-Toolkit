@@ -568,9 +568,19 @@ export default function TopicPulseExplorePage() {
               Research
             </button>
             <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
-            <span className="text-white/75 text-xs font-medium truncate">{run?.seedQuery}</span>
+            {runLoading ? (
+              <span className="h-3 w-24 rounded bg-white/15 animate-pulse inline-block" />
+            ) : (
+              <span className="text-white/75 text-xs font-medium truncate">{run?.seedQuery}</span>
+            )}
           </div>
-          <h1 className="text-xl font-semibold text-white" data-testid="text-run-query">{run?.seedQuery}</h1>
+          <h1 className="text-xl font-semibold text-white" data-testid="text-run-query">
+            {runLoading ? (
+              <span className="h-6 w-48 rounded bg-white/15 animate-pulse inline-block" />
+            ) : (
+              run?.seedQuery
+            )}
+          </h1>
           <p className="text-sm text-white/60 mt-0.5">
             {filteredTopics.length} topics {intentFilter !== "all" && `(filtered from ${topics?.length})`}
           </p>
