@@ -549,9 +549,24 @@ export default function TopicPulseExplorePage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
         <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative px-5 py-5 max-w-6xl mx-auto w-full">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 mb-2">
+        <div className="relative px-5 py-6 max-w-6xl mx-auto w-full">
+          {/* Title row — matches hub hero pattern */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Search className="h-4 w-4 text-amber-400 shrink-0" />
+            <h1 className="text-xl font-bold text-white" data-testid="text-run-query">
+              {runLoading
+                ? <span className="h-6 w-48 rounded bg-white/15 animate-pulse inline-block align-middle" />
+                : run?.seedQuery}
+            </h1>
+          </div>
+          {/* Subtitle */}
+          <p className="text-white/50 text-xs mt-0.5">
+            {runLoading
+              ? <span className="h-3 w-40 rounded bg-white/15 animate-pulse inline-block" />
+              : `${topics?.length ?? filteredTopics.length} topics found · searched ${run?.createdAt ? new Date(run.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}`}
+          </p>
+          {/* Breadcrumb — at bottom, matching hub position */}
+          <div className="flex items-center gap-1.5 mt-2.5">
             <button
               onClick={() => navigate("/video-studio")}
               className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
@@ -568,22 +583,10 @@ export default function TopicPulseExplorePage() {
               Research
             </button>
             <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
-            {runLoading ? (
-              <span className="h-3 w-24 rounded bg-white/15 animate-pulse inline-block" />
-            ) : (
-              <span className="text-white/75 text-xs font-medium truncate">{run?.seedQuery}</span>
-            )}
+            {runLoading
+              ? <span className="h-3 w-24 rounded bg-white/15 animate-pulse inline-block" />
+              : <span className="text-white/75 text-xs font-medium truncate">{run?.seedQuery}</span>}
           </div>
-          <h1 className="text-xl font-semibold text-white" data-testid="text-run-query">
-            {runLoading ? (
-              <span className="h-6 w-48 rounded bg-white/15 animate-pulse inline-block" />
-            ) : (
-              run?.seedQuery
-            )}
-          </h1>
-          <p className="text-sm text-white/60 mt-0.5">
-            {filteredTopics.length} topics {intentFilter !== "all" && `(filtered from ${topics?.length})`}
-          </p>
         </div>
       </div>
 
