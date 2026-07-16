@@ -5325,9 +5325,11 @@ export async function registerRoutes(
   });
 
   app.get("/api/teleprompter/recordings/:id/stream", requireAuth, async (req: Request, res: Response) => {
+    console.log(`[rec-stream] id=${req.params.id} user=${req.session.userId}`);
     try {
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
-      if (!recording) return res.status(404).json({ message: "Recording not found" });
+      if (!recording) { console.log(`[rec-stream] not found id=${req.params.id}`); return res.status(404).json({ message: "Recording not found" }); }
+      console.log(`[rec-stream] storageKey=${recording.storageKey} size=${recording.sizeBytes} status=${recording.processingStatus}`);
       // Use stored metadata — avoids a round-trip GCS getMetadata() call on every range request
       const fileSize = recording.sizeBytes;
       const mimeType = recording.mimeType || "video/mp4";
@@ -5368,9 +5370,10 @@ export async function registerRoutes(
   });
 
   app.get("/api/teleprompter/recordings/:id/download", requireAuth, async (req: Request, res: Response) => {
+    console.log(`[rec-download] id=${req.params.id} user=${req.session.userId}`);
     try {
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
-      if (!recording) return res.status(404).json({ message: "Recording not found" });
+      if (!recording) { console.log(`[rec-download] not found id=${req.params.id}`); return res.status(404).json({ message: "Recording not found" }); }
       const objectStorage = new ObjectStorageService();
       const file = await objectStorage.getObjectEntityFile(recording.storageKey);
       const ext = path.extname(recording.storageKey) || ".webm";
