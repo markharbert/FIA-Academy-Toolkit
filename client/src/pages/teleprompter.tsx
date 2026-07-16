@@ -341,12 +341,20 @@ export default function TeleprompterPage() {
       scriptToOpen = await performSave();
       if (!scriptToOpen) return;
     }
-    openTeleprompter({
+    const opened = openTeleprompter({
       title: scriptToOpen?.title || title.trim() || "Untitled script",
       sections: [{ text: scriptToOpen?.content || trimmedContent }],
       scriptId: scriptToOpen?.id,
       bulletPoints: scriptToOpen?.bulletPoints || bulletPoints.trim() || undefined,
     });
+    if (!opened) {
+      toast({
+        title: "Popup blocked",
+        description: "Your browser blocked the teleprompter window. Click the popup icon in your address bar to allow it, then try again.",
+        variant: "destructive",
+        duration: 8000,
+      });
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

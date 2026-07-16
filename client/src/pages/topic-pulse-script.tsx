@@ -1560,7 +1560,15 @@ export default function TopicPulseScriptPage() {
       { label: "FINAL CALL TO ACTION", color: "#ec4899", text: fs.finalCTA.text ?? "" },
     ];
 
-    openTeleprompter({ title: script?.title ?? "Script", sections });
+    const opened = openTeleprompter({ title: script?.title ?? "Script", sections });
+    if (!opened) {
+      toast({
+        title: "Popup blocked",
+        description: "Your browser blocked the teleprompter window. Click the popup icon in your address bar to allow it, then try again.",
+        variant: "destructive",
+        duration: 8000,
+      });
+    }
   };
 
   const buildTeleprompterContent = () => {

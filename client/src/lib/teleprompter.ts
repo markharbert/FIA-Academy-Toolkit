@@ -8,10 +8,10 @@ export type TeleprompterSection = {
   text: string;
 };
 
-export function openTeleprompter(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): void {
+export function openTeleprompter(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): boolean {
   const { title, sections, scriptId, bulletPoints } = opts;
   const cleaned = sections.filter((s) => s.text && s.text.trim());
-  if (cleaned.length === 0) return;
+  if (cleaned.length === 0) return false;
 
   const esc = (t: string) =>
     t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -806,14 +806,12 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     "noopener=no",
   ].join(",");
   const tw = window.open("", "teleprompter_window", features);
-  if (tw) {
-    try {
-      tw.resizeTo(twWidth, twHeight);
-      tw.moveTo(twLeft, twTop);
-    } catch (e) { /* noop — blocked in some browsers */ }
-  }
-  if (tw) {
-    tw.document.write(html);
-    tw.document.close();
-  }
+  if (!tw) return false;
+  try {
+    tw.resizeTo(twWidth, twHeight);
+    tw.moveTo(twLeft, twTop);
+  } catch (e) { /* noop — blocked in some browsers */ }
+  tw.document.write(html);
+  tw.document.close();
+  return true;
 }
