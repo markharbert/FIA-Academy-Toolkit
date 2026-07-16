@@ -1,4 +1,5 @@
 - [Teleprompter recording upload](teleprompter-upload.md) — signed-URL direct-to-GCS is CORS-blocked; use server proxy route instead.
+- [GCS Signed URL Downloads](gcs-signed-url-downloads.md) — can't append response-content-disposition post-signing (V4 includes it in signature); proxy downloads via fetch(signedUrl) in Express instead.
 - [Generate Full Script feature](generate-full-script.md) — how the feature works and a key debugging lesson about server restarts.
 - [Funnel Simulation Roadmap](funnel-simulation-roadmap.md) — planned profitability simulation report using per-node traffic/cost/conversion data already collected in canvasData.
 - [Funnel canvas theme system](funnel-canvas-theme.md) — dark/light toggle via CanvasThemeContext; all nodes use useCanvasTheme(); persists to localStorage.
