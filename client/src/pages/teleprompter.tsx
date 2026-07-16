@@ -1001,25 +1001,24 @@ export default function TeleprompterPage() {
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Button
-                    onClick={handleOpenTeleprompter}
+                    onClick={handleOpenModal}
                     disabled={!content.trim() || isSaving}
-                    className="bg-gradient-to-r from-slate-700 to-zinc-900 hover:from-slate-800 hover:to-black text-white shadow-md"
-                    data-testid="button-open-teleprompter"
+                    className="bg-red-600 hover:bg-red-700 text-white shadow-md"
+                    data-testid="button-open-teleprompter-modal"
                   >
                     <Play className="h-4 w-4 mr-2" />
                     Open Teleprompter
                   </Button>
                   {scoreUsage?.isAdmin && (
                     <Button
-                      variant="outline"
-                      onClick={handleOpenModal}
+                      onClick={handleOpenTeleprompter}
                       disabled={!content.trim() || isSaving}
-                      data-testid="button-open-teleprompter-modal"
-                      className="text-xs"
+                      className="bg-gradient-to-r from-slate-700 to-zinc-900 hover:from-slate-800 hover:to-black text-white shadow-md"
+                      data-testid="button-open-teleprompter"
                       size="sm"
                     >
                       <Play className="h-3.5 w-3.5 mr-1.5" />
-                      Try in-page (Beta)
+                      Open Teleprompter (Popup)
                     </Button>
                   )}
                   <Button
