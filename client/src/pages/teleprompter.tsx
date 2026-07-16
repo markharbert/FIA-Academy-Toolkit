@@ -190,7 +190,7 @@ export default function TeleprompterPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [showHelp, setShowHelp] = useState(false);
-  const [modalHtml, setModalHtml] = useState<string | null>(null);
+  const [modalSrc, setModalSrc] = useState<string | null>(null);
   const [modalPos, setModalPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
@@ -501,7 +501,9 @@ export default function TeleprompterPage() {
       x: Math.round((window.innerWidth - mw) / 2),
       y: Math.round((window.innerHeight - mh) / 2),
     });
-    setModalHtml(html);
+    if (modalSrc) URL.revokeObjectURL(modalSrc);
+    const blob = new Blob([html], { type: "text/html" });
+    setModalSrc(URL.createObjectURL(blob));
   };
 
   const handleModalDragStart = (e: React.MouseEvent) => {
@@ -1194,7 +1196,7 @@ export default function TeleprompterPage() {
       </div>
 
       {/* In-page teleprompter overlay (Beta) — draggable */}
-      {modalHtml && (
+      {modalSrc && (
         <div className="fixed inset-0 z-[9999] pointer-events-none">
           <div
             className="absolute flex flex-col bg-black rounded-xl overflow-hidden pointer-events-auto shadow-2xl"
@@ -1215,7 +1217,7 @@ export default function TeleprompterPage() {
                 <span className="text-white/40 text-xs select-none">Teleprompter — drag to reposition</span>
               </div>
               <button
-                onClick={() => setModalHtml(null)}
+                onClick={() => { if (modalSrc) URL.revokeObjectURL(modalSrc); setModalSrc(null); }}
                 onMouseDown={(e) => e.stopPropagation()}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
                 data-testid="button-close-teleprompter-modal"
@@ -1227,7 +1229,7 @@ export default function TeleprompterPage() {
             <div className="relative flex-1 min-h-0">
               {isDragging && <div className="absolute inset-0 z-10" />}
               <iframe
-                srcDoc={modalHtml}
+                src={modalSrc}
                 allow="camera; microphone"
                 className="w-full h-full border-0"
                 title="Teleprompter"
