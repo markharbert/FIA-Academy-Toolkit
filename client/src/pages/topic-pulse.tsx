@@ -4,6 +4,16 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search, TrendingUp, Zap, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun } from "@shared/schema";
@@ -46,6 +56,7 @@ export default function TopicPulsePage() {
   const [seedQuery, setSeedQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string | undefined>();
   const [runsPage, setRunsPage] = useState(1);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const PAGE_SIZE = 15;
 
   const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
@@ -277,7 +288,7 @@ export default function TopicPulsePage() {
                   variant="ghost"
                   size="sm"
                   className="h-7 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={() => deleteAllRunsMutation.mutate()}
+                  onClick={() => setShowClearConfirm(true)}
                   disabled={deleteAllRunsMutation.isPending}
                   data-testid="button-clear-all-searches"
                 >
@@ -402,6 +413,27 @@ export default function TopicPulsePage() {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all searches?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all your recent search history. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-clear-confirm-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { deleteAllRunsMutation.mutate(); setShowClearConfirm(false); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-clear-confirm-go"
+            >
+              Yes, clear all
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

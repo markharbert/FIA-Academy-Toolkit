@@ -9,6 +9,25 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { 
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Minus, Bookmark, 
   FileText, Sparkles, Lightbulb, HelpCircle, CheckCircle2, AlertCircle,
@@ -440,12 +459,19 @@ export default function TopicPulseExplorePage() {
     },
   });
 
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [pendingGenerateTopicId, setPendingGenerateTopicId] = useState<string | null>(null);
+  const [genVideoLength, setGenVideoLength] = useState("6-10");
+  const [genTone, setGenTone] = useState("friendly");
+  const [showResearchConfirm, setShowResearchConfirm] = useState(false);
+  const [pendingResearchQuery, setPendingResearchQuery] = useState<string | null>(null);
+
   const scriptMutation = useMutation({
-    mutationFn: async (topicId: string) => {
+    mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string }) => {
       const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", {
         topicId,
-        videoLengthTarget: "6-10",
-        tonePreference: "friendly",
+        videoLengthTarget,
+        tonePreference,
       });
       return res.json();
     },
@@ -647,7 +673,7 @@ export default function TopicPulseExplorePage() {
                   
                   <div className="flex gap-2 mb-4 flex-wrap">
                     <Button 
-                      onClick={() => scriptMutation.mutate(selectedTopic.id)}
+                      onClick={() => { setPendingGenerateTopicId(selectedTopic.id); setShowGenerateDialog(true); }}
                       disabled={scriptMutation.isPending}
                       className="bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold"
                       data-testid="button-generate-script"
@@ -670,7 +696,7 @@ export default function TopicPulseExplorePage() {
                     </Button>
                     <Button 
                       variant="outline" 
-                      onClick={() => researchDeeperMutation.mutate(selectedTopic.keywordQuery)}
+                      onClick={() => { setPendingResearchQuery(selectedTopic.keywordQuery); setShowResearchConfirm(true); }}
                       disabled={researchDeeperMutation.isPending}
                       data-testid="button-research-deeper"
                     >
@@ -815,6 +841,85 @@ export default function TopicPulseExplorePage() {
         )}
       </div>
 
+      {/* Generate Script options dialog */}
+      <Dialog open={showGenerateDialog} onOpenChange={(open) => { if (!open) setShowGenerateDialog(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Generate Script</DialogTitle>
+            <DialogDescription>Choose your video settings before generating.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Video Length</Label>
+              <Select value={genVideoLength} onValueChange={setGenVideoLength}>
+                <SelectTrigger data-testid="select-gen-video-length">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3-5">3–5 minutes</SelectItem>
+                  <SelectItem value="6-10">6–10 minutes</SelectItem>
+                  <SelectItem value="10-15">10–15 minutes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Tone</Label>
+              <Select value={genTone} onValueChange={setGenTone}>
+                <SelectTrigger data-testid="select-gen-tone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="friendly">Friendly</SelectItem>
+                  <SelectItem value="professional">Professional</SelectItem>
+                  <SelectItem value="casual">Casual</SelectItem>
+                  <SelectItem value="energetic">Energetic</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowGenerateDialog(false)} data-testid="button-gen-dialog-cancel">Cancel</Button>
+            <Button
+              onClick={() => {
+                if (pendingGenerateTopicId) {
+                  scriptMutation.mutate({ topicId: pendingGenerateTopicId, videoLengthTarget: genVideoLength, tonePreference: genTone });
+                  setShowGenerateDialog(false);
+                }
+              }}
+              disabled={scriptMutation.isPending}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+              data-testid="button-confirm-generate-script"
+            >
+              {scriptMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+              Generate Script
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Research Deeper confirmation */}
+      <AlertDialog open={showResearchConfirm} onOpenChange={setShowResearchConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start a new search?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This uses one research credit to run a new search using "{pendingResearchQuery}" as the seed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-research-confirm-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingResearchQuery) researchDeeperMutation.mutate(pendingResearchQuery);
+                setShowResearchConfirm(false);
+              }}
+              data-testid="button-research-confirm-go"
+            >
+              Yes, search
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -100,6 +100,8 @@ export default function TeleprompterPage() {
   const [dirty, setDirty] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [showDirtyDialog, setShowDirtyDialog] = useState(false);
+  const [dirtyDialogAction, setDirtyDialogAction] = useState<(() => void) | null>(null);
 
   // Fetch recording as a blob when preview opens — one continuous download instead
   // of the browser making multiple range requests hunting for the moov atom.
@@ -257,24 +259,35 @@ export default function TeleprompterPage() {
     },
   });
 
+  const confirmOrProceed = (action: () => void) => {
+    if (dirty) {
+      setDirtyDialogAction(() => action);
+      setShowDirtyDialog(true);
+    } else {
+      action();
+    }
+  };
+
   const handleNewScript = () => {
-    if (dirty && !confirm("Discard unsaved changes?")) return;
-    setSelectedId(null);
-    setTitle("");
-    setContent("");
-    setBulletPoints("");
-    setEditorTab("script");
-    setDirty(false);
+    confirmOrProceed(() => {
+      setSelectedId(null);
+      setTitle("");
+      setContent("");
+      setBulletPoints("");
+      setEditorTab("script");
+      setDirty(false);
+    });
   };
 
   const handleSelect = (script: TeleprompterScript) => {
     if (script.id === selectedId) return;
-    if (dirty && !confirm("Discard unsaved changes?")) return;
-    setSelectedId(script.id);
-    setTitle(script.title);
-    setContent(script.content);
-    setBulletPoints(script.bulletPoints || "");
-    setDirty(false);
+    confirmOrProceed(() => {
+      setSelectedId(script.id);
+      setTitle(script.title);
+      setContent(script.content);
+      setBulletPoints(script.bulletPoints || "");
+      setDirty(false);
+    });
   };
 
   const performSave = (): Promise<TeleprompterScript | null> => {
@@ -1131,6 +1144,37 @@ export default function TeleprompterPage() {
               data-testid="button-delete-confirm"
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unsaved changes guard */}
+      <AlertDialog open={showDirtyDialog} onOpenChange={(open) => { if (!open) setShowDirtyDialog(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes to this script. They will be lost if you continue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setShowDirtyDialog(false)}
+              data-testid="button-dirty-cancel"
+            >
+              Keep editing
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowDirtyDialog(false);
+                dirtyDialogAction?.();
+                setDirtyDialogAction(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-dirty-discard"
+            >
+              Discard changes
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

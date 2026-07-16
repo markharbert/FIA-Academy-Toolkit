@@ -1351,6 +1351,53 @@ export default function TopicPulseScriptPage() {
     }
   };
 
+  const handleDownloadExpandedPdf = () => {
+    if (!editedScriptJson?.expandedScript || !script) return;
+    const esc = (text: string) =>
+      text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const bodyHtml = editedScriptJson.expandedScript
+      .split(/\n\n+/)
+      .map((para) => `<p>${esc(para).replace(/\n/g, "<br>")}</p>`)
+      .join("");
+    const logoUrl = `${window.location.origin}${academyLogoPath}`;
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${esc(script.title)}</title>
+  <style>
+    @page{size:letter;margin:0}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Georgia,"Times New Roman",serif;color:#111;background:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact;padding-top:80px;padding-bottom:48px}
+    .hdr{position:fixed;top:0;left:0;right:0;height:68px;display:flex;align-items:center;justify-content:space-between;padding:0 48px;background:#fff;border-bottom:2px solid #0b1437;z-index:100}
+    .hdr img{height:44px;width:auto}
+    .hdr-date{font-family:Arial,sans-serif;font-size:10px;color:#888;text-align:right;line-height:1.6}
+    .ftr{position:fixed;bottom:0;left:0;right:0;height:36px;display:flex;align-items:center;justify-content:center;padding:0 48px;background:#fff;border-top:1px solid #e5e7eb;z-index:100;font-family:Arial,sans-serif;font-size:10px;color:#aaa}
+    .ftr a{color:#aaa;text-decoration:none}
+    .page{padding:20px 48px 16px}
+    .title{font-size:22px;font-weight:bold;margin-bottom:3px;line-height:1.3}
+    .meta{font-size:11px;color:#888;margin-bottom:28px;font-family:Arial,sans-serif}
+    p{font-size:14px;line-height:1.8;margin-bottom:14px}
+  </style>
+</head>
+<body>
+  <div class="hdr">
+    <img src="${logoUrl}" alt="Fearless Influencer" />
+    <div class="hdr-date">Script generated<br>${new Date(script.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</div>
+  </div>
+  <div class="ftr">Created with the Fearless Influencer Academy Toolkit &nbsp;·&nbsp;<a href="https://fearlessinfluencer.com">fearlessinfluencer.com</a></div>
+  <div class="page">
+    <h1 class="title">${esc(script.title)}</h1>
+    <p class="meta">Full teleprompter script</p>
+    ${bodyHtml}
+  </div>
+  <script>window.onload=function(){window.print()}<\/script>
+</body>
+</html>`;
+    const pw = window.open("", "_blank");
+    if (pw) { pw.document.write(html); pw.document.close(); }
+  };
+
   const handleDownloadPdf = () => {
     if (!editedScriptJson?.fullScript || !script) return;
     const fs = editedScriptJson.fullScript;
@@ -1914,8 +1961,7 @@ export default function TopicPulseScriptPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={handleDownloadPdf}
-                          disabled={!editedScriptJson?.fullScript}
+                          onClick={handleDownloadExpandedPdf}
                           data-testid="button-download-pdf"
                         >
                           <FileDown className="h-4 w-4 mr-2" />
