@@ -505,6 +505,7 @@ function CallToActionTab({
   const [editLinkUrl, setEditLinkUrl] = useState("");
   const [editLinkLabel, setEditLinkLabel] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingDeleteOfferId, setPendingDeleteOfferId] = useState<string | null>(null);
 
   const { data: offers, isLoading } = useQuery<SavedOffer[]>({
     queryKey: ["/api/topic-pulse/offers"],
@@ -753,7 +754,7 @@ function CallToActionTab({
                         <Button 
                           size="icon" 
                           variant="ghost"
-                          onClick={() => deleteOfferMutation.mutate(offer.id)}
+                          onClick={() => setPendingDeleteOfferId(offer.id)}
                           disabled={deleteOfferMutation.isPending}
                           data-testid={`button-delete-offer-${offer.id}`}
                         >
@@ -2084,6 +2085,27 @@ export default function TopicPulseScriptPage() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={!!pendingDeleteOfferId} onOpenChange={(open) => { if (!open) setPendingDeleteOfferId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this offer?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the saved offer and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-delete-offer-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (pendingDeleteOfferId) { deleteOfferMutation.mutate(pendingDeleteOfferId); setPendingDeleteOfferId(null); } }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-delete-offer-confirm"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showOverwriteDialog} onOpenChange={setShowOverwriteDialog}>
         <AlertDialogContent>

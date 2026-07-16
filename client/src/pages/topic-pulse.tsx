@@ -251,6 +251,7 @@ export default function TopicPulsePage() {
   const [genVideoLength, setGenVideoLength] = useState("6-10");
   const [genTone, setGenTone] = useState("friendly");
   const [showUnsaveConfirm, setShowUnsaveConfirm] = useState(false);
+  const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
   const PAGE_SIZE = 15;
 
   const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
@@ -648,7 +649,7 @@ export default function TopicPulsePage() {
                                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  deleteRunMutation.mutate(run.id);
+                                  setPendingDeleteRunId(run.id);
                                 }}
                                 disabled={deleteRunMutation.isPending}
                                 data-testid={`button-delete-run-${run.id}`}
@@ -948,6 +949,28 @@ export default function TopicPulsePage() {
               data-testid="button-clear-confirm-go"
             >
               Yes, clear all
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Delete run confirm ── */}
+      <AlertDialog open={!!pendingDeleteRunId} onOpenChange={(open) => { if (!open) setPendingDeleteRunId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this search?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this search and all its topics. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-delete-run-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (pendingDeleteRunId) { deleteRunMutation.mutate(pendingDeleteRunId); setPendingDeleteRunId(null); } }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-delete-run-confirm"
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
