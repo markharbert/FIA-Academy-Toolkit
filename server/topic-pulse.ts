@@ -253,31 +253,44 @@ function generateKeywordVariations(seed: string): string[] {
 }
 
 function classifyIntents(query: string): TopicIntent[] {
-  const lowerQuery = query.toLowerCase();
+  const q = query.toLowerCase();
   const intents: TopicIntent[] = [];
-  
-  if (lowerQuery.includes("review") || lowerQuery.includes("worth it")) {
+
+  // Review — requires whole-word "review" to avoid false matches
+  if (/\breview\b/.test(q) || /\brating\b/.test(q) || /\bratings\b/.test(q) || q.includes("worth it") || q.includes("honest opinion")) {
     intents.push("review");
   }
-  if (lowerQuery.includes("vs") || lowerQuery.includes("versus") || lowerQuery.includes("compared")) {
+
+  // Comparison — whole-word "vs", "compare", "versus", "difference between"
+  if (/\bvs\b/.test(q) || /\bversus\b/.test(q) || /\bcompare\b/.test(q) || q.includes("compared to") || q.includes("difference between") || q.includes("which is better")) {
     intents.push("comparison");
   }
-  if (lowerQuery.includes("how to") || lowerQuery.includes("tutorial") || lowerQuery.includes("step by step")) {
+
+  // How-to — instructional content
+  if (q.includes("how to") || q.includes("tutorial") || q.includes("step by step") || /\bguide\b/.test(q) || /\btips\b/.test(q) || q.includes("ways to") || q.includes("learn ") || q.includes("how do")) {
     intents.push("how-to");
   }
-  if (lowerQuery.includes("fix") || lowerQuery.includes("problem") || lowerQuery.includes("issue") || lowerQuery.includes("not working")) {
+
+  // Problem-fix — whole-word "fix" to avoid "prefix"/"suffix"
+  if (/\bfix\b/.test(q) || /\bproblem\b/.test(q) || /\bissue\b/.test(q) || q.includes("not working") || q.includes("error") || q.includes("help with") || q.includes("troubleshoot")) {
     intents.push("problem-fix");
   }
-  if (lowerQuery.includes("beginner") || lowerQuery.includes("starter") || lowerQuery.includes("basics")) {
+
+  // Beginner guide
+  if (/\bbeginner\b/.test(q) || /\bstarter\b/.test(q) || /\bbasics\b/.test(q) || q.includes("for beginners") || q.includes("get started") || q.includes("introduction to")) {
     intents.push("beginner-guide");
   }
-  if (lowerQuery.includes("top") || lowerQuery.includes("best") || lowerQuery.includes("list")) {
+
+  // Top list — whole-word "top", "best", "list" to avoid "laptop", "stop", "playlist"
+  if (/\bbest\b/.test(q) || /\btop\b/.test(q) || /\blist\b/.test(q) || q.includes("most popular") || q.includes("top rated") || q.includes("ranked")) {
     intents.push("top-list");
   }
-  if (lowerQuery.includes("buy") || lowerQuery.includes("price") || lowerQuery.includes("cost") || lowerQuery.includes("where to get") || lowerQuery.includes("purchase") || lowerQuery.includes("cheap") || lowerQuery.includes("discount") || lowerQuery.includes("deal")) {
+
+  // Buyer intent
+  if (/\bbuy\b/.test(q) || /\bprice\b/.test(q) || /\bcost\b/.test(q) || /\bcheap\b/.test(q) || /\bdeal\b/.test(q) || /\border\b/.test(q) || q.includes("where to get") || q.includes("purchase") || q.includes("discount") || q.includes("how much")) {
     intents.push("buyer");
   }
-  
+
   return intents.length > 0 ? intents : ["how-to"];
 }
 

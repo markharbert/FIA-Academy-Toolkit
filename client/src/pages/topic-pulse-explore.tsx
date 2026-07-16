@@ -264,7 +264,7 @@ const intentLabels: Record<TopicIntent, string> = {
   "problem-fix": "Problem Fix",
   "beginner-guide": "Beginner Guide",
   "top-list": "Top List",
-  "buyer": "Buyer",
+  "buyer": "Buy/Price",
 };
 
 const intentColors: Record<TopicIntent, string> = {
