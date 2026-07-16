@@ -191,6 +191,9 @@ export default function TeleprompterPage() {
 
   const [showHelp, setShowHelp] = useState(false);
   const [modalHtml, setModalHtml] = useState<string | null>(null);
+  const [modalPos, setModalPos] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -492,8 +495,34 @@ export default function TeleprompterPage() {
       bulletPoints: scriptToOpen?.bulletPoints || bulletPoints.trim() || undefined,
     });
     if (!html) return;
+    const mw = window.innerWidth * 0.75;
+    const mh = window.innerHeight * 0.95;
+    setModalPos({
+      x: Math.round((window.innerWidth - mw) / 2),
+      y: Math.round((window.innerHeight - mh) / 2),
+    });
     setModalHtml(html);
   };
+
+  const handleModalDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragOffsetRef.current = { x: e.clientX - modalPos.x, y: e.clientY - modalPos.y };
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e: MouseEvent) => {
+      setModalPos({ x: e.clientX - dragOffsetRef.current.x, y: e.clientY - dragOffsetRef.current.y });
+    };
+    const onUp = () => setIsDragging(false);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [isDragging]);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -1164,23 +1193,46 @@ export default function TeleprompterPage() {
         </div>
       </div>
 
-      {/* In-page teleprompter overlay (Beta) */}
+      {/* In-page teleprompter overlay (Beta) — draggable */}
       {modalHtml && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70">
-          <div className="relative flex flex-col bg-black rounded-xl overflow-hidden" style={{ width: "75vw", height: "95vh" }}>
-            <button
-              onClick={() => setModalHtml(null)}
-              className="absolute top-3 right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
-              data-testid="button-close-teleprompter-modal"
+        <div className="fixed inset-0 z-[9999] pointer-events-none">
+          <div
+            className="absolute flex flex-col bg-black rounded-xl overflow-hidden pointer-events-auto shadow-2xl"
+            style={{ width: "75vw", height: "95vh", left: modalPos.x, top: modalPos.y }}
+          >
+            {/* Drag handle */}
+            <div
+              className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-white/10 shrink-0 select-none"
+              style={{ cursor: isDragging ? "grabbing" : "grab" }}
+              onMouseDown={handleModalDragStart}
             >
-              ✕ Close
-            </button>
-            <iframe
-              srcDoc={modalHtml}
-              allow="camera; microphone"
-              className="flex-1 w-full border-0"
-              title="Teleprompter"
-            />
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  <div className="w-2.5 h-2.5 rounded-full bg-white/20" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-white/20" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-white/20" />
+                </div>
+                <span className="text-white/40 text-xs select-none">Teleprompter — drag to reposition</span>
+              </div>
+              <button
+                onClick={() => setModalHtml(null)}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
+                data-testid="button-close-teleprompter-modal"
+              >
+                ✕ Close
+              </button>
+            </div>
+            {/* Iframe — transparent blocker overlay during drag prevents iframe swallowing mouse events */}
+            <div className="relative flex-1 min-h-0">
+              {isDragging && <div className="absolute inset-0 z-10" />}
+              <iframe
+                srcDoc={modalHtml}
+                allow="camera; microphone"
+                className="w-full h-full border-0"
+                title="Teleprompter"
+              />
+            </div>
           </div>
         </div>
       )}
