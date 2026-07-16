@@ -59,7 +59,7 @@ export default function VideoStudioPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(345_55%_16%)]" />
         <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-rose-500/20 blur-3xl" />
         <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative max-w-5xl mx-auto px-6 py-10">
+        <div className="relative max-w-6xl mx-auto px-6 py-10">
           <div className="flex items-center gap-3 mb-2">
             <div className="h-10 w-10 rounded-xl bg-rose-500/20 ring-1 ring-rose-400/30 flex items-center justify-center">
               <Clapperboard className="h-5 w-5 text-rose-300" />
@@ -72,7 +72,7 @@ export default function VideoStudioPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-12">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-12">
 
         {/* ─── Zone 1: Workflow Pipeline ─── */}
         <section>
