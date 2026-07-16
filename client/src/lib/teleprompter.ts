@@ -50,8 +50,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     /* ── Controls bar ── */
     #controls{
-      flex-shrink:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-      padding:10px 18px;background:#111;border-bottom:1px solid #333;
+      flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
+      padding:10px 18px;background:#111;border-top:1px solid #333;
     }
     #controls .title{font-family:Arial,sans-serif;font-size:12px;color:#555;margin-right:6px;white-space:nowrap;overflow:hidden;max-width:180px}
     #speedWrap{display:flex;flex-direction:column;align-items:center;gap:3px}
@@ -172,21 +172,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
   </style>
 </head>
 <body>
-  <!-- ── Top controls (full-width) ── -->
-  <div id="controls">
-    <span class="title">${esc(title)}</span>
-    <div id="speedWrap">
-      <span id="speedLabel">Scroll Speed</span>
-      <input type="range" id="speedSlider" min="1" max="8" value="3" step="1">
-    </div>
-    <button class="font-btn" id="fontDown" onclick="changeFont(-1)" title="Smaller text">A−</button>
-    <span id="fontLabel">Medium</span>
-    <button class="font-btn" id="fontUp" onclick="changeFont(1)" title="Larger text">A+</button>
-    <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
-    <button id="playBtn" onclick="togglePlay()">▶ Play</button>
-    <span id="countdown">Scrolling begins in <span id="cd-num">5</span></span>
-  </div>
-
   <!-- ── Main area ── -->
   <div id="main">
 
@@ -327,6 +312,21 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       <div id="cam-footer">saves to your account for 30 days · download any time from your teleprompter page</div>
     </div>
 
+  </div>
+
+  <!-- ── Bottom controls (full-width) ── -->
+  <div id="controls">
+    <span class="title">${esc(title)}</span>
+    <div id="speedWrap">
+      <span id="speedLabel">Scroll Speed</span>
+      <input type="range" id="speedSlider" min="1" max="8" value="3" step="1">
+    </div>
+    <button class="font-btn" id="fontDown" onclick="changeFont(-1)" title="Smaller text">A−</button>
+    <span id="fontLabel">Medium</span>
+    <button class="font-btn" id="fontUp" onclick="changeFont(1)" title="Larger text">A+</button>
+    <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
+    <button id="playBtn" onclick="togglePlay()">▶ Play</button>
+    <span id="countdown">Scrolling begins in <span id="cd-num">5</span></span>
   </div>
 
   <script>
