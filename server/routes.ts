@@ -5298,6 +5298,36 @@ export async function registerRoutes(
     }
   });
 
+  // Score a recording's transcript using the 5-part formula
+  app.post("/api/teleprompter/recordings/:id/score", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
+      if (!recording) return res.status(404).json({ message: "Recording not found" });
+      if (!recording.transcriptText) return res.status(400).json({ message: "No transcript yet — transcribe first" });
+
+      const { goalType } = req.body;
+      if (!goalType || !goalTypes.includes(goalType)) {
+        return res.status(400).json({ message: "Invalid goal type" });
+      }
+
+      const result = await scoreTranscript(
+        recording.transcriptText,
+        goalType as GoalType,
+        recording.durationSeconds ?? 60
+      );
+
+      await storage.updateTeleprompterRecording(recording.id, req.session.userId!, {
+        scoreJson: result,
+        scoreGoalType: goalType as GoalType,
+      });
+
+      res.json(result);
+    } catch (err) {
+      console.error("[Teleprompter] Score recording error:", err);
+      if (!res.headersSent) res.status(500).json({ message: "Failed to score recording" });
+    }
+  });
+
   // Download the stored transcript for a recording as a .txt file
   app.get("/api/teleprompter/recordings/:id/transcript.txt", requireAuth, async (req: Request, res: Response) => {
     try {

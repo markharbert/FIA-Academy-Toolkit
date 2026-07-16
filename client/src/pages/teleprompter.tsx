@@ -39,12 +39,17 @@ import {
   Clock,
   Sparkles,
   Eye,
+  Star,
+  BarChart2,
+  RefreshCw,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { openTeleprompter } from "@/lib/teleprompter";
 import jsPDF from "jspdf";
-import type { TeleprompterScript, TeleprompterRecording } from "@shared/schema";
+import type { TeleprompterScript, TeleprompterRecording, ScoreResult, GoalType } from "@shared/schema";
+import { goalTypes, goalTypeLabels } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 const MAX_SCRIPT_CHARS = 100_000;
 const MAX_FILE_BYTES = 500_000;
@@ -95,7 +100,17 @@ export default function TeleprompterPage() {
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
-  const [transcriptModal, setTranscriptModal] = useState<{ open: boolean; title: string; text: string }>({ open: false, title: "", text: "" });
+  const [transcriptModal, setTranscriptModal] = useState<{
+    open: boolean;
+    title: string;
+    text: string;
+    recordingId: string;
+    durationSeconds: number | null;
+    scoreJson: ScoreResult | null;
+    scoreGoalType: GoalType | null;
+  }>({ open: false, title: "", text: "", recordingId: "", durationSeconds: null, scoreJson: null, scoreGoalType: null });
+  const [selectedGoal, setSelectedGoal] = useState<GoalType | null>(null);
+  const [isScoring, setIsScoring] = useState(false);
   const [dirty, setDirty] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -443,7 +458,16 @@ export default function TeleprompterPage() {
   async function handleGetTranscript(rec: TeleprompterRecording) {
     // If transcript already exists, show it immediately in the modal
     if (rec.transcriptText) {
-      setTranscriptModal({ open: true, title: rec.title, text: rec.transcriptText });
+      setSelectedGoal((rec.scoreGoalType as GoalType) ?? null);
+      setTranscriptModal({
+        open: true,
+        title: rec.title,
+        text: rec.transcriptText,
+        recordingId: rec.id,
+        durationSeconds: rec.durationSeconds ?? null,
+        scoreJson: (rec.scoreJson as ScoreResult) ?? null,
+        scoreGoalType: (rec.scoreGoalType as GoalType) ?? null,
+      });
       return;
     }
     setTranscribingIds((prev) => new Set(prev).add(rec.id));
@@ -454,11 +478,36 @@ export default function TeleprompterPage() {
       // Invalidate recordings cache so the button label updates to "Transcript"
       queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
       // Show the result in the modal
-      setTranscriptModal({ open: true, title: rec.title, text: data.transcript });
+      setSelectedGoal(null);
+      setTranscriptModal({
+        open: true,
+        title: rec.title,
+        text: data.transcript,
+        recordingId: rec.id,
+        durationSeconds: rec.durationSeconds ?? null,
+        scoreJson: null,
+        scoreGoalType: null,
+      });
     } catch (err: any) {
       toast({ title: "Transcription failed", description: err.message, variant: "destructive" });
     } finally {
       setTranscribingIds((prev) => { const s = new Set(prev); s.delete(rec.id); return s; });
+    }
+  }
+
+  async function handleScoreTake() {
+    if (!selectedGoal || !transcriptModal.recordingId) return;
+    setIsScoring(true);
+    try {
+      const res = await apiRequest("POST", `/api/teleprompter/recordings/${transcriptModal.recordingId}/score`, { goalType: selectedGoal });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Scoring failed");
+      queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+      setTranscriptModal((m) => ({ ...m, scoreJson: data, scoreGoalType: selectedGoal }));
+    } catch (err: any) {
+      toast({ title: "Scoring failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsScoring(false);
     }
   }
 
@@ -1040,48 +1089,163 @@ export default function TeleprompterPage() {
 
       {/* Transcript viewer modal */}
       <Dialog open={transcriptModal.open} onOpenChange={(open) => !open && setTranscriptModal((m) => ({ ...m, open: false }))}>
-        <DialogContent className="max-w-3xl w-full flex flex-col" style={{ maxHeight: "90vh" }}>
+        <DialogContent
+          className={cn("w-full flex flex-col transition-all", transcriptModal.scoreJson ? "max-w-5xl" : "max-w-2xl")}
+          style={{ maxHeight: "90vh" }}
+        >
           <DialogHeader className="shrink-0">
             <DialogTitle className="text-base leading-snug">{transcriptModal.title}</DialogTitle>
-            <DialogDescription>Transcript — use the Copy button or select and copy the text below.</DialogDescription>
+            <DialogDescription>
+              {transcriptModal.scoreJson
+                ? `Score: ${transcriptModal.scoreJson.totalScore}/100 · ${goalTypeLabels[transcriptModal.scoreGoalType!]}`
+                : "Transcript — score your take or copy below."}
+            </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto rounded-md border border-border bg-muted/40 p-4 mt-2">
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcriptModal.text}</p>
-          </div>
-          <div className="flex justify-between items-center pt-3 shrink-0 gap-2 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(transcriptModal.text).then(() => {
-                    toast({ title: "Copied to clipboard" });
-                  });
-                }}
-                data-testid="button-copy-transcript"
-              >
-                <FileText className="h-3.5 w-3.5 mr-1.5" />
-                Copy
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => downloadTranscriptTxt(transcriptModal.title, transcriptModal.text)}
-                data-testid="button-download-transcript-txt"
-              >
-                <Download className="h-3.5 w-3.5 mr-1.5" />
-                Download TXT
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => downloadTranscriptPdf(transcriptModal.title, transcriptModal.text)}
-                data-testid="button-download-transcript-pdf"
-              >
-                <Download className="h-3.5 w-3.5 mr-1.5" />
-                Download PDF
-              </Button>
+
+          {/* Two-panel body */}
+          <div className={cn("flex-1 min-h-0 flex gap-4 mt-2", transcriptModal.scoreJson ? "flex-row" : "flex-col")}>
+
+            {/* ── Score panel (left) ── */}
+            {transcriptModal.scoreJson && (() => {
+              const sc = transcriptModal.scoreJson;
+              const total = sc.totalScore;
+              const scoreColor = total >= 80 ? "text-green-500" : total >= 60 ? "text-amber-500" : "text-red-500";
+              const ringColor = total >= 80 ? "border-green-500" : total >= 60 ? "border-amber-500" : "border-red-500";
+              const parts: { label: string; key: keyof typeof sc.partScores }[] = [
+                { label: "Hook", key: "hook" },
+                { label: "Set the Hook", key: "setHook" },
+                { label: "First CTA", key: "firstCTA" },
+                { label: "Content", key: "content" },
+                { label: "Final CTA", key: "finalCTA" },
+              ];
+              return (
+                <div className="w-56 shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
+                  {/* Big score */}
+                  <div className="flex flex-col items-center gap-1 pt-1">
+                    <div className={cn("w-20 h-20 rounded-full border-4 flex items-center justify-center", ringColor)}>
+                      <span className={cn("text-2xl font-bold tabular-nums", scoreColor)}>{total}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">out of 100</span>
+                  </div>
+
+                  {/* Part scores */}
+                  <div className="flex flex-col gap-2">
+                    {parts.map(({ label, key }) => {
+                      const val = sc.partScores[key];
+                      const pct = (val / 20) * 100;
+                      const barColor = val >= 16 ? "bg-green-500" : val >= 12 ? "bg-amber-500" : "bg-red-500";
+                      return (
+                        <div key={key} className="flex flex-col gap-0.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-medium">{label}</span>
+                            <span className="text-xs text-muted-foreground tabular-nums">{val}/20</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                            <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Top improvements */}
+                  {sc.summary.topImprovements.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Top improvements</p>
+                      <ul className="flex flex-col gap-1.5">
+                        {sc.summary.topImprovements.slice(0, 3).map((item, i) => (
+                          <li key={i} className="flex gap-1.5 text-xs text-foreground/80 leading-snug">
+                            <span className="mt-0.5 text-amber-500 shrink-0">▸</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Strengths */}
+                  {sc.summary.strengths.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What worked</p>
+                      <ul className="flex flex-col gap-1.5">
+                        {sc.summary.strengths.slice(0, 2).map((item, i) => (
+                          <li key={i} className="flex gap-1.5 text-xs text-foreground/80 leading-snug">
+                            <span className="mt-0.5 text-green-500 shrink-0">✓</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── Transcript panel (right or full) ── */}
+            <div className="flex-1 overflow-y-auto rounded-md border border-border bg-muted/40 p-4">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcriptModal.text}</p>
             </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-between items-start pt-3 shrink-0 gap-3 flex-wrap border-t border-border mt-2">
+            <div className="flex flex-col gap-2 flex-1">
+              {/* Copy / download row */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigator.clipboard.writeText(transcriptModal.text).then(() => toast({ title: "Copied to clipboard" }))}
+                  data-testid="button-copy-transcript"
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  Copy
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadTranscriptTxt(transcriptModal.title, transcriptModal.text)} data-testid="button-download-transcript-txt">
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  TXT
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadTranscriptPdf(transcriptModal.title, transcriptModal.text)} data-testid="button-download-transcript-pdf">
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  PDF
+                </Button>
+              </div>
+
+              {/* Score section */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground shrink-0">Score as:</span>
+                {goalTypes.map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setSelectedGoal(g)}
+                    className={cn(
+                      "text-xs px-2.5 py-1 rounded-full border transition-colors",
+                      selectedGoal === g
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                    )}
+                    data-testid={`button-goal-${g}`}
+                  >
+                    {g === "sales" ? "Sales" : g === "lead" ? "Lead" : g === "education" ? "Education" : "Recruit"}
+                  </button>
+                ))}
+                <Button
+                  size="sm"
+                  disabled={!selectedGoal || isScoring}
+                  onClick={handleScoreTake}
+                  data-testid="button-score-take"
+                >
+                  {isScoring ? (
+                    <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Scoring…</>
+                  ) : transcriptModal.scoreJson ? (
+                    <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-score</>
+                  ) : (
+                    <><BarChart2 className="h-3.5 w-3.5 mr-1.5" />Score this take</>
+                  )}
+                </Button>
+              </div>
+            </div>
+
             <Button
               variant="ghost"
               size="sm"
