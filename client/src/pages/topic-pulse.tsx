@@ -261,7 +261,7 @@ export default function TopicPulsePage() {
   const [msgIndex, setMsgIndex] = useState(0);
   const apiDoneRef = useRef(false);
   const startTimeRef = useRef(0);
-  const MIN_MS = 5500;
+  const MIN_MS = 7500;
 
   const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
     queryKey: ["/api/topic-pulse/runs", runsPage],
@@ -365,10 +365,10 @@ export default function TopicPulsePage() {
     let raf: number;
     let msgTimer: ReturnType<typeof setInterval>;
 
-    // Cycle through messages every ~1.1s
+    // Cycle through messages every ~1.5s
     msgTimer = setInterval(() => {
       setMsgIndex((i) => (i + 1) % SEARCH_MESSAGES.length);
-    }, 1100);
+    }, 1500);
 
     const tick = () => {
       const elapsed = Date.now() - startTimeRef.current;
@@ -377,10 +377,10 @@ export default function TopicPulsePage() {
 
       // Progress curve: rushes to ~88% then holds, jumps to 100 when ready
       let target: number;
-      if (elapsed < 1200)      target = (elapsed / 1200) * 35;
-      else if (elapsed < 2600) target = 35 + ((elapsed - 1200) / 1400) * 25;
-      else if (elapsed < 4200) target = 60 + ((elapsed - 2600) / 1600) * 20;
-      else if (elapsed < 5500) target = 80 + ((elapsed - 4200) / 1300) * 8;
+      if (elapsed < 1500)      target = (elapsed / 1500) * 35;
+      else if (elapsed < 3500) target = 35 + ((elapsed - 1500) / 2000) * 25;
+      else if (elapsed < 5500) target = 60 + ((elapsed - 3500) / 2000) * 20;
+      else if (elapsed < 7500) target = 80 + ((elapsed - 5500) / 2000) * 8;
       else                     target = 88;
 
       if (done && elapsed >= MIN_MS) {
