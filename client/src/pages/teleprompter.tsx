@@ -563,49 +563,53 @@ export default function TeleprompterPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
       }
 
-      // Step 1 of the two-step GCS upload: return a signed PUT URL to the iframe.
-      // The iframe then PUTs the blob directly to GCS — no large body through Express.
-      if (e.data?.type === "teleprompter-prepare-upload-request") {
+      // Chunked upload — relay one 5 MB chunk from the iframe to Express.
+      if (e.data?.type === "teleprompter-chunk-upload-request") {
+        const { uploadId, chunkIndex, totalChunks, chunk, mimeType } = e.data;
         const source = e.source as Window | null;
         const reply = (payload: object) => { try { source?.postMessage(payload, "*"); } catch (_) {} };
         try {
-          const res = await fetch("/api/teleprompter/recordings/prepare-upload", {
-            method: "POST",
-            credentials: "include",
+          const ext = (mimeType && mimeType.includes("mp4")) ? ".mp4" : ".webm";
+          const fd = new FormData();
+          fd.append("chunk", chunk, `chunk-${chunkIndex}${ext}`);
+          fd.append("uploadId", uploadId);
+          fd.append("chunkIndex", String(chunkIndex));
+          fd.append("totalChunks", String(totalChunks));
+          const res = await fetch("/api/teleprompter/recordings/upload-chunk", {
+            method: "POST", body: fd, credentials: "include",
           });
           if (!res.ok) {
-            reply({ type: "teleprompter-prepare-upload-result", success: false, error: "Failed to get upload URL" });
+            reply({ type: "teleprompter-chunk-upload-result", success: false, uploadId, chunkIndex, error: `Chunk upload failed (${res.status})` });
             return;
           }
-          const data = await res.json();
-          reply({ type: "teleprompter-prepare-upload-result", success: true, uploadUrl: data.uploadUrl, storageKey: data.storageKey });
+          reply({ type: "teleprompter-chunk-upload-result", success: true, uploadId, chunkIndex });
         } catch (err: any) {
-          reply({ type: "teleprompter-prepare-upload-result", success: false, error: err?.message || "Failed to get upload URL" });
+          reply({ type: "teleprompter-chunk-upload-result", success: false, uploadId, chunkIndex, error: err?.message || "Chunk upload failed" });
         }
       }
 
-      // Step 3: the iframe has finished its PUT to GCS — register the recording in the DB.
-      if (e.data?.type === "teleprompter-confirm-upload-request") {
-        const { storageKey, title, scriptId, durationSeconds, format, mimeType, sizeBytes } = e.data;
+      // Chunked upload — all chunks received; assemble + register.
+      if (e.data?.type === "teleprompter-finalize-upload-request") {
+        const { uploadId, totalChunks, title, scriptId, durationSeconds, format, mimeType, sizeBytes } = e.data;
         const source = e.source as Window | null;
         const reply = (payload: object) => { try { source?.postMessage(payload, "*"); } catch (_) {} };
         try {
-          const res = await fetch("/api/teleprompter/recordings/confirm-upload", {
+          const res = await fetch("/api/teleprompter/recordings/finalize-chunked-upload", {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ storageKey, title, scriptId, durationSeconds, format, mimeType, sizeBytes }),
+            body: JSON.stringify({ uploadId, totalChunks, title, scriptId, durationSeconds, format, mimeType, sizeBytes }),
           });
           if (!res.ok) {
             const errText = await res.text().catch(() => "");
-            reply({ type: "teleprompter-confirm-upload-result", success: false, error: `Save failed (${res.status})${errText ? ": " + errText.slice(0, 120) : ""}` });
+            reply({ type: "teleprompter-finalize-upload-result", success: false, error: `Save failed (${res.status})${errText ? ": " + errText.slice(0, 120) : ""}` });
             return;
           }
           const data = await res.json();
           queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
-          reply({ type: "teleprompter-confirm-upload-result", success: true, data });
+          reply({ type: "teleprompter-finalize-upload-result", success: true, data });
         } catch (err: any) {
-          reply({ type: "teleprompter-confirm-upload-result", success: false, error: err?.message || "Failed to save recording" });
+          reply({ type: "teleprompter-finalize-upload-result", success: false, error: err?.message || "Failed to save recording" });
         }
       }
 

@@ -5114,6 +5114,100 @@ export async function registerRoutes(
     }
   });
 
+  // Chunked upload — Step A: receive one chunk and write it to a temp dir.
+  // Each chunk is ≤ 5 MB so it passes through the deployment ingress without a 413.
+  app.post("/api/teleprompter/recordings/upload-chunk", requireAuth, upload.single("chunk"), async (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ message: "No chunk received" });
+    try {
+      const { uploadId, chunkIndex, totalChunks } = req.body;
+      if (!uploadId || chunkIndex === undefined || !totalChunks) {
+        fs.unlinkSync(file.path);
+        return res.status(400).json({ message: "Missing uploadId, chunkIndex, or totalChunks" });
+      }
+      const chunkDir = path.join(UPLOADS_DIR, "chunks", uploadId);
+      fs.mkdirSync(chunkDir, { recursive: true });
+      const chunkPath = path.join(chunkDir, `chunk-${String(chunkIndex).padStart(6, "0")}`);
+      fs.renameSync(file.path, chunkPath);
+      res.json({ ok: true, chunkIndex });
+    } catch (err) {
+      try { if (req.file) fs.unlinkSync(req.file.path); } catch (_) {}
+      console.error("[Teleprompter] chunk upload error:", err);
+      res.status(500).json({ message: "Failed to store chunk" });
+    }
+  });
+
+  // Chunked upload — Step B: assemble all chunks, faststart, push to GCS, register in DB.
+  app.post("/api/teleprompter/recordings/finalize-chunked-upload", requireAuth, async (req: Request, res: Response) => {
+    const chunkDir = path.join(UPLOADS_DIR, "chunks", req.body?.uploadId ?? "");
+    const assembledPath = path.join(UPLOADS_DIR, `assembled-${req.body?.uploadId ?? "bad"}`);
+    try {
+      const userId = req.session.userId!;
+      const { uploadId, totalChunks, title: rawTitle, scriptId: rawScriptId, durationSeconds: rawDuration, mimeType: rawMime, sizeBytes: rawSize, format: rawFormat } = req.body ?? {};
+      if (!uploadId || !totalChunks) return res.status(400).json({ message: "Missing uploadId or totalChunks" });
+
+      const n = parseInt(String(totalChunks), 10);
+      const writeStream = fs.createWriteStream(assembledPath);
+      for (let i = 0; i < n; i++) {
+        const cp = path.join(chunkDir, `chunk-${String(i).padStart(6, "0")}`);
+        writeStream.write(fs.readFileSync(cp));
+      }
+      await new Promise<void>((resolve, reject) => { writeStream.end((err: any) => err ? reject(err) : resolve()); });
+      try { fs.rmSync(chunkDir, { recursive: true }); } catch (_) {}
+
+      const scriptId = (typeof rawScriptId === "string" && rawScriptId) ? rawScriptId : null;
+      const baseTitle = (typeof rawTitle === "string" && rawTitle.trim()) ? rawTitle.trim().slice(0, 100) : "Untitled";
+      const durationSeconds = rawDuration ? (parseInt(String(rawDuration), 10) || null) : null;
+      const mimeType = (typeof rawMime === "string" && rawMime) ? rawMime : "video/webm";
+      const format = (typeof rawFormat === "string" && ["landscape", "portrait", "square"].includes(rawFormat)) ? rawFormat : "landscape";
+      const isMp4 = mimeType.includes("mp4");
+
+      let takeNumber: number;
+      if (scriptId) {
+        takeNumber = await storage.incrementTeleprompterScriptTakeCount(scriptId, userId);
+      } else {
+        const existingRecordings = await storage.getTeleprompterRecordingsByUser(userId);
+        const takeRegex = /^Take (\d+)\s*\u2014/;
+        const suffix = " \u2014 " + baseTitle;
+        const maxTake = existingRecordings
+          .filter((r) => r.title.endsWith(suffix))
+          .reduce((max, r) => { const m = takeRegex.exec(r.title); return m ? Math.max(max, parseInt(m[1], 10)) : max; }, 0);
+        takeNumber = maxTake + 1;
+      }
+      const title = `Take ${takeNumber} \u2014 ${baseTitle}`;
+      const objectId = crypto.randomUUID();
+      const storageKey = `/objects/recordings/${userId}/${objectId}.mp4`;
+
+      let uploadPath = assembledPath;
+      let faststartPath: string | null = null;
+      if (isMp4) {
+        const processed = await faststartMp4(assembledPath);
+        if (processed !== assembledPath) { faststartPath = processed; uploadPath = processed; }
+      }
+
+      const fileBuffer = fs.readFileSync(uploadPath);
+      const finalMime = isMp4 ? "video/mp4" : (mimeType || "video/webm");
+      const objectStorage = new ObjectStorageService();
+      await objectStorage.uploadFile(storageKey, fileBuffer, finalMime);
+      try { fs.unlinkSync(assembledPath); } catch (_) {}
+      if (faststartPath) { try { fs.unlinkSync(faststartPath); } catch (_) {} }
+
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      const recording = await storage.createTeleprompterRecording({
+        userId, scriptId, title, storageKey,
+        mimeType: finalMime, sizeBytes: fileBuffer.length,
+        durationSeconds, format, expiresAt,
+      });
+      res.json(recording);
+    } catch (err) {
+      try { fs.unlinkSync(assembledPath); } catch (_) {}
+      try { fs.rmSync(chunkDir, { recursive: true }); } catch (_) {}
+      console.error("[Teleprompter] finalize-chunked-upload error:", err);
+      res.status(500).json({ message: "Failed to finalize recording" });
+    }
+  });
+
   app.post("/api/teleprompter/recordings", requireAuth, upload.single("video"), async (req: Request, res: Response) => {
     const file = req.file;
     if (!file) return res.status(400).json({ message: "No video file received" });
