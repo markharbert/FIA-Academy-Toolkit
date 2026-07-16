@@ -718,34 +718,6 @@ export default function TopicPulsePage() {
 
                 {/* LEFT: topic list */}
                 <div className={`${selectedSavedItem ? "w-72 shrink-0" : "flex-1"} space-y-4`}>
-                  {/* Progress bar */}
-                  <div className="rounded-xl border bg-card p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-semibold">Your Progress</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length} of {savedTopics.length} scripted
-                      </p>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-violet-500 transition-all"
-                        style={{
-                          width: savedTopics.length > 0
-                            ? `${((savedTopics as any[]).filter((s) => s.completedAt || s.status === "completed").length / savedTopics.length) * 100}%`
-                            : "0%"
-                        }}
-                      />
-                    </div>
-                    {(() => {
-                      const remaining = (savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length;
-                      return (
-                        <p className="text-xs text-muted-foreground mt-1.5">
-                          {remaining > 0 ? `${remaining} topic${remaining !== 1 ? "s" : ""} ready to script` : "All topics scripted! 🎉"}
-                        </p>
-                      );
-                    })()}
-                  </div>
-
                   {/* Active topics */}
                   {(savedTopics as any[]).filter((s) => !s.completedAt && s.status !== "completed").length > 0 && (
                     <div>
