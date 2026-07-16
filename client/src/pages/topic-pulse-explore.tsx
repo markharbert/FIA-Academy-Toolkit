@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { SiGoogle } from "react-icons/si";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Topic, TopicRun, TopicIntent, TrendDataPoint, DemandSignals } from "@shared/schema";
+import type { Topic, TopicRun, TopicIntent, TrendDataPoint, DemandSignals, Script } from "@shared/schema";
 
 function IntentAnalysisSection({ topicId, existingAnalysis }: { topicId: string; existingAnalysis?: string | null }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -403,6 +403,17 @@ export default function TopicPulseExplorePage() {
     enabled: !!runId,
   });
 
+  const { data: scripts } = useQuery<(Script & { topic?: Topic })[]>({
+    queryKey: ["/api/topic-pulse/scripts"],
+  });
+
+  // Map of topicId → script for quick lookup
+  const scriptByTopicId = useMemo(() => {
+    const map = new Map<string, Script>();
+    scripts?.forEach((s) => { if (s.topicId) map.set(s.topicId, s); });
+    return map;
+  }, [scripts]);
+
   const enrichMutation = useMutation({
     mutationFn: async (topicId: string) => {
       const res = await apiRequest("POST", `/api/topic-pulse/topics/${topicId}/enrich`, {});
@@ -450,6 +461,7 @@ export default function TopicPulseExplorePage() {
     },
     onSuccess: (data) => {
       toast({ title: "Script generated!" });
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/scripts"] });
       navigate(`/video-studio/scripts/${data.id}`);
     },
     onError: (err: Error) => {
@@ -628,8 +640,14 @@ export default function TopicPulseExplorePage() {
               >
                 <CardContent className="py-3">
                   <div className="flex items-center justify-between gap-4">
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
                       <p className="text-sm font-medium">{topic.topicTitle}</p>
+                      {scriptByTopicId.has(topic.id) && (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20 shrink-0">
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                          Script ready
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <SearchVolumeBadge volume={topic.monthlySearchVolume} testId={`badge-volume-${topic.id}`} />
@@ -666,20 +684,39 @@ export default function TopicPulseExplorePage() {
                 <div>
                   
                   <div className="space-y-2 mb-5">
-                    <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a full video script.</p>
-                    <Button 
-                      onClick={() => scriptMutation.mutate({ topicId: selectedTopic.id, videoLengthTarget: "6-10", tonePreference: "friendly" })}
-                      disabled={scriptMutation.isPending}
-                      className="w-full bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold h-11"
-                      data-testid="button-generate-script"
-                    >
-                      {scriptMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <FileText className="h-4 w-4 mr-2" />
-                      )}
-                      {scriptMutation.isPending ? "Generating…" : "Generate Script Outline →"}
-                    </Button>
+                    {scriptByTopicId.has(selectedTopic.id) ? (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Script already generated for this topic</p>
+                        </div>
+                        <Button
+                          onClick={() => navigate(`/video-studio/scripts/${scriptByTopicId.get(selectedTopic.id)!.id}`)}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-semibold h-11"
+                          data-testid="button-go-to-script"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Go to Script →
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a full video script.</p>
+                        <Button
+                          onClick={() => scriptMutation.mutate({ topicId: selectedTopic.id, videoLengthTarget: "6-10", tonePreference: "friendly" })}
+                          disabled={scriptMutation.isPending}
+                          className="w-full bg-violet-600 hover:bg-violet-700 text-white border-0 font-semibold h-11"
+                          data-testid="button-generate-script"
+                        >
+                          {scriptMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4 mr-2" />
+                          )}
+                          {scriptMutation.isPending ? "Generating…" : "Generate Script Outline →"}
+                        </Button>
+                      </>
+                    )}
                     <div className="flex gap-2">
                       <Button 
                         variant="outline"
