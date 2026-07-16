@@ -149,8 +149,9 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     .cam-btn-green:hover{background:#059669}
 
     /* upload spinner */
-    .upload-spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.12);border-top-color:rgba(255,255,255,.75);border-radius:50%;animation:spin .75s linear infinite;margin:8px auto 4px}
+    .upload-spinner{width:48px;height:48px;border:4px solid rgba(255,255,255,.1);border-top-color:#10b981;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
     @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes bar-glow{0%,100%{box-shadow:0 0 10px rgba(16,185,129,.5)}50%{box-shadow:0 0 22px rgba(16,185,129,.85)}}
 
     #cam-footer{flex-shrink:0;padding:6px 12px;font-family:monospace;font-size:9px;color:#222;border-top:1px solid #1a1a1a;text-align:center}
     #download-info{font-family:monospace;font-size:11px;color:rgba(255,255,255,.3)}
@@ -292,19 +293,17 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         </div>
 
         <!-- UPLOADING -->
-        <div id="cam-uploading" class="cam-section">
-          <p class="cam-msg warn" style="text-align:center;font-size:13px;font-weight:700">⚠ Don't close this window yet</p>
-          <p class="cam-msg" style="text-align:center;font-size:11px;margin-top:-4px">Your video is uploading. Closing now will lose your recording.</p>
-          <div style="margin:10px 0 4px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <span style="font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.45)">Uploading…</span>
-              <span id="upload-pct" style="font-family:monospace;font-size:11px;color:rgba(255,255,255,.7)">0%</span>
-            </div>
-            <div style="background:rgba(255,255,255,.1);border-radius:999px;height:7px;overflow:hidden">
-              <div id="upload-bar" style="height:100%;width:0%;background:#10b981;border-radius:999px;transition:width .25s ease"></div>
-            </div>
+        <div id="cam-uploading" class="cam-section" style="gap:6px">
+          <div class="upload-spinner"></div>
+          <p style="font-family:Arial,sans-serif;font-size:22px;font-weight:800;color:#fff;text-align:center;margin:0;letter-spacing:-.01em">Video Uploading…</p>
+          <p style="font-family:Arial,sans-serif;font-size:13px;color:#fbbf24;font-weight:700;text-align:center;margin:0 0 6px;line-height:1.4">⚠&nbsp; Do NOT close or refresh this window</p>
+          <div style="background:rgba(255,255,255,.12);border-radius:999px;height:20px;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.07)">
+            <div id="upload-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#059669,#10b981,#34d399);border-radius:999px;transition:width .5s ease;animation:bar-glow 1.8s ease-in-out infinite"></div>
           </div>
-          <p class="cam-msg" style="text-align:center;font-size:10px;color:rgba(255,255,255,.25);margin-top:4px">Large videos may take several minutes — this window will close automatically when done.</p>
+          <div style="text-align:center;margin:2px 0 4px">
+            <span id="upload-pct" style="font-family:monospace;font-size:32px;font-weight:800;color:#10b981;line-height:1">0%</span>
+          </div>
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.35);text-align:center;margin:0;line-height:1.5">Your take is being saved to the cloud.<br>Large videos may take a minute or two.</p>
         </div>
 
         <!-- REVIEW -->
@@ -724,17 +723,38 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       // This avoids all cookie/origin issues when running inside a blob-URL iframe.
       var inIframe=!!(window.parent&&window.parent!==window);
       if(inIframe){
+        // ── Simulated progress animation (0→88% while waiting, then 100% on success) ──
+        var simPct=0;
+        var simAnim=setInterval(function(){
+          // Decelerating approach: moves fast early, slows near 88%
+          simPct=simPct+(88-simPct)*0.04;
+          var p=Math.round(simPct);
+          if(bar)bar.style.width=p+'%';
+          if(pct)pct.textContent=p+'%';
+        },350);
+
+        function finishUploadAnim(success,data,errMsg){
+          clearInterval(simAnim);
+          if(success){
+            if(bar)bar.style.width='100%';
+            if(pct)pct.textContent='100%';
+            setTimeout(function(){onSuccess(data);},500);
+          } else {
+            onFail(errMsg||'Upload failed');
+          }
+        }
+
         var parentReplyTimer;
         function onUploadResult(ev){
           if(!ev.data||ev.data.type!=='teleprompter-upload-result')return;
           clearTimeout(parentReplyTimer);
           window.removeEventListener('message',onUploadResult);
-          if(ev.data.success){onSuccess(ev.data.data);}
-          else{onFail(ev.data.error||'Upload failed');}
+          finishUploadAnim(ev.data.success,ev.data.data,ev.data.error);
         }
         window.addEventListener('message',onUploadResult);
         parentReplyTimer=setTimeout(function(){
           window.removeEventListener('message',onUploadResult);
+          clearInterval(simAnim);
           onFail('Upload timed out — tap Retry Upload to try again');
         },120000);
         try{
@@ -750,6 +770,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         }catch(err){
           clearTimeout(parentReplyTimer);
           window.removeEventListener('message',onUploadResult);
+          clearInterval(simAnim);
           onFail('Could not communicate with parent window');
         }
         return;
