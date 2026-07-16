@@ -462,9 +462,6 @@ export default function TopicPulseExplorePage() {
   const [pendingGenerateTopicId, setPendingGenerateTopicId] = useState<string | null>(null);
   const [genVideoLength, setGenVideoLength] = useState("6-10");
   const [genTone, setGenTone] = useState("friendly");
-  const [showResearchConfirm, setShowResearchConfirm] = useState(false);
-  const [pendingResearchQuery, setPendingResearchQuery] = useState<string | null>(null);
-
   const scriptMutation = useMutation({
     mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string }) => {
       const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", {
@@ -481,25 +478,6 @@ export default function TopicPulseExplorePage() {
     onError: (err: Error) => {
       toast({
         title: "Script generation failed",
-        description: err.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const researchDeeperMutation = useMutation({
-    mutationFn: async (seedQuery: string) => {
-      const res = await apiRequest("POST", "/api/topic-pulse/search", { seedQuery });
-      return res.json();
-    },
-    onSuccess: (data: { runId: string }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/runs"] });
-      toast({ title: "New search started!" });
-      navigate(`/video-studio/research/explore/${data.runId}`);
-    },
-    onError: (err: Error) => {
-      toast({
-        title: "Search failed",
         description: err.message,
         variant: "destructive",
       });
@@ -713,21 +691,6 @@ export default function TopicPulseExplorePage() {
                         )}
                         Save to My List
                       </Button>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => { setPendingResearchQuery(selectedTopic.keywordQuery); setShowResearchConfirm(true); }}
-                        disabled={researchDeeperMutation.isPending}
-                        data-testid="button-research-deeper"
-                      >
-                        {researchDeeperMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                        ) : (
-                          <Search className="h-3.5 w-3.5 mr-1.5" />
-                        )}
-                        Find More Topics
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -900,29 +863,6 @@ export default function TopicPulseExplorePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Research Deeper confirmation */}
-      <AlertDialog open={showResearchConfirm} onOpenChange={setShowResearchConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Start a new search?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This uses one research credit to run a new search using "{pendingResearchQuery}" as the seed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-research-confirm-cancel">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (pendingResearchQuery) researchDeeperMutation.mutate(pendingResearchQuery);
-                setShowResearchConfirm(false);
-              }}
-              data-testid="button-research-confirm-go"
-            >
-              Yes, search
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
