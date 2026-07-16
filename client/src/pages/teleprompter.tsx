@@ -1217,8 +1217,8 @@ export default function TeleprompterPage() {
       {/* Transcript viewer modal */}
       <Dialog open={transcriptModal.open} onOpenChange={(open) => !open && setTranscriptModal((m) => ({ ...m, open: false }))}>
         <DialogContent
-          className={cn("w-full flex flex-col overflow-hidden transition-all", transcriptModal.scoreJson ? "max-w-7xl" : "max-w-2xl")}
-          style={{ maxHeight: "90vh", height: "90vh" }}
+          className={cn("w-full flex flex-col overflow-hidden transition-all", transcriptModal.scoreJson ? "max-w-[96vw]" : "max-w-2xl")}
+          style={transcriptModal.scoreJson ? { maxHeight: "94vh", height: "94vh" } : { maxHeight: "90vh" }}
         >
           <DialogHeader className="shrink-0">
             <DialogTitle className="text-base leading-snug">{transcriptModal.title}</DialogTitle>
