@@ -403,53 +403,49 @@ export default function TopicPulsePage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
         <div className="absolute -bottom-20 -right-10 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="absolute -top-14 -left-6 h-56 w-56 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative max-w-4xl mx-auto px-6 py-6 flex items-center gap-4">
-          <Link href="/video-studio">
-            <button className="flex items-center gap-1 text-white/50 hover:text-white text-sm transition-colors shrink-0" data-testid="button-back-video-studio">
-              <ArrowLeft className="h-4 w-4" />
-              Video Studio
-            </button>
-          </Link>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
-              <h1 className="text-xl font-bold text-white" data-testid="text-page-title">Research</h1>
-              {creditsData && (
-                <div
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${
-                    creditsExhausted || creditsLow
-                      ? "bg-red-500/15 text-red-400 ring-red-500/30"
-                      : creditsMedium
-                      ? "bg-amber-500/15 text-amber-400 ring-amber-500/30"
-                      : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
-                  }`}
-                  data-testid="credits-display"
+        <div className="relative max-w-4xl mx-auto px-6 py-6">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
+            <h1 className="text-xl font-bold text-white" data-testid="text-page-title">Research</h1>
+            {creditsData && (
+              <div
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${
+                  creditsExhausted || creditsLow
+                    ? "bg-red-500/15 text-red-400 ring-red-500/30"
+                    : creditsMedium
+                    ? "bg-amber-500/15 text-amber-400 ring-amber-500/30"
+                    : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
+                }`}
+                data-testid="credits-display"
+              >
+                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${creditsExhausted || creditsLow ? "bg-red-400" : creditsMedium ? "bg-amber-400" : "bg-emerald-400"}`} />
+                {creditsExhausted
+                  ? "No searches left this month"
+                  : `${creditsRemaining.toLocaleString()} search${creditsRemaining !== 1 ? "es" : ""} left`}
+              </div>
+            )}
+          </div>
+          <p className="text-white/50 text-xs mt-0.5">Find in-demand YouTube topics and generate scripts with Mark's 5-part formula</p>
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 mt-2.5">
+            <Link href="/video-studio">
+              <span className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors cursor-pointer" data-testid="button-back-video-studio">Video Studio</span>
+            </Link>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            {activeTab === "saved" ? (
+              <>
+                <button
+                  onClick={() => setActiveTab("research")}
+                  className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
                 >
-                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${creditsExhausted || creditsLow ? "bg-red-400" : creditsMedium ? "bg-amber-400" : "bg-emerald-400"}`} />
-                  {creditsExhausted
-                    ? "No searches left this month"
-                    : `${creditsRemaining.toLocaleString()} search${creditsRemaining !== 1 ? "es" : ""} left`}
-                </div>
-              )}
-            </div>
-            <p className="text-white/50 text-xs mt-0.5">Find in-demand YouTube topics and generate scripts with Mark's 5-part formula</p>
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-1.5 mt-2.5">
-              {activeTab === "saved" ? (
-                <>
-                  <button
-                    onClick={() => setActiveTab("research")}
-                    className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
-                  >
-                    Research
-                  </button>
-                  <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
-                  <span className="text-white/75 text-xs font-medium">Saved Topics</span>
-                </>
-              ) : (
-                <span className="text-white/45 text-xs font-medium">Research</span>
-              )}
-            </div>
+                  Research
+                </button>
+                <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+                <span className="text-white/75 text-xs font-medium">Saved Topics</span>
+              </>
+            ) : (
+              <span className="text-white/75 text-xs font-medium">Research</span>
+            )}
           </div>
         </div>
       </div>

@@ -553,6 +553,14 @@ export default function TopicPulseExplorePage() {
           {/* Breadcrumb */}
           <div className="flex items-center gap-1.5 mb-2">
             <button
+              onClick={() => navigate("/video-studio")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+              data-testid="button-back-video-studio"
+            >
+              Video Studio
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <button
               onClick={() => navigate("/video-studio/research")}
               className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
               data-testid="button-back"
