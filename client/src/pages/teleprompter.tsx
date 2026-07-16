@@ -958,17 +958,19 @@ export default function TeleprompterPage() {
                     <Play className="h-4 w-4 mr-2" />
                     Open Teleprompter
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleOpenModal}
-                    disabled={!content.trim() || isSaving}
-                    data-testid="button-open-teleprompter-modal"
-                    className="text-xs"
-                    size="sm"
-                  >
-                    <Play className="h-3.5 w-3.5 mr-1.5" />
-                    Try in-page (Beta)
-                  </Button>
+                  {scoreUsage?.isAdmin && (
+                    <Button
+                      variant="outline"
+                      onClick={handleOpenModal}
+                      disabled={!content.trim() || isSaving}
+                      data-testid="button-open-teleprompter-modal"
+                      className="text-xs"
+                      size="sm"
+                    >
+                      <Play className="h-3.5 w-3.5 mr-1.5" />
+                      Try in-page (Beta)
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={handleSave}
@@ -1164,20 +1166,22 @@ export default function TeleprompterPage() {
 
       {/* In-page teleprompter overlay (Beta) */}
       {modalHtml && (
-        <div className="fixed inset-0 z-[9999] flex flex-col bg-black">
-          <button
-            onClick={() => setModalHtml(null)}
-            className="absolute top-3 right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
-            data-testid="button-close-teleprompter-modal"
-          >
-            ✕ Close
-          </button>
-          <iframe
-            srcDoc={modalHtml}
-            allow="camera; microphone"
-            className="flex-1 w-full border-0"
-            title="Teleprompter"
-          />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70">
+          <div className="relative flex flex-col bg-black rounded-xl overflow-hidden" style={{ width: "75vw", height: "95vh" }}>
+            <button
+              onClick={() => setModalHtml(null)}
+              className="absolute top-3 right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
+              data-testid="button-close-teleprompter-modal"
+            >
+              ✕ Close
+            </button>
+            <iframe
+              srcDoc={modalHtml}
+              allow="camera; microphone"
+              className="flex-1 w-full border-0"
+              title="Teleprompter"
+            />
+          </div>
         </div>
       )}
 
