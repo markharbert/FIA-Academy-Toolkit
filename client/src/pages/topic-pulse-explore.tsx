@@ -647,7 +647,6 @@ export default function TopicPulseExplorePage() {
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium">{topic.topicTitle}</p>
-                      <p className="text-sm text-muted-foreground truncate">{topic.keywordQuery}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <SearchVolumeBadge volume={topic.monthlySearchVolume} testId={`badge-volume-${topic.id}`} />
