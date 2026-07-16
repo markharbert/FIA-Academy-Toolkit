@@ -95,6 +95,7 @@ const allNavItems: NavItem[] = [
     testId: "nav-funnel-grid",
     matchPaths: ["/funnel-grid"],
     collaboratorVisible: false,
+    adminOnly: true,
   },
   {
     title: "Video Studio",
