@@ -433,6 +433,23 @@ export default function TopicPulsePage() {
               )}
             </div>
             <p className="text-white/50 text-xs mt-0.5">Find in-demand YouTube topics and generate scripts with Mark's 5-part formula</p>
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5 mt-2.5">
+              {activeTab === "saved" ? (
+                <>
+                  <button
+                    onClick={() => setActiveTab("research")}
+                    className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+                  >
+                    Research
+                  </button>
+                  <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+                  <span className="text-white/75 text-xs font-medium">Saved Topics</span>
+                </>
+              ) : (
+                <span className="text-white/45 text-xs font-medium">Research</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

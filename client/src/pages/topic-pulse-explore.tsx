@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import { 
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Minus, Bookmark, 
   FileText, Sparkles, Lightbulb, HelpCircle, CheckCircle2, AlertCircle,
-  ArrowUpDown, ArrowDown, ArrowUp, X, Search, Brain, ChevronDown
+  ArrowUpDown, ArrowDown, ArrowUp, X, Search, Brain, ChevronDown, ChevronRight
 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -549,16 +549,23 @@ export default function TopicPulseExplorePage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(32_60%_16%)]" />
         <div className="absolute -bottom-16 -right-10 h-56 w-56 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="absolute -top-12 -left-6 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative px-4 py-4 flex items-center gap-4 max-w-6xl mx-auto w-full">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/video-studio/research")} className="text-white/70 hover:text-white hover:bg-white/10" data-testid="button-back">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold text-white" data-testid="text-run-query">{run?.seedQuery}</h1>
-            <p className="text-sm text-white/60">
-              {filteredTopics.length} topics {intentFilter !== "all" && `(filtered from ${topics?.length})`}
-            </p>
+        <div className="relative px-5 py-5 max-w-6xl mx-auto w-full">
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1.5 mb-2">
+            <button
+              onClick={() => navigate("/video-studio/research")}
+              className="text-white/45 hover:text-white/75 text-xs font-medium transition-colors"
+              data-testid="button-back"
+            >
+              Research
+            </button>
+            <ChevronRight className="h-3 w-3 text-white/25 shrink-0" />
+            <span className="text-white/75 text-xs font-medium truncate">{run?.seedQuery}</span>
           </div>
+          <h1 className="text-xl font-semibold text-white" data-testid="text-run-query">{run?.seedQuery}</h1>
+          <p className="text-sm text-white/60 mt-0.5">
+            {filteredTopics.length} topics {intentFilter !== "all" && `(filtered from ${topics?.length})`}
+          </p>
         </div>
       </div>
 
