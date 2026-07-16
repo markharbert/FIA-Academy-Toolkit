@@ -3,7 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft, Bookmark, CheckCircle2 } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Loader2, Search, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft, Bookmark, CheckCircle2, FileText, Check, RotateCcw, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +15,26 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { TopicRun } from "@shared/schema";
@@ -58,6 +79,11 @@ export default function TopicPulsePage() {
   const [runsPage, setRunsPage] = useState(1);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<"research" | "saved">("research");
+  const [selectedSavedItem, setSelectedSavedItem] = useState<any | null>(null);
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [genVideoLength, setGenVideoLength] = useState("6-10");
+  const [genTone, setGenTone] = useState("friendly");
+  const [showUnsaveConfirm, setShowUnsaveConfirm] = useState(false);
   const PAGE_SIZE = 15;
 
   const { data: runsData, isLoading: runsLoading } = useQuery<RunsPage>({
@@ -144,6 +170,68 @@ export default function TopicPulsePage() {
 
   const handlePresetClick = (type: string) => {
     setSelectedType(selectedType === type ? undefined : type);
+  };
+
+  const scriptMutation = useMutation({
+    mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string }) => {
+      const res = await apiRequest("POST", "/api/topic-pulse/scripts/generate", { topicId, videoLengthTarget, tonePreference });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Script outline generated!" });
+      navigate(`/video-studio/scripts/${data.id}`);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const completeSavedMutation = useMutation({
+    mutationFn: async (savedId: string) => {
+      const res = await apiRequest("POST", `/api/topic-pulse/saved-topics/${savedId}/complete`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/saved-topics"] });
+      toast({ title: "Marked as done" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const resetSavedMutation = useMutation({
+    mutationFn: async (savedId: string) => {
+      const res = await apiRequest("POST", `/api/topic-pulse/saved-topics/${savedId}/reset`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/saved-topics"] });
+      toast({ title: "Reset to active" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const unsaveMutation = useMutation({
+    mutationFn: async (savedId: string) => {
+      await apiRequest("DELETE", `/api/topic-pulse/saved-topics/${savedId}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topic-pulse/saved-topics"] });
+      setSelectedSavedItem(null);
+      toast({ title: "Topic removed from saved list" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const getOpportunityLabel = (score: number) => {
+    if (score >= 70) return { label: "Great opportunity", color: "text-green-600 dark:text-green-400" };
+    if (score >= 40) return { label: "Good potential", color: "text-amber-600 dark:text-amber-400" };
+    return { label: "Challenging", color: "text-rose-600 dark:text-rose-400" };
   };
 
   return (
@@ -495,7 +583,7 @@ export default function TopicPulsePage() {
                         <button
                           key={saved.id}
                           className="w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl border bg-card hover:bg-muted/50 hover:-translate-y-px transition-all text-left"
-                          onClick={() => navigate(`/video-studio/research/saved?topicId=${saved.topic?.id ?? ""}`)}
+                          onClick={() => setSelectedSavedItem(saved)}
                           data-testid={`card-saved-hub-${saved.id}`}
                         >
                           <div className="flex-1 min-w-0">
@@ -531,7 +619,7 @@ export default function TopicPulsePage() {
                         <button
                           key={saved.id}
                           className="w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl border bg-card opacity-60 hover:opacity-100 hover:-translate-y-px transition-all text-left"
-                          onClick={() => navigate(`/video-studio/research/saved?topicId=${saved.topic?.id ?? ""}`)}
+                          onClick={() => setSelectedSavedItem(saved)}
                           data-testid={`card-saved-hub-done-${saved.id}`}
                         >
                           <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -588,6 +676,195 @@ export default function TopicPulsePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Unsave confirm ── */}
+      <AlertDialog open={showUnsaveConfirm} onOpenChange={setShowUnsaveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this topic?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will be removed from your saved list. You can save it again from the search results.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (selectedSavedItem) {
+                  unsaveMutation.mutate(selectedSavedItem.id);
+                  setShowUnsaveConfirm(false);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Generate Script Outline options dialog ── */}
+      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
+        <DialogContent className="max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Generate Script Outline</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Video Length</Label>
+              <Select value={genVideoLength} onValueChange={setGenVideoLength}>
+                <SelectTrigger data-testid="select-video-length">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3-5">Short (3–5 min)</SelectItem>
+                  <SelectItem value="6-10">Medium (6–10 min)</SelectItem>
+                  <SelectItem value="11-20">Long (11–20 min)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Tone</Label>
+              <Select value={genTone} onValueChange={setGenTone}>
+                <SelectTrigger data-testid="select-tone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="friendly">Friendly &amp; Conversational</SelectItem>
+                  <SelectItem value="professional">Professional</SelectItem>
+                  <SelectItem value="educational">Educational</SelectItem>
+                  <SelectItem value="entertaining">Entertaining</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (selectedSavedItem?.topic?.id) {
+                  scriptMutation.mutate({ topicId: selectedSavedItem.topic.id, videoLengthTarget: genVideoLength, tonePreference: genTone });
+                  setShowGenerateDialog(false);
+                }
+              }}
+              disabled={scriptMutation.isPending}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+              data-testid="button-confirm-generate"
+            >
+              {scriptMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Generate Script Outline
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Saved topic detail sheet ── */}
+      <Sheet open={!!selectedSavedItem} onOpenChange={(open) => { if (!open) setSelectedSavedItem(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-0 p-0">
+          <SheetHeader className="px-5 py-4 border-b shrink-0">
+            <div className="flex items-start justify-between gap-3">
+              <SheetTitle className="text-base leading-snug">{selectedSavedItem?.topic?.topicTitle}</SheetTitle>
+              <Button variant="ghost" size="icon" className="shrink-0 -mr-1 -mt-1" onClick={() => setSelectedSavedItem(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {selectedSavedItem?.topic?.keywordQuery && (
+              <p className="text-sm text-muted-foreground">{selectedSavedItem.topic.keywordQuery}</p>
+            )}
+          </SheetHeader>
+
+          <div className="flex-1 overflow-auto px-5 py-5 space-y-5">
+            {/* Primary CTA */}
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Looks like a good fit? Turn it into a video script outline.</p>
+              <Button
+                onClick={() => setShowGenerateDialog(true)}
+                disabled={scriptMutation.isPending}
+                className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold h-11"
+                data-testid="button-sheet-generate"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Generate Script Outline →
+              </Button>
+            </div>
+
+            {/* Secondary actions */}
+            <div className="flex gap-2">
+              {(selectedSavedItem?.completedAt || selectedSavedItem?.status === "completed") ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => resetSavedMutation.mutate(selectedSavedItem.id)}
+                  disabled={resetSavedMutation.isPending}
+                  data-testid="button-sheet-reset"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                  Reset to Active
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => completeSavedMutation.mutate(selectedSavedItem.id)}
+                  disabled={completeSavedMutation.isPending}
+                  data-testid="button-sheet-done"
+                >
+                  <Check className="h-3.5 w-3.5 mr-1.5" />
+                  Mark Done
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => setShowUnsaveConfirm(true)}
+                disabled={unsaveMutation.isPending}
+                data-testid="button-sheet-remove"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            {/* Stats */}
+            {selectedSavedItem?.topic && (
+              <div className="space-y-3 pt-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Topic Stats</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedSavedItem.topic.monthlySearchVolume != null && (
+                    <div className="p-3 rounded-xl border bg-muted/30">
+                      <p className="text-xs text-muted-foreground mb-1">Monthly Searches</p>
+                      <p className="font-mono text-lg font-bold text-blue-600 dark:text-blue-400">
+                        {selectedSavedItem.topic.monthlySearchVolume >= 1000
+                          ? `${Math.round(selectedSavedItem.topic.monthlySearchVolume / 1000)}K`
+                          : selectedSavedItem.topic.monthlySearchVolume}
+                      </p>
+                    </div>
+                  )}
+                  {selectedSavedItem.topic.opportunityScore != null && (
+                    <div className="p-3 rounded-xl border bg-muted/30">
+                      <p className="text-xs text-muted-foreground mb-1">Opportunity</p>
+                      <p className={`font-mono text-lg font-bold ${getOpportunityLabel(selectedSavedItem.topic.opportunityScore).color}`}>
+                        {selectedSavedItem.topic.opportunityScore}/100
+                      </p>
+                      <p className={`text-xs ${getOpportunityLabel(selectedSavedItem.topic.opportunityScore).color}`}>
+                        {getOpportunityLabel(selectedSavedItem.topic.opportunityScore).label}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {selectedSavedItem.topic.competitionLevel && (
+                  <div className="p-3 rounded-xl border bg-muted/30">
+                    <p className="text-xs text-muted-foreground mb-1">Competition</p>
+                    <p className="font-medium text-sm capitalize">{selectedSavedItem.topic.competitionLevel}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
