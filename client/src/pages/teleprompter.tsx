@@ -563,6 +563,53 @@ export default function TeleprompterPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
       }
 
+      // Step 1 of the two-step GCS upload: return a signed PUT URL to the iframe.
+      // The iframe then PUTs the blob directly to GCS — no large body through Express.
+      if (e.data?.type === "teleprompter-prepare-upload-request") {
+        const source = e.source as Window | null;
+        const reply = (payload: object) => { try { source?.postMessage(payload, "*"); } catch (_) {} };
+        try {
+          const res = await fetch("/api/teleprompter/recordings/prepare-upload", {
+            method: "POST",
+            credentials: "include",
+          });
+          if (!res.ok) {
+            reply({ type: "teleprompter-prepare-upload-result", success: false, error: "Failed to get upload URL" });
+            return;
+          }
+          const data = await res.json();
+          reply({ type: "teleprompter-prepare-upload-result", success: true, uploadUrl: data.uploadUrl, storageKey: data.storageKey });
+        } catch (err: any) {
+          reply({ type: "teleprompter-prepare-upload-result", success: false, error: err?.message || "Failed to get upload URL" });
+        }
+      }
+
+      // Step 3: the iframe has finished its PUT to GCS — register the recording in the DB.
+      if (e.data?.type === "teleprompter-confirm-upload-request") {
+        const { storageKey, title, scriptId, durationSeconds, format, mimeType, sizeBytes } = e.data;
+        const source = e.source as Window | null;
+        const reply = (payload: object) => { try { source?.postMessage(payload, "*"); } catch (_) {} };
+        try {
+          const res = await fetch("/api/teleprompter/recordings/confirm-upload", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storageKey, title, scriptId, durationSeconds, format, mimeType, sizeBytes }),
+          });
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            reply({ type: "teleprompter-confirm-upload-result", success: false, error: `Save failed (${res.status})${errText ? ": " + errText.slice(0, 120) : ""}` });
+            return;
+          }
+          const data = await res.json();
+          queryClient.invalidateQueries({ queryKey: ["/api/teleprompter/recordings"] });
+          reply({ type: "teleprompter-confirm-upload-result", success: true, data });
+        } catch (err: any) {
+          reply({ type: "teleprompter-confirm-upload-result", success: false, error: err?.message || "Failed to save recording" });
+        }
+      }
+
+      // Legacy handler kept for any in-flight uploads from old iframe instances.
       if (e.data?.type === "teleprompter-upload-request") {
         const { blob, title, scriptId, durationSeconds, format, mimeType } = e.data;
         const source = e.source as Window | null;
