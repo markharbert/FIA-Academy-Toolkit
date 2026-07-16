@@ -226,33 +226,17 @@ export default function TeleprompterPage() {
   const [showDirtyDialog, setShowDirtyDialog] = useState(false);
   const [dirtyDialogAction, setDirtyDialogAction] = useState<(() => void) | null>(null);
 
-  // Fetch recording as a blob when preview opens — one continuous download instead
-  // of the browser making multiple range requests hunting for the moov atom.
+  // Set the stream URL directly — the browser handles range requests natively,
+  // which works for any file size without loading into memory first.
   useEffect(() => {
     if (!previewRec) {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
       setPreviewLoading(false);
       return;
     }
-    let cancelled = false;
-    setPreviewLoading(true);
-    setPreviewUrl(null);
+    setPreviewUrl(`/api/teleprompter/recordings/${previewRec.id}/stream`);
+    setPreviewLoading(false);
     setPreviewPlaying(false);
-    fetch(`/api/teleprompter/recordings/${previewRec.id}/stream`, { credentials: "include" })
-      .then((r) => r.blob())
-      .then((blob) => {
-        if (cancelled) return;
-        const url = URL.createObjectURL(blob);
-        setPreviewUrl(url);
-        setPreviewLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setPreviewLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [previewRec?.id]);
 
   const { data: scripts, isLoading } = useQuery<TeleprompterScript[]>({
