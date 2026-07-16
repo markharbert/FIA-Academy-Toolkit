@@ -1254,6 +1254,16 @@ export default function TeleprompterPage() {
                 title="Teleprompter"
               />
             </div>
+            {/* Bottom drag handle */}
+            <div
+              className="flex items-center justify-center px-4 py-1.5 bg-zinc-900 border-t border-white/10 shrink-0 select-none"
+              style={{ cursor: isDragging ? "grabbing" : "grab" }}
+              onMouseDown={handleModalDragStart}
+            >
+              <div className="flex gap-1">
+                <div className="w-8 h-0.5 rounded-full bg-white/20" />
+              </div>
+            </div>
           </div>
         </div>
       )}
