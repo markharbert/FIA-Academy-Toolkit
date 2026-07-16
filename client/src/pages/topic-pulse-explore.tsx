@@ -407,12 +407,21 @@ export default function TopicPulseExplorePage() {
     queryKey: ["/api/topic-pulse/scripts"],
   });
 
-  // Map of topicId → script for quick lookup
-  const scriptByTopicId = useMemo(() => {
-    const map = new Map<string, Script>();
-    scripts?.forEach((s) => { if (s.topicId) map.set(s.topicId, s); });
-    return map;
+  // Two maps: exact topicId match (primary) + topic title match (fallback for re-searched keywords)
+  const { scriptById, scriptByTitle } = useMemo(() => {
+    const byId = new Map<string, Script>();
+    const byTitle = new Map<string, Script>();
+    scripts?.forEach((s) => {
+      if (s.topicId) byId.set(s.topicId, s);
+      if (s.title) byTitle.set(s.title.toLowerCase().trim(), s);
+    });
+    return { scriptById: byId, scriptByTitle: byTitle };
   }, [scripts]);
+
+  // Returns an existing script for a topic — first by exact DB link, then by matching title
+  function getScriptForTopic(topic: Topic): Script | undefined {
+    return scriptById.get(topic.id) ?? scriptByTitle.get(topic.topicTitle.toLowerCase().trim());
+  }
 
   const enrichMutation = useMutation({
     mutationFn: async (topicId: string) => {
@@ -642,7 +651,7 @@ export default function TopicPulseExplorePage() {
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0 flex items-center gap-2">
                       <p className="text-sm font-medium">{topic.topicTitle}</p>
-                      {scriptByTopicId.has(topic.id) && (
+                      {!!getScriptForTopic(topic) && (
                         <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20 shrink-0">
                           <CheckCircle2 className="h-2.5 w-2.5" />
                           Script ready
@@ -684,14 +693,14 @@ export default function TopicPulseExplorePage() {
                 <div>
                   
                   <div className="space-y-2 mb-5">
-                    {scriptByTopicId.has(selectedTopic.id) ? (
+                    {getScriptForTopic(selectedTopic) ? (
                       <>
                         <div className="flex items-center gap-1.5">
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                           <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Script already generated for this topic</p>
                         </div>
                         <Button
-                          onClick={() => navigate(`/video-studio/scripts/${scriptByTopicId.get(selectedTopic.id)!.id}`)}
+                          onClick={() => navigate(`/video-studio/scripts/${getScriptForTopic(selectedTopic)!.id}`)}
                           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white border-0 font-semibold h-11"
                           data-testid="button-go-to-script"
                         >
