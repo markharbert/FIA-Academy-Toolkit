@@ -130,6 +130,23 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
   return text.trim();
 }
 
+// Whisper-based transcription — used for teleprompter recordings.
+// OpenAI Whisper is already billed through the existing OpenAI account,
+// avoiding Gemini quota limits. Max file size: 25MB (ample for short takes).
+export async function transcribeAudioWhisper(audioPath: string): Promise<string> {
+  const absolutePath = path.resolve(audioPath);
+  const fileSizeMB = fs.statSync(absolutePath).size / 1024 / 1024;
+  console.log(`[AI] Whisper transcribing: ${path.basename(audioPath)} (${fileSizeMB.toFixed(2)}MB)`);
+
+  const transcription = await openai.audio.transcriptions.create({
+    model: "whisper-1",
+    file: fs.createReadStream(absolutePath),
+    response_format: "text",
+  });
+
+  return (typeof transcription === "string" ? transcription : (transcription as any).text ?? "").trim();
+}
+
 const scoringSystemPrompt = `You are an expert video marketing coach. Analyze the transcript of a practice video based on the 5-part video creation formula.
 
 THE 5-PART VIDEO CREATION FORMULA:

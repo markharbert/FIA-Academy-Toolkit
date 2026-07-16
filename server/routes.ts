@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeAudio, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints } from "./ai";
+import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
@@ -5282,8 +5282,8 @@ export async function registerRoutes(
       }
       tmpAudioPath = path.join(UPLOADS_DIR, audioResult.audioPath!);
 
-      // Transcribe with Gemini
-      const transcript = await transcribeAudio(tmpAudioPath);
+      // Transcribe with OpenAI Whisper (avoids Gemini quota limits for short takes)
+      const transcript = await transcribeAudioWhisper(tmpAudioPath);
 
       // Persist transcript so subsequent requests are instant
       await storage.updateTeleprompterRecording(recording.id, req.session.userId!, { transcriptText: transcript });
