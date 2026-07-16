@@ -1276,7 +1276,7 @@ export default function TeleprompterPage() {
             </li>
             <li className="flex gap-2">
               <span className="shrink-0 text-primary">→</span>
-              <span>Hit <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">Space</kbd> to play/pause the scroll. Use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">[</kbd> and <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">]</kbd> to slow down or speed up, or drag the Speed slider in the toolbar.</span>
+              <span>Hit <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">Space</kbd> to play/pause the scroll. Use <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">↑</kbd> and <kbd className="px-1.5 py-0.5 text-[11px] rounded bg-muted border border-border">↓</kbd> to speed up or slow down, or drag the Speed slider in the toolbar.</span>
             </li>
             <li className="flex gap-2">
               <span className="shrink-0 text-primary">→</span>

@@ -201,7 +201,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <button class="view-tab active" id="tab-script" onclick="switchView('script')">&#x1F4C4; Script</button>
         <button class="view-tab" id="tab-bullets" onclick="switchView('bullets')">&#x2022; Bullets</button>
       </div>
-      <div id="hint">Space = play/pause &nbsp;·&nbsp; [ / ] = slower / faster &nbsp;·&nbsp; +/− = font size</div>
+      <div id="hint">Space = play/pause &nbsp;·&nbsp; ↑ / ↓ = faster / slower &nbsp;·&nbsp; +/− = font size</div>
     </div>
 
     <!-- Draggable divider -->
@@ -431,8 +431,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     document.addEventListener('keydown',function(e){
       if(e.target===speedSlider)return;
       if(e.key===' '){e.preventDefault();togglePlay();}
-      if(e.key==='['||e.key===','){e.preventDefault();stepSpeed(-1);}
-      if(e.key===']'||e.key==='.'){e.preventDefault();stepSpeed(1);}
+      if(e.key==='ArrowDown'){e.preventDefault();stepSpeed(-1);}
+      if(e.key==='ArrowUp'){e.preventDefault();stepSpeed(1);}
       if(e.key==='r'||e.key==='R')resetScroll();
       if(e.key==='+'||e.key==='='){e.preventDefault();changeFont(1);}
       if(e.key==='-'||e.key==='_'){e.preventDefault();changeFont(-1);}
