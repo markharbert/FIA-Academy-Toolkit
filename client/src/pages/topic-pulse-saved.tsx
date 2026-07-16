@@ -428,6 +428,16 @@ export default function TopicPulseSavedPage() {
               )}
               <SearchVolumeBadge volume={saved.topic.monthlySearchVolume} />
               <OpportunityBadge score={saved.topic.opportunityScore || 0} />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={(e) => { e.stopPropagation(); setPendingUnsaveId(saved.id); setShowUnsaveConfirm(true); }}
+                disabled={deleteMutation.isPending}
+                data-testid={`button-delete-saved-${saved.id}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -463,27 +473,6 @@ export default function TopicPulseSavedPage() {
               </div>
             ) : savedTopics && savedTopics.length > 0 ? (
               <>
-                {/* Progress bar */}
-                <div className="rounded-xl border bg-card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold">Your Progress</p>
-                    <p className="text-sm text-muted-foreground">
-                      {completedTopics.length} of {savedTopics.length} scripted
-                    </p>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-violet-500 transition-all"
-                      style={{ width: `${savedTopics.length > 0 ? (completedTopics.length / savedTopics.length) * 100 : 0}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    {savedTopics.length - completedTopics.length > 0
-                      ? `${savedTopics.length - completedTopics.length} topic${savedTopics.length - completedTopics.length !== 1 ? "s" : ""} ready to script`
-                      : "All topics scripted! 🎉"}
-                  </p>
-                </div>
-
                 <div>
                   <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
                     <Bookmark className="h-4 w-4" />
