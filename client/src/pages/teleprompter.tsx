@@ -138,42 +138,29 @@ function TakePartDetail({
           <span className="text-xs text-muted-foreground font-normal">{levelLabel}</span>
         </div>
       </AccordionTrigger>
-      <AccordionContent className="border border-t-0 rounded-b-xl px-3 pb-3 pt-2.5 space-y-3" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-        {def && (
-          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 p-2.5">
-            <div className="flex items-start gap-2">
-              <Lightbulb className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 mb-0.5">{def.question}</p>
-                <p className="text-xs text-amber-700 dark:text-amber-300/80 leading-relaxed">{def.definition}</p>
-              </div>
+      <AccordionContent className="border border-t-0 rounded-b-xl px-3 pb-3 pt-2.5 space-y-2.5" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
+        {(data.whatMissing.length > 0 || data.suggestions.length > 0) && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+              <Lightbulb className="h-3 w-3" />How to Improve
             </div>
-          </div>
-        )}
-        {data.whatWorked.length > 0 && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide"><Check className="h-3 w-3" />What Worked</div>
-            <ul className="space-y-0.5 pl-4">{data.whatWorked.map((item, i) => <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>)}</ul>
-          </div>
-        )}
-        {data.whatMissing.length > 0 && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide"><AlertTriangle className="h-3 w-3" />What's Missing</div>
-            <ul className="space-y-0.5 pl-4">{data.whatMissing.map((item, i) => <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>)}</ul>
-          </div>
-        )}
-        {data.suggestions.length > 0 && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide"><Lightbulb className="h-3 w-3" />Suggestions</div>
-            <ul className="space-y-0.5 pl-4">{data.suggestions.map((item, i) => <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>)}</ul>
+            <ul className="space-y-0.5 pl-4">
+              {[...data.whatMissing, ...data.suggestions].map((item, i) => (
+                <li key={i} className="text-xs text-muted-foreground list-disc">{item}</li>
+              ))}
+            </ul>
           </div>
         )}
         {data.exampleLines.length > 0 && (
           <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide"><Quote className="h-3 w-3" />Example Lines</div>
-            <div className="space-y-1.5 pl-3">{data.exampleLines.map((line, i) => (
-              <blockquote key={i} className="border-l-2 pl-2.5 text-xs italic text-muted-foreground" style={{ borderColor: color }}>"{line}"</blockquote>
-            ))}</div>
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <Quote className="h-3 w-3" />Try Something Like This
+            </div>
+            <div className="space-y-1.5 pl-3">
+              {data.exampleLines.slice(0, 2).map((line, i) => (
+                <blockquote key={i} className="border-l-2 pl-2.5 text-xs italic text-muted-foreground" style={{ borderColor: color }}>"{line}"</blockquote>
+              ))}
+            </div>
           </div>
         )}
       </AccordionContent>
