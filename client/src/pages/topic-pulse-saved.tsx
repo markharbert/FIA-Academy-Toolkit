@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -242,12 +242,23 @@ function OpportunityBadge({ score }: { score: number }) {
 
 export default function TopicPulseSavedPage() {
   const [, navigate] = useLocation();
+  const search = useSearch();
   const { toast } = useToast();
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
 
   const { data: savedTopics, isLoading } = useQuery<(SavedTopic & { topic: Topic })[]>({
     queryKey: ["/api/topic-pulse/saved-topics"],
   });
+
+  useEffect(() => {
+    if (!savedTopics || selectedTopic) return;
+    const params = new URLSearchParams(search);
+    const topicId = params.get("topicId");
+    if (topicId) {
+      const match = savedTopics.find((s) => s.topic.id === topicId);
+      if (match) setSelectedTopic(match.topic);
+    }
+  }, [savedTopics, search]);
 
   const { data: scripts } = useQuery<any[]>({
     queryKey: ["/api/topic-pulse/scripts"],

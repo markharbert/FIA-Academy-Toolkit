@@ -495,7 +495,7 @@ export default function TopicPulsePage() {
                         <button
                           key={saved.id}
                           className="w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl border bg-card hover:bg-muted/50 hover:-translate-y-px transition-all text-left"
-                          onClick={() => navigate("/video-studio/research/saved")}
+                          onClick={() => navigate(`/video-studio/research/saved?topicId=${saved.topic?.id ?? ""}`)}
                           data-testid={`card-saved-hub-${saved.id}`}
                         >
                           <div className="flex-1 min-w-0">
@@ -531,7 +531,7 @@ export default function TopicPulsePage() {
                         <button
                           key={saved.id}
                           className="w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl border bg-card opacity-60 hover:opacity-100 hover:-translate-y-px transition-all text-left"
-                          onClick={() => navigate("/video-studio/research/saved")}
+                          onClick={() => navigate(`/video-studio/research/saved?topicId=${saved.topic?.id ?? ""}`)}
                           data-testid={`card-saved-hub-done-${saved.id}`}
                         >
                           <div className="flex-1 min-w-0 flex items-center gap-2">
