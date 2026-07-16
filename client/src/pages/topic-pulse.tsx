@@ -4,7 +4,7 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, BookOpen, ShoppingBag, HelpCircle, ListChecks, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft, Bookmark, CheckCircle2, FileText, Check, RotateCcw, X, TrendingUp, TrendingDown, Minus, Lightbulb, Brain, ChevronDown, AlertCircle } from "lucide-react";
+import { Loader2, Search, HelpCircle, Trash2, Clock, Sparkles, ChevronLeft, ChevronRight, ArrowLeft, Bookmark, CheckCircle2, FileText, Check, RotateCcw, X, TrendingUp, TrendingDown, Minus, Lightbulb, Brain, ChevronDown, AlertCircle } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,13 +52,6 @@ interface CreditsData {
   remaining: number;
   resetsAt: string;
 }
-
-const PRESETS = [
-  { label: "Product Review",     description: "Review or compare a product",    icon: ShoppingBag, type: "review",       color: "bg-violet-500/10 text-violet-600 dark:text-violet-400 ring-violet-500/30 hover:bg-violet-500/20", activeColor: "bg-violet-500 text-white ring-violet-500" },
-  { label: "Compare Options",    description: "Side-by-side comparison",         icon: ListChecks,  type: "comparison",   color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30 hover:bg-blue-500/20",           activeColor: "bg-blue-500 text-white ring-blue-500" },
-  { label: "How-To Tutorial",    description: "Teach something step by step",    icon: BookOpen,    type: "how-to",       color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 ring-teal-500/30 hover:bg-teal-500/20",           activeColor: "bg-teal-500 text-white ring-teal-500" },
-  { label: "Solve a Problem",    description: "Fix a common frustration",        icon: HelpCircle,  type: "problem-fix",  color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/30 hover:bg-amber-500/20",       activeColor: "bg-amber-500 text-white ring-amber-500" },
-];
 
 const RUN_ACCENTS = [
   "border-l-violet-500",
@@ -242,7 +235,6 @@ export default function TopicPulsePage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [seedQuery, setSeedQuery] = useState("");
-  const [selectedType, setSelectedType] = useState<string | undefined>();
   const [runsPage, setRunsPage] = useState(1);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<"research" | "saved">("research");
@@ -333,12 +325,9 @@ export default function TopicPulsePage() {
       toast({ title: "Enter a topic", description: "Please enter a niche or keyword to search", variant: "destructive" });
       return;
     }
-    searchMutation.mutate({ seedQuery: seedQuery.trim(), videoType: selectedType });
+    searchMutation.mutate({ seedQuery: seedQuery.trim() });
   };
 
-  const handlePresetClick = (type: string) => {
-    setSelectedType(selectedType === type ? undefined : type);
-  };
 
   const scriptMutation = useMutation({
     mutationFn: async ({ topicId, videoLengthTarget, tonePreference }: { topicId: string; videoLengthTarget: string; tonePreference: string; savedTopicId?: string }) => {
@@ -555,27 +544,6 @@ export default function TopicPulsePage() {
               </Button>
             </div>
 
-            {/* Preset pills */}
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">What type of video are you making? <span className="italic">(optional)</span></p>
-              <div className="flex flex-wrap gap-2">
-                {PRESETS.map((preset) => {
-                  const active = selectedType === preset.type;
-                  return (
-                    <button
-                      key={preset.type}
-                      onClick={() => handlePresetClick(preset.type)}
-                      title={preset.description}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ring-1 transition-all ${active ? preset.activeColor : preset.color}`}
-                      data-testid={`badge-preset-${preset.type}`}
-                    >
-                      <preset.icon className="h-3 w-3" />
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </div>
 
           {/* Recent searches */}
