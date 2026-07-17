@@ -58,6 +58,13 @@ import { DmoWidget } from "@/components/dashboard/widgets/dmo-widget";
 import { InboxAnalyzerWidget } from "@/components/dashboard/widgets/inbox-analyzer-widget";
 import { CompetitorPulseWidget } from "@/components/dashboard/widgets/competitor-pulse-widget";
 import { RecentActivityWidget } from "@/components/dashboard/widgets/recent-activity-widget";
+import { VideoScoreWidget } from "@/components/dashboard/widgets/video-score-widget";
+import { TopicPulseWidget } from "@/components/dashboard/widgets/topic-pulse-widget";
+import { ScriptsWidget } from "@/components/dashboard/widgets/scripts-widget";
+import { YoutubeAnalyticsWidget } from "@/components/dashboard/widgets/youtube-analytics-widget";
+import { SearchConsoleWidget } from "@/components/dashboard/widgets/search-console-widget";
+import { FunnelBoardWidget } from "@/components/dashboard/widgets/funnel-board-widget";
+import { QuickActionsWidget } from "@/components/dashboard/widgets/quick-actions-widget";
 
 // ─── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -114,13 +121,20 @@ function nowTimeLabel(tz?: string | null) {
 
 function WidgetRenderer({ id }: { id: WidgetId }) {
   switch (id) {
-    case "projects":         return <ProjectsWidget />;
-    case "email-health":     return <EmailHealthWidget />;
-    case "dmo-streak":       return <DmoWidget />;
-    case "inbox-analyzer":   return <InboxAnalyzerWidget />;
-    case "competitor-pulse": return <CompetitorPulseWidget />;
-    case "recent-activity":  return <RecentActivityWidget />;
-    default:                 return null;
+    case "projects":          return <ProjectsWidget />;
+    case "email-health":      return <EmailHealthWidget />;
+    case "dmo-streak":        return <DmoWidget />;
+    case "inbox-analyzer":    return <InboxAnalyzerWidget />;
+    case "competitor-pulse":  return <CompetitorPulseWidget />;
+    case "recent-activity":   return <RecentActivityWidget />;
+    case "video-score":       return <VideoScoreWidget />;
+    case "topic-pulse":       return <TopicPulseWidget />;
+    case "scripts":           return <ScriptsWidget />;
+    case "youtube-analytics": return <YoutubeAnalyticsWidget />;
+    case "search-console":    return <SearchConsoleWidget />;
+    case "funnel-board":      return <FunnelBoardWidget />;
+    case "quick-actions":     return <QuickActionsWidget />;
+    default:                  return null;
   }
 }
 

@@ -14,7 +14,14 @@ export type WidgetId =
   | "dmo-streak"
   | "inbox-analyzer"
   | "competitor-pulse"
-  | "recent-activity";
+  | "recent-activity"
+  | "video-score"
+  | "topic-pulse"
+  | "scripts"
+  | "youtube-analytics"
+  | "search-console"
+  | "funnel-board"
+  | "quick-actions";
 
 export type WidgetSize = "third" | "half" | "two-thirds" | "full";
 
@@ -25,21 +32,35 @@ export type WidgetConfig = {
 };
 
 export const DEFAULT_LAYOUT: WidgetConfig[] = [
-  { id: "projects",         visible: true, size: "two-thirds" },
-  { id: "email-health",     visible: true, size: "third"      },
-  { id: "dmo-streak",       visible: true, size: "third"      },
-  { id: "inbox-analyzer",   visible: true, size: "third"      },
-  { id: "competitor-pulse", visible: true, size: "third"      },
-  { id: "recent-activity",  visible: true, size: "full"       },
+  { id: "projects",           visible: true,  size: "two-thirds" },
+  { id: "email-health",       visible: true,  size: "third"      },
+  { id: "dmo-streak",         visible: true,  size: "third"      },
+  { id: "inbox-analyzer",     visible: true,  size: "third"      },
+  { id: "competitor-pulse",   visible: true,  size: "third"      },
+  { id: "recent-activity",    visible: true,  size: "full"       },
+  { id: "video-score",        visible: false, size: "third"      },
+  { id: "topic-pulse",        visible: false, size: "third"      },
+  { id: "scripts",            visible: false, size: "third"      },
+  { id: "youtube-analytics",  visible: false, size: "half"       },
+  { id: "search-console",     visible: false, size: "half"       },
+  { id: "funnel-board",       visible: false, size: "half"       },
+  { id: "quick-actions",      visible: false, size: "full"       },
 ];
 
 export const WIDGET_META: Record<WidgetId, { title: string; description: string }> = {
-  "projects":         { title: "Projects",         description: "Upcoming tasks and project summary" },
-  "email-health":     { title: "Email Health",     description: "Sender reputation and inbox placement" },
-  "dmo-streak":       { title: "DMO Streak",       description: "Daily method of operation progress" },
-  "inbox-analyzer":   { title: "Inbox Analyzer",   description: "Email analysis scores" },
-  "competitor-pulse": { title: "Competitor Pulse", description: "Inbox Intel alerts and tracker stats" },
-  "recent-activity":  { title: "Recent Activity",  description: "Latest events across all tools" },
+  "projects":           { title: "Projects",           description: "Upcoming tasks and project summary" },
+  "email-health":       { title: "Email Health",       description: "Sender reputation and inbox placement" },
+  "dmo-streak":         { title: "DMO Streak",         description: "Daily method of operation progress" },
+  "inbox-analyzer":     { title: "Inbox Analyzer",     description: "Email analysis scores" },
+  "competitor-pulse":   { title: "Competitor Pulse",   description: "Inbox Intel alerts and tracker stats" },
+  "recent-activity":    { title: "Recent Activity",    description: "Latest events across all tools" },
+  "video-score":        { title: "Video Score",        description: "Latest AI-scored session and score trend" },
+  "topic-pulse":        { title: "Topic Pulse",        description: "Research runs and saved topics" },
+  "scripts":            { title: "Scripts",            description: "AI-generated video scripts library" },
+  "youtube-analytics":  { title: "YouTube Analytics",  description: "Channel stats: subscribers, views, watch time" },
+  "search-console":     { title: "Search Console",     description: "Google Search Console clicks and impressions" },
+  "funnel-board":       { title: "Funnel Board",       description: "Marketing funnel canvases" },
+  "quick-actions":      { title: "Quick Actions",      description: "One-click shortcuts to key workflows" },
 };
 
 export const SIZE_CLASSES: Record<WidgetSize, string> = {
@@ -131,7 +152,7 @@ export function StatChip({
 }: {
   value: number | string;
   label: string;
-  tone?: "neutral" | "rose" | "amber" | "indigo";
+  tone?: "neutral" | "rose" | "amber" | "indigo" | "teal" | "emerald" | "sky";
 }) {
   const toneClasses =
     tone === "rose"
@@ -140,6 +161,12 @@ export function StatChip({
       ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/20"
       : tone === "indigo"
       ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 ring-indigo-500/20"
+      : tone === "teal"
+      ? "bg-teal-500/10 text-teal-700 dark:text-teal-300 ring-teal-500/20"
+      : tone === "emerald"
+      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/20"
+      : tone === "sky"
+      ? "bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-sky-500/20"
       : "bg-muted text-foreground ring-border";
   return (
     <div className={`rounded-lg ring-1 px-2.5 py-1.5 ${toneClasses}`}>
@@ -236,3 +263,12 @@ export const ANOMALY_META: Record<
   esp_change:      { icon: GitCompare,    label: "Switched ESP",    color: "text-fuchsia-600 dark:text-fuchsia-400", bg: "bg-fuchsia-500/10", ring: "ring-fuchsia-500/30" },
   auth_regression: { icon: AlertTriangle, label: "Auth regression", color: "text-rose-600 dark:text-rose-400",     bg: "bg-rose-500/10",    ring: "ring-rose-500/30" },
 };
+
+// ─── Number formatter ─────────────────────────────────────────────────────────
+
+export function fmtNum(n: number | null | undefined, decimals = 0): string {
+  if (n == null) return "—";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toFixed(decimals);
+}
