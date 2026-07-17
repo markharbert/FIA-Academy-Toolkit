@@ -563,13 +563,14 @@ export interface IStorage {
   deleteFunnelTemplate(id: string): Promise<void>;
 
   // Announcements
-  getActiveAnnouncement(): Promise<Announcement | null>;
+  getActiveAnnouncements(): Promise<Announcement[]>;
   getAllAnnouncements(): Promise<Announcement[]>;
   createAnnouncement(data: InsertAnnouncement): Promise<Announcement>;
   updateAnnouncement(id: number, data: Partial<InsertAnnouncement>): Promise<Announcement | null>;
   deleteAnnouncement(id: number): Promise<void>;
   activateAnnouncement(id: number): Promise<void>;
   deactivateAnnouncement(id: number): Promise<void>;
+  reorderAnnouncements(orderedIds: number[]): Promise<void>;
 
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
@@ -4855,17 +4856,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Announcements ────────────────────────────────────────────────────────────
-  async getActiveAnnouncement(): Promise<Announcement | null> {
-    const [row] = await db.select().from(announcements).where(eq(announcements.isActive, true)).limit(1);
-    return row ?? null;
+  async getActiveAnnouncements(): Promise<Announcement[]> {
+    return db.select().from(announcements)
+      .where(eq(announcements.isActive, true))
+      .orderBy(asc(announcements.sortOrder), asc(announcements.createdAt));
   }
 
   async getAllAnnouncements(): Promise<Announcement[]> {
-    return db.select().from(announcements).orderBy(desc(announcements.createdAt));
+    return db.select().from(announcements)
+      .orderBy(asc(announcements.sortOrder), asc(announcements.createdAt));
   }
 
   async createAnnouncement(data: InsertAnnouncement): Promise<Announcement> {
-    const [row] = await db.insert(announcements).values(data).returning();
+    const [maxRow] = await db.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` }).from(announcements);
+    const nextOrder = (maxRow?.max ?? -1) + 1;
+    const [row] = await db.insert(announcements).values({ ...data, sortOrder: nextOrder }).returning();
     return row;
   }
 
@@ -4879,12 +4884,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async activateAnnouncement(id: number): Promise<void> {
-    await db.update(announcements).set({ isActive: false });
     await db.update(announcements).set({ isActive: true }).where(eq(announcements.id, id));
   }
 
   async deactivateAnnouncement(id: number): Promise<void> {
     await db.update(announcements).set({ isActive: false }).where(eq(announcements.id, id));
+  }
+
+  async reorderAnnouncements(orderedIds: number[]): Promise<void> {
+    await Promise.all(
+      orderedIds.map((id, idx) =>
+        db.update(announcements).set({ sortOrder: idx }).where(eq(announcements.id, id))
+      )
+    );
   }
 }
 

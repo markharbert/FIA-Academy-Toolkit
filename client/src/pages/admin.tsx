@@ -1,4 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -58,7 +61,7 @@ import {
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
   Key, Youtube, MessageSquare, XCircle, Trash2, Bug, Lightbulb, X,
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
-  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone, Megaphone
+  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone, Megaphone, GripVertical
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -1947,11 +1950,17 @@ function AnnouncementsTab() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ ...emptyAnnouncementForm });
+  const [orderedList, setOrderedList] = useState<AnnouncementRow[]>([]);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const { data, isLoading } = useQuery<{ announcements: AnnouncementRow[] }>({
     queryKey: ["/api/admin/announcements"],
   });
-  const announcements = data?.announcements ?? [];
+
+  useEffect(() => {
+    if (data?.announcements) setOrderedList(data.announcements);
+  }, [data]);
 
   const createMutation = useMutation({
     mutationFn: (d: typeof emptyAnnouncementForm) => apiRequest("POST", "/api/admin/announcements", d),
@@ -2009,6 +2018,31 @@ function AnnouncementsTab() {
     onError: () => toast({ title: "Failed to deactivate", variant: "destructive" }),
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: (orderedIds: number[]) =>
+      apiRequest("POST", "/api/admin/announcements/reorder", { orderedIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements/active"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to save order", variant: "destructive" });
+      if (data?.announcements) setOrderedList(data.announcements);
+    },
+  });
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setOrderedList(prev => {
+      const oldIdx = prev.findIndex(a => a.id === active.id);
+      const newIdx = prev.findIndex(a => a.id === over.id);
+      const next = arrayMove(prev, oldIdx, newIdx);
+      reorderMutation.mutate(next.map(a => a.id));
+      return next;
+    });
+  }
+
   function openCreate() {
     setEditId(null);
     setForm({ ...emptyAnnouncementForm });
@@ -2053,7 +2087,7 @@ function AnnouncementsTab() {
         <div>
           <h2 className="text-lg font-semibold">Announcements</h2>
           <p className="text-sm text-muted-foreground">
-            Create banners that appear on the dashboard for all members. Only one can be active at a time.
+            Create banners that appear on the dashboard. Multiple can be active at once — drag to set the order they appear.
           </p>
         </div>
         {!showForm && (
@@ -2170,7 +2204,7 @@ function AnnouncementsTab() {
                   data-testid="switch-announcement-active"
                 />
                 <label htmlFor="announcement-active-switch" className="text-sm cursor-pointer select-none">
-                  Make this announcement live immediately
+                  Show this announcement on the dashboard
                 </label>
               </div>
             </div>
@@ -2202,7 +2236,7 @@ function AnnouncementsTab() {
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : announcements.length === 0 && !showForm ? (
+      ) : orderedList.length === 0 && !showForm ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
             <Megaphone className="h-6 w-6 text-muted-foreground" />
@@ -2211,20 +2245,24 @@ function AnnouncementsTab() {
           <p className="text-xs text-muted-foreground mt-1">Create one to show a banner on the dashboard for all members.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {announcements.map(a => (
-            <AnnouncementCard
-              key={a.id}
-              announcement={a}
-              onEdit={() => openEdit(a)}
-              onDelete={() => deleteMutation.mutate(a.id)}
-              onActivate={() => activateMutation.mutate(a.id)}
-              onDeactivate={() => deactivateMutation.mutate(a.id)}
-              isDeleting={deleteMutation.isPending}
-              isToggling={activateMutation.isPending || deactivateMutation.isPending}
-            />
-          ))}
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={orderedList.map(a => a.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {orderedList.map(a => (
+                <AnnouncementCard
+                  key={a.id}
+                  announcement={a}
+                  onEdit={() => openEdit(a)}
+                  onDelete={() => deleteMutation.mutate(a.id)}
+                  onActivate={() => activateMutation.mutate(a.id)}
+                  onDeactivate={() => deactivateMutation.mutate(a.id)}
+                  isDeleting={deleteMutation.isPending}
+                  isToggling={activateMutation.isPending || deactivateMutation.isPending}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
@@ -2247,62 +2285,80 @@ function AnnouncementCard({
   isDeleting: boolean;
   isToggling: boolean;
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: announcement.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
   const color = ANNOUNCEMENT_COLORS.find(c => c.key === announcement.bgColor);
   return (
-    <Card className={`overflow-hidden transition-all ${announcement.isActive ? "ring-2 ring-emerald-400/50 ring-offset-1" : ""}`}>
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
-          <div className={`h-3 w-3 rounded-full mt-1 shrink-0 ${color?.swatch ?? "bg-violet-600"}`} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-sm truncate">{announcement.callout}</span>
-              {announcement.isActive ? (
-                <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 text-[10px]">
-                  Live
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                  Inactive
-                </Badge>
+    <div ref={setNodeRef} style={style}>
+      <Card className={`overflow-hidden transition-shadow ${announcement.isActive ? "ring-2 ring-emerald-400/50 ring-offset-1" : ""} ${isDragging ? "shadow-xl" : ""}`}>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2">
+            <button
+              {...attributes}
+              {...listeners}
+              className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none p-0.5 -ml-1"
+              title="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+            <div className={`h-3 w-3 rounded-full shrink-0 ${color?.swatch ?? "bg-violet-600"}`} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-sm truncate">{announcement.callout}</span>
+                {announcement.isActive ? (
+                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 text-[10px]">
+                    Live
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                    Inactive
+                  </Badge>
+                )}
+              </div>
+              {announcement.body && (
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">{announcement.body}</p>
+              )}
+              {announcement.ctaLabel && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Button: <span className="text-foreground">{announcement.ctaLabel}</span>
+                  {announcement.ctaUrl && <span className="opacity-70"> → {announcement.ctaUrl}</span>}
+                </p>
               )}
             </div>
-            {announcement.body && (
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">{announcement.body}</p>
-            )}
-            {announcement.ctaLabel && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Button: <span className="text-foreground">{announcement.ctaLabel}</span>
-                {announcement.ctaUrl && <span className="opacity-70"> → {announcement.ctaUrl}</span>}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {announcement.isActive ? (
-              <Button variant="ghost" size="sm" onClick={onDeactivate} disabled={isToggling}
-                className="h-7 px-2 text-muted-foreground" title="Hide banner"
-                data-testid={`button-deactivate-${announcement.id}`}>
-                {isToggling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <EyeOff className="h-3.5 w-3.5" />}
+            <div className="flex items-center gap-1 shrink-0">
+              {announcement.isActive ? (
+                <Button variant="ghost" size="sm" onClick={onDeactivate} disabled={isToggling}
+                  className="h-7 px-2 text-muted-foreground" title="Hide banner"
+                  data-testid={`button-deactivate-${announcement.id}`}>
+                  {isToggling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <EyeOff className="h-3.5 w-3.5" />}
+                </Button>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={onActivate} disabled={isToggling}
+                  className="h-7 px-2 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700" title="Make live"
+                  data-testid={`button-activate-${announcement.id}`}>
+                  {isToggling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={onEdit} className="h-7 px-2" title="Edit"
+                data-testid={`button-edit-announcement-${announcement.id}`}>
+                <Pencil className="h-3.5 w-3.5" />
               </Button>
-            ) : (
-              <Button variant="ghost" size="sm" onClick={onActivate} disabled={isToggling}
-                className="h-7 px-2 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700" title="Make live"
-                data-testid={`button-activate-${announcement.id}`}>
-                {isToggling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+              <Button variant="ghost" size="sm" onClick={onDelete} disabled={isDeleting}
+                className="h-7 px-2 text-muted-foreground hover:text-rose-500" title="Delete"
+                data-testid={`button-delete-announcement-${announcement.id}`}>
+                {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
               </Button>
-            )}
-            <Button variant="ghost" size="sm" onClick={onEdit} className="h-7 px-2" title="Edit"
-              data-testid={`button-edit-announcement-${announcement.id}`}>
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onDelete} disabled={isDeleting}
-              className="h-7 px-2 text-muted-foreground hover:text-rose-500" title="Delete"
-              data-testid={`button-delete-announcement-${announcement.id}`}>
-              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            </Button>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

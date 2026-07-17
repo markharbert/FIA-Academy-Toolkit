@@ -361,11 +361,11 @@ export default function DashboardPage() {
   const [activePanel, setActivePanel] = useState<"layout" | "widgets" | null>(null);
   const [arrangeMode, setArrangeMode] = useState(false);
 
-  // ── Active announcement ───────────────────────────────────────────────────────
-  const { data: announcementData } = useQuery<{ announcement: ActiveAnnouncement | null }>({
+  // ── Active announcements ──────────────────────────────────────────────────────
+  const { data: announcementData } = useQuery<{ announcements: ActiveAnnouncement[] }>({
     queryKey: ["/api/announcements/active"],
   });
-  const activeAnnouncement = announcementData?.announcement ?? null;
+  const activeAnnouncements = announcementData?.announcements ?? [];
 
   // ── Layout — local state synced once from server ─────────────────────────────
   const { data: layoutData } = useQuery<{ layout: WidgetConfig[] | null }>({
@@ -599,8 +599,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Announcement banner ────────────────────────────────────────────────── */}
-      {activeAnnouncement && <AnnouncementBanner announcement={activeAnnouncement} />}
+      {/* ── Announcement banners ───────────────────────────────────────────────── */}
+      {activeAnnouncements.map(a => (
+        <AnnouncementBanner key={a.id} announcement={a} />
+      ))}
 
       {/* ── Widget area ───────────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">

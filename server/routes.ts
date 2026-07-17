@@ -11571,11 +11571,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Public (auth-only): active announcement for the dashboard banner
   app.get("/api/announcements/active", requireAuth, async (_req: Request, res: Response) => {
     try {
-      const announcement = await storage.getActiveAnnouncement();
-      res.json({ announcement });
+      const announcements = await storage.getActiveAnnouncements();
+      res.json({ announcements });
     } catch (err) {
       console.error("[announcements] get active error:", err);
-      res.status(500).json({ message: "Failed to get announcement" });
+      res.status(500).json({ message: "Failed to get announcements" });
     }
   });
 
@@ -11648,6 +11648,19 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (err) {
       console.error("[announcements] deactivate error:", err);
       res.status(500).json({ message: "Failed to deactivate announcement" });
+    }
+  });
+
+  // Admin: reorder
+  app.post("/api/admin/announcements/reorder", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { orderedIds } = z.object({ orderedIds: z.array(z.number().int()) }).parse(req.body);
+      await storage.reorderAnnouncements(orderedIds);
+      res.json({ ok: true });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0]?.message });
+      console.error("[announcements] reorder error:", err);
+      res.status(500).json({ message: "Failed to reorder announcements" });
     }
   });
 

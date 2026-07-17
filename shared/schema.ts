@@ -1965,6 +1965,7 @@ export const announcements = pgTable("announcements", {
   ctaUrl: text("cta_url"),
   bgColor: text("bg_color").notNull().default("violet"),
   isActive: boolean("is_active").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
