@@ -168,6 +168,8 @@ export interface IStorage {
   getRecentCfMagicTokens(limit: number): Promise<CfMagicToken[]>;
   getCfMagicExpiryMinutes(): Promise<number>;
   setCfMagicExpiryMinutes(minutes: number): Promise<void>;
+  getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string }>;
+  setCfButtonSettings(settings: { text: string; bg: string; color: string; radius: string; width: string }): Promise<void>;
 
   // Admin: Audit Log
   createAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
@@ -1074,6 +1076,21 @@ export class DatabaseStorage implements IStorage {
     await db.insert(appSettings)
       .values({ key: "cf_magic_expiry_minutes", value: String(minutes), updatedAt: now })
       .onConflictDoUpdate({ target: appSettings.key, set: { value: String(minutes), updatedAt: now } });
+  }
+
+  async getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string }> {
+    const defaults = { text: "Access Academy Toolkit", bg: "#4f46e5", color: "#ffffff", radius: "rounded", width: "auto" };
+    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, "cf_button_settings"));
+    if (!row) return defaults;
+    try { return { ...defaults, ...JSON.parse(row.value) }; } catch { return defaults; }
+  }
+
+  async setCfButtonSettings(settings: { text: string; bg: string; color: string; radius: string; width: string }): Promise<void> {
+    const now = new Date();
+    const value = JSON.stringify(settings);
+    await db.insert(appSettings)
+      .values({ key: "cf_button_settings", value, updatedAt: now })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: now } });
   }
 
   // Admin: Audit Log

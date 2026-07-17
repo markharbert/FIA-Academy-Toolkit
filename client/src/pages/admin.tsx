@@ -489,10 +489,14 @@ function CfIntegrationTab() {
   const [btnRadius, setBtnRadius] = useState<"rounded" | "pill" | "square">("rounded");
   const [btnWidth, setBtnWidth] = useState<"auto" | "full">("auto");
   const [expirySaving, setExpirySaving] = useState(false);
+  const [btnSaving, setBtnSaving] = useState(false);
   const [expiryInput, setExpiryInput] = useState("15");
 
   const { data: magicSettings } = useQuery<{ expiryMinutes: number }>({
     queryKey: ["/api/admin/cf/magic-settings"],
+  });
+  const { data: btnSettings } = useQuery<{ text: string; bg: string; color: string; radius: string; width: string }>({
+    queryKey: ["/api/admin/cf/button-settings"],
   });
   const { data: magicTokensData, isLoading: magicTokensLoading } = useQuery<{ tokens: Array<{ id: string; email: string; expiresAt: string; usedAt: string | null; createdAt: string; ipAddress: string | null }> }>({
     queryKey: ["/api/admin/cf/magic-tokens"],
@@ -505,9 +509,38 @@ function CfIntegrationTab() {
     if (magicSettings?.expiryMinutes) setExpiryInput(String(magicSettings.expiryMinutes));
   }, [magicSettings]);
 
+  useEffect(() => {
+    if (!btnSettings) return;
+    if (btnSettings.text) setBtnText(btnSettings.text);
+    if (btnSettings.bg) setBtnBg(btnSettings.bg);
+    if (btnSettings.color) setBtnColor(btnSettings.color);
+    if (btnSettings.radius) setBtnRadius(btnSettings.radius as "rounded" | "pill" | "square");
+    if (btnSettings.width) setBtnWidth(btnSettings.width as "auto" | "full");
+  }, [btnSettings]);
+
   const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
   const embedCode = `<a href="${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}" style="display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:14px 28px; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:15px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}">${btnText}</a>`;
+
+  const handleSaveBtnSettings = async () => {
+    setBtnSaving(true);
+    try {
+      const res = await fetch("/api/admin/cf/button-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text: btnText, bg: btnBg, color: btnColor, radius: btnRadius, width: btnWidth }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/cf/button-settings"] });
+      toast({ title: "Button settings saved!" });
+    } catch (err: any) {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+    } finally {
+      setBtnSaving(false);
+    }
+  };
 
   const handleSaveExpiry = async () => {
     const mins = parseInt(expiryInput, 10);
@@ -1077,6 +1110,10 @@ function CfIntegrationTab() {
                 </a>
               </div>
             </div>
+            <Button onClick={handleSaveBtnSettings} disabled={btnSaving} className="w-full" data-testid="button-save-btn-settings">
+              {btnSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save Button Settings
+            </Button>
           </CardContent>
         </Card>
 

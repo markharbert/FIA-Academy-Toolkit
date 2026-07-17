@@ -1852,6 +1852,29 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: get CF button customizer settings
+  app.get("/api/admin/cf/button-settings", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const settings = await storage.getCfButtonSettings();
+      res.json(settings);
+    } catch (err) {
+      console.error("[CF Button Admin] get error:", err);
+      res.status(500).json({ message: "Failed to get button settings" });
+    }
+  });
+
+  // Admin: save CF button customizer settings
+  app.post("/api/admin/cf/button-settings", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { text, bg, color, radius, width } = req.body as { text: string; bg: string; color: string; radius: string; width: string };
+      await storage.setCfButtonSettings({ text: String(text || ""), bg: String(bg || ""), color: String(color || ""), radius: String(radius || "rounded"), width: String(width || "auto") });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[CF Button Admin] save error:", err);
+      res.status(500).json({ message: "Failed to save button settings" });
+    }
+  });
+
   // ===================
   // ADMIN ROUTES - USER MANAGEMENT
   // ===================
