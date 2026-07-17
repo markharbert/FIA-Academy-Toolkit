@@ -27,11 +27,13 @@ import type { DmoEntry, InsightsResponse } from "@shared/schema";
 
 import {
   DndContext,
+  DragOverlay,
   closestCenter,
   PointerSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -145,13 +147,26 @@ function SortableWidget({
     transition,
   };
 
+  // While this item is being dragged, render a dashed placeholder in its
+  // grid slot — the DragOverlay shows the real widget floating under cursor.
+  if (isDragging) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={SIZE_CLASSES[config.size]}
+        data-testid={`widget-cell-${config.id}`}
+      >
+        <div className="h-full min-h-[140px] rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/40 dark:bg-gray-900/20 transition-colors" />
+      </div>
+    );
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`${SIZE_CLASSES[config.size]} relative ${
-        isDragging ? "opacity-40 z-50" : ""
-      }`}
+      className={`${SIZE_CLASSES[config.size]} relative`}
       data-testid={`widget-cell-${config.id}`}
     >
       {/* Always-visible controls in arrange mode */}
@@ -175,7 +190,7 @@ function SortableWidget({
         </button>
       </div>
 
-      {/* Slight overlay to show the widget is in edit state */}
+      {/* Subtle violet ring to show edit state */}
       <div className="rounded-xl ring-2 ring-violet-400/40 ring-offset-1 pointer-events-none absolute inset-0 z-10" />
 
       <WidgetRenderer id={config.id} />
@@ -253,12 +268,23 @@ export default function DashboardPage() {
     toast({ title: "Widgets updated" });
   }
 
-  // ── Arrange mode: DnD drag end ───────────────────────────────────────────────
+  // ── Arrange mode: DnD ───────────────────────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
+  // Track which widget is actively being dragged (for DragOverlay)
+  const [activeWidgetId, setActiveWidgetId] = useState<WidgetId | null>(null);
+  const activeDragWidth = useRef<number>(0);
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveWidgetId(event.active.id as WidgetId);
+    const rect = (event.active.rect.current as any)?.initial;
+    if (rect?.width) activeDragWidth.current = rect.width;
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    setActiveWidgetId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -504,6 +530,7 @@ export default function DashboardPage() {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
@@ -520,6 +547,20 @@ export default function DashboardPage() {
                 ))}
               </div>
             </SortableContext>
+
+            {/* Floating widget clone that follows the cursor — no distortion */}
+            <DragOverlay
+              dropAnimation={{ duration: 180, easing: "ease" }}
+            >
+              {activeWidgetId ? (
+                <div
+                  style={{ width: activeDragWidth.current || undefined }}
+                  className="opacity-90 shadow-2xl rounded-xl rotate-1 scale-[1.02]"
+                >
+                  <WidgetRenderer id={activeWidgetId} />
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         ) : (
           /* ── Normal static grid ── */
