@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -36,7 +36,6 @@ import {
 import {
   SortableContext,
   useSortable,
-  rectSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
 
@@ -114,9 +113,11 @@ function nowTimeLabel(tz?: string | null) {
   }
 }
 
-// ─── Widget renderer ────────────────────────────────────────────────────────────
+// ─── Widget renderer ─────────────────────────────────────────────────────────
+// Wrapped in memo so it only re-renders when `id` changes — not on every
+// onDragOver state update during arrange mode.
 
-function WidgetRenderer({ id }: { id: WidgetId }) {
+const WidgetRenderer = memo(function WidgetRenderer({ id }: { id: WidgetId }) {
   switch (id) {
     case "projects":          return <ProjectsWidget />;
     case "email-health":      return <EmailHealthWidget />;
@@ -133,16 +134,71 @@ function WidgetRenderer({ id }: { id: WidgetId }) {
     case "quick-actions":     return <QuickActionsWidget />;
     default:                  return null;
   }
+});
+
+// ─── Ghost slot (hidden widget placeholder) ──────────────────────────────────
+// Defined at module level so React never treats it as a new component type
+// between renders — avoiding unmount/remount flicker during drag.
+
+function GhostSlot({
+  config,
+  onClick,
+}: {
+  config: WidgetConfig;
+  onClick?: () => void;
+}) {
+  const meta = WIDGET_META[config.id];
+  const interactive = Boolean(onClick);
+  return (
+    <div
+      className={`${SIZE_CLASSES[config.size]} min-h-[130px] rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 p-4 transition-all group ${
+        interactive
+          ? "border-muted-foreground/15 bg-muted/10 cursor-pointer hover:border-violet-400/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/10"
+          : "border-muted-foreground/10 bg-muted/5 cursor-default opacity-50"
+      }`}
+      onClick={onClick}
+      data-testid={`ghost-slot-${config.id}`}
+    >
+      <div
+        className={`h-8 w-8 rounded-full border-2 border-dashed flex items-center justify-center transition-colors ${
+          interactive
+            ? "border-muted-foreground/20 group-hover:border-violet-400/60"
+            : "border-muted-foreground/10"
+        }`}
+      >
+        <Plus
+          className={`h-3.5 w-3.5 transition-colors ${
+            interactive
+              ? "text-muted-foreground/25 group-hover:text-violet-500"
+              : "text-muted-foreground/15"
+          }`}
+        />
+      </div>
+      <p
+        className={`text-xs font-medium text-center leading-tight transition-colors ${
+          interactive
+            ? "text-muted-foreground/40 group-hover:text-violet-600 dark:group-hover:text-violet-400"
+            : "text-muted-foreground/30"
+        }`}
+      >
+        {meta.title}
+      </p>
+    </div>
+  );
 }
 
-// ─── Sortable widget (used only in arrange mode) ────────────────────────────────
+// ─── Sortable widget (used only in arrange mode) ─────────────────────────────
+// `placeholderHeight` matches the dragged widget's measured height so the
+// dashed ghost slot stays the same size as the real widget.
 
 function SortableWidget({
   config,
   onRemove,
+  placeholderHeight,
 }: {
   config: WidgetConfig;
   onRemove: () => void;
+  placeholderHeight: number;
 }) {
   // We intentionally do NOT apply transform/transition to the node —
   // live DOM reordering via onDragOver handles placement without CSS
@@ -157,10 +213,13 @@ function SortableWidget({
     return (
       <div
         ref={setNodeRef}
-        className={SIZE_CLASSES[config.size]}
+        className={`${SIZE_CLASSES[config.size]} flex flex-col`}
         data-testid={`widget-cell-${config.id}`}
       >
-        <div className="h-full min-h-[140px] rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/40 dark:bg-gray-900/20" />
+        <div
+          style={{ height: placeholderHeight || 200 }}
+          className="rounded-xl border-2 border-dashed border-violet-300/40 dark:border-violet-600/30 bg-violet-50/20 dark:bg-violet-950/10"
+        />
       </div>
     );
   }
@@ -168,7 +227,7 @@ function SortableWidget({
   return (
     <div
       ref={setNodeRef}
-      className={`${SIZE_CLASSES[config.size]} relative`}
+      className={`${SIZE_CLASSES[config.size]} relative flex flex-col`}
       data-testid={`widget-cell-${config.id}`}
     >
       {/* Controls — always visible in arrange mode */}
@@ -277,17 +336,21 @@ export default function DashboardPage() {
 
   // Always-current ref so handleDragEnd can read latest layout without
   // stale-closure issues (onDragOver updates state many times mid-drag).
+  // Updated synchronously during render (before paint) so it's never stale
+  // when a rapid drag sequence ends.
   const localLayoutRef = useRef(localLayout);
-  useEffect(() => { localLayoutRef.current = localLayout; }, [localLayout]);
+  localLayoutRef.current = localLayout;
 
   // Track which widget is being dragged (feeds the DragOverlay)
   const [activeWidgetId, setActiveWidgetId] = useState<WidgetId | null>(null);
   const activeDragWidth = useRef<number>(0);
+  const activeDragHeight = useRef<number>(0);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveWidgetId(event.active.id as WidgetId);
     const rect = (event.active.rect.current as any)?.initial;
     if (rect?.width) activeDragWidth.current = rect.width;
+    if (rect?.height) activeDragHeight.current = rect.height;
   }, []);
 
   // Live-reorder the DOM as the cursor moves over different widgets.
@@ -464,50 +527,23 @@ export default function DashboardPage() {
                   </Button>
                 </div>
                 <div className="grid grid-cols-12 gap-4">
-                  {localLayout.map((config) => {
-                    const meta = WIDGET_META[config.id];
-                    return (
-                      <div
-                        key={config.id}
-                        className={`${SIZE_CLASSES[config.size]} min-h-[130px] rounded-xl border-2 border-dashed border-muted-foreground/15 bg-muted/10 flex flex-col items-center justify-center gap-2 p-4 cursor-pointer hover:border-violet-400/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/10 transition-all group`}
-                        onClick={() => setActivePanel("widgets")}
-                        data-testid={`ghost-slot-${config.id}`}
-                      >
-                        <div className="h-8 w-8 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center group-hover:border-violet-400/60 transition-colors">
-                          <Plus className="h-3.5 w-3.5 text-muted-foreground/25 group-hover:text-violet-500 transition-colors" />
-                        </div>
-                        <p className="text-xs font-medium text-muted-foreground/40 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors text-center leading-tight">
-                          {meta.title}
-                        </p>
-                      </div>
-                    );
-                  })}
+                  {localLayout.map((config) => (
+                    <GhostSlot
+                      key={config.id}
+                      config={config}
+                      onClick={() => setActivePanel("widgets")}
+                    />
+                  ))}
                 </div>
               </div>
             );
           }
 
-          // Ghost slot helper — shared by both arrange and widget-panel modes
-          const GhostSlot = ({ config }: { config: WidgetConfig }) => {
-            const meta = WIDGET_META[config.id];
-            return (
-              <div
-                className={`${SIZE_CLASSES[config.size]} min-h-[130px] rounded-xl border-2 border-dashed border-muted-foreground/15 bg-muted/10 flex flex-col items-center justify-center gap-2 p-4 cursor-pointer hover:border-violet-400/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/10 transition-all group`}
-                onClick={() => setActivePanel("widgets")}
-                data-testid={`ghost-slot-${config.id}`}
-              >
-                <div className="h-8 w-8 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center group-hover:border-violet-400/60 transition-colors">
-                  <Plus className="h-3.5 w-3.5 text-muted-foreground/25 group-hover:text-violet-500 transition-colors" />
-                </div>
-                <p className="text-xs font-medium text-muted-foreground/40 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors text-center leading-tight">
-                  {meta.title}
-                </p>
-              </div>
-            );
-          };
-
-          // Full grid: visible widgets as real cards, hidden widgets as ghost slots
-          // (or null when not in reveal mode — only happens in the normal static case)
+          // Full grid: visible widgets as real cards, hidden widgets as ghost slots.
+          // GhostSlot is defined at module level (not inside this IIFE) so React
+          // never sees it as a new component type between renders — no remounting.
+          // In arrange mode ghost slots are decorative (no onClick) to prevent
+          // the Add/Remove panel from opening while the drag banner is active.
           const fullGrid = (
             <div className="grid grid-cols-12 gap-4">
               {localLayout.map((config) => {
@@ -518,6 +554,7 @@ export default function DashboardPage() {
                         key={config.id}
                         config={config}
                         onRemove={() => removeWidget(config.id)}
+                        placeholderHeight={activeDragHeight.current}
                       />
                     );
                   }
@@ -531,8 +568,15 @@ export default function DashboardPage() {
                     </div>
                   );
                 }
-                // Hidden widget — only render a placeholder when we're revealing all
-                return revealAll ? <GhostSlot key={config.id} config={config} /> : null;
+                // Hidden widget — render a placeholder only when revealing all.
+                // Pass onClick only in widget-panel mode, not while in arrange mode.
+                return revealAll ? (
+                  <GhostSlot
+                    key={config.id}
+                    config={config}
+                    onClick={arrangeMode ? undefined : () => setActivePanel("widgets")}
+                  />
+                ) : null;
               })}
             </div>
           );
@@ -546,19 +590,28 @@ export default function DashboardPage() {
                 onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
               >
+                {/*
+                  strategy={() => null} — a no-op that skips all getBoundingClientRect
+                  calls on every drag event. Since we live-reorder the DOM in onDragOver
+                  (not via CSS transforms), dnd-kit doesn't need to compute any offsets.
+                  This eliminates the #1 source of layout thrash during drag.
+                */}
                 <SortableContext
                   items={visibleWidgets.map((w) => w.id)}
-                  strategy={rectSortingStrategy}
+                  strategy={() => null}
                 >
                   {fullGrid}
                 </SortableContext>
 
                 {/* Floating widget clone that follows the cursor — no distortion */}
-                <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
+                <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
                   {activeWidgetId ? (
                     <div
-                      style={{ width: activeDragWidth.current || undefined }}
-                      className="opacity-90 shadow-2xl rounded-xl rotate-1 scale-[1.02]"
+                      style={{
+                        width: activeDragWidth.current || undefined,
+                        willChange: "transform",
+                      }}
+                      className="opacity-90 shadow-2xl rounded-xl rotate-1 scale-[1.02] pointer-events-none"
                     >
                       <WidgetRenderer id={activeWidgetId} />
                     </div>
