@@ -1933,6 +1933,7 @@ type AnnouncementRow = {
   ctaUrl: string | null;
   bgColor: string;
   isActive: boolean;
+  version: number;
   createdAt: string;
 };
 
@@ -2029,6 +2030,16 @@ function AnnouncementsTab() {
       toast({ title: "Failed to save order", variant: "destructive" });
       if (data?.announcements) setOrderedList(data.announcements);
     },
+  });
+
+  const resetDismissalsMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/admin/announcements/${id}/reset-dismissals`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements/active"] });
+      toast({ title: "Dismissals reset — all members will see this banner again" });
+    },
+    onError: () => toast({ title: "Failed to reset dismissals", variant: "destructive" }),
   });
 
   function handleDragEnd(event: DragEndEvent) {
@@ -2256,8 +2267,10 @@ function AnnouncementsTab() {
                   onDelete={() => deleteMutation.mutate(a.id)}
                   onActivate={() => activateMutation.mutate(a.id)}
                   onDeactivate={() => deactivateMutation.mutate(a.id)}
+                  onReset={() => resetDismissalsMutation.mutate(a.id)}
                   isDeleting={deleteMutation.isPending}
                   isToggling={activateMutation.isPending || deactivateMutation.isPending}
+                  isResetting={resetDismissalsMutation.isPending}
                 />
               ))}
             </div>
@@ -2274,16 +2287,20 @@ function AnnouncementCard({
   onDelete,
   onActivate,
   onDeactivate,
+  onReset,
   isDeleting,
   isToggling,
+  isResetting,
 }: {
   announcement: AnnouncementRow;
   onEdit: () => void;
   onDelete: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
+  onReset: () => void;
   isDeleting: boolean;
   isToggling: boolean;
+  isResetting: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: announcement.id,
@@ -2345,6 +2362,11 @@ function AnnouncementCard({
                   {isToggling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
                 </Button>
               )}
+              <Button variant="ghost" size="sm" onClick={onReset} disabled={isResetting}
+                className="h-7 px-2 text-muted-foreground hover:text-blue-500" title="Re-show to all members who dismissed it"
+                data-testid={`button-reset-announcement-${announcement.id}`}>
+                {isResetting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              </Button>
               <Button variant="ghost" size="sm" onClick={onEdit} className="h-7 px-2" title="Edit"
                 data-testid={`button-edit-announcement-${announcement.id}`}>
                 <Pencil className="h-3.5 w-3.5" />

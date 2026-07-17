@@ -11651,6 +11651,17 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // Admin: reset dismissals (bumps version so all members see it again)
+  app.post("/api/admin/announcements/:id/reset-dismissals", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.resetAnnouncementDismissals(parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[announcements] reset-dismissals error:", err);
+      res.status(500).json({ message: "Failed to reset dismissals" });
+    }
+  });
+
   // Admin: reorder
   app.post("/api/admin/announcements/reorder", requireAdmin, async (req: Request, res: Response) => {
     try {

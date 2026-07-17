@@ -571,6 +571,7 @@ export interface IStorage {
   activateAnnouncement(id: number): Promise<void>;
   deactivateAnnouncement(id: number): Promise<void>;
   reorderAnnouncements(orderedIds: number[]): Promise<void>;
+  resetAnnouncementDismissals(id: number): Promise<void>;
 
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
@@ -4897,6 +4898,12 @@ export class DatabaseStorage implements IStorage {
         db.update(announcements).set({ sortOrder: idx }).where(eq(announcements.id, id))
       )
     );
+  }
+
+  async resetAnnouncementDismissals(id: number): Promise<void> {
+    await db.update(announcements)
+      .set({ version: sql`${announcements.version} + 1` })
+      .where(eq(announcements.id, id));
   }
 }
 
