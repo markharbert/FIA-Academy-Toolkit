@@ -61,7 +61,9 @@ import {
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
   Key, Youtube, MessageSquare, XCircle, Trash2, Bug, Lightbulb, X,
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
-  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone, Megaphone, GripVertical
+  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone, Megaphone, GripVertical,
+  Bell, AlertTriangle, Star, Gift, Rocket, Sparkles, PartyPopper, Trophy, Heart, Flame, Tag, Calendar,
+  type LucideIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -1934,6 +1936,31 @@ const ANNOUNCEMENT_PREVIEW_MAP: Record<string, { bar: string; text: string; butt
   slate:  { bar: "bg-slate-700",   text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                                 },
 };
 
+const ANNOUNCEMENT_ICON_LIST: { name: string; component: LucideIcon }[] = [
+  { name: "Bell",          component: Bell },
+  { name: "Megaphone",     component: Megaphone },
+  { name: "Info",          component: Info },
+  { name: "AlertTriangle", component: AlertTriangle },
+  { name: "AlertCircle",   component: AlertCircle },
+  { name: "Star",          component: Star },
+  { name: "Gift",          component: Gift },
+  { name: "Zap",           component: Zap },
+  { name: "Rocket",        component: Rocket },
+  { name: "Sparkles",      component: Sparkles },
+  { name: "PartyPopper",   component: PartyPopper },
+  { name: "Trophy",        component: Trophy },
+  { name: "Heart",         component: Heart },
+  { name: "Lightbulb",     component: Lightbulb },
+  { name: "Flame",         component: Flame },
+  { name: "CheckCircle2",  component: CheckCircle2 },
+  { name: "Tag",           component: Tag },
+  { name: "Calendar",      component: Calendar },
+];
+
+const ANNOUNCEMENT_ICON_MAP: Record<string, LucideIcon> = Object.fromEntries(
+  ANNOUNCEMENT_ICON_LIST.map(ic => [ic.name, ic.component])
+);
+
 type AnnouncementRow = {
   id: number;
   callout: string;
@@ -1941,6 +1968,8 @@ type AnnouncementRow = {
   ctaLabel: string | null;
   ctaUrl: string | null;
   bgColor: string;
+  icon: string | null;
+  iconColor: string | null;
   isActive: boolean;
   version: number;
   createdAt: string;
@@ -1952,6 +1981,8 @@ const emptyAnnouncementForm = {
   ctaLabel: "",
   ctaUrl: "",
   bgColor: "violet" as string,
+  icon: "",
+  iconColor: "auto",
   isActive: false,
 };
 
@@ -2077,6 +2108,8 @@ function AnnouncementsTab() {
       ctaLabel: a.ctaLabel ?? "",
       ctaUrl: a.ctaUrl ?? "",
       bgColor: a.bgColor || "violet",
+      icon: a.icon ?? "",
+      iconColor: a.iconColor ?? "auto",
       isActive: a.isActive,
     });
     setShowForm(true);
@@ -2089,6 +2122,8 @@ function AnnouncementsTab() {
       ctaLabel: form.ctaLabel.trim() || null,
       ctaUrl: form.ctaUrl.trim() || null,
       bgColor: form.bgColor,
+      icon: form.icon || null,
+      iconColor: form.iconColor || "auto",
       isActive: form.isActive,
     };
     if (editId !== null) {
@@ -2102,6 +2137,12 @@ function AnnouncementsTab() {
   const isCustomColor = form.bgColor.startsWith("#");
   const previewStyles = isCustomColor ? null : (ANNOUNCEMENT_PREVIEW_MAP[form.bgColor] ?? ANNOUNCEMENT_PREVIEW_MAP.violet);
   const customText = isCustomColor ? hexTextColor(form.bgColor) : null;
+  const PreviewIcon: LucideIcon | null = form.icon ? (ANNOUNCEMENT_ICON_MAP[form.icon] ?? null) : null;
+  const previewIconStyle = form.iconColor?.startsWith("#")
+    ? { color: form.iconColor }
+    : isCustomColor ? { color: customText! }
+    : undefined;
+  const previewIconClass = (!form.iconColor?.startsWith("#") && !isCustomColor && previewStyles) ? previewStyles.text : "";
 
   return (
     <div className="space-y-6">
@@ -2133,6 +2174,9 @@ function AnnouncementsTab() {
               className={`${isCustomColor ? "" : previewStyles!.bar} rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap`}
               style={isCustomColor ? { backgroundColor: form.bgColor } : undefined}
             >
+              {PreviewIcon && (
+                <PreviewIcon className={`h-4 w-4 shrink-0 ${previewIconClass}`} style={previewIconStyle} />
+              )}
               <span
                 className={`font-bold text-sm shrink-0 ${isCustomColor ? "" : previewStyles!.text}`}
                 style={isCustomColor ? { color: customText! } : undefined}
@@ -2255,6 +2299,86 @@ function AnnouncementsTab() {
                     </label>
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-2">
+                  Icon <span className="text-muted-foreground/50">(optional)</span>
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    title="No icon"
+                    onClick={() => setForm(f => ({ ...f, icon: "" }))}
+                    className={`h-8 w-8 rounded-lg border-2 flex items-center justify-center text-sm font-medium transition-all ${
+                      !form.icon
+                        ? "border-foreground ring-2 ring-offset-2 ring-foreground bg-muted"
+                        : "border-muted-foreground/25 text-muted-foreground/40 hover:border-muted-foreground/50 hover:bg-muted/50"
+                    }`}
+                    data-testid="icon-swatch-none"
+                  >
+                    –
+                  </button>
+                  {ANNOUNCEMENT_ICON_LIST.map(ic => {
+                    const IconComp = ic.component;
+                    return (
+                      <button
+                        key={ic.name}
+                        type="button"
+                        title={ic.name}
+                        onClick={() => setForm(f => ({ ...f, icon: ic.name }))}
+                        className={`h-8 w-8 rounded-lg border-2 flex items-center justify-center transition-all ${
+                          form.icon === ic.name
+                            ? "border-foreground ring-2 ring-offset-2 ring-foreground bg-muted text-foreground"
+                            : "border-muted-foreground/25 text-muted-foreground/50 hover:border-muted-foreground/50 hover:bg-muted/50 hover:text-foreground"
+                        }`}
+                        data-testid={`icon-swatch-${ic.name}`}
+                      >
+                        <IconComp className="h-4 w-4" />
+                      </button>
+                    );
+                  })}
+                </div>
+                {form.icon && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">Icon color:</span>
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, iconColor: "auto" }))}
+                      className={`h-6 px-2 rounded border text-[11px] transition-all ${
+                        form.iconColor === "auto"
+                          ? "border-foreground ring-1 ring-offset-1 ring-foreground bg-muted font-medium"
+                          : "border-muted-foreground/30 text-muted-foreground hover:border-muted-foreground/60"
+                      }`}
+                      data-testid="icon-color-auto"
+                    >
+                      Auto
+                    </button>
+                    <div className="relative" title="Custom icon color">
+                      <input
+                        type="color"
+                        id="icon-color-picker"
+                        value={form.iconColor?.startsWith("#") ? form.iconColor : "#ffffff"}
+                        onChange={e => setForm(f => ({ ...f, iconColor: e.target.value }))}
+                        className="sr-only"
+                        data-testid="icon-color-picker-custom"
+                      />
+                      <label
+                        htmlFor="icon-color-picker"
+                        className={`h-6 w-6 rounded cursor-pointer flex items-center justify-center border-2 transition-all ${
+                          form.iconColor?.startsWith("#")
+                            ? "border-foreground ring-1 ring-offset-1 ring-foreground scale-110"
+                            : "border-dashed border-muted-foreground/40 hover:border-muted-foreground/70"
+                        }`}
+                        style={form.iconColor?.startsWith("#") ? { backgroundColor: form.iconColor } : undefined}
+                      >
+                        {!form.iconColor?.startsWith("#") && (
+                          <span className="text-[9px] font-bold text-muted-foreground/50">+</span>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-3 pt-1">

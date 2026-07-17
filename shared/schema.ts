@@ -1964,6 +1964,8 @@ export const announcements = pgTable("announcements", {
   ctaLabel: text("cta_label"),
   ctaUrl: text("cta_url"),
   bgColor: text("bg_color").notNull().default("violet"),
+  icon: text("icon"),
+  iconColor: text("icon_color").default("auto"),
   isActive: boolean("is_active").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   version: integer("version").notNull().default(0),

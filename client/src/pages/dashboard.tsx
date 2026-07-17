@@ -20,6 +20,9 @@ import {
   X,
   Check,
   Plus,
+  Bell, Megaphone, Info, AlertTriangle, AlertCircle, Star, Gift, Zap, Rocket,
+  Sparkles, PartyPopper, Trophy, Heart, Lightbulb, Flame, CheckCircle2, Tag, Calendar,
+  type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -288,6 +291,11 @@ const ANNOUNCEMENT_STYLES: Record<string, { bar: string; text: string; button: s
   slate:  { bar: "bg-slate-700",   text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                          dismiss: "text-white/70 hover:text-white" },
 };
 
+const ANNOUNCEMENT_ICON_MAP: Record<string, LucideIcon> = {
+  Bell, Megaphone, Info, AlertTriangle, AlertCircle, Star, Gift, Zap, Rocket,
+  Sparkles, PartyPopper, Trophy, Heart, Lightbulb, Flame, CheckCircle2, Tag, Calendar,
+};
+
 type ActiveAnnouncement = {
   id: number;
   callout: string;
@@ -295,6 +303,8 @@ type ActiveAnnouncement = {
   ctaLabel: string | null;
   ctaUrl: string | null;
   bgColor: string;
+  icon: string | null;
+  iconColor: string | null;
 };
 
 function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement }) {
@@ -306,6 +316,12 @@ function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement
   const styles = isCustom ? null : (ANNOUNCEMENT_STYLES[announcement.bgColor] ?? ANNOUNCEMENT_STYLES.violet);
   const customText = isCustom ? hexTextColor(announcement.bgColor) : null;
   const isExternal = announcement.ctaUrl?.startsWith("http");
+  const BannerIcon: LucideIcon | null = announcement.icon ? (ANNOUNCEMENT_ICON_MAP[announcement.icon] ?? null) : null;
+  const iconStyle = announcement.iconColor?.startsWith("#")
+    ? { color: announcement.iconColor }
+    : isCustom ? { color: customText! }
+    : undefined;
+  const iconClass = (!announcement.iconColor?.startsWith("#") && !isCustom && styles) ? styles.text : "";
 
   function dismiss() {
     setDismissed(true);
@@ -320,6 +336,9 @@ function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement
       data-testid="announcement-banner"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
+        {BannerIcon && (
+          <BannerIcon className={`h-4 w-4 shrink-0 ${iconClass}`} style={iconStyle} />
+        )}
         <span
           className={`font-bold text-sm shrink-0 ${isCustom ? "" : styles!.text}`}
           style={isCustom ? { color: customText! } : undefined}
