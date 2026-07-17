@@ -42,6 +42,7 @@ import FunnelPlannerIndexPage from "@/pages/funnel-planner/index";
 import FunnelPlannerEditorPage from "@/pages/funnel-planner/editor";
 import FunnelSharePage from "@/pages/funnel-planner/share";
 import CfLoginPage from "@/pages/cf-login";
+import CfMagicLoginPage from "@/pages/cf-magic-login";
 import MemberLoginPage from "@/pages/member-login";
 import WorkspaceInviteAcceptPage from "@/pages/workspace-invite-accept";
 import HelpPage from "@/pages/help";
@@ -380,6 +381,7 @@ function App() {
           <Switch>
             {/* Standalone pages — no sidebar, no auth check */}
             <Route path="/cf-login">{() => <CfLoginPage />}</Route>
+            <Route path="/cf-magic-login">{() => <CfMagicLoginPage />}</Route>
             <Route path="/member-login">{() => <MemberLoginPage />}</Route>
             <Route path="/workspace/accept">{() => <WorkspaceInviteAcceptPage />}</Route>
             <Route path="/funnels/share/:token">{() => <FunnelSharePage />}</Route>

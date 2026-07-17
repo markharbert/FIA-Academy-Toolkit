@@ -689,6 +689,152 @@ export async function registerRoutes(
     }
   });
 
+  // ─── CF Magic Token Login (secure, single-use, time-limited) ────────────────
+  // GET /api/auth/cf-magic?email={{contact.email_address}}&cfid={{contact.id}}
+  // Embedded in ClickFunnels page. Verifies enrollment, creates a one-time token,
+  // and redirects to /cf-magic-login?t=TOKEN. Old behavior is untouched.
+  const cfMagicLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+      const base = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+      res.redirect(`${base}/cf-magic-login?error=rate_limited`);
+    },
+  });
+
+  app.get("/api/auth/cf-magic", cfMagicLimiter, async (req: Request, res: Response) => {
+    const APP_BASE = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+    // Extract email safely from raw URL to preserve "+" characters
+    const rawEmailMatch = req.originalUrl.match(/[?&]email=([^&]*)/);
+    const rawEmail = rawEmailMatch ? rawEmailMatch[1] : "";
+    const email = rawEmail ? decodeURIComponent(rawEmail).trim().toLowerCase() : "";
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.redirect(`${APP_BASE}/cf-magic-login?error=missing_token`);
+    }
+
+    try {
+      let cfFirstName = "";
+      let cfLastName = "";
+      let cfContactId: string | null = null;
+
+      // Verify CF enrollment if configured
+      if (CF_API_TOKEN && CF_COURSE_ID) {
+        let cfInfo: CfContactInfo;
+        try {
+          cfInfo = await checkCfEnrollmentByEmail(email);
+        } catch (err: any) {
+          console.error("[CF Magic] CF API error:", err?.message);
+          return res.redirect(`${APP_BASE}/cf-magic-login?error=cf_api_error`);
+        }
+        if (!cfInfo.enrolled) {
+          console.warn(`[CF Magic] not enrolled: ${email}`);
+          return res.redirect(`${APP_BASE}/cf-magic-login?error=cf_not_enrolled`);
+        }
+        cfFirstName = cfInfo.firstName || "";
+        cfLastName = cfInfo.lastName || "";
+        cfContactId = cfInfo.contactId || null;
+      }
+
+      // Per-email rate limit: 10 tokens per hour
+      const recentCount = await storage.countRecentCfMagicRequests(email, new Date(Date.now() - 60 * 60 * 1000));
+      if (recentCount >= 10) {
+        return res.redirect(`${APP_BASE}/cf-magic-login?error=rate_limited`);
+      }
+
+      // Find or auto-provision user
+      let user = await storage.getUserByEmail(email);
+      if (user?.isDisabled) {
+        return res.redirect(`${APP_BASE}/cf-magic-login?error=account_disabled`);
+      }
+      if (!user) {
+        const displayName = [cfFirstName, cfLastName].filter(Boolean).join(" ") || email.split("@")[0];
+        user = await storage.createUser({ email, displayName, firstName: cfFirstName, lastName: cfLastName });
+        await storage.updateUser(user.id, { cfEnrolled: true, cfEnrolledAt: new Date(), cfContactId });
+      } else if (CF_API_TOKEN && CF_COURSE_ID) {
+        if (!user.cfEnrolled || user.cfRevokedAt) {
+          await storage.updateUser(user.id, {
+            cfEnrolled: true,
+            cfEnrolledAt: user.cfEnrolledAt ?? new Date(),
+            cfRevokedAt: null,
+            isDisabled: false,
+            cfContactId: cfContactId ?? user.cfContactId,
+          });
+        }
+      }
+
+      // Generate one-time token
+      const expiryMinutes = await storage.getCfMagicExpiryMinutes();
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+      const ip = req.ip || req.socket?.remoteAddress || null;
+
+      await storage.createCfMagicToken({ tokenHash, userId: user.id, email, expiresAt, ipAddress: ip });
+      console.log(`[CF Magic] token created for ${email} (userId: ${user.id}), expires in ${expiryMinutes}m`);
+
+      return res.redirect(`${APP_BASE}/cf-magic-login?t=${rawToken}`);
+    } catch (err: any) {
+      console.error("[CF Magic] unexpected error:", err?.message);
+      return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`);
+    }
+  });
+
+  // POST /api/auth/cf-magic-redeem — validates token, creates session
+  app.post("/api/auth/cf-magic-redeem", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.body as { token: string };
+      if (!token || typeof token !== "string" || token.length < 32) {
+        return res.status(400).json({ success: false, error: "invalid_token" });
+      }
+
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const magicToken = await storage.getCfMagicTokenByHash(tokenHash);
+
+      if (!magicToken) return res.status(400).json({ success: false, error: "invalid_token" });
+      if (magicToken.usedAt) return res.status(400).json({ success: false, error: "already_used" });
+      if (new Date() > new Date(magicToken.expiresAt)) return res.status(400).json({ success: false, error: "expired" });
+
+      const user = await storage.getUser(magicToken.userId);
+      if (!user || user.isDisabled) {
+        return res.status(403).json({ success: false, error: "account_disabled" });
+      }
+
+      // Mark used BEFORE creating session (prevents race-condition reuse)
+      await storage.markCfMagicTokenUsed(magicToken.id);
+
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("[CF Magic] session regeneration error:", err);
+          return res.status(500).json({ success: false, error: "server_error" });
+        }
+        req.session.userId = user.id;
+        req.session.save(async (saveErr) => {
+          if (saveErr) {
+            console.error("[CF Magic] session save error:", saveErr);
+            return res.status(500).json({ success: false, error: "server_error" });
+          }
+          await storage.updateUser(user.id, { lastLoginAt: new Date() });
+          logUserAction({
+            userId: user.id,
+            actionType: "login_success",
+            actionLabel: ActionLabels.login_success,
+            entityType: "auth",
+            metadata: { method: "cf_magic_token" },
+            req,
+          });
+          console.log(`[CF Magic] session created for ${user.email} (userId: ${user.id})`);
+          res.json({ success: true });
+        });
+      });
+    } catch (err: any) {
+      console.error("[CF Magic] redeem error:", err?.message);
+      res.status(500).json({ success: false, error: "server_error" });
+    }
+  });
+
   // Public: serve brand logo (used in email templates)
   app.get("/lion-logo.png", (_req: Request, res: Response) => {
     const imgPath = path.join(process.cwd(), "client", "public", "lion-logo.png");
@@ -1667,6 +1813,42 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[CF Admin] Error:", err);
       res.status(500).json({ message: "Failed to update CF access" });
+    }
+  });
+
+  // Admin: recent CF magic token activity
+  app.get("/api/admin/cf/magic-tokens", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const tokens = await storage.getRecentCfMagicTokens(limit);
+      res.json({ tokens });
+    } catch (err) {
+      console.error("[CF Magic Admin] tokens error:", err);
+      res.status(500).json({ message: "Failed to get magic tokens" });
+    }
+  });
+
+  // Admin: get CF magic token expiry setting
+  app.get("/api/admin/cf/magic-settings", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const expiryMinutes = await storage.getCfMagicExpiryMinutes();
+      res.json({ expiryMinutes });
+    } catch (err) {
+      console.error("[CF Magic Admin] settings error:", err);
+      res.status(500).json({ message: "Failed to get settings" });
+    }
+  });
+
+  // Admin: save CF magic token expiry setting
+  app.post("/api/admin/cf/magic-settings", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { expiryMinutes } = req.body as { expiryMinutes: number };
+      const mins = Math.min(Math.max(1, parseInt(String(expiryMinutes)) || 15), 1440);
+      await storage.setCfMagicExpiryMinutes(mins);
+      res.json({ ok: true, expiryMinutes: mins });
+    } catch (err) {
+      console.error("[CF Magic Admin] save settings error:", err);
+      res.status(500).json({ message: "Failed to save settings" });
     }
   });
 

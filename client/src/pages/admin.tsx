@@ -63,6 +63,7 @@ import {
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
   CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone, Megaphone, GripVertical,
   Bell, AlertTriangle, Star, Gift, Rocket, Sparkles, PartyPopper, Trophy, Heart, Flame, Tag, Calendar,
+  Palette, Timer, ShieldCheck, Code,
   type LucideIcon,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -480,6 +481,58 @@ function CfIntegrationTab() {
   };
 
   const webhookUrl = `${window.location.protocol}//${window.location.host}/api/webhooks/clickfunnels`;
+
+  // Magic Link builder state
+  const [btnText, setBtnText] = useState("Access Academy Toolkit");
+  const [btnBg, setBtnBg] = useState("#4f46e5");
+  const [btnColor, setBtnColor] = useState("#ffffff");
+  const [btnRadius, setBtnRadius] = useState<"rounded" | "pill" | "square">("rounded");
+  const [btnWidth, setBtnWidth] = useState<"auto" | "full">("auto");
+  const [expirySaving, setExpirySaving] = useState(false);
+  const [expiryInput, setExpiryInput] = useState("15");
+
+  const { data: magicSettings } = useQuery<{ expiryMinutes: number }>({
+    queryKey: ["/api/admin/cf/magic-settings"],
+  });
+  const { data: magicTokensData, isLoading: magicTokensLoading } = useQuery<{ tokens: Array<{ id: string; email: string; expiresAt: string; usedAt: string | null; createdAt: string; ipAddress: string | null }> }>({
+    queryKey: ["/api/admin/cf/magic-tokens"],
+    staleTime: 0,
+    refetchOnMount: "always" as const,
+  });
+  const magicTokens = magicTokensData?.tokens ?? [];
+
+  useEffect(() => {
+    if (magicSettings?.expiryMinutes) setExpiryInput(String(magicSettings.expiryMinutes));
+  }, [magicSettings]);
+
+  const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
+  const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
+  const embedCode = `<a href="${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}" style="display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:14px 28px; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:15px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}">${btnText}</a>`;
+
+  const handleSaveExpiry = async () => {
+    const mins = parseInt(expiryInput, 10);
+    if (!mins || mins < 1) {
+      toast({ title: "Enter a valid number of minutes", variant: "destructive" });
+      return;
+    }
+    setExpirySaving(true);
+    try {
+      const res = await fetch("/api/admin/cf/magic-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ expiryMinutes: mins }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/cf/magic-settings"] });
+      toast({ title: `Expiry set to ${data.expiryMinutes} minutes` });
+    } catch (err: any) {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+    } finally {
+      setExpirySaving(false);
+    }
+  };
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -920,6 +973,266 @@ function CfIntegrationTab() {
           )}
           {cfUsers.length > 0 && (
             <p className="text-xs text-muted-foreground mt-3">{cfUsers.length} member{cfUsers.length !== 1 ? "s" : ""} shown</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ─── Magic Link Button Builder ─────────────────────────────────── */}
+      <div>
+        <h3 className="text-lg font-semibold">Secure Magic Link Login</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Generate a customizable button to embed in your ClickFunnels members area. Each click creates a single-use, time-limited login link — far more secure than the standard one-click flow.
+        </p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Button Customizer */}
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-purple-500 to-indigo-400" />
+          <CardHeader className="pt-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Palette className="h-4 w-4 text-purple-500" />
+              Button Customizer
+            </CardTitle>
+            <CardDescription>Design the embed button. The code updates live below.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1">Button Text</label>
+              <input
+                type="text"
+                value={btnText}
+                onChange={(e) => setBtnText(e.target.value)}
+                className="w-full text-sm border rounded-md px-3 py-2 bg-background"
+                data-testid="input-btn-text"
+                maxLength={80}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Background Color</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={btnBg} onChange={(e) => setBtnBg(e.target.value)}
+                    className="h-8 w-10 cursor-pointer rounded border bg-background p-0.5" data-testid="input-btn-bg" />
+                  <input type="text" value={btnBg} onChange={(e) => setBtnBg(e.target.value)}
+                    className="flex-1 text-xs border rounded-md px-2 py-1.5 bg-background font-mono" maxLength={7} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Text Color</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={btnColor} onChange={(e) => setBtnColor(e.target.value)}
+                    className="h-8 w-10 cursor-pointer rounded border bg-background p-0.5" data-testid="input-btn-color" />
+                  <input type="text" value={btnColor} onChange={(e) => setBtnColor(e.target.value)}
+                    className="flex-1 text-xs border rounded-md px-2 py-1.5 bg-background font-mono" maxLength={7} />
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Corner Style</label>
+              <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
+                {(["rounded", "pill", "square"] as const).map((r) => (
+                  <button key={r} onClick={() => setBtnRadius(r)}
+                    className={`flex-1 px-2 py-1 text-xs rounded-md font-medium transition-colors ${btnRadius === r ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    data-testid={`btn-radius-${r}`}>
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Width</label>
+              <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
+                {(["auto", "full"] as const).map((w) => (
+                  <button key={w} onClick={() => setBtnWidth(w)}
+                    className={`flex-1 px-2 py-1 text-xs rounded-md font-medium transition-colors ${btnWidth === w ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    data-testid={`btn-width-${w}`}>
+                    {w === "auto" ? "Auto (inline)" : "Full Width"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Live Preview */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-2">Preview</label>
+              <div className="rounded-lg border bg-muted/30 p-4 flex items-center justify-center min-h-[64px]">
+                <a
+                  href="#"
+                  onClick={(e) => e.preventDefault()}
+                  style={{
+                    display: "inline-block",
+                    backgroundColor: btnBg,
+                    color: btnColor,
+                    padding: "14px 28px",
+                    borderRadius: borderRadiusMap[btnRadius],
+                    fontFamily: "sans-serif",
+                    fontSize: "15px",
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    textAlign: "center",
+                    ...(btnWidth === "full" ? { width: "100%", boxSizing: "border-box" as const } : {}),
+                  }}
+                >
+                  {btnText || "Button Text"}
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Token Settings */}
+        <div className="space-y-6">
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-teal-500 to-cyan-400" />
+            <CardHeader className="pt-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Timer className="h-4 w-4 text-teal-500" />
+                Token Expiry
+              </CardTitle>
+              <CardDescription>
+                How long each magic login link stays valid after it's generated. Shorter = more secure.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={expiryInput}
+                  onChange={(e) => setExpiryInput(e.target.value)}
+                  className="w-20 text-sm border rounded-md px-3 py-2 bg-background font-mono text-right"
+                  data-testid="input-expiry-minutes"
+                />
+                <span className="text-sm text-muted-foreground">minutes</span>
+                <Button size="sm" onClick={handleSaveExpiry} disabled={expirySaving} data-testid="button-save-expiry">
+                  {expirySaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[5, 10, 15, 30, 60].map((m) => (
+                  <button key={m} onClick={() => setExpiryInput(String(m))}
+                    className={`text-xs px-2 py-1 rounded border transition-colors ${expiryInput === String(m) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
+                    data-testid={`preset-expiry-${m}`}>
+                    {m >= 60 ? `${m / 60}h` : `${m}m`}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Current setting: <span className="font-medium text-foreground">{magicSettings?.expiryMinutes ?? 15} minutes</span>
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-orange-500 to-amber-400" />
+            <CardHeader className="pt-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-orange-500" />
+                How It Works
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <div className="flex gap-2"><span className="text-orange-500 font-bold">1.</span><span>Member clicks the button in the CF members area</span></div>
+              <div className="flex gap-2"><span className="text-orange-500 font-bold">2.</span><span>Server verifies active CF enrollment via the API</span></div>
+              <div className="flex gap-2"><span className="text-orange-500 font-bold">3.</span><span>A single-use token is created and stored in the database</span></div>
+              <div className="flex gap-2"><span className="text-orange-500 font-bold">4.</span><span>Member is logged in — the token is immediately consumed</span></div>
+              <div className="flex gap-2"><span className="text-orange-500 font-bold">5.</span><span>Anyone reusing the link gets an "already used" error</span></div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Embed Code */}
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-400" />
+        <CardHeader className="pt-4">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Code className="h-4 w-4 text-violet-500" />
+            Embed Code
+          </CardTitle>
+          <CardDescription>
+            Paste this into a <strong>Custom HTML</strong> block in your ClickFunnels members area page. ClickFunnels will automatically fill in <code className="text-xs bg-muted px-1 rounded">&#123;&#123;contact.email_address&#125;&#125;</code> with the logged-in member's email.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="relative">
+            <pre className="text-xs bg-muted rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed font-mono" data-testid="embed-code-preview">
+              {embedCode}
+            </pre>
+            <Button
+              variant="outline"
+              size="sm"
+              className="absolute top-2 right-2"
+              onClick={() => handleCopy(embedCode, "Embed code")}
+              data-testid="button-copy-embed-code"
+            >
+              <Copy className="h-3.5 w-3.5 mr-1.5" />
+              Copy
+            </Button>
+          </div>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200">
+            <strong>Setup:</strong> In ClickFunnels, edit your members area page → Add Element → Custom HTML → paste the code above. No JavaScript required.
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Token Activity */}
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-slate-500 to-gray-400" />
+        <CardHeader className="pt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="h-4 w-4 text-slate-500" />
+                Recent Magic Link Activity
+              </CardTitle>
+              <CardDescription>Last 50 token requests. Shows who used magic login and whether tokens were consumed.</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/cf/magic-tokens"] })} data-testid="button-refresh-tokens">
+              <RotateCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {magicTokensLoading ? (
+            <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : magicTokens.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No magic link tokens generated yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Member</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Requested</TableHead>
+                  <TableHead>IP</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {magicTokens.map((t) => {
+                  const now = new Date();
+                  const expired = !t.usedAt && new Date(t.expiresAt) < now;
+                  const status = t.usedAt ? "used" : expired ? "expired" : "active";
+                  return (
+                    <TableRow key={t.id} data-testid={`magic-token-row-${t.id}`}>
+                      <TableCell className="text-sm">{t.email}</TableCell>
+                      <TableCell>
+                        {status === "used" && <Badge className="text-xs border-transparent bg-green-500/15 text-green-700 dark:text-green-400">Used</Badge>}
+                        {status === "expired" && <Badge variant="outline" className="text-xs text-muted-foreground">Expired</Badge>}
+                        {status === "active" && <Badge className="text-xs border-transparent bg-blue-500/15 text-blue-700 dark:text-blue-400">Active</Badge>}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(t.createdAt).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">
+                        {t.ipAddress ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
