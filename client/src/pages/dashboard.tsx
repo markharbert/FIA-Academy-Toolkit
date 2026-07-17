@@ -402,6 +402,8 @@ export default function DashboardPage() {
   // ── Active announcements ──────────────────────────────────────────────────────
   const { data: announcementData } = useQuery<{ announcements: ActiveAnnouncement[] }>({
     queryKey: ["/api/announcements/active"],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const activeAnnouncements = announcementData?.announcements ?? [];
 

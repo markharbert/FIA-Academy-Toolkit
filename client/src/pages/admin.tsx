@@ -2486,6 +2486,7 @@ function AnnouncementCard({
   };
   const color = ANNOUNCEMENT_COLORS.find(c => c.key === announcement.bgColor);
   const isCustomBg = announcement.bgColor.startsWith("#");
+  const CardIcon = announcement.icon ? (ANNOUNCEMENT_ICON_MAP[announcement.icon] ?? null) : null;
   return (
     <div ref={setNodeRef} style={style}>
       <Card className={`overflow-hidden transition-shadow ${announcement.isActive ? "ring-2 ring-emerald-400/50 ring-offset-1" : ""} ${isDragging ? "shadow-xl" : ""}`}>
@@ -2503,6 +2504,12 @@ function AnnouncementCard({
               className={`h-3 w-3 rounded-full shrink-0 ${isCustomBg ? "" : (color?.swatch ?? "bg-violet-600")}`}
               style={isCustomBg ? { backgroundColor: announcement.bgColor } : undefined}
             />
+            {CardIcon && (
+              <CardIcon
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                style={announcement.iconColor?.startsWith("#") ? { color: announcement.iconColor } : undefined}
+              />
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-sm truncate">{announcement.callout}</span>
