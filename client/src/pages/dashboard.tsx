@@ -34,6 +34,7 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -41,7 +42,6 @@ import {
   rectSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 
 import {
   type WidgetConfig,
@@ -133,31 +133,23 @@ function SortableWidget({
   config: WidgetConfig;
   onRemove: () => void;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: config.id });
+  // We intentionally do NOT apply transform/transition to the node —
+  // live DOM reordering via onDragOver handles placement without CSS
+  // transforms, which cause contortion in variable-width CSS grids.
+  const { attributes, listeners, setNodeRef, isDragging } = useSortable({
+    id: config.id,
+  });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  // While this item is being dragged, render a dashed placeholder in its
-  // grid slot — the DragOverlay shows the real widget floating under cursor.
+  // While this item is being dragged, keep a same-size dashed placeholder
+  // in the grid slot. The DragOverlay shows the real floating widget.
   if (isDragging) {
     return (
       <div
         ref={setNodeRef}
-        style={style}
         className={SIZE_CLASSES[config.size]}
         data-testid={`widget-cell-${config.id}`}
       >
-        <div className="h-full min-h-[140px] rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/40 dark:bg-gray-900/20 transition-colors" />
+        <div className="h-full min-h-[140px] rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/40 dark:bg-gray-900/20" />
       </div>
     );
   }
@@ -165,11 +157,10 @@ function SortableWidget({
   return (
     <div
       ref={setNodeRef}
-      style={style}
       className={`${SIZE_CLASSES[config.size]} relative`}
       data-testid={`widget-cell-${config.id}`}
     >
-      {/* Always-visible controls in arrange mode */}
+      {/* Controls — always visible in arrange mode */}
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-2 pt-2 pointer-events-auto">
         <button
           {...attributes}
@@ -273,18 +264,25 @@ export default function DashboardPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
-  // Track which widget is actively being dragged (for DragOverlay)
+  // Always-current ref so handleDragEnd can read latest layout without
+  // stale-closure issues (onDragOver updates state many times mid-drag).
+  const localLayoutRef = useRef(localLayout);
+  useEffect(() => { localLayoutRef.current = localLayout; }, [localLayout]);
+
+  // Track which widget is being dragged (feeds the DragOverlay)
   const [activeWidgetId, setActiveWidgetId] = useState<WidgetId | null>(null);
   const activeDragWidth = useRef<number>(0);
 
-  function handleDragStart(event: DragStartEvent) {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveWidgetId(event.active.id as WidgetId);
     const rect = (event.active.rect.current as any)?.initial;
     if (rect?.width) activeDragWidth.current = rect.width;
-  }
+  }, []);
 
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveWidgetId(null);
+  // Live-reorder the DOM as the cursor moves over different widgets.
+  // Because we directly swap the React state here, the grid re-renders
+  // with correct CSS grid placement — NO CSS transforms are needed.
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -296,11 +294,15 @@ export default function DashboardPage() {
       const reordered = arrayMove(visibleIds, oldIdx, newIdx);
       const hidden = prev.filter((w) => !w.visible);
       const visible = reordered.map((id) => prev.find((w) => w.id === id)!);
-      const next = [...visible, ...hidden];
-      scheduleAutoSave(next);
-      return next;
+      return [...visible, ...hidden];
     });
-  }
+  }, []);
+
+  // On drop: clear overlay and save whatever order the live reorder landed on.
+  const handleDragEnd = useCallback((_event: DragEndEvent) => {
+    setActiveWidgetId(null);
+    scheduleAutoSave(localLayoutRef.current);
+  }, [scheduleAutoSave]);
 
   // ── Arrange mode: remove widget ──────────────────────────────────────────────
   function removeWidget(id: WidgetId) {
@@ -531,6 +533,7 @@ export default function DashboardPage() {
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
