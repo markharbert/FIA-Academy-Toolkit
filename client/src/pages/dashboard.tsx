@@ -22,6 +22,7 @@ import {
   GripVertical,
   X,
   Check,
+  Plus,
 } from "lucide-react";
 import type { DmoEntry, InsightsResponse } from "@shared/schema";
 
@@ -47,6 +48,7 @@ import {
   type WidgetConfig,
   type WidgetId,
   SIZE_CLASSES,
+  WIDGET_META,
   mergeLayout,
   dmoTotalPts,
 } from "@/components/dashboard/widget-registry";
@@ -524,22 +526,43 @@ export default function DashboardPage() {
 
         {/* ── Widget grid ──────────────────────────────────────────────────────── */}
         {visibleWidgets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
-            <SlidersHorizontal className="h-8 w-8 text-muted-foreground/30" />
-            <p className="text-sm font-medium text-muted-foreground">
-              All widgets are hidden
-            </p>
-            <p className="text-xs text-muted-foreground/70">
-              Use Customize → Add / Remove Widgets to show some.
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setActivePanel("widgets")}
-              data-testid="button-customize-empty"
-            >
-              Add widgets
-            </Button>
+          /* ── Ghost grid: shown when all widgets are hidden ── */
+          <div>
+            <div className="flex items-center justify-between mb-5">
+              <p className="text-sm text-muted-foreground">
+                Your dashboard is empty — click a slot to add widgets.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setActivePanel("widgets")}
+                data-testid="button-customize-empty"
+                className="shrink-0 ml-4"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Add Widgets
+              </Button>
+            </div>
+            <div className="grid grid-cols-12 gap-4">
+              {localLayout.map((config) => {
+                const meta = WIDGET_META[config.id];
+                return (
+                  <div
+                    key={config.id}
+                    className={`${SIZE_CLASSES[config.size]} min-h-[130px] rounded-xl border-2 border-dashed border-muted-foreground/15 bg-muted/10 flex flex-col items-center justify-center gap-2 p-4 cursor-pointer hover:border-violet-400/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/10 transition-all group`}
+                    onClick={() => setActivePanel("widgets")}
+                    data-testid={`ghost-slot-${config.id}`}
+                  >
+                    <div className="h-8 w-8 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center group-hover:border-violet-400/60 transition-colors">
+                      <Plus className="h-3.5 w-3.5 text-muted-foreground/25 group-hover:text-violet-500 transition-colors" />
+                    </div>
+                    <p className="text-xs font-medium text-muted-foreground/40 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors text-center leading-tight">
+                      {meta.title}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : arrangeMode ? (
           /* ── Drag-and-drop grid (arrange mode only) ── */
