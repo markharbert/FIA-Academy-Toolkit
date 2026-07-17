@@ -31,20 +31,26 @@ export type WidgetConfig = {
   size: WidgetSize;
 };
 
+// ── Default layout ────────────────────────────────────────────────────────────
+// Row 1: Projects (2/3 featured) | Email Health (1/3)
+// Row 2: Quick Actions (2/3)     | DMO Streak (1/3)
+//
+// Left column = workspace; right column = daily health checks.
+// Everything else is hidden — members add what they need via Customize.
 export const DEFAULT_LAYOUT: WidgetConfig[] = [
   { id: "projects",           visible: true,  size: "two-thirds" },
   { id: "email-health",       visible: true,  size: "third"      },
+  { id: "quick-actions",      visible: true,  size: "two-thirds" },
   { id: "dmo-streak",         visible: true,  size: "third"      },
-  { id: "inbox-analyzer",     visible: true,  size: "third"      },
-  { id: "competitor-pulse",   visible: true,  size: "third"      },
-  { id: "recent-activity",    visible: true,  size: "full"       },
+  { id: "recent-activity",    visible: false, size: "full"       },
+  { id: "inbox-analyzer",     visible: false, size: "third"      },
+  { id: "competitor-pulse",   visible: false, size: "two-thirds" },
   { id: "video-score",        visible: false, size: "third"      },
-  { id: "topic-pulse",        visible: false, size: "third"      },
+  { id: "topic-pulse",        visible: false, size: "two-thirds" },
   { id: "scripts",            visible: false, size: "third"      },
-  { id: "youtube-analytics",  visible: false, size: "half"       },
-  { id: "search-console",     visible: false, size: "half"       },
-  { id: "funnel-board",       visible: false, size: "half"       },
-  { id: "quick-actions",      visible: false, size: "full"       },
+  { id: "youtube-analytics",  visible: false, size: "two-thirds" },
+  { id: "search-console",     visible: false, size: "third"      },
+  { id: "funnel-board",       visible: false, size: "two-thirds" },
 ];
 
 export const WIDGET_META: Record<WidgetId, { title: string; description: string }> = {
