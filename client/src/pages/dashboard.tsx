@@ -31,13 +31,14 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
-  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   useSortable,
+  rectSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import {
   type WidgetConfig,
@@ -188,8 +189,9 @@ function GhostSlot({
 }
 
 // ─── Sortable widget (used only in arrange mode) ─────────────────────────────
-// `placeholderHeight` matches the dragged widget's measured height so the
-// dashed ghost slot stays the same size as the real widget.
+// Uses CSS.Transform + transition from useSortable so non-active widgets
+// smoothly slide to their projected positions as you drag — no DOM reorder
+// mid-drag, only CSS transforms, then the real reorder happens on drop.
 
 function SortableWidget({
   config,
@@ -200,19 +202,29 @@ function SortableWidget({
   onRemove: () => void;
   placeholderHeight: number;
 }) {
-  // We intentionally do NOT apply transform/transition to the node —
-  // live DOM reordering via onDragOver handles placement without CSS
-  // transforms, which cause contortion in variable-width CSS grids.
-  const { attributes, listeners, setNodeRef, isDragging } = useSortable({
-    id: config.id,
-  });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    isDragging,
+    transform,
+    transition,
+  } = useSortable({ id: config.id });
 
-  // While this item is being dragged, keep a same-size dashed placeholder
-  // in the grid slot. The DragOverlay shows the real floating widget.
+  // Apply CSS transform + transition to ALL items (including the placeholder).
+  // Non-active items animate to their projected positions via rectSortingStrategy.
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  // While this item is being dragged, render a dashed placeholder in the
+  // original grid slot. The DragOverlay shows the real floating widget.
   if (isDragging) {
     return (
       <div
         ref={setNodeRef}
+        style={style}
         className={`${SIZE_CLASSES[config.size]} flex flex-col`}
         data-testid={`widget-cell-${config.id}`}
       >
@@ -227,6 +239,7 @@ function SortableWidget({
   return (
     <div
       ref={setNodeRef}
+      style={style}
       className={`${SIZE_CLASSES[config.size]} relative flex flex-col`}
       data-testid={`widget-cell-${config.id}`}
     >
@@ -334,13 +347,6 @@ export default function DashboardPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
-  // Always-current ref so handleDragEnd can read latest layout without
-  // stale-closure issues (onDragOver updates state many times mid-drag).
-  // Updated synchronously during render (before paint) so it's never stale
-  // when a rapid drag sequence ends.
-  const localLayoutRef = useRef(localLayout);
-  localLayoutRef.current = localLayout;
-
   // Track which widget is being dragged (feeds the DragOverlay)
   const [activeWidgetId, setActiveWidgetId] = useState<WidgetId | null>(null);
   const activeDragWidth = useRef<number>(0);
@@ -353,11 +359,14 @@ export default function DashboardPage() {
     if (rect?.height) activeDragHeight.current = rect.height;
   }, []);
 
-  // Live-reorder the DOM as the cursor moves over different widgets.
-  // Because we directly swap the React state here, the grid re-renders
-  // with correct CSS grid placement — NO CSS transforms are needed.
-  const handleDragOver = useCallback((event: DragOverEvent) => {
+  // On drop: compute the new order from active/over IDs and persist.
+  // All animation during drag is handled by CSS transforms (rectSortingStrategy
+  // + useSortable transform/transition) — no DOM reordering mid-drag.
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveWidgetId(null);
+
+    // Dropped in the same place or outside the grid — nothing to do
     if (!over || active.id === over.id) return;
 
     setLocalLayout((prev) => {
@@ -368,14 +377,10 @@ export default function DashboardPage() {
       const reordered = arrayMove(visibleIds, oldIdx, newIdx);
       const hidden = prev.filter((w) => !w.visible);
       const visible = reordered.map((id) => prev.find((w) => w.id === id)!);
-      return [...visible, ...hidden];
+      const newLayout = [...visible, ...hidden];
+      scheduleAutoSave(newLayout);
+      return newLayout;
     });
-  }, []);
-
-  // On drop: clear overlay and save whatever order the live reorder landed on.
-  const handleDragEnd = useCallback((_event: DragEndEvent) => {
-    setActiveWidgetId(null);
-    scheduleAutoSave(localLayoutRef.current);
   }, [scheduleAutoSave]);
 
   // ── Arrange mode: remove widget ──────────────────────────────────────────────
@@ -587,18 +592,17 @@ export default function DashboardPage() {
                 sensors={sensors}
                 collisionDetection={closestCenter}
                 onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
               >
                 {/*
-                  strategy={() => null} — a no-op that skips all getBoundingClientRect
-                  calls on every drag event. Since we live-reorder the DOM in onDragOver
-                  (not via CSS transforms), dnd-kit doesn't need to compute any offsets.
-                  This eliminates the #1 source of layout thrash during drag.
+                  rectSortingStrategy measures actual DOM rects so dnd-kit can
+                  compute the exact CSS transforms to slide each non-active widget
+                  to its projected position while you drag. The DOM reorders only
+                  on drop (handleDragEnd), keeping animations smooth mid-drag.
                 */}
                 <SortableContext
                   items={visibleWidgets.map((w) => w.id)}
-                  strategy={() => null}
+                  strategy={rectSortingStrategy}
                 >
                   {fullGrid}
                 </SortableContext>
