@@ -1973,3 +1973,10 @@ export const announcements = pgTable("announcements", {
 export const insertAnnouncementSchema = createInsertSchema(announcements).omit({ id: true, createdAt: true });
 export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
 export type Announcement = typeof announcements.$inferSelect;
+
+export const dismissedAnnouncements = pgTable("dismissed_announcements", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  announcementId: integer("announcement_id").notNull().references(() => announcements.id, { onDelete: "cascade" }),
+  dismissedAt: timestamp("dismissed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

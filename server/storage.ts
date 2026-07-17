@@ -51,7 +51,7 @@ import {
   funnels, type Funnel, type InsertFunnel,
   funnelBrainFiles, type FunnelBrainFile,
   funnelTemplates, type FunnelTemplate,
-  announcements, type Announcement, type InsertAnnouncement,
+  announcements, dismissedAnnouncements, type Announcement, type InsertAnnouncement,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
@@ -563,7 +563,7 @@ export interface IStorage {
   deleteFunnelTemplate(id: string): Promise<void>;
 
   // Announcements
-  getActiveAnnouncements(): Promise<Announcement[]>;
+  getActiveAnnouncements(userId: string): Promise<Announcement[]>;
   getAllAnnouncements(): Promise<Announcement[]>;
   createAnnouncement(data: InsertAnnouncement): Promise<Announcement>;
   updateAnnouncement(id: number, data: Partial<InsertAnnouncement>): Promise<Announcement | null>;
@@ -571,6 +571,7 @@ export interface IStorage {
   activateAnnouncement(id: number): Promise<void>;
   deactivateAnnouncement(id: number): Promise<void>;
   reorderAnnouncements(orderedIds: number[]): Promise<void>;
+  dismissAnnouncement(userId: string, announcementId: number): Promise<void>;
   resetAnnouncementDismissals(id: number): Promise<void>;
 
   // Inbox Intel (Competitor Email Intelligence)
@@ -4857,10 +4858,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Announcements ────────────────────────────────────────────────────────────
-  async getActiveAnnouncements(): Promise<Announcement[]> {
-    return db.select().from(announcements)
-      .where(eq(announcements.isActive, true))
-      .orderBy(asc(announcements.sortOrder), asc(announcements.createdAt));
+  async getActiveAnnouncements(userId: string): Promise<Announcement[]> {
+    const [active, dismissed] = await Promise.all([
+      db.select().from(announcements)
+        .where(eq(announcements.isActive, true))
+        .orderBy(asc(announcements.sortOrder), asc(announcements.createdAt)),
+      db.select({ announcementId: dismissedAnnouncements.announcementId })
+        .from(dismissedAnnouncements)
+        .where(eq(dismissedAnnouncements.userId, userId)),
+    ]);
+    const dismissedIds = new Set(dismissed.map(d => d.announcementId));
+    return active.filter(a => !dismissedIds.has(a.id));
   }
 
   async getAllAnnouncements(): Promise<Announcement[]> {
@@ -4900,10 +4908,15 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
+  async dismissAnnouncement(userId: string, announcementId: number): Promise<void> {
+    await db.insert(dismissedAnnouncements)
+      .values({ userId, announcementId })
+      .onConflictDoNothing();
+  }
+
   async resetAnnouncementDismissals(id: number): Promise<void> {
-    await db.update(announcements)
-      .set({ version: sql`${announcements.version} + 1` })
-      .where(eq(announcements.id, id));
+    await db.delete(dismissedAnnouncements)
+      .where(eq(dismissedAnnouncements.announcementId, id));
   }
 }
 

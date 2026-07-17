@@ -287,20 +287,10 @@ type ActiveAnnouncement = {
   ctaLabel: string | null;
   ctaUrl: string | null;
   bgColor: string;
-  version: number;
 };
 
 function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement }) {
-  const dismissKey = `dismissed-announcement-${announcement.id}-v${announcement.version}`;
-  const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(dismissKey) === "1"; }
-    catch { return false; }
-  });
-
-  useEffect(() => {
-    try { setDismissed(localStorage.getItem(dismissKey) === "1"); }
-    catch { setDismissed(false); }
-  }, [dismissKey]);
+  const [dismissed, setDismissed] = useState(false);
 
   if (dismissed) return null;
 
@@ -309,8 +299,8 @@ function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement
 
   function dismiss() {
     setDismissed(true);
-    try { localStorage.setItem(dismissKey, "1"); }
-    catch { /* ignore */ }
+    apiRequest("POST", `/api/announcements/${announcement.id}/dismiss`).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: ["/api/announcements/active"] });
   }
 
   return (

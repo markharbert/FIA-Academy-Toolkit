@@ -11568,14 +11568,27 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   });
 
   // ── Announcements ─────────────────────────────────────────────────────────
-  // Public (auth-only): active announcement for the dashboard banner
-  app.get("/api/announcements/active", requireAuth, async (_req: Request, res: Response) => {
+  // Public (auth-only): active announcements for the dashboard banner, filtered by user dismissals
+  app.get("/api/announcements/active", requireAuth, async (req: Request, res: Response) => {
     try {
-      const announcements = await storage.getActiveAnnouncements();
+      const userId = req.session.userId as string;
+      const announcements = await storage.getActiveAnnouncements(userId);
       res.json({ announcements });
     } catch (err) {
       console.error("[announcements] get active error:", err);
       res.status(500).json({ message: "Failed to get announcements" });
+    }
+  });
+
+  // Dismiss a banner (records server-side so it won't show again for this user)
+  app.post("/api/announcements/:id/dismiss", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId as string;
+      await storage.dismissAnnouncement(userId, parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[announcements] dismiss error:", err);
+      res.status(500).json({ message: "Failed to dismiss announcement" });
     }
   });
 
