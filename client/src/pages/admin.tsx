@@ -1903,11 +1903,19 @@ function AdminFeedbackTab() {
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Announcements ─────────────────────────────────────────────────────────────
 
+function hexTextColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 145 ? "#1a1a1a" : "#ffffff";
+}
+
 const ANNOUNCEMENT_COLORS = [
   { key: "violet", label: "Violet",  swatch: "bg-violet-600" },
   { key: "indigo", label: "Indigo",  swatch: "bg-indigo-600" },
   { key: "teal",   label: "Teal",    swatch: "bg-teal-600"   },
   { key: "amber",  label: "Amber",   swatch: "bg-amber-500"  },
+  { key: "yellow", label: "Yellow",  swatch: "bg-yellow-400" },
   { key: "rose",   label: "Rose",    swatch: "bg-rose-600"   },
   { key: "red",    label: "Red",     swatch: "bg-red-600"    },
   { key: "slate",  label: "Slate",   swatch: "bg-slate-700"  },
@@ -1916,13 +1924,14 @@ const ANNOUNCEMENT_COLORS = [
 type AnnouncementColorKey = typeof ANNOUNCEMENT_COLORS[number]["key"];
 
 const ANNOUNCEMENT_PREVIEW_MAP: Record<string, { bar: string; text: string; button: string }> = {
-  violet: { bar: "bg-violet-600",  text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
-  indigo: { bar: "bg-indigo-600",  text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
-  teal:   { bar: "bg-teal-600",    text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
-  amber:  { bar: "bg-amber-500",   text: "text-amber-950",  button: "bg-amber-950/15 hover:bg-amber-950/25 text-amber-950 border-amber-950/25"              },
-  rose:   { bar: "bg-rose-600",    text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
-  red:    { bar: "bg-red-600",     text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
-  slate:  { bar: "bg-slate-700",   text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
+  violet: { bar: "bg-violet-600",  text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                                 },
+  indigo: { bar: "bg-indigo-600",  text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                                 },
+  teal:   { bar: "bg-teal-600",    text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                                 },
+  amber:  { bar: "bg-amber-500",   text: "text-amber-950",  button: "bg-amber-950/15 hover:bg-amber-950/25 text-amber-950 border-amber-950/25"                 },
+  yellow: { bar: "bg-yellow-400",  text: "text-yellow-950", button: "bg-yellow-950/10 hover:bg-yellow-950/20 text-yellow-950 border-yellow-950/20"             },
+  rose:   { bar: "bg-rose-600",    text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                                 },
+  red:    { bar: "bg-red-600",     text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                                 },
+  slate:  { bar: "bg-slate-700",   text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                                 },
 };
 
 type AnnouncementRow = {
@@ -1942,7 +1951,7 @@ const emptyAnnouncementForm = {
   body: "",
   ctaLabel: "",
   ctaUrl: "",
-  bgColor: "violet" as AnnouncementColorKey,
+  bgColor: "violet" as string,
   isActive: false,
 };
 
@@ -2067,7 +2076,7 @@ function AnnouncementsTab() {
       body: a.body ?? "",
       ctaLabel: a.ctaLabel ?? "",
       ctaUrl: a.ctaUrl ?? "",
-      bgColor: (a.bgColor as AnnouncementColorKey) ?? "violet",
+      bgColor: a.bgColor || "violet",
       isActive: a.isActive,
     });
     setShowForm(true);
@@ -2090,7 +2099,9 @@ function AnnouncementsTab() {
   }
 
   const isBusy = createMutation.isPending || updateMutation.isPending;
-  const previewStyles = ANNOUNCEMENT_PREVIEW_MAP[form.bgColor] ?? ANNOUNCEMENT_PREVIEW_MAP.violet;
+  const isCustomColor = form.bgColor.startsWith("#");
+  const previewStyles = isCustomColor ? null : (ANNOUNCEMENT_PREVIEW_MAP[form.bgColor] ?? ANNOUNCEMENT_PREVIEW_MAP.violet);
+  const customText = isCustomColor ? hexTextColor(form.bgColor) : null;
 
   return (
     <div className="space-y-6">
@@ -2118,20 +2129,34 @@ function AnnouncementsTab() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className={`${previewStyles.bar} rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap`}>
-              <span className={`font-bold text-sm shrink-0 ${previewStyles.text}`}>
+            <div
+              className={`${isCustomColor ? "" : previewStyles!.bar} rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap`}
+              style={isCustomColor ? { backgroundColor: form.bgColor } : undefined}
+            >
+              <span
+                className={`font-bold text-sm shrink-0 ${isCustomColor ? "" : previewStyles!.text}`}
+                style={isCustomColor ? { color: customText! } : undefined}
+              >
                 {form.callout || "Your callout here"}
               </span>
               {form.body && (
-                <span className={`text-sm opacity-90 ${previewStyles.text}`}>{form.body}</span>
+                <span
+                  className={`text-sm opacity-90 ${isCustomColor ? "" : previewStyles!.text}`}
+                  style={isCustomColor ? { color: customText! } : undefined}
+                >
+                  {form.body}
+                </span>
               )}
               <div className="flex-1" />
               {form.ctaLabel && (
-                <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-default ${previewStyles.button}`}>
+                <span
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-default ${isCustomColor ? "" : previewStyles!.button}`}
+                  style={isCustomColor ? { color: customText!, borderColor: `${customText}50`, backgroundColor: `${customText}18` } : undefined}
+                >
                   {form.ctaLabel}
                 </span>
               )}
-              <X className={`h-4 w-4 opacity-50 ${previewStyles.text}`} />
+              <X className={`h-4 w-4 opacity-50 ${isCustomColor ? "" : previewStyles!.text}`} style={isCustomColor ? { color: customText! } : undefined} />
             </div>
             <p className="text-[11px] text-muted-foreground -mt-3 pl-1">↑ Live preview</p>
 
@@ -2189,7 +2214,7 @@ function AnnouncementsTab() {
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-2">
                   Background Color
                 </label>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap items-center">
                   {ANNOUNCEMENT_COLORS.map(c => (
                     <button
                       key={c.key}
@@ -2204,6 +2229,31 @@ function AnnouncementsTab() {
                       data-testid={`color-swatch-${c.key}`}
                     />
                   ))}
+                  {/* Custom hex color picker */}
+                  <div className="relative" title="Custom color">
+                    <input
+                      type="color"
+                      id="custom-color-picker"
+                      value={form.bgColor.startsWith("#") ? form.bgColor : "#a855f7"}
+                      onChange={e => setForm(f => ({ ...f, bgColor: e.target.value }))}
+                      className="sr-only"
+                      data-testid="color-picker-custom"
+                    />
+                    <label
+                      htmlFor="custom-color-picker"
+                      title="Custom color"
+                      className={`h-8 w-8 rounded-full cursor-pointer flex items-center justify-center transition-all border-2 ${
+                        form.bgColor.startsWith("#")
+                          ? "border-foreground ring-2 ring-offset-2 ring-foreground scale-110"
+                          : "border-dashed border-muted-foreground/40 hover:border-muted-foreground/70 hover:scale-105"
+                      }`}
+                      style={form.bgColor.startsWith("#") ? { backgroundColor: form.bgColor } : undefined}
+                    >
+                      {!form.bgColor.startsWith("#") && (
+                        <span className="text-[11px] font-bold text-muted-foreground/50 leading-none">+</span>
+                      )}
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -2311,6 +2361,7 @@ function AnnouncementCard({
     opacity: isDragging ? 0.5 : 1,
   };
   const color = ANNOUNCEMENT_COLORS.find(c => c.key === announcement.bgColor);
+  const isCustomBg = announcement.bgColor.startsWith("#");
   return (
     <div ref={setNodeRef} style={style}>
       <Card className={`overflow-hidden transition-shadow ${announcement.isActive ? "ring-2 ring-emerald-400/50 ring-offset-1" : ""} ${isDragging ? "shadow-xl" : ""}`}>
@@ -2324,7 +2375,10 @@ function AnnouncementCard({
             >
               <GripVertical className="h-4 w-4" />
             </button>
-            <div className={`h-3 w-3 rounded-full shrink-0 ${color?.swatch ?? "bg-violet-600"}`} />
+            <div
+              className={`h-3 w-3 rounded-full shrink-0 ${isCustomBg ? "" : (color?.swatch ?? "bg-violet-600")}`}
+              style={isCustomBg ? { backgroundColor: announcement.bgColor } : undefined}
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-sm truncate">{announcement.callout}</span>

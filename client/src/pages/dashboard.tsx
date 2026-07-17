@@ -270,14 +270,22 @@ function SortableWidget({
 
 // ─── Announcement banner ────────────────────────────────────────────────────────
 
+function hexTextColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 145 ? "#1a1a1a" : "#ffffff";
+}
+
 const ANNOUNCEMENT_STYLES: Record<string, { bar: string; text: string; button: string; dismiss: string }> = {
-  violet: { bar: "bg-violet-600",  text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
-  indigo: { bar: "bg-indigo-600",  text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
-  teal:   { bar: "bg-teal-600",    text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
-  amber:  { bar: "bg-amber-500",   text: "text-amber-950", button: "bg-amber-950/15 hover:bg-amber-950/25 text-amber-950 border-amber-950/25",         dismiss: "text-amber-900/60 hover:text-amber-900" },
-  rose:   { bar: "bg-rose-600",    text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
-  red:    { bar: "bg-red-600",     text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
-  slate:  { bar: "bg-slate-700",   text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
+  violet: { bar: "bg-violet-600",  text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                          dismiss: "text-white/70 hover:text-white" },
+  indigo: { bar: "bg-indigo-600",  text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                          dismiss: "text-white/70 hover:text-white" },
+  teal:   { bar: "bg-teal-600",    text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                          dismiss: "text-white/70 hover:text-white" },
+  amber:  { bar: "bg-amber-500",   text: "text-amber-950",  button: "bg-amber-950/15 hover:bg-amber-950/25 text-amber-950 border-amber-950/25",          dismiss: "text-amber-900/60 hover:text-amber-900" },
+  yellow: { bar: "bg-yellow-400",  text: "text-yellow-950", button: "bg-yellow-950/10 hover:bg-yellow-950/20 text-yellow-950 border-yellow-950/20",      dismiss: "text-yellow-900/60 hover:text-yellow-900" },
+  rose:   { bar: "bg-rose-600",    text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                          dismiss: "text-white/70 hover:text-white" },
+  red:    { bar: "bg-red-600",     text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                          dismiss: "text-white/70 hover:text-white" },
+  slate:  { bar: "bg-slate-700",   text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                          dismiss: "text-white/70 hover:text-white" },
 };
 
 type ActiveAnnouncement = {
@@ -294,7 +302,9 @@ function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement
 
   if (dismissed) return null;
 
-  const styles = ANNOUNCEMENT_STYLES[announcement.bgColor] ?? ANNOUNCEMENT_STYLES.violet;
+  const isCustom = announcement.bgColor.startsWith("#");
+  const styles = isCustom ? null : (ANNOUNCEMENT_STYLES[announcement.bgColor] ?? ANNOUNCEMENT_STYLES.violet);
+  const customText = isCustom ? hexTextColor(announcement.bgColor) : null;
   const isExternal = announcement.ctaUrl?.startsWith("http");
 
   function dismiss() {
@@ -304,13 +314,23 @@ function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement
   }
 
   return (
-    <div className={`${styles.bar} w-full`} data-testid="announcement-banner">
+    <div
+      className={`${isCustom ? "" : styles!.bar} w-full`}
+      style={isCustom ? { backgroundColor: announcement.bgColor } : undefined}
+      data-testid="announcement-banner"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
-        <span className={`font-bold text-sm shrink-0 ${styles.text}`}>
+        <span
+          className={`font-bold text-sm shrink-0 ${isCustom ? "" : styles!.text}`}
+          style={isCustom ? { color: customText! } : undefined}
+        >
           {announcement.callout}
         </span>
         {announcement.body && (
-          <span className={`text-sm opacity-90 hidden sm:inline ${styles.text}`}>
+          <span
+            className={`text-sm opacity-90 hidden sm:inline ${isCustom ? "" : styles!.text}`}
+            style={isCustom ? { color: customText! } : undefined}
+          >
             {announcement.body}
           </span>
         )}
@@ -320,7 +340,8 @@ function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement
             href={announcement.ctaUrl}
             target={isExternal ? "_blank" : "_self"}
             rel="noopener noreferrer"
-            className={`text-xs font-semibold px-3 py-1 rounded-lg border transition-colors shrink-0 ${styles.button}`}
+            className={`text-xs font-semibold px-3 py-1 rounded-lg border transition-colors shrink-0 ${isCustom ? "" : styles!.button}`}
+            style={isCustom ? { color: customText!, borderColor: `${customText}50`, backgroundColor: `${customText}18` } : undefined}
             data-testid="announcement-cta"
           >
             {announcement.ctaLabel}
@@ -328,7 +349,8 @@ function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement
         )}
         <button
           onClick={dismiss}
-          className={`shrink-0 transition-opacity ${styles.dismiss}`}
+          className={`shrink-0 transition-opacity ${isCustom ? "" : styles!.dismiss}`}
+          style={isCustom ? { color: `${customText}99` } : undefined}
           aria-label="Dismiss announcement"
           data-testid="announcement-dismiss"
         >
