@@ -51,6 +51,7 @@ import {
   funnels, type Funnel, type InsertFunnel,
   funnelBrainFiles, type FunnelBrainFile,
   funnelTemplates, type FunnelTemplate,
+  announcements, type Announcement, type InsertAnnouncement,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
@@ -560,6 +561,15 @@ export interface IStorage {
   createFunnelTemplate(data: { name: string; description: string; canvasData: any; createdBy: string }): Promise<import("@shared/schema").FunnelTemplate>;
   updateFunnelTemplate(id: string, data: { name?: string; description?: string }): Promise<FunnelTemplate>;
   deleteFunnelTemplate(id: string): Promise<void>;
+
+  // Announcements
+  getActiveAnnouncement(): Promise<Announcement | null>;
+  getAllAnnouncements(): Promise<Announcement[]>;
+  createAnnouncement(data: InsertAnnouncement): Promise<Announcement>;
+  updateAnnouncement(id: number, data: Partial<InsertAnnouncement>): Promise<Announcement | null>;
+  deleteAnnouncement(id: number): Promise<void>;
+  activateAnnouncement(id: number): Promise<void>;
+  deactivateAnnouncement(id: number): Promise<void>;
 
   // Inbox Intel (Competitor Email Intelligence)
   getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]>;
@@ -4842,6 +4852,39 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFunnelTemplate(id: string): Promise<void> {
     await db.delete(funnelTemplates).where(eq(funnelTemplates.id, id));
+  }
+
+  // ── Announcements ────────────────────────────────────────────────────────────
+  async getActiveAnnouncement(): Promise<Announcement | null> {
+    const [row] = await db.select().from(announcements).where(eq(announcements.isActive, true)).limit(1);
+    return row ?? null;
+  }
+
+  async getAllAnnouncements(): Promise<Announcement[]> {
+    return db.select().from(announcements).orderBy(desc(announcements.createdAt));
+  }
+
+  async createAnnouncement(data: InsertAnnouncement): Promise<Announcement> {
+    const [row] = await db.insert(announcements).values(data).returning();
+    return row;
+  }
+
+  async updateAnnouncement(id: number, data: Partial<InsertAnnouncement>): Promise<Announcement | null> {
+    const [row] = await db.update(announcements).set(data).where(eq(announcements.id, id)).returning();
+    return row ?? null;
+  }
+
+  async deleteAnnouncement(id: number): Promise<void> {
+    await db.delete(announcements).where(eq(announcements.id, id));
+  }
+
+  async activateAnnouncement(id: number): Promise<void> {
+    await db.update(announcements).set({ isActive: false });
+    await db.update(announcements).set({ isActive: true }).where(eq(announcements.id, id));
+  }
+
+  async deactivateAnnouncement(id: number): Promise<void> {
+    await db.update(announcements).set({ isActive: false }).where(eq(announcements.id, id));
   }
 }
 

@@ -268,6 +268,80 @@ function SortableWidget({
   );
 }
 
+// ─── Announcement banner ────────────────────────────────────────────────────────
+
+const ANNOUNCEMENT_STYLES: Record<string, { bar: string; text: string; button: string; dismiss: string }> = {
+  violet: { bar: "bg-violet-600",  text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
+  indigo: { bar: "bg-indigo-600",  text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
+  teal:   { bar: "bg-teal-600",    text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
+  amber:  { bar: "bg-amber-500",   text: "text-amber-950", button: "bg-amber-950/15 hover:bg-amber-950/25 text-amber-950 border-amber-950/25",         dismiss: "text-amber-900/60 hover:text-amber-900" },
+  rose:   { bar: "bg-rose-600",    text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
+  red:    { bar: "bg-red-600",     text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
+  slate:  { bar: "bg-slate-700",   text: "text-white",     button: "bg-white/20 hover:bg-white/30 text-white border-white/30",                         dismiss: "text-white/70 hover:text-white" },
+};
+
+type ActiveAnnouncement = {
+  id: number;
+  callout: string;
+  body: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+  bgColor: string;
+};
+
+function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement }) {
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem("dismissed-announcement") === String(announcement.id); }
+    catch { return false; }
+  });
+
+  if (dismissed) return null;
+
+  const styles = ANNOUNCEMENT_STYLES[announcement.bgColor] ?? ANNOUNCEMENT_STYLES.violet;
+  const isExternal = announcement.ctaUrl?.startsWith("http");
+
+  function dismiss() {
+    setDismissed(true);
+    try { localStorage.setItem("dismissed-announcement", String(announcement.id)); }
+    catch { /* ignore */ }
+  }
+
+  return (
+    <div className={`${styles.bar} w-full`} data-testid="announcement-banner">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center gap-3 flex-wrap">
+        <span className={`font-bold text-sm shrink-0 ${styles.text}`}>
+          {announcement.callout}
+        </span>
+        {announcement.body && (
+          <span className={`text-sm opacity-90 hidden sm:inline ${styles.text}`}>
+            {announcement.body}
+          </span>
+        )}
+        <div className="flex-1 min-w-0" />
+        {announcement.ctaLabel && announcement.ctaUrl && (
+          <a
+            href={announcement.ctaUrl}
+            target={isExternal ? "_blank" : "_self"}
+            rel="noopener noreferrer"
+            className={`text-xs font-semibold px-3 py-1 rounded-lg border transition-colors shrink-0 ${styles.button}`}
+            data-testid="announcement-cta"
+          >
+            {announcement.ctaLabel}
+          </a>
+        )}
+        <button
+          onClick={dismiss}
+          className={`shrink-0 transition-opacity ${styles.dismiss}`}
+          aria-label="Dismiss announcement"
+          data-testid="announcement-dismiss"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -286,6 +360,12 @@ export default function DashboardPage() {
   // ── Panel / mode state ───────────────────────────────────────────────────────
   const [activePanel, setActivePanel] = useState<"layout" | "widgets" | null>(null);
   const [arrangeMode, setArrangeMode] = useState(false);
+
+  // ── Active announcement ───────────────────────────────────────────────────────
+  const { data: announcementData } = useQuery<{ announcement: ActiveAnnouncement | null }>({
+    queryKey: ["/api/announcements/active"],
+  });
+  const activeAnnouncement = announcementData?.announcement ?? null;
 
   // ── Layout — local state synced once from server ─────────────────────────────
   const { data: layoutData } = useQuery<{ layout: WidgetConfig[] | null }>({
@@ -518,6 +598,9 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* ── Announcement banner ────────────────────────────────────────────────── */}
+      {activeAnnouncement && <AnnouncementBanner announcement={activeAnnouncement} />}
 
       {/* ── Widget area ───────────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">

@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -11564,6 +11564,90 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (err) {
       console.error("[funnel-templates] delete error:", err);
       res.status(500).json({ message: "Failed to delete template" });
+    }
+  });
+
+  // ── Announcements ─────────────────────────────────────────────────────────
+  // Public (auth-only): active announcement for the dashboard banner
+  app.get("/api/announcements/active", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const announcement = await storage.getActiveAnnouncement();
+      res.json({ announcement });
+    } catch (err) {
+      console.error("[announcements] get active error:", err);
+      res.status(500).json({ message: "Failed to get announcement" });
+    }
+  });
+
+  // Admin: list all
+  app.get("/api/admin/announcements", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const list = await storage.getAllAnnouncements();
+      res.json({ announcements: list });
+    } catch (err) {
+      console.error("[announcements] list error:", err);
+      res.status(500).json({ message: "Failed to list announcements" });
+    }
+  });
+
+  // Admin: create
+  app.post("/api/admin/announcements", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const data = insertAnnouncementSchema.parse(req.body);
+      const announcement = await storage.createAnnouncement(data);
+      res.json({ announcement });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0]?.message });
+      console.error("[announcements] create error:", err);
+      res.status(500).json({ message: "Failed to create announcement" });
+    }
+  });
+
+  // Admin: update
+  app.patch("/api/admin/announcements/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const data = insertAnnouncementSchema.partial().parse(req.body);
+      const announcement = await storage.updateAnnouncement(id, data);
+      if (!announcement) return res.status(404).json({ message: "Not found" });
+      res.json({ announcement });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0]?.message });
+      console.error("[announcements] update error:", err);
+      res.status(500).json({ message: "Failed to update announcement" });
+    }
+  });
+
+  // Admin: delete
+  app.delete("/api/admin/announcements/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteAnnouncement(parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[announcements] delete error:", err);
+      res.status(500).json({ message: "Failed to delete announcement" });
+    }
+  });
+
+  // Admin: activate (deactivates all others first)
+  app.post("/api/admin/announcements/:id/activate", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.activateAnnouncement(parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[announcements] activate error:", err);
+      res.status(500).json({ message: "Failed to activate announcement" });
+    }
+  });
+
+  // Admin: deactivate
+  app.post("/api/admin/announcements/:id/deactivate", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deactivateAnnouncement(parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[announcements] deactivate error:", err);
+      res.status(500).json({ message: "Failed to deactivate announcement" });
     }
   });
 

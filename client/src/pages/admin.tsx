@@ -58,7 +58,7 @@ import {
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
   Key, Youtube, MessageSquare, XCircle, Trash2, Bug, Lightbulb, X,
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
-  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone
+  CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone, Megaphone
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -1898,6 +1898,415 @@ function AdminFeedbackTab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Announcements ─────────────────────────────────────────────────────────────
+
+const ANNOUNCEMENT_COLORS = [
+  { key: "violet", label: "Violet",  swatch: "bg-violet-600" },
+  { key: "indigo", label: "Indigo",  swatch: "bg-indigo-600" },
+  { key: "teal",   label: "Teal",    swatch: "bg-teal-600"   },
+  { key: "amber",  label: "Amber",   swatch: "bg-amber-500"  },
+  { key: "rose",   label: "Rose",    swatch: "bg-rose-600"   },
+  { key: "red",    label: "Red",     swatch: "bg-red-600"    },
+  { key: "slate",  label: "Slate",   swatch: "bg-slate-700"  },
+] as const;
+
+type AnnouncementColorKey = typeof ANNOUNCEMENT_COLORS[number]["key"];
+
+const ANNOUNCEMENT_PREVIEW_MAP: Record<string, { bar: string; text: string; button: string }> = {
+  violet: { bar: "bg-violet-600",  text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
+  indigo: { bar: "bg-indigo-600",  text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
+  teal:   { bar: "bg-teal-600",    text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
+  amber:  { bar: "bg-amber-500",   text: "text-amber-950",  button: "bg-amber-950/15 hover:bg-amber-950/25 text-amber-950 border-amber-950/25"              },
+  rose:   { bar: "bg-rose-600",    text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
+  red:    { bar: "bg-red-600",     text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
+  slate:  { bar: "bg-slate-700",   text: "text-white",      button: "bg-white/20 hover:bg-white/30 text-white border-white/30"                              },
+};
+
+type AnnouncementRow = {
+  id: number;
+  callout: string;
+  body: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+  bgColor: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+const emptyAnnouncementForm = {
+  callout: "",
+  body: "",
+  ctaLabel: "",
+  ctaUrl: "",
+  bgColor: "violet" as AnnouncementColorKey,
+  isActive: false,
+};
+
+function AnnouncementsTab() {
+  const { toast } = useToast();
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState({ ...emptyAnnouncementForm });
+
+  const { data, isLoading } = useQuery<{ announcements: AnnouncementRow[] }>({
+    queryKey: ["/api/admin/announcements"],
+  });
+  const announcements = data?.announcements ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: (d: typeof emptyAnnouncementForm) => apiRequest("POST", "/api/admin/announcements", d),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements/active"] });
+      setShowForm(false);
+      setForm({ ...emptyAnnouncementForm });
+      toast({ title: "Announcement created" });
+    },
+    onError: () => toast({ title: "Failed to create announcement", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, d }: { id: number; d: Partial<typeof emptyAnnouncementForm> }) =>
+      apiRequest("PATCH", `/api/admin/announcements/${id}`, d),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements/active"] });
+      setEditId(null);
+      setShowForm(false);
+      setForm({ ...emptyAnnouncementForm });
+      toast({ title: "Announcement saved" });
+    },
+    onError: () => toast({ title: "Failed to update announcement", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/announcements/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements/active"] });
+      toast({ title: "Announcement deleted" });
+    },
+    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/admin/announcements/${id}/activate`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements/active"] });
+      toast({ title: "Announcement is now live" });
+    },
+    onError: () => toast({ title: "Failed to activate", variant: "destructive" }),
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/admin/announcements/${id}/deactivate`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements/active"] });
+      toast({ title: "Announcement hidden" });
+    },
+    onError: () => toast({ title: "Failed to deactivate", variant: "destructive" }),
+  });
+
+  function openCreate() {
+    setEditId(null);
+    setForm({ ...emptyAnnouncementForm });
+    setShowForm(true);
+  }
+
+  function openEdit(a: AnnouncementRow) {
+    setEditId(a.id);
+    setForm({
+      callout: a.callout,
+      body: a.body ?? "",
+      ctaLabel: a.ctaLabel ?? "",
+      ctaUrl: a.ctaUrl ?? "",
+      bgColor: (a.bgColor as AnnouncementColorKey) ?? "violet",
+      isActive: a.isActive,
+    });
+    setShowForm(true);
+  }
+
+  function handleSubmit() {
+    const payload = {
+      callout: form.callout.trim(),
+      body: form.body.trim() || null,
+      ctaLabel: form.ctaLabel.trim() || null,
+      ctaUrl: form.ctaUrl.trim() || null,
+      bgColor: form.bgColor,
+      isActive: form.isActive,
+    };
+    if (editId !== null) {
+      updateMutation.mutate({ id: editId, d: payload });
+    } else {
+      createMutation.mutate({ ...emptyAnnouncementForm, ...payload });
+    }
+  }
+
+  const isBusy = createMutation.isPending || updateMutation.isPending;
+  const previewStyles = ANNOUNCEMENT_PREVIEW_MAP[form.bgColor] ?? ANNOUNCEMENT_PREVIEW_MAP.violet;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Announcements</h2>
+          <p className="text-sm text-muted-foreground">
+            Create banners that appear on the dashboard for all members. Only one can be active at a time.
+          </p>
+        </div>
+        {!showForm && (
+          <Button onClick={openCreate} size="sm" className="gap-1.5" data-testid="button-new-announcement">
+            <Plus className="h-3.5 w-3.5" />
+            New Announcement
+          </Button>
+        )}
+      </div>
+
+      {showForm && (
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-orange-500 to-rose-500" />
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">
+              {editId !== null ? "Edit Announcement" : "New Announcement"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className={`${previewStyles.bar} rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap`}>
+              <span className={`font-bold text-sm shrink-0 ${previewStyles.text}`}>
+                {form.callout || "Your callout here"}
+              </span>
+              {form.body && (
+                <span className={`text-sm opacity-90 ${previewStyles.text}`}>{form.body}</span>
+              )}
+              <div className="flex-1" />
+              {form.ctaLabel && (
+                <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-default ${previewStyles.button}`}>
+                  {form.ctaLabel}
+                </span>
+              )}
+              <X className={`h-4 w-4 opacity-50 ${previewStyles.text}`} />
+            </div>
+            <p className="text-[11px] text-muted-foreground -mt-3 pl-1">↑ Live preview</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-1.5">
+                  Callout <span className="text-rose-500">*</span>
+                </label>
+                <Input
+                  placeholder="e.g. New Feature Alert!"
+                  value={form.callout}
+                  onChange={e => setForm(f => ({ ...f, callout: e.target.value }))}
+                  data-testid="input-announcement-callout"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-1.5">
+                  Body Text <span className="text-muted-foreground/50">(optional)</span>
+                </label>
+                <Input
+                  placeholder="A short supporting sentence."
+                  value={form.body}
+                  onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
+                  data-testid="input-announcement-body"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-1.5">
+                    Button Label <span className="text-muted-foreground/50">(optional)</span>
+                  </label>
+                  <Input
+                    placeholder="e.g. Check it out"
+                    value={form.ctaLabel}
+                    onChange={e => setForm(f => ({ ...f, ctaLabel: e.target.value }))}
+                    data-testid="input-announcement-cta-label"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-1.5">
+                    Button URL <span className="text-muted-foreground/50">(optional)</span>
+                  </label>
+                  <Input
+                    placeholder="/projects or https://..."
+                    value={form.ctaUrl}
+                    onChange={e => setForm(f => ({ ...f, ctaUrl: e.target.value }))}
+                    data-testid="input-announcement-cta-url"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-2">
+                  Background Color
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {ANNOUNCEMENT_COLORS.map(c => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      title={c.label}
+                      onClick={() => setForm(f => ({ ...f, bgColor: c.key }))}
+                      className={`h-8 w-8 rounded-full transition-all ${c.swatch} ${
+                        form.bgColor === c.key
+                          ? "ring-2 ring-offset-2 ring-foreground scale-110"
+                          : "opacity-60 hover:opacity-90 hover:scale-105"
+                      }`}
+                      data-testid={`color-swatch-${c.key}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-1">
+                <Switch
+                  checked={form.isActive}
+                  onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))}
+                  id="announcement-active-switch"
+                  data-testid="switch-announcement-active"
+                />
+                <label htmlFor="announcement-active-switch" className="text-sm cursor-pointer select-none">
+                  Make this announcement live immediately
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                onClick={handleSubmit}
+                disabled={isBusy || !form.callout.trim()}
+                size="sm"
+                className="gap-1.5"
+                data-testid="button-save-announcement"
+              >
+                {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                {editId !== null ? "Save Changes" : "Create"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setShowForm(false); setEditId(null); setForm({ ...emptyAnnouncementForm }); }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : announcements.length === 0 && !showForm ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+            <Megaphone className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium">No announcements yet</p>
+          <p className="text-xs text-muted-foreground mt-1">Create one to show a banner on the dashboard for all members.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {announcements.map(a => (
+            <AnnouncementCard
+              key={a.id}
+              announcement={a}
+              onEdit={() => openEdit(a)}
+              onDelete={() => deleteMutation.mutate(a.id)}
+              onActivate={() => activateMutation.mutate(a.id)}
+              onDeactivate={() => deactivateMutation.mutate(a.id)}
+              isDeleting={deleteMutation.isPending}
+              isToggling={activateMutation.isPending || deactivateMutation.isPending}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnnouncementCard({
+  announcement,
+  onEdit,
+  onDelete,
+  onActivate,
+  onDeactivate,
+  isDeleting,
+  isToggling,
+}: {
+  announcement: AnnouncementRow;
+  onEdit: () => void;
+  onDelete: () => void;
+  onActivate: () => void;
+  onDeactivate: () => void;
+  isDeleting: boolean;
+  isToggling: boolean;
+}) {
+  const color = ANNOUNCEMENT_COLORS.find(c => c.key === announcement.bgColor);
+  return (
+    <Card className={`overflow-hidden transition-all ${announcement.isActive ? "ring-2 ring-emerald-400/50 ring-offset-1" : ""}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className={`h-3 w-3 rounded-full mt-1 shrink-0 ${color?.swatch ?? "bg-violet-600"}`} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm truncate">{announcement.callout}</span>
+              {announcement.isActive ? (
+                <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 text-[10px]">
+                  Live
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                  Inactive
+                </Badge>
+              )}
+            </div>
+            {announcement.body && (
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">{announcement.body}</p>
+            )}
+            {announcement.ctaLabel && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Button: <span className="text-foreground">{announcement.ctaLabel}</span>
+                {announcement.ctaUrl && <span className="opacity-70"> → {announcement.ctaUrl}</span>}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {announcement.isActive ? (
+              <Button variant="ghost" size="sm" onClick={onDeactivate} disabled={isToggling}
+                className="h-7 px-2 text-muted-foreground" title="Hide banner"
+                data-testid={`button-deactivate-${announcement.id}`}>
+                {isToggling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <EyeOff className="h-3.5 w-3.5" />}
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={onActivate} disabled={isToggling}
+                className="h-7 px-2 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700" title="Make live"
+                data-testid={`button-activate-${announcement.id}`}>
+                {isToggling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={onEdit} className="h-7 px-2" title="Edit"
+              data-testid={`button-edit-announcement-${announcement.id}`}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onDelete} disabled={isDeleting}
+              className="h-7 px-2 text-muted-foreground hover:text-rose-500" title="Delete"
+              data-testid={`button-delete-announcement-${announcement.id}`}>
+              {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -2487,6 +2896,10 @@ export default function AdminPage() {
           <TabsTrigger value="feedback" data-testid="tab-feedback" className="gap-1.5">
             <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
             Feedback
+          </TabsTrigger>
+          <TabsTrigger value="announcements" data-testid="tab-announcements" className="gap-1.5">
+            <Megaphone className="h-3.5 w-3.5 text-orange-400" />
+            Announcements
           </TabsTrigger>
         </TabsList>
 
@@ -3346,6 +3759,10 @@ export default function AdminPage() {
 
         <TabsContent value="feedback" className="space-y-6">
           <AdminFeedbackTab />
+        </TabsContent>
+
+        <TabsContent value="announcements" className="space-y-6">
+          <AnnouncementsTab />
         </TabsContent>
 
       </Tabs>

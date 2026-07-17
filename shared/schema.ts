@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1955,3 +1955,19 @@ export const funnelTemplates = pgTable("funnel_templates", {
 });
 
 export type FunnelTemplate = typeof funnelTemplates.$inferSelect;
+
+// ─── Announcements ─────────────────────────────────────────────────────────────
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  callout: text("callout").notNull(),
+  body: text("body"),
+  ctaLabel: text("cta_label"),
+  ctaUrl: text("cta_url"),
+  bgColor: text("bg_color").notNull().default("violet"),
+  isActive: boolean("is_active").notNull().default(false),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({ id: true, createdAt: true });
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type Announcement = typeof announcements.$inferSelect;
