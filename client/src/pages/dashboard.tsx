@@ -1,12 +1,45 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Briefcase, Target, SlidersHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Briefcase,
+  Target,
+  SlidersHorizontal,
+  LayoutGrid,
+  Eye,
+  Move,
+  GripVertical,
+  X,
+  Check,
+} from "lucide-react";
 import type { DmoEntry, InsightsResponse } from "@shared/schema";
+
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  rectSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import {
   type WidgetConfig,
@@ -16,6 +49,7 @@ import {
   dmoTotalPts,
 } from "@/components/dashboard/widget-registry";
 import { CustomizePanel } from "@/components/dashboard/customize-panel";
+import { LayoutPanel } from "@/components/dashboard/layout-panel";
 import { ProjectsWidget } from "@/components/dashboard/widgets/projects-widget";
 import { EmailHealthWidget } from "@/components/dashboard/widgets/email-health-widget";
 import { DmoWidget } from "@/components/dashboard/widgets/dmo-widget";
@@ -74,25 +108,79 @@ function nowTimeLabel(tz?: string | null) {
   }
 }
 
-// ─── Widget renderer ───────────────────────────────────────────────────────────
+// ─── Widget renderer ────────────────────────────────────────────────────────────
 
 function WidgetRenderer({ id }: { id: WidgetId }) {
   switch (id) {
-    case "projects":
-      return <ProjectsWidget />;
-    case "email-health":
-      return <EmailHealthWidget />;
-    case "dmo-streak":
-      return <DmoWidget />;
-    case "inbox-analyzer":
-      return <InboxAnalyzerWidget />;
-    case "competitor-pulse":
-      return <CompetitorPulseWidget />;
-    case "recent-activity":
-      return <RecentActivityWidget />;
-    default:
-      return null;
+    case "projects":         return <ProjectsWidget />;
+    case "email-health":     return <EmailHealthWidget />;
+    case "dmo-streak":       return <DmoWidget />;
+    case "inbox-analyzer":   return <InboxAnalyzerWidget />;
+    case "competitor-pulse": return <CompetitorPulseWidget />;
+    case "recent-activity":  return <RecentActivityWidget />;
+    default:                 return null;
   }
+}
+
+// ─── Sortable widget (used only in arrange mode) ────────────────────────────────
+
+function SortableWidget({
+  config,
+  onRemove,
+}: {
+  config: WidgetConfig;
+  onRemove: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: config.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`${SIZE_CLASSES[config.size]} relative ${
+        isDragging ? "opacity-40 z-50" : ""
+      }`}
+      data-testid={`widget-cell-${config.id}`}
+    >
+      {/* Always-visible controls in arrange mode */}
+      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-2 pt-2 pointer-events-auto">
+        <button
+          {...attributes}
+          {...listeners}
+          className="h-7 w-7 flex items-center justify-center rounded-lg bg-background/95 border border-border shadow-sm text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+          aria-label="Drag to reorder"
+          data-testid={`drag-handle-${config.id}`}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <button
+          onClick={onRemove}
+          className="h-7 w-7 flex items-center justify-center rounded-lg bg-background/95 border border-border shadow-sm text-muted-foreground hover:text-rose-500 hover:border-rose-300 transition-colors"
+          aria-label="Remove widget"
+          data-testid={`remove-widget-${config.id}`}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Slight overlay to show the widget is in edit state */}
+      <div className="rounded-xl ring-2 ring-violet-400/40 ring-offset-1 pointer-events-none absolute inset-0 z-10" />
+
+      <WidgetRenderer id={config.id} />
+    </div>
+  );
 }
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
@@ -110,30 +198,100 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, [user?.timezone]);
 
-  // ── Customize panel ──────────────────────────────────────────────────────────
-  const [showCustomize, setShowCustomize] = useState(false);
+  // ── Panel / mode state ───────────────────────────────────────────────────────
+  const [activePanel, setActivePanel] = useState<"layout" | "widgets" | null>(null);
+  const [arrangeMode, setArrangeMode] = useState(false);
 
-  // ── Layout ──────────────────────────────────────────────────────────────────
+  // ── Layout — local state synced once from server ─────────────────────────────
   const { data: layoutData } = useQuery<{ layout: WidgetConfig[] | null }>({
     queryKey: ["/api/dashboard/layout"],
   });
-  const layout = useMemo(
-    () => mergeLayout(layoutData?.layout ?? null),
-    [layoutData]
-  );
 
+  const [localLayout, setLocalLayout] = useState<WidgetConfig[]>(() => mergeLayout(null));
+  const hasInitialized = useRef(false);
+
+  useEffect(() => {
+    if (layoutData !== undefined && !hasInitialized.current) {
+      setLocalLayout(mergeLayout(layoutData.layout ?? null));
+      hasInitialized.current = true;
+    }
+  }, [layoutData]);
+
+  // ── Save mutation ────────────────────────────────────────────────────────────
   const saveLayoutMutation = useMutation({
     mutationFn: (newLayout: WidgetConfig[]) =>
       apiRequest("PATCH", "/api/dashboard/layout", { layout: newLayout }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/layout"] });
-      setShowCustomize(false);
-      toast({ title: "Dashboard layout saved" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/layout"] });
     },
     onError: () => {
-      toast({ title: "Failed to save layout", variant: "destructive" });
+      toast({ title: "Couldn't save layout", variant: "destructive" });
     },
   });
+
+  // ── Debounced auto-save ──────────────────────────────────────────────────────
+  const saveTimer = useRef<NodeJS.Timeout>();
+  const scheduleAutoSave = useCallback((newLayout: WidgetConfig[]) => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveLayoutMutation.mutate(newLayout);
+    }, 800);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Panels: layout preset applied + widgets panel save ───────────────────────
+  function handleApplyLayout(newLayout: WidgetConfig[]) {
+    setLocalLayout(newLayout);
+    saveLayoutMutation.mutate(newLayout);
+    toast({ title: "Layout updated" });
+  }
+
+  function handleSaveWidgets(newLayout: WidgetConfig[]) {
+    setLocalLayout(newLayout);
+    saveLayoutMutation.mutate(newLayout);
+    setActivePanel(null);
+    toast({ title: "Widgets updated" });
+  }
+
+  // ── Arrange mode: DnD drag end ───────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setLocalLayout((prev) => {
+      const visibleIds = prev.filter((w) => w.visible).map((w) => w.id);
+      const oldIdx = visibleIds.indexOf(active.id as WidgetId);
+      const newIdx = visibleIds.indexOf(over.id as WidgetId);
+      if (oldIdx < 0 || newIdx < 0) return prev;
+      const reordered = arrayMove(visibleIds, oldIdx, newIdx);
+      const hidden = prev.filter((w) => !w.visible);
+      const visible = reordered.map((id) => prev.find((w) => w.id === id)!);
+      const next = [...visible, ...hidden];
+      scheduleAutoSave(next);
+      return next;
+    });
+  }
+
+  // ── Arrange mode: remove widget ──────────────────────────────────────────────
+  function removeWidget(id: WidgetId) {
+    setLocalLayout((prev) => {
+      const next = prev.map((w) => (w.id === id ? { ...w, visible: false } : w));
+      scheduleAutoSave(next);
+      return next;
+    });
+  }
+
+  // ── Done arranging ───────────────────────────────────────────────────────────
+  function doneArranging() {
+    clearTimeout(saveTimer.current);
+    saveLayoutMutation.mutate(localLayout);
+    setArrangeMode(false);
+    toast({ title: "Layout saved" });
+  }
 
   // ── Hero KPI ribbon data ─────────────────────────────────────────────────────
   const { data: dmoToday } = useQuery<{ entry: DmoEntry | null; date: string }>({
@@ -160,8 +318,7 @@ export default function DashboardPage() {
     [todayPts, projectsSummary, insights]
   );
 
-  // Visible widgets in order
-  const visibleWidgets = layout.filter((w) => w.visible);
+  const visibleWidgets = localLayout.filter((w) => w.visible);
 
   return (
     <div className="flex-1 overflow-auto bg-background">
@@ -222,21 +379,9 @@ export default function DashboardPage() {
           {/* KPI ribbon */}
           {(() => {
             const kpiStyles = [
-              {
-                bg: "bg-amber-500/15 ring-amber-400/30",
-                label: "text-amber-200/80",
-                value: "text-amber-100",
-              },
-              {
-                bg: "bg-indigo-500/15 ring-indigo-400/30",
-                label: "text-indigo-200/80",
-                value: "text-indigo-100",
-              },
-              {
-                bg: "bg-violet-500/15 ring-violet-400/30",
-                label: "text-violet-200/80",
-                value: "text-violet-100",
-              },
+              { bg: "bg-amber-500/15 ring-amber-400/30",  label: "text-amber-200/80",  value: "text-amber-100"  },
+              { bg: "bg-indigo-500/15 ring-indigo-400/30", label: "text-indigo-200/80", value: "text-indigo-100" },
+              { bg: "bg-violet-500/15 ring-violet-400/30", label: "text-violet-200/80", value: "text-violet-100" },
             ];
             return (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
@@ -248,9 +393,7 @@ export default function DashboardPage() {
                       className={`rounded-xl backdrop-blur-md ring-1 px-4 py-3 ${s.bg}`}
                       data-testid={`kpi-${i}`}
                     >
-                      <p
-                        className={`text-[10px] uppercase tracking-wider font-medium ${s.label}`}
-                      >
+                      <p className={`text-[10px] uppercase tracking-wider font-medium ${s.label}`}>
                         {k.label}
                       </p>
                       <p className={`mt-1 text-2xl font-bold tabular-nums ${s.value}`}>
@@ -267,43 +410,119 @@ export default function DashboardPage() {
 
       {/* ── Widget area ───────────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Customize button row */}
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-            Dashboard
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCustomize(true)}
-            className="gap-1.5 text-muted-foreground hover:text-foreground"
-            data-testid="button-customize-dashboard"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Customize
-          </Button>
-        </div>
 
-        {/* Widget grid — 12 columns, items flow left-to-right using CSS grid */}
+        {/* ── Arrange mode banner ──────────────────────────────────────────────── */}
+        {arrangeMode && (
+          <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-violet-400/50 bg-violet-50 dark:bg-violet-950/30 px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <Move className="h-4 w-4 text-violet-500 shrink-0" />
+              <p className="text-sm font-medium text-violet-700 dark:text-violet-300">
+                Arrange mode — drag widgets to reorder, click × to remove
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={doneArranging}
+              disabled={saveLayoutMutation.isPending}
+              className="bg-violet-600 hover:bg-violet-700 text-white shrink-0 gap-1.5"
+              data-testid="button-done-arrange"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Done
+            </Button>
+          </div>
+        )}
+
+        {/* ── Top bar: label + Customize button ───────────────────────────────── */}
+        {!arrangeMode && (
+          <div className="flex items-center justify-between mb-5">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+              Dashboard
+            </p>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground hover:text-foreground"
+                  data-testid="button-customize-dashboard"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  Customize
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                  onClick={() => setActivePanel("layout")}
+                  data-testid="menu-change-layout"
+                >
+                  <LayoutGrid className="h-4 w-4 mr-2 text-muted-foreground" />
+                  Change Layout
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setActivePanel("widgets")}
+                  data-testid="menu-add-remove-widgets"
+                >
+                  <Eye className="h-4 w-4 mr-2 text-muted-foreground" />
+                  Add / Remove Widgets
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setArrangeMode(true)}
+                  data-testid="menu-arrange-widgets"
+                >
+                  <Move className="h-4 w-4 mr-2 text-muted-foreground" />
+                  Arrange Widgets
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
+        {/* ── Widget grid ──────────────────────────────────────────────────────── */}
         {visibleWidgets.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
             <SlidersHorizontal className="h-8 w-8 text-muted-foreground/30" />
             <p className="text-sm font-medium text-muted-foreground">
               All widgets are hidden
             </p>
-            <p className="text-xs text-muted-foreground">
-              Click Customize to show some widgets.
+            <p className="text-xs text-muted-foreground/70">
+              Use Customize → Add / Remove Widgets to show some.
             </p>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setShowCustomize(true)}
+              onClick={() => setActivePanel("widgets")}
               data-testid="button-customize-empty"
             >
-              Customize dashboard
+              Add widgets
             </Button>
           </div>
+        ) : arrangeMode ? (
+          /* ── Drag-and-drop grid (arrange mode only) ── */
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={visibleWidgets.map((w) => w.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-12 gap-4">
+                {visibleWidgets.map((config) => (
+                  <SortableWidget
+                    key={config.id}
+                    config={config}
+                    onRemove={() => removeWidget(config.id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         ) : (
+          /* ── Normal static grid ── */
           <div className="grid grid-cols-12 gap-4">
             {visibleWidgets.map((config) => (
               <div
@@ -318,12 +537,19 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── Customize panel ───────────────────────────────────────────────────── */}
+      {/* ── Side panels ──────────────────────────────────────────────────────── */}
+      <LayoutPanel
+        layout={localLayout}
+        open={activePanel === "layout"}
+        onOpenChange={(o) => !o && setActivePanel(null)}
+        onApply={handleApplyLayout}
+        isSaving={saveLayoutMutation.isPending}
+      />
       <CustomizePanel
-        layout={layout}
-        open={showCustomize}
-        onOpenChange={setShowCustomize}
-        onSave={(newLayout) => saveLayoutMutation.mutate(newLayout)}
+        layout={localLayout}
+        open={activePanel === "widgets"}
+        onOpenChange={(o) => !o && setActivePanel(null)}
+        onSave={handleSaveWidgets}
         isSaving={saveLayoutMutation.isPending}
       />
     </div>
