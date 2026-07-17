@@ -773,6 +773,9 @@ async function runStartupMigrations() {
       )
     `);
     console.log("[startup] teleprompter_score_usage migration complete");
+
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_layout JSONB`);
+    console.log("[startup] dashboard_layout migration complete");
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

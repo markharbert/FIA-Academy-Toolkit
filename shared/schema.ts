@@ -41,6 +41,7 @@ export const users = pgTable("users", {
   cfEnrolledAt: timestamp("cf_enrolled_at"),
   cfRevokedAt: timestamp("cf_revoked_at"),
   icalToken: text("ical_token"),
+  dashboardLayout: jsonb("dashboard_layout"),
 });
 
 // User identities table for OAuth providers (supports multiple providers per user)

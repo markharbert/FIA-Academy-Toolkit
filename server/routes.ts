@@ -9397,6 +9397,30 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.get("/api/dashboard/layout", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      return res.json({ layout: (user as any).dashboardLayout ?? null });
+    } catch (err) {
+      console.error("[dashboard] layout get error:", err);
+      res.status(500).json({ message: "Failed to load layout" });
+    }
+  });
+
+  app.patch("/api/dashboard/layout", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { layout } = req.body;
+      if (!Array.isArray(layout)) {
+        return res.status(400).json({ message: "layout must be an array" });
+      }
+      await storage.updateUser(req.session.userId!, { dashboardLayout: layout } as any);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[dashboard] layout save error:", err);
+      res.status(500).json({ message: "Failed to save layout" });
+    }
+  });
+
   // ─── Workspace Collaborators ────────────────────────────────────────────────
 
   const MAX_COLLABORATORS = 1;
