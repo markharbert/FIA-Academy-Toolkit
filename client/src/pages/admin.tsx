@@ -488,6 +488,8 @@ function CfIntegrationTab() {
   const [btnColor, setBtnColor] = useState("#ffffff");
   const [btnRadius, setBtnRadius] = useState<"rounded" | "pill" | "square">("rounded");
   const [btnWidth, setBtnWidth] = useState<"auto" | "full">("auto");
+  const [btnFontSize, setBtnFontSize] = useState<"13" | "15" | "18" | "22">("15");
+  const [btnPadding, setBtnPadding] = useState<"compact" | "normal" | "spacious">("normal");
   const [expirySaving, setExpirySaving] = useState(false);
   const [btnSaving, setBtnSaving] = useState(false);
   const [expiryInput, setExpiryInput] = useState("15");
@@ -516,11 +518,14 @@ function CfIntegrationTab() {
     if (btnSettings.color) setBtnColor(btnSettings.color);
     if (btnSettings.radius) setBtnRadius(btnSettings.radius as "rounded" | "pill" | "square");
     if (btnSettings.width) setBtnWidth(btnSettings.width as "auto" | "full");
+    if ((btnSettings as any).fontSize) setBtnFontSize((btnSettings as any).fontSize as "13" | "15" | "18" | "22");
+    if ((btnSettings as any).padding) setBtnPadding((btnSettings as any).padding as "compact" | "normal" | "spacious");
   }, [btnSettings]);
 
   const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
+  const paddingMap = { compact: "10px 20px", normal: "14px 28px", spacious: "18px 36px" };
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
-  const embedCode = `<a href="${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}" style="display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:14px 28px; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:15px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}">${btnText}</a>`;
+  const embedCode = `<a href="${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}" style="display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:${paddingMap[btnPadding]}; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:${btnFontSize}px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}">${btnText}</a>`;
 
   const handleSaveBtnSettings = async () => {
     setBtnSaving(true);
@@ -529,7 +534,7 @@ function CfIntegrationTab() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ text: btnText, bg: btnBg, color: btnColor, radius: btnRadius, width: btnWidth }),
+        body: JSON.stringify({ text: btnText, bg: btnBg, color: btnColor, radius: btnRadius, width: btnWidth, fontSize: btnFontSize, padding: btnPadding }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed");
@@ -1085,6 +1090,32 @@ function CfIntegrationTab() {
                 ))}
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">Font Size</label>
+                <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
+                  {(["13", "15", "18", "22"] as const).map((s) => (
+                    <button key={s} onClick={() => setBtnFontSize(s)}
+                      className={`flex-1 px-1.5 py-1 text-xs rounded-md font-medium transition-colors ${btnFontSize === s ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid={`btn-fontsize-${s}`}>
+                      {s === "13" ? "S" : s === "15" ? "M" : s === "18" ? "L" : "XL"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">Padding</label>
+                <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
+                  {(["compact", "normal", "spacious"] as const).map((p) => (
+                    <button key={p} onClick={() => setBtnPadding(p)}
+                      className={`flex-1 px-1.5 py-1 text-xs rounded-md font-medium transition-colors ${btnPadding === p ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid={`btn-padding-${p}`}>
+                      {p === "compact" ? "S" : p === "normal" ? "M" : "L"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
             {/* Live Preview */}
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-2">Preview</label>
@@ -1096,10 +1127,10 @@ function CfIntegrationTab() {
                     display: "inline-block",
                     backgroundColor: btnBg,
                     color: btnColor,
-                    padding: "14px 28px",
+                    padding: paddingMap[btnPadding],
                     borderRadius: borderRadiusMap[btnRadius],
                     fontFamily: "sans-serif",
-                    fontSize: "15px",
+                    fontSize: `${btnFontSize}px`,
                     fontWeight: 600,
                     textDecoration: "none",
                     textAlign: "center",
