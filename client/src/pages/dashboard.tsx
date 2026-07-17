@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo } from "react";
+import { useState, useEffect, useRef, useCallback, memo, useLayoutEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -31,14 +31,13 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   useSortable,
-  rectSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 
 import {
   type WidgetConfig,
@@ -189,42 +188,40 @@ function GhostSlot({
 }
 
 // ─── Sortable widget (used only in arrange mode) ─────────────────────────────
-// Uses CSS.Transform + transition from useSortable so non-active widgets
-// smoothly slide to their projected positions as you drag — no DOM reorder
-// mid-drag, only CSS transforms, then the real reorder happens on drop.
+// FLIP approach: DOM reorders instantly on drag-over (correct positions always),
+// and the DashboardPage's useLayoutEffect computes & plays the CSS translation
+// animation from old→new position. No dnd-kit CSS transforms on non-active items.
 
 function SortableWidget({
   config,
   onRemove,
   placeholderHeight,
+  registerRef,
 }: {
   config: WidgetConfig;
   onRemove: () => void;
   placeholderHeight: number;
+  registerRef: (id: WidgetId, el: HTMLDivElement | null) => void;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    isDragging,
-    transform,
-    transition,
-  } = useSortable({ id: config.id });
+  const { attributes, listeners, setNodeRef, isDragging } = useSortable({
+    id: config.id,
+  });
 
-  // Apply CSS transform + transition to ALL items (including the placeholder).
-  // Non-active items animate to their projected positions via rectSortingStrategy.
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  // Combined ref: registers with dnd-kit AND our FLIP tracker
+  const setRefs = useCallback(
+    (el: HTMLDivElement | null) => {
+      setNodeRef(el);
+      registerRef(config.id, el);
+    },
+    [setNodeRef, config.id, registerRef]
+  );
 
-  // While this item is being dragged, render a dashed placeholder in the
-  // original grid slot. The DragOverlay shows the real floating widget.
+  // While this item is being dragged, keep a same-size dashed placeholder
+  // in the grid slot. The DragOverlay shows the real floating widget.
   if (isDragging) {
     return (
       <div
-        ref={setNodeRef}
-        style={style}
+        ref={setRefs}
         className={`${SIZE_CLASSES[config.size]} flex flex-col`}
         data-testid={`widget-cell-${config.id}`}
       >
@@ -238,8 +235,7 @@ function SortableWidget({
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
+      ref={setRefs}
       className={`${SIZE_CLASSES[config.size]} relative flex flex-col`}
       data-testid={`widget-cell-${config.id}`}
     >
@@ -347,28 +343,111 @@ export default function DashboardPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
+  // ── FLIP animation refs ──────────────────────────────────────────────────────
+  // widgetElsRef: live DOM element map for all visible sortable widgets.
+  // snapRects: pre-reorder bounding box snapshot (set in handleDragOver,
+  //            consumed in useLayoutEffect after React re-renders the new order).
+  const widgetElsRef = useRef<Map<WidgetId, HTMLDivElement | null>>(new Map());
+  const snapRects = useRef<Map<WidgetId, { x: number; y: number }>>(new Map());
+
+  const registerWidgetEl = useCallback(
+    (id: WidgetId, el: HTMLDivElement | null) => {
+      if (el) widgetElsRef.current.set(id, el);
+      else widgetElsRef.current.delete(id);
+    },
+    []
+  );
+
+  // After each live DOM reorder triggered by handleDragOver, animate non-active
+  // widgets from their old positions to their new positions (FLIP technique):
+  //   F = snapshot rects (done in handleDragOver, before setLocalLayout)
+  //   L = new rects read here after React has updated the DOM
+  //   I = apply inverse transform so element visually appears at old position
+  //   P = remove transform with CSS transition → element animates to new position
+  useLayoutEffect(() => {
+    if (snapRects.current.size === 0) return;
+
+    const toAnimate: HTMLDivElement[] = [];
+
+    snapRects.current.forEach(({ x, y }, id) => {
+      const el = widgetElsRef.current.get(id);
+      if (!el) return;
+      const next = el.getBoundingClientRect();
+      const dx = x - next.left;
+      const dy = y - next.top;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+
+      // Invert: instantly place at old visual position (no transition)
+      el.style.transition = "none";
+      el.style.transform = `translate(${dx}px,${dy}px)`;
+      toAnimate.push(el);
+    });
+
+    snapRects.current.clear();
+
+    if (toAnimate.length === 0) return;
+
+    // Play: two rAFs so the browser paints the "Invert" frame first,
+    // then triggers the transition to the natural (new) position.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        toAnimate.forEach((el) => {
+          el.style.transition = "transform 280ms cubic-bezier(0.2,0,0,1)";
+          el.style.transform = "";
+        });
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localLayout]);
+
+  // ── DnD handlers ─────────────────────────────────────────────────────────────
+
+  // Always-current ref so handleDragEnd can read the latest layout without
+  // a stale closure (localLayout changes many times mid-drag via onDragOver).
+  const localLayoutRef = useRef(localLayout);
+  localLayoutRef.current = localLayout;
+
   // Track which widget is being dragged (feeds the DragOverlay)
   const [activeWidgetId, setActiveWidgetId] = useState<WidgetId | null>(null);
+  const activeWidgetIdRef = useRef<WidgetId | null>(null);
   const activeDragWidth = useRef<number>(0);
   const activeDragHeight = useRef<number>(0);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveWidgetId(event.active.id as WidgetId);
+    const id = event.active.id as WidgetId;
+    setActiveWidgetId(id);
+    activeWidgetIdRef.current = id;
     const rect = (event.active.rect.current as any)?.initial;
     if (rect?.width) activeDragWidth.current = rect.width;
     if (rect?.height) activeDragHeight.current = rect.height;
   }, []);
 
-  // On drop: compute the new order from active/over IDs and persist.
-  // All animation during drag is handled by CSS transforms (rectSortingStrategy
-  // + useSortable transform/transition) — no DOM reordering mid-drag.
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
+  // Live-reorder the DOM as the cursor crosses into a new widget's territory.
+  // Before updating state (which triggers a React render + DOM update), snapshot
+  // the current positions of all non-active widgets for the FLIP animator above.
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
-    setActiveWidgetId(null);
-
-    // Dropped in the same place or outside the grid — nothing to do
     if (!over || active.id === over.id) return;
 
+    // Cancel any in-progress FLIP animations so we snapshot real positions,
+    // not mid-animation visual positions.
+    widgetElsRef.current.forEach((el, id) => {
+      if (!el || id === activeWidgetIdRef.current) return;
+      if (el.style.transform) {
+        el.style.transition = "none";
+        el.style.transform = "";
+      }
+    });
+
+    // F — First: snapshot each non-active widget's position before reorder
+    snapRects.current = new Map();
+    widgetElsRef.current.forEach((el, id) => {
+      if (!el || id === activeWidgetIdRef.current) return;
+      const r = el.getBoundingClientRect();
+      snapRects.current.set(id, { x: r.left, y: r.top });
+    });
+
+    // Reorder state → React re-renders → useLayoutEffect fires (L + I + P)
     setLocalLayout((prev) => {
       const visibleIds = prev.filter((w) => w.visible).map((w) => w.id);
       const oldIdx = visibleIds.indexOf(active.id as WidgetId);
@@ -377,10 +456,17 @@ export default function DashboardPage() {
       const reordered = arrayMove(visibleIds, oldIdx, newIdx);
       const hidden = prev.filter((w) => !w.visible);
       const visible = reordered.map((id) => prev.find((w) => w.id === id)!);
-      const newLayout = [...visible, ...hidden];
-      scheduleAutoSave(newLayout);
-      return newLayout;
+      return [...visible, ...hidden];
     });
+  }, []);
+
+  // On drop: DOM is already in the correct order (from live handleDragOver reorders).
+  // Just clear the overlay and persist whatever order we landed on.
+  const handleDragEnd = useCallback((_event: DragEndEvent) => {
+    setActiveWidgetId(null);
+    activeWidgetIdRef.current = null;
+    snapRects.current.clear(); // discard any pending snapshot
+    scheduleAutoSave(localLayoutRef.current);
   }, [scheduleAutoSave]);
 
   // ── Arrange mode: remove widget ──────────────────────────────────────────────
@@ -560,6 +646,7 @@ export default function DashboardPage() {
                         config={config}
                         onRemove={() => removeWidget(config.id)}
                         placeholderHeight={activeDragHeight.current}
+                        registerRef={registerWidgetEl}
                       />
                     );
                   }
@@ -592,17 +679,18 @@ export default function DashboardPage() {
                 sensors={sensors}
                 collisionDetection={closestCenter}
                 onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
               >
                 {/*
-                  rectSortingStrategy measures actual DOM rects so dnd-kit can
-                  compute the exact CSS transforms to slide each non-active widget
-                  to its projected position while you drag. The DOM reorders only
-                  on drop (handleDragEnd), keeping animations smooth mid-drag.
+                  strategy={() => null} — dnd-kit computes no CSS transforms for
+                  any item. The DOM is live-reordered in onDragOver (always correct
+                  positions) and our FLIP useLayoutEffect handles the smooth animation
+                  from old→new position for every non-active widget.
                 */}
                 <SortableContext
                   items={visibleWidgets.map((w) => w.id)}
-                  strategy={rectSortingStrategy}
+                  strategy={() => null}
                 >
                   {fullGrid}
                 </SortableContext>
