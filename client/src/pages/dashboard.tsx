@@ -524,7 +524,7 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={config.id}
-                      className={SIZE_CLASSES[config.size]}
+                      className={`${SIZE_CLASSES[config.size]} flex flex-col`}
                       data-testid={`widget-cell-${config.id}`}
                     >
                       <WidgetRenderer id={config.id} />

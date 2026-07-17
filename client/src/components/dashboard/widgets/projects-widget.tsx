@@ -131,7 +131,7 @@ export function ProjectsWidget() {
   return (
     <>
       <Card
-        className="relative overflow-hidden border-card-border bg-card hover-elevate transition-all h-full"
+        className="relative overflow-hidden border-card-border bg-card hover-elevate transition-all w-full h-full"
         data-testid="card-projects-hero"
       >
         <div className="absolute inset-x-0 top-0 h-0.5 bg-indigo-500" />

@@ -102,7 +102,7 @@ export function Tile({
 }) {
   const card = (
     <Card
-      className={`relative overflow-hidden border-card-border bg-card transition-all hover-elevate h-full ${
+      className={`relative overflow-hidden border-card-border bg-card transition-all hover-elevate w-full h-full ${
         href ? "cursor-pointer" : ""
       } ${className}`}
       data-testid={testId}
@@ -112,7 +112,7 @@ export function Tile({
     </Card>
   );
   return href ? (
-    <Link href={href} className="block h-full">
+    <Link href={href} className="flex flex-col w-full h-full">
       {card}
     </Link>
   ) : (
