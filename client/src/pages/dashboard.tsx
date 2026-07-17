@@ -438,97 +438,138 @@ export default function DashboardPage() {
         )}
 
         {/* ── Widget grid ──────────────────────────────────────────────────────── */}
-        {visibleWidgets.length === 0 ? (
-          /* ── Ghost grid: shown when all widgets are hidden ── */
-          <div>
-            <div className="flex items-center justify-between mb-5">
-              <p className="text-sm text-muted-foreground">
-                Your dashboard is empty — click a slot to add widgets.
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
+        {(() => {
+          // In arrange mode or while the Add/Remove panel is open, reveal the
+          // full layout: visible widgets render normally, hidden ones show as
+          // ghost placeholder slots so the user can see the whole picture.
+          const revealAll = arrangeMode || activePanel === "widgets";
+
+          // True empty state: no visible widgets AND we're not in a reveal mode
+          if (visibleWidgets.length === 0 && !revealAll) {
+            return (
+              <div>
+                <div className="flex items-center justify-between mb-5">
+                  <p className="text-sm text-muted-foreground">
+                    Your dashboard is empty — click a slot to add widgets.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setActivePanel("widgets")}
+                    data-testid="button-customize-empty"
+                    className="shrink-0 ml-4"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                    Add Widgets
+                  </Button>
+                </div>
+                <div className="grid grid-cols-12 gap-4">
+                  {localLayout.map((config) => {
+                    const meta = WIDGET_META[config.id];
+                    return (
+                      <div
+                        key={config.id}
+                        className={`${SIZE_CLASSES[config.size]} min-h-[130px] rounded-xl border-2 border-dashed border-muted-foreground/15 bg-muted/10 flex flex-col items-center justify-center gap-2 p-4 cursor-pointer hover:border-violet-400/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/10 transition-all group`}
+                        onClick={() => setActivePanel("widgets")}
+                        data-testid={`ghost-slot-${config.id}`}
+                      >
+                        <div className="h-8 w-8 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center group-hover:border-violet-400/60 transition-colors">
+                          <Plus className="h-3.5 w-3.5 text-muted-foreground/25 group-hover:text-violet-500 transition-colors" />
+                        </div>
+                        <p className="text-xs font-medium text-muted-foreground/40 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors text-center leading-tight">
+                          {meta.title}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+
+          // Ghost slot helper — shared by both arrange and widget-panel modes
+          const GhostSlot = ({ config }: { config: WidgetConfig }) => {
+            const meta = WIDGET_META[config.id];
+            return (
+              <div
+                className={`${SIZE_CLASSES[config.size]} min-h-[130px] rounded-xl border-2 border-dashed border-muted-foreground/15 bg-muted/10 flex flex-col items-center justify-center gap-2 p-4 cursor-pointer hover:border-violet-400/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/10 transition-all group`}
                 onClick={() => setActivePanel("widgets")}
-                data-testid="button-customize-empty"
-                className="shrink-0 ml-4"
+                data-testid={`ghost-slot-${config.id}`}
               >
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Add Widgets
-              </Button>
-            </div>
+                <div className="h-8 w-8 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center group-hover:border-violet-400/60 transition-colors">
+                  <Plus className="h-3.5 w-3.5 text-muted-foreground/25 group-hover:text-violet-500 transition-colors" />
+                </div>
+                <p className="text-xs font-medium text-muted-foreground/40 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors text-center leading-tight">
+                  {meta.title}
+                </p>
+              </div>
+            );
+          };
+
+          // Full grid: visible widgets as real cards, hidden widgets as ghost slots
+          // (or null when not in reveal mode — only happens in the normal static case)
+          const fullGrid = (
             <div className="grid grid-cols-12 gap-4">
               {localLayout.map((config) => {
-                const meta = WIDGET_META[config.id];
-                return (
-                  <div
-                    key={config.id}
-                    className={`${SIZE_CLASSES[config.size]} min-h-[130px] rounded-xl border-2 border-dashed border-muted-foreground/15 bg-muted/10 flex flex-col items-center justify-center gap-2 p-4 cursor-pointer hover:border-violet-400/50 hover:bg-violet-50/50 dark:hover:bg-violet-950/10 transition-all group`}
-                    onClick={() => setActivePanel("widgets")}
-                    data-testid={`ghost-slot-${config.id}`}
-                  >
-                    <div className="h-8 w-8 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center group-hover:border-violet-400/60 transition-colors">
-                      <Plus className="h-3.5 w-3.5 text-muted-foreground/25 group-hover:text-violet-500 transition-colors" />
+                if (config.visible) {
+                  if (arrangeMode) {
+                    return (
+                      <SortableWidget
+                        key={config.id}
+                        config={config}
+                        onRemove={() => removeWidget(config.id)}
+                      />
+                    );
+                  }
+                  return (
+                    <div
+                      key={config.id}
+                      className={SIZE_CLASSES[config.size]}
+                      data-testid={`widget-cell-${config.id}`}
+                    >
+                      <WidgetRenderer id={config.id} />
                     </div>
-                    <p className="text-xs font-medium text-muted-foreground/40 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors text-center leading-tight">
-                      {meta.title}
-                    </p>
-                  </div>
-                );
+                  );
+                }
+                // Hidden widget — only render a placeholder when we're revealing all
+                return revealAll ? <GhostSlot key={config.id} config={config} /> : null;
               })}
             </div>
-          </div>
-        ) : arrangeMode ? (
-          /* ── Drag-and-drop grid (arrange mode only) ── */
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={visibleWidgets.map((w) => w.id)}
-              strategy={rectSortingStrategy}
-            >
-              <div className="grid grid-cols-12 gap-4">
-                {visibleWidgets.map((config) => (
-                  <SortableWidget
-                    key={config.id}
-                    config={config}
-                    onRemove={() => removeWidget(config.id)}
-                  />
-                ))}
-              </div>
-            </SortableContext>
+          );
 
-            {/* Floating widget clone that follows the cursor — no distortion */}
-            <DragOverlay
-              dropAnimation={{ duration: 180, easing: "ease" }}
-            >
-              {activeWidgetId ? (
-                <div
-                  style={{ width: activeDragWidth.current || undefined }}
-                  className="opacity-90 shadow-2xl rounded-xl rotate-1 scale-[1.02]"
-                >
-                  <WidgetRenderer id={activeWidgetId} />
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          /* ── Normal static grid ── */
-          <div className="grid grid-cols-12 gap-4">
-            {visibleWidgets.map((config) => (
-              <div
-                key={config.id}
-                className={SIZE_CLASSES[config.size]}
-                data-testid={`widget-cell-${config.id}`}
+          if (arrangeMode) {
+            return (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
               >
-                <WidgetRenderer id={config.id} />
-              </div>
-            ))}
-          </div>
-        )}
+                <SortableContext
+                  items={visibleWidgets.map((w) => w.id)}
+                  strategy={rectSortingStrategy}
+                >
+                  {fullGrid}
+                </SortableContext>
+
+                {/* Floating widget clone that follows the cursor — no distortion */}
+                <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
+                  {activeWidgetId ? (
+                    <div
+                      style={{ width: activeDragWidth.current || undefined }}
+                      className="opacity-90 shadow-2xl rounded-xl rotate-1 scale-[1.02]"
+                    >
+                      <WidgetRenderer id={activeWidgetId} />
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            );
+          }
+
+          return fullGrid;
+        })()}
       </div>
 
       {/* ── Side panels ──────────────────────────────────────────────────────── */}
