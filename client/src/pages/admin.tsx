@@ -815,205 +815,124 @@ function CfIntegrationTab() {
         </Card>
       </div>
 
-      {/* Webhook Tester */}
-      <Card className="overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" />
-        <CardHeader className="pt-4">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="h-4 w-4 text-amber-500" />
-            Webhook Tester
-          </CardTitle>
-          <CardDescription>
-            Simulate a ClickFunnels event to verify your integration is working correctly.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="email"
-              placeholder="user@example.com"
-              value={testEmail}
-              onChange={(e) => setTestEmail(e.target.value)}
-              className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
-              data-testid="input-test-webhook-email"
-            />
-            <select
-              value={testEvent}
-              onChange={(e) => setTestEvent(e.target.value)}
-              className="text-sm border rounded-md px-3 py-2 bg-background"
-              data-testid="select-test-webhook-event"
-            >
-              <option value="courses/enrollment.created">courses/enrollment.created</option>
-              <option value="courses/enrollment.suspended">courses/enrollment.suspended</option>
-              <option value="courses/enrollment.deleted">courses/enrollment.deleted</option>
-              <option value="subscription.cancelled">subscription.cancelled</option>
-              <option value="subscription.churned">subscription.churned</option>
-            </select>
-            <Button
-              onClick={handleTestWebhook}
-              disabled={testLoading}
-              size="sm"
-              data-testid="button-run-test-webhook"
-            >
-              {testLoading ? "Running..." : "Run Test"}
-            </Button>
-          </div>
-
-          {testResult && (
-            <div className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm ${
-              testResult.action === "granted" ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" :
-              testResult.action === "revoked" ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400" :
-              "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-            }`} data-testid="text-test-webhook-result">
-              {testResult.action === "granted" && <UserCheck className="h-4 w-4 flex-shrink-0" />}
-              {testResult.action === "revoked" && <UserX className="h-4 w-4 flex-shrink-0" />}
-              {!["granted", "revoked"].includes(testResult.action) && <AlertCircle className="h-4 w-4 flex-shrink-0" />}
-              <div>
-                <span className="font-medium capitalize">{testResult.action.replace(/_/g, " ")}</span>
-                {testResult.email && <span className="ml-2 opacity-70">for {testResult.email}</span>}
-                {testResult.action === "no_local_user" && (
-                  <p className="text-xs mt-0.5 opacity-70">No account found with that email in this app.</p>
-                )}
+      {/* Webhook Tester + CF Contact Lookup — side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Webhook Tester */}
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" />
+          <CardHeader className="pt-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-500" />
+              Webhook Tester
+            </CardTitle>
+            <CardDescription>
+              Simulate a ClickFunnels event to verify your integration is working correctly.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3">
+              <input
+                type="email"
+                placeholder="user@example.com"
+                value={testEmail}
+                onChange={(e) => setTestEmail(e.target.value)}
+                className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
+                data-testid="input-test-webhook-email"
+              />
+              <div className="flex gap-2">
+                <select
+                  value={testEvent}
+                  onChange={(e) => setTestEvent(e.target.value)}
+                  className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
+                  data-testid="select-test-webhook-event"
+                >
+                  <option value="courses/enrollment.created">courses/enrollment.created</option>
+                  <option value="courses/enrollment.suspended">courses/enrollment.suspended</option>
+                  <option value="courses/enrollment.deleted">courses/enrollment.deleted</option>
+                  <option value="subscription.cancelled">subscription.cancelled</option>
+                  <option value="subscription.churned">subscription.churned</option>
+                </select>
+                <Button
+                  onClick={handleTestWebhook}
+                  disabled={testLoading}
+                  size="sm"
+                  data-testid="button-run-test-webhook"
+                >
+                  {testLoading ? "Running..." : "Run Test"}
+                </Button>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* CF Contact Lookup */}
-      <Card className="overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-sky-500 to-cyan-400" />
-        <CardHeader className="pt-4">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Search className="h-4 w-4 text-sky-500" />
-            CF Contact Lookup
-          </CardTitle>
-          <CardDescription>
-            Check a member's enrollment status directly against the ClickFunnels API.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <input
-              type="email"
-              placeholder="user@example.com"
-              value={lookupEmail}
-              onChange={(e) => setLookupEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-              className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
-              data-testid="input-cf-lookup-email"
-            />
-            <Button onClick={handleLookup} disabled={lookupLoading} size="sm" data-testid="button-cf-lookup">
-              {lookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Look Up"}
-            </Button>
-          </div>
-          {lookupResult && (
-            <div className={`rounded-md border px-4 py-3 text-sm space-y-1 ${
-              lookupResult.error ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30" :
-              lookupResult.enrolled ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30" :
-              "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
-            }`} data-testid="text-cf-lookup-result">
-              {lookupResult.error ? (
-                <p className="text-red-700 dark:text-red-400"><span className="font-medium">Error:</span> {lookupResult.error}</p>
-              ) : (
-                <>
-                  <p className={lookupResult.enrolled ? "text-green-700 dark:text-green-400 font-medium" : "text-amber-700 dark:text-amber-400 font-medium"}>
-                    {lookupResult.enrolled ? "✓ Active enrollment found" : "✗ Not enrolled / not found"}
-                  </p>
-                  {lookupResult.contactId && <p className="text-muted-foreground text-xs">Contact ID: <code className="font-mono">{lookupResult.contactId}</code></p>}
-                  {lookupResult.email && <p className="text-muted-foreground text-xs">Email: {lookupResult.email}</p>}
-                </>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {testResult && (
+              <div className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm ${
+                testResult.action === "granted" ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" :
+                testResult.action === "revoked" ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400" :
+                "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+              }`} data-testid="text-test-webhook-result">
+                {testResult.action === "granted" && <UserCheck className="h-4 w-4 flex-shrink-0" />}
+                {testResult.action === "revoked" && <UserX className="h-4 w-4 flex-shrink-0" />}
+                {!["granted", "revoked"].includes(testResult.action) && <AlertCircle className="h-4 w-4 flex-shrink-0" />}
+                <div>
+                  <span className="font-medium capitalize">{testResult.action.replace(/_/g, " ")}</span>
+                  {testResult.email && <span className="ml-2 opacity-70">for {testResult.email}</span>}
+                  {testResult.action === "no_local_user" && (
+                    <p className="text-xs mt-0.5 opacity-70">No account found with that email in this app.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Member List */}
-      <Card className="overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-400" />
-        <CardHeader className="pt-4">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="h-4 w-4 text-indigo-500" />
-                Member Enrollment List
-              </CardTitle>
-              <CardDescription>
-                All users grouped by their ClickFunnels membership status.
-              </CardDescription>
+        {/* CF Contact Lookup */}
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-sky-500 to-cyan-400" />
+          <CardHeader className="pt-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Search className="h-4 w-4 text-sky-500" />
+              CF Contact Lookup
+            </CardTitle>
+            <CardDescription>
+              Check a member's enrollment status directly against the ClickFunnels API.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <input
+                type="email"
+                placeholder="user@example.com"
+                value={lookupEmail}
+                onChange={(e) => setLookupEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+                className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
+                data-testid="input-cf-lookup-email"
+              />
+              <Button onClick={handleLookup} disabled={lookupLoading} size="sm" data-testid="button-cf-lookup">
+                {lookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Look Up"}
+              </Button>
             </div>
-            <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
-              {(["enrolled", "revoked", "never"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setMemberFilter(f)}
-                  className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
-                    memberFilter === f
-                      ? "bg-background shadow-sm text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  data-testid={`filter-cf-${f}`}
-                >
-                  {f === "enrolled" ? "Active" : f === "revoked" ? "Revoked" : "Never Connected"}
-                </button>
-              ))}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {cfUsersLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : cfUsers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              No members in this category.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member</TableHead>
-                  <TableHead>CF Contact ID</TableHead>
-                  {memberFilter === "enrolled" && <TableHead>Enrolled</TableHead>}
-                  {memberFilter === "revoked" && <TableHead>Revoked</TableHead>}
-                  {memberFilter === "never" && <TableHead>Status</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cfUsers.map((u) => (
-                  <TableRow key={u.id} data-testid={`cf-member-row-${u.id}`}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium text-sm">{u.displayName || `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "—"}</p>
-                        <p className="text-xs text-muted-foreground">{u.email ?? "—"}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {u.cfContactId ? (
-                        <code className="text-xs font-mono text-muted-foreground">{u.cfContactId}</code>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {memberFilter === "enrolled" && u.cfEnrolledAt
-                        ? new Date(u.cfEnrolledAt).toLocaleDateString()
-                        : memberFilter === "revoked" && u.cfRevokedAt
-                        ? new Date(u.cfRevokedAt).toLocaleDateString()
-                        : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          {cfUsers.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-3">{cfUsers.length} member{cfUsers.length !== 1 ? "s" : ""} shown</p>
-          )}
-        </CardContent>
-      </Card>
+            {lookupResult && (
+              <div className={`rounded-md border px-4 py-3 text-sm space-y-1 ${
+                lookupResult.error ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30" :
+                lookupResult.enrolled ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30" :
+                "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
+              }`} data-testid="text-cf-lookup-result">
+                {lookupResult.error ? (
+                  <p className="text-red-700 dark:text-red-400"><span className="font-medium">Error:</span> {lookupResult.error}</p>
+                ) : (
+                  <>
+                    <p className={lookupResult.enrolled ? "text-green-700 dark:text-green-400 font-medium" : "text-amber-700 dark:text-amber-400 font-medium"}>
+                      {lookupResult.enrolled ? "✓ Active enrollment found" : "✗ Not enrolled / not found"}
+                    </p>
+                    {lookupResult.contactId && <p className="text-muted-foreground text-xs">Contact ID: <code className="font-mono">{lookupResult.contactId}</code></p>}
+                    {lookupResult.email && <p className="text-muted-foreground text-xs">Email: {lookupResult.email}</p>}
+                  </>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* ─── Magic Link Button Builder ─────────────────────────────────── */}
       <div>
