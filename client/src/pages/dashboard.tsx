@@ -297,6 +297,11 @@ function AnnouncementBanner({ announcement }: { announcement: ActiveAnnouncement
     catch { return false; }
   });
 
+  useEffect(() => {
+    try { setDismissed(localStorage.getItem(dismissKey) === "1"); }
+    catch { setDismissed(false); }
+  }, [dismissKey]);
+
   if (dismissed) return null;
 
   const styles = ANNOUNCEMENT_STYLES[announcement.bgColor] ?? ANNOUNCEMENT_STYLES.violet;

@@ -2270,7 +2270,7 @@ function AnnouncementsTab() {
                   onReset={() => resetDismissalsMutation.mutate(a.id)}
                   isDeleting={deleteMutation.isPending}
                   isToggling={activateMutation.isPending || deactivateMutation.isPending}
-                  isResetting={resetDismissalsMutation.isPending}
+                  isResetting={resetDismissalsMutation.isPending && resetDismissalsMutation.variables === a.id}
                 />
               ))}
             </div>
