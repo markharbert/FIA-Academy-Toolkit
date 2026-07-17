@@ -1866,8 +1866,16 @@ export async function registerRoutes(
   // Admin: save CF button customizer settings
   app.post("/api/admin/cf/button-settings", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { text, bg, color, radius, width } = req.body as { text: string; bg: string; color: string; radius: string; width: string };
-      await storage.setCfButtonSettings({ text: String(text || ""), bg: String(bg || ""), color: String(color || ""), radius: String(radius || "rounded"), width: String(width || "auto") });
+      const { text, bg, color, radius, width, fontSize, padding } = req.body as { text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string };
+      await storage.setCfButtonSettings({
+        text: String(text || ""),
+        bg: String(bg || ""),
+        color: String(color || ""),
+        radius: String(radius || "rounded"),
+        width: String(width || "auto"),
+        fontSize: String(fontSize || "15"),
+        padding: String(padding || "normal"),
+      });
       res.json({ ok: true });
     } catch (err) {
       console.error("[CF Button Admin] save error:", err);
