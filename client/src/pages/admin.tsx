@@ -452,6 +452,33 @@ function CfIntegrationTab() {
     queryKey: ["/api/admin/cf/status"],
   });
 
+  const [memberFilter, setMemberFilter] = useState<"enrolled" | "revoked" | "never">("enrolled");
+  const { data: cfUsersData, isLoading: cfUsersLoading } = useQuery<{ users: CfUser[] }>({
+    queryKey: [`/api/admin/cf/users?filter=${memberFilter}`],
+  });
+  const cfUsers = cfUsersData?.users ?? [];
+
+  const [lookupEmail, setLookupEmail] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState<{ enrolled: boolean; contactId?: string | null; email?: string | null; error?: string } | null>(null);
+
+  const handleLookup = async () => {
+    if (!lookupEmail.trim()) return;
+    setLookupLoading(true);
+    setLookupResult(null);
+    try {
+      const res = await fetch(`/api/admin/cf/test-lookup?email=${encodeURIComponent(lookupEmail.trim())}`, { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed");
+      const er = data.enrollmentResult;
+      setLookupResult({ enrolled: !!er?.enrolled, contactId: er?.contactId, email: er?.email, error: er?.error });
+    } catch (err: any) {
+      toast({ title: "Lookup failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
   const webhookUrl = `${window.location.protocol}//${window.location.host}/api/webhooks/clickfunnels`;
 
   const handleCopy = (text: string, label: string) => {
@@ -758,6 +785,141 @@ function CfIntegrationTab() {
                 )}
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* CF Contact Lookup */}
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-sky-500 to-cyan-400" />
+        <CardHeader className="pt-4">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Search className="h-4 w-4 text-sky-500" />
+            CF Contact Lookup
+          </CardTitle>
+          <CardDescription>
+            Check a member's enrollment status directly against the ClickFunnels API.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <input
+              type="email"
+              placeholder="user@example.com"
+              value={lookupEmail}
+              onChange={(e) => setLookupEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+              className="flex-1 text-sm border rounded-md px-3 py-2 bg-background"
+              data-testid="input-cf-lookup-email"
+            />
+            <Button onClick={handleLookup} disabled={lookupLoading} size="sm" data-testid="button-cf-lookup">
+              {lookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Look Up"}
+            </Button>
+          </div>
+          {lookupResult && (
+            <div className={`rounded-md border px-4 py-3 text-sm space-y-1 ${
+              lookupResult.error ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30" :
+              lookupResult.enrolled ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30" :
+              "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
+            }`} data-testid="text-cf-lookup-result">
+              {lookupResult.error ? (
+                <p className="text-red-700 dark:text-red-400"><span className="font-medium">Error:</span> {lookupResult.error}</p>
+              ) : (
+                <>
+                  <p className={lookupResult.enrolled ? "text-green-700 dark:text-green-400 font-medium" : "text-amber-700 dark:text-amber-400 font-medium"}>
+                    {lookupResult.enrolled ? "✓ Active enrollment found" : "✗ Not enrolled / not found"}
+                  </p>
+                  {lookupResult.contactId && <p className="text-muted-foreground text-xs">Contact ID: <code className="font-mono">{lookupResult.contactId}</code></p>}
+                  {lookupResult.email && <p className="text-muted-foreground text-xs">Email: {lookupResult.email}</p>}
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Member List */}
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-400" />
+        <CardHeader className="pt-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-4 w-4 text-indigo-500" />
+                Member Enrollment List
+              </CardTitle>
+              <CardDescription>
+                All users grouped by their ClickFunnels membership status.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
+              {(["enrolled", "revoked", "never"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setMemberFilter(f)}
+                  className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
+                    memberFilter === f
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  data-testid={`filter-cf-${f}`}
+                >
+                  {f === "enrolled" ? "Active" : f === "revoked" ? "Revoked" : "Never Connected"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {cfUsersLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : cfUsers.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              No members in this category.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Member</TableHead>
+                  <TableHead>CF Contact ID</TableHead>
+                  {memberFilter === "enrolled" && <TableHead>Enrolled</TableHead>}
+                  {memberFilter === "revoked" && <TableHead>Revoked</TableHead>}
+                  {memberFilter === "never" && <TableHead>Status</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cfUsers.map((u) => (
+                  <TableRow key={u.id} data-testid={`cf-member-row-${u.id}`}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium text-sm">{u.displayName || `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || "—"}</p>
+                        <p className="text-xs text-muted-foreground">{u.email ?? "—"}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {u.cfContactId ? (
+                        <code className="text-xs font-mono text-muted-foreground">{u.cfContactId}</code>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {memberFilter === "enrolled" && u.cfEnrolledAt
+                        ? new Date(u.cfEnrolledAt).toLocaleDateString()
+                        : memberFilter === "revoked" && u.cfRevokedAt
+                        ? new Date(u.cfRevokedAt).toLocaleDateString()
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {cfUsers.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-3">{cfUsers.length} member{cfUsers.length !== 1 ? "s" : ""} shown</p>
           )}
         </CardContent>
       </Card>
@@ -3148,6 +3310,10 @@ export default function AdminPage() {
             <Users className="h-3.5 w-3.5 text-sky-400" />
             Users
           </TabsTrigger>
+          <TabsTrigger value="clickfunnels" data-testid="tab-clickfunnels" className="gap-1.5">
+            <Workflow className="h-3.5 w-3.5 text-purple-400" />
+            ClickFunnels
+          </TabsTrigger>
           <TabsTrigger value="integrations" data-testid="tab-integrations" className="gap-1.5">
             <Webhook className="h-3.5 w-3.5 text-emerald-400" />
             Integrations
@@ -3735,6 +3901,10 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="clickfunnels" className="space-y-6">
+          <CfIntegrationTab />
+        </TabsContent>
+
         <TabsContent value="integrations" className="space-y-6">
           <Card>
             <CardHeader>
@@ -4012,7 +4182,6 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-          <CfIntegrationTab />
         </TabsContent>
 
         <TabsContent value="email-templates" className="space-y-6">
