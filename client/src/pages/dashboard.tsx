@@ -1,5 +1,4 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { Link } from "wouter";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -13,8 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Briefcase,
-  Target,
   SlidersHorizontal,
   LayoutGrid,
   Eye,
@@ -24,7 +21,6 @@ import {
   Check,
   Plus,
 } from "lucide-react";
-import type { DmoEntry, InsightsResponse } from "@shared/schema";
 
 import {
   DndContext,
@@ -50,7 +46,6 @@ import {
   SIZE_CLASSES,
   WIDGET_META,
   mergeLayout,
-  dmoTotalPts,
 } from "@/components/dashboard/widget-registry";
 import { CustomizePanel } from "@/components/dashboard/customize-panel";
 import { LayoutPanel } from "@/components/dashboard/layout-panel";
@@ -337,31 +332,6 @@ export default function DashboardPage() {
     toast({ title: "Layout saved" });
   }
 
-  // ── Hero KPI ribbon data ─────────────────────────────────────────────────────
-  const { data: dmoToday } = useQuery<{ entry: DmoEntry | null; date: string }>({
-    queryKey: ["/api/dmo/today"],
-  });
-  const { data: projectsSummary } = useQuery<{
-    totalOpenTasks: number;
-    totalActive: number;
-    totalDueThisWeek: number;
-    totalOverdue: number;
-  }>({ queryKey: ["/api/dashboard/projects"] });
-  const { data: insights } = useQuery<InsightsResponse>({
-    queryKey: ["/api/inbox-intel/insights"],
-  });
-
-  const todayPts = dmoTotalPts(dmoToday?.entry ?? null);
-
-  const headerKpis = useMemo(
-    () => [
-      { label: "DMO points today", value: `${todayPts}/25` },
-      { label: "Open tasks", value: projectsSummary?.totalOpenTasks ?? 0 },
-      { label: "Competitor emails 7d", value: insights?.totalEmails7d ?? 0 },
-    ],
-    [todayPts, projectsSummary, insights]
-  );
-
   const visibleWidgets = localLayout.filter((w) => w.visible);
 
   return (
@@ -373,82 +343,25 @@ export default function DashboardPage() {
         <div className="absolute -top-20 -left-10 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl" />
         <div className="absolute top-0 left-1/2 h-56 w-56 rounded-full bg-teal-500/8 blur-3xl" />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-7">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div className="text-white">
-              <p className="text-xs font-medium tracking-wide uppercase text-white/70 flex items-center gap-2 flex-wrap">
-                <span data-testid="text-dashboard-date">{todayLabel(user?.timezone)}</span>
-                <span className="opacity-50">·</span>
-                <span className="tabular-nums" data-testid="text-dashboard-time">
-                  {nowTime}
-                </span>
-              </p>
-              <h1
-                className="text-3xl sm:text-4xl font-bold tracking-tight mt-1 text-white"
-                data-testid="text-dashboard-title"
-              >
-                {firstName
-                  ? `${timeGreeting(user?.timezone)}, ${firstName}`
-                  : timeGreeting(user?.timezone)}
-              </h1>
-              <p className="text-white/70 mt-1 text-sm">
-                Your private marketing command center.
-              </p>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <Link href="/projects">
-                <Button
-                  size="sm"
-                  className="bg-white text-[hsl(230_70%_12%)] hover:bg-white/90 shadow-lg"
-                  data-testid="button-open-projects"
-                >
-                  <Briefcase className="h-4 w-4 mr-1.5" />
-                  Open Projects
-                </Button>
-              </Link>
-              <Link href="/dmo-tracker">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-                  data-testid="button-log-dmo"
-                >
-                  <Target className="h-4 w-4 mr-1.5" />
-                  Log DMO
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          {/* KPI ribbon */}
-          {(() => {
-            const kpiStyles = [
-              { bg: "bg-amber-500/15 ring-amber-400/30",  label: "text-amber-200/80",  value: "text-amber-100"  },
-              { bg: "bg-indigo-500/15 ring-indigo-400/30", label: "text-indigo-200/80", value: "text-indigo-100" },
-              { bg: "bg-violet-500/15 ring-violet-400/30", label: "text-violet-200/80", value: "text-violet-100" },
-            ];
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
-                {headerKpis.map((k, i) => {
-                  const s = kpiStyles[i] ?? kpiStyles[0];
-                  return (
-                    <div
-                      key={i}
-                      className={`rounded-xl backdrop-blur-md ring-1 px-4 py-3 ${s.bg}`}
-                      data-testid={`kpi-${i}`}
-                    >
-                      <p className={`text-[10px] uppercase tracking-wider font-medium ${s.label}`}>
-                        {k.label}
-                      </p>
-                      <p className={`mt-1 text-2xl font-bold tabular-nums ${s.value}`}>
-                        {k.value}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-6">
+          <p className="text-xs font-medium tracking-wide uppercase text-white/60 flex items-center gap-2 flex-wrap">
+            <span data-testid="text-dashboard-date">{todayLabel(user?.timezone)}</span>
+            <span className="opacity-40">·</span>
+            <span className="tabular-nums" data-testid="text-dashboard-time">
+              {nowTime}
+            </span>
+          </p>
+          <h1
+            className="text-3xl sm:text-4xl font-bold tracking-tight mt-1 text-white"
+            data-testid="text-dashboard-title"
+          >
+            {firstName
+              ? `${timeGreeting(user?.timezone)}, ${firstName}`
+              : timeGreeting(user?.timezone)}
+          </h1>
+          <p className="text-white/60 mt-1 text-sm">
+            Your private marketing command center.
+          </p>
         </div>
       </div>
 
