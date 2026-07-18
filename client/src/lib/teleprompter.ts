@@ -663,10 +663,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         setCamState('denied');return;
       }
       var vidConstraints={
-        landscape:{width:{ideal:1920},height:{ideal:1080}},
-        portrait:{width:{ideal:1080},height:{ideal:1920}},
-        square:{width:{ideal:1080},height:{ideal:1080}}
-      }[selectedFormat]||{width:{ideal:1920},height:{ideal:1080}};
+        // For landscape (used by screen modes): require at least 720p so the PiP
+        // overlay has enough pixels to look sharp; aim for 1080p if the webcam supports it
+        landscape:{width:{min:1280,ideal:1920},height:{min:720,ideal:1080}},
+        portrait:{width:{min:720,ideal:1080},height:{min:1280,ideal:1920}},
+        square:{width:{min:720,ideal:1080},height:{min:720,ideal:1080}}
+      }[selectedFormat]||{width:{min:1280,ideal:1920},height:{min:720,ideal:1080}};
       var videoConstraint=Object.assign(cameraId?{deviceId:{exact:cameraId}}:{facingMode:'user'},vidConstraints);
       var audioConstraint=micId?{deviceId:{exact:micId}}:true;
       navigator.mediaDevices.getUserMedia({video:videoConstraint,audio:audioConstraint})
@@ -1196,8 +1198,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
             // PiP: screen full-frame + camera overlay bottom-right
             drawCover(ctx,screenVidHidden,0,0,COMPOSITE_W,COMPOSITE_H,false);
 
-            // 30% of canvas width — larger than before for a cleaner, sharper face
-            var pipW=Math.round(COMPOSITE_W*0.30);
+            // 26% of canvas width — compact but sharp; more pixels-per-face than before
+            var pipW=Math.round(COMPOSITE_W*0.26);
             var pipH=Math.round(pipW*9/16);
             var pipX=COMPOSITE_W-pipW-24;
             var pipY=COMPOSITE_H-pipH-24;
