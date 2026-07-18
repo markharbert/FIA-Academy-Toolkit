@@ -880,18 +880,18 @@ function CfIntegrationTab() {
 
             {testResult && (
               <div className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm ${
-                testResult.action === "granted" ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" :
+                ["granted", "created"].includes(testResult.action) ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400" :
                 testResult.action === "revoked" ? "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400" :
                 "border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
               }`} data-testid="text-test-webhook-result">
-                {testResult.action === "granted" && <UserCheck className="h-4 w-4 flex-shrink-0" />}
+                {["granted", "created"].includes(testResult.action) && <UserCheck className="h-4 w-4 flex-shrink-0" />}
                 {testResult.action === "revoked" && <UserX className="h-4 w-4 flex-shrink-0" />}
-                {!["granted", "revoked"].includes(testResult.action) && <AlertCircle className="h-4 w-4 flex-shrink-0" />}
+                {!["granted", "created", "revoked"].includes(testResult.action) && <AlertCircle className="h-4 w-4 flex-shrink-0" />}
                 <div>
                   <span className="font-medium capitalize">{testResult.action.replace(/_/g, " ")}</span>
                   {testResult.email && <span className="ml-2 opacity-70">for {testResult.email}</span>}
-                  {testResult.action === "no_local_user" && (
-                    <p className="text-xs mt-0.5 opacity-70">No account found with that email in this app.</p>
+                  {testResult.action === "created" && (
+                    <p className="text-xs mt-0.5 opacity-70">New account auto-provisioned for this enrollee.</p>
                   )}
                 </div>
               </div>
@@ -945,6 +945,23 @@ function CfIntegrationTab() {
                 )}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Bulk Member Sync */}
+        <Card className="overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+          <CardHeader className="pt-4 pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4 text-emerald-500" />
+              Bulk Member Sync
+            </CardTitle>
+            <CardDescription>
+              Pull every active CF enrollee into the Users tab at once — including members who haven't clicked the login link yet. Safe to run anytime; existing accounts are not overwritten.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ImportAllMembersButton />
           </CardContent>
         </Card>
       </div>

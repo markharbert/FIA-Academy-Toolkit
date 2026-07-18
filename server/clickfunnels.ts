@@ -66,6 +66,8 @@ export interface CfWebhookEvent {
   contactEmail: string | null;
   contactId: string | null;
   courseId: string | null;
+  firstName: string | null;
+  lastName: string | null;
 }
 
 export function parseCfWebhookEvent(body: any): CfWebhookEvent {
@@ -93,7 +95,13 @@ export function parseCfWebhookEvent(body: any): CfWebhookEvent {
         ""
     ) || null;
 
-  return { eventType, contactEmail, contactId, courseId };
+  const firstName: string | null =
+    data.first_name || data.contact?.first_name || null;
+
+  const lastName: string | null =
+    data.last_name || data.contact?.last_name || null;
+
+  return { eventType, contactEmail, contactId, courseId, firstName, lastName };
 }
 
 // Grant or revoke CF access for a user identified by email
@@ -139,8 +147,22 @@ export async function handleCfEnrollmentEvent(
       });
       return { action: "granted", email: contactEmail };
     }
-    // User not in our system yet – we can't grant access but log it
-    return { action: "no_local_user", email: contactEmail };
+    // No local account yet — auto-provision one so the member appears in the
+    // Users tab immediately, even before they click the login link for the first time.
+    const displayName = [firstName, lastName].filter(Boolean).join(" ") || contactEmail.split("@")[0];
+    const newUser = await storage.createUser({
+      email: contactEmail,
+      displayName,
+      firstName: firstName || "",
+      lastName: lastName || "",
+    });
+    await storage.updateUser(newUser.id, {
+      cfEnrolled: true,
+      cfContactId: contactId,
+      cfEnrolledAt: new Date(),
+    });
+    console.log(`[CF Webhook] Auto-provisioned account for new enrollee: ${contactEmail}`);
+    return { action: "created", email: contactEmail };
   }
 
   if (isRevokeEvent) {
