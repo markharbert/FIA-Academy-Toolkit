@@ -706,6 +706,39 @@ export async function registerRoutes(
 
   app.get("/api/auth/cf-magic", cfMagicLimiter, async (req: Request, res: Response) => {
     const APP_BASE = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+
+    // ── NEW: Pre-issued token path (native CF button with {{contact.atk_token}}) ──
+    // When a token is supplied, skip email entirely — the scheduler already verified
+    // enrollment and stored the token. Just redeem it directly.
+    const rawT = (req.query.t as string || "").trim();
+    if (rawT && rawT.length >= 32 && !rawT.includes("{{")) {
+      const tokenHash = crypto.createHash("sha256").update(rawT).digest("hex");
+      const magicToken = await storage.getCfMagicTokenByHash(tokenHash).catch(() => null);
+
+      if (!magicToken) return res.redirect(`${APP_BASE}/cf-magic-login?error=invalid_token`);
+      if (magicToken.usedAt) return res.redirect(`${APP_BASE}/cf-magic-login?error=already_used`);
+      if (new Date() > new Date(magicToken.expiresAt)) return res.redirect(`${APP_BASE}/cf-magic-login?error=expired`);
+
+      const user = await storage.getUser(magicToken.userId).catch(() => null);
+      if (!user || user.isDisabled) return res.redirect(`${APP_BASE}/cf-magic-login?error=account_disabled`);
+
+      await storage.markCfMagicTokenUsed(magicToken.id);
+
+      return new Promise<void>((resolve) => {
+        req.session.regenerate((err) => {
+          if (err) { resolve(); return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`); }
+          req.session.userId = user.id;
+          req.session.save(async (saveErr) => {
+            if (saveErr) { resolve(); return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`); }
+            await storage.updateUser(user.id, { lastLoginAt: new Date() });
+            resolve();
+            return res.redirect(`${APP_BASE}/dashboard`);
+          });
+        });
+      });
+    }
+
+    // ── LEGACY: Email in URL path (old GET flow) ──────────────────────────────
     // Extract email safely from raw URL to preserve "+" characters
     const rawEmailMatch = req.originalUrl.match(/[?&]email=([^&]*)/);
     const rawEmail = rawEmailMatch ? rawEmailMatch[1] : "";
@@ -1829,6 +1862,34 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[CF Admin] Users error:", err);
       res.status(500).json({ message: "Failed to get CF users" });
+    }
+  });
+
+  // Admin: backfill CF Contact IDs for enrolled members who are missing one
+  app.post("/api/admin/cf/sync-contact-ids", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const cfUsers = await storage.getCfUsers("enrolled");
+      const missing = cfUsers.filter((u) => !u.cfContactId);
+      if (missing.length === 0) return res.json({ synced: 0, skipped: 0, errors: 0, message: "All enrolled members already have a Contact ID." });
+
+      let synced = 0, skipped = 0, errors = 0;
+      for (const member of missing) {
+        try {
+          const info = await checkCfEnrollmentByEmail(member.email);
+          if (info.contactId) {
+            await storage.updateUser(member.id, { cfContactId: info.contactId });
+            synced++;
+          } else {
+            skipped++;
+          }
+        } catch {
+          errors++;
+        }
+      }
+      res.json({ synced, skipped, errors, message: `Synced ${synced} contact IDs. Skipped ${skipped} (not found in CF). Errors: ${errors}.` });
+    } catch (err: any) {
+      console.error("[CF Sync] error:", err?.message);
+      res.status(500).json({ message: "Sync failed" });
     }
   });
 

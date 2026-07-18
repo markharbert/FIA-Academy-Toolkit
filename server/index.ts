@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { bootstrapSuperAdmins, storage } from "./storage";
 import { startNotificationScheduler } from "./notificationScheduler";
+import { startCfTokenScheduler } from "./cfTokenScheduler";
 import { configureEmailSender } from "./email-sendgrid";
 import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
 import { db } from "./db";
@@ -830,6 +831,7 @@ async function runStartupMigrations() {
       // Start email notification scheduler
       startNotificationScheduler();
       startYouTubeAnalyticsScheduler();
+      startCfTokenScheduler();
     },
   );
 })();

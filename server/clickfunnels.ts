@@ -286,4 +286,41 @@ export async function checkCfEnrollmentByEmail(
   };
 }
 
+// ── CF API: Write a token into a contact's custom field ─────────────────────
+// The custom field slug must already exist in CF (e.g. "atk_token").
+// CF REST API: PUT /contacts/:id  with { contact: { custom_attributes: { slug: value } } }
+export async function writeCfContactToken(
+  contactId: string,
+  token: string
+): Promise<void> {
+  if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN) {
+    throw new Error("CF_API_TOKEN and CF_WORKSPACE_DOMAIN must be configured");
+  }
+  const url = `https://${CF_WORKSPACE_DOMAIN}/api/v2/contacts/${contactId}`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${CF_API_TOKEN}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      contact: {
+        custom_attributes: {
+          atk_token: token,
+        },
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`CF write token failed: ${res.status} ${body.slice(0, 120)}`);
+  }
+}
+
+// ── CF API: Get all enrolled contacts with a known CF contact ID ─────────────
+export async function getEnrolledContactIds(): Promise<Array<{ userId: string; email: string; contactId: string }>> {
+  return storage.getEnrolledUsersWithContactId();
+}
+
 export { CF_WORKSPACE_DOMAIN, CF_COURSE_ID, CF_API_TOKEN };

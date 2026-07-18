@@ -442,6 +442,38 @@ function ApiAccessToggleCard() {
   );
 }
 
+function SyncContactIdsButton() {
+  const { toast } = useToast();
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/cf/sync-contact-ids", { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Sync failed");
+      setResult(data.message);
+      toast({ title: "Sync complete", description: data.message });
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing} data-testid="button-sync-contact-ids">
+        {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <RotateCw className="h-3.5 w-3.5 mr-2" />}
+        {syncing ? "Syncing…" : "Sync Contact IDs from ClickFunnels"}
+      </Button>
+      {result && <p className="text-xs text-muted-foreground">{result}</p>}
+    </div>
+  );
+}
+
 function CfIntegrationTab() {
   const { toast } = useToast();
   const [testEmail, setTestEmail] = useState("");
@@ -516,34 +548,7 @@ function CfIntegrationTab() {
   const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
   const paddingMap = { compact: "10px 20px", normal: "14px 28px", spacious: "18px 36px" };
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
-
-  const btnStyle = `display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:${paddingMap[btnPadding]}; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:${btnFontSize}px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}`;
-  const embedCode = `<div${btnWidth === "full" ? "" : ' style="text-align:center"'}>
-  <a id="__atk_btn" href="${appOrigin}/member-login" target="_blank" rel="noopener noreferrer" style="${btnStyle}">${btnText}</a>
-  <script>
-  var __atkE="{{contact.email_address}}";
-  !function(){
-    var BASE='${appOrigin}',b=document.getElementById('__atk_btn');
-    if(!b)return;
-    var em=(__atkE||'').trim();
-    if(!em||em.indexOf('@')<0||em.indexOf('{{')>=0)return;
-    function fetchToken(done){
-      fetch(BASE+'/api/auth/cf-token-issue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em})})
-      .then(function(r){return r.ok?r.json():null})
-      .then(function(d){var u=d&&d.token?BASE+'/cf-magic-login?t='+d.token:null;if(done)done(u);else if(u)b.href=u;})
-      .catch(function(){if(done)done(null);});
-    }
-    fetchToken();
-    setInterval(fetchToken,270000);
-    b.addEventListener('click',function(e){
-      if((b.getAttribute('href')||'').indexOf('?t=')>=0)return;
-      e.preventDefault();
-      var w=window.open(BASE+'/cf-magic-login?loading=1','_blank');
-      fetchToken(function(u){if(w)w.location.href=u||BASE+'/member-login';});
-    });
-  }();
-  <\/script>
-</div>`;
+  const cfButtonUrl = `${appOrigin}/api/auth/cf-magic?t={{contact.atk_token}}`;
 
   const handleSaveBtnSettings = async () => {
     setBtnSaving(true);
@@ -1081,42 +1086,64 @@ function CfIntegrationTab() {
         </div>
       </div>
 
-      {/* Embed Code */}
+      {/* Native Button Setup */}
       <Card className="overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-400" />
         <CardHeader className="pt-4">
           <CardTitle className="text-base flex items-center gap-2">
             <Code className="h-4 w-4 text-violet-500" />
-            Embed Code
+            Native CF Button Setup
           </CardTitle>
           <CardDescription>
-            Two ways to add the login button to your ClickFunnels members area page.
+            Add a native ClickFunnels button to your members page using this URL. Our server refreshes each member's token every 4 minutes automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
 
-          {/* Embed Code */}
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Add a <strong>Custom HTML element</strong> in your CF members page and paste the code below. The button will automatically receive a fresh, secure login token every 4.5 minutes — so any copied link expires within 5 minutes. <strong>Do not enable "Dynamically Populated"</strong> on the element.</p>
-            <div className="relative">
-              <pre className="text-xs bg-muted rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed font-mono" data-testid="embed-code-preview">
-                {embedCode}
-              </pre>
-              <Button
-                variant="outline"
-                size="sm"
-                className="absolute top-2 right-2"
-                onClick={() => handleCopy(embedCode, "Embed code")}
-                data-testid="button-copy-embed-code"
-              >
-                <Copy className="h-3.5 w-3.5 mr-1.5" />
-                Copy
-              </Button>
+          {/* Step 1 */}
+          <div className="space-y-3">
+            <div className="flex gap-3 items-start">
+              <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">1</span>
+              <div className="space-y-1.5 flex-1">
+                <p className="text-sm font-medium">Create a custom contact field in ClickFunnels</p>
+                <p className="text-xs text-muted-foreground">In CF, go to <strong>Workspace Settings → Custom Fields</strong> and create a new text field. Set the field name to exactly:</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono">atk_token</code>
+                  <Button variant="outline" size="sm" onClick={() => handleCopy("atk_token", "Field name")} data-testid="button-copy-field-name">
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">The slug (API name) must be <code className="font-mono text-xs">atk_token</code>. The display name can be anything, e.g. "ATK Token".</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 items-start">
+              <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">2</span>
+              <div className="space-y-1.5 flex-1">
+                <p className="text-sm font-medium">Add a native Button element to your members page</p>
+                <p className="text-xs text-muted-foreground">In CF page editor, add a <strong>Button</strong> element (not Custom HTML). Set the button link to this URL:</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">{cfButtonUrl}</code>
+                  <Button variant="outline" size="sm" onClick={() => handleCopy(cfButtonUrl, "Button URL")} data-testid="button-copy-cf-url">
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">CF will automatically replace <code className="font-mono text-xs">{"{{contact.atk_token}}"}</code> with each member's real token when they view the page.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 items-start">
+              <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">3</span>
+              <div className="space-y-2 flex-1">
+                <p className="text-sm font-medium">Sync Contact IDs for existing members</p>
+                <p className="text-xs text-muted-foreground">The token refresh only works for members whose CF Contact ID is stored in our database. New members get it automatically from the webhook. For existing members, click the button below to pull their Contact IDs from CF now.</p>
+                <SyncContactIdsButton />
+              </div>
             </div>
           </div>
 
           <div className="rounded-lg border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30 p-3 text-xs text-sky-800 dark:text-sky-200">
-            <strong>How it works:</strong> When a member loads the page, the script reads their email, contacts our server to verify their enrollment, and silently drops a short-lived token into the button link. The token refreshes automatically in the background — members never notice, but stolen links expire quickly.
+            <strong>How it works:</strong> Our server generates a fresh single-use token for every enrolled member every 4 minutes and writes it to their CF contact record via the API. When a member clicks the button, CF fills in their token — it's already in our database, verified, and expires within 5 minutes. Copied links become useless almost immediately.
           </div>
         </CardContent>
       </Card>

@@ -168,6 +168,7 @@ export interface IStorage {
   getRecentCfMagicTokens(limit: number): Promise<CfMagicToken[]>;
   getCfMagicExpiryMinutes(): Promise<number>;
   setCfMagicExpiryMinutes(minutes: number): Promise<void>;
+  getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
   getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }>;
   setCfButtonSettings(settings: { text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }): Promise<void>;
 
@@ -1069,6 +1070,17 @@ export class DatabaseStorage implements IStorage {
   async getCfMagicExpiryMinutes(): Promise<number> {
     const [row] = await db.select().from(appSettings).where(eq(appSettings.key, "cf_magic_expiry_minutes"));
     return row ? parseInt(row.value, 10) || 15 : 15;
+  }
+
+  async getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>> {
+    const rows = await db.select({
+      userId: users.id,
+      email: users.email,
+      contactId: users.cfContactId,
+    }).from(users).where(
+      and(eq(users.cfEnrolled, true), sql`${users.cfContactId} IS NOT NULL`, eq(users.isDisabled, false))
+    );
+    return rows.filter((r): r is { userId: string; email: string; contactId: string } => !!r.contactId);
   }
 
   async setCfMagicExpiryMinutes(minutes: number): Promise<void> {
