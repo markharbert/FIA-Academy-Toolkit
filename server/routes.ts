@@ -707,9 +707,8 @@ export async function registerRoutes(
   app.get("/api/auth/cf-magic", cfMagicLimiter, async (req: Request, res: Response) => {
     const APP_BASE = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
 
-    // ── NEW: Pre-issued token path (native CF button with {{contact.atk_token}}) ──
-    // When a token is supplied, skip email entirely — the scheduler already verified
-    // enrollment and stored the token. Just redeem it directly.
+    // ── Pre-issued token path (?t=TOKEN) ─────────────────────────────────────
+    // When a token is supplied, verify and redeem it directly.
     const rawT = (req.query.t as string || "").trim();
     if (rawT && rawT.length >= 32 && !rawT.includes("{{")) {
       const tokenHash = crypto.createHash("sha256").update(rawT).digest("hex");
@@ -738,59 +737,7 @@ export async function registerRoutes(
       });
     }
 
-    // ── SECURED: Email + CF Contact ID path (page button with pre-issued token) ──
-    // When both email and cfid are present, verify they match our DB record, then
-    // consume the pre-issued token the scheduler already placed there. This means
-    // the URL alone (email + cfid) is worthless without a valid server-side token —
-    // same security guarantees as the pre-issued token email-link path.
-    const rawEmailMatchSecure = req.originalUrl.match(/[?&]email=([^&]*)/);
-    const rawEmailSecure = rawEmailMatchSecure ? rawEmailMatchSecure[1] : "";
-    const emailSecure = rawEmailSecure ? decodeURIComponent(rawEmailSecure).trim().toLowerCase() : "";
-    const cfidParam = ((req.query.cfid as string) || "").trim();
-
-    if (emailSecure && cfidParam && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailSecure)) {
-      try {
-        const user = await storage.getUserByEmail(emailSecure);
-        if (!user || user.isDisabled) {
-          return res.redirect(`${APP_BASE}/cf-magic-login?error=account_disabled`);
-        }
-
-        // Verify the cfid matches what we have stored — prevents constructing URLs with arbitrary emails
-        if (!user.cfContactId || user.cfContactId !== cfidParam) {
-          console.warn(`[CF Magic Secure] cfid mismatch for ${emailSecure}: got ${cfidParam}, stored ${user.cfContactId}`);
-          return res.redirect(`${APP_BASE}/cf-magic-login?error=invalid_token`);
-        }
-
-        // Consume the pre-issued token the scheduler already placed for this user
-        const preIssuedToken = await storage.getLatestValidCfMagicTokenForUser(user.id);
-        if (!preIssuedToken) {
-          // No valid token yet — scheduler runs every 4 min, ask them to try again shortly
-          console.warn(`[CF Magic Secure] no valid pre-issued token for ${emailSecure} — scheduler may not have run yet`);
-          return res.redirect(`${APP_BASE}/cf-magic-login?error=no_token`);
-        }
-
-        await storage.markCfMagicTokenUsed(preIssuedToken.id);
-        console.log(`[CF Magic Secure] token consumed for ${emailSecure} (userId: ${user.id})`);
-
-        return new Promise<void>((resolve) => {
-          req.session.regenerate((err) => {
-            if (err) { resolve(); return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`); }
-            req.session.userId = user.id;
-            req.session.save(async (saveErr) => {
-              if (saveErr) { resolve(); return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`); }
-              await storage.updateUser(user.id, { lastLoginAt: new Date() });
-              resolve();
-              return res.redirect(`${APP_BASE}/dashboard`);
-            });
-          });
-        });
-      } catch (err: any) {
-        console.error("[CF Magic Secure] unexpected error:", err?.message);
-        return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`);
-      }
-    }
-
-    // ── LEGACY: Email-only path (old GET flow, no cfid) ──────────────────────
+    // ── Email path ────────────────────────────────────────────────────────────
     // Extract email safely from raw URL to preserve "+" characters
     const rawEmailMatch = req.originalUrl.match(/[?&]email=([^&]*)/);
     const rawEmail = rawEmailMatch ? rawEmailMatch[1] : "";
@@ -1932,22 +1879,6 @@ export async function registerRoutes(
       res.json({ status: cfRes.status, url, body: JSON.parse(body) });
     } catch (err: any) {
       res.status(500).json({ message: err?.message });
-    }
-  });
-
-  app.post("/api/admin/cf/push-tokens-now", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const { refreshAllTokens } = await import("./cfTokenScheduler");
-      const result = await refreshAllTokens();
-      res.json({
-        ...result,
-        message: result.pushed === 0
-          ? "No members with a CF Contact ID found. Run the import first."
-          : `Pushed tokens to ${result.pushed} member(s).${result.failed > 0 ? ` ${result.failed} failed.` : ""}`,
-      });
-    } catch (err: any) {
-      console.error("[CF Push Tokens] error:", err?.message);
-      res.status(500).json({ message: err?.message || "Push failed" });
     }
   });
 

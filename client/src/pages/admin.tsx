@@ -442,42 +442,6 @@ function ApiAccessToggleCard() {
   );
 }
 
-function PushTokensNowButton() {
-  const { toast } = useToast();
-  const [pushing, setPushing] = useState(false);
-  const [result, setResult] = useState<{ message: string; pushed: number; failed: number } | null>(null);
-
-  const handlePush = async () => {
-    setPushing(true);
-    setResult(null);
-    try {
-      const res = await fetch("/api/admin/cf/push-tokens-now", { method: "POST", credentials: "include" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Push failed");
-      setResult(data);
-      toast({ title: "Tokens pushed", description: data.message });
-    } catch (err: any) {
-      toast({ title: "Push failed", description: err.message, variant: "destructive" });
-    } finally {
-      setPushing(false);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <Button variant="outline" size="sm" onClick={handlePush} disabled={pushing} data-testid="button-push-tokens-now">
-        {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <Zap className="h-3.5 w-3.5 mr-2" />}
-        {pushing ? "Pushing tokens…" : "Push Tokens to All Members Now"}
-      </Button>
-      {result && (
-        <p className="text-xs text-muted-foreground">
-          {result.message}
-          {result.failed > 0 && <span className="text-destructive ml-1">({result.failed} failed)</span>}
-        </p>
-      )}
-    </div>
-  );
-}
 
 function ImportAllMembersButton() {
   const { toast } = useToast();
@@ -628,8 +592,7 @@ function CfIntegrationTab() {
   const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
   const paddingMap = { compact: "10px 20px", normal: "14px 28px", spacious: "18px 36px" };
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
-  const cfPageButtonUrl = `${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}&cfid={{contact.id}}`;
-  const cfEmailLinkUrl = `${appOrigin}/api/auth/cf-magic?t={{contact.atk_token}}`;
+  const cfPageButtonUrl = `${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}`;
 
   const handleSaveBtnSettings = async () => {
     setBtnSaving(true);
@@ -1186,70 +1149,30 @@ function CfIntegrationTab() {
             <div className="flex gap-3 items-start">
               <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">1</span>
               <div className="space-y-1.5 flex-1">
-                <p className="text-sm font-medium">Create a custom contact field in ClickFunnels</p>
-                <p className="text-xs text-muted-foreground">In CF, go to <strong>Workspace Settings → Custom Fields</strong> and create a new text field. Set the field name to exactly:</p>
+                <p className="text-sm font-medium">Add the login button to your CF member area page</p>
+                <p className="text-xs text-muted-foreground">Use a native <strong>Button</strong> element (not Custom HTML) on your ClickFunnels member area page. CF automatically fills in <code className="font-mono text-xs">{"{{contact.email_address}}"}</code> for each member. Use this URL:</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono">atk_token</code>
-                  <Button variant="outline" size="sm" onClick={() => handleCopy("atk_token", "Field name")} data-testid="button-copy-field-name">
+                  <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">{cfPageButtonUrl}</code>
+                  <Button variant="outline" size="sm" onClick={() => handleCopy(cfPageButtonUrl, "Login URL")} data-testid="button-copy-cf-page-url">
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">The slug (API name) must be <code className="font-mono text-xs">atk_token</code>. The display name can be anything, e.g. "ATK Token".</p>
               </div>
             </div>
 
             <div className="flex gap-3 items-start">
               <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">2</span>
-              <div className="space-y-3 flex-1">
-                <p className="text-sm font-medium">Add the login button — use the right URL for where it lives</p>
-
-                {/* Page button URL */}
-                <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-foreground">For a CF page button (member area page):</p>
-                  <p className="text-xs text-muted-foreground">CF reliably replaces standard fields like <code className="font-mono text-xs">{"{{contact.email_address}}"}</code> and <code className="font-mono text-xs">{"{{contact.id}}"}</code> in page button URLs. Use a native <strong>Button</strong> element (not Custom HTML). The server verifies both values against our database and then consumes the pre-issued token — so this URL is safe to embed in a page even though email addresses are visible:</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">{cfPageButtonUrl}</code>
-                    <Button variant="outline" size="sm" onClick={() => handleCopy(cfPageButtonUrl, "Page button URL")} data-testid="button-copy-cf-page-url">
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Email link URL */}
-                <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-foreground">For a CF email link (broadcast or automation):</p>
-                  <p className="text-xs text-muted-foreground">Custom attribute merge tags work in CF emails. Use this URL in any email button or hyperlink — CF replaces <code className="font-mono text-xs">{"{{contact.atk_token}}"}</code> with each member's pre-issued token:</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">{cfEmailLinkUrl}</code>
-                    <Button variant="outline" size="sm" onClick={() => handleCopy(cfEmailLinkUrl, "Email link URL")} data-testid="button-copy-cf-email-url">
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 items-start">
-              <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">3</span>
-              <div className="space-y-3 flex-1">
-                <div>
-                  <p className="text-sm font-medium">Import all enrolled members from ClickFunnels</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Pulls every active enrollment from CF, creates Toolkit accounts for members who don't have one yet, and saves their CF Contact ID. Run this once — new members are handled automatically via webhooks going forward.</p>
-                  <div className="mt-2"><ImportAllMembersButton /></div>
-                </div>
-                <div className="border-t pt-3">
-                  <p className="text-sm font-medium">Push initial tokens to all members</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">After importing, use this to immediately write a token into every member's CF contact record (populating the <code className="font-mono text-xs">atk_token</code> custom attribute for everyone at once). The scheduler does this automatically every 4 minutes — this button just triggers it right now.</p>
-                  <div className="mt-2"><PushTokensNowButton /></div>
-                </div>
+              <div className="space-y-1.5 flex-1">
+                <p className="text-sm font-medium">Import all enrolled members from ClickFunnels</p>
+                <p className="text-xs text-muted-foreground">Pulls every active enrollment from CF and creates Toolkit accounts for members who don't have one yet. Run this once — new members are handled automatically via webhooks going forward.</p>
+                <div className="mt-2"><ImportAllMembersButton /></div>
               </div>
             </div>
           </div>
 
           <div className="rounded-lg border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30 p-3 text-xs text-sky-800 dark:text-sky-200 space-y-1.5">
-            <p><strong>How it works:</strong> Our server generates a fresh single-use token for every enrolled member every 4 minutes and writes it to their CF contact record via the API.</p>
-            <p><strong>Page button</strong> — CF replaces <code className="font-mono">{"{{contact.email_address}}"}</code> with the member's email. Our server verifies their CF enrollment and logs them in instantly.</p>
-            <p><strong>Email link</strong> — CF replaces <code className="font-mono">{"{{contact.atk_token}}"}</code> with their pre-issued token. The token is already in our database, verified, and expires within 5 minutes. Copied links become useless almost immediately.</p>
+            <p><strong>How it works:</strong> When a member clicks the button, CF fills in their email address. Our server verifies their enrollment with the ClickFunnels API, then logs them in instantly with a fresh one-time token — no password needed.</p>
+            <p><strong>New members</strong> get an account created automatically on their first login. Existing members are recognized by email.</p>
           </div>
         </CardContent>
       </Card>
