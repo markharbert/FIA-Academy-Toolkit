@@ -163,6 +163,7 @@ export interface IStorage {
   // CF Magic Tokens
   createCfMagicToken(data: { tokenHash: string; userId: string; email: string; expiresAt: Date; ipAddress?: string | null }): Promise<CfMagicToken>;
   getCfMagicTokenByHash(tokenHash: string): Promise<CfMagicToken | undefined>;
+  getLatestValidCfMagicTokenForUser(userId: string): Promise<CfMagicToken | undefined>;
   markCfMagicTokenUsed(id: string): Promise<void>;
   countRecentCfMagicRequests(email: string, since: Date): Promise<number>;
   getRecentCfMagicTokens(limit: number): Promise<CfMagicToken[]>;
@@ -1061,6 +1062,19 @@ export class DatabaseStorage implements IStorage {
 
   async getCfMagicTokenByHash(tokenHash: string): Promise<CfMagicToken | undefined> {
     const [row] = await db.select().from(cfMagicTokens).where(eq(cfMagicTokens.tokenHash, tokenHash));
+    return row;
+  }
+
+  async getLatestValidCfMagicTokenForUser(userId: string): Promise<CfMagicToken | undefined> {
+    const now = new Date();
+    const [row] = await db.select().from(cfMagicTokens)
+      .where(and(
+        eq(cfMagicTokens.userId, userId),
+        isNull(cfMagicTokens.usedAt),
+        gt(cfMagicTokens.expiresAt, now),
+      ))
+      .orderBy(desc(cfMagicTokens.createdAt))
+      .limit(1);
     return row;
   }
 

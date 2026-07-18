@@ -738,7 +738,59 @@ export async function registerRoutes(
       });
     }
 
-    // ── LEGACY: Email in URL path (old GET flow) ──────────────────────────────
+    // ── SECURED: Email + CF Contact ID path (page button with pre-issued token) ──
+    // When both email and cfid are present, verify they match our DB record, then
+    // consume the pre-issued token the scheduler already placed there. This means
+    // the URL alone (email + cfid) is worthless without a valid server-side token —
+    // same security guarantees as the pre-issued token email-link path.
+    const rawEmailMatchSecure = req.originalUrl.match(/[?&]email=([^&]*)/);
+    const rawEmailSecure = rawEmailMatchSecure ? rawEmailMatchSecure[1] : "";
+    const emailSecure = rawEmailSecure ? decodeURIComponent(rawEmailSecure).trim().toLowerCase() : "";
+    const cfidParam = ((req.query.cfid as string) || "").trim();
+
+    if (emailSecure && cfidParam && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailSecure)) {
+      try {
+        const user = await storage.getUserByEmail(emailSecure);
+        if (!user || user.isDisabled) {
+          return res.redirect(`${APP_BASE}/cf-magic-login?error=account_disabled`);
+        }
+
+        // Verify the cfid matches what we have stored — prevents constructing URLs with arbitrary emails
+        if (!user.cfContactId || user.cfContactId !== cfidParam) {
+          console.warn(`[CF Magic Secure] cfid mismatch for ${emailSecure}: got ${cfidParam}, stored ${user.cfContactId}`);
+          return res.redirect(`${APP_BASE}/cf-magic-login?error=invalid_token`);
+        }
+
+        // Consume the pre-issued token the scheduler already placed for this user
+        const preIssuedToken = await storage.getLatestValidCfMagicTokenForUser(user.id);
+        if (!preIssuedToken) {
+          // No valid token yet — scheduler runs every 4 min, ask them to try again shortly
+          console.warn(`[CF Magic Secure] no valid pre-issued token for ${emailSecure} — scheduler may not have run yet`);
+          return res.redirect(`${APP_BASE}/cf-magic-login?error=no_token`);
+        }
+
+        await storage.markCfMagicTokenUsed(preIssuedToken.id);
+        console.log(`[CF Magic Secure] token consumed for ${emailSecure} (userId: ${user.id})`);
+
+        return new Promise<void>((resolve) => {
+          req.session.regenerate((err) => {
+            if (err) { resolve(); return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`); }
+            req.session.userId = user.id;
+            req.session.save(async (saveErr) => {
+              if (saveErr) { resolve(); return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`); }
+              await storage.updateUser(user.id, { lastLoginAt: new Date() });
+              resolve();
+              return res.redirect(`${APP_BASE}/dashboard`);
+            });
+          });
+        });
+      } catch (err: any) {
+        console.error("[CF Magic Secure] unexpected error:", err?.message);
+        return res.redirect(`${APP_BASE}/cf-magic-login?error=server_error`);
+      }
+    }
+
+    // ── LEGACY: Email-only path (old GET flow, no cfid) ──────────────────────
     // Extract email safely from raw URL to preserve "+" characters
     const rawEmailMatch = req.originalUrl.match(/[?&]email=([^&]*)/);
     const rawEmail = rawEmailMatch ? rawEmailMatch[1] : "";

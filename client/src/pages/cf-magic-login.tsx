@@ -7,6 +7,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_token: "This login link is invalid or has already been used.",
   expired: "This login link has expired. Please return to the members area and click the button again.",
   already_used: "This login link has already been used. Please click the button in your members area to get a new one.",
+  no_token: "Your login token is being refreshed — this only takes a moment. Please go back and click the login button again.",
   rate_limited: "Too many login attempts. Please wait a few minutes and try again.",
   cf_not_enrolled: "We couldn't verify an active membership for this account. Please contact support if you believe this is an error.",
   account_disabled: "This account has been disabled. Please contact support.",

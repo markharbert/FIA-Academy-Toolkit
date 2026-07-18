@@ -628,7 +628,7 @@ function CfIntegrationTab() {
   const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
   const paddingMap = { compact: "10px 20px", normal: "14px 28px", spacious: "18px 36px" };
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
-  const cfPageButtonUrl = `${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}`;
+  const cfPageButtonUrl = `${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}&cfid={{contact.id}}`;
   const cfEmailLinkUrl = `${appOrigin}/api/auth/cf-magic?t={{contact.atk_token}}`;
 
   const handleSaveBtnSettings = async () => {
@@ -1206,7 +1206,7 @@ function CfIntegrationTab() {
                 {/* Page button URL */}
                 <div className="space-y-1.5">
                   <p className="text-xs font-medium text-foreground">For a CF page button (member area page):</p>
-                  <p className="text-xs text-muted-foreground">CF reliably replaces standard fields like <code className="font-mono">{"{{contact.email_address}}"}</code> in page button URLs. Use a native <strong>Button</strong> element (not Custom HTML) with this URL:</p>
+                  <p className="text-xs text-muted-foreground">CF reliably replaces standard fields like <code className="font-mono text-xs">{"{{contact.email_address}}"}</code> and <code className="font-mono text-xs">{"{{contact.id}}"}</code> in page button URLs. Use a native <strong>Button</strong> element (not Custom HTML). The server verifies both values against our database and then consumes the pre-issued token — so this URL is safe to embed in a page even though email addresses are visible:</p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">{cfPageButtonUrl}</code>
                     <Button variant="outline" size="sm" onClick={() => handleCopy(cfPageButtonUrl, "Page button URL")} data-testid="button-copy-cf-page-url">
