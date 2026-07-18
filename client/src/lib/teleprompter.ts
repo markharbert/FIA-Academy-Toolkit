@@ -1176,10 +1176,16 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       canvasComposite.width=COMPOSITE_W;
       canvasComposite.height=COMPOSITE_H;
       var ctx=canvasComposite.getContext('2d');
+      // Use highest quality interpolation for all scaling operations
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
       compositing=true;
 
       function frame(){
         if(!compositing)return;
+        // Re-apply smoothing each frame — save()/restore() can reset context state
+        ctx.imageSmoothingEnabled=true;
+        ctx.imageSmoothingQuality='high';
         ctx.clearRect(0,0,COMPOSITE_W,COMPOSITE_H);
 
         if(recordingSource==='pip'){
@@ -1190,7 +1196,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
             // PiP: screen full-frame + camera overlay bottom-right
             drawCover(ctx,screenVidHidden,0,0,COMPOSITE_W,COMPOSITE_H,false);
 
-            var pipW=Math.round(COMPOSITE_W*0.27);
+            // 30% of canvas width — larger than before for a cleaner, sharper face
+            var pipW=Math.round(COMPOSITE_W*0.30);
             var pipH=Math.round(pipW*9/16);
             var pipX=COMPOSITE_W-pipW-24;
             var pipY=COMPOSITE_H-pipH-24;
