@@ -1069,7 +1069,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         if(layoutRow)layoutRow.style.display='flex';
         if(stopShareBtn)stopShareBtn.style.display='';
       }else{
-        if(readyMsg){readyMsg.textContent='Camera ready. Hit record when you\'re set.';readyMsg.className='cam-msg';}
+        if(readyMsg){readyMsg.textContent="Camera ready. Hit record when you're set.";readyMsg.className='cam-msg';}
         if(shareBtn)shareBtn.style.display='';
         if(layoutRow)layoutRow.style.display='none';
         if(stopShareBtn)stopShareBtn.style.display='none';
