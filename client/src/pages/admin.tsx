@@ -4784,7 +4784,7 @@ export default function AdminPage() {
                 ) : (
                   <div className="space-y-1.5">
                     {panelActions.slice(0, 10).map((a) => {
-                      const { Icon, tone } = getActionIconAndTone(a.actionType);
+                      const { Icon, tone } = getActionVisual(a.actionType);
                       return (
                         <div key={a.id} className="flex items-start gap-2 text-xs">
                           <Icon className={cn("h-3.5 w-3.5 mt-0.5 shrink-0", tone)} />
