@@ -568,7 +568,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     // Screen sharing state
     var recordingSource='camera'; // 'camera' | 'pip' | 'sidebyside'
     var screenStream=null,compositeStream=null,compositeAnimId=null,screenReady=false,compositing=false;
-    var COMPOSITE_W=1280,COMPOSITE_H=720;
+    var COMPOSITE_W=1920,COMPOSITE_H=1080;
 
     var camPreview=document.getElementById('cam-preview');
     var camPlayback=document.getElementById('cam-playback');
