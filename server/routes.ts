@@ -1866,6 +1866,23 @@ export async function registerRoutes(
   });
 
   // Admin: immediately push fresh tokens to all enrolled members with a CF Contact ID
+  // Debug: read a CF contact directly to inspect custom_attributes
+  app.get("/api/admin/cf/contact/:contactId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { contactId } = req.params;
+      const token = process.env.CF_API_TOKEN || "";
+      const rawDomain = (process.env.CF_WORKSPACE_DOMAIN || "").replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+      const url = `https://${rawDomain}/api/v2/contacts/${contactId}`;
+      const cfRes = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      const body = await cfRes.text();
+      res.json({ status: cfRes.status, url, body: JSON.parse(body) });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message });
+    }
+  });
+
   app.post("/api/admin/cf/push-tokens-now", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { refreshAllTokens } = await import("./cfTokenScheduler");

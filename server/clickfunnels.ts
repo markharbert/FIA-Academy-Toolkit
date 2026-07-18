@@ -314,7 +314,7 @@ export async function writeCfContactToken(
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`CF write token failed: ${res.status} ${body.slice(0, 120)}`);
+    throw new Error(`CF write token failed: ${res.status} ${body.slice(0, 200)}`);
   }
 }
 
