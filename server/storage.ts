@@ -276,6 +276,7 @@ export interface IStorage {
     items: UserActionLog[];
     nextCursor: { createdAt: Date; id: string } | null;
   }>;
+  deleteOldUserActionLogs(olderThanDays: number): Promise<number>;
   
   // Processing Metrics
   createProcessingMetric(metric: InsertProcessingMetric): Promise<ProcessingMetric>;
@@ -1593,6 +1594,12 @@ export class DatabaseStorage implements IStorage {
     }
     
     return { items, nextCursor };
+  }
+
+  async deleteOldUserActionLogs(olderThanDays: number): Promise<number> {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+    const result = await db.delete(userActionLog).where(lt(userActionLog.createdAt, cutoff));
+    return (result as any).rowCount ?? 0;
   }
   
   // Processing Metrics

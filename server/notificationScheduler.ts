@@ -215,12 +215,27 @@ async function tick() {
   }
 }
 
+// ── Log Retention ────────────────────────────────────────────────────────────
+
+async function purgeOldActionLogs() {
+  try {
+    const deleted = await storage.deleteOldUserActionLogs(180);
+    if (deleted > 0) {
+      console.log(`[notificationScheduler] Purged ${deleted} action log entries older than 180 days`);
+    }
+  } catch (err) {
+    console.error("[notificationScheduler] Action log purge error:", err);
+  }
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 export function startNotificationScheduler() {
   console.log("[notificationScheduler] starting (runs every hour)");
   setTimeout(() => {
     tick();
+    purgeOldActionLogs();
     setInterval(tick, 60 * 60 * 1000);
+    setInterval(purgeOldActionLogs, 24 * 60 * 60 * 1000);
   }, 60_000);
 }

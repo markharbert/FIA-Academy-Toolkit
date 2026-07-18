@@ -4977,6 +4977,15 @@ export async function registerRoutes(
           runtimeMs,
           creditsUsed: result.creditsUsed,
         });
+        logUserAction({
+          userId,
+          actionType: "topic_searched",
+          actionLabel: ActionLabels.topic_searched,
+          entityType: "topic_run",
+          entityId: run.id,
+          metadata: { topicCount: createdTopics.length, creditsUsed: result.creditsUsed },
+          req,
+        });
       } catch (innerErr) {
         if (!reservationSettled) {
           // Refund the full reservation since no paid work was successfully completed.
@@ -5272,6 +5281,15 @@ export async function registerRoutes(
       });
 
       res.json(script);
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "script_generated",
+        actionLabel: ActionLabels.script_generated,
+        entityType: "script",
+        entityId: script.id,
+        metadata: { title: topic.topicTitle, videoLength: parsed.data.videoLengthTarget },
+        req,
+      });
     } catch (err) {
       console.error("[TopicPulse] Generate script error:", err);
       res.status(500).json({ message: "Failed to generate script" });
@@ -5444,6 +5462,15 @@ export async function registerRoutes(
       }
       const script = await storage.createTeleprompterScript(req.session.userId!, parsed.data);
       res.status(201).json(script);
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "teleprompter_script_created",
+        actionLabel: ActionLabels.teleprompter_script_created,
+        entityType: "teleprompter_script",
+        entityId: script.id,
+        metadata: { title: script.title },
+        req,
+      });
     } catch (err) {
       console.error("[Teleprompter] Create script error:", err);
       res.status(500).json({ message: "Failed to create script" });
@@ -5460,6 +5487,15 @@ export async function registerRoutes(
       const script = await storage.updateTeleprompterScript(req.params.id, req.session.userId!, parsed.data);
       if (!script) return res.status(404).json({ message: "Script not found" });
       res.json(script);
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "teleprompter_script_updated",
+        actionLabel: ActionLabels.teleprompter_script_updated,
+        entityType: "teleprompter_script",
+        entityId: req.params.id,
+        metadata: { title: script.title },
+        req,
+      });
     } catch (err) {
       console.error("[Teleprompter] Update script error:", err);
       res.status(500).json({ message: "Failed to update script" });
@@ -5485,6 +5521,14 @@ export async function registerRoutes(
       const ok = await storage.deleteTeleprompterScript(req.params.id, req.session.userId!);
       if (!ok) return res.status(404).json({ message: "Script not found" });
       res.json({ success: true });
+      logUserAction({
+        userId: req.session.userId!,
+        actionType: "teleprompter_script_deleted",
+        actionLabel: ActionLabels.teleprompter_script_deleted,
+        entityType: "teleprompter_script",
+        entityId: req.params.id,
+        req,
+      });
     } catch (err) {
       console.error("[Teleprompter] Delete script error:", err);
       res.status(500).json({ message: "Failed to delete script" });
@@ -6303,6 +6347,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const streak = await storage.getDmoStreak(userId);
       res.json({ entry, streak });
       fireWebhooks(userId, "dmo.updated", { entry, streak });
+      logUserAction({
+        userId,
+        actionType: "dmo_logged",
+        actionLabel: ActionLabels.dmo_logged,
+        entityType: "dmo",
+        entityId: date,
+        metadata: { date, streak: streak.currentStreak },
+        req,
+      });
     } catch (err) {
       res.status(500).json({ message: "Failed to save DMO entry" });
     }
@@ -9201,6 +9254,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         }
       }
       res.status(201).json(created);
+      logUserAction({
+        userId: uid,
+        actionType: "project_created",
+        actionLabel: ActionLabels.project_created,
+        entityType: "project",
+        entityId: created.id,
+        metadata: { name: created.name, fromTemplate: !!templateId },
+        req,
+      });
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       console.error("[projects] create error:", err);
@@ -9428,6 +9490,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
       fireWebhooks(uid, "project.updated", updated);
+      logUserAction({
+        userId: uid,
+        actionType: "project_updated",
+        actionLabel: ActionLabels.project_updated,
+        entityType: "project",
+        entityId: req.params.id,
+        metadata: { name: updated.name },
+        req,
+      });
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       console.error("[projects] update error:", err);
@@ -9455,6 +9526,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       await storage.deleteProject(req.params.id, uid);
       res.json({ ok: true });
       fireWebhooks(uid, "project.deleted", { id: req.params.id });
+      logUserAction({
+        userId: uid,
+        actionType: "project_deleted",
+        actionLabel: ActionLabels.project_deleted,
+        entityType: "project",
+        entityId: req.params.id,
+        metadata: { name: project.name },
+        req,
+      });
     } catch (err) {
       console.error("[projects] delete error:", err);
       res.status(500).json({ message: "Failed to delete project" });
@@ -9496,6 +9576,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const data = insertProjectTaskSchema.parse({ ...req.body, projectId: req.params.id });
       const created = await storage.createTask(uid, req.params.id, data);
       res.status(201).json(created);
+      logUserAction({
+        userId: uid,
+        actionType: "task_created",
+        actionLabel: ActionLabels.task_created,
+        entityType: "task",
+        entityId: created.id,
+        metadata: { title: created.title, projectId: req.params.id, projectName: project.name },
+        req,
+      });
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       if (err?.message?.startsWith("Invalid parent") || err?.message?.startsWith("Subtasks")) {
@@ -9514,6 +9603,16 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);
       fireWebhooks(uid, "task.updated", updated);
+      const isCompletion = !!(data as any).completedAt;
+      logUserAction({
+        userId: uid,
+        actionType: isCompletion ? "task_completed" : "task_updated",
+        actionLabel: isCompletion ? ActionLabels.task_completed : ActionLabels.task_updated,
+        entityType: "task",
+        entityId: req.params.id,
+        metadata: { title: updated.title, projectId: updated.projectId },
+        req,
+      });
     } catch (err: any) {
       if (err?.issues) return res.status(400).json({ message: "Invalid input", errors: err.issues });
       if (err?.message?.startsWith("Invalid parent") || err?.message?.includes("subtask") || err?.message?.includes("own parent")) {
@@ -9546,6 +9645,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       await storage.deleteTask(req.params.id, uid);
       res.json({ ok: true });
       fireWebhooks(uid, "task.deleted", { id: req.params.id });
+      logUserAction({
+        userId: uid,
+        actionType: "task_deleted",
+        actionLabel: ActionLabels.task_deleted,
+        entityType: "task",
+        entityId: req.params.id,
+        metadata: { title: task.title, projectId: task.projectId },
+        req,
+      });
     } catch (err) {
       console.error("[projects] delete task error:", err);
       res.status(500).json({ message: "Failed to delete task" });

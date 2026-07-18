@@ -143,6 +143,23 @@ export const userActionTypes = [
   "folder_created",
   "folder_renamed",
   "folder_deleted",
+  "project_created",
+  "project_updated",
+  "project_deleted",
+  "task_created",
+  "task_updated",
+  "task_completed",
+  "task_deleted",
+  "dmo_logged",
+  "topic_searched",
+  "script_generated",
+  "script_deleted",
+  "teleprompter_script_created",
+  "teleprompter_script_updated",
+  "teleprompter_script_deleted",
+  "teleprompter_recording_uploaded",
+  "password_changed",
+  "password_reset_requested",
 ] as const;
 export type UserActionType = typeof userActionTypes[number];
 
