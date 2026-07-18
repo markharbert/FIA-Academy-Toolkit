@@ -22,11 +22,13 @@ export async function refreshAllTokens(): Promise<{ pushed: number; failed: numb
 
   let pushed = 0, failed = 0;
   for (const member of members) {
-    try {
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-      const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
 
+    // Step 1: Save token record to DB (non-fatal — still push to CF even if DB write fails)
+    let dbOk = false;
+    try {
       await storage.createCfMagicToken({
         tokenHash,
         userId: member.userId,
@@ -34,14 +36,32 @@ export async function refreshAllTokens(): Promise<{ pushed: number; failed: numb
         expiresAt,
         ipAddress: null,
       });
+      dbOk = true;
+    } catch (err: any) {
+      console.error(
+        `[CF Token Scheduler] DB write failed for ${member.email}: ${err?.message ?? err}`
+      );
+    }
 
+    // Step 2: Push token to CF contact record (only attempt if DB write succeeded,
+    // so the token can actually be validated when the member clicks the link)
+    if (!dbOk) {
+      failed++;
+      continue;
+    }
+
+    try {
       await writeCfContactToken(member.contactId, rawToken);
       pushed++;
     } catch (err: any) {
-      console.error(`[CF Token Scheduler] failed for ${member.email} (contact ${member.contactId}):`, err?.message);
+      console.error(
+        `[CF Token Scheduler] CF write failed for ${member.email} (contact ${member.contactId}): ${err?.message ?? err}`
+      );
       failed++;
     }
   }
+
+  console.log(`[CF Token Scheduler] done — pushed=${pushed} failed=${failed}`);
   return { pushed, failed };
 }
 
@@ -55,7 +75,6 @@ export function startCfTokenScheduler() {
   }
 
   console.log("[CF Token Scheduler] starting (refresh every 4 min)");
-  // Run immediately on startup, then on interval
   refreshAllTokens().catch(() => {});
   setInterval(() => refreshAllTokens().catch(() => {}), REFRESH_INTERVAL_MS);
 }
