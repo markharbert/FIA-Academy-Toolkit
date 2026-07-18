@@ -400,14 +400,16 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
   </div>
 
   <script>
-    /* ══════════════════════════════════════════
-       TELEPROMPTER LOGIC
-    ══════════════════════════════════════════ */
     window.onerror=function(msg,src,line){
       var d=document.getElementById('_err_banner');
       if(!d){d=document.createElement('div');d.id='_err_banner';d.style.cssText='position:fixed;top:0;left:0;right:0;background:#dc2626;color:#fff;padding:8px 14px;z-index:9999;font-family:monospace;font-size:11px;word-break:break-word';document.body.appendChild(d);}
       d.textContent='JS Error (line '+line+'): '+msg;
     };
+  <\/script>
+  <script>
+    /* ══════════════════════════════════════════
+       TELEPROMPTER LOGIC
+    ══════════════════════════════════════════ */
     var SPEEDS=[6,12,20,28,38,50,65,85];
     var playing=false,speed=SPEEDS[2],lastTime=null,raf=null,scrollAccum=0,cdTimer=null;
     var scroller=document.getElementById('scroller');

@@ -1351,21 +1351,6 @@ export default function TeleprompterPage() {
                 </svg>
               </div>
             ))}
-            {/* Side drag bars */}
-            {(["left", "right"] as const).map((side) => (
-              <div
-                key={side}
-                className="absolute z-10 top-0 bottom-0 w-3 pointer-events-auto select-none flex items-center justify-center"
-                style={{
-                  left:  side === "left"  ? 0 : undefined,
-                  right: side === "right" ? 0 : undefined,
-                  cursor: isDragging ? "grabbing" : "grab",
-                }}
-                onMouseDown={handleModalDragStart}
-              >
-                <div className="h-8 w-0.5 rounded-full bg-white/20" />
-              </div>
-            ))}
             {/* Drag handle */}
             <div
               className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-white/10 shrink-0 select-none"
