@@ -1016,11 +1016,16 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     }
 
     function downloadRecording(){
-      // Prefer server-side download if the upload succeeded
+      // Prefer server-side download if the upload succeeded.
+      // Use APP_BASE_URL for the absolute path — this popup runs at a blob: URL so
+      // relative paths don't resolve to the server. Also open in a new tab so the
+      // download never navigates (and blanks) this popup window.
       if(recordingId){
         var a=document.createElement('a');
-        a.href='/api/teleprompter/recordings/'+recordingId+'/download';
+        a.href=(APP_BASE_URL||window.location.origin)+'/api/teleprompter/recordings/'+recordingId+'/download';
         a.download='';
+        a.target='_blank';
+        a.rel='noopener';
         document.body.appendChild(a);a.click();document.body.removeChild(a);
         return;
       }
