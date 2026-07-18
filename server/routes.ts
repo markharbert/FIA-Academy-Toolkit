@@ -1865,6 +1865,23 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: immediately push fresh tokens to all enrolled members with a CF Contact ID
+  app.post("/api/admin/cf/push-tokens-now", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { refreshAllTokens } = await import("./cfTokenScheduler");
+      const result = await refreshAllTokens();
+      res.json({
+        ...result,
+        message: result.pushed === 0
+          ? "No members with a CF Contact ID found. Run the import first."
+          : `Pushed tokens to ${result.pushed} member(s).${result.failed > 0 ? ` ${result.failed} failed.` : ""}`,
+      });
+    } catch (err: any) {
+      console.error("[CF Push Tokens] error:", err?.message);
+      res.status(500).json({ message: err?.message || "Push failed" });
+    }
+  });
+
   // Admin: import ALL CF-enrolled members from the CF API, creating accounts for unknowns
   app.post("/api/admin/cf/import-all-members", requireAdmin, async (req: Request, res: Response) => {
     try {

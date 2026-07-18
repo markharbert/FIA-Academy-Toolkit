@@ -442,6 +442,43 @@ function ApiAccessToggleCard() {
   );
 }
 
+function PushTokensNowButton() {
+  const { toast } = useToast();
+  const [pushing, setPushing] = useState(false);
+  const [result, setResult] = useState<{ message: string; pushed: number; failed: number } | null>(null);
+
+  const handlePush = async () => {
+    setPushing(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/cf/push-tokens-now", { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Push failed");
+      setResult(data);
+      toast({ title: "Tokens pushed", description: data.message });
+    } catch (err: any) {
+      toast({ title: "Push failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Button variant="outline" size="sm" onClick={handlePush} disabled={pushing} data-testid="button-push-tokens-now">
+        {pushing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <Zap className="h-3.5 w-3.5 mr-2" />}
+        {pushing ? "Pushing tokens…" : "Push Tokens to All Members Now"}
+      </Button>
+      {result && (
+        <p className="text-xs text-muted-foreground">
+          {result.message}
+          {result.failed > 0 && <span className="text-destructive ml-1">({result.failed} failed)</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ImportAllMembersButton() {
   const { toast } = useToast();
   const [running, setRunning] = useState(false);
@@ -1177,10 +1214,17 @@ function CfIntegrationTab() {
 
             <div className="flex gap-3 items-start">
               <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">3</span>
-              <div className="space-y-2 flex-1">
-                <p className="text-sm font-medium">Import all enrolled members from ClickFunnels</p>
-                <p className="text-xs text-muted-foreground">This pulls every active enrollment from CF, creates Toolkit accounts for members who don't have one yet, and saves their CF Contact ID so the token scheduler can reach them. Run this once now, then new members are handled automatically via webhooks.</p>
-                <ImportAllMembersButton />
+              <div className="space-y-3 flex-1">
+                <div>
+                  <p className="text-sm font-medium">Import all enrolled members from ClickFunnels</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Pulls every active enrollment from CF, creates Toolkit accounts for members who don't have one yet, and saves their CF Contact ID. Run this once — new members are handled automatically via webhooks going forward.</p>
+                  <div className="mt-2"><ImportAllMembersButton /></div>
+                </div>
+                <div className="border-t pt-3">
+                  <p className="text-sm font-medium">Push initial tokens to all members</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">After importing, use this to immediately write a token into every member's CF contact record (populating the <code className="font-mono text-xs">atk_token</code> custom attribute for everyone at once). The scheduler does this automatically every 4 minutes — this button just triggers it right now.</p>
+                  <div className="mt-2"><PushTokensNowButton /></div>
+                </div>
               </div>
             </div>
           </div>
