@@ -628,7 +628,8 @@ function CfIntegrationTab() {
   const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
   const paddingMap = { compact: "10px 20px", normal: "14px 28px", spacious: "18px 36px" };
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
-  const cfButtonUrl = `${appOrigin}/api/auth/cf-magic?t={{contact.atk_token}}`;
+  const cfPageButtonUrl = `${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}`;
+  const cfEmailLinkUrl = `${appOrigin}/api/auth/cf-magic?t={{contact.atk_token}}`;
 
   const handleSaveBtnSettings = async () => {
     setBtnSaving(true);
@@ -1199,16 +1200,32 @@ function CfIntegrationTab() {
 
             <div className="flex gap-3 items-start">
               <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">2</span>
-              <div className="space-y-1.5 flex-1">
-                <p className="text-sm font-medium">Add a native Button element to your members page</p>
-                <p className="text-xs text-muted-foreground">In CF page editor, add a <strong>Button</strong> element (not Custom HTML). Set the button link to this URL:</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">{cfButtonUrl}</code>
-                  <Button variant="outline" size="sm" onClick={() => handleCopy(cfButtonUrl, "Button URL")} data-testid="button-copy-cf-url">
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
+              <div className="space-y-3 flex-1">
+                <p className="text-sm font-medium">Add the login button — use the right URL for where it lives</p>
+
+                {/* Page button URL */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-foreground">For a CF page button (member area page):</p>
+                  <p className="text-xs text-muted-foreground">CF reliably replaces standard fields like <code className="font-mono">{"{{contact.email_address}}"}</code> in page button URLs. Use a native <strong>Button</strong> element (not Custom HTML) with this URL:</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">{cfPageButtonUrl}</code>
+                    <Button variant="outline" size="sm" onClick={() => handleCopy(cfPageButtonUrl, "Page button URL")} data-testid="button-copy-cf-page-url">
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">CF will automatically replace <code className="font-mono text-xs">{"{{contact.atk_token}}"}</code> with each member's real token when they view the page.</p>
+
+                {/* Email link URL */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-foreground">For a CF email link (broadcast or automation):</p>
+                  <p className="text-xs text-muted-foreground">Custom attribute merge tags work in CF emails. Use this URL in any email button or hyperlink — CF replaces <code className="font-mono text-xs">{"{{contact.atk_token}}"}</code> with each member's pre-issued token:</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">{cfEmailLinkUrl}</code>
+                    <Button variant="outline" size="sm" onClick={() => handleCopy(cfEmailLinkUrl, "Email link URL")} data-testid="button-copy-cf-email-url">
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1229,8 +1246,10 @@ function CfIntegrationTab() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30 p-3 text-xs text-sky-800 dark:text-sky-200">
-            <strong>How it works:</strong> Our server generates a fresh single-use token for every enrolled member every 4 minutes and writes it to their CF contact record via the API. When a member clicks the button, CF fills in their token — it's already in our database, verified, and expires within 5 minutes. Copied links become useless almost immediately.
+          <div className="rounded-lg border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30 p-3 text-xs text-sky-800 dark:text-sky-200 space-y-1.5">
+            <p><strong>How it works:</strong> Our server generates a fresh single-use token for every enrolled member every 4 minutes and writes it to their CF contact record via the API.</p>
+            <p><strong>Page button</strong> — CF replaces <code className="font-mono">{"{{contact.email_address}}"}</code> with the member's email. Our server verifies their CF enrollment and logs them in instantly.</p>
+            <p><strong>Email link</strong> — CF replaces <code className="font-mono">{"{{contact.atk_token}}"}</code> with their pre-issued token. The token is already in our database, verified, and expires within 5 minutes. Copied links become useless almost immediately.</p>
           </div>
         </CardContent>
       </Card>

@@ -17,3 +17,8 @@ CF API v2 accepts `custom_attributes` as a flat object `{ atk_token: value }` in
 
 ## Verification
 After fixes: scheduler runs every 4 minutes, `pushed=177 failed=0`. Tokens rotate correctly in both `cf_magic_tokens` table and CF contact `custom_attributes.atk_token`.
+
+## CF Merge Tag Contexts
+- **CF Page Builder buttons**: Only reliably replaces standard contact fields. Use `?email={{contact.email_address}}` for page button URLs.
+- **CF Emails**: Replaces custom attribute merge tags. Use `?t={{contact.atk_token}}` in email links/buttons.
+- Admin UI now shows both URLs with context-specific instructions.
