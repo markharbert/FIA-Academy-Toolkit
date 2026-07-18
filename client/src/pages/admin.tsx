@@ -519,7 +519,7 @@ function CfIntegrationTab() {
 
   const btnStyle = `display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:${paddingMap[btnPadding]}; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:${btnFontSize}px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}`;
   const embedCode = `<div${btnWidth === "full" ? "" : ' style="text-align:center"'}>
-  <a id="__atk_btn" href="${appOrigin}/member-login" style="${btnStyle}">${btnText}</a>
+  <a id="__atk_btn" href="${appOrigin}/member-login" target="_blank" rel="noopener noreferrer" style="${btnStyle}">${btnText}</a>
   <span id="__atk_e" style="display:none;font-size:0;line-height:0">{{contact.email_address}}</span>
   <script>
   !function(){
