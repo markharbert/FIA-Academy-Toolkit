@@ -614,6 +614,35 @@ function CfIntegrationTab() {
         </p>
       </div>
 
+      {/* One-Click Login URL */}
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-violet-500 to-indigo-400" />
+        <CardHeader className="pt-4 pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Link className="h-4 w-4 text-violet-500" />
+            ClickFunnels One-Click Login
+          </CardTitle>
+          <CardDescription>
+            Paste this URL into any ClickFunnels button. CF automatically fills in each member's email address.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-muted px-3 py-2.5 rounded font-mono break-all">
+              {`${window.location.origin}/api/auth/cf-magic?email={{contact.email_address}}`}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleCopy(`${window.location.origin}/api/auth/cf-magic?email={{contact.email_address}}`, "Login URL")}
+              data-testid="button-copy-cf-login-url"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="overflow-hidden">
