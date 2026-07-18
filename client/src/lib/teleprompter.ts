@@ -180,12 +180,11 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     #resizer::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:56px;width:4px;border-radius:999px;background:rgba(255,255,255,.45);transition:background .15s}
     #resizer:hover::after,#resizer.dragging::after{background:rgba(255,255,255,.85)}
 
-    /* ── Source picker ── */
-    #source-picker{flex-shrink:0;display:flex;justify-content:center;gap:4px;padding:5px 10px 4px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
-    .src-btn{display:flex;align-items:center;gap:4px;font-family:Arial,sans-serif;font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.35);background:transparent;border:1px solid transparent;border-radius:6px;cursor:pointer;padding:5px 10px;transition:.15s}
-    .src-btn:hover:not([disabled]){color:rgba(255,255,255,.7);background:rgba(255,255,255,.06)}
-    .src-btn.active{color:#fff;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
-    .src-btn[disabled]{opacity:.3;cursor:not-allowed}
+    /* ── Layout toggle (PiP / Side by Side) ── */
+    .layout-row{display:flex;gap:6px}
+    .layout-btn{flex:1;font-family:Arial,sans-serif;font-size:11px;font-weight:700;padding:7px 6px;border-radius:7px;border:1px solid rgba(255,255,255,.15);cursor:pointer;transition:.15s;background:rgba(255,255,255,.06);color:rgba(255,255,255,.5)}
+    .layout-btn:hover:not(.active){background:rgba(255,255,255,.12);color:rgba(255,255,255,.85)}
+    .layout-btn.active{background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.35)}
     /* ── Canvas composite (screen share preview) ── */
     #canvas-composite{display:none;position:absolute;inset:0;width:100%;height:100%}
     /* ── Screen sharing indicator badge ── */
@@ -251,15 +250,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <button class="fmt-btn" id="fmt-btn-square" onclick="setFormat('square')" title="Instagram Feed · Square · 1:1">
           <span class="fmt-icon-wrap"><span class="fmt-icon fmt-icon-sq"></span></span>Square 1:1
         </button>
-      </div>
-      <!-- Source picker: Camera Only / PiP / Side by Side -->
-      <div id="source-picker">
-        <button class="src-btn active" id="src-btn-camera" onclick="setSource('camera')">Camera Only</button>
-        <button class="src-btn" id="src-btn-pip" onclick="setSource('pip')">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="1" width="22" height="22" rx="2"/><rect x="13" y="13" width="9" height="8" rx="1.5" fill="currentColor"/></svg>
-          PiP
-        </button>
-        <button class="src-btn" id="src-btn-sidebyside" onclick="setSource('sidebyside')">Side by Side</button>
       </div>
       <!-- Video area -->
       <div id="video-wrap" class="fmt-landscape">
@@ -332,23 +322,21 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
         <!-- READY -->
         <div id="cam-ready" class="cam-section">
-          <!-- Camera-only mode -->
-          <div id="ready-cam" class="ready-sub">
-            <p class="cam-msg">Camera ready. Hit record when you're set — recording starts immediately.</p>
-            <button class="cam-btn cam-btn-red" onclick="startRecording()">
-              <span style="font-size:9px">●</span> Start Recording
-            </button>
-          </div>
-          <!-- Screen mode: need to share screen first -->
-          <div id="ready-screen" class="ready-sub" style="display:none">
-            <p class="cam-msg" id="ready-screen-msg"></p>
-            <button class="cam-btn cam-btn-white" id="ready-share-btn" onclick="requestScreenShare()">
+          <p class="cam-msg" id="ready-msg">Camera ready. Hit record when you're set.</p>
+          <button class="cam-btn cam-btn-red" onclick="startRecording()">
+            <span style="font-size:9px">●</span> Start Recording
+          </button>
+          <!-- Screen share controls — always available below the record button -->
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
+            <button class="cam-btn cam-btn-dark" id="ready-share-btn" onclick="requestScreenShare()">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
               Share Screen
             </button>
-            <button class="cam-btn cam-btn-red" id="ready-record-btn" style="display:none" onclick="startRecording()">
-              <span style="font-size:9px">●</span> Start Recording
-            </button>
+            <!-- Layout toggle — appears after screen sharing is active -->
+            <div id="ready-layout-row" class="layout-row" style="display:none">
+              <button id="ready-layout-pip" class="layout-btn active" onclick="setScreenLayout('pip')">Picture-in-Picture</button>
+              <button id="ready-layout-sbs" class="layout-btn" onclick="setScreenLayout('sidebyside')">Side by Side</button>
+            </div>
             <button class="cam-btn cam-btn-dark" id="ready-stop-share-btn" style="display:none" onclick="stopScreenShare()">
               &#x2715; Stop Screen Sharing
             </button>
@@ -361,13 +349,18 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           <button class="cam-btn cam-btn-dark" onclick="stopRecording()">
             <span style="font-size:9px">■</span> Stop Recording
           </button>
-          <!-- Screen share toggle — only shown in PiP / Side-by-Side mode -->
-          <div id="rec-screen-toggle" style="display:none;flex-direction:column;gap:8px;margin-top:2px">
-            <button id="rec-share-btn" class="cam-btn cam-btn-dark" onclick="requestScreenShare()" style="display:none">
+          <!-- Screen share toggle — always available during recording -->
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
+            <button id="rec-share-btn" class="cam-btn cam-btn-dark" onclick="requestScreenShare()">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
               Add Screen Share
             </button>
-            <button id="rec-stop-share-btn" class="cam-btn cam-btn-dark" onclick="stopScreenShare()" style="display:none">
+            <!-- Layout toggle — appears when screen is active -->
+            <div id="rec-layout-row" class="layout-row" style="display:none">
+              <button id="rec-layout-pip" class="layout-btn active" onclick="setScreenLayout('pip')">Picture-in-Picture</button>
+              <button id="rec-layout-sbs" class="layout-btn" onclick="setScreenLayout('sidebyside')">Side by Side</button>
+            </div>
+            <button id="rec-stop-share-btn" class="cam-btn cam-btn-dark" style="display:none" onclick="stopScreenShare()">
               &#x2715; Remove Screen Share
             </button>
           </div>
@@ -566,7 +559,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     var audioCtx=null,audioAnalyser=null,micRaf=null,micLevelFill=null;
 
     // Screen sharing state
-    var recordingSource='camera'; // 'camera' | 'pip' | 'sidebyside'
+    var screenLayout='pip'; // 'pip' | 'sidebyside' — layout when screen is shared
     var screenStream=null,compositeStream=null,compositeAnimId=null,screenReady=false,compositing=false;
     var COMPOSITE_W=1920,COMPOSITE_H=1080;
 
@@ -584,15 +577,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     function setCamState(s){
       camState=s;
-      var isScreenMode=(recordingSource!=='camera');
       var liveActive=(s==='ready'||s==='recording');
       // placeholder (shows when no video is active)
       camPlaceholder.style.display=(s==='idle'||s==='loading'||s==='denied')?'flex':'none';
-      // live preview:
-      //   • camera-only mode → camPreview always
-      //   • screen mode + ready state → camPreview until screen is shared, then canvas
-      //   • screen mode + recording → canvas always (compositing is running, shows camera or composite)
-      var showCanvas=isScreenMode&&((screenReady&&liveActive)||(s==='recording'));
+      // Show canvas when screen is shared in any live state, or when compositing is
+      // running during recording (screen was added mid-take)
+      var showCanvas=(screenReady&&liveActive)||(compositing&&s==='recording');
       if(showCanvas){
         camPreview.style.display='none';
         canvasComposite.style.display='block';
@@ -605,19 +595,13 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       // REC overlay
       recDot.style.display=(s==='recording')?'flex':'none';
       recTimerEl.style.display=(s==='recording')?'block':'none';
-      // screen sharing badge (blue pill) — only visible during screen-mode recording with screen active
-      screenIndicator.style.display=(s==='recording'&&isScreenMode&&screenReady)?'flex':'none';
+      // screen sharing badge (blue pill) — only visible during recording with screen active
+      screenIndicator.style.display=(s==='recording'&&screenReady)?'flex':'none';
       // device bar — show only when camera is active; disable selects while recording
       var devVisible=(s==='ready'||s==='recording');
       deviceBar.className=devVisible?'vis':'';
       camSelect.disabled=(s==='recording'||s==='uploading');
       micSelect.disabled=(s==='recording'||s==='uploading');
-      // lock source buttons during recording / uploading
-      var srcLocked=(s==='recording'||s==='uploading');
-      ['camera','pip','sidebyside'].forEach(function(src){
-        var btn=document.getElementById('src-btn-'+src);
-        if(btn)btn.disabled=srcLocked;
-      });
       // section panels
       ['idle','loading','denied','ready','recording','uploading','review'].forEach(function(name){
         var el=document.getElementById('cam-'+name);
@@ -638,7 +622,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     function setFormat(fmt){
       if(camState==='recording'||camState==='uploading')return;
-      if(recordingSource!=='camera')return; // format locked in screen modes — always landscape
+      if(screenReady)return; // format locked while screen is shared — always landscape
       if(selectedFormat===fmt)return;
       selectedFormat=fmt;
       ['landscape','portrait','square'].forEach(function(f){
@@ -789,8 +773,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         // Screen modes always record from the canvas — that way screen sharing can
         // be toggled on or off freely at any point during the take.
         var streamToRecord;
-        if(recordingSource!=='camera'){
-          // Ensure compositing is running (it may not be if screen was never shared)
+        if(screenReady){
+          // Screen is active: record from canvas so screen sharing can be toggled freely
           if(!compositing)startCompositing();
           var canvasVideoTracks=canvasComposite.captureStream(30).getVideoTracks();
           var micTracks=mediaStream.getAudioTracks();
@@ -1058,86 +1042,52 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       if(bar)bar.style.width='0%';
       if(pct)pct.textContent='0%';
       // Restart compositing if still in screen mode with screen shared
-      if(recordingSource!=='camera'&&screenReady)startCompositing();
+      if(screenReady)startCompositing();
       setCamState('ready');
     }
 
     /* ══════════════════════════════════════════
-       SCREEN SHARING — SOURCE PICKER
+       SCREEN SHARING — CONTROLS
     ══════════════════════════════════════════ */
 
-    // Update the cam-ready sub-views based on current source and screenReady state
+    // Update the cam-ready controls to reflect current screen sharing state
     function updateReadySection(){
-      var readyCam=document.getElementById('ready-cam');
-      var readyScreen=document.getElementById('ready-screen');
-      var readyScreenMsg=document.getElementById('ready-screen-msg');
-      var readyShareBtn=document.getElementById('ready-share-btn');
-      var readyRecordBtn=document.getElementById('ready-record-btn');
-      var readyStopShareBtn=document.getElementById('ready-stop-share-btn');
-      if(!readyCam||!readyScreen)return;
-
-      if(recordingSource==='camera'){
-        readyCam.style.display='';    // flex from .ready-sub
-        readyScreen.style.display='none';
+      var readyMsg=document.getElementById('ready-msg');
+      var shareBtn=document.getElementById('ready-share-btn');
+      var layoutRow=document.getElementById('ready-layout-row');
+      var stopShareBtn=document.getElementById('ready-stop-share-btn');
+      if(screenReady){
+        if(readyMsg){readyMsg.textContent='\u2713 Screen sharing active \u2014 '+(screenLayout==='pip'?'Picture-in-Picture':'Side by Side')+'.';readyMsg.className='cam-msg success';}
+        if(shareBtn)shareBtn.style.display='none';
+        if(layoutRow)layoutRow.style.display='flex';
+        if(stopShareBtn)stopShareBtn.style.display='';
       }else{
-        readyCam.style.display='none';
-        readyScreen.style.display=''; // flex from .ready-sub
-        var modeLabel=recordingSource==='pip'?'Picture-in-Picture':'Side by Side';
-        if(!screenReady){
-          // Screen not yet shared — user can start recording right now (camera-only on canvas)
-          // or share screen first. Both are valid.
-          readyScreenMsg.textContent='Camera ready. You can start recording now and add screen sharing any time during the take.';
-          readyScreenMsg.className='cam-msg';
-          if(readyShareBtn)readyShareBtn.style.display='';
-          if(readyRecordBtn)readyRecordBtn.style.display='';
-          if(readyStopShareBtn)readyStopShareBtn.style.display='none';
-        }else{
-          readyScreenMsg.textContent='\u2713 Screen sharing active \u2014 '+modeLabel+' ready.';
-          readyScreenMsg.className='cam-msg success';
-          if(readyShareBtn)readyShareBtn.style.display='none';
-          if(readyRecordBtn)readyRecordBtn.style.display='';
-          if(readyStopShareBtn)readyStopShareBtn.style.display='';
-        }
+        if(readyMsg){readyMsg.textContent='Camera ready. Hit record when you\'re set.';readyMsg.className='cam-msg';}
+        if(shareBtn)shareBtn.style.display='';
+        if(layoutRow)layoutRow.style.display='none';
+        if(stopShareBtn)stopShareBtn.style.display='none';
       }
+      updateLayoutButtons();
     }
 
-    // Switch recording source: 'camera' | 'pip' | 'sidebyside'
-    function setSource(src){
-      if(camState==='recording'||camState==='uploading')return;
-      if(recordingSource===src)return;
+    // Switch PiP / Side-by-Side layout while screen is shared (works before or during recording)
+    function setScreenLayout(layout){
+      if(screenLayout===layout)return;
+      screenLayout=layout;
+      updateLayoutButtons();
+      // frame() reads screenLayout on every tick — no compositing restart needed
+    }
 
-      // Switching back to camera-only: stop any active screen share
-      if(src==='camera'&&screenReady)stopScreenShare();
-
-      // Handle format locking / unlocking
-      if(src!=='camera'){
-        // Lock to landscape (temporarily allow setFormat by spoofing source)
-        if(selectedFormat!=='landscape'){
-          var prevSrc=recordingSource;recordingSource='camera';
-          setFormat('landscape');
-          recordingSource=prevSrc;
-        }
-        ['portrait','square'].forEach(function(f){
-          var b=document.getElementById('fmt-btn-'+f);
-          if(b)b.classList.add('locked');
-        });
-      }else{
-        ['portrait','square'].forEach(function(f){
-          var b=document.getElementById('fmt-btn-'+f);
-          if(b)b.classList.remove('locked');
-        });
-      }
-
-      recordingSource=src;
-
-      // Update source button active state
-      ['camera','pip','sidebyside'].forEach(function(s){
-        var btn=document.getElementById('src-btn-'+s);
-        if(btn)btn.className='src-btn'+(s===src?' active':'');
+    // Sync active state on both the ready-section and recording-section layout buttons
+    function updateLayoutButtons(){
+      ['pip','sbs'].forEach(function(id){
+        var layout=id==='pip'?'pip':'sidebyside';
+        var active=screenLayout===layout;
+        var rb=document.getElementById('ready-layout-'+id);
+        var rc=document.getElementById('rec-layout-'+id);
+        if(rb)rb.className='layout-btn'+(active?' active':'');
+        if(rc)rc.className='layout-btn'+(active?' active':'');
       });
-
-      // Refresh display
-      setCamState(camState);
     }
 
     // ── Canvas compositing helpers ────────────────────────────────────────────
@@ -1195,7 +1145,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         ctx.imageSmoothingQuality='high';
         ctx.clearRect(0,0,COMPOSITE_W,COMPOSITE_H);
 
-        if(recordingSource==='pip'){
+        if(screenLayout==='pip'||!screenReady){
           ctx.fillStyle='#000';
           ctx.fillRect(0,0,COMPOSITE_W,COMPOSITE_H);
 
@@ -1227,7 +1177,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
             drawCover(ctx,camPreview,0,0,COMPOSITE_W,COMPOSITE_H,true);
           }
 
-        }else if(recordingSource==='sidebyside'){
+        }else if(screenLayout==='sidebyside'){
           ctx.fillStyle='#111';
           ctx.fillRect(0,0,COMPOSITE_W,COMPOSITE_H);
 
@@ -1284,15 +1234,24 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
         screenReady=true;
 
+        // Lock to landscape while screen is shared
+        if(selectedFormat!=='landscape'){
+          var tmpScreenReady=screenReady;screenReady=false;
+          setFormat('landscape');
+          screenReady=tmpScreenReady;
+        }
+        ['portrait','square'].forEach(function(f){
+          var b=document.getElementById('fmt-btn-'+f);
+          if(b)b.classList.add('locked');
+        });
+
         if(camState==='recording'){
-          // Mid-recording: compositing is already running; screenReady flag is enough —
-          // the frame() loop checks it on each tick and instantly switches to composite.
-          // Just update the screen badge and the recording controls panel.
+          // Mid-recording: frame() picks up screenReady flag on next tick.
           screenIndicator.style.display='flex';
           updateRecordingControls();
         }else{
-          // Pre-recording (ready state): start compositing and switch preview to canvas
-          startCompositing();
+          // Pre-recording: start compositing, switch preview to canvas.
+          if(!compositing)startCompositing();
           camPreview.style.display='none';
           canvasComposite.style.display='block';
           updateReadySection();
@@ -1313,9 +1272,14 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       screenVidHidden.srcObject=null;
       screenReady=false;
 
+      // Unlock portrait/square format buttons
+      ['portrait','square'].forEach(function(f){
+        var b=document.getElementById('fmt-btn-'+f);
+        if(b)b.classList.remove('locked');
+      });
+
       if(camState==='recording'){
-        // Mid-recording: keep compositing alive — the frame() loop will fall back to
-        // camera-only as soon as screenReady is false. Update badge + controls.
+        // Mid-recording: compositing keeps running; frame() falls back to camera.
         screenIndicator.style.display='none';
         updateRecordingControls();
       }else{
@@ -1327,30 +1291,24 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       }
     }
 
-    // Show / hide the mid-recording screen share toggle (only in PiP / Side-by-Side mode)
+    // Update the mid-recording screen share controls
     function updateRecordingControls(){
-      var toggle=document.getElementById('rec-screen-toggle');
       var shareBtn=document.getElementById('rec-share-btn');
+      var layoutRow=document.getElementById('rec-layout-row');
       var stopShareBtn=document.getElementById('rec-stop-share-btn');
       var recMsg=document.getElementById('rec-mode-msg');
-      if(!toggle)return;
-      if(recordingSource!=='camera'){
-        toggle.style.display='flex';
-        toggle.style.flexDirection='column';
-        toggle.style.gap='8px';
-        if(screenReady){
-          if(shareBtn)shareBtn.style.display='none';
-          if(stopShareBtn)stopShareBtn.style.display='';
-          if(recMsg)recMsg.textContent='Recording \u2014 screen sharing active.';
-        }else{
-          if(shareBtn)shareBtn.style.display='';
-          if(stopShareBtn)stopShareBtn.style.display='none';
-          if(recMsg)recMsg.textContent='Recording \u2014 camera only. You can add screen sharing at any time.';
-        }
+      if(screenReady){
+        if(shareBtn)shareBtn.style.display='none';
+        if(layoutRow)layoutRow.style.display='flex';
+        if(stopShareBtn)stopShareBtn.style.display='';
+        if(recMsg)recMsg.textContent='Recording \u2014 screen sharing active.';
       }else{
-        toggle.style.display='none';
-        if(recMsg)recMsg.textContent='Recording in progress\u2026';
+        if(shareBtn)shareBtn.style.display='';
+        if(layoutRow)layoutRow.style.display='none';
+        if(stopShareBtn)stopShareBtn.style.display='none';
+        if(recMsg)recMsg.textContent='Recording \u2014 camera only. Add screen sharing below.';
       }
+      updateLayoutButtons();
     }
 
     // Warn before accidental close while recording or uploading
