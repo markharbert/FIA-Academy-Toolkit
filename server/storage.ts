@@ -870,11 +870,12 @@ export class DatabaseStorage implements IStorage {
     provider?: string;
     consent?: string;
     membership?: string;
+    login?: string;
     sort?: string;
     page?: number;
     pageSize?: number;
   }): Promise<{ users: (User & { totalVideos: number })[]; total: number }> {
-    const { search, role, status, provider, consent, membership, sort = "newest", page = 1, pageSize = 25 } = options;
+    const { search, role, status, provider, consent, membership, login, sort = "newest", page = 1, pageSize = 25 } = options;
     
     const conditions: any[] = [];
     
@@ -914,6 +915,12 @@ export class DatabaseStorage implements IStorage {
     } else if (membership === "never") {
       conditions.push(and(eq(users.cfEnrolled, false), isNull(users.cfRevokedAt))!);
     }
+
+    if (login === "logged_in") {
+      conditions.push(sql`${users.lastLoginAt} IS NOT NULL`);
+    } else if (login === "never") {
+      conditions.push(isNull(users.lastLoginAt));
+    }
     
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     
@@ -931,6 +938,10 @@ export class DatabaseStorage implements IStorage {
       case "last_login":
         orderByColumn = users.lastLoginAt;
         orderDirection = "desc";
+        break;
+      case "never_first":
+        orderByColumn = users.lastLoginAt;
+        orderDirection = "asc";
         break;
       case "newest":
       default:

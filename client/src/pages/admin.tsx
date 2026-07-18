@@ -3142,6 +3142,7 @@ export default function AdminPage() {
   const [providerFilter, setProviderFilter] = useState("all");
   const [consentFilter, setConsentFilter] = useState("all");
   const [membershipFilter, setMembershipFilter] = useState("all");
+  const [loginFilter, setLoginFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   
   // User drawer
@@ -3379,6 +3380,7 @@ export default function AdminPage() {
       if (providerFilter !== "all") params.set("provider", providerFilter);
       if (consentFilter !== "all") params.set("consent", consentFilter);
       if (membershipFilter !== "all") params.set("membership", membershipFilter);
+      if (loginFilter !== "all") params.set("login", loginFilter);
       
       const res = await fetch(`/api/admin/users?${params}`, { credentials: "include" });
       if (res.ok) {
@@ -3391,7 +3393,7 @@ export default function AdminPage() {
     } finally {
       setUsersLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, roleFilter, providerFilter, consentFilter, membershipFilter, sortBy]);
+  }, [currentPage, pageSize, searchQuery, roleFilter, providerFilter, consentFilter, membershipFilter, loginFilter, sortBy]);
 
   useEffect(() => {
     if (user?.isAdmin) {
@@ -4008,7 +4010,7 @@ export default function AdminPage() {
                 <Users className="h-4 w-4 text-sky-500" />
                 User Management
               </CardTitle>
-              <CardDescription>View and manage all registered users</CardDescription>
+              <CardDescription>All enrolled CF members plus any manually registered users. Includes members who haven't logged in yet.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-3">
@@ -4046,6 +4048,16 @@ export default function AdminPage() {
                     <SelectItem value="never">Never enrolled</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={loginFilter} onValueChange={(v) => { setLoginFilter(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-[155px]" data-testid="select-login-filter">
+                    <SelectValue placeholder="Toolkit Login" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Login Status</SelectItem>
+                    <SelectItem value="logged_in">Has logged in</SelectItem>
+                    <SelectItem value="never">Never logged in</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setCurrentPage(1); }}>
                   <SelectTrigger className="w-[140px]" data-testid="select-sort">
                     <SelectValue placeholder="Sort" />
@@ -4054,6 +4066,7 @@ export default function AdminPage() {
                     <SelectItem value="newest">Newest First</SelectItem>
                     <SelectItem value="oldest">Oldest First</SelectItem>
                     <SelectItem value="last_login">Last Login</SelectItem>
+                    <SelectItem value="never_first">Never Logged In First</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -4076,7 +4089,7 @@ export default function AdminPage() {
                           <TableHead className="text-center">Projects</TableHead>
                           <TableHead className="text-center">Tasks</TableHead>
                           <TableHead className="text-center">DMO (30d)</TableHead>
-                          <TableHead className="text-center">Last Login</TableHead>
+                          <TableHead className="text-center">Toolkit Login</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -4144,10 +4157,21 @@ export default function AdminPage() {
                                   {u.dmoLast30Days ?? 0}/30
                                 </span>
                               </TableCell>
-                              <TableCell className="text-center text-sm text-muted-foreground">
-                                {u.lastLoginAt
-                                  ? format(new Date(u.lastLoginAt), "MMM d, yyyy")
-                                  : <span className="text-muted-foreground/50">—</span>}
+                              <TableCell className="text-center">
+                                {u.lastLoginAt ? (
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <Badge variant="outline" className="text-xs text-green-700 border-green-300 dark:text-green-400 dark:border-green-700 gap-1">
+                                      <LogIn className="h-3 w-3" />
+                                      Active
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">{format(new Date(u.lastLoginAt), "MMM d, yyyy")}</span>
+                                  </div>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-700 gap-1">
+                                    <LogIn className="h-3 w-3 opacity-40" />
+                                    Never
+                                  </Badge>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center justify-end gap-1">
