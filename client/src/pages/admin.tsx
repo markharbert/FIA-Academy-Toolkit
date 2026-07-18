@@ -525,7 +525,7 @@ function CfIntegrationTab() {
   const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
   const paddingMap = { compact: "10px 20px", normal: "14px 28px", spacious: "18px 36px" };
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
-  const cfButtonUrl = `${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}`;
+
   const btnStyle = `display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:${paddingMap[btnPadding]}; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:${btnFontSize}px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}`;
   const embedCode = `<div${btnWidth === "full" ? "" : ' style="text-align:center"'}>
   <a id="__atk_btn" href="${appOrigin}/member-login" style="${btnStyle}">${btnText}</a>
@@ -1165,33 +1165,9 @@ function CfIntegrationTab() {
         </CardHeader>
         <CardContent className="space-y-5">
 
-          {/* Option A: Native CF Button URL */}
+          {/* Embed Code */}
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Option A — Native CF Button (recommended)</p>
-            <p className="text-xs text-muted-foreground">Add a <strong>Button element</strong> in the CF page editor. Set its action to <strong>Custom URL</strong> and paste this URL. Style the button however you like inside CF. <strong>Do not enable "Dynamically Populated"</strong> — it is not needed and will break the button display.</p>
-            <div className="relative">
-              <pre className="text-xs bg-muted rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed font-mono" data-testid="cf-button-url-preview">
-                {cfButtonUrl}
-              </pre>
-              <Button
-                variant="outline"
-                size="sm"
-                className="absolute top-2 right-2"
-                onClick={() => handleCopy(cfButtonUrl, "Button URL")}
-                data-testid="button-copy-cf-url"
-              >
-                <Copy className="h-3.5 w-3.5 mr-1.5" />
-                Copy
-              </Button>
-            </div>
-          </div>
-
-          <div className="border-t" />
-
-          {/* Option B: Custom HTML embed */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Option B — Custom HTML block</p>
-            <p className="text-xs text-muted-foreground">Add a <strong>Custom HTML element</strong> in CF and paste the code below. The included script reads the member's email from a hidden text node and builds the login URL automatically. <strong>Do not enable "Dynamically Populated"</strong> — the script handles this without it.</p>
+            <p className="text-xs text-muted-foreground">Add a <strong>Custom HTML element</strong> in your CF members page and paste the code below. The button will automatically receive a fresh, secure login token every 4.5 minutes — so any copied link expires within 5 minutes. <strong>Do not enable "Dynamically Populated"</strong> on the element.</p>
             <div className="relative">
               <pre className="text-xs bg-muted rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed font-mono" data-testid="embed-code-preview">
                 {embedCode}
@@ -1210,7 +1186,7 @@ function CfIntegrationTab() {
           </div>
 
           <div className="rounded-lg border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30 p-3 text-xs text-sky-800 dark:text-sky-200">
-            <strong>Tip:</strong> Both options pass the logged-in member's email to our server, which verifies their enrollment and logs them in automatically. If the merge tag isn't processed (e.g. the member isn't logged into CF), they'll be taken to the standard login page as a fallback.
+            <strong>How it works:</strong> When a member loads the page, the script reads their email, contacts our server to verify their enrollment, and silently drops a short-lived token into the button link. The token refreshes automatically in the background — members never notice, but stolen links expire quickly.
           </div>
         </CardContent>
       </Card>
