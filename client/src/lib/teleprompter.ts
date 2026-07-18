@@ -179,6 +179,19 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     #resizer:hover,#resizer.dragging{background:rgba(255,255,255,.18)}
     #resizer::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:56px;width:4px;border-radius:999px;background:rgba(255,255,255,.45);transition:background .15s}
     #resizer:hover::after,#resizer.dragging::after{background:rgba(255,255,255,.85)}
+
+    /* ── Source picker ── */
+    #source-picker{flex-shrink:0;display:flex;justify-content:center;gap:4px;padding:5px 10px 4px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
+    .src-btn{display:flex;align-items:center;gap:4px;font-family:Arial,sans-serif;font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.35);background:transparent;border:1px solid transparent;border-radius:6px;cursor:pointer;padding:5px 10px;transition:.15s}
+    .src-btn:hover:not([disabled]){color:rgba(255,255,255,.7);background:rgba(255,255,255,.06)}
+    .src-btn.active{color:#fff;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
+    .src-btn[disabled]{opacity:.3;cursor:not-allowed}
+    /* ── Canvas composite (screen share preview) ── */
+    #canvas-composite{display:none;position:absolute;inset:0;width:100%;height:100%}
+    /* ── Screen sharing indicator badge ── */
+    #screen-indicator{position:absolute;top:12px;left:14px;display:none;align-items:center;gap:5px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;color:#fff;background:rgba(59,130,246,.9);padding:4px 10px 4px 8px;border-radius:999px;box-shadow:0 2px 8px rgba(59,130,246,.5);z-index:6}
+    /* ── Ready section sub-views ── */
+    .ready-sub{display:flex;flex-direction:column;gap:10px}
   </style>
 </head>
 <body>
@@ -239,6 +252,15 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           <span class="fmt-icon-wrap"><span class="fmt-icon fmt-icon-sq"></span></span>Square 1:1
         </button>
       </div>
+      <!-- Source picker: Camera Only / PiP / Side by Side -->
+      <div id="source-picker">
+        <button class="src-btn active" id="src-btn-camera" onclick="setSource('camera')">Camera Only</button>
+        <button class="src-btn" id="src-btn-pip" onclick="setSource('pip')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="1" width="22" height="22" rx="2"/><rect x="13" y="13" width="9" height="8" rx="1.5" fill="currentColor"/></svg>
+          PiP
+        </button>
+        <button class="src-btn" id="src-btn-sidebyside" onclick="setSource('sidebyside')">Side by Side</button>
+      </div>
       <!-- Video area -->
       <div id="video-wrap" class="fmt-landscape">
         <div id="cam-placeholder">
@@ -249,8 +271,17 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         </div>
         <video id="cam-preview" autoplay muted playsinline></video>
         <video id="cam-playback" controls></video>
+        <!-- Canvas composite for PiP / Side-by-Side screen sharing -->
+        <canvas id="canvas-composite"></canvas>
+        <!-- Hidden video element that plays the screen share stream (used as canvas draw source) -->
+        <video id="screen-vid-hidden" autoplay muted playsinline style="position:absolute;pointer-events:none;opacity:0;width:1px;height:1px;top:0;left:0"></video>
         <div id="rec-dot"><span class="dot"></span><span>REC</span></div>
         <div id="rec-timer">0:00</div>
+        <!-- Screen sharing badge (shown during recording) -->
+        <div id="screen-indicator">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          Screen Sharing
+        </div>
       </div>
 
       <!-- Device selector (camera + mic) — visible once camera is active -->
@@ -301,10 +332,27 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
         <!-- READY -->
         <div id="cam-ready" class="cam-section">
-          <p class="cam-msg">Camera ready. Hit record when you're set — recording starts immediately.</p>
-          <button class="cam-btn cam-btn-red" onclick="startRecording()">
-            <span style="font-size:9px">●</span> Start Recording
-          </button>
+          <!-- Camera-only mode -->
+          <div id="ready-cam" class="ready-sub">
+            <p class="cam-msg">Camera ready. Hit record when you're set — recording starts immediately.</p>
+            <button class="cam-btn cam-btn-red" onclick="startRecording()">
+              <span style="font-size:9px">●</span> Start Recording
+            </button>
+          </div>
+          <!-- Screen mode: need to share screen first -->
+          <div id="ready-screen" class="ready-sub" style="display:none">
+            <p class="cam-msg" id="ready-screen-msg"></p>
+            <button class="cam-btn cam-btn-white" id="ready-share-btn" onclick="requestScreenShare()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              Share Screen
+            </button>
+            <button class="cam-btn cam-btn-red" id="ready-record-btn" style="display:none" onclick="startRecording()">
+              <span style="font-size:9px">●</span> Start Recording
+            </button>
+            <button class="cam-btn cam-btn-dark" id="ready-stop-share-btn" style="display:none" onclick="stopScreenShare()">
+              &#x2715; Stop Screen Sharing
+            </button>
+          </div>
         </div>
 
         <!-- RECORDING -->
@@ -507,6 +555,11 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     var selectedCameraId='',selectedMicId='';
     var audioCtx=null,audioAnalyser=null,micRaf=null,micLevelFill=null;
 
+    // Screen sharing state
+    var recordingSource='camera'; // 'camera' | 'pip' | 'sidebyside'
+    var screenStream=null,compositeStream=null,compositeAnimId=null,screenReady=false,compositing=false;
+    var COMPOSITE_W=1280,COMPOSITE_H=720;
+
     var camPreview=document.getElementById('cam-preview');
     var camPlayback=document.getElementById('cam-playback');
     var camPlaceholder=document.getElementById('cam-placeholder');
@@ -515,28 +568,50 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     var deviceBar=document.getElementById('device-bar');
     var camSelect=document.getElementById('cam-select');
     var micSelect=document.getElementById('mic-select');
+    var canvasComposite=document.getElementById('canvas-composite');
+    var screenVidHidden=document.getElementById('screen-vid-hidden');
+    var screenIndicator=document.getElementById('screen-indicator');
 
     function setCamState(s){
       camState=s;
+      var isScreenMode=(recordingSource!=='camera');
+      var liveActive=(s==='ready'||s==='recording');
       // placeholder (shows when no video is active)
       camPlaceholder.style.display=(s==='idle'||s==='loading'||s==='denied')?'flex':'none';
-      // live preview
-      camPreview.style.display=(s==='ready'||s==='recording')?'block':'none';
+      // live preview — camPreview in camera mode; canvas in screen mode (after screen is shared)
+      if(isScreenMode&&screenReady&&liveActive){
+        camPreview.style.display='none';
+        canvasComposite.style.display='block';
+      }else{
+        // camera-only mode, or screen mode before screen is shared: show camPreview (user sees camera is live)
+        camPreview.style.display=liveActive?'block':'none';
+        canvasComposite.style.display='none';
+      }
       // recorded playback (visible during upload preview + review)
       camPlayback.style.display=(s==='uploading'||s==='review')?'block':'none';
       // REC overlay
       recDot.style.display=(s==='recording')?'flex':'none';
       recTimerEl.style.display=(s==='recording')?'block':'none';
+      // screen sharing badge (blue pill) — only visible during screen-mode recording
+      screenIndicator.style.display=(s==='recording'&&isScreenMode&&screenReady)?'flex':'none';
       // device bar — show only when camera is active; disable selects while recording
       var devVisible=(s==='ready'||s==='recording');
       deviceBar.className=devVisible?'vis':'';
       camSelect.disabled=(s==='recording'||s==='uploading');
       micSelect.disabled=(s==='recording'||s==='uploading');
+      // lock source buttons during recording / uploading
+      var srcLocked=(s==='recording'||s==='uploading');
+      ['camera','pip','sidebyside'].forEach(function(src){
+        var btn=document.getElementById('src-btn-'+src);
+        if(btn)btn.disabled=srcLocked;
+      });
       // section panels
       ['idle','loading','denied','ready','recording','uploading','review'].forEach(function(name){
         var el=document.getElementById('cam-'+name);
         if(el)el.className='cam-section'+(name===s?' active':'');
       });
+      // update ready sub-views whenever state is 'ready'
+      if(s==='ready')updateReadySection();
     }
 
     function getSupportedMimeType(){
@@ -549,6 +624,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     function setFormat(fmt){
       if(camState==='recording'||camState==='uploading')return;
+      if(recordingSource!=='camera')return; // format locked in screen modes — always landscape
       if(selectedFormat===fmt)return;
       selectedFormat=fmt;
       ['landscape','portrait','square'].forEach(function(f){
@@ -686,19 +762,39 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     var recCdActive=false;
     function startRecording(){
-      if(!mediaStream||recCdActive)return;
+      if(recCdActive)return;
+      // In screen mode, need screenReady; in camera mode, need mediaStream
+      if(recordingSource!=='camera'&&!screenReady)return;
+      if(!mediaStream)return;
       recCdActive=true;
       // Phase 1: countdown → recording starts
       startCountdown(function(){
         recCdActive=false;
+
+        // Decide which stream to record
+        var streamToRecord;
+        if(recordingSource!=='camera'&&screenReady){
+          // Screen mode: composite canvas video + mic audio
+          var canvasVideoTracks=canvasComposite.captureStream(30).getVideoTracks();
+          var micTracks=mediaStream.getAudioTracks();
+          compositeStream=new MediaStream(canvasVideoTracks);
+          micTracks.forEach(function(t){compositeStream.addTrack(t);});
+          streamToRecord=compositeStream;
+        }else{
+          compositeStream=null;
+          streamToRecord=mediaStream;
+        }
+
         recMimeType=getSupportedMimeType();
         var opts=recMimeType?{mimeType:recMimeType}:{};
-        try{mediaRecorder=new MediaRecorder(mediaStream,opts);}
-        catch(e){mediaRecorder=new MediaRecorder(mediaStream);recMimeType=mediaRecorder.mimeType||'video/webm';}
+        try{mediaRecorder=new MediaRecorder(streamToRecord,opts);}
+        catch(e){mediaRecorder=new MediaRecorder(streamToRecord);recMimeType=mediaRecorder.mimeType||'video/webm';}
 
         recordedChunks=[];
         mediaRecorder.ondataavailable=function(e){if(e.data&&e.data.size>0)recordedChunks.push(e.data);};
         mediaRecorder.onstop=function(){
+          // Stop compositing when recording is done; playback takes over the panel
+          stopCompositing();
           recordedBlob=new Blob(recordedChunks,{type:recMimeType||'video/webm'});
           if(recordedUrl)URL.revokeObjectURL(recordedUrl);
           recordedUrl=URL.createObjectURL(recordedBlob);
@@ -939,7 +1035,243 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       var pct=document.getElementById('upload-pct');
       if(bar)bar.style.width='0%';
       if(pct)pct.textContent='0%';
+      // Restart compositing if still in screen mode with screen shared
+      if(recordingSource!=='camera'&&screenReady)startCompositing();
       setCamState('ready');
+    }
+
+    /* ══════════════════════════════════════════
+       SCREEN SHARING — SOURCE PICKER
+    ══════════════════════════════════════════ */
+
+    // Update the cam-ready sub-views based on current source and screenReady state
+    function updateReadySection(){
+      var readyCam=document.getElementById('ready-cam');
+      var readyScreen=document.getElementById('ready-screen');
+      var readyScreenMsg=document.getElementById('ready-screen-msg');
+      var readyShareBtn=document.getElementById('ready-share-btn');
+      var readyRecordBtn=document.getElementById('ready-record-btn');
+      var readyStopShareBtn=document.getElementById('ready-stop-share-btn');
+      if(!readyCam||!readyScreen)return;
+
+      if(recordingSource==='camera'){
+        readyCam.style.display='';    // flex from .ready-sub
+        readyScreen.style.display='none';
+      }else{
+        readyCam.style.display='none';
+        readyScreen.style.display=''; // flex from .ready-sub
+        var modeLabel=recordingSource==='pip'?'Picture-in-Picture':'Side by Side';
+        if(!screenReady){
+          readyScreenMsg.textContent='Camera ready. Share your screen to record in '+modeLabel+' mode.';
+          readyScreenMsg.className='cam-msg';
+          if(readyShareBtn)readyShareBtn.style.display='';
+          if(readyRecordBtn)readyRecordBtn.style.display='none';
+          if(readyStopShareBtn)readyStopShareBtn.style.display='none';
+        }else{
+          readyScreenMsg.textContent='\u2713 Screen sharing active \u2014 '+modeLabel+' ready.';
+          readyScreenMsg.className='cam-msg success';
+          if(readyShareBtn)readyShareBtn.style.display='none';
+          if(readyRecordBtn)readyRecordBtn.style.display='';
+          if(readyStopShareBtn)readyStopShareBtn.style.display='';
+        }
+      }
+    }
+
+    // Switch recording source: 'camera' | 'pip' | 'sidebyside'
+    function setSource(src){
+      if(camState==='recording'||camState==='uploading')return;
+      if(recordingSource===src)return;
+
+      // Switching back to camera-only: stop any active screen share
+      if(src==='camera'&&screenReady)stopScreenShare();
+
+      // Handle format locking / unlocking
+      if(src!=='camera'){
+        // Lock to landscape (temporarily allow setFormat by spoofing source)
+        if(selectedFormat!=='landscape'){
+          var prevSrc=recordingSource;recordingSource='camera';
+          setFormat('landscape');
+          recordingSource=prevSrc;
+        }
+        ['portrait','square'].forEach(function(f){
+          var b=document.getElementById('fmt-btn-'+f);
+          if(b)b.classList.add('locked');
+        });
+      }else{
+        ['portrait','square'].forEach(function(f){
+          var b=document.getElementById('fmt-btn-'+f);
+          if(b)b.classList.remove('locked');
+        });
+      }
+
+      recordingSource=src;
+
+      // Update source button active state
+      ['camera','pip','sidebyside'].forEach(function(s){
+        var btn=document.getElementById('src-btn-'+s);
+        if(btn)btn.className='src-btn'+(s===src?' active':'');
+      });
+
+      // Refresh display
+      setCamState(camState);
+    }
+
+    // ── Canvas compositing helpers ────────────────────────────────────────────
+
+    // Draw video onto canvas using object-fit:cover semantics, optionally mirrored
+    function drawCover(ctx,video,dx,dy,dw,dh,mirror){
+      if(!video||!video.videoWidth||!video.videoHeight)return;
+      var vw=video.videoWidth,vh=video.videoHeight;
+      var dstAR=dw/dh,srcAR=vw/vh;
+      var sx,sy,sw,sh;
+      if(srcAR>dstAR){sh=vh;sw=Math.round(vh*dstAR);sy=0;sx=Math.round((vw-sw)/2);}
+      else{sw=vw;sh=Math.round(vw/dstAR);sx=0;sy=Math.round((vh-sh)/2);}
+      ctx.save();
+      if(mirror){
+        // Translate to right edge of target, flip, draw from 0
+        ctx.translate(dx+dw,dy);ctx.scale(-1,1);
+        ctx.drawImage(video,sx,sy,sw,sh,0,0,dw,dh);
+      }else{
+        ctx.drawImage(video,sx,sy,sw,sh,dx,dy,dw,dh);
+      }
+      ctx.restore();
+    }
+
+    // Draw a rounded rectangle path (ES5 compatible)
+    function roundedRectPath(ctx,x,y,w,h,r){
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+      ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+      ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+      ctx.closePath();
+    }
+
+    function stopCompositing(){
+      compositing=false;
+      if(compositeAnimId){cancelAnimationFrame(compositeAnimId);compositeAnimId=null;}
+    }
+
+    function startCompositing(){
+      stopCompositing(); // stop any existing loop
+      if(!canvasComposite)return;
+      canvasComposite.width=COMPOSITE_W;
+      canvasComposite.height=COMPOSITE_H;
+      var ctx=canvasComposite.getContext('2d');
+      compositing=true;
+
+      function frame(){
+        if(!compositing)return;
+        ctx.clearRect(0,0,COMPOSITE_W,COMPOSITE_H);
+
+        if(recordingSource==='pip'){
+          // Background: screen (full canvas, cover-fit)
+          ctx.fillStyle='#000';
+          ctx.fillRect(0,0,COMPOSITE_W,COMPOSITE_H);
+          drawCover(ctx,screenVidHidden,0,0,COMPOSITE_W,COMPOSITE_H,false);
+
+          // PiP camera: bottom-right corner, 27% of canvas width, 16:9
+          var pipW=Math.round(COMPOSITE_W*0.27);
+          var pipH=Math.round(pipW*9/16);
+          var pipX=COMPOSITE_W-pipW-24;
+          var pipY=COMPOSITE_H-pipH-24;
+          var r=10;
+
+          // Clip to rounded rect, draw camera (mirrored)
+          ctx.save();
+          roundedRectPath(ctx,pipX,pipY,pipW,pipH,r);
+          ctx.clip();
+          drawCover(ctx,camPreview,pipX,pipY,pipW,pipH,true);
+          ctx.restore();
+
+          // White border around PiP
+          ctx.save();
+          roundedRectPath(ctx,pipX,pipY,pipW,pipH,r);
+          ctx.strokeStyle='rgba(255,255,255,0.9)';
+          ctx.lineWidth=3;
+          ctx.stroke();
+          ctx.restore();
+
+        }else if(recordingSource==='sidebyside'){
+          var halfW=COMPOSITE_W/2;
+          // Black background
+          ctx.fillStyle='#111';
+          ctx.fillRect(0,0,COMPOSITE_W,COMPOSITE_H);
+          // Left half: screen
+          ctx.save();
+          ctx.beginPath();ctx.rect(0,0,halfW,COMPOSITE_H);ctx.clip();
+          drawCover(ctx,screenVidHidden,0,0,halfW,COMPOSITE_H,false);
+          ctx.restore();
+          // Right half: camera (mirrored)
+          ctx.save();
+          ctx.beginPath();ctx.rect(halfW,0,halfW,COMPOSITE_H);ctx.clip();
+          drawCover(ctx,camPreview,halfW,0,halfW,COMPOSITE_H,true);
+          ctx.restore();
+          // Thin divider
+          ctx.strokeStyle='rgba(255,255,255,0.18)';
+          ctx.lineWidth=2;
+          ctx.beginPath();ctx.moveTo(halfW,0);ctx.lineTo(halfW,COMPOSITE_H);ctx.stroke();
+        }
+
+        compositeAnimId=requestAnimationFrame(frame);
+      }
+
+      compositeAnimId=requestAnimationFrame(frame);
+    }
+
+    // ── Screen share request / teardown ───────────────────────────────────────
+
+    function requestScreenShare(){
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){
+        alert('Screen sharing is not supported in this browser. Please use Chrome, Edge, or Firefox.');
+        return;
+      }
+      if(!canvasComposite.captureStream){
+        alert('Canvas recording is not supported in this browser. Please use Chrome or Firefox.');
+        return;
+      }
+      navigator.mediaDevices.getDisplayMedia({
+        video:{frameRate:{ideal:30},width:{ideal:1920}},
+        audio:false
+      }).then(function(stream){
+        screenStream=stream;
+        screenVidHidden.srcObject=stream;
+        screenVidHidden.play().catch(function(){});
+
+        // Handle user clicking browser's native "Stop sharing" button
+        stream.getVideoTracks()[0].addEventListener('ended',function(){
+          stopScreenShare();
+        });
+
+        screenReady=true;
+        startCompositing();
+        // Switch preview from camPreview to canvas
+        camPreview.style.display='none';
+        canvasComposite.style.display='block';
+        updateReadySection();
+      }).catch(function(err){
+        // NotAllowedError and AbortError mean user cancelled — silently ignore
+        if(err.name!=='NotAllowedError'&&err.name!=='AbortError'){
+          console.warn('[screen-share] getDisplayMedia error:',err.name,err.message);
+        }
+      });
+    }
+
+    function stopScreenShare(){
+      if(screenStream){
+        screenStream.getTracks().forEach(function(t){t.stop();});
+        screenStream=null;
+      }
+      screenVidHidden.srcObject=null;
+      screenReady=false;
+      stopCompositing();
+      canvasComposite.style.display='none';
+      // Restore camera preview if still in an active state
+      if(camState==='ready'||camState==='recording'){
+        camPreview.style.display='block';
+      }
+      if(camState==='ready')updateReadySection();
     }
 
     // Warn before accidental close while recording or uploading
