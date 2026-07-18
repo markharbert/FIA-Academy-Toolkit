@@ -63,7 +63,7 @@ import {
   Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
   CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone, Megaphone, GripVertical,
   Bell, AlertTriangle, Star, Gift, Rocket, Sparkles, PartyPopper, Trophy, Heart, Flame, Tag, Calendar,
-  Palette, Timer, ShieldCheck, Code,
+  Palette, ShieldCheck, Code,
   type LucideIcon,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -490,13 +490,8 @@ function CfIntegrationTab() {
   const [btnWidth, setBtnWidth] = useState<"auto" | "full">("auto");
   const [btnFontSize, setBtnFontSize] = useState<"13" | "15" | "18" | "22">("15");
   const [btnPadding, setBtnPadding] = useState<"compact" | "normal" | "spacious">("normal");
-  const [expirySaving, setExpirySaving] = useState(false);
   const [btnSaving, setBtnSaving] = useState(false);
-  const [expiryInput, setExpiryInput] = useState("15");
 
-  const { data: magicSettings } = useQuery<{ expiryMinutes: number }>({
-    queryKey: ["/api/admin/cf/magic-settings"],
-  });
   const { data: btnSettings } = useQuery<{ text: string; bg: string; color: string; radius: string; width: string }>({
     queryKey: ["/api/admin/cf/button-settings"],
   });
@@ -506,10 +501,6 @@ function CfIntegrationTab() {
     refetchOnMount: "always" as const,
   });
   const magicTokens = magicTokensData?.tokens ?? [];
-
-  useEffect(() => {
-    if (magicSettings?.expiryMinutes) setExpiryInput(String(magicSettings.expiryMinutes));
-  }, [magicSettings]);
 
   useEffect(() => {
     if (!btnSettings) return;
@@ -565,31 +556,6 @@ function CfIntegrationTab() {
       toast({ title: "Failed to save", description: err.message, variant: "destructive" });
     } finally {
       setBtnSaving(false);
-    }
-  };
-
-  const handleSaveExpiry = async () => {
-    const mins = parseInt(expiryInput, 10);
-    if (!mins || mins < 1) {
-      toast({ title: "Enter a valid number of minutes", variant: "destructive" });
-      return;
-    }
-    setExpirySaving(true);
-    try {
-      const res = await fetch("/api/admin/cf/magic-settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ expiryMinutes: mins }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed");
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/cf/magic-settings"] });
-      toast({ title: `Expiry set to ${data.expiryMinutes} minutes` });
-    } catch (err: any) {
-      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
-    } finally {
-      setExpirySaving(false);
     }
   };
 
@@ -1090,48 +1056,6 @@ function CfIntegrationTab() {
 
         {/* Token Settings */}
         <div className="space-y-6">
-          <Card className="overflow-hidden">
-            <div className="h-1 bg-gradient-to-r from-teal-500 to-cyan-400" />
-            <CardHeader className="pt-4">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Timer className="h-4 w-4 text-teal-500" />
-                Token Expiry
-              </CardTitle>
-              <CardDescription>
-                How long each magic login link stays valid after it's generated. Shorter = more secure.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  max={1440}
-                  value={expiryInput}
-                  onChange={(e) => setExpiryInput(e.target.value)}
-                  className="w-20 text-sm border rounded-md px-3 py-2 bg-background font-mono text-right"
-                  data-testid="input-expiry-minutes"
-                />
-                <span className="text-sm text-muted-foreground">minutes</span>
-                <Button size="sm" onClick={handleSaveExpiry} disabled={expirySaving} data-testid="button-save-expiry">
-                  {expirySaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {[5, 10, 15, 30, 60].map((m) => (
-                  <button key={m} onClick={() => setExpiryInput(String(m))}
-                    className={`text-xs px-2 py-1 rounded border transition-colors ${expiryInput === String(m) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
-                    data-testid={`preset-expiry-${m}`}>
-                    {m >= 60 ? `${m / 60}h` : `${m}m`}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Current setting: <span className="font-medium text-foreground">{magicSettings?.expiryMinutes ?? 15} minutes</span>
-              </p>
-            </CardContent>
-          </Card>
-
           <Card className="overflow-hidden">
             <div className="h-1 bg-gradient-to-r from-orange-500 to-amber-400" />
             <CardHeader className="pt-4">
