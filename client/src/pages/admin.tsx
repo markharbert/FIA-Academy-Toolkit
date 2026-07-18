@@ -527,14 +527,20 @@ function CfIntegrationTab() {
     if(!b||!eEl)return;
     var em=(eEl.textContent||eEl.innerText||'').trim();
     if(!em||em.indexOf('@')<0||em.indexOf('{{')>=0)return;
-    function issue(){
+    function fetchToken(done){
       fetch(BASE+'/api/auth/cf-token-issue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em})})
       .then(function(r){return r.ok?r.json():null})
-      .then(function(d){if(d&&d.token)b.href=BASE+'/cf-magic-login?t='+d.token})
-      .catch(function(){});
+      .then(function(d){var u=d&&d.token?BASE+'/cf-magic-login?t='+d.token:null;if(done)done(u);else if(u)b.href=u;})
+      .catch(function(){if(done)done(null);});
     }
-    issue();
-    setInterval(issue,270000);
+    fetchToken();
+    setInterval(fetchToken,270000);
+    b.addEventListener('click',function(e){
+      if((b.getAttribute('href')||'').indexOf('?t=')>=0)return;
+      e.preventDefault();
+      var w=window.open(BASE+'/cf-magic-login?loading=1','_blank');
+      fetchToken(function(u){if(w)w.location.href=u||BASE+'/member-login';});
+    });
   }();
   <\/script>
 </div>`;

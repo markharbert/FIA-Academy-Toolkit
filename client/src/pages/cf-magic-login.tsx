@@ -52,7 +52,10 @@ export default function CfMagicLoginPage() {
       }
     }, 3000);
 
-    if (immediateError) {
+    if (params.get("loading") === "1") {
+      // Parent window will navigate us to the real token URL once it's ready — stay in spinner state.
+      return () => clearTimeout(timer);
+    } else if (immediateError) {
       handleResult({ success: false, error: immediateError });
     } else if (!token) {
       handleResult({ success: false, error: "missing_token" });
