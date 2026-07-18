@@ -525,7 +525,22 @@ function CfIntegrationTab() {
   const borderRadiusMap = { rounded: "8px", pill: "100px", square: "2px" };
   const paddingMap = { compact: "10px 20px", normal: "14px 28px", spacious: "18px 36px" };
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://toolkit.fearlessmarketinglab.com";
-  const embedCode = `<a href="${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}" style="display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:${paddingMap[btnPadding]}; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:${btnFontSize}px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}">${btnText}</a>`;
+  const cfButtonUrl = `${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}`;
+  const btnStyle = `display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:${paddingMap[btnPadding]}; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:${btnFontSize}px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}`;
+  const embedCode = `<div${btnWidth === "full" ? "" : ' style="text-align:center"'}>
+  <a id="__atk_btn" href="${appOrigin}/api/auth/cf-magic" style="${btnStyle}">${btnText}</a>
+  <span id="__atk_e" style="display:none;font-size:0;line-height:0">{{contact.email_address}}</span>
+  <script>
+  !function(){
+    var e=document.getElementById('__atk_e'),b=document.getElementById('__atk_btn');
+    if(!e||!b)return;
+    var m=(e.textContent||e.innerText||'').trim();
+    if(m&&m.indexOf('@')>-1&&m.indexOf('{{')<0){
+      b.href='${appOrigin}/api/auth/cf-magic?email='+encodeURIComponent(m);
+    }
+  }();
+  <\/script>
+</div>`;
 
   const handleSaveBtnSettings = async () => {
     setBtnSaving(true);
@@ -1139,27 +1154,57 @@ function CfIntegrationTab() {
             Embed Code
           </CardTitle>
           <CardDescription>
-            Paste this into a <strong>Custom HTML</strong> block in your ClickFunnels members area page. ClickFunnels will automatically fill in <code className="text-xs bg-muted px-1 rounded">&#123;&#123;contact.email_address&#125;&#125;</code> with the logged-in member's email.
+            Two ways to add the login button to your ClickFunnels members area page.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="relative">
-            <pre className="text-xs bg-muted rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed font-mono" data-testid="embed-code-preview">
-              {embedCode}
-            </pre>
-            <Button
-              variant="outline"
-              size="sm"
-              className="absolute top-2 right-2"
-              onClick={() => handleCopy(embedCode, "Embed code")}
-              data-testid="button-copy-embed-code"
-            >
-              <Copy className="h-3.5 w-3.5 mr-1.5" />
-              Copy
-            </Button>
+        <CardContent className="space-y-5">
+
+          {/* Option A: Native CF Button URL */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Option A — Native CF Button (recommended)</p>
+            <p className="text-xs text-muted-foreground">Add a <strong>Button element</strong> in the CF page editor. Set its action to <strong>Custom URL</strong> and paste this URL. Style the button however you like inside CF. <strong>Do not enable "Dynamically Populated"</strong> — it is not needed and will break the button display.</p>
+            <div className="relative">
+              <pre className="text-xs bg-muted rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed font-mono" data-testid="cf-button-url-preview">
+                {cfButtonUrl}
+              </pre>
+              <Button
+                variant="outline"
+                size="sm"
+                className="absolute top-2 right-2"
+                onClick={() => handleCopy(cfButtonUrl, "Button URL")}
+                data-testid="button-copy-cf-url"
+              >
+                <Copy className="h-3.5 w-3.5 mr-1.5" />
+                Copy
+              </Button>
+            </div>
           </div>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200">
-            <strong>Setup:</strong> In ClickFunnels, edit your members area page → Add Element → Custom HTML → paste the code above. No JavaScript required.
+
+          <div className="border-t" />
+
+          {/* Option B: Custom HTML embed */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Option B — Custom HTML block</p>
+            <p className="text-xs text-muted-foreground">Add a <strong>Custom HTML element</strong> in CF and paste the code below. The included script reads the member's email from a hidden text node and builds the login URL automatically. <strong>Do not enable "Dynamically Populated"</strong> — the script handles this without it.</p>
+            <div className="relative">
+              <pre className="text-xs bg-muted rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed font-mono" data-testid="embed-code-preview">
+                {embedCode}
+              </pre>
+              <Button
+                variant="outline"
+                size="sm"
+                className="absolute top-2 right-2"
+                onClick={() => handleCopy(embedCode, "Embed code")}
+                data-testid="button-copy-embed-code"
+              >
+                <Copy className="h-3.5 w-3.5 mr-1.5" />
+                Copy
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30 p-3 text-xs text-sky-800 dark:text-sky-200">
+            <strong>Tip:</strong> Both options pass the logged-in member's email to our server, which verifies their enrollment and logs them in automatically. If the merge tag isn't processed (e.g. the member isn't logged into CF), they'll be taken to the standard login page as a fallback.
           </div>
         </CardContent>
       </Card>

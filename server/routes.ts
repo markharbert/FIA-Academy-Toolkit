@@ -712,7 +712,8 @@ export async function registerRoutes(
     const email = rawEmail ? decodeURIComponent(rawEmail).trim().toLowerCase() : "";
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.redirect(`${APP_BASE}/cf-magic-login?error=missing_token`);
+      // Email missing or invalid (e.g. merge tag wasn't processed by CF) — fall back to member login
+      return res.redirect(`${APP_BASE}/member-login`);
     }
 
     try {
