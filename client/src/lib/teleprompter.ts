@@ -299,7 +299,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       <div id="cam-body">
 
         <!-- IDLE: prompt to enable camera -->
-        <div id="cam-idle" class="cam-section">
+        <div id="cam-idle" class="cam-section active">
           <p class="cam-msg">Record a take while you read your script. Your video will be saved to your account automatically.</p>
           <div id="unsupported-msg" style="display:none;font-family:Arial,sans-serif;font-size:12px;color:#f87171">Recording is not supported in this browser. Try Chrome, Edge, or Firefox.</div>
           <button class="cam-btn cam-btn-white" onclick="requestCamera()">
@@ -403,6 +403,11 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     /* ══════════════════════════════════════════
        TELEPROMPTER LOGIC
     ══════════════════════════════════════════ */
+    window.onerror=function(msg,src,line){
+      var d=document.getElementById('_err_banner');
+      if(!d){d=document.createElement('div');d.id='_err_banner';d.style.cssText='position:fixed;top:0;left:0;right:0;background:#dc2626;color:#fff;padding:8px 14px;z-index:9999;font-family:monospace;font-size:11px;word-break:break-word';document.body.appendChild(d);}
+      d.textContent='JS Error (line '+line+'): '+msg;
+    };
     var SPEEDS=[6,12,20,28,38,50,65,85];
     var playing=false,speed=SPEEDS[2],lastTime=null,raf=null,scrollAccum=0,cdTimer=null;
     var scroller=document.getElementById('scroller');
