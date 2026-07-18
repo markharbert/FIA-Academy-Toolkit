@@ -323,4 +323,61 @@ export async function getEnrolledContactIds(): Promise<Array<{ userId: string; e
   return storage.getEnrolledUsersWithContactId();
 }
 
+// ── CF API: Fetch every enrollment in the course (all pages) ─────────────────
+export interface CfEnrollmentRecord {
+  contactId: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  active: boolean;
+}
+
+export async function getAllCfEnrollments(): Promise<CfEnrollmentRecord[]> {
+  if (!CF_API_TOKEN || !CF_WORKSPACE_DOMAIN || !CF_COURSE_ID) {
+    throw new Error("CF_API_TOKEN, CF_WORKSPACE_DOMAIN, and CF_COURSE_ID must be configured");
+  }
+
+  const baseUrl = `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${CF_API_TOKEN}`,
+    Accept: "application/json",
+  };
+
+  const results: CfEnrollmentRecord[] = [];
+  let nextUrl: string | null = `${baseUrl}/courses/${CF_COURSE_ID}/enrollments?per=20`;
+  let page = 0;
+
+  while (nextUrl) {
+    page++;
+    console.log(`[CF Import] Fetching enrollments page ${page}:`, nextUrl);
+    const r = await fetch(nextUrl, { headers });
+    if (!r.ok) {
+      const body = await r.text();
+      throw new Error(`CF API enrollments page ${page} failed: ${r.status} ${body.slice(0, 120)}`);
+    }
+
+    const enrollments: any[] = await r.json();
+    for (const e of enrollments) {
+      const contact = e.contact ?? {};
+      const contactId = contact.id ? String(contact.id) : null;
+      const email = contact.email_address?.toLowerCase()?.trim() || null;
+      if (!contactId || !email) continue;
+      results.push({
+        contactId,
+        email,
+        firstName: contact.first_name || undefined,
+        lastName: contact.last_name || undefined,
+        active: isEnrollmentActive(e),
+      });
+    }
+
+    const linkHeader: string = r.headers.get("link") || "";
+    const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch ? nextMatch[1] : null;
+  }
+
+  console.log(`[CF Import] Total enrollments fetched: ${results.length} across ${page} pages`);
+  return results;
+}
+
 export { CF_WORKSPACE_DOMAIN, CF_COURSE_ID, CF_API_TOKEN };

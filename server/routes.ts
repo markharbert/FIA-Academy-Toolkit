@@ -1865,6 +1865,75 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: import ALL CF-enrolled members from the CF API, creating accounts for unknowns
+  app.post("/api/admin/cf/import-all-members", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { getAllCfEnrollments } = await import("./clickfunnels");
+      const enrollments = await getAllCfEnrollments();
+
+      let created = 0, contactIdUpdated = 0, skipped = 0, inactive = 0, errors = 0;
+
+      for (const enrollment of enrollments) {
+        try {
+          if (!enrollment.active) {
+            inactive++;
+            continue;
+          }
+
+          const existing = await storage.getUserByEmail(enrollment.email);
+
+          if (!existing) {
+            // Brand-new member — provision a Toolkit account for them
+            const firstName = enrollment.firstName || "";
+            const lastName = enrollment.lastName || "";
+            const displayName = [firstName, lastName].filter(Boolean).join(" ") || enrollment.email.split("@")[0];
+            const newUser = await storage.createUser({
+              email: enrollment.email,
+              displayName,
+              firstName: firstName || undefined,
+              lastName: lastName || undefined,
+            });
+            await storage.updateUser(newUser.id, {
+              cfEnrolled: true,
+              cfEnrolledAt: new Date(),
+              cfContactId: enrollment.contactId,
+              isDisabled: false,
+            });
+            created++;
+          } else if (!existing.cfContactId) {
+            // Existing account — just fill in the missing Contact ID + ensure enrolled
+            await storage.updateUser(existing.id, {
+              cfContactId: enrollment.contactId,
+              cfEnrolled: true,
+              cfEnrolledAt: existing.cfEnrolledAt ?? new Date(),
+              isDisabled: false,
+            });
+            contactIdUpdated++;
+          } else {
+            skipped++;
+          }
+        } catch (err: any) {
+          console.error(`[CF Import] Error processing ${enrollment.email}:`, err?.message);
+          errors++;
+        }
+      }
+
+      console.log(`[CF Import] Done — created=${created} updated=${contactIdUpdated} skipped=${skipped} inactive=${inactive} errors=${errors}`);
+      res.json({
+        total: enrollments.length,
+        created,
+        contactIdUpdated,
+        skipped,
+        inactive,
+        errors,
+        message: `Import complete. ${created} new accounts created, ${contactIdUpdated} contact IDs updated, ${skipped} already up-to-date, ${inactive} inactive/revoked skipped.`,
+      });
+    } catch (err: any) {
+      console.error("[CF Import] Fatal error:", err?.message);
+      res.status(500).json({ message: err?.message || "Import failed" });
+    }
+  });
+
   // Admin: backfill CF Contact IDs for enrolled members who are missing one
   app.post("/api/admin/cf/sync-contact-ids", requireAdmin, async (req: Request, res: Response) => {
     try {

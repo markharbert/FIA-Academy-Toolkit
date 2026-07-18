@@ -442,6 +442,49 @@ function ApiAccessToggleCard() {
   );
 }
 
+function ImportAllMembersButton() {
+  const { toast } = useToast();
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ message: string; created: number; contactIdUpdated: number; skipped: number; inactive: number; errors: number } | null>(null);
+
+  const handleImport = async () => {
+    setRunning(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/cf/import-all-members", { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Import failed");
+      setResult(data);
+      toast({ title: "Import complete", description: data.message });
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Button variant="outline" size="sm" onClick={handleImport} disabled={running} data-testid="button-import-all-members">
+        {running ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <Users className="h-3.5 w-3.5 mr-2" />}
+        {running ? "Importing… (this may take a minute)" : "Import All Members from ClickFunnels"}
+      </Button>
+      {result && (
+        <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs space-y-1">
+          <p className="font-medium">{result.message}</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
+            {result.created > 0 && <span className="text-green-700 dark:text-green-400">✓ {result.created} new accounts created</span>}
+            {result.contactIdUpdated > 0 && <span className="text-blue-700 dark:text-blue-400">✓ {result.contactIdUpdated} contact IDs updated</span>}
+            {result.skipped > 0 && <span>{result.skipped} already up-to-date</span>}
+            {result.inactive > 0 && <span>{result.inactive} inactive/revoked skipped</span>}
+            {result.errors > 0 && <span className="text-destructive">{result.errors} errors</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SyncContactIdsButton() {
   const { toast } = useToast();
   const [syncing, setSyncing] = useState(false);
@@ -1135,9 +1178,9 @@ function CfIntegrationTab() {
             <div className="flex gap-3 items-start">
               <span className="flex-shrink-0 h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 text-xs font-bold flex items-center justify-center">3</span>
               <div className="space-y-2 flex-1">
-                <p className="text-sm font-medium">Sync Contact IDs for existing members</p>
-                <p className="text-xs text-muted-foreground">The token refresh only works for members whose CF Contact ID is stored in our database. New members get it automatically from the webhook. For existing members, click the button below to pull their Contact IDs from CF now.</p>
-                <SyncContactIdsButton />
+                <p className="text-sm font-medium">Import all enrolled members from ClickFunnels</p>
+                <p className="text-xs text-muted-foreground">This pulls every active enrollment from CF, creates Toolkit accounts for members who don't have one yet, and saves their CF Contact ID so the token scheduler can reach them. Run this once now, then new members are handled automatically via webhooks.</p>
+                <ImportAllMembersButton />
               </div>
             </div>
           </div>
