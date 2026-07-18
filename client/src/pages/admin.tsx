@@ -528,16 +528,22 @@ function CfIntegrationTab() {
   const cfButtonUrl = `${appOrigin}/api/auth/cf-magic?email={{contact.email_address}}`;
   const btnStyle = `display:inline-block; background-color:${btnBg}; color:${btnColor}; padding:${paddingMap[btnPadding]}; border-radius:${borderRadiusMap[btnRadius]}; font-family:sans-serif; font-size:${btnFontSize}px; font-weight:600; text-decoration:none; text-align:center;${btnWidth === "full" ? " width:100%; box-sizing:border-box;" : ""}`;
   const embedCode = `<div${btnWidth === "full" ? "" : ' style="text-align:center"'}>
-  <a id="__atk_btn" href="${appOrigin}/api/auth/cf-magic" style="${btnStyle}">${btnText}</a>
+  <a id="__atk_btn" href="${appOrigin}/member-login" style="${btnStyle}">${btnText}</a>
   <span id="__atk_e" style="display:none;font-size:0;line-height:0">{{contact.email_address}}</span>
   <script>
   !function(){
-    var e=document.getElementById('__atk_e'),b=document.getElementById('__atk_btn');
-    if(!e||!b)return;
-    var m=(e.textContent||e.innerText||'').trim();
-    if(m&&m.indexOf('@')>-1&&m.indexOf('{{')<0){
-      b.href='${appOrigin}/api/auth/cf-magic?email='+encodeURIComponent(m);
+    var BASE='${appOrigin}',b=document.getElementById('__atk_btn'),eEl=document.getElementById('__atk_e');
+    if(!b||!eEl)return;
+    var em=(eEl.textContent||eEl.innerText||'').trim();
+    if(!em||em.indexOf('@')<0||em.indexOf('{{')>=0)return;
+    function issue(){
+      fetch(BASE+'/api/auth/cf-token-issue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em})})
+      .then(function(r){return r.ok?r.json():null})
+      .then(function(d){if(d&&d.token)b.href=BASE+'/cf-magic-login?t='+d.token})
+      .catch(function(){});
     }
+    issue();
+    setInterval(issue,270000);
   }();
   <\/script>
 </div>`;

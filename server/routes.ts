@@ -783,6 +783,81 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/auth/cf-token-issue — called by the embed-code JavaScript on the CF members page.
+  // Checks local DB enrollment (no CF API call), generates a 5-minute one-time token, returns JSON.
+  // CORS-enabled so the CF page's JS can call across origins.
+  const cfTokenIssueLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      const b = req.body as { email?: string };
+      return (b?.email || req.ip || "").toLowerCase();
+    },
+    handler: (_req: Request, res: Response) => {
+      res.status(429).json({ error: "rate_limited" });
+    },
+  });
+
+  const CF_TOKEN_CORS_RE = /^https?:\/\/([\w-]+\.)*(myclickfunnels|clickfunnels)\.com$/;
+
+  function setCfTokenCors(req: Request, res: Response) {
+    const origin = req.headers.origin || "";
+    if (CF_TOKEN_CORS_RE.test(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Max-Age", "86400");
+  }
+
+  // Handle CORS preflight
+  app.options("/api/auth/cf-token-issue", (req: Request, res: Response) => {
+    setCfTokenCors(req, res);
+    res.status(204).end();
+  });
+
+  app.post("/api/auth/cf-token-issue", cfTokenIssueLimiter, async (req: Request, res: Response) => {
+    setCfTokenCors(req, res);
+    const APP_BASE = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+    const rawEmail = ((req.body as any)?.email || "").trim().toLowerCase();
+
+    if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      return res.status(400).json({ error: "invalid_email" });
+    }
+
+    try {
+      // Use local DB only — no CF API call for perf & CF rate-limit safety
+      const user = await storage.getUserByEmail(rawEmail);
+      if (!user || !user.cfEnrolled || user.cfRevokedAt || user.isDisabled) {
+        return res.status(403).json({ error: "not_enrolled" });
+      }
+
+      // Per-email rate limit: max 20 tokens / hour (allows ~100 min of active browsing)
+      const since = new Date(Date.now() - 60 * 60 * 1000);
+      const recentCount = await storage.countRecentCfMagicRequests(rawEmail, since);
+      if (recentCount >= 20) {
+        return res.status(429).json({ error: "rate_limited" });
+      }
+
+      // Generate 5-minute token
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+      const ip = req.ip || req.socket?.remoteAddress || null;
+
+      await storage.createCfMagicToken({ tokenHash, userId: user.id, email: rawEmail, expiresAt, ipAddress: ip });
+
+      return res.json({ token: rawToken, expiresIn: 300 });
+    } catch (err: any) {
+      console.error("[CF Token Issue] error:", err?.message);
+      return res.status(500).json({ error: "server_error" });
+    }
+  });
+
   // POST /api/auth/cf-magic-redeem — validates token, creates session
   app.post("/api/auth/cf-magic-redeem", async (req: Request, res: Response) => {
     try {
