@@ -60,7 +60,7 @@ import {
   CheckCircle2, LogOut, LogIn, RefreshCw, Search, Mail, Eye, EyeOff, Info, Clock,
   Copy, ExternalLink, Webhook, UserCheck, UserX, UserMinus, Filter, Zap,
   Key, Youtube, MessageSquare, XCircle, Trash2, Bug, Lightbulb, X,
-  Upload, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
+  Upload, Folder, FolderPlus, FolderEdit, FolderMinus, FilePenLine, FileVideo,
   CircleAlert, RotateCw, UserCog, Activity, Workflow, Send, Plus, Pencil, Link, Smartphone, Megaphone, GripVertical,
   Bell, AlertTriangle, Star, Gift, Rocket, Sparkles, PartyPopper, Trophy, Heart, Flame, Tag, Calendar,
 
@@ -174,6 +174,7 @@ interface AdminUser {
   role?: string | null;
   themePreference?: string | null;
   emailVerifiedAt?: string | null;
+  timezone?: string | null;
 }
 
 interface UserAction {
@@ -2835,6 +2836,10 @@ export default function AdminPage() {
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [sessionDetailLoading, setSessionDetailLoading] = useState(false);
   
+  // Compact recent actions for the User Details side panel
+  const [panelActions, setPanelActions] = useState<UserAction[]>([]);
+  const [panelActionsLoading, setPanelActionsLoading] = useState(false);
+
   // User actions drawer
   const [actionsUserId, setActionsUserId] = useState<string | null>(null);
   const [actionsUser, setActionsUser] = useState<AdminUser | null>(null);
@@ -3090,7 +3095,15 @@ export default function AdminPage() {
 
   const handleUserClick = (userId: string) => {
     setSelectedUserId(userId);
+    setPanelActions([]);
     fetchUserDetails(userId);
+    // Load recent actions for the panel (IP, activity timeline)
+    setPanelActionsLoading(true);
+    fetch(`/api/admin/users/${userId}/actions?limit=20`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(data => setPanelActions(data.items ?? []))
+      .catch(() => {})
+      .finally(() => setPanelActionsLoading(false));
   };
   
   const fetchUserActions = async (userId: string, cursor?: string) => {
@@ -3756,10 +3769,8 @@ export default function AdminPage() {
                           <TableHead>User</TableHead>
                           <TableHead>Role</TableHead>
                           <TableHead>Membership</TableHead>
-                          <TableHead className="text-center">Videos</TableHead>
                           <TableHead className="text-center">KW Credits</TableHead>
                           <TableHead className="text-center">Projects</TableHead>
-                          <TableHead className="text-center">Tasks</TableHead>
                           <TableHead className="text-center">DMO (30d)</TableHead>
                           <TableHead className="text-center">Toolkit Login</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
@@ -3768,7 +3779,7 @@ export default function AdminPage() {
                       <TableBody>
                         {users.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                               No users found
                             </TableCell>
                           </TableRow>
@@ -3810,19 +3821,11 @@ export default function AdminPage() {
                                   </Badge>
                                 )}
                               </TableCell>
-                              <TableCell className="text-center font-medium">
-                                {u.totalVideos || 0}
-                              </TableCell>
                               <TableCell className="text-center text-sm font-medium">
                                 {u.keywordsCreditsThisMonth || 0}/{u.keywordsCreditsTotalUsed || 0}
                               </TableCell>
                               <TableCell className="text-center font-medium">
                                 {u.projectCount ?? 0}
-                              </TableCell>
-                              <TableCell className="text-center text-sm font-medium">
-                                <span title={`${u.tasksDoneCount ?? 0} completed out of ${u.taskCount ?? 0} total`}>
-                                  {u.tasksDoneCount ?? 0}/{u.taskCount ?? 0}
-                                </span>
                               </TableCell>
                               <TableCell className="text-center font-medium">
                                 <span title="DMO days logged in the last 30 days">
@@ -4554,28 +4557,13 @@ export default function AdminPage() {
               </div>
 
               {/* STATS GRID */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg border bg-card p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <FileVideo className="h-3.5 w-3.5" /> Video sessions
-                  </div>
-                  <div className="text-2xl font-semibold mt-1" data-testid="stat-sessions">{userDetails.sessionCount}</div>
-                </div>
-                <div className="rounded-lg border bg-card p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Key className="h-3.5 w-3.5" /> KW credits (mo / total)
-                  </div>
-                  <div className="text-2xl font-semibold mt-1" data-testid="stat-kw-credits">
-                    {u.keywordsCreditsThisMonth ?? 0}
-                    <span className="text-sm text-muted-foreground font-normal"> / {u.keywordsCreditsTotalUsed ?? 0}</span>
-                  </div>
-                </div>
+              <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-lg border bg-card p-3">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <LogIn className="h-3.5 w-3.5" /> Last login
                   </div>
                   <div className="text-sm font-medium mt-1">
-                    {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d, yyyy") : "Never"}
+                    {u.lastLoginAt ? format(new Date(u.lastLoginAt), "MMM d") : "Never"}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {u.lastLoginAt ? format(new Date(u.lastLoginAt), "h:mm a") : "—"}
@@ -4583,13 +4571,41 @@ export default function AdminPage() {
                 </div>
                 <div className="rounded-lg border bg-card p-3">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5" /> Account age
+                    <Folder className="h-3.5 w-3.5" /> Projects
+                  </div>
+                  <div className="text-2xl font-semibold mt-1">{u.projectCount ?? 0}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Activity className="h-3.5 w-3.5" /> DMO (30d)
+                  </div>
+                  <div className="text-2xl font-semibold mt-1">{u.dmoLast30Days ?? 0}<span className="text-sm font-normal text-muted-foreground">/30</span></div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Key className="h-3.5 w-3.5" /> KW credits
+                  </div>
+                  <div className="text-lg font-semibold mt-1" data-testid="stat-kw-credits">
+                    {u.keywordsCreditsThisMonth ?? 0}
+                    <span className="text-xs text-muted-foreground font-normal"> mo</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">{u.keywordsCreditsTotalUsed ?? 0} total</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <FileVideo className="h-3.5 w-3.5" /> Videos
+                  </div>
+                  <div className="text-2xl font-semibold mt-1" data-testid="stat-sessions">{userDetails.sessionCount}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" /> Member since
                   </div>
                   <div className="text-sm font-medium mt-1">
-                    {Math.floor((Date.now() - new Date(u.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days
+                    {format(new Date(u.createdAt), "MMM d")}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Since {format(new Date(u.createdAt), "MMM d, yyyy")}
+                    {format(new Date(u.createdAt), "yyyy")}
                   </div>
                 </div>
               </div>
@@ -4657,12 +4673,27 @@ export default function AdminPage() {
                       <span>{u.lastName}</span>
                     </div>
                   )}
+                  {u.timezone && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Time zone</span>
+                      <span className="text-right text-xs">{u.timezone}</span>
+                    </div>
+                  )}
                   {u.themePreference && (
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Theme</span>
                       <span className="capitalize">{u.themePreference}</span>
                     </div>
                   )}
+                  {(() => {
+                    const lastIp = panelActions.find(a => a.ip)?.ip;
+                    return lastIp ? (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">Last IP</span>
+                        <span className="font-mono text-xs">{lastIp}</span>
+                      </div>
+                    ) : null;
+                  })()}
                   {u.disabledAt && (
                     <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Disabled at</span>
@@ -4736,6 +4767,39 @@ export default function AdminPage() {
                     ))}
                     {userDetails.sessionCount > 5 && (
                       <p className="text-xs text-muted-foreground pt-1">...and {userDetails.sessionCount - 5} more</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* RECENT ACTIVITY TIMELINE */}
+              <div className="rounded-lg border p-4 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-violet-500" />
+                  <h3 className="font-semibold text-sm">Recent Activity</h3>
+                  {panelActionsLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground ml-auto" />}
+                </div>
+                {!panelActionsLoading && panelActions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {panelActions.slice(0, 10).map((a) => {
+                      const { Icon, tone } = getActionIconAndTone(a.actionType);
+                      return (
+                        <div key={a.id} className="flex items-start gap-2 text-xs">
+                          <Icon className={cn("h-3.5 w-3.5 mt-0.5 shrink-0", tone)} />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-foreground">{a.actionLabel || a.actionType.replace(/_/g, " ")}</span>
+                            <div className="flex items-center gap-2 text-muted-foreground mt-0.5">
+                              <span>{format(new Date(a.createdAt), "MMM d, h:mm a")}</span>
+                              {a.ip && <span className="font-mono">{a.ip}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {panelActions.length > 10 && (
+                      <p className="text-xs text-muted-foreground pt-1">Showing 10 of {panelActions.length}+ — open Action History for full log</p>
                     )}
                   </div>
                 )}
