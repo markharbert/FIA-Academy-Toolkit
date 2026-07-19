@@ -337,6 +337,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
               <button id="ready-layout-pip" class="layout-btn active" onclick="setScreenLayout('pip')">Picture-in-Picture</button>
               <button id="ready-layout-sbs" class="layout-btn" onclick="setScreenLayout('sidebyside')">Side by Side</button>
             </div>
+            <!-- PiP camera size — only shown in PiP mode -->
+            <div id="ready-pip-size-row" class="layout-row" style="display:none">
+              <button id="ready-pip-large" class="layout-btn active" onclick="setPipSize('large')">Large</button>
+              <button id="ready-pip-small" class="layout-btn" onclick="setPipSize('small')">Small</button>
+              <button id="ready-pip-circle" class="layout-btn" onclick="setPipSize('circle')">Circle</button>
+            </div>
             <button class="cam-btn cam-btn-dark" id="ready-stop-share-btn" style="display:none" onclick="stopScreenShare()">
               &#x2715; Stop Screen Sharing
             </button>
@@ -359,6 +365,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
             <div id="rec-layout-row" class="layout-row" style="display:none">
               <button id="rec-layout-pip" class="layout-btn active" onclick="setScreenLayout('pip')">Picture-in-Picture</button>
               <button id="rec-layout-sbs" class="layout-btn" onclick="setScreenLayout('sidebyside')">Side by Side</button>
+            </div>
+            <!-- PiP camera size — only shown in PiP mode -->
+            <div id="rec-pip-size-row" class="layout-row" style="display:none">
+              <button id="rec-pip-large" class="layout-btn active" onclick="setPipSize('large')">Large</button>
+              <button id="rec-pip-small" class="layout-btn" onclick="setPipSize('small')">Small</button>
+              <button id="rec-pip-circle" class="layout-btn" onclick="setPipSize('circle')">Circle</button>
             </div>
             <button id="rec-stop-share-btn" class="cam-btn cam-btn-dark" style="display:none" onclick="stopScreenShare()">
               &#x2715; Remove Screen Share
@@ -569,6 +581,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     // Screen sharing state
     var screenLayout='pip'; // 'pip' | 'sidebyside' — layout when screen is shared
+    var pipSize='large'; // 'large' | 'small' | 'circle' — camera overlay size in PiP mode
     var screenStream=null,compositeStream=null,compositeAnimId=null,screenReady=false,compositing=false;
     var COMPOSITE_W=1920,COMPOSITE_H=1080;
 
@@ -1077,6 +1090,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         if(stopShareBtn)stopShareBtn.style.display='none';
       }
       updateLayoutButtons();
+      updatePipSizeButtons();
     }
 
     // Switch PiP / Side-by-Side layout while screen is shared (works before or during recording)
@@ -1084,7 +1098,15 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       if(screenLayout===layout)return;
       screenLayout=layout;
       updateLayoutButtons();
+      updatePipSizeButtons();
       // frame() reads screenLayout on every tick — no compositing restart needed
+    }
+
+    // Change the camera overlay size (only has visual effect in PiP mode)
+    function setPipSize(size){
+      if(pipSize===size)return;
+      pipSize=size;
+      updatePipSizeButtons();
     }
 
     // Sync active state on both the ready-section and recording-section layout buttons
@@ -1096,6 +1118,22 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         var rc=document.getElementById('rec-layout-'+id);
         if(rb)rb.className='layout-btn'+(active?' active':'');
         if(rc)rc.className='layout-btn'+(active?' active':'');
+      });
+    }
+
+    // Sync active state on pip-size buttons; show row only when PiP is the active layout
+    function updatePipSizeButtons(){
+      var showSizeRow=screenReady&&screenLayout==='pip';
+      var rr=document.getElementById('ready-pip-size-row');
+      var rc2=document.getElementById('rec-pip-size-row');
+      if(rr)rr.style.display=showSizeRow?'flex':'none';
+      if(rc2)rc2.style.display=showSizeRow?'flex':'none';
+      ['large','small','circle'].forEach(function(s){
+        var active=pipSize===s;
+        var rb2=document.getElementById('ready-pip-'+s);
+        var rc3=document.getElementById('rec-pip-'+s);
+        if(rb2)rb2.className='layout-btn'+(active?' active':'');
+        if(rc3)rc3.className='layout-btn'+(active?' active':'');
       });
     }
 
@@ -1162,25 +1200,38 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
             // PiP: screen full-frame + camera overlay bottom-right
             drawCover(ctx,screenVidHidden,0,0,COMPOSITE_W,COMPOSITE_H,false);
 
-            // 26% of canvas width — compact but sharp; more pixels-per-face than before
-            var pipW=Math.round(COMPOSITE_W*0.26);
-            var pipH=Math.round(pipW*9/16);
-            var pipX=COMPOSITE_W-pipW-24;
-            var pipY=COMPOSITE_H-pipH-24;
-            var r=10;
-
-            ctx.save();
-            roundedRectPath(ctx,pipX,pipY,pipW,pipH,r);
-            ctx.clip();
-            drawCover(ctx,camPreview,pipX,pipY,pipW,pipH,true);
-            ctx.restore();
-
-            ctx.save();
-            roundedRectPath(ctx,pipX,pipY,pipW,pipH,r);
-            ctx.strokeStyle='rgba(255,255,255,0.9)';
-            ctx.lineWidth=3;
-            ctx.stroke();
-            ctx.restore();
+            if(pipSize==='circle'){
+              // Circle overlay — small circle in bottom-right corner
+              var cr=Math.round(COMPOSITE_H*0.13);
+              var cx=COMPOSITE_W-cr-28;
+              var cy=COMPOSITE_H-cr-28;
+              ctx.save();
+              ctx.beginPath();ctx.arc(cx,cy,cr,0,Math.PI*2);ctx.clip();
+              drawCover(ctx,camPreview,cx-cr,cy-cr,cr*2,cr*2,true);
+              ctx.restore();
+              ctx.save();
+              ctx.beginPath();ctx.arc(cx,cy,cr,0,Math.PI*2);
+              ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.stroke();
+              ctx.restore();
+            }else{
+              // Large (26%) or Small (16%) rounded-rect overlay
+              var pipW=Math.round(COMPOSITE_W*(pipSize==='small'?0.16:0.26));
+              var pipH=Math.round(pipW*9/16);
+              var pipX=COMPOSITE_W-pipW-24;
+              var pipY=COMPOSITE_H-pipH-24;
+              var r=10;
+              ctx.save();
+              roundedRectPath(ctx,pipX,pipY,pipW,pipH,r);
+              ctx.clip();
+              drawCover(ctx,camPreview,pipX,pipY,pipW,pipH,true);
+              ctx.restore();
+              ctx.save();
+              roundedRectPath(ctx,pipX,pipY,pipW,pipH,r);
+              ctx.strokeStyle='rgba(255,255,255,0.9)';
+              ctx.lineWidth=3;
+              ctx.stroke();
+              ctx.restore();
+            }
           }else{
             // No screen yet (or screen stopped): camera full-frame so recording continues
             drawCover(ctx,camPreview,0,0,COMPOSITE_W,COMPOSITE_H,true);
@@ -1318,6 +1369,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         if(recMsg)recMsg.textContent='Recording \u2014 camera only. Add screen sharing below.';
       }
       updateLayoutButtons();
+      updatePipSizeButtons();
     }
 
     // Warn before accidental close while recording or uploading
