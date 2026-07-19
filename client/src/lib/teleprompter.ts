@@ -342,6 +342,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
               <button id="ready-pip-large" class="layout-btn active" onclick="setPipSize('large')">Large</button>
               <button id="ready-pip-small" class="layout-btn" onclick="setPipSize('small')">Small</button>
               <button id="ready-pip-circle" class="layout-btn" onclick="setPipSize('circle')">Circle</button>
+              <button id="ready-pip-none" class="layout-btn" onclick="setPipSize('none')">None</button>
             </div>
             <button class="cam-btn cam-btn-dark" id="ready-stop-share-btn" style="display:none" onclick="stopScreenShare()">
               &#x2715; Stop Screen Sharing
@@ -371,6 +372,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
               <button id="rec-pip-large" class="layout-btn active" onclick="setPipSize('large')">Large</button>
               <button id="rec-pip-small" class="layout-btn" onclick="setPipSize('small')">Small</button>
               <button id="rec-pip-circle" class="layout-btn" onclick="setPipSize('circle')">Circle</button>
+              <button id="rec-pip-none" class="layout-btn" onclick="setPipSize('none')">None</button>
             </div>
             <button id="rec-stop-share-btn" class="cam-btn cam-btn-dark" style="display:none" onclick="stopScreenShare()">
               &#x2715; Remove Screen Share
@@ -1128,7 +1130,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       var rc2=document.getElementById('rec-pip-size-row');
       if(rr)rr.style.display=showSizeRow?'flex':'none';
       if(rc2)rc2.style.display=showSizeRow?'flex':'none';
-      ['large','small','circle'].forEach(function(s){
+      ['large','small','circle','none'].forEach(function(s){
         var active=pipSize===s;
         var rb2=document.getElementById('ready-pip-'+s);
         var rc3=document.getElementById('rec-pip-'+s);
@@ -1200,7 +1202,9 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
             // PiP: screen full-frame + camera overlay bottom-right
             drawCover(ctx,screenVidHidden,0,0,COMPOSITE_W,COMPOSITE_H,false);
 
-            if(pipSize==='circle'){
+            if(pipSize==='none'){
+              // Screen only — no camera overlay
+            }else if(pipSize==='circle'){
               // Circle overlay — small circle in bottom-right corner
               var cr=Math.round(COMPOSITE_H*0.13);
               var cx=COMPOSITE_W-cr-28;
