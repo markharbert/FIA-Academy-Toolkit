@@ -411,7 +411,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
        TELEPROMPTER LOGIC
     ══════════════════════════════════════════ */
     var SPEEDS=[6,12,20,28,38,50,65,85];
-    var playing=false,speed=SPEEDS[2],lastTime=null,raf=null,scrollAccum=0,cdTimer=null;
+    var playing=false,hasStarted=false,speed=SPEEDS[2],lastTime=null,raf=null,scrollAccum=0,cdTimer=null;
     var scroller=document.getElementById('scroller');
     var playBtn=document.getElementById('playBtn');
     var recCdEl=document.getElementById('rec-countdown');
@@ -462,7 +462,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       recCdActive=false;
     }
     function resetScroll(){
-      playing=false;if(raf){cancelAnimationFrame(raf);raf=null;}
+      playing=false;hasStarted=false;if(raf){cancelAnimationFrame(raf);raf=null;}
       hideCountdown();lastTime=null;scrollAccum=0;scroller.scrollTop=0;playBtn.textContent='▶ Play';
     }
     function startCountdown(onDone,label){
@@ -480,7 +480,9 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       playing=!playing;
       if(playing){
         playBtn.textContent='⏸ Pause';if(raf){cancelAnimationFrame(raf);raf=null;}
-        startCountdown(function(){if(playing){lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);}},'Scroll starts in…');
+        if(!hasStarted){
+          startCountdown(function(){if(playing){hasStarted=true;lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);}},'Scroll starts in…');
+        }else{lastTime=null;raf=requestAnimationFrame(tick);}
       }else{playBtn.textContent='▶ Play';if(raf){cancelAnimationFrame(raf);raf=null;}hideCountdown();}
     }
     function tick(now){
@@ -824,7 +826,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         // Phase 2: silent 5-second pause, then scroll starts
         setTimeout(function(){
           if(!playing){
-            playing=true;playBtn.textContent='⏸ Pause';
+            playing=true;hasStarted=true;playBtn.textContent='⏸ Pause';
             lastTime=null;scrollAccum=0;raf=requestAnimationFrame(tick);
           }
         },5000);
