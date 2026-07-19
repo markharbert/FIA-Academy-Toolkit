@@ -188,7 +188,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     /* ── Canvas composite (screen share preview) ── */
     #canvas-composite{display:none;position:absolute;inset:0;width:100%;height:100%}
     /* ── Screen sharing indicator badge ── */
-    #screen-indicator{position:absolute;top:12px;left:14px;display:none;align-items:center;gap:5px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;color:#fff;background:rgba(59,130,246,.9);padding:4px 10px 4px 8px;border-radius:999px;box-shadow:0 2px 8px rgba(59,130,246,.5);z-index:6}
+    #screen-indicator{position:absolute;bottom:12px;left:14px;display:none;align-items:center;gap:5px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;color:#fff;background:rgba(59,130,246,.9);padding:4px 10px 4px 8px;border-radius:999px;box-shadow:0 2px 8px rgba(59,130,246,.5);z-index:6}
     /* ── Ready section sub-views ── */
     .ready-sub{display:flex;flex-direction:column;gap:10px}
   </style>
