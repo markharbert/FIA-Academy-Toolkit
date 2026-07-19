@@ -1336,7 +1336,7 @@ export default function ProjectsPage() {
     mutationFn: async ({ projectId, title, date }: { projectId: string; title: string; date: string }) => {
       const res = await apiRequest("POST", `/api/projects/${projectId}/tasks`, {
         title,
-        dueDate: `${date}T12:00:00.000Z`,
+        dueDate: `${date}T00:00:00.000Z`,
         status: "todo",
       });
       return res.json();
@@ -1351,7 +1351,7 @@ export default function ProjectsPage() {
   const rescheduleTaskMutation = useMutation({
     mutationFn: async ({ task, date }: { task: OpenTask; date: string }) => {
       await apiRequest("PATCH", `/api/tasks/${task.id}`, {
-        dueDate: `${date}T12:00:00.000Z`,
+        dueDate: `${date}T00:00:00.000Z`,
       });
     },
     onSuccess: () => {

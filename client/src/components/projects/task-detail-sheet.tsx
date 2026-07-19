@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { RichTextEditor } from "./rich-text-editor";
 import { TaskCommentsActivity } from "./task-comments-activity";
 import { useAuth } from "@/lib/auth";
+import { dueDateKey, formatInTz, safeTimezone, dueHasTime, localDateTimeToUTC } from "@shared/datetime";
 import { CalendarIcon, Trash2, X, Plus, Link2, ExternalLink, ListChecks, Flag, CheckCircle2, ChevronLeft, CornerDownRight, Paperclip, Download, FileImage, FileText, Loader2 } from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -91,6 +92,7 @@ interface Props {
 export function TaskDetailSheet({ project, columns = [], task, parentTask, subtasks, open, onOpenChange, onOpenTask }: Props) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const userTz = safeTimezone(user?.timezone);
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("todo");
@@ -386,7 +388,15 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
                   })()}
                   {dueDate && (
                     <Badge variant="secondary" className={`${hdr.chip} text-[10px]`}>
-                      <CalendarIcon className="h-2.5 w-2.5 mr-1" /> {dueDate.toLocaleDateString()} · {dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      <CalendarIcon className="h-2.5 w-2.5 mr-1" />
+                      {(() => {
+                        const key = dueDateKey(dueDate, userTz);
+                        const [y, m, d] = key.split("-").map(Number);
+                        const dateStr = new Date(y, m - 1, d).toLocaleDateString();
+                        return dueHasTime(dueDate)
+                          ? `${dateStr} · ${formatInTz(dueDate, userTz, "h:mm a")}`
+                          : dateStr;
+                      })()}
                     </Badge>
                   )}
                   {subtasks.length > 0 && (
@@ -486,46 +496,57 @@ export function TaskDetailSheet({ project, columns = [], task, parentTask, subta
                   <Button variant="outline" size="sm" className="mt-1 h-8 w-full justify-start text-xs font-normal" data-testid="button-due-date">
                     <CalendarIcon className="h-3 w-3 mr-1.5 shrink-0" />
                     <span className="truncate">
-                      {dueDate
-                        ? `${dueDate.toLocaleDateString()} · ${dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                        : "None"}
+                      {dueDate ? (() => {
+                        const key = dueDateKey(dueDate, userTz);
+                        const [y, m, d] = key.split("-").map(Number);
+                        const dateStr = new Date(y, m - 1, d).toLocaleDateString();
+                        return dueHasTime(dueDate)
+                          ? `${dateStr} · ${formatInTz(dueDate, userTz, "h:mm a")}`
+                          : dateStr;
+                      })() : "None"}
                     </span>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-auto p-0">
                   <Calendar
                     mode="single"
-                    selected={dueDate ?? undefined}
+                    selected={dueDate ? (() => {
+                      const key = dueDateKey(dueDate, userTz);
+                      const [y, m, d] = key.split("-").map(Number);
+                      return new Date(y, m - 1, d);
+                    })() : undefined}
                     onSelect={(d) => {
                       if (!d) {
                         setDueDate(null);
                         updateMutation.mutate({ dueDate: null });
                         return;
                       }
-                      const next = new Date(d);
-                      if (dueDate) {
-                        next.setHours(dueDate.getHours(), dueDate.getMinutes(), 0, 0);
+                      const pickedKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                      if (dueDate && dueHasTime(dueDate)) {
+                        const prevTime = formatInTz(dueDate, userTz, "HH:mm").split(":").map(Number);
+                        const iso = localDateTimeToUTC(pickedKey, prevTime[0], prevTime[1], userTz);
+                        setDueDate(new Date(iso));
+                        updateMutation.mutate({ dueDate: iso });
                       } else {
-                        next.setHours(9, 0, 0, 0);
+                        const iso = `${pickedKey}T00:00:00.000Z`;
+                        setDueDate(new Date(iso));
+                        updateMutation.mutate({ dueDate: iso });
                       }
-                      setDueDate(next);
-                      updateMutation.mutate({ dueDate: next.toISOString() });
                     }}
                   />
                   <div className="p-2 border-t flex items-center gap-2">
                     <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold shrink-0">Time</Label>
                     <Input
                       type="time"
-                      value={dueDate ? `${String(dueDate.getHours()).padStart(2, "0")}:${String(dueDate.getMinutes()).padStart(2, "0")}` : ""}
+                      value={dueDate ? formatInTz(dueDate, userTz, "HH:mm") : ""}
                       onChange={(e) => {
                         const v = e.target.value;
-                        if (!v) return;
+                        if (!v || !dueDate) return;
                         const [h, m] = v.split(":").map(Number);
-                        const base = dueDate ? new Date(dueDate) : new Date();
-                        if (!dueDate) base.setSeconds(0, 0);
-                        base.setHours(h, m, 0, 0);
-                        setDueDate(base);
-                        updateMutation.mutate({ dueDate: base.toISOString() });
+                        const key = dueDateKey(dueDate, userTz);
+                        const iso = localDateTimeToUTC(key, h, m, userTz);
+                        setDueDate(new Date(iso));
+                        updateMutation.mutate({ dueDate: iso });
                       }}
                       disabled={!dueDate}
                       className="h-7 text-xs flex-1"

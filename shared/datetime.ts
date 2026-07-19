@@ -1,4 +1,4 @@
-import { formatInTimeZone, toZonedTime } from "date-fns-tz";
+import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
 
 export const DEFAULT_TIMEZONE = "America/New_York";
 
@@ -129,4 +129,14 @@ export function prettyTimezoneLabel(tz: string): string {
   } catch {
     return tz;
   }
+}
+
+/**
+ * Given a YYYY-MM-DD key + hours + minutes in a specific IANA timezone, return the UTC ISO string.
+ * Use this when saving a date+time that the user picked in their profile timezone.
+ */
+export function localDateTimeToUTC(dateKey: string, hours: number, minutes: number, tz: string): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const localDate = new Date(y, m - 1, d, hours, minutes, 0, 0);
+  return fromZonedTime(localDate, safeTimezone(tz)).toISOString();
 }
