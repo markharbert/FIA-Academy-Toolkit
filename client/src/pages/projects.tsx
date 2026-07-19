@@ -18,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { dayDiffInTz, dueDateKey as dueDateKeyInTz, dueHasTime, formatInTz } from "@shared/datetime";
-import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText, Upload, ExternalLink } from "lucide-react";
+import { Briefcase, Plus, MoreVertical, Archive, ArchiveRestore, Trash2, ChevronRight, ChevronLeft, CalendarClock, CalendarDays, CircleCheck, CircleDot, Loader2, Pencil, LayoutGrid, List, Flame, Clock, AlertTriangle, X, ListChecks, Inbox, Layers, Copy, FileText, Upload, ExternalLink, Globe2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -1640,7 +1640,17 @@ export default function ProjectsPage() {
           <AllTasksList tasks={allTasks} isLoading={tasksLoading} tz={user?.timezone} onTaskClick={setListTask} />
         ) : topTab === "calendar" ? (
           <>
-            <CalendarSync />
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+              <Globe2 className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Dates reflect your timezone:{" "}
+                <strong className="text-foreground font-medium">{user?.timezone || "America/New_York"}</strong>
+              </span>
+              <span className="text-muted-foreground/40 mx-0.5">·</span>
+              <Link href="/account" className="text-indigo-400 hover:text-indigo-300 transition-colors underline-offset-2 hover:underline">
+                Change in Account settings
+              </Link>
+            </div>
             <TasksCalendar
               tasks={calendarTasks}
               isLoading={tasksLoading}
@@ -1655,6 +1665,9 @@ export default function ProjectsPage() {
               }}
               unscheduledTasks={calendarUnscheduledTasks}
             />
+            <div className="mt-4">
+              <CalendarSync />
+            </div>
           </>
         ) : (
           <TemplatesTab
