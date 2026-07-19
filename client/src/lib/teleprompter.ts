@@ -1171,7 +1171,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     function stopCompositing(){
       compositing=false;
-      if(compositeAnimId){cancelAnimationFrame(compositeAnimId);compositeAnimId=null;}
+      if(compositeAnimId){clearInterval(compositeAnimId);compositeAnimId=null;}
     }
 
     function startCompositing(){
@@ -1262,10 +1262,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           }
         }
 
-        compositeAnimId=requestAnimationFrame(frame);
       }
 
-      compositeAnimId=requestAnimationFrame(frame);
+      // Use setInterval instead of requestAnimationFrame so compositing continues
+      // at full speed even when the user switches browser tabs (rAF is throttled in
+      // background tabs; setInterval is not throttled when MediaRecorder is active).
+      compositeAnimId=setInterval(frame,1000/30);
     }
 
     // ── Screen share request / teardown ───────────────────────────────────────
