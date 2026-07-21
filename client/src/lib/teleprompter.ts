@@ -1487,6 +1487,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
   return html;
 }
 
+let _teleprompterWin: Window | null = null;
+
 export function openTeleprompter(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): boolean {
   const cleaned = opts.sections.filter((s) => s.text && s.text.trim());
   if (cleaned.length === 0) return false;
@@ -1509,8 +1511,13 @@ export function openTeleprompter(opts: { title: string; sections: TeleprompterSe
     "status=no",
     "noopener=no",
   ].join(",");
-  const tw = window.open("", "teleprompter_window", features);
+  // Always open a completely fresh window so scripts re-execute cleanly
+  if (_teleprompterWin && !_teleprompterWin.closed) {
+    _teleprompterWin.close();
+  }
+  const tw = window.open("", "_blank", features);
   if (!tw) return false;
+  _teleprompterWin = tw;
   try {
     tw.resizeTo(twWidth, twHeight);
     tw.moveTo(twLeft, twTop);
