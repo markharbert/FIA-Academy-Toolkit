@@ -54,7 +54,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       padding:8px 16px;background:#0a0a0a;border-top:1px solid #1a1a1a;
     }
     /* ── Topic title (top of right column) ── */
-    #cam-title{flex-shrink:0;font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em;padding:5px 12px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
+    #cam-title{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px 5px 12px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
+    #cam-title-text{font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em;min-width:0}
+    #cam-close-btn{flex-shrink:0;font-family:Arial,sans-serif;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;border:1px solid rgba(239,68,68,.45);cursor:pointer;background:rgba(239,68,68,.12);color:rgba(239,68,68,.85);transition:.15s;line-height:1.4;white-space:nowrap}
+    #cam-close-btn:hover{background:rgba(239,68,68,.28);color:#fca5a5;border-color:rgba(239,68,68,.75)}
     #speedWrap{display:flex;flex-direction:column;align-items:center;gap:3px}
     #speedLabel{font-family:Arial,sans-serif;font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
     #speedSlider{width:100px;cursor:pointer;accent-color:#fff;height:4px;border-radius:2px}
@@ -238,7 +241,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     <!-- Right: camera + recording -->
     <div id="camera-panel">
       <!-- Topic title -->
-      <div id="cam-title">${esc(title)}</div>
+      <div id="cam-title">
+        <span id="cam-title-text">${esc(title)}</span>
+        <button id="cam-close-btn" onclick="closeWithConfirm()">✕ Close</button>
+      </div>
       <!-- Format picker -->
       <div id="format-picker">
         <button class="fmt-btn active" id="fmt-btn-landscape" onclick="setFormat('landscape')" title="YouTube · Facebook · 16:9">
@@ -1421,7 +1427,15 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       updatePipSizeButtons();
     }
 
-    // Always confirm before closing the popup window
+    function closeWithConfirm(){
+      var msg="Are you sure you want to close the teleprompter?";
+      if(camState==='recording')msg="You are still recording! Closing will discard this take. Close anyway?";
+      else if(camState==='uploading')msg="Your video is still uploading. Closing will stop the save. Close anyway?";
+      else if(pollTimer!==null)msg="Your video is still being prepared for download. Close anyway?";
+      else if(hasUnsaved)msg="You have a recording that has not been saved yet. Close anyway?";
+      if(window.confirm(msg))window.close();
+    }
+    // Also intercept the browser X when user has already interacted with page
     window.addEventListener('beforeunload',function(e){
       e.preventDefault();e.returnValue='';
     });
