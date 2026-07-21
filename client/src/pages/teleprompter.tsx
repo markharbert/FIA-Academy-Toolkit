@@ -1755,9 +1755,9 @@ export default function TeleprompterPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Close teleprompter confirmation */}
+      {/* Close teleprompter confirmation — must stack above the z-[9999] teleprompter overlay */}
       <AlertDialog open={showCloseTeleprompterDialog} onOpenChange={(open) => { if (!open) setShowCloseTeleprompterDialog(false); }}>
-        <AlertDialogContent>
+        <AlertDialogContent className="z-[10001]" overlayClassName="z-[10000]">
           <AlertDialogHeader>
             <AlertDialogTitle>Close the teleprompter?</AlertDialogTitle>
             <AlertDialogDescription>
