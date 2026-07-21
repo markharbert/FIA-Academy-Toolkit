@@ -1197,9 +1197,9 @@ export default function TeleprompterPage() {
                             <p className="text-sm font-medium truncate flex items-center gap-2" data-testid={`recording-title-${rec.id}`}>
                               {rec.title || "Untitled Take"}
                               {isProcessing && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-red-500 animate-pulse" data-testid={`status-processing-${rec.id}`}>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                                  Processing…
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-500 animate-pulse" data-testid={`status-processing-${rec.id}`}>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Processing for download…
                                 </span>
                               )}
                               {isFailed && (
@@ -1268,10 +1268,12 @@ export default function TeleprompterPage() {
                                 {isProcessing || isFailed ? (
                                   <button
                                     disabled
-                                    className="p-2 rounded-md text-emerald-500 opacity-30 cursor-not-allowed"
+                                    className="p-2 rounded-md text-emerald-500 opacity-40 cursor-not-allowed"
                                     data-testid={`button-download-recording-${rec.id}`}
                                   >
-                                    <Download className="h-4 w-4" />
+                                    {isProcessing
+                                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                                      : <Download className="h-4 w-4" />}
                                   </button>
                                 ) : (
                                   <a
