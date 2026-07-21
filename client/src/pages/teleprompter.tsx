@@ -225,6 +225,7 @@ export default function TeleprompterPage() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [showDirtyDialog, setShowDirtyDialog] = useState(false);
   const [dirtyDialogAction, setDirtyDialogAction] = useState<(() => void) | null>(null);
+  const [showCloseTeleprompterDialog, setShowCloseTeleprompterDialog] = useState(false);
 
   // Set the stream URL directly — the browser handles range requests natively,
   // which works for any file size without loading into memory first.
@@ -1368,7 +1369,7 @@ export default function TeleprompterPage() {
                 <span className="text-white/40 text-xs select-none">Teleprompter — drag to reposition</span>
               </div>
               <button
-                onClick={() => { if (modalSrc) URL.revokeObjectURL(modalSrc); setModalSrc(null); }}
+                onClick={() => setShowCloseTeleprompterDialog(true)}
                 onMouseDown={(e) => e.stopPropagation()}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
                 data-testid="button-close-teleprompter-modal"
@@ -1749,6 +1750,37 @@ export default function TeleprompterPage() {
               data-testid="button-dirty-discard"
             >
               Discard changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Close teleprompter confirmation */}
+      <AlertDialog open={showCloseTeleprompterDialog} onOpenChange={(open) => { if (!open) setShowCloseTeleprompterDialog(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close the teleprompter?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure? Any unsaved recording or progress may be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setShowCloseTeleprompterDialog(false)}
+              data-testid="button-close-teleprompter-cancel"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowCloseTeleprompterDialog(false);
+                if (modalSrc) URL.revokeObjectURL(modalSrc);
+                setModalSrc(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-close-teleprompter-confirm"
+            >
+              Yes, close
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
