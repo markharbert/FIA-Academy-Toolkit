@@ -54,21 +54,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       padding:8px 16px;background:#0a0a0a;border-top:1px solid #1a1a1a;
     }
     /* ── Topic title (top of right column) ── */
-    #cam-title{flex-shrink:0;font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em;padding:5px 44px 5px 12px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
-    /* ── Window close button (very top right of the window) ── */
-    #win-close-btn{position:fixed;top:5px;right:8px;z-index:9000;width:24px;height:24px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);font-family:Arial,sans-serif;font-size:13px;font-weight:700;line-height:24px;text-align:center;padding:0;transition:.15s}
-    #win-close-btn:hover{background:rgba(239,68,68,.85);color:#fff}
-    /* ── In-window close confirmation dialog ── */
-    #cc-overlay{display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.7);align-items:center;justify-content:center}
-    #cc-overlay.vis{display:flex}
-    #cc-card{background:#181818;border:1px solid #2e2e2e;border-radius:14px;padding:24px 28px;max-width:400px;width:90%;text-align:center;font-family:Arial,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.6)}
-    #cc-title{font-size:16px;font-weight:700;color:#fff;margin-bottom:8px}
-    #cc-msg{font-size:13px;color:rgba(255,255,255,.65);line-height:1.55;margin-bottom:20px}
-    #cc-actions{display:flex;gap:10px;justify-content:center}
-    #cc-cancel{font-family:Arial,sans-serif;font-size:13px;font-weight:700;padding:8px 20px;border-radius:999px;border:1px solid #3a3a3a;cursor:pointer;background:transparent;color:rgba(255,255,255,.75);transition:.15s}
-    #cc-cancel:hover{background:rgba(255,255,255,.08);color:#fff}
-    #cc-confirm{font-family:Arial,sans-serif;font-size:13px;font-weight:700;padding:8px 20px;border-radius:999px;border:none;cursor:pointer;background:#dc2626;color:#fff;transition:.15s}
-    #cc-confirm:hover{background:#ef4444}
+    #cam-title{flex-shrink:0;font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em;padding:5px 12px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
     #speedWrap{display:flex;flex-direction:column;align-items:center;gap:3px}
     #speedLabel{font-family:Arial,sans-serif;font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
     #speedSlider{width:100px;cursor:pointer;accent-color:#fff;height:4px;border-radius:2px}
@@ -1439,29 +1425,9 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     // "Leave site?" confirmation. NOTE: Chrome only displays this dialog if
     // the user has clicked/typed inside the window at least once (security
     // policy, cannot be bypassed by any website).
-    var _buHandler=function(e){e.preventDefault();e.returnValue='';};
-    window.addEventListener('beforeunload',_buHandler);
-
-    // In-window close confirmation (immune to popup/iframe dialog blocking)
-    function showCloseConfirm(){
-      var m="Are you sure you want to close the teleprompter?";
-      if(camState==='recording')m="You are still recording. Closing now will discard this take.";
-      else if(camState==='uploading')m="Your video is still uploading. Closing will stop the save.";
-      else if(pollTimer!==null)m="Your video is still being prepared for download.";
-      else if(hasUnsaved)m="You have a recording that has not been saved yet.";
-      document.getElementById('cc-msg').textContent=m;
-      document.getElementById('cc-overlay').classList.add('vis');
-    }
-    function hideCloseConfirm(){
-      document.getElementById('cc-overlay').classList.remove('vis');
-    }
-    function confirmCloseWindow(){
-      // User already confirmed — remove the beforeunload guard so the
-      // browser does not show a second "Leave site?" dialog
-      window.removeEventListener('beforeunload',_buHandler);
-      hideCloseConfirm();
-      window.close();
-    }
+    window.addEventListener('beforeunload',function(e){
+      e.preventDefault();e.returnValue='';
+    });
 
     // Check MediaRecorder API support
     if(typeof MediaRecorder==='undefined'){
@@ -1471,21 +1437,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     // Boot
     setCamState('idle');
   <\/script>
-
-  <!-- ── Window close button (very top right) ── -->
-  <button id="win-close-btn" onclick="showCloseConfirm()" title="Close teleprompter">✕</button>
-
-  <!-- ── In-window close confirmation ── -->
-  <div id="cc-overlay">
-    <div id="cc-card">
-      <div id="cc-title">Close teleprompter?</div>
-      <div id="cc-msg">Are you sure you want to close the teleprompter?</div>
-      <div id="cc-actions">
-        <button id="cc-cancel" onclick="hideCloseConfirm()">Cancel</button>
-        <button id="cc-confirm" onclick="confirmCloseWindow()">Yes, close</button>
-      </div>
-    </div>
-  </div>
 
 </body>
 </html>`;
