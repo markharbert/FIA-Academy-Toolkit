@@ -58,18 +58,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     /* ── Window-level close button (top-right, above everything) ── */
     #win-close-btn{position:fixed;top:8px;right:10px;z-index:8888;background:rgba(255,255,255,.07);border:none;cursor:pointer;color:rgba(255,255,255,.35);width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;transition:.15s;line-height:0}
     #win-close-btn:hover{background:rgba(239,68,68,.2);color:#f87171}
-    /* ── Close confirmation dialog ── */
-    #cc-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);align-items:center;justify-content:center}
-    #cc-overlay.vis{display:flex}
-    #cc-box{background:#1c1c1c;border:1px solid #333;border-radius:14px;padding:24px 22px 20px;max-width:280px;width:88%;text-align:center;font-family:Arial,sans-serif;box-shadow:0 8px 40px rgba(0,0,0,.7)}
-    #cc-title{font-size:15px;font-weight:800;color:#fff;margin:0 0 8px}
-    #cc-msg{font-size:12px;color:rgba(255,255,255,.5);line-height:1.65;margin:0 0 18px}
-    .cc-btns{display:flex;gap:8px}
-    .cc-btn{font-family:Arial,sans-serif;font-size:13px;font-weight:700;padding:9px 0;border-radius:8px;border:none;cursor:pointer;flex:1;transition:.15s}
-    .cc-btn-cancel{background:rgba(255,255,255,.08);color:rgba(255,255,255,.75)}
-    .cc-btn-cancel:hover{background:rgba(255,255,255,.16)}
-    .cc-btn-close{background:#ef4444;color:#fff}
-    .cc-btn-close:hover{background:#dc2626}
     #speedWrap{display:flex;flex-direction:column;align-items:center;gap:3px}
     #speedLabel{font-family:Arial,sans-serif;font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
     #speedSlider{width:100px;cursor:pointer;accent-color:#fff;height:4px;border-radius:2px}
@@ -1438,15 +1426,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     function openCloseDialog(){
       var msg="Are you sure you want to close the teleprompter?";
-      if(camState==='recording')msg="You're still recording! Closing now will discard the take.";
-      else if(camState==='uploading')msg="Your video is still uploading. Closing now will stop the save.";
-      else if(pollTimer!==null)msg="Your video is still being prepared for download. Close anyway?";
-      else if(hasUnsaved)msg="You have a recording that hasn't been saved yet. Close anyway?";
-      document.getElementById('cc-msg').textContent=msg;
-      document.getElementById('cc-overlay').classList.add('vis');
+      if(camState==='recording')msg="You are still recording!\n\nClosing now will discard this take. Close anyway?";
+      else if(camState==='uploading')msg="Your video is still uploading.\n\nClosing will stop the save. Close anyway?";
+      else if(pollTimer!==null)msg="Your video is still being prepared for download.\n\nClose anyway?";
+      else if(hasUnsaved)msg="You have a recording that has not been saved yet.\n\nClose anyway?";
+      if(window.confirm(msg)){window.close();}
     }
-    function confirmClose(){window.close();}
-    function cancelClose(){document.getElementById('cc-overlay').classList.remove('vis');}
 
     // Native browser close button — still warn if something is in progress
     window.addEventListener('beforeunload',function(e){
@@ -1468,18 +1453,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
   <button id="win-close-btn" onclick="openCloseDialog()" title="Close teleprompter">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
   </button>
-
-  <!-- ── Close confirmation dialog ── -->
-  <div id="cc-overlay" onclick="cancelClose()">
-    <div id="cc-box" onclick="event.stopPropagation()">
-      <p id="cc-title">Close teleprompter?</p>
-      <p id="cc-msg">Are you sure you want to close the teleprompter?</p>
-      <div class="cc-btns">
-        <button class="cc-btn cc-btn-cancel" onclick="cancelClose()">Stay</button>
-        <button class="cc-btn cc-btn-close" onclick="confirmClose()">Yes, close</button>
-      </div>
-    </div>
-  </div>
 
 </body>
 </html>`;
