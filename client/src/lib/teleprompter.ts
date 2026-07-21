@@ -793,12 +793,14 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       startCountdown(function(){
         recCdActive=false;
 
-        // Decide which stream to record.
-        // Screen modes always record from the canvas — that way screen sharing can
-        // be toggled on or off freely at any point during the take.
+        // Always record from the compositing canvas (when supported). The
+        // MediaRecorder cannot switch source streams mid-recording, so the
+        // canvas must be the source from the very first frame — that is what
+        // lets screen sharing be turned on or off at ANY point during a take,
+        // even one that started camera-only. With no screen shared, frame()
+        // simply draws the camera full-frame (mirrored, matching the preview).
         var streamToRecord;
-        if(screenReady){
-          // Screen is active: record from canvas so screen sharing can be toggled freely
+        if(canvasComposite&&canvasComposite.captureStream){
           if(!compositing)startCompositing();
           var canvasVideoTracks=canvasComposite.captureStream(30).getVideoTracks();
           var micTracks=mediaStream.getAudioTracks();
@@ -806,6 +808,9 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           micTracks.forEach(function(t){compositeStream.addTrack(t);});
           streamToRecord=compositeStream;
         }else{
+          // Fallback for browsers without canvas.captureStream: record the raw
+          // camera stream (mid-take screen sharing unavailable — the share
+          // button already alerts about missing support in that case).
           compositeStream=null;
           streamToRecord=mediaStream;
         }
@@ -1203,6 +1208,18 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       ctx.restore();
     }
 
+    // Draw video onto canvas using object-fit:contain semantics (letterboxed).
+    // Used for shared-screen content in portrait/square formats, where cover
+    // cropping would cut away most of the screen and make it unreadable.
+    function drawContain(ctx,video,dx,dy,dw,dh){
+      if(!video||!video.videoWidth||!video.videoHeight)return;
+      var vw=video.videoWidth,vh=video.videoHeight;
+      var scale=Math.min(dw/vw,dh/vh);
+      var w=Math.round(vw*scale),h=Math.round(vh*scale);
+      var x=dx+Math.round((dw-w)/2),y=dy+Math.round((dh-h)/2);
+      ctx.drawImage(video,x,y,w,h);
+    }
+
     // Draw a rounded rectangle path (ES5 compatible)
     function roundedRectPath(ctx,x,y,w,h,r){
       ctx.beginPath();
@@ -1222,6 +1239,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     function startCompositing(){
       stopCompositing(); // stop any existing loop
       if(!canvasComposite)return;
+      // Canvas dimensions follow the selected format so camera-only recordings
+      // keep their aspect ratio. The format cannot change while compositing is
+      // running (setFormat is blocked during recording and while sharing).
+      if(selectedFormat==='portrait'){COMPOSITE_W=1080;COMPOSITE_H=1920;}
+      else if(selectedFormat==='square'){COMPOSITE_W=1080;COMPOSITE_H=1080;}
+      else{COMPOSITE_W=1920;COMPOSITE_H=1080;}
       canvasComposite.width=COMPOSITE_W;
       canvasComposite.height=COMPOSITE_H;
       var ctx=canvasComposite.getContext('2d');
@@ -1242,8 +1265,14 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           ctx.fillRect(0,0,COMPOSITE_W,COMPOSITE_H);
 
           if(screenReady&&screenVidHidden.videoWidth){
-            // PiP: screen full-frame + camera overlay bottom-right
-            drawCover(ctx,screenVidHidden,0,0,COMPOSITE_W,COMPOSITE_H,false);
+            // PiP: screen full-frame + camera overlay bottom-right.
+            // Landscape: cover (fills frame). Portrait/square: contain
+            // (letterboxed) so the shared screen stays fully readable.
+            if(selectedFormat==='landscape'){
+              drawCover(ctx,screenVidHidden,0,0,COMPOSITE_W,COMPOSITE_H,false);
+            }else{
+              drawContain(ctx,screenVidHidden,0,0,COMPOSITE_W,COMPOSITE_H);
+            }
 
             if(pipSize==='none'){
               // Screen only — no camera overlay
@@ -1293,7 +1322,11 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
             var halfW=COMPOSITE_W/2;
             ctx.save();
             ctx.beginPath();ctx.rect(0,0,halfW,COMPOSITE_H);ctx.clip();
-            drawCover(ctx,screenVidHidden,0,0,halfW,COMPOSITE_H,false);
+            if(selectedFormat==='landscape'){
+              drawCover(ctx,screenVidHidden,0,0,halfW,COMPOSITE_H,false);
+            }else{
+              drawContain(ctx,screenVidHidden,0,0,halfW,COMPOSITE_H);
+            }
             ctx.restore();
             ctx.save();
             ctx.beginPath();ctx.rect(halfW,0,halfW,COMPOSITE_H);ctx.clip();
