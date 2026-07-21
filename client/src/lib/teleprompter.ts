@@ -55,11 +55,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     }
     /* ── Topic title (top of right column) ── */
     #cam-title{flex-shrink:0;font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em;padding:5px 12px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
-    /* ── Full-width top header ── */
-    #tp-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:6px 14px;background:#111;border-bottom:1px solid #222;z-index:100}
-    #tp-header-title{font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.04em}
-    #closeBtn{font-family:Arial,sans-serif;font-size:12px;font-weight:700;padding:4px 13px;border-radius:999px;border:1px solid rgba(239,68,68,.4);cursor:pointer;background:rgba(239,68,68,.12);color:rgba(239,68,68,.8);transition:.15s;flex-shrink:0}
-    #closeBtn:hover{background:rgba(239,68,68,.25);color:#f87171;border-color:rgba(239,68,68,.7)}
     #speedWrap{display:flex;flex-direction:column;align-items:center;gap:3px}
     #speedLabel{font-family:Arial,sans-serif;font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
     #speedSlider{width:100px;cursor:pointer;accent-color:#fff;height:4px;border-radius:2px}
@@ -199,12 +194,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
   </style>
 </head>
 <body>
-  <!-- ── Top header bar (full width, close button lives here) ── -->
-  <div id="tp-header">
-    <span id="tp-header-title">${esc(title)}</span>
-    <button id="closeBtn" onclick="openCloseDialog()">✕ Close</button>
-  </div>
-
   <!-- ── Main area ── -->
   <div id="main">
 
@@ -1432,20 +1421,9 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       updatePipSizeButtons();
     }
 
-    function openCloseDialog(){
-      var msg="Are you sure you want to close the teleprompter?";
-      if(camState==='recording')msg="You are still recording! Closing now will discard this take. Close anyway?";
-      else if(camState==='uploading')msg="Your video is still uploading. Closing will stop the save. Close anyway?";
-      else if(pollTimer!==null)msg="Your video is still being prepared for download. Close anyway?";
-      else if(hasUnsaved)msg="You have a recording that has not been saved yet. Close anyway?";
-      if(window.confirm(msg)){window.close();}
-    }
-
-    // Native browser close button — still warn if something is in progress
+    // Always confirm before closing the popup window
     window.addEventListener('beforeunload',function(e){
-      if(camState==='recording'||camState==='uploading'||hasUnsaved||pollTimer!==null){
-        e.preventDefault();e.returnValue='';
-      }
+      e.preventDefault();e.returnValue='';
     });
 
     // Check MediaRecorder API support
