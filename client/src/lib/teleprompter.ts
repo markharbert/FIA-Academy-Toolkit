@@ -53,11 +53,11 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
       padding:8px 16px;background:#0a0a0a;border-top:1px solid #1a1a1a;
     }
-    /* ── Topic title row (top of right column) ── */
-    #cam-title-row{flex-shrink:0;display:flex;align-items:center;gap:4px;padding:5px 8px 5px 12px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
-    #cam-title{flex:1;font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em}
-    #cam-close-btn{flex-shrink:0;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,.3);padding:5px;border-radius:5px;transition:.15s;line-height:0;display:flex;align-items:center;justify-content:center}
-    #cam-close-btn:hover{background:rgba(239,68,68,.15);color:#f87171}
+    /* ── Topic title (top of right column) ── */
+    #cam-title{flex-shrink:0;font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em;padding:5px 12px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
+    /* ── Window-level close button (top-right, above everything) ── */
+    #win-close-btn{position:fixed;top:8px;right:10px;z-index:8888;background:rgba(255,255,255,.07);border:none;cursor:pointer;color:rgba(255,255,255,.35);width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;transition:.15s;line-height:0}
+    #win-close-btn:hover{background:rgba(239,68,68,.2);color:#f87171}
     /* ── Close confirmation dialog ── */
     #cc-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);align-items:center;justify-content:center}
     #cc-overlay.vis{display:flex}
@@ -252,13 +252,8 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     <!-- Right: camera + recording -->
     <div id="camera-panel">
-      <!-- Topic title + close button -->
-      <div id="cam-title-row">
-        <div id="cam-title">${esc(title)}</div>
-        <button id="cam-close-btn" onclick="openCloseDialog()" title="Close teleprompter">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
+      <!-- Topic title -->
+      <div id="cam-title">${esc(title)}</div>
       <!-- Format picker -->
       <div id="format-picker">
         <button class="fmt-btn active" id="fmt-btn-landscape" onclick="setFormat('landscape')" title="YouTube · Facebook · 16:9">
@@ -1468,6 +1463,11 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     // Boot
     setCamState('idle');
   <\/script>
+
+  <!-- ── Window-level close button (top-right corner) ── -->
+  <button id="win-close-btn" onclick="openCloseDialog()" title="Close teleprompter">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+  </button>
 
   <!-- ── Close confirmation dialog ── -->
   <div id="cc-overlay" onclick="cancelClose()">
