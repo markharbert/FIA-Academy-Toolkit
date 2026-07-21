@@ -1426,10 +1426,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     function openCloseDialog(){
       var msg="Are you sure you want to close the teleprompter?";
-      if(camState==='recording')msg="You are still recording!\n\nClosing now will discard this take. Close anyway?";
-      else if(camState==='uploading')msg="Your video is still uploading.\n\nClosing will stop the save. Close anyway?";
-      else if(pollTimer!==null)msg="Your video is still being prepared for download.\n\nClose anyway?";
-      else if(hasUnsaved)msg="You have a recording that has not been saved yet.\n\nClose anyway?";
+      if(camState==='recording')msg="You are still recording! Closing now will discard this take. Close anyway?";
+      else if(camState==='uploading')msg="Your video is still uploading. Closing will stop the save. Close anyway?";
+      else if(pollTimer!==null)msg="Your video is still being prepared for download. Close anyway?";
+      else if(hasUnsaved)msg="You have a recording that has not been saved yet. Close anyway?";
       if(window.confirm(msg)){window.close();}
     }
 
