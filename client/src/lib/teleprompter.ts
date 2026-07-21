@@ -1044,16 +1044,25 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     function startPollingProcessingStatus(id){
       if(pollTimer)clearInterval(pollTimer);
+      var pollCount=0;
+      var MAX_POLLS=72; // ~3 minutes at 2.5s each; after that, give up and enable download
       pollTimer=setInterval(function(){
+        pollCount++;
         fetch((APP_BASE_URL||'')+'/api/teleprompter/recordings/'+id+'/status',{credentials:'include'})
           .then(function(r){return r.json();})
           .then(function(d){
             if(d.processingStatus==='complete'||d.processingStatus==='failed'){
               clearInterval(pollTimer);pollTimer=null;
               setDownloadReady(true);
+            } else if(pollCount>=MAX_POLLS){
+              // Upload seems to have stalled server-side — give up and let them try anyway
+              clearInterval(pollTimer);pollTimer=null;
+              setDownloadReady(true);
             }
           })
-          .catch(function(){});
+          .catch(function(){
+            if(pollCount>=MAX_POLLS){clearInterval(pollTimer);pollTimer=null;setDownloadReady(true);}
+          });
       },2500);
     }
 

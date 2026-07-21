@@ -196,6 +196,20 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS processing_status TEXT DEFAULT 'complete'
     `);
     console.log("[startup] teleprompter_recordings processing_status migration complete");
+    // Recordings left in "processing" after a server crash/restart will never complete.
+    // Mark any that have been stuck for more than 3 minutes as "failed" so the UI unblocks.
+    {
+      const stuckCutoff = new Date(Date.now() - 3 * 60 * 1000);
+      const stuckResult = await db.execute(sql`
+        UPDATE teleprompter_recordings
+        SET processing_status = 'failed'
+        WHERE processing_status = 'processing'
+          AND created_at < ${stuckCutoff.toISOString()}
+      `);
+      if ((stuckResult.rowCount ?? 0) > 0) {
+        console.log(`[startup] marked ${stuckResult.rowCount} stuck teleprompter recording(s) as failed`);
+      }
+    }
     await db.execute(sql`
       ALTER TABLE teleprompter_scripts
         ADD COLUMN IF NOT EXISTS take_count INTEGER NOT NULL DEFAULT 0
