@@ -5672,7 +5672,8 @@ export async function registerRoutes(
       }
       const title = `Take ${takeNumber} \u2014 ${baseTitle}`;
       const objectId = crypto.randomUUID();
-      const storageKey = `/objects/recordings/${userId}/${objectId}.mp4`;
+      const fileExt = isMp4 ? ".mp4" : ".webm";
+      const storageKey = `/objects/recordings/${userId}/${objectId}${fileExt}`;
 
       const finalMime = isMp4 ? "video/mp4" : (mimeType || "video/webm");
       const sizeEstimate = rawSize ? (parseInt(String(rawSize), 10) || 0) : 0;
@@ -5752,7 +5753,7 @@ export async function registerRoutes(
       const isMp4 = file.mimetype.includes("mp4") || file.originalname.toLowerCase().endsWith(".mp4");
       const ext = path.extname(file.originalname).toLowerCase() || (isMp4 ? ".mp4" : ".webm");
       const objectId = crypto.randomUUID();
-      const storageKey = `/objects/recordings/${userId}/${objectId}.mp4`;
+      const storageKey = `/objects/recordings/${userId}/${objectId}${ext}`;
 
       // Move moov atom to the front so the browser can start playing immediately
       let uploadPath = file.path;
@@ -5824,6 +5825,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/teleprompter/recordings/:id/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
+      if (!recording) return res.status(404).json({ message: "Not found" });
+      res.json({ processingStatus: recording.processingStatus });
+    } catch (err) {
+      res.status(500).json({ message: "Error fetching status" });
+    }
+  });
+
   app.get("/api/teleprompter/recordings/:id/download", requireAuth, async (req: Request, res: Response) => {
     console.log(`[rec-download] id=${req.params.id} user=${req.session.userId}`);
     try {
@@ -5850,7 +5861,10 @@ export async function registerRoutes(
       }
       res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}${ext}"`);
       res.setHeader("Content-Type", gcsRes.headers.get("content-type") || recording.mimeType || "video/mp4");
-      const cl = gcsRes.headers.get("content-length");
+      // Use GCS-provided Content-Length if available; fall back to the DB size so Safari
+      // (which produces 0-byte files on chunked downloads without a declared size) always
+      // knows the full file length before the stream starts.
+      const cl = gcsRes.headers.get("content-length") || (recording.sizeBytes ? String(recording.sizeBytes) : null);
       if (cl) res.setHeader("Content-Length", cl);
       console.log(`[rec-download] proxying ${cl ?? "??"} bytes from GCS`);
       const { Readable } = await import("node:stream");

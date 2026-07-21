@@ -400,9 +400,9 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
           <button id="retry-upload-btn" class="cam-btn cam-btn-dark" style="display:none;margin-bottom:4px" onclick="retryUpload()">↑ Retry Upload</button>
           <p class="cam-msg warn" id="review-warn">⚠ Download before closing this window.</p>
           <div id="download-info"></div>
-          <button class="cam-btn cam-btn-green" onclick="downloadRecording()">
+          <button id="download-btn" class="cam-btn cam-btn-green" onclick="downloadRecording()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-            Download Video
+            <span id="download-btn-text">Download Video</span>
           </button>
           <button class="cam-btn cam-btn-dark" style="margin-top:2px" onclick="retake()">↺ Record Another Take</button>
         </div>
@@ -576,7 +576,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     var camState='idle';
     var mediaStream=null,mediaRecorder=null,recordedChunks=[],recordedBlob=null,recordedUrl=null,recMimeType='';
     var timerInterval=null,recSeconds=0;
-    var hasUnsaved=false,recordingId=null,recordingTitle=null,uploadFailed=false;
+    var hasUnsaved=false,recordingId=null,recordingTitle=null,uploadFailed=false,pollTimer=null;
     var selectedFormat='landscape';
     var selectedCameraId='',selectedMicId='';
     var audioCtx=null,audioAnalyser=null,micRaf=null,micLevelFill=null;
@@ -876,6 +876,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         document.getElementById('review-warn').style.display='none';
         setCamState('review');
         try{if(window.opener)window.opener.postMessage({type:'teleprompter-recording-saved'},'*');if(window.parent&&window.parent!==window)window.parent.postMessage({type:'teleprompter-recording-saved'},'*');}catch(e){}
+        if(data.processingStatus==='processing'){
+          setDownloadReady(false);
+          startPollingProcessingStatus(data.id);
+        }
       }
 
       function onFail(reason){
@@ -1023,17 +1027,46 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       uploadRecording();
     }
 
+    function setDownloadReady(ready){
+      var btn=document.getElementById('download-btn');
+      var txt=document.getElementById('download-btn-text');
+      if(!btn)return;
+      if(ready){
+        btn.disabled=false;
+        btn.className='cam-btn cam-btn-green';
+        if(txt)txt.textContent='Download Video';
+      }else{
+        btn.disabled=true;
+        btn.className='cam-btn cam-btn-dark';
+        if(txt)txt.textContent='Processing video for download\u2026';
+      }
+    }
+
+    function startPollingProcessingStatus(id){
+      if(pollTimer)clearInterval(pollTimer);
+      pollTimer=setInterval(function(){
+        fetch((APP_BASE_URL||'')+'/api/teleprompter/recordings/'+id+'/status',{credentials:'include'})
+          .then(function(r){return r.json();})
+          .then(function(d){
+            if(d.processingStatus==='complete'||d.processingStatus==='failed'){
+              clearInterval(pollTimer);pollTimer=null;
+              setDownloadReady(true);
+            }
+          })
+          .catch(function(){});
+      },2500);
+    }
+
     function downloadRecording(){
       // Prefer server-side download if the upload succeeded.
       // Use APP_BASE_URL for the absolute path — this popup runs at a blob: URL so
-      // relative paths don't resolve to the server. Also open in a new tab so the
-      // download never navigates (and blanks) this popup window.
+      // relative paths don't resolve to the server.
+      // No target='_blank': Content-Disposition:attachment keeps the page from navigating away,
+      // and avoids Chrome/Edge popup-blocker silently killing secondary popup downloads.
       if(recordingId){
         var a=document.createElement('a');
         a.href=(APP_BASE_URL||window.location.origin)+'/api/teleprompter/recordings/'+recordingId+'/download';
         a.download='';
-        a.target='_blank';
-        a.rel='noopener';
         document.body.appendChild(a);a.click();document.body.removeChild(a);
         return;
       }
@@ -1054,6 +1087,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     }
 
     function retake(){
+      if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
       if(recordedUrl){URL.revokeObjectURL(recordedUrl);recordedUrl=null;}
       recordedBlob=null;recordedChunks=[];hasUnsaved=false;
       recordingId=null;uploadFailed=false;
