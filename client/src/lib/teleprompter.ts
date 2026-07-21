@@ -1421,12 +1421,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       updatePipSizeButtons();
     }
 
-    // Intercept the window's own close (X) button — browser shows its native
-    // "Leave site?" confirmation. NOTE: Chrome only displays this dialog if
-    // the user has clicked/typed inside the window at least once (security
-    // policy, cannot be bypassed by any website).
+    // Warn before accidental close ONLY while there is an unsaved recording
+    // or an upload in progress. Must stay conditional: this same HTML also
+    // runs inside the in-app overlay iframe, and an unconditional handler
+    // would nag "Leave site?" on every parent-page reload.
     window.addEventListener('beforeunload',function(e){
-      e.preventDefault();e.returnValue='';
+      if(hasUnsaved||camState==='uploading'){e.preventDefault();e.returnValue='';}
     });
 
     // Check MediaRecorder API support
@@ -1449,7 +1449,9 @@ let _teleprompterBlobUrl: string | null = null;
 export function openTeleprompter(opts: { title: string; sections: TeleprompterSection[]; scriptId?: string; bulletPoints?: string }): boolean {
   const cleaned = opts.sections.filter((s) => s.text && s.text.trim());
   if (cleaned.length === 0) return false;
-  const html = buildTeleprompterHtml(opts);
+  // baseUrl is required: the popup loads from a blob: URL, so relative
+  // fetch('/api/...') calls would fail — they must be absolute.
+  const html = buildTeleprompterHtml({ ...opts, baseUrl: window.location.origin });
   const twWidth = Math.min(1440, screen.availWidth - 40);
   const twHeight = Math.min(900, screen.availHeight - 60);
   const twLeft = Math.max(0, Math.round((screen.availWidth - twWidth) / 2));

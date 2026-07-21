@@ -24,7 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { openTeleprompter } from "@/lib/teleprompter";
 import type { Script, ScriptJson, SavedOffer, Topic } from "@shared/schema";
-import { Gift, Star, RefreshCw } from "lucide-react";
+import { Gift, Star, RefreshCw, Pencil } from "lucide-react";
 import academyLogoPath from "@assets/Media_&_Images_—_Kiss_Cut_Fearless_Influencer_Logo_—_2024-04_1777420277879.png";
 
 type TrendDataPoint = { year: number; month: string; value: number };
