@@ -55,8 +55,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     }
     /* ── Topic title (top of right column) ── */
     #cam-title{flex-shrink:0;font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em;padding:5px 12px;background:#0d0d0d;border-bottom:1px solid #1e1e1e}
-    /* ── Window-level close button (top-right, above everything) ── */
-    #closeBtn{font-family:Arial,sans-serif;font-size:12px;font-weight:700;padding:5px 13px;border-radius:999px;border:1px solid rgba(239,68,68,.4);cursor:pointer;background:rgba(239,68,68,.12);color:rgba(239,68,68,.8);transition:.15s}
+    /* ── Full-width top header ── */
+    #tp-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:6px 14px;background:#111;border-bottom:1px solid #222;z-index:100}
+    #tp-header-title{font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.04em}
+    #closeBtn{font-family:Arial,sans-serif;font-size:12px;font-weight:700;padding:4px 13px;border-radius:999px;border:1px solid rgba(239,68,68,.4);cursor:pointer;background:rgba(239,68,68,.12);color:rgba(239,68,68,.8);transition:.15s;flex-shrink:0}
     #closeBtn:hover{background:rgba(239,68,68,.25);color:#f87171;border-color:rgba(239,68,68,.7)}
     #speedWrap{display:flex;flex-direction:column;align-items:center;gap:3px}
     #speedLabel{font-family:Arial,sans-serif;font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
@@ -197,6 +199,12 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
   </style>
 </head>
 <body>
+  <!-- ── Top header bar (full width, close button lives here) ── -->
+  <div id="tp-header">
+    <span id="tp-header-title">${esc(title)}</span>
+    <button id="closeBtn" onclick="openCloseDialog()">✕ Close</button>
+  </div>
+
   <!-- ── Main area ── -->
   <div id="main">
 
@@ -232,7 +240,6 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         <button class="font-btn" id="fontUp" onclick="changeFont(1)" title="Larger text">A+</button>
         <button id="resetBtn" onclick="resetScroll()">↺ Restart</button>
         <button id="playBtn" onclick="togglePlay()">▶ Play</button>
-        <button id="closeBtn" onclick="openCloseDialog()">✕ Close</button>
       </div>
     </div>
 
