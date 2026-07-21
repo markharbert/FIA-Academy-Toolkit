@@ -1445,10 +1445,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       if(!isUnsafeToClose()){window.close();return;}
       // Build a context-specific message
       var msg='If you close now you may lose your recording or miss the download.';
-      if(camState==='recording')msg='You\'re still recording! Closing now will discard the take.';
-      else if(camState==='uploading')msg='Your video is still uploading. Closing now will stop the save.';
-      else if(pollTimer!==null)msg='Your video is still being prepared for download. Close anyway?';
-      else if(hasUnsaved)msg='You have a recording that hasn\'t been saved yet. Close anyway?';
+      if(camState==='recording')msg="You're still recording! Closing now will discard the take.";
+      else if(camState==='uploading')msg="Your video is still uploading. Closing now will stop the save.";
+      else if(pollTimer!==null)msg="Your video is still being prepared for download. Close anyway?";
+      else if(hasUnsaved)msg="You have a recording that hasn't been saved yet. Close anyway?";
       document.getElementById('close-confirm-msg').textContent=msg;
       document.getElementById('close-confirm-overlay').classList.add('vis');
     }
