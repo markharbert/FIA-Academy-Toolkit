@@ -67,7 +67,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
     .font-btn:disabled{opacity:.3;cursor:not-allowed}
     #fontLabel{font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.55);min-width:54px;text-align:center;white-space:nowrap}
     /* ── Recording length notice ── */
-    #rec-length-notice{font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.38);background:#070707;border-top:1px solid #181818;padding:7px 20px;text-align:center;line-height:1.5;letter-spacing:.01em;flex-shrink:0}
+    #rec-length-notice{font-family:Arial,sans-serif;font-size:10.5px;color:rgba(255,255,255,.42);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:7px 10px;margin:6px 10px 2px;text-align:center;line-height:1.55;letter-spacing:.01em;flex-shrink:0}
     /* ── Main two-panel layout ── */
     #main{flex:1;display:flex;overflow:hidden;min-height:0;padding-right:16px}
 
@@ -410,13 +410,10 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         </div>
 
       </div>
+      <div id="rec-length-notice">&#x2139;&#xFE0E; Best suited for videos up to 20&ndash;30 minutes. For longer recordings, use an external screen recorder.</div>
       <div id="cam-footer">saves to your account for 30 days · download any time from your teleprompter page</div>
     </div>
 
-  </div>
-
-  <div id="rec-length-notice">
-    &#x2139;&#xFE0E;&nbsp; Best suited for videos up to 20&ndash;30 minutes. For longer recordings, use an external screen recorder and upload the file separately.
   </div>
 
   <script>
