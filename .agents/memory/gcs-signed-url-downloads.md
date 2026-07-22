@@ -17,3 +17,8 @@ For download routes that must send `Content-Disposition: attachment`, do NOT red
 3. Set `Content-Disposition: attachment; filename="..."` on the Express response yourself.
 4. Pipe: `Readable.fromWeb(gcsRes.body).pipe(res)`.
 5. For streaming/preview (not downloads), the plain 302 redirect to the signed URL works fine — let the browser hit GCS directly.
+
+## CRITICAL LIMIT (found July 2026): proxy fails in production for files >32 MiB
+Replit Autoscale deployments run on Google Cloud Run, which caps non-chunked HTTP responses at 32 MiB. The Express proxy sets `Content-Length` (added for Safari, which saves 0-byte files on chunked downloads without a declared size), so the response is not chunked — Cloud Run kills the connection at 32 MiB and the browser shows a failed download. Works fine in dev; fails ONLY in production, ONLY for large files. Evidence: member's 154/181 MB recordings failed in every browser while 17–23 MB ones downloaded fine; server logs show clean "proxying N bytes" with no error (the cutoff happens at the infra layer).
+
+**Implication:** the proxy approach is only safe for files under ~30 MB. For large downloads either (a) have the signing service include `response-content-disposition` in the V4 signature AT signing time (supported by GCS if the signer accepts it) and redirect, or (b) drop Content-Length to force chunked encoding — but that reintroduces the Safari 0-byte issue, so browser-sniff or accept the tradeoff.

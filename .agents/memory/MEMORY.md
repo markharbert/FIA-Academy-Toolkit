@@ -1,6 +1,7 @@
 - [Teleprompter recording upload](teleprompter-upload.md) — signed-URL direct-to-GCS is CORS-blocked; use server proxy route instead.
 - [Popup dialog blocking](popup-dialog-blocking.md) — canvas iframe sandbox silently blocks confirm()/beforeunload in popups; only a custom DOM overlay dialog works.
-- [GCS Signed URL Downloads](gcs-signed-url-downloads.md) — can't append response-content-disposition post-signing (V4 includes it in signature); proxy downloads via fetch(signedUrl) in Express instead.
+- [GCS Signed URL Downloads](gcs-signed-url-downloads.md) — proxy downloads via fetch(signedUrl) in Express; BUT prod (Cloud Run) kills non-chunked responses >32MiB, so proxy fails for large files in prod only.
+- [MediaRecorder MP4 Opus audio](mediarecorder-mp4-opus.md) — browser-recorded .mp4 has Opus audio; silent in QuickTime/Windows players; needs server-side AAC transcode.
 - [Generate Full Script feature](generate-full-script.md) — how the feature works and a key debugging lesson about server restarts.
 - [Funnel Simulation Roadmap](funnel-simulation-roadmap.md) — planned profitability simulation report using per-node traffic/cost/conversion data already collected in canvasData.
 - [Funnel canvas theme system](funnel-canvas-theme.md) — dark/light toggle via CanvasThemeContext; all nodes use useCanvasTheme(); persists to localStorage.
