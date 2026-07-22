@@ -411,7 +411,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
         </div>
 
       </div>
-      <div id="rec-length-notice"><span class="notice-icon">&#x2139;</span> Best suited for videos up to 20&ndash;30 minutes. For longer recordings, use an external screen recorder.</div>
+      <div id="rec-length-notice"><span class="notice-icon">&#x2139;</span> Best suited for videos up to 20&ndash;30 minutes. For longer videos, record with your phone, a camera, or software like OBS instead.</div>
       <div id="cam-footer">saves to your account for 30 days · download any time from your teleprompter page</div>
     </div>
 
