@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints } from "./ai";
-import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
+import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
 import bcrypt from "bcrypt";
@@ -5697,7 +5697,9 @@ export async function registerRoutes(
         let faststartPath: string | null = null;
         try {
           if (isMp4) {
-            const processed = await faststartMp4(assembledPath);
+            // Faststart remux + Opus→AAC audio transcode when needed, so the
+            // downloaded file plays with audio in QuickTime/Windows players.
+            const processed = await prepareTeleprompterMp4(assembledPath);
             if (processed !== assembledPath) { faststartPath = processed; uploadPath = processed; }
           }
           const fileBuffer = fs.readFileSync(uploadPath);
@@ -5755,11 +5757,12 @@ export async function registerRoutes(
       const objectId = crypto.randomUUID();
       const storageKey = `/objects/recordings/${userId}/${objectId}${ext}`;
 
-      // Move moov atom to the front so the browser can start playing immediately
+      // Move moov atom to the front so the browser can start playing immediately,
+      // and transcode Opus audio to AAC so downloads play everywhere.
       let uploadPath = file.path;
       let faststartPath: string | null = null;
       if (isMp4) {
-        const processed = await faststartMp4(file.path);
+        const processed = await prepareTeleprompterMp4(file.path);
         if (processed !== file.path) {
           faststartPath = processed;
           uploadPath = processed;
@@ -5840,12 +5843,6 @@ export async function registerRoutes(
     try {
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
       if (!recording) { console.log(`[rec-download] not found id=${req.params.id}`); return res.status(404).json({ message: "Recording not found" }); }
-      const objectStorage = new ObjectStorageService();
-      // Generate a signed URL that we know works (same mechanism as the working stream/preview).
-      // We can't redirect to it for downloads because GCS V4 includes response-content-disposition
-      // in the signature — we can't append it after signing. Instead, proxy the GCS stream
-      // through Express so we can set Content-Disposition: attachment ourselves.
-      const signedUrl = await objectStorage.getSignedReadUrl(recording.storageKey, 300);
       const ext = path.extname(recording.storageKey) || ".mp4";
       const safeTitle = recording.title
         .replace(/\u2014/g, " - ")
@@ -5853,24 +5850,16 @@ export async function registerRoutes(
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 100) || "recording";
-      // Fetch directly from GCS using the signed URL (bypasses the Replit sidecar
-      // which was causing createReadStream to fail silently on large files).
-      const gcsRes = await fetch(signedUrl);
-      if (!gcsRes.ok || !gcsRes.body) {
-        return res.status(502).json({ message: "Failed to fetch recording from storage" });
-      }
-      res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}${ext}"`);
-      res.setHeader("Content-Type", gcsRes.headers.get("content-type") || recording.mimeType || "video/mp4");
-      // Use GCS-provided Content-Length if available; fall back to the DB size so Safari
-      // (which produces 0-byte files on chunked downloads without a declared size) always
-      // knows the full file length before the stream starts.
-      const cl = gcsRes.headers.get("content-length") || (recording.sizeBytes ? String(recording.sizeBytes) : null);
-      if (cl) res.setHeader("Content-Length", cl);
-      console.log(`[rec-download] proxying ${cl ?? "??"} bytes from GCS`);
-      const { Readable } = await import("node:stream");
-      const nodeStream = Readable.fromWeb(gcsRes.body as any);
-      nodeStream.on("error", (err) => console.error("[rec-download] stream error:", err));
-      nodeStream.pipe(res);
+      // Do NOT proxy the file through Express: the deployment platform (Cloud Run)
+      // kills non-chunked responses at 32 MiB, which made large recordings fail.
+      // Instead, bake `Content-Disposition: attachment` into the GCS object's
+      // metadata (V4 signed URLs reject a disposition param appended after
+      // signing) and redirect the browser straight to a signed GCS URL — the
+      // browser then downloads any size natively, with the correct filename.
+      const objectStorage = new ObjectStorageService();
+      const signedUrl = await objectStorage.getSignedDownloadUrl(recording.storageKey, 300, `${safeTitle}${ext}`);
+      console.log(`[rec-download] redirecting to signed URL (attachment disposition set)`);
+      return res.redirect(302, signedUrl);
     } catch (err) {
       console.error("[Teleprompter] Download recording error:", err);
       if (!res.headersSent) res.status(500).json({ message: "Failed to download recording" });

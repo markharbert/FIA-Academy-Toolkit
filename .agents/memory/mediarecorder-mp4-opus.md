@@ -11,5 +11,6 @@ Confirmed July 2026 via ffprobe on a member's production teleprompter recording:
 
 ## How to Apply
 - Any feature that lets users download browser-recorded MP4s needs a server-side audio transcode to AAC before the file is universally playable: `ffmpeg -i in.mp4 -c:v copy -c:a aac out.mp4` (video stream copied, fast even for large files; can be folded into the existing faststart remux step).
+- Probe first (`ffprobe` audio codec), transcode only opus/vorbis, and verify output (AAC present, duration ±2s) with a plain-remux fallback — Safari records AAC natively and some recordings have no audio track at all (mic permission issues), so unconditional re-encode is wasteful and a missing audio stream is a user-side mic problem, not a codec bug.
 - Do NOT assume "it's already .mp4 so it plays everywhere." Check the audio codec.
 - A `-c copy` faststart remux preserves Opus — it does not fix this.

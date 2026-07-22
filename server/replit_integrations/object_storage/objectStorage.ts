@@ -303,6 +303,20 @@ export class ObjectStorageService {
     return signObjectURL({ bucketName: file.bucket.name, objectName: file.name, method: "GET", ttlSec });
   }
 
+  // Generates a short-lived signed GET URL that forces a browser download with
+  // the given filename. The sidecar issues V4 signed URLs, which reject any
+  // response-content-disposition param added after signing — so instead we set
+  // Content-Disposition as OBJECT METADATA (served by GCS on every response)
+  // and then redirect to a plain signed URL. This lets large files download
+  // straight from GCS: proxying through Express is killed at 32 MiB by the
+  // deployment platform (Cloud Run non-chunked response limit).
+  async getSignedDownloadUrl(objectPath: string, ttlSec: number, filename: string): Promise<string> {
+    const file = await this.getObjectEntityFile(objectPath);
+    const safeName = filename.replace(/["\\\r\n]/g, "");
+    await file.setMetadata({ contentDisposition: `attachment; filename="${safeName}"` });
+    return signObjectURL({ bucketName: file.bucket.name, objectName: file.name, method: "GET", ttlSec });
+  }
+
   // Deletes an object from the given path.
   async deleteObject(objectPath: string): Promise<void> {
     try {

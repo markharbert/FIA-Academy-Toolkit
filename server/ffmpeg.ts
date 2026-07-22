@@ -72,6 +72,87 @@ export async function faststartMp4(inputPath: string): Promise<string> {
   });
 }
 
+/**
+ * Probe just the first audio stream's codec name and container duration.
+ * Returns { codec: null } when the file has no audio stream.
+ */
+async function probeAudioInfo(inputPath: string): Promise<{ codec: string | null; duration: number }> {
+  return new Promise((resolve) => {
+    const ffprobe = spawn("ffprobe", [
+      "-v", "error",
+      "-show_entries", "stream=codec_type,codec_name:format=duration",
+      "-of", "json",
+      inputPath,
+    ]);
+    let stdout = "";
+    ffprobe.stdout.on("data", (d) => { stdout += d.toString(); });
+    const killTimer = setTimeout(() => { try { ffprobe.kill("SIGKILL"); } catch (_) {} }, 30_000);
+    ffprobe.on("close", () => {
+      clearTimeout(killTimer);
+      try {
+        const data = JSON.parse(stdout);
+        const audio = (data.streams || []).find((s: any) => s.codec_type === "audio");
+        resolve({ codec: audio?.codec_name ?? null, duration: parseFloat(data.format?.duration || "0") });
+      } catch (_) {
+        resolve({ codec: null, duration: 0 });
+      }
+    });
+    ffprobe.on("error", () => { clearTimeout(killTimer); resolve({ codec: null, duration: 0 }); });
+  });
+}
+
+/**
+ * Prepare a browser-recorded MP4 for universal playback and download.
+ *
+ * Chrome/Edge MediaRecorder muxes Opus audio into MP4 (Chromium has no AAC
+ * encoder). Opus-in-MP4 plays fine in browsers but is SILENT in QuickTime and
+ * Windows Media Player. When the audio track is Opus/Vorbis, re-encode audio
+ * to AAC (video stream copied, so this is fast); otherwise just remux with
+ * +faststart like before. The transcoded output is verified (AAC audio present,
+ * duration matches) before it is used — any failure falls back to a plain
+ * faststart remux of the original.
+ *
+ * Returns the output path (a temp file the caller must clean up) or the
+ * original inputPath on fallback — same contract as faststartMp4.
+ */
+export async function prepareTeleprompterMp4(inputPath: string): Promise<string> {
+  const src = await probeAudioInfo(inputPath);
+  if (src.codec !== "opus" && src.codec !== "vorbis") {
+    // No audio track, or already a widely-supported codec (e.g. AAC from
+    // Safari's MediaRecorder) — don't re-encode, just faststart-remux.
+    return faststartMp4(inputPath);
+  }
+
+  const outputPath = inputPath + ".aac.mp4";
+  const ok = await new Promise<boolean>((resolve) => {
+    const ff = spawn("ffmpeg", [
+      "-i", inputPath,
+      "-c:v", "copy",
+      "-c:a", "aac",
+      "-b:a", "192k",
+      "-movflags", "+faststart",
+      "-y", outputPath,
+    ]);
+    // Audio-only re-encode is fast, but allow headroom for long recordings.
+    const killTimer = setTimeout(() => { try { ff.kill("SIGKILL"); } catch (_) {} resolve(false); }, 300_000);
+    ff.on("close", (code) => { clearTimeout(killTimer); resolve(code === 0 && fs.existsSync(outputPath)); });
+    ff.on("error", () => { clearTimeout(killTimer); resolve(false); });
+  });
+
+  if (ok) {
+    const out = await probeAudioInfo(outputPath);
+    const durationOk = src.duration <= 0 || Math.abs(out.duration - src.duration) <= 2;
+    if (out.codec === "aac" && durationOk) {
+      return outputPath;
+    }
+    console.error(`[FFmpeg] AAC transcode verification failed (codec=${out.codec}, dur=${out.duration} vs ${src.duration}) — falling back to remux`);
+  } else {
+    console.error("[FFmpeg] AAC transcode failed — falling back to plain faststart remux");
+  }
+  try { fs.unlinkSync(outputPath); } catch (_) {}
+  return faststartMp4(inputPath);
+}
+
 export async function probeVideo(inputPath: string): Promise<ProbeResult> {
   return new Promise((resolve) => {
     if (!fs.existsSync(inputPath)) {
