@@ -1032,18 +1032,48 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       uploadRecording();
     }
 
+    var processingCountdownTimer=null;
+    function stopProcessingCountdown(){
+      if(processingCountdownTimer){clearInterval(processingCountdownTimer);processingCountdownTimer=null;}
+    }
+    function startProcessingCountdown(txt){
+      stopProcessingCountdown();
+      // Estimate processing time from file size: audio conversion + cloud upload
+      // scale with size. ~0.5s per MB plus fixed overhead, clamped to 20s–4min.
+      var mb=recordedBlob?recordedBlob.size/1048576:20;
+      var secondsLeft=Math.min(240,Math.max(20,Math.round(12+mb*0.5)));
+      function render(){
+        if(!txt)return;
+        if(secondsLeft>0){
+          var m=Math.floor(secondsLeft/60),s=secondsLeft%60;
+          txt.textContent='Processing video \u2014 about '+(m>0?m+':'+(s<10?'0':'')+s:s+'s')+' left\u2026';
+        }else{
+          txt.textContent='Processing video \u2014 almost done\u2026';
+        }
+      }
+      render();
+      processingCountdownTimer=setInterval(function(){
+        secondsLeft--;
+        render();
+        if(secondsLeft<=-1&&processingCountdownTimer){
+          // Stop ticking once we hit "almost done" — polling will flip the button
+          clearInterval(processingCountdownTimer);processingCountdownTimer=null;
+        }
+      },1000);
+    }
     function setDownloadReady(ready){
       var btn=document.getElementById('download-btn');
       var txt=document.getElementById('download-btn-text');
       if(!btn)return;
       if(ready){
+        stopProcessingCountdown();
         btn.disabled=false;
         btn.className='cam-btn cam-btn-green';
         if(txt)txt.textContent='Download Video';
       }else{
         btn.disabled=true;
         btn.className='cam-btn cam-btn-dark';
-        if(txt)txt.textContent='Processing video for download\u2026';
+        startProcessingCountdown(txt);
       }
     }
 
@@ -1102,6 +1132,7 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
 
     function retake(){
       if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+      stopProcessingCountdown();
       if(recordedUrl){URL.revokeObjectURL(recordedUrl);recordedUrl=null;}
       recordedBlob=null;recordedChunks=[];hasUnsaved=false;
       recordingId=null;uploadFailed=false;
