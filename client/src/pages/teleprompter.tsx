@@ -783,6 +783,20 @@ export default function TeleprompterPage() {
     }
   }
 
+  async function handleDownloadRecording(id: string) {
+    try {
+      const res = await fetch(`/api/teleprompter/recordings/${id}/download-url`, { credentials: "include" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.message || "Download failed. The file may still be processing — please try again in a moment.");
+      }
+    } catch {
+      alert("Could not reach the server. Check your connection and try again.");
+    }
+  }
+
   function downloadTranscriptTxt(title: string, text: string) {
     const blob = new Blob([`${title}\n${"=".repeat(title.length)}\n\n${text}`], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -1277,14 +1291,13 @@ export default function TeleprompterPage() {
                                       : <Download className="h-4 w-4" />}
                                   </button>
                                 ) : (
-                                  <a
-                                    href={`/api/teleprompter/recordings/${rec.id}/download`}
-                                    download={`${rec.title.replace(/\u2014/g, " - ").replace(/[^\w\s().,'&!-]/g, "").trim()}.mp4`}
+                                  <button
+                                    onClick={() => handleDownloadRecording(rec.id)}
                                     className="p-2 rounded-md text-emerald-500 hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
                                     data-testid={`button-download-recording-${rec.id}`}
                                   >
                                     <Download className="h-4 w-4" />
-                                  </a>
+                                  </button>
                                 )}
                               </TooltipTrigger>
                               <TooltipContent>{isProcessing ? "Available when processing completes" : "Download Video"}</TooltipContent>
@@ -1492,15 +1505,14 @@ export default function TeleprompterPage() {
               {previewRec?.durationSeconds ? `${Math.floor(previewRec.durationSeconds / 60)}:${String(previewRec.durationSeconds % 60).padStart(2, "0")}` : ""}
               {previewRec?.sizeBytes ? ` · ${(previewRec.sizeBytes / 1024 / 1024).toFixed(1)} MB` : ""}
             </p>
-            <a
-              href={previewRec ? `/api/teleprompter/recordings/${previewRec.id}/download` : "#"}
-              download={previewRec ? `${previewRec.title.replace(/\u2014/g, " - ").replace(/[^\w\s().,'&!-]/g, "").trim()}.mp4` : undefined}
+            <button
+              onClick={() => previewRec && handleDownloadRecording(previewRec.id)}
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-border bg-background hover:bg-muted transition-colors"
               data-testid="button-preview-download"
             >
               <Download className="h-3.5 w-3.5" />
               Download this take
-            </a>
+            </button>
           </div>
         </DialogContent>
       </Dialog>

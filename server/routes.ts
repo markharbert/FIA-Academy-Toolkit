@@ -5838,11 +5838,21 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/teleprompter/recordings/:id/download", requireAuth, async (req: Request, res: Response) => {
+  // Returns a signed GCS download URL as JSON so the client can navigate to it
+  // directly. This replaces the old 302-redirect approach; now the client fetches
+  // this endpoint, checks for errors explicitly, and only navigates when successful —
+  // avoiding the "download.json" bug where a 500 JSON error was silently saved.
+  app.get("/api/teleprompter/recordings/:id/download-url", requireAuth, async (req: Request, res: Response) => {
     console.log(`[rec-download] id=${req.params.id} user=${req.session.userId}`);
     try {
       const recording = await storage.getTeleprompterRecording(req.params.id, req.session.userId!);
       if (!recording) { console.log(`[rec-download] not found id=${req.params.id}`); return res.status(404).json({ message: "Recording not found" }); }
+      if (recording.processingStatus === "processing") {
+        return res.status(202).json({ message: "Recording is still processing — please wait and try again." });
+      }
+      if (recording.processingStatus === "failed") {
+        return res.status(422).json({ message: "Recording failed to upload — the file could not be saved to your account." });
+      }
       const ext = path.extname(recording.storageKey) || ".mp4";
       const safeTitle = recording.title
         .replace(/\u2014/g, " - ")
@@ -5850,20 +5860,22 @@ export async function registerRoutes(
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 100) || "recording";
-      // Do NOT proxy the file through Express: the deployment platform (Cloud Run)
-      // kills non-chunked responses at 32 MiB, which made large recordings fail.
-      // Instead, bake `Content-Disposition: attachment` into the GCS object's
-      // metadata (V4 signed URLs reject a disposition param appended after
-      // signing) and redirect the browser straight to a signed GCS URL — the
-      // browser then downloads any size natively, with the correct filename.
+      // Set Content-Disposition as object metadata (V4 signed URLs reject a
+      // disposition param added after signing), then return the plain signed URL.
+      // The browser navigates to it directly — no Express proxy, no 32 MiB limit.
       const objectStorage = new ObjectStorageService();
-      const signedUrl = await objectStorage.getSignedDownloadUrl(recording.storageKey, 300, `${safeTitle}${ext}`);
-      console.log(`[rec-download] redirecting to signed URL (attachment disposition set)`);
-      return res.redirect(302, signedUrl);
+      const url = await objectStorage.getSignedDownloadUrl(recording.storageKey, 300, `${safeTitle}${ext}`);
+      console.log(`[rec-download] returning signed URL for id=${req.params.id}`);
+      return res.json({ url });
     } catch (err) {
       console.error("[Teleprompter] Download recording error:", err);
-      if (!res.headersSent) res.status(500).json({ message: "Failed to download recording" });
+      if (!res.headersSent) res.status(500).json({ message: "Failed to generate download link — the file may not have uploaded correctly." });
     }
+  });
+
+  // Legacy redirect route kept for backwards-compatibility (e.g. old emails / direct links).
+  app.get("/api/teleprompter/recordings/:id/download", requireAuth, async (req: Request, res: Response) => {
+    return res.redirect(302, `/api/teleprompter/recordings/${req.params.id}/download-url`);
   });
 
   // Transcribe a teleprompter recording on demand — downloads from GCS, extracts audio,

@@ -1081,41 +1081,95 @@ export function buildTeleprompterHtml(opts: { title: string; sections: Telepromp
       }
     }
 
+    function showUploadFailed(){
+      stopProcessingCountdown();
+      var btn=document.getElementById('download-btn');
+      var txt=document.getElementById('download-btn-text');
+      var msg=document.getElementById('review-cloud-msg');
+      if(btn){btn.disabled=true;btn.className='cam-btn cam-btn-dark';}
+      if(txt)txt.textContent='Upload Failed';
+      if(msg)msg.innerHTML='<p class="cam-msg error" style="font-size:11px">\u26a0 Video failed to save to your account. Use the download below to keep your take.</p>';
+      // Enable local blob fallback if available
+      if(recordedUrl){
+        var btn2=document.getElementById('download-btn');
+        if(btn2){btn2.disabled=false;}
+      }
+    }
+
+    function showProcessingSlowMessage(){
+      var txt=document.getElementById('download-btn-text');
+      var msg=document.getElementById('review-cloud-msg');
+      if(txt)txt.textContent='Still Processing\u2026';
+      if(msg)msg.innerHTML='<p class="cam-msg" style="font-size:11px;color:rgba(255,255,255,.6)">\u23f3 Large video still processing \u2014 this can take several minutes. You can wait here or refresh the page later to download from your recordings list.</p>';
+    }
+
     function startPollingProcessingStatus(id){
       if(pollTimer)clearInterval(pollTimer);
       var pollCount=0;
-      var MAX_POLLS=72; // ~3 minutes at 2.5s each; after that, give up and enable download
-      pollTimer=setInterval(function(){
-        pollCount++;
+      var FAST_POLLS=72;   // ~3 min at 2.5s — fast phase
+      var slowCount=0;
+      var SLOW_POLLS=40;   // ~20 more min at 30s — slow phase
+      var inSlowMode=false;
+
+      function doPoll(){
         fetch((APP_BASE_URL||'')+'/api/teleprompter/recordings/'+id+'/status',{credentials:'include'})
           .then(function(r){return r.json();})
           .then(function(d){
-            if(d.processingStatus==='complete'||d.processingStatus==='failed'){
+            if(d.processingStatus==='complete'){
               clearInterval(pollTimer);pollTimer=null;
               setDownloadReady(true);
-            } else if(pollCount>=MAX_POLLS){
-              // Upload seems to have stalled server-side — give up and let them try anyway
+            } else if(d.processingStatus==='failed'){
               clearInterval(pollTimer);pollTimer=null;
-              setDownloadReady(true);
+              showUploadFailed();
+            } else if(!inSlowMode){
+              pollCount++;
+              if(pollCount>=FAST_POLLS){
+                // Switch to slow polling — large videos take longer than 3 min
+                clearInterval(pollTimer);pollTimer=null;
+                inSlowMode=true;
+                showProcessingSlowMessage();
+                pollTimer=setInterval(doPoll,30000);
+              }
+            } else {
+              slowCount++;
+              if(slowCount>=SLOW_POLLS){
+                // 23 total minutes elapsed — give up waiting, let them download from recordings list
+                clearInterval(pollTimer);pollTimer=null;
+                var txt=document.getElementById('download-btn-text');
+                var msg=document.getElementById('review-cloud-msg');
+                if(txt)txt.textContent='Check Later';
+                if(msg)msg.innerHTML='<p class="cam-msg" style="font-size:11px;color:rgba(255,255,255,.6)">\u26a0 Processing is taking longer than expected. Check your recordings list in a few minutes to download.</p>';
+              }
             }
           })
-          .catch(function(){
-            if(pollCount>=MAX_POLLS){clearInterval(pollTimer);pollTimer=null;setDownloadReady(true);}
-          });
-      },2500);
+          .catch(function(){/* network error — keep polling */});
+      }
+
+      pollTimer=setInterval(doPoll,2500);
     }
 
     function downloadRecording(){
       // Prefer server-side download if the upload succeeded.
-      // Use APP_BASE_URL for the absolute path — this popup runs at a blob: URL so
-      // relative paths don't resolve to the server.
-      // No target='_blank': Content-Disposition:attachment keeps the page from navigating away,
-      // and avoids Chrome/Edge popup-blocker silently killing secondary popup downloads.
+      // Fetch the signed-URL endpoint first so we can detect and show errors
+      // instead of the browser silently saving a JSON error as "download.json".
       if(recordingId){
-        var a=document.createElement('a');
-        a.href=(APP_BASE_URL||window.location.origin)+'/api/teleprompter/recordings/'+recordingId+'/download';
-        a.download='';
-        document.body.appendChild(a);a.click();document.body.removeChild(a);
+        var downloadApiUrl=(APP_BASE_URL||window.location.origin)+'/api/teleprompter/recordings/'+recordingId+'/download-url';
+        fetch(downloadApiUrl,{credentials:'include'})
+          .then(function(r){return r.json();})
+          .then(function(d){
+            if(d.url){
+              // Navigate to the signed GCS URL — Content-Disposition:attachment
+              // on the GCS object triggers the save dialog without keeping our page.
+              window.location.href=d.url;
+            } else {
+              var msg=document.getElementById('review-cloud-msg');
+              if(msg)msg.innerHTML='<p class="cam-msg error" style="font-size:11px">\u26a0 '+(d.message||'Download failed')+'. Try refreshing the page and downloading from your recordings list.</p>';
+            }
+          })
+          .catch(function(){
+            var msg=document.getElementById('review-cloud-msg');
+            if(msg)msg.innerHTML='<p class="cam-msg error" style="font-size:11px">\u26a0 Could not reach the server. Check your connection and try again.</p>';
+          });
         return;
       }
       // Fallback: download from local blob
