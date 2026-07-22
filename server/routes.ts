@@ -5702,14 +5702,14 @@ export async function registerRoutes(
             const processed = await prepareTeleprompterMp4(assembledPath);
             if (processed !== assembledPath) { faststartPath = processed; uploadPath = processed; }
           }
-          const fileBuffer = fs.readFileSync(uploadPath);
+          const sizeBytes = fs.statSync(uploadPath).size;
           const objectStorage = new ObjectStorageService();
-          await objectStorage.uploadFile(storageKey, fileBuffer, finalMime);
+          await objectStorage.uploadFileFromPath(uploadPath, storageKey, finalMime);
           await storage.updateTeleprompterRecording(recording.id, userId, {
             processingStatus: "complete",
-            sizeBytes: fileBuffer.length,
+            sizeBytes,
           });
-          console.log(`[Teleprompter] finalize-chunked-upload complete: ${recording.id} (${fileBuffer.length} bytes)`);
+          console.log(`[Teleprompter] finalize-chunked-upload complete: ${recording.id} (${sizeBytes} bytes)`);
         } catch (bgErr) {
           console.error("[Teleprompter] background GCS upload failed:", bgErr);
           try { await storage.updateTeleprompterRecording(recording.id, userId, { processingStatus: "failed" }); } catch (_) {}
@@ -5769,10 +5769,10 @@ export async function registerRoutes(
         }
       }
 
-      const fileBuffer = fs.readFileSync(uploadPath);
       const finalMime = isMp4 ? "video/mp4" : (file.mimetype || "video/webm");
+      const sizeBytes = fs.statSync(uploadPath).size;
       const objectStorage = new ObjectStorageService();
-      await objectStorage.uploadFile(storageKey, fileBuffer, finalMime);
+      await objectStorage.uploadFileFromPath(uploadPath, storageKey, finalMime);
       try { fs.unlinkSync(file.path); } catch (_) {}
       if (faststartPath) { try { fs.unlinkSync(faststartPath); } catch (_) {} }
 
@@ -5784,7 +5784,7 @@ export async function registerRoutes(
         title,
         storageKey,
         mimeType: finalMime,
-        sizeBytes: fileBuffer.length,
+        sizeBytes,
         durationSeconds,
         format,
         expiresAt,

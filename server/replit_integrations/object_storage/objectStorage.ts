@@ -264,6 +264,28 @@ export class ObjectStorageService {
     });
   }
 
+  // Streams a local file to GCS without loading it into memory.
+  // Use this for large files (video recordings, etc.) to avoid OOM.
+  async uploadFileFromPath(localPath: string, objectPath: string, contentType: string = "video/mp4"): Promise<void> {
+    let entityDir = this.getPrivateObjectDir();
+    if (!entityDir.endsWith("/")) entityDir = `${entityDir}/`;
+    let fullPath: string;
+    if (objectPath.startsWith("/objects/")) {
+      fullPath = `${entityDir}${objectPath.slice("/objects/".length)}`;
+    } else {
+      fullPath = objectPath;
+    }
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    // bucket.upload() streams the file from disk using resumable multipart upload —
+    // it never loads the full file into the Node.js heap.
+    await bucket.upload(localPath, {
+      destination: objectName,
+      contentType,
+      resumable: true,
+    });
+  }
+
   // Uploads an image file to permanent storage and returns the object path.
   async uploadImage(localFilePath: string, objectName: string): Promise<string> {
     const fs = await import("fs");

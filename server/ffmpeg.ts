@@ -53,12 +53,13 @@ export async function faststartMp4(inputPath: string): Promise<string> {
       "-y",
       outputPath,
     ]);
-    // Kill after 30 s and fall back to the original file
+    // Kill after 10 min and fall back to the original file.
+    // A -c copy +faststart remux on a large file (1+ GB) can take several minutes.
     const killTimer = setTimeout(() => {
       try { ff.kill("SIGKILL"); } catch (_) {}
       try { fs.unlinkSync(outputPath); } catch (_) {}
       resolve(inputPath);
-    }, 30_000);
+    }, 600_000);
     ff.on("close", (code) => {
       clearTimeout(killTimer);
       if (code === 0 && fs.existsSync(outputPath)) {
@@ -133,8 +134,8 @@ export async function prepareTeleprompterMp4(inputPath: string): Promise<string>
       "-movflags", "+faststart",
       "-y", outputPath,
     ]);
-    // Audio-only re-encode is fast, but allow headroom for long recordings.
-    const killTimer = setTimeout(() => { try { ff.kill("SIGKILL"); } catch (_) {} resolve(false); }, 300_000);
+    // Audio-only re-encode is fast, but allow headroom for very long recordings.
+    const killTimer = setTimeout(() => { try { ff.kill("SIGKILL"); } catch (_) {} resolve(false); }, 900_000);
     ff.on("close", (code) => { clearTimeout(killTimer); resolve(code === 0 && fs.existsSync(outputPath)); });
     ff.on("error", () => { clearTimeout(killTimer); resolve(false); });
   });
