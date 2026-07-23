@@ -203,14 +203,14 @@ export default function LoginPage() {
           <div className="flex flex-col items-center gap-2 pt-1">
             <Link
               href="/forgot-password"
-              className="text-sm text-white/40 hover:text-white/70 transition-colors"
+              className="text-sm text-white/40 hover:text-white/70 transition-colors underline underline-offset-2"
               data-testid="link-forgot-password"
             >
               Forgot your password?
             </Link>
             <Link
               href="/forgot-password?firsttime=1"
-              className="text-sm text-white/40 hover:text-white/70 transition-colors"
+              className="text-sm text-white/40 hover:text-white/70 transition-colors underline underline-offset-2"
               data-testid="link-first-time"
             >
               First time signing in? Set your password →
@@ -224,7 +224,7 @@ export default function LoginPage() {
             href="https://www.fearlessinfluencer.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-white/50 hover:text-white/80 transition-colors"
+            className="text-sm text-white/50 hover:text-white/80 transition-colors underline underline-offset-2"
             data-testid="link-not-a-member"
           >
             Learn how to join →
