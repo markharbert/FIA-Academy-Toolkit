@@ -408,6 +408,38 @@ function LinkModal({
   );
 }
 
+function LinkScreenshot({ url, title }: { url: string; title: string }) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+  const src = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
+
+  return (
+    <div className="hidden md:block relative w-[108px] h-[60px] rounded-lg overflow-hidden bg-muted/40 shrink-0 border border-border/50">
+      {status !== "error" && (
+        <img
+          src={src}
+          alt={`Preview of ${title}`}
+          className={cn(
+            "w-full h-full object-cover object-top transition-opacity duration-500",
+            status === "loaded" ? "opacity-100" : "opacity-0"
+          )}
+          loading="lazy"
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("error")}
+        />
+      )}
+      {status !== "loaded" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          {status === "loading" ? (
+            <Globe className="h-4 w-4 text-muted-foreground/30 animate-pulse" />
+          ) : (
+            <Globe className="h-4 w-4 text-muted-foreground/30" />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LinkCard({
   link,
   copied,
@@ -463,13 +495,8 @@ function LinkCard({
         )}
       </div>
 
-      {/* URL */}
-      <div className="hidden sm:flex items-center gap-1.5 flex-[3] min-w-0 bg-muted/40 rounded-lg px-2.5 py-1.5">
-        <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
-        <span className="text-xs text-muted-foreground font-mono truncate">
-          {displayUrl}
-        </span>
-      </div>
+      {/* Page snapshot */}
+      <LinkScreenshot url={link.url} title={link.title} />
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
