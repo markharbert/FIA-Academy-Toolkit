@@ -357,7 +357,7 @@ function AppLayout() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col" style={{ background: "hsl(230,75%,10%)" }}>
       <main className="flex-1">
         <PublicRoutes />
       </main>
