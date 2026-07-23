@@ -217,6 +217,19 @@ export default function LoginPage() {
             </Link>
           </div>
         </div>
+
+        <div className="text-center">
+          <span className="text-sm text-white/30">Not a member? </span>
+          <a
+            href="https://www.fearlessinfluencer.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-white/50 hover:text-white/80 transition-colors underline underline-offset-2"
+            data-testid="link-not-a-member"
+          >
+            Learn how to join →
+          </a>
+        </div>
       </div>
     </div>
   );
