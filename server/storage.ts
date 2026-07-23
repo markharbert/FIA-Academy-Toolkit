@@ -1,5 +1,5 @@
 import { 
-  users, sessions, passwordResetTokens, magicLinkTokens, cfMagicTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
+  users, sessions, passwordResetTokens, magicLinkTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks,
   type PublicApiKey, type Webhook,
   projects, projectTasks,
@@ -52,7 +52,6 @@ import {
   funnelBrainFiles, type FunnelBrainFile,
   funnelTemplates, type FunnelTemplate,
   announcements, dismissedAnnouncements, type Announcement, type InsertAnnouncement,
-  type CfMagicToken,
   affiliateLinks, type AffiliateLink, type InsertAffiliateLink,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
@@ -161,15 +160,6 @@ export interface IStorage {
   getCfEnrolledUsers(): Promise<{ enrolledCount: number; revokedCount: number }>;
   getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId'>>>;
 
-  // CF Magic Tokens
-  createCfMagicToken(data: { tokenHash: string; userId: string; email: string; expiresAt: Date; ipAddress?: string | null }): Promise<CfMagicToken>;
-  getCfMagicTokenByHash(tokenHash: string): Promise<CfMagicToken | undefined>;
-  getLatestValidCfMagicTokenForUser(userId: string): Promise<CfMagicToken | undefined>;
-  markCfMagicTokenUsed(id: string): Promise<void>;
-  countRecentCfMagicRequests(email: string, since: Date): Promise<number>;
-  getRecentCfMagicTokens(limit: number): Promise<CfMagicToken[]>;
-  getCfMagicExpiryMinutes(): Promise<number>;
-  setCfMagicExpiryMinutes(minutes: number): Promise<void>;
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
   getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }>;
   setCfButtonSettings(settings: { text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }): Promise<void>;
@@ -1059,55 +1049,6 @@ export class DatabaseStorage implements IStorage {
     return query.orderBy(desc(users.cfEnrolledAt));
   }
 
-  // CF Magic Tokens
-  async createCfMagicToken(data: { tokenHash: string; userId: string; email: string; expiresAt: Date; ipAddress?: string | null }): Promise<CfMagicToken> {
-    const [row] = await db.insert(cfMagicTokens).values({
-      tokenHash: data.tokenHash,
-      userId: data.userId,
-      email: data.email,
-      expiresAt: data.expiresAt,
-      ipAddress: data.ipAddress ?? null,
-    }).returning();
-    return row;
-  }
-
-  async getCfMagicTokenByHash(tokenHash: string): Promise<CfMagicToken | undefined> {
-    const [row] = await db.select().from(cfMagicTokens).where(eq(cfMagicTokens.tokenHash, tokenHash));
-    return row;
-  }
-
-  async getLatestValidCfMagicTokenForUser(userId: string): Promise<CfMagicToken | undefined> {
-    const now = new Date();
-    const [row] = await db.select().from(cfMagicTokens)
-      .where(and(
-        eq(cfMagicTokens.userId, userId),
-        isNull(cfMagicTokens.usedAt),
-        gt(cfMagicTokens.expiresAt, now),
-      ))
-      .orderBy(desc(cfMagicTokens.createdAt))
-      .limit(1);
-    return row;
-  }
-
-  async markCfMagicTokenUsed(id: string): Promise<void> {
-    await db.update(cfMagicTokens).set({ usedAt: new Date() }).where(eq(cfMagicTokens.id, id));
-  }
-
-  async countRecentCfMagicRequests(email: string, since: Date): Promise<number> {
-    const [row] = await db.select({ count: count() }).from(cfMagicTokens)
-      .where(and(eq(cfMagicTokens.email, email), gte(cfMagicTokens.createdAt, since)));
-    return row?.count ?? 0;
-  }
-
-  async getRecentCfMagicTokens(limit: number): Promise<CfMagicToken[]> {
-    return db.select().from(cfMagicTokens).orderBy(desc(cfMagicTokens.createdAt)).limit(limit);
-  }
-
-  async getCfMagicExpiryMinutes(): Promise<number> {
-    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, "cf_magic_expiry_minutes"));
-    return row ? parseInt(row.value, 10) || 15 : 15;
-  }
-
   async getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>> {
     const rows = await db.select({
       userId: users.id,
@@ -1117,13 +1058,6 @@ export class DatabaseStorage implements IStorage {
       and(eq(users.cfEnrolled, true), sql`${users.cfContactId} IS NOT NULL`, eq(users.isDisabled, false))
     );
     return rows.filter((r): r is { userId: string; email: string; contactId: string } => !!r.contactId);
-  }
-
-  async setCfMagicExpiryMinutes(minutes: number): Promise<void> {
-    const now = new Date();
-    await db.insert(appSettings)
-      .values({ key: "cf_magic_expiry_minutes", value: String(minutes), updatedAt: now })
-      .onConflictDoUpdate({ target: appSettings.key, set: { value: String(minutes), updatedAt: now } });
   }
 
   async getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }> {

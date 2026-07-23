@@ -79,19 +79,6 @@ export const magicLinkTokens = pgTable("magic_link_tokens", {
 export type MagicLinkToken = typeof magicLinkTokens.$inferSelect;
 export type InsertMagicLinkToken = typeof magicLinkTokens.$inferInsert;
 
-// CF Magic Tokens — single-use, time-limited tokens for secure ClickFunnels one-click login
-export const cfMagicTokens = pgTable("cf_magic_tokens", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tokenHash: text("token_hash").notNull().unique(),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  email: text("email").notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
-  usedAt: timestamp("used_at"),
-  ipAddress: text("ip_address"),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
-export type CfMagicToken = typeof cfMagicTokens.$inferSelect;
-
 // Admin audit log table for tracking admin actions
 export const adminAuditLog = pgTable("admin_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
