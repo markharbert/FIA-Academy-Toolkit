@@ -53,7 +53,6 @@ import AnalyticsYouTubePage from "@/pages/analytics-youtube";
 import AnalyticsGscPage from "@/pages/analytics-gsc";
 import LinksPage from "@/pages/links";
 import NotFound from "@/pages/not-found";
-import NotAuthenticated from "@/pages/not-authenticated";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -67,7 +66,8 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!user) {
-    return <Redirect to="/members-only" />;
+    const dest = window.location.pathname + window.location.search;
+    return <Redirect to={`/login?redirect=${encodeURIComponent(dest)}`} />;
   }
 
   return <Component />;
@@ -128,7 +128,7 @@ function AuthenticatedCatchAll() {
     return <Redirect to="/dashboard" />;
   }
 
-  return <NotAuthenticated />;
+  return <Redirect to="/login" />;
 }
 
 function OldExploreRedirect() {
@@ -302,7 +302,7 @@ function PublicRoutes() {
         }}
       </Route>
       <Route path="/members-only">
-        {() => <NotAuthenticated />}
+        {() => <Redirect to="/login" />}
       </Route>
       <Route path="/login">
         {() => <PublicOnlyRoute component={LoginPage} />}

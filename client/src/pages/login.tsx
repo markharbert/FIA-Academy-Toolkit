@@ -65,12 +65,17 @@ export default function LoginPage() {
   const params = new URLSearchParams(window.location.search);
   const errorParam = params.get("error");
   const emailParam = params.get("email") || "";
+  const rawRedirect = params.get("redirect") || "";
+  // Only allow internal redirects (must start with /) to prevent open-redirect attacks
+  const redirectTo = rawRedirect.startsWith("/") ? rawRedirect : "/dashboard";
 
   useEffect(() => {
     if (errorParam && CF_ERROR_MESSAGES[errorParam]) {
       const { type, message } = CF_ERROR_MESSAGES[errorParam];
       if (type === "error") setError(message);
       else setNotice(message);
+    } else if (!errorParam && rawRedirect.startsWith("/")) {
+      setNotice("Please sign in to continue.");
     }
   }, [errorParam]);
 
@@ -88,11 +93,11 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const loggedInUser = await login(data.email, data.password);
-      // Collaborators go straight to Projects — that's their workspace
-      if (loggedInUser?.isCollaborator) {
+      // Collaborators default to Projects; everyone else honours the redirect param
+      if (loggedInUser?.isCollaborator && redirectTo === "/dashboard") {
         setLocation("/projects");
       } else {
-        setLocation("/dashboard");
+        setLocation(redirectTo);
       }
     } catch (err: any) {
       const code = err?.code;
