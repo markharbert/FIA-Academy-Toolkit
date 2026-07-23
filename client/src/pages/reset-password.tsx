@@ -226,10 +226,10 @@ export default function ResetPassword() {
                   {resetPasswordMutation.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Resetting...
+                      Saving...
                     </>
                   ) : (
-                    "Reset Password"
+                    "Set Password"
                   )}
                 </button>
               </form>

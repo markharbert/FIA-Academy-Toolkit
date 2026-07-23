@@ -5,9 +5,28 @@ const APP_BASE_URL = process.env.APP_BASE_URL || "https://toolkit.fearlessmarket
 
 export async function sendPasswordResetEmail(
   email: string,
-  resetToken: string
+  resetToken: string,
+  isFirstTime = false
 ): Promise<boolean> {
-  const resetLink = `${APP_BASE_URL}/reset-password?token=${resetToken}`;
+  const resetLink = `${APP_BASE_URL}/reset-password?token=${resetToken}${isFirstTime ? "&welcome=1" : ""}`;
+
+  const heading = isFirstTime ? "Set Up Your Password" : "Reset Your Password";
+  const intro = isFirstTime
+    ? "Welcome to the Academy Toolkit! To get started, you need to set a password for your account."
+    : "We received a request to reset the password for your Academy Toolkit account.";
+  const body = isFirstTime
+    ? "Click the button below to choose your password and activate your account:"
+    : "Click the button below to choose a new password:";
+  const buttonText = isFirstTime ? "Set My Password" : "Reset Password";
+  const footer = isFirstTime
+    ? "This link expires in 60 minutes."
+    : "This link expires in 60 minutes. If you didn't request a password reset, you can safely ignore this email.";
+  const subject = isFirstTime
+    ? "Set up your Academy Toolkit password"
+    : "Reset your Academy Toolkit password";
+  const textIntro = isFirstTime
+    ? "Welcome to the Academy Toolkit! Click the link below to set your password:"
+    : "We received a request to reset your password. Click the link below to set a new password:";
 
   const html = `
 <!DOCTYPE html>
@@ -27,18 +46,18 @@ export async function sendPasswordResetEmail(
         </tr>
         <tr>
           <td style="background:#fff;padding:28px 32px;border-radius:0 0 12px 12px;">
-            <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0f172a;">Reset Your Password</h2>
-            <p style="margin:0 0 16px;font-size:15px;color:#334155;">We received a request to reset the password for your Academy Toolkit account.</p>
-            <p style="margin:0 0 20px;font-size:15px;color:#334155;">Click the button below to choose a new password:</p>
+            <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0f172a;">${heading}</h2>
+            <p style="margin:0 0 16px;font-size:15px;color:#334155;">${intro}</p>
+            <p style="margin:0 0 20px;font-size:15px;color:#334155;">${body}</p>
             <p style="text-align:center;margin:0 0 24px;">
               <a href="${resetLink}" target="_blank" rel="noopener noreferrer"
                  style="display:inline-block;padding:12px 24px;background:#da0010;color:#fff;font-size:14px;font-weight:600;border-radius:8px;text-decoration:none;">
-                Reset Password
+                ${buttonText}
               </a>
             </p>
             <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Or copy and paste this link into your browser:</p>
             <p style="margin:0 0 24px;font-size:13px;color:#3f92cc;word-break:break-all;">${resetLink}</p>
-            <p style="margin:0 0 0;font-size:13px;color:#94a3b8;"><strong>This link expires in 60 minutes.</strong> If you didn't request a password reset, you can safely ignore this email.</p>
+            <p style="margin:0 0 0;font-size:13px;color:#94a3b8;"><strong>${footer}</strong></p>
           </td>
         </tr>
         <tr>
@@ -52,16 +71,16 @@ export async function sendPasswordResetEmail(
 </body>
 </html>`;
 
-  const text = `Reset Your Academy Toolkit Password\n\nWe received a request to reset your password.\n\nClick the link below to set a new password:\n${resetLink}\n\nThis link expires in 60 minutes.\n\nIf you didn't request a password reset, you can safely ignore this email.`;
+  const text = `${heading}\n\n${textIntro}\n${resetLink}\n\n${footer}`;
 
   try {
     await sendEmail({
       to: email,
-      subject: "Reset your Academy Toolkit password",
+      subject,
       html,
       text,
     });
-    console.log(`[Email] Password reset email sent to ${email}`);
+    console.log(`[Email] Password ${isFirstTime ? "setup" : "reset"} email sent to ${email}`);
     return true;
   } catch (error) {
     console.error("[Email] Failed to send password reset email:", error);

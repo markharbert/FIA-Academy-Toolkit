@@ -163,16 +163,6 @@ export default function LoginPage() {
                 )}
               />
 
-              <div className="flex items-center justify-end">
-                <Link
-                  href="/forgot-password"
-                  className="text-sm text-white/40 hover:text-white/70 transition-colors"
-                  data-testid="link-forgot-password"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-
               <button
                 type="submit"
                 disabled={isLoading}
@@ -191,6 +181,23 @@ export default function LoginPage() {
               </button>
             </form>
           </Form>
+
+          <div className="flex flex-col items-center gap-2 pt-1">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-white/40 hover:text-white/70 transition-colors"
+              data-testid="link-forgot-password"
+            >
+              Forgot your password?
+            </Link>
+            <Link
+              href="/forgot-password?firsttime=1"
+              className="text-sm text-white/40 hover:text-white/70 transition-colors"
+              data-testid="link-first-time"
+            >
+              First time signing in? Set your password →
+            </Link>
+          </div>
         </div>
       </div>
     </div>

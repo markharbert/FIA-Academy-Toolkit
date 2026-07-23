@@ -827,10 +827,6 @@ export async function registerRoutes(
         return res.json({ message: successMessage });
       }
 
-      if (!user.passwordHash) {
-        return res.json({ message: successMessage });
-      }
-
       // Per-user rate limiting
       const recentRequests = await storage.countRecentPasswordResetRequests(user.id, oneHourAgo);
       if (recentRequests >= MAX_RESET_REQUESTS_PER_HOUR) {

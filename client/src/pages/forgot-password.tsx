@@ -90,9 +90,9 @@ export default function ForgotPassword() {
             data-testid="card-forgot-password"
           >
             <div className="text-center space-y-2">
-              <h1 className="text-xl font-semibold text-white" data-testid="text-page-title">Forgot Password</h1>
+              <h1 className="text-xl font-semibold text-white" data-testid="text-page-title">Set or Reset Your Password</h1>
               <p className="text-sm text-white/50 leading-relaxed" data-testid="text-page-description">
-                Enter your email address and we'll send you a link to reset your password.
+                Enter your email and we'll send you a link to set or reset your password. Works whether it's your first time or you've forgotten yours.
               </p>
             </div>
 
@@ -133,7 +133,7 @@ export default function ForgotPassword() {
                       Sending...
                     </>
                   ) : (
-                    "Send Reset Link"
+                    "Send Me a Link"
                   )}
                 </button>
               </form>
