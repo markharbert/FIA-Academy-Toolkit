@@ -2012,3 +2012,28 @@ export const dismissedAnnouncements = pgTable("dismissed_announcements", {
   announcementId: integer("announcement_id").notNull().references(() => announcements.id, { onDelete: "cascade" }),
   dismissedAt: timestamp("dismissed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+// ─── Affiliate Links ───────────────────────────────────────────────────────────
+export const affiliateLinks = pgTable("affiliate_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  description: text("description"),
+  category: text("category"),
+  emoji: text("emoji").default("🔗").notNull(),
+  clickCount: integer("click_count").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertAffiliateLinkSchema = createInsertSchema(affiliateLinks).omit({
+  id: true,
+  clickCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAffiliateLink = z.infer<typeof insertAffiliateLinkSchema>;
+export type AffiliateLink = typeof affiliateLinks.$inferSelect;

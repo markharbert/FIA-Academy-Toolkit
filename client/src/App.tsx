@@ -52,6 +52,7 @@ import FeedbackPage from "@/pages/feedback";
 import AnalyticsPage from "@/pages/analytics";
 import AnalyticsYouTubePage from "@/pages/analytics-youtube";
 import AnalyticsGscPage from "@/pages/analytics-gsc";
+import LinksPage from "@/pages/links";
 import NotFound from "@/pages/not-found";
 import NotAuthenticated from "@/pages/not-authenticated";
 
@@ -161,6 +162,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/admin">
         {() => <AdminRoute component={AdminPage} />}
+      </Route>
+      <Route path="/links">
+        {() => <AdminRoute component={LinksPage} />}
       </Route>
       <Route path="/account">
         {() => <ProtectedRoute component={AccountPage} />}

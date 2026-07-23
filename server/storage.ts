@@ -660,6 +660,15 @@ export interface IStorage {
   refreshWorkspaceInviteToken(id: string, ownerId: string, newToken: string): Promise<WorkspaceInvite | undefined>;
   countActiveWorkspaceInvites(ownerId: string): Promise<number>;
   getCollaboratorOwner(userId: string): Promise<string | undefined>;
+
+  // Affiliate Links
+  getAffiliateLinks(userId: string, opts?: { q?: string; category?: string; activeOnly?: boolean }): Promise<import("@shared/schema").AffiliateLink[]>;
+  getAffiliateLink(id: string, userId: string): Promise<import("@shared/schema").AffiliateLink | undefined>;
+  createAffiliateLink(userId: string, data: import("@shared/schema").InsertAffiliateLink): Promise<import("@shared/schema").AffiliateLink>;
+  updateAffiliateLink(id: string, userId: string, updates: Partial<import("@shared/schema").InsertAffiliateLink>): Promise<import("@shared/schema").AffiliateLink | undefined>;
+  deleteAffiliateLink(id: string, userId: string): Promise<void>;
+  incrementAffiliateLinkClick(id: string, userId: string): Promise<void>;
+  getAffiliateLinkCategories(userId: string): Promise<string[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5031,6 +5040,75 @@ export class DatabaseStorage implements IStorage {
   async resetAnnouncementDismissals(id: number): Promise<void> {
     await db.delete(dismissedAnnouncements)
       .where(eq(dismissedAnnouncements.announcementId, id));
+  }
+
+  // ─── Affiliate Links ──────────────────────────────────────────────────────────
+  async getAffiliateLinks(userId: string, opts?: { q?: string; category?: string; activeOnly?: boolean }): Promise<import("@shared/schema").AffiliateLink[]> {
+    const { affiliateLinks } = await import("@shared/schema");
+    const conditions: any[] = [eq(affiliateLinks.userId, userId)];
+    if (opts?.activeOnly) conditions.push(eq(affiliateLinks.isActive, true));
+    if (opts?.category) conditions.push(eq(affiliateLinks.category, opts.category));
+
+    const results = await db.select().from(affiliateLinks)
+      .where(and(...conditions))
+      .orderBy(asc(affiliateLinks.sortOrder), asc(affiliateLinks.createdAt));
+
+    if (opts?.q) {
+      const q = opts.q.toLowerCase();
+      return results.filter(l =>
+        l.title.toLowerCase().includes(q) ||
+        l.url.toLowerCase().includes(q) ||
+        (l.description && l.description.toLowerCase().includes(q)) ||
+        (l.category && l.category.toLowerCase().includes(q))
+      );
+    }
+    return results;
+  }
+
+  async getAffiliateLink(id: string, userId: string): Promise<import("@shared/schema").AffiliateLink | undefined> {
+    const { affiliateLinks } = await import("@shared/schema");
+    const [link] = await db.select().from(affiliateLinks)
+      .where(and(eq(affiliateLinks.id, id), eq(affiliateLinks.userId, userId)));
+    return link || undefined;
+  }
+
+  async createAffiliateLink(userId: string, data: import("@shared/schema").InsertAffiliateLink): Promise<import("@shared/schema").AffiliateLink> {
+    const { affiliateLinks } = await import("@shared/schema");
+    const [link] = await db.insert(affiliateLinks)
+      .values({ ...data, userId })
+      .returning();
+    return link;
+  }
+
+  async updateAffiliateLink(id: string, userId: string, updates: Partial<import("@shared/schema").InsertAffiliateLink>): Promise<import("@shared/schema").AffiliateLink | undefined> {
+    const { affiliateLinks } = await import("@shared/schema");
+    const [link] = await db.update(affiliateLinks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(affiliateLinks.id, id), eq(affiliateLinks.userId, userId)))
+      .returning();
+    return link || undefined;
+  }
+
+  async deleteAffiliateLink(id: string, userId: string): Promise<void> {
+    const { affiliateLinks } = await import("@shared/schema");
+    await db.delete(affiliateLinks)
+      .where(and(eq(affiliateLinks.id, id), eq(affiliateLinks.userId, userId)));
+  }
+
+  async incrementAffiliateLinkClick(id: string, userId: string): Promise<void> {
+    const { affiliateLinks } = await import("@shared/schema");
+    await db.update(affiliateLinks)
+      .set({ clickCount: sql`${affiliateLinks.clickCount} + 1`, updatedAt: new Date() })
+      .where(and(eq(affiliateLinks.id, id), eq(affiliateLinks.userId, userId)));
+  }
+
+  async getAffiliateLinkCategories(userId: string): Promise<string[]> {
+    const { affiliateLinks } = await import("@shared/schema");
+    const rows = await db.selectDistinct({ category: affiliateLinks.category })
+      .from(affiliateLinks)
+      .where(eq(affiliateLinks.userId, userId))
+      .orderBy(asc(affiliateLinks.category));
+    return rows.map(r => r.category).filter((c): c is string => !!c);
   }
 }
 

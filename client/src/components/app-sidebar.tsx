@@ -35,6 +35,7 @@ import {
   BarChart2,
   ChevronDown,
   GitFork,
+  Link2,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -187,6 +188,15 @@ const allNavItems: NavItem[] = [
         activeClass: "!bg-emerald-500/10 !text-emerald-200 font-medium",
       },
     ],
+  },
+  {
+    title: "Link Library",
+    url: "/links",
+    icon: Link2,
+    iconColor: "text-purple-400",
+    testId: "nav-links",
+    collaboratorVisible: false,
+    adminOnly: true,
   },
 ];
 

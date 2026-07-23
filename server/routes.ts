@@ -12248,6 +12248,136 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // ─── Affiliate Links ─────────────────────────────────────────────────────────
+  app.get("/api/affiliate-links/categories", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const categories = await storage.getAffiliateLinkCategories(userId);
+      res.json(categories);
+    } catch (err) {
+      console.error("[affiliate-links] categories error:", err);
+      res.status(500).json({ message: "Failed to load categories" });
+    }
+  });
+
+  app.get("/api/affiliate-links", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { q, category } = req.query as { q?: string; category?: string };
+      const links = await storage.getAffiliateLinks(userId, { q, category });
+      res.json(links);
+    } catch (err) {
+      console.error("[affiliate-links] list error:", err);
+      res.status(500).json({ message: "Failed to load links" });
+    }
+  });
+
+  app.post("/api/affiliate-links", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { insertAffiliateLinkSchema } = await import("@shared/schema");
+      const parsed = insertAffiliateLinkSchema.safeParse({ ...req.body, userId });
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
+      const link = await storage.createAffiliateLink(userId, parsed.data);
+      res.status(201).json(link);
+    } catch (err) {
+      console.error("[affiliate-links] create error:", err);
+      res.status(500).json({ message: "Failed to create link" });
+    }
+  });
+
+  app.patch("/api/affiliate-links/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { insertAffiliateLinkSchema } = await import("@shared/schema");
+      const parsed = insertAffiliateLinkSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
+      const { userId: _uid, ...updates } = parsed.data as any;
+      const link = await storage.updateAffiliateLink(req.params.id, userId, updates);
+      if (!link) return res.status(404).json({ message: "Link not found" });
+      res.json(link);
+    } catch (err) {
+      console.error("[affiliate-links] update error:", err);
+      res.status(500).json({ message: "Failed to update link" });
+    }
+  });
+
+  app.delete("/api/affiliate-links/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      await storage.deleteAffiliateLink(req.params.id, userId);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[affiliate-links] delete error:", err);
+      res.status(500).json({ message: "Failed to delete link" });
+    }
+  });
+
+  app.post("/api/affiliate-links/:id/click", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      await storage.incrementAffiliateLinkClick(req.params.id, userId);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[affiliate-links] click error:", err);
+      res.status(500).json({ message: "Failed to track click" });
+    }
+  });
+
+  // v1 API – Affiliate Links
+  app.get("/api/v1/links", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { q, category } = req.query as { q?: string; category?: string };
+      const links = await storage.getAffiliateLinks(user.id, { q, category, activeOnly: true });
+      res.json({ links });
+    } catch (err) {
+      console.error("[v1] links list error:", err);
+      res.status(500).json({ message: "Failed to load links" });
+    }
+  });
+
+  app.post("/api/v1/links", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { insertAffiliateLinkSchema } = await import("@shared/schema");
+      const parsed = insertAffiliateLinkSchema.safeParse({ ...req.body, userId: user.id });
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const link = await storage.createAffiliateLink(user.id, parsed.data);
+      res.status(201).json({ link });
+    } catch (err) {
+      console.error("[v1] links create error:", err);
+      res.status(500).json({ message: "Failed to create link" });
+    }
+  });
+
+  app.patch("/api/v1/links/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { insertAffiliateLinkSchema } = await import("@shared/schema");
+      const parsed = insertAffiliateLinkSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
+      const { userId: _uid, ...updates } = parsed.data as any;
+      const link = await storage.updateAffiliateLink(req.params.id, user.id, updates);
+      if (!link) return res.status(404).json({ message: "Link not found" });
+      res.json({ link });
+    } catch (err) {
+      console.error("[v1] links update error:", err);
+      res.status(500).json({ message: "Failed to update link" });
+    }
+  });
+
+  app.delete("/api/v1/links/:id", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      await storage.deleteAffiliateLink(req.params.id, user.id);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[v1] links delete error:", err);
+      res.status(500).json({ message: "Failed to delete link" });
+    }
+  });
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 

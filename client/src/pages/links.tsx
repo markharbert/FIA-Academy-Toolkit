@@ -1,0 +1,764 @@
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
+import { Redirect } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Plus,
+  Search,
+  Copy,
+  ExternalLink,
+  Pencil,
+  Trash2,
+  Check,
+  Link2,
+  MousePointerClick,
+  FolderOpen,
+  Globe,
+  Loader2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { AffiliateLink } from "@shared/schema";
+
+const EMOJI_OPTIONS = [
+  "🔗", "💰", "🎯", "⭐", "🚀", "📈", "💎", "🛒", "🎁", "💡",
+  "📱", "🖥️", "📧", "🎓", "📚", "🏆", "🌟", "💪", "✅", "🔑",
+  "🌐", "🤝", "💼", "🏷️", "🎉", "🔥", "⚡", "💫", "🌈", "🎨",
+  "🛍️", "📊", "🔔", "🎵", "🏠", "🚗", "✈️", "🌴", "🎪", "🎭",
+];
+
+const PALETTE = [
+  "bg-indigo-500/20",
+  "bg-violet-500/20",
+  "bg-rose-500/20",
+  "bg-amber-500/20",
+  "bg-teal-500/20",
+  "bg-sky-500/20",
+  "bg-pink-500/20",
+  "bg-emerald-500/20",
+  "bg-orange-500/20",
+  "bg-cyan-500/20",
+  "bg-purple-500/20",
+  "bg-lime-500/20",
+];
+
+function pickColor(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) & 0x7fffffff;
+  return PALETTE[h % PALETTE.length];
+}
+
+const formSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  url: z.string().url("Enter a valid URL (include https://)"),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  emoji: z.string().min(1),
+  isActive: z.boolean(),
+  sortOrder: z.number().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+function LinkModal({
+  open,
+  link,
+  onClose,
+  onSaved,
+  existingCategories,
+}: {
+  open: boolean;
+  link: AffiliateLink | null;
+  onClose: () => void;
+  onSaved: () => void;
+  existingCategories: string[];
+}) {
+  const { toast } = useToast();
+  const isEdit = !!link;
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      title: "",
+      url: "",
+      description: "",
+      category: "",
+      emoji: "🔗",
+      isActive: true,
+    },
+  });
+
+  useEffect(() => {
+    if (open) {
+      if (link) {
+        form.reset({
+          title: link.title,
+          url: link.url,
+          description: link.description || "",
+          category: link.category || "",
+          emoji: link.emoji,
+          isActive: link.isActive,
+        });
+      } else {
+        form.reset({
+          title: "",
+          url: "",
+          description: "",
+          category: "",
+          emoji: "🔗",
+          isActive: true,
+        });
+      }
+    }
+  }, [open, link]);
+
+  const mutation = useMutation({
+    mutationFn: (data: FormValues) => {
+      const payload = {
+        ...data,
+        description: data.description || null,
+        category: data.category || null,
+      };
+      if (isEdit) {
+        return apiRequest("PATCH", `/api/affiliate-links/${link!.id}`, payload);
+      }
+      return apiRequest("POST", "/api/affiliate-links", payload);
+    },
+    onSuccess: () => {
+      toast({ title: isEdit ? "Link updated" : "Link added!" });
+      onSaved();
+    },
+    onError: () => {
+      toast({ title: "Something went wrong", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Link" : "Add Affiliate Link"}</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="emoji"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Icon</FormLabel>
+                  <div className="grid grid-cols-10 gap-1 p-2 rounded-lg border border-border bg-muted/20">
+                    {EMOJI_OPTIONS.map((e) => (
+                      <button
+                        key={e}
+                        type="button"
+                        onClick={() => field.onChange(e)}
+                        className={cn(
+                          "h-8 w-8 rounded-md text-lg flex items-center justify-center transition-all",
+                          field.value === e
+                            ? "bg-primary/20 ring-2 ring-primary ring-offset-1"
+                            : "hover:bg-muted"
+                        )}
+                        data-testid={`emoji-${e}`}
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Title</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g. Kajabi 30-Day Trial"
+                      {...field}
+                      data-testid="input-link-title"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="url"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>URL</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="https://..."
+                      {...field}
+                      data-testid="input-link-url"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Category{" "}
+                    <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g. Software, Courses, Tools"
+                      {...field}
+                      list="category-suggestions"
+                      data-testid="input-link-category"
+                    />
+                  </FormControl>
+                  {existingCategories.length > 0 && (
+                    <datalist id="category-suggestions">
+                      {existingCategories.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Note{" "}
+                    <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Add a note about this link..."
+                      {...field}
+                      rows={2}
+                      className="resize-none"
+                      data-testid="input-link-description"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {isEdit && (
+              <FormField
+                control={form.control}
+                name="isActive"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-lg border border-border p-3 gap-4">
+                    <div className="min-w-0">
+                      <FormLabel className="font-medium cursor-pointer">Active</FormLabel>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Inactive links are hidden from the mobile app
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="toggle-link-active"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                data-testid="button-cancel-link"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={mutation.isPending}
+                data-testid="button-save-link"
+              >
+                {mutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving…
+                  </>
+                ) : isEdit ? (
+                  "Save Changes"
+                ) : (
+                  "Add Link"
+                )}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LinkCard({
+  link,
+  copied,
+  onCopy,
+  onEdit,
+  onDelete,
+}: {
+  link: AffiliateLink;
+  copied: boolean;
+  onCopy: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const colorBg = pickColor(link.category || link.id);
+  const displayUrl = link.url.replace(/^https?:\/\//, "").split("?")[0].split("/").slice(0, 2).join("/");
+
+  return (
+    <div
+      className="group relative bg-card border border-border rounded-xl p-5 flex flex-col gap-3 hover:border-border/60 hover:shadow-lg hover:shadow-black/10 transition-all duration-200"
+      data-testid={`card-link-${link.id}`}
+    >
+      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <button
+          onClick={onEdit}
+          className="h-7 w-7 rounded-md flex items-center justify-center bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+          data-testid={`button-edit-link-${link.id}`}
+          title="Edit"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="h-7 w-7 rounded-md flex items-center justify-center bg-muted hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+          data-testid={`button-delete-link-${link.id}`}
+          title="Delete"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="flex items-start gap-3 pr-16">
+        <div
+          className={cn(
+            "h-12 w-12 rounded-xl flex items-center justify-center text-2xl shrink-0",
+            colorBg
+          )}
+        >
+          {link.emoji}
+        </div>
+        <div className="min-w-0 pt-0.5">
+          <h3 className="font-semibold text-sm text-foreground leading-snug truncate">
+            {link.title}
+          </h3>
+          {link.category && (
+            <Badge variant="secondary" className="mt-1 text-xs h-5 px-1.5 font-normal">
+              {link.category}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {link.description && (
+        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+          {link.description}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-2.5 py-1.5 min-w-0">
+        <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+        <span className="text-xs text-muted-foreground font-mono truncate flex-1">
+          {displayUrl}
+        </span>
+        {!link.isActive && (
+          <Badge
+            variant="outline"
+            className="text-[10px] h-4 px-1.5 shrink-0 text-muted-foreground"
+          >
+            Inactive
+          </Badge>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 mt-auto">
+        <Button
+          onClick={onCopy}
+          size="sm"
+          className={cn(
+            "flex-1 h-8 text-xs font-medium transition-all duration-200",
+            copied && "bg-emerald-600 hover:bg-emerald-600 text-white"
+          )}
+          data-testid={`button-copy-link-${link.id}`}
+        >
+          {copied ? (
+            <>
+              <Check className="h-3.5 w-3.5 mr-1.5" />
+              Copied!
+            </>
+          ) : (
+            <>
+              <Copy className="h-3.5 w-3.5 mr-1.5" />
+              Copy Link
+            </>
+          )}
+        </Button>
+        <a
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="h-8 w-8 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+          data-testid={`link-preview-${link.id}`}
+          title="Open link"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+        {link.clickCount > 0 && (
+          <div
+            className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+            title={`Copied ${link.clickCount} time${link.clickCount !== 1 ? "s" : ""}`}
+          >
+            <MousePointerClick className="h-3 w-3" />
+            <span>{link.clickCount}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function LinksPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingLink, setEditingLink] = useState<AffiliateLink | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  const { data: links = [], isLoading: linksLoading } = useQuery<AffiliateLink[]>({
+    queryKey: ["/api/affiliate-links"],
+    enabled: !!user,
+  });
+
+  const { data: categories = [] } = useQuery<string[]>({
+    queryKey: ["/api/affiliate-links/categories"],
+    enabled: !!user,
+  });
+
+  const filtered = useMemo(() => {
+    let result = links;
+    if (activeCategory !== "all") {
+      result = result.filter((l) => l.category === activeCategory);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (l) =>
+          l.title.toLowerCase().includes(q) ||
+          l.url.toLowerCase().includes(q) ||
+          l.description?.toLowerCase().includes(q) ||
+          l.category?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [links, activeCategory, search]);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/affiliate-links/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/affiliate-links"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/affiliate-links/categories"] });
+      setDeleteTarget(null);
+      toast({ title: "Link deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete link", variant: "destructive" });
+    },
+  });
+
+  const clickMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/affiliate-links/${id}/click`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/affiliate-links"] });
+    },
+  });
+
+  const handleCopy = (link: AffiliateLink) => {
+    navigator.clipboard.writeText(link.url);
+    clickMutation.mutate(link.id);
+    setCopiedId(link.id);
+    toast({ title: "Copied to clipboard!" });
+    setTimeout(() => setCopiedId((prev) => (prev === link.id ? null : prev)), 2000);
+  };
+
+  const handleSaved = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/affiliate-links"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/affiliate-links/categories"] });
+    setModalOpen(false);
+    setEditingLink(null);
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user?.isAdmin) {
+    return <Redirect to="/dashboard" />;
+  }
+
+  const totalClicks = links.reduce((sum, l) => sum + l.clickCount, 0);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div className="mb-8">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-purple-500/15 flex items-center justify-center shrink-0">
+                <Link2 className="h-5 w-5 text-purple-400" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                  Link Library
+                </h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  All your affiliate links in one place — copy and share in seconds
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => {
+                setEditingLink(null);
+                setModalOpen(true);
+              }}
+              className="shrink-0"
+              data-testid="button-add-link"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Link
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-3 mt-5 flex-wrap">
+            <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-1.5">
+              <span className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">{links.length}</span>{" "}
+                {links.length === 1 ? "link" : "links"}
+              </span>
+            </div>
+            {categories.length > 0 && (
+              <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-1.5">
+                <span className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{categories.length}</span>{" "}
+                  {categories.length === 1 ? "category" : "categories"}
+                </span>
+              </div>
+            )}
+            {totalClicks > 0 && (
+              <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-1.5">
+                <MousePointerClick className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{totalClicks}</span> copies
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mb-4">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search links…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-links"
+            />
+          </div>
+        </div>
+
+        {categories.length > 0 && (
+          <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              onClick={() => setActiveCategory("all")}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0",
+                activeCategory === "all"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/70"
+              )}
+              data-testid="tab-all"
+            >
+              All
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0",
+                  activeCategory === cat
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/70"
+                )}
+                data-testid={`tab-cat-${cat}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {linksLoading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-48 rounded-xl bg-muted/30 animate-pulse" />
+            ))}
+          </div>
+        )}
+
+        {!linksLoading && filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="h-16 w-16 rounded-2xl bg-muted/40 flex items-center justify-center mb-4">
+              {search || activeCategory !== "all" ? (
+                <Search className="h-7 w-7 text-muted-foreground/50" />
+              ) : (
+                <FolderOpen className="h-7 w-7 text-muted-foreground/50" />
+              )}
+            </div>
+            <h3 className="text-base font-semibold text-foreground mb-1">
+              {search || activeCategory !== "all" ? "No links found" : "No links yet"}
+            </h3>
+            <p className="text-sm text-muted-foreground mb-5 max-w-xs">
+              {search || activeCategory !== "all"
+                ? "Try adjusting your search or clearing the category filter"
+                : "Add your affiliate links here and they'll be ready to copy and share instantly"}
+            </p>
+            {!search && activeCategory === "all" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEditingLink(null);
+                  setModalOpen(true);
+                }}
+                data-testid="button-add-first-link"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add your first link
+              </Button>
+            )}
+          </div>
+        )}
+
+        {!linksLoading && filtered.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((link) => (
+              <LinkCard
+                key={link.id}
+                link={link}
+                copied={copiedId === link.id}
+                onCopy={() => handleCopy(link)}
+                onEdit={() => {
+                  setEditingLink(link);
+                  setModalOpen(true);
+                }}
+                onDelete={() => setDeleteTarget(link.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <LinkModal
+        open={modalOpen}
+        link={editingLink}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingLink(null);
+        }}
+        onSaved={handleSaved}
+        existingCategories={categories}
+      />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this link?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The link will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
