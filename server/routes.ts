@@ -453,22 +453,41 @@ export async function registerRoutes(
       const collaboratorOwnerId = await storage.getCollaboratorOwner(user.id);
       const isCollaborator = !!collaboratorOwnerId;
 
-      // If ClickFunnels is configured, require active membership for non-admin,
-      // non-collaborator users. Admins and collaborators are always exempt.
+      // If ClickFunnels is configured, verify active membership via live CF API
+      // for non-admin, non-collaborator users.
       if (!isCollaborator && CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
-        if (user.cfEnrolled === false) {
-          console.warn(`[Login] CF membership revoked for user ${user.id} (${email})`);
-          return res.status(403).json({
-            message: "Your membership has been revoked. Please reactivate your ClickFunnels membership to continue.",
-            error: "cf_revoked",
+        try {
+          const cfInfo = await checkCfEnrollmentByEmail(email, user.cfContactId ?? undefined);
+          if (!cfInfo.enrolled) {
+            console.warn(`[Login] CF live check: not enrolled — ${email}`);
+            await storage.updateUser(user.id, { cfEnrolled: false, cfRevokedAt: new Date() });
+            return res.status(403).json({
+              message: "Your Fearless Influencer Academy membership is not active. Please check your membership and try again.",
+              error: "cf_not_enrolled",
+            });
+          }
+          // Sync latest CF data back to local DB
+          await storage.updateUser(user.id, {
+            cfEnrolled: true,
+            cfRevokedAt: null,
+            cfContactId: cfInfo.contactId ?? user.cfContactId,
           });
-        }
-        if (user.cfEnrolled !== true) {
-          console.warn(`[Login] CF enrollment not confirmed for user ${user.id} (${email})`);
-          return res.status(403).json({
-            message: "This toolkit is exclusively available to active members. Your membership status could not be confirmed.",
-            error: "cf_not_enrolled",
-          });
+          console.log(`[Login] CF live check passed for ${email}`);
+        } catch (cfErr: any) {
+          console.error(`[Login] CF API check failed, falling back to local DB: ${cfErr?.message}`);
+          // CF API is down — fall back to locally-synced status
+          if (user.cfEnrolled === false) {
+            return res.status(403).json({
+              message: "Your membership has been revoked. Please reactivate your Fearless Influencer Academy membership to continue.",
+              error: "cf_revoked",
+            });
+          }
+          if (user.cfEnrolled !== true) {
+            return res.status(403).json({
+              message: "We couldn't verify your membership right now. Please try again in a moment.",
+              error: "cf_api_error",
+            });
+          }
         }
       }
 
