@@ -53,13 +53,6 @@ import {
 import { cn } from "@/lib/utils";
 import type { AffiliateLink } from "@shared/schema";
 
-const EMOJI_OPTIONS = [
-  "🔗", "💰", "🎯", "⭐", "🚀", "📈", "💎", "🛒", "🎁", "💡",
-  "📱", "🖥️", "📧", "🎓", "📚", "🏆", "🌟", "💪", "✅", "🔑",
-  "🌐", "🤝", "💼", "🏷️", "🎉", "🔥", "⚡", "💫", "🌈", "🎨",
-  "🛍️", "📊", "🔔", "🎵", "🏠", "🚗", "✈️", "🌴", "🎪", "🎭",
-];
-
 const PRESET_CATEGORIES = [
   "Software",
   "Courses",
@@ -79,33 +72,11 @@ const PRESET_CATEGORIES = [
   "Business Tools",
 ];
 
-const PALETTE = [
-  "bg-indigo-500/20",
-  "bg-violet-500/20",
-  "bg-rose-500/20",
-  "bg-amber-500/20",
-  "bg-teal-500/20",
-  "bg-sky-500/20",
-  "bg-pink-500/20",
-  "bg-emerald-500/20",
-  "bg-orange-500/20",
-  "bg-cyan-500/20",
-  "bg-purple-500/20",
-  "bg-lime-500/20",
-];
-
-function pickColor(seed: string) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) & 0x7fffffff;
-  return PALETTE[h % PALETTE.length];
-}
-
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
   url: z.string().url("Enter a valid URL (include https://)"),
   description: z.string().optional(),
   category: z.string().optional(),
-  emoji: z.string().min(1),
   isActive: z.boolean(),
   sortOrder: z.number().optional(),
 });
@@ -136,7 +107,6 @@ function LinkModal({
       url: "",
       description: "",
       category: "",
-      emoji: "🔗",
       isActive: true,
     },
   });
@@ -149,7 +119,6 @@ function LinkModal({
           url: link.url,
           description: link.description || "",
           category: link.category || "",
-          emoji: link.emoji,
           isActive: link.isActive,
         });
         const cat = link.category || "";
@@ -160,7 +129,6 @@ function LinkModal({
           url: "",
           description: "",
           category: "",
-          emoji: "🔗",
           isActive: true,
         });
         setShowCustom(false);
@@ -172,6 +140,7 @@ function LinkModal({
     mutationFn: (data: FormValues) => {
       const payload = {
         ...data,
+        emoji: "🔗",
         description: data.description || null,
         category: data.category || null,
       };
@@ -197,35 +166,6 @@ function LinkModal({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="emoji"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Icon</FormLabel>
-                  <div className="grid grid-cols-10 gap-1 p-2 rounded-lg border border-border bg-muted/20">
-                    {EMOJI_OPTIONS.map((e) => (
-                      <button
-                        key={e}
-                        type="button"
-                        onClick={() => field.onChange(e)}
-                        className={cn(
-                          "h-8 w-8 rounded-md text-lg flex items-center justify-center transition-all",
-                          field.value === e
-                            ? "bg-primary/20 ring-2 ring-primary ring-offset-1"
-                            : "hover:bg-muted"
-                        )}
-                        data-testid={`emoji-${e}`}
-                      >
-                        {e}
-                      </button>
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="title"
