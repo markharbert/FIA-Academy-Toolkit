@@ -224,7 +224,7 @@ export default function LoginPage() {
             href="https://www.fearlessinfluencer.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-white/50 hover:text-white/80 transition-colors underline underline-offset-2"
+            className="text-sm text-white/50 hover:text-white/80 transition-colors"
             data-testid="link-not-a-member"
           >
             Learn how to join →
