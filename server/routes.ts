@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
-import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema } from "@shared/schema";
+import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -12275,7 +12275,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.post("/api/affiliate-links", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const { insertAffiliateLinkSchema } = await import("@shared/schema");
       const parsed = insertAffiliateLinkSchema.safeParse({ ...req.body, userId });
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
       const link = await storage.createAffiliateLink(userId, parsed.data);
@@ -12289,7 +12288,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.patch("/api/affiliate-links/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const { insertAffiliateLinkSchema } = await import("@shared/schema");
       const parsed = insertAffiliateLinkSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
       const { userId: _uid, ...updates } = parsed.data as any;
@@ -12340,7 +12338,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.post("/api/v1/links", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
-      const { insertAffiliateLinkSchema } = await import("@shared/schema");
       const parsed = insertAffiliateLinkSchema.safeParse({ ...req.body, userId: user.id });
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
       const link = await storage.createAffiliateLink(user.id, parsed.data);
@@ -12354,7 +12351,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.patch("/api/v1/links/:id", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
-      const { insertAffiliateLinkSchema } = await import("@shared/schema");
       const parsed = insertAffiliateLinkSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
       const { userId: _uid, ...updates } = parsed.data as any;

@@ -53,6 +53,7 @@ import {
   funnelTemplates, type FunnelTemplate,
   announcements, dismissedAnnouncements, type Announcement, type InsertAnnouncement,
   type CfMagicToken,
+  affiliateLinks, type AffiliateLink, type InsertAffiliateLink,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
@@ -662,10 +663,10 @@ export interface IStorage {
   getCollaboratorOwner(userId: string): Promise<string | undefined>;
 
   // Affiliate Links
-  getAffiliateLinks(userId: string, opts?: { q?: string; category?: string; activeOnly?: boolean }): Promise<import("@shared/schema").AffiliateLink[]>;
-  getAffiliateLink(id: string, userId: string): Promise<import("@shared/schema").AffiliateLink | undefined>;
-  createAffiliateLink(userId: string, data: import("@shared/schema").InsertAffiliateLink): Promise<import("@shared/schema").AffiliateLink>;
-  updateAffiliateLink(id: string, userId: string, updates: Partial<import("@shared/schema").InsertAffiliateLink>): Promise<import("@shared/schema").AffiliateLink | undefined>;
+  getAffiliateLinks(userId: string, opts?: { q?: string; category?: string; activeOnly?: boolean }): Promise<AffiliateLink[]>;
+  getAffiliateLink(id: string, userId: string): Promise<AffiliateLink | undefined>;
+  createAffiliateLink(userId: string, data: InsertAffiliateLink): Promise<AffiliateLink>;
+  updateAffiliateLink(id: string, userId: string, updates: Partial<InsertAffiliateLink>): Promise<AffiliateLink | undefined>;
   deleteAffiliateLink(id: string, userId: string): Promise<void>;
   incrementAffiliateLinkClick(id: string, userId: string): Promise<void>;
   getAffiliateLinkCategories(userId: string): Promise<string[]>;
@@ -5043,8 +5044,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ─── Affiliate Links ──────────────────────────────────────────────────────────
-  async getAffiliateLinks(userId: string, opts?: { q?: string; category?: string; activeOnly?: boolean }): Promise<import("@shared/schema").AffiliateLink[]> {
-    const { affiliateLinks } = await import("@shared/schema");
+  async getAffiliateLinks(userId: string, opts?: { q?: string; category?: string; activeOnly?: boolean }): Promise<AffiliateLink[]> {
     const conditions: any[] = [eq(affiliateLinks.userId, userId)];
     if (opts?.activeOnly) conditions.push(eq(affiliateLinks.isActive, true));
     if (opts?.category) conditions.push(eq(affiliateLinks.category, opts.category));
@@ -5065,23 +5065,20 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async getAffiliateLink(id: string, userId: string): Promise<import("@shared/schema").AffiliateLink | undefined> {
-    const { affiliateLinks } = await import("@shared/schema");
+  async getAffiliateLink(id: string, userId: string): Promise<AffiliateLink | undefined> {
     const [link] = await db.select().from(affiliateLinks)
       .where(and(eq(affiliateLinks.id, id), eq(affiliateLinks.userId, userId)));
     return link || undefined;
   }
 
-  async createAffiliateLink(userId: string, data: import("@shared/schema").InsertAffiliateLink): Promise<import("@shared/schema").AffiliateLink> {
-    const { affiliateLinks } = await import("@shared/schema");
+  async createAffiliateLink(userId: string, data: InsertAffiliateLink): Promise<AffiliateLink> {
     const [link] = await db.insert(affiliateLinks)
       .values({ ...data, userId })
       .returning();
     return link;
   }
 
-  async updateAffiliateLink(id: string, userId: string, updates: Partial<import("@shared/schema").InsertAffiliateLink>): Promise<import("@shared/schema").AffiliateLink | undefined> {
-    const { affiliateLinks } = await import("@shared/schema");
+  async updateAffiliateLink(id: string, userId: string, updates: Partial<InsertAffiliateLink>): Promise<AffiliateLink | undefined> {
     const [link] = await db.update(affiliateLinks)
       .set({ ...updates, updatedAt: new Date() })
       .where(and(eq(affiliateLinks.id, id), eq(affiliateLinks.userId, userId)))
@@ -5090,20 +5087,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAffiliateLink(id: string, userId: string): Promise<void> {
-    const { affiliateLinks } = await import("@shared/schema");
     await db.delete(affiliateLinks)
       .where(and(eq(affiliateLinks.id, id), eq(affiliateLinks.userId, userId)));
   }
 
   async incrementAffiliateLinkClick(id: string, userId: string): Promise<void> {
-    const { affiliateLinks } = await import("@shared/schema");
     await db.update(affiliateLinks)
       .set({ clickCount: sql`${affiliateLinks.clickCount} + 1`, updatedAt: new Date() })
       .where(and(eq(affiliateLinks.id, id), eq(affiliateLinks.userId, userId)));
   }
 
   async getAffiliateLinkCategories(userId: string): Promise<string[]> {
-    const { affiliateLinks } = await import("@shared/schema");
     const rows = await db.selectDistinct({ category: affiliateLinks.category })
       .from(affiliateLinks)
       .where(eq(affiliateLinks.userId, userId))
