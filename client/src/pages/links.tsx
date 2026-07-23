@@ -362,80 +362,72 @@ function LinkCard({
   onDelete: () => void;
 }) {
   const colorBg = pickColor(link.category || link.id);
-  const displayUrl = link.url.replace(/^https?:\/\//, "").split("?")[0].split("/").slice(0, 2).join("/");
+  const displayUrl = link.url.replace(/^https?:\/\//, "").split("?")[0];
 
   return (
     <div
-      className="group relative bg-card border border-border rounded-xl p-5 flex flex-col gap-3 hover:border-border/60 hover:shadow-lg hover:shadow-black/10 transition-all duration-200"
+      className="group flex items-center gap-4 bg-card border border-border rounded-xl px-4 py-3.5 hover:border-border/60 hover:shadow-md hover:shadow-black/8 transition-all duration-200"
       data-testid={`card-link-${link.id}`}
     >
-      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-        <button
-          onClick={onEdit}
-          className="h-7 w-7 rounded-md flex items-center justify-center bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-          data-testid={`button-edit-link-${link.id}`}
-          title="Edit"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={onDelete}
-          className="h-7 w-7 rounded-md flex items-center justify-center bg-muted hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
-          data-testid={`button-delete-link-${link.id}`}
-          title="Delete"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+      {/* Emoji icon */}
+      <div
+        className={cn(
+          "h-10 w-10 rounded-lg flex items-center justify-center text-xl shrink-0",
+          colorBg
+        )}
+      >
+        {link.emoji}
       </div>
 
-      <div className="flex items-start gap-3 pr-16">
-        <div
-          className={cn(
-            "h-12 w-12 rounded-xl flex items-center justify-center text-2xl shrink-0",
-            colorBg
-          )}
-        >
-          {link.emoji}
-        </div>
-        <div className="min-w-0 pt-0.5">
-          <h3 className="font-semibold text-sm text-foreground leading-snug truncate">
+      {/* Title + meta */}
+      <div className="min-w-0 flex-[2]">
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="font-semibold text-sm text-foreground truncate">
             {link.title}
           </h3>
           {link.category && (
-            <Badge variant="secondary" className="mt-1 text-xs h-5 px-1.5 font-normal">
+            <Badge variant="secondary" className="text-xs h-5 px-1.5 font-normal shrink-0">
               {link.category}
             </Badge>
           )}
+          {!link.isActive && (
+            <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0 text-muted-foreground">
+              Inactive
+            </Badge>
+          )}
         </div>
-      </div>
-
-      {link.description && (
-        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-          {link.description}
-        </p>
-      )}
-
-      <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-2.5 py-1.5 min-w-0">
-        <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
-        <span className="text-xs text-muted-foreground font-mono truncate flex-1">
-          {displayUrl}
-        </span>
-        {!link.isActive && (
-          <Badge
-            variant="outline"
-            className="text-[10px] h-4 px-1.5 shrink-0 text-muted-foreground"
-          >
-            Inactive
-          </Badge>
+        {link.description && (
+          <p className="text-xs text-muted-foreground truncate mt-0.5">
+            {link.description}
+          </p>
         )}
       </div>
 
-      <div className="flex items-center gap-2 mt-auto">
+      {/* URL */}
+      <div className="hidden sm:flex items-center gap-1.5 flex-[3] min-w-0 bg-muted/40 rounded-lg px-2.5 py-1.5">
+        <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+        <span className="text-xs text-muted-foreground font-mono truncate">
+          {displayUrl}
+        </span>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 shrink-0">
+        {link.clickCount > 0 && (
+          <div
+            className="hidden md:flex items-center gap-1 text-xs text-muted-foreground"
+            title={`Copied ${link.clickCount} time${link.clickCount !== 1 ? "s" : ""}`}
+          >
+            <MousePointerClick className="h-3 w-3" />
+            <span>{link.clickCount}</span>
+          </div>
+        )}
+
         <Button
           onClick={onCopy}
           size="sm"
           className={cn(
-            "flex-1 h-8 text-xs font-medium transition-all duration-200",
+            "h-8 px-3 text-xs font-medium transition-all duration-200",
             copied && "bg-emerald-600 hover:bg-emerald-600 text-white"
           )}
           data-testid={`button-copy-link-${link.id}`}
@@ -448,29 +440,40 @@ function LinkCard({
           ) : (
             <>
               <Copy className="h-3.5 w-3.5 mr-1.5" />
-              Copy Link
+              Copy
             </>
           )}
         </Button>
+
         <a
           href={link.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="h-8 w-8 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+          className="h-8 w-8 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           data-testid={`link-preview-${link.id}`}
           title="Open link"
         >
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
-        {link.clickCount > 0 && (
-          <div
-            className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
-            title={`Copied ${link.clickCount} time${link.clickCount !== 1 ? "s" : ""}`}
+
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <button
+            onClick={onEdit}
+            className="h-8 w-8 rounded-md flex items-center justify-center bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+            data-testid={`button-edit-link-${link.id}`}
+            title="Edit"
           >
-            <MousePointerClick className="h-3 w-3" />
-            <span>{link.clickCount}</span>
-          </div>
-        )}
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="h-8 w-8 rounded-md flex items-center justify-center bg-muted hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+            data-testid={`button-delete-link-${link.id}`}
+            title="Delete"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -668,9 +671,9 @@ export default function LinksPage() {
         )}
 
         {linksLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-48 rounded-xl bg-muted/30 animate-pulse" />
+              <div key={i} className="h-14 rounded-xl bg-muted/30 animate-pulse" />
             ))}
           </div>
         )}
@@ -710,7 +713,7 @@ export default function LinksPage() {
         )}
 
         {!linksLoading && filtered.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-2">
             {filtered.map((link) => (
               <LinkCard
                 key={link.id}
