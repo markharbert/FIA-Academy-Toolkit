@@ -757,23 +757,69 @@ export function workspaceInviteEmail(params: {
 export function welcomeEmail(params: {
   firstName: string | null;
   email: string;
+  setupLink?: string;
 }, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
   const name = params.firstName || "there";
-  const subject = "Welcome to Academy Toolkit!";
+  const subject = "Welcome to the Academy Toolkit — let's get you set up";
+
+  const toolRow = (emoji: string, title: string, desc: string) =>
+    `<tr>
+      <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;vertical-align:top;width:32px;font-size:20px;">${emoji}</td>
+      <td style="padding:10px 0 10px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top;">
+        <strong style="font-size:14px;color:#0f172a;">${title}</strong><br/>
+        <span style="font-size:13px;color:#64748b;line-height:1.5;">${desc}</span>
+      </td>
+    </tr>`;
+
+  const setupSection = params.setupLink
+    ? `<div style="margin:0 0 28px;padding:20px 24px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;">
+        <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#0f172a;">Step 1 — Set your password</p>
+        <p style="margin:0 0 16px;font-size:14px;color:#334155;line-height:1.6;">
+          Click the button below to create your password and activate your Academy Toolkit account.
+          This link expires in <strong>7 days</strong>.
+        </p>
+        ${btn("Set My Password &amp; Get Started", params.setupLink)}
+      </div>`
+    : `<div style="margin:0 0 28px;">
+        ${btn("Go to Your Dashboard", `${BASE_URL}/dashboard`)}
+      </div>`;
+
   const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name}, welcome!</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">
-      Your Academy Toolkit account is active and ready to go. Here's what you can do right now:
+    <p style="margin:0 0 6px;font-size:17px;font-weight:700;color:#0f172a;">Hey ${name}, welcome!</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+      Congratulations on joining the <strong>Fearless Influencer Academy</strong>! As part of your membership,
+      you have full access to the <strong>Academy Toolkit</strong> — a private suite of AI-powered tools
+      built specifically to help you grow your private practice with video marketing.
     </p>
-    <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;color:#334155;line-height:2;">
-      <li><strong>Upload a video</strong> — get AI scoring and feedback on your 5-part formula</li>
-      <li><strong>Start a project</strong> — organize your campaigns, content, and tasks</li>
-      <li><strong>Track your DMO</strong> — build daily habits and watch your streak grow</li>
-      <li><strong>Analyze your inbox</strong> — monitor deliverability and competitor emails</li>
-    </ul>
-    ${btn("Go to your dashboard", `${BASE_URL}/dashboard`)}`;
-  const text = `Hey ${name}, welcome to Academy Toolkit!\n\nYour account is active. Get started at ${BASE_URL}/dashboard`;
-  return { subject, html: wrap("Welcome to Academy Toolkit!", body, resources), text };
+
+    ${setupSection}
+
+    <p style="margin:0 0 14px;font-size:15px;font-weight:700;color:#0f172a;">Everything included in your Toolkit:</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+      ${toolRow("🎥", "AI Video Coach", "Upload a practice video and get instant AI scoring against the proven 5-part video formula. You'll see exactly what's working and what to improve — plus written feedback and a downloadable PDF report.")}
+      ${toolRow("📊", "Dashboard", "Your live command center. See your key metrics, upcoming tasks, email health scores, and daily progress at a glance the moment you log in.")}
+      ${toolRow("✅", "DMO Tracker", "Track your Daily Method of Operation — the habits that grow your practice. Log activities, build streaks, earn points, and hit milestone badges that keep you consistent.")}
+      ${toolRow("📁", "Projects", "A full project manager (like Asana, but built for your practice). Organize campaigns, content, and client work in List, Board, or Calendar view — with tasks, subtasks, and team collaboration.")}
+      ${toolRow("📺", "Teleprompter", "A built-in, scrolling teleprompter for your practice scripts. Customize the font size and speed, then record with confidence — no memorizing required.")}
+      ${toolRow("📧", "Email Tools", "Monitor your sender reputation with Google Postmaster Tools integration, and analyze your emails with unique seed addresses to see exactly where they land — inbox, spam, or promotions tab.")}
+      ${toolRow("🔍", "Inbox Intel", "Spy (ethically) on your competitors' email strategies. Capture every email they send, see their sending cadence, ESP fingerprint, authentication health, and copy patterns — all in one place.")}
+    </table>
+
+    <div style="margin:0 0 24px;padding:16px 20px;background:#f8fafc;border-left:3px solid #3f92cc;border-radius:0 8px 8px 0;">
+      <p style="margin:0;font-size:13px;color:#334155;line-height:1.7;">
+        <strong>Need help getting started?</strong> The Toolkit has a built-in Help section with step-by-step guides for every tool.
+        Once you're logged in, look for the <strong>Help</strong> link in the sidebar.
+      </p>
+    </div>
+
+    <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6;">
+      If you have any questions, reply to this email and we'll get you sorted out.<br/>
+      Welcome aboard — let's make this your best year yet!
+    </p>`;
+
+  const text = `Welcome to the Academy Toolkit, ${name}!\n\nCongratulations on joining the Fearless Influencer Academy. As part of your membership, you have full access to the Academy Toolkit.\n\n${params.setupLink ? `STEP 1 — SET YOUR PASSWORD\nClick the link below to create your password and activate your account (expires in 7 days):\n${params.setupLink}\n\n` : ""}WHAT'S INCLUDED:\n\n🎥 AI Video Coach — upload videos, get AI scoring and feedback on the 5-part formula\n📊 Dashboard — your live command center with metrics and daily progress\n✅ DMO Tracker — log daily habits, build streaks, earn points and badges\n📁 Projects — organize campaigns and content in list, board, or calendar view\n📺 Teleprompter — scrolling teleprompter for your practice scripts\n📧 Email Tools — sender reputation monitoring and inbox placement analysis\n🔍 Inbox Intel — competitor email intelligence and strategy analysis\n\nOnce you're set up, visit your dashboard at ${BASE_URL}/dashboard\n\nWelcome aboard!`;
+
+  return { subject, html: wrap("Welcome to the Academy Toolkit!", body, resources), text };
 }
 
 export function magicLinkLoginEmail(params: {

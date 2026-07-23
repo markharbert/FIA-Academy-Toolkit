@@ -111,6 +111,26 @@ export async function sendWorkspaceInviteEmail(params: {
   }
 }
 
+export async function sendWelcomeEmail(params: {
+  email: string;
+  firstName: string | null;
+  setupLink: string;
+  resources?: import("./email-templates").EmailResourceLink[];
+}): Promise<boolean> {
+  const rendered = emailTemplates.welcomeEmail(
+    { firstName: params.firstName, email: params.email, setupLink: params.setupLink },
+    params.resources ?? []
+  );
+  try {
+    await sendEmail({ to: params.email, subject: rendered.subject, html: rendered.html, text: rendered.text });
+    console.log(`[Email] Welcome email sent to ${params.email}`);
+    return true;
+  } catch (error) {
+    console.error("[Email] Failed to send welcome email:", error);
+    return false;
+  }
+}
+
 export function isEmailConfigured(): boolean {
   return !!process.env.SENDGRID_API_TOKEN;
 }

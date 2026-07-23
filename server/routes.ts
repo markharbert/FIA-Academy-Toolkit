@@ -12,7 +12,7 @@ import multer from "multer";
 import rateLimit from "express-rate-limit";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { sendPasswordResetEmail, sendWorkspaceInviteEmail } from "./email";
+import { sendPasswordResetEmail, sendWorkspaceInviteEmail, sendWelcomeEmail } from "./email";
 import path from "path";
 import fs from "fs";
 import session from "express-session";
@@ -1280,6 +1280,36 @@ export async function registerRoutes(
         const result = await handleCfEnrollmentEvent(event);
         console.log("[CF Webhook] Action:", result.action, "| email:", result.email);
 
+        // New enrollment: send welcome email with a 7-day password setup link
+        if (result.action === "created" && result.email) {
+          try {
+            const newUser = await storage.getUserByEmail(result.email);
+            if (newUser) {
+              const token = crypto.randomBytes(32).toString("hex");
+              const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+              const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+              await storage.createPasswordResetToken({
+                userId: newUser.id,
+                tokenHash,
+                expiresAt,
+                requestIp: "cf-webhook",
+                userAgent: "cf-enrollment",
+              });
+              const APP_BASE = process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com";
+              const setupLink = `${APP_BASE}/reset-password?token=${token}&welcome=1`;
+              const resources = await storage.getActiveEmailResourceLinks();
+              await sendWelcomeEmail({
+                email: newUser.email,
+                firstName: newUser.firstName,
+                setupLink,
+                resources,
+              });
+            }
+          } catch (emailErr: any) {
+            console.error("[CF Webhook] Failed to send welcome email:", emailErr?.message);
+          }
+        }
+
         res.json({ ok: true, action: result.action });
       } catch (err) {
         console.error("[CF Webhook] Error:", err);
@@ -1364,7 +1394,7 @@ export async function registerRoutes(
       weeklyInboxReport: () => emailTemplates.weeklyInboxReportEmail({
         firstName: sample.firstName, inboxRate: 87, spamRate: 4, emailsAnalyzed: 23,
       }, resources),
-      welcome: () => emailTemplates.welcomeEmail({ firstName: sample.firstName, email: sample.email }, resources),
+      welcome: () => emailTemplates.welcomeEmail({ firstName: sample.firstName, email: sample.email, setupLink: `${process.env.APP_BASE_URL || "https://toolkit.fearlessmarketinglab.com"}/reset-password?token=preview-token&welcome=1` }, resources),
       feedbackSubmittedFeature: () => emailTemplates.feedbackSubmittedEmail({ firstName: sample.firstName, type: "feature", title: "Add dark mode to the teleprompter", postId: "demo-post-id" }, resources),
       feedbackSubmittedBug: () => emailTemplates.feedbackSubmittedEmail({ firstName: sample.firstName, type: "bug", title: "Video upload fails on files over 500MB", postId: "demo-post-id" }, resources),
       newBugAdminAlert: () => emailTemplates.newBugAdminAlertEmail({ submitterName: "Jane Smith", submitterEmail: "jane@example.com", title: "Video upload fails on files over 500MB", description: "When I try to upload a video larger than 500MB the upload just spins and never completes. I've tried multiple times with different files.", postId: "demo-post-id" }, resources),
