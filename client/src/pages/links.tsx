@@ -379,9 +379,9 @@ function LinkCard({
         {link.emoji}
       </div>
 
-      {/* Title + meta */}
+      {/* Title + description + badges */}
       <div className="min-w-0 flex-[2]">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <h3 className="font-semibold text-sm text-foreground truncate">
             {link.title}
           </h3>
@@ -397,7 +397,7 @@ function LinkCard({
           )}
         </div>
         {link.description && (
-          <p className="text-xs text-muted-foreground truncate mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
             {link.description}
           </p>
         )}
@@ -412,10 +412,10 @@ function LinkCard({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         {link.clickCount > 0 && (
           <div
-            className="hidden md:flex items-center gap-1 text-xs text-muted-foreground"
+            className="hidden md:flex items-center gap-1 text-xs text-muted-foreground mr-1"
             title={`Copied ${link.clickCount} time${link.clickCount !== 1 ? "s" : ""}`}
           >
             <MousePointerClick className="h-3 w-3" />
@@ -456,24 +456,24 @@ function LinkCard({
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-          <button
-            onClick={onEdit}
-            className="h-8 w-8 rounded-md flex items-center justify-center bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-            data-testid={`button-edit-link-${link.id}`}
-            title="Edit"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={onDelete}
-            className="h-8 w-8 rounded-md flex items-center justify-center bg-muted hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
-            data-testid={`button-delete-link-${link.id}`}
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <div className="w-px h-5 bg-border mx-0.5" />
+
+        <button
+          onClick={onEdit}
+          className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          data-testid={`button-edit-link-${link.id}`}
+          title="Edit"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          data-testid={`button-delete-link-${link.id}`}
+          title="Delete"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
     </div>
   );
