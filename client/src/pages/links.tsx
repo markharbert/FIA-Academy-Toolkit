@@ -60,6 +60,25 @@ const EMOJI_OPTIONS = [
   "🛍️", "📊", "🔔", "🎵", "🏠", "🚗", "✈️", "🌴", "🎪", "🎭",
 ];
 
+const PRESET_CATEGORIES = [
+  "Software",
+  "Courses",
+  "Coaching",
+  "Equipment",
+  "Email Marketing",
+  "Funnels",
+  "Video & Editing",
+  "Social Media",
+  "Templates",
+  "Communities",
+  "Books & Resources",
+  "Hosting",
+  "Payments",
+  "Productivity",
+  "Health & Wellness",
+  "Business Tools",
+];
+
 const PALETTE = [
   "bg-indigo-500/20",
   "bg-violet-500/20",
@@ -108,6 +127,7 @@ function LinkModal({
 }) {
   const { toast } = useToast();
   const isEdit = !!link;
+  const [showCustom, setShowCustom] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -132,6 +152,8 @@ function LinkModal({
           emoji: link.emoji,
           isActive: link.isActive,
         });
+        const cat = link.category || "";
+        setShowCustom(!!cat && !PRESET_CATEGORIES.includes(cat));
       } else {
         form.reset({
           title: "",
@@ -141,6 +163,7 @@ function LinkModal({
           emoji: "🔗",
           isActive: true,
         });
+        setShowCustom(false);
       }
     }
   }, [open, link]);
@@ -248,21 +271,58 @@ function LinkModal({
                     Category{" "}
                     <span className="text-muted-foreground text-xs font-normal">(optional)</span>
                   </FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. Software, Courses, Tools"
-                      {...field}
-                      list="category-suggestions"
-                      data-testid="input-link-category"
-                    />
-                  </FormControl>
-                  {existingCategories.length > 0 && (
-                    <datalist id="category-suggestions">
-                      {existingCategories.map((c) => (
-                        <option key={c} value={c} />
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {PRESET_CATEGORIES.map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            field.onChange(field.value === cat ? "" : cat);
+                            setShowCustom(false);
+                          }}
+                          className={cn(
+                            "px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                            field.value === cat && !showCustom
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-muted/40 text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                          )}
+                          data-testid={`cat-preset-${cat}`}
+                        >
+                          {cat}
+                        </button>
                       ))}
-                    </datalist>
-                  )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCustom(true);
+                          if (PRESET_CATEGORIES.includes(field.value || "")) {
+                            field.onChange("");
+                          }
+                        }}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                          showCustom
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted/40 text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                        )}
+                        data-testid="cat-custom"
+                      >
+                        + Custom
+                      </button>
+                    </div>
+                    {showCustom && (
+                      <FormControl>
+                        <Input
+                          placeholder="Enter a custom category…"
+                          value={field.value || ""}
+                          onChange={field.onChange}
+                          autoFocus
+                          data-testid="input-link-category"
+                        />
+                      </FormControl>
+                    )}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
