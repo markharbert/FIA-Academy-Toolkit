@@ -72,7 +72,7 @@ export default function ForgotPassword() {
               The link will expire in 60 minutes.
             </div>
             <Link
-              href="/login"
+              href="/"
               className="w-full rounded-lg py-2.5 text-sm font-semibold text-white text-center transition-opacity hover:opacity-80 flex items-center justify-center gap-2 border border-white/20"
               style={{ background: "hsl(230,75%,18%)" }}
               data-testid="button-back-to-login"
@@ -141,7 +141,7 @@ export default function ForgotPassword() {
 
             <div className="text-center">
               <Link
-                href="/login"
+                href="/"
                 className="text-sm text-white/40 hover:text-white/70 transition-colors inline-flex items-center gap-1"
                 data-testid="link-login"
               >

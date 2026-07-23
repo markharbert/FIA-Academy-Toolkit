@@ -126,7 +126,7 @@ export default function ResetPassword() {
               </p>
             </div>
             <Link
-              href="/login"
+              href="/"
               className="w-full rounded-lg py-2.5 text-sm font-semibold text-white text-center flex items-center justify-center transition-opacity hover:opacity-80"
               style={{ background: "hsl(358,100%,43%)" }}
               data-testid="button-go-to-login"

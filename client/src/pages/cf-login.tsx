@@ -127,7 +127,7 @@ export default function CfLoginPage() {
             {errorKey === "cf_login_disabled" ? (
               <a
                 data-testid="link-go-to-login"
-                href="/login"
+                href="/"
                 className="w-full rounded-lg bg-[hsl(203,54%,53%)] hover:bg-[hsl(203,54%,45%)] text-white text-sm font-semibold py-3 px-4 text-center transition-colors"
               >
                 Log In with Email &amp; Password

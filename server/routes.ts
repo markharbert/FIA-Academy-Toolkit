@@ -1146,28 +1146,28 @@ export async function registerRoutes(
         console.log("[OAuth Google] Passport result - err:", err?.message || null, "user:", user?.id || null, "info:", JSON.stringify(info));
         if (err) {
           console.error("[OAuth Google] Authentication error:", err.message, err.stack);
-          return res.redirect("/login?error=oauth_failed&reason=auth_error");
+          return res.redirect("/?error=oauth_failed&reason=auth_error");
         }
         
         if (!user) {
           console.error("[OAuth Google] No user returned from strategy, info:", JSON.stringify(info));
-          return res.redirect("/login?error=oauth_failed&reason=no_user");
+          return res.redirect("/?error=oauth_failed&reason=no_user");
         }
 
         if (user.isDisabled) {
           console.warn("[OAuth Google] Login attempt by disabled user:", user.id);
-          return res.redirect("/login?error=account_disabled");
+          return res.redirect("/?error=account_disabled");
         }
 
         // If ClickFunnels is configured, require active membership for non-admin users.
         if (CF_API_TOKEN && CF_COURSE_ID && !user.isAdmin) {
           if (user.cfEnrolled === false) {
             console.warn("[OAuth Google] CF membership revoked for user:", user.id);
-            return res.redirect("/login?error=cf_revoked");
+            return res.redirect("/?error=cf_revoked");
           }
           if (user.cfEnrolled !== true) {
             console.warn("[OAuth Google] CF enrollment not confirmed for user:", user.id);
-            return res.redirect("/login?error=cf_not_enrolled");
+            return res.redirect("/?error=cf_not_enrolled");
           }
         }
         
@@ -1177,7 +1177,7 @@ export async function registerRoutes(
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error("[OAuth Google] Session save error:", saveErr);
-            return res.redirect("/login?error=oauth_failed&reason=session_save");
+            return res.redirect("/?error=oauth_failed&reason=session_save");
           }
           console.log("[OAuth Google] Session saved, redirecting to dashboard");
           res.redirect("/dashboard");
@@ -1188,10 +1188,10 @@ export async function registerRoutes(
     // Fallback routes when Google OAuth is not configured
     app.get("/api/auth/oauth/google", (req: Request, res: Response) => {
       console.log("[OAuth] Google OAuth not configured - missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
-      res.redirect("/login?error=oauth_not_configured");
+      res.redirect("/?error=oauth_not_configured");
     });
     app.get("/api/auth/oauth/google/callback", (req: Request, res: Response) => {
-      res.redirect("/login?error=oauth_not_configured");
+      res.redirect("/?error=oauth_not_configured");
     });
   }
 

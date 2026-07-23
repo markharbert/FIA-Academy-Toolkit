@@ -10,7 +10,6 @@ import { Footer } from "@/components/footer";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { Loader2, ExternalLink } from "lucide-react";
 
-import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
@@ -67,7 +66,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
   if (!user) {
     const dest = window.location.pathname + window.location.search;
-    return <Redirect to={`/login?redirect=${encodeURIComponent(dest)}`} />;
+    return <Redirect to={`/?redirect=${encodeURIComponent(dest)}`} />;
   }
 
   return <Component />;
@@ -85,7 +84,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   }
 
   if (!user) {
-    return <Redirect to="/login" />;
+    return <Redirect to="/" />;
   }
 
   if (!user.isAdmin) {
@@ -128,7 +127,12 @@ function AuthenticatedCatchAll() {
     return <Redirect to="/dashboard" />;
   }
 
-  return <Redirect to="/login" />;
+  return <Redirect to="/" />;
+}
+
+function LoginPageRedirect() {
+  const qs = window.location.search;
+  return <Redirect to={qs ? `/${qs}` : "/"} />;
 }
 
 function OldExploreRedirect() {
@@ -282,30 +286,16 @@ function ProtectedRoutes() {
 }
 
 function PublicRoutes() {
-  const { user, isLoading } = useAuth();
-
   return (
     <Switch>
       <Route path="/">
-        {() => {
-          if (isLoading) {
-            return (
-              <div className="flex min-h-[60vh] items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            );
-          }
-          if (user) {
-            return <Redirect to="/dashboard" />;
-          }
-          return <LandingPage />;
-        }}
+        {() => <PublicOnlyRoute component={LoginPage} />}
       </Route>
       <Route path="/members-only">
-        {() => <Redirect to="/login" />}
+        {() => <Redirect to="/" />}
       </Route>
       <Route path="/login">
-        {() => <PublicOnlyRoute component={LoginPage} />}
+        {() => <LoginPageRedirect />}
       </Route>
       <Route path="/signup">
         {() => <Redirect to="/" />}
