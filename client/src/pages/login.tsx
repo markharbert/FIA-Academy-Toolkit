@@ -8,22 +8,30 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Loader2, AlertTriangle, Info } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 
-const CF_ERROR_MESSAGES: Record<string, { type: "error" | "info"; message: string }> = {
+const SUPPORT_EMAIL = "support@markharbert.com";
+
+const SupportLink = () => (
+  <a href={`mailto:${SUPPORT_EMAIL}`} className="underline text-red-200 hover:text-white transition-colors">
+    {SUPPORT_EMAIL}
+  </a>
+);
+
+const CF_ERROR_MESSAGES: Record<string, { type: "error" | "info"; message: React.ReactNode }> = {
   cf_no_account: {
     type: "info",
     message: "No Academy Toolkit account found for this email. Create one below using your ClickFunnels email address.",
   },
   cf_not_enrolled: {
     type: "error",
-    message: "Your membership doesn't include access to the Academy Toolkit. Please contact support if you believe this is an error.",
+    message: <>Your Fearless Influencer Academy membership is not active. Please contact support at <SupportLink />.</>,
   },
   cf_revoked: {
     type: "error",
-    message: "Your ClickFunnels membership has been revoked. Please reactivate your membership to continue.",
+    message: <>Your Fearless Influencer Academy membership has been revoked. Please contact support at <SupportLink />.</>,
   },
   account_disabled: {
     type: "error",
-    message: "Your account has been disabled. Please contact support.",
+    message: <>Your account has been disabled. Please contact support at <SupportLink />.</>,
   },
   missing_email: {
     type: "error",
@@ -50,8 +58,8 @@ const CF_ERROR_MESSAGES: Record<string, { type: "error" | "info"; message: strin
 export default function LoginPage() {
   const { login } = useAuth();
   const [, setLocation] = useLocation();
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<React.ReactNode | null>(null);
+  const [notice, setNotice] = useState<React.ReactNode | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const params = new URLSearchParams(window.location.search);
@@ -86,8 +94,13 @@ export default function LoginPage() {
       } else {
         setLocation("/dashboard");
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+    } catch (err: any) {
+      const code = err?.code;
+      if (code === "cf_not_enrolled" || code === "cf_revoked") {
+        setError(<>Your Fearless Influencer Academy membership is not active. Please contact support at <SupportLink />.</>);
+      } else {
+        setError(err instanceof Error ? err.message : "Login failed");
+      }
     } finally {
       setIsLoading(false);
     }

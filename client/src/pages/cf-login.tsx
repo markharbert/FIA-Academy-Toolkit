@@ -5,7 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 type Stage = "verifying" | "success" | "error";
 
 const ERROR_MESSAGES: Record<string, string> = {
-  cf_not_enrolled: "We weren't able to verify an active membership for this email address.",
+  cf_not_enrolled: "Your Fearless Influencer Academy membership is not active. Please contact support at support@markharbert.com.",
   account_disabled: "This account has been disabled.",
   cf_api_error: "We had trouble reaching our membership system. Please try again in a moment.",
   cf_login_disabled: "One-click login is currently unavailable. Please log in below using your email address and password.",
