@@ -789,20 +789,20 @@ export function welcomeEmail(params: {
     <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
       Congratulations on joining the <strong>Fearless Influencer Academy</strong>! As part of your membership,
       you have full access to the <strong>Academy Toolkit</strong> — a private suite of AI-powered tools
-      built specifically to help you grow your private practice with video marketing.
+      built specifically to help you grow your online business.
     </p>
 
     ${setupSection}
 
     <p style="margin:0 0 14px;font-size:15px;font-weight:700;color:#0f172a;">Everything included in your Toolkit:</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
-      ${toolRow("🎥", "AI Video Coach", "Upload a practice video and get instant AI scoring against the proven 5-part video formula. You'll see exactly what's working and what to improve — plus written feedback and a downloadable PDF report.")}
-      ${toolRow("📊", "Dashboard", "Your live command center. See your key metrics, upcoming tasks, email health scores, and daily progress at a glance the moment you log in.")}
-      ${toolRow("✅", "DMO Tracker", "Track your Daily Method of Operation — the habits that grow your practice. Log activities, build streaks, earn points, and hit milestone badges that keep you consistent.")}
-      ${toolRow("📁", "Projects", "A full project manager (like Asana, but built for your practice). Organize campaigns, content, and client work in List, Board, or Calendar view — with tasks, subtasks, and team collaboration.")}
-      ${toolRow("📺", "Teleprompter", "A built-in, scrolling teleprompter for your practice scripts. Customize the font size and speed, then record with confidence — no memorizing required.")}
-      ${toolRow("📧", "Email Tools", "Monitor your sender reputation with Google Postmaster Tools integration, and analyze your emails with unique seed addresses to see exactly where they land — inbox, spam, or promotions tab.")}
-      ${toolRow("🔍", "Inbox Intel", "Spy (ethically) on your competitors' email strategies. Capture every email they send, see their sending cadence, ESP fingerprint, authentication health, and copy patterns — all in one place.")}
+      ${toolRow("📊", "Dashboard", "Your live command center. See your key metrics, upcoming tasks, and daily progress the moment you log in.")}
+      ${toolRow("🎬", "Video Studio", "Research video topics, generate scripts with AI, use the built-in teleprompter to record confidently, then get instant AI scoring on your videos against the proven 5-part formula — with written feedback and a downloadable PDF report.")}
+      ${toolRow("🗂️", "Funnel Grid", "Map out your marketing funnels visually. Track traffic, conversions, and revenue at every stage so you always know what's working and where to focus.")}
+      ${toolRow("📁", "Projects", "Your built-in project manager. Organize campaigns, content, and client work in List, Board, or Calendar view — with tasks, subtasks, and team collaboration.")}
+      ${toolRow("📧", "Email Tools", "Three tools in one: monitor your sender reputation with Google Postmaster, analyze inbox placement with unique seed addresses, and spy on competitor email strategies with Inbox Intel.")}
+      ${toolRow("📈", "Analytics", "Connect your YouTube channel and Google Search Console to track your content performance, top search terms, audience demographics, and video analytics in one dashboard.")}
+      ${toolRow("✅", "DMO Tracker", "Track your Daily Method of Operation — the habits that grow your business. Log activities, build streaks, earn points, and hit milestone badges that keep you consistent.")}
     </table>
 
     <div style="margin:0 0 24px;padding:16px 20px;background:#f8fafc;border-left:3px solid #3f92cc;border-radius:0 8px 8px 0;">
@@ -817,7 +817,7 @@ export function welcomeEmail(params: {
       Welcome aboard — let's make this your best year yet!
     </p>`;
 
-  const text = `Welcome to the Academy Toolkit, ${name}!\n\nCongratulations on joining the Fearless Influencer Academy. As part of your membership, you have full access to the Academy Toolkit.\n\n${params.setupLink ? `STEP 1 — SET YOUR PASSWORD\nClick the link below to create your password and activate your account (expires in 7 days):\n${params.setupLink}\n\n` : ""}WHAT'S INCLUDED:\n\n🎥 AI Video Coach — upload videos, get AI scoring and feedback on the 5-part formula\n📊 Dashboard — your live command center with metrics and daily progress\n✅ DMO Tracker — log daily habits, build streaks, earn points and badges\n📁 Projects — organize campaigns and content in list, board, or calendar view\n📺 Teleprompter — scrolling teleprompter for your practice scripts\n📧 Email Tools — sender reputation monitoring and inbox placement analysis\n🔍 Inbox Intel — competitor email intelligence and strategy analysis\n\nOnce you're set up, visit your dashboard at ${BASE_URL}/dashboard\n\nWelcome aboard!`;
+  const text = `Welcome to the Academy Toolkit, ${name}!\n\nCongratulations on joining the Fearless Influencer Academy. As part of your membership, you have full access to the Academy Toolkit — built specifically to help you grow your online business.\n\n${params.setupLink ? `STEP 1 — SET YOUR PASSWORD\nClick the link below to create your password and activate your account (expires in 7 days):\n${params.setupLink}\n\n` : ""}WHAT'S INCLUDED:\n\n📊 Dashboard — your live command center with key metrics and daily progress\n🎬 Video Studio — research topics, write scripts, record with teleprompter, get AI video scoring\n🗂️ Funnel Grid — map your marketing funnels and track conversions at every stage\n📁 Projects — organize campaigns and content in list, board, or calendar view\n📧 Email Tools — sender reputation, inbox placement analysis, and competitor email intel\n📈 Analytics — YouTube and Google Search Console performance tracking\n✅ DMO Tracker — log daily habits, build streaks, earn points and badges\n\nOnce you're set up, visit your dashboard at ${BASE_URL}/dashboard\n\nWelcome aboard!`;
 
   return { subject, html: wrap("Welcome to the Academy Toolkit!", body, resources), text };
 }
