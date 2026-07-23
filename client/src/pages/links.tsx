@@ -413,7 +413,7 @@ function LinkScreenshot({ url, title }: { url: string; title: string }) {
   const src = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
 
   return (
-    <div className="hidden md:block relative w-[108px] h-[60px] rounded-lg overflow-hidden bg-muted/40 shrink-0 border border-border/50">
+    <div className="relative w-[96px] h-[60px] rounded-lg overflow-hidden bg-muted/40 shrink-0 border border-border/50">
       {status !== "error" && (
         <img
           src={src}
@@ -429,11 +429,7 @@ function LinkScreenshot({ url, title }: { url: string; title: string }) {
       )}
       {status !== "loaded" && (
         <div className="absolute inset-0 flex items-center justify-center">
-          {status === "loading" ? (
-            <Globe className="h-4 w-4 text-muted-foreground/30 animate-pulse" />
-          ) : (
-            <Globe className="h-4 w-4 text-muted-foreground/30" />
-          )}
+          <Globe className={cn("h-4 w-4 text-muted-foreground/30", status === "loading" && "animate-pulse")} />
         </div>
       )}
     </div>
@@ -453,23 +449,13 @@ function LinkCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const colorBg = pickColor(link.category || link.id);
-  const displayUrl = link.url.replace(/^https?:\/\//, "").split("?")[0];
-
   return (
     <div
-      className="group flex items-center gap-4 bg-card border border-border rounded-xl px-4 py-3.5 hover:border-border/60 hover:shadow-md hover:shadow-black/8 transition-all duration-200"
+      className="group flex items-center gap-4 bg-card border border-border rounded-xl px-4 py-3 hover:border-border/60 hover:shadow-md hover:shadow-black/8 transition-all duration-200"
       data-testid={`card-link-${link.id}`}
     >
-      {/* Emoji icon */}
-      <div
-        className={cn(
-          "h-10 w-10 rounded-lg flex items-center justify-center text-xl shrink-0",
-          colorBg
-        )}
-      >
-        {link.emoji}
-      </div>
+      {/* Page snapshot (replaces emoji) */}
+      <LinkScreenshot url={link.url} title={link.title} />
 
       {/* Title + description + badges */}
       <div className="min-w-0 flex-[2]">
@@ -494,9 +480,6 @@ function LinkCard({
           </p>
         )}
       </div>
-
-      {/* Page snapshot */}
-      <LinkScreenshot url={link.url} title={link.title} />
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
