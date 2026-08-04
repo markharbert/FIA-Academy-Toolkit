@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { Collapsible, CollapsibleContent } from "@radix-ui/react-collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@radix-ui/react-collapsible";
 import { cn } from "@/lib/utils";
 import {
   Sidebar,
@@ -22,7 +23,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   LayoutDashboard,
-  Wrench,
   Mail,
   User,
   LogOut,
@@ -35,220 +35,96 @@ import {
   BarChart2,
   ChevronDown,
   GitFork,
-  Link2,
+  Lightbulb,
+  Tag,
+  Video,
+  TrendingUp,
+  Monitor,
+  Package,
+  Star,
+  Leaf,
+  Rocket,
+  Trophy,
+  Layers,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 
-type NavChild = {
-  title: string;
-  url: string;
-  testId: string;
-  matchPaths?: string[];
-  activeClass: string;
-};
+// ─── Framework structure ──────────────────────────────────────────────────────
 
-type NavItem = {
-  title: string;
-  url: string;
-  icon: React.ElementType;
-  iconColor: string;
-  testId: string;
-  collaboratorVisible: boolean;
-  adminOnly?: boolean;
-  matchPaths?: string[];
-  activeClass?: string;
-  subMenuBorderClass?: string;
-  children?: NavChild[];
-};
-
-const allNavItems: NavItem[] = [
+const LEVELS = [
   {
-    title: "Dashboard",
-    url: "/dashboard",
-    icon: LayoutDashboard,
-    iconColor: "text-sky-400",
-    testId: "nav-dashboard",
-    collaboratorVisible: false,
-  },
-  {
-    title: "DMO Tracker",
-    url: "/dmo-tracker",
-    icon: Target,
-    iconColor: "text-amber-400",
-    testId: "nav-dmo-tracker",
-    collaboratorVisible: false,
-  },
-  {
-    title: "Projects",
-    url: "/projects",
-    icon: Briefcase,
-    iconColor: "text-indigo-400",
-    testId: "nav-projects",
-    matchPaths: ["/projects"],
-    collaboratorVisible: true,
-  },
-  {
-    title: "Funnel Grid",
-    url: "/funnel-grid",
-    icon: GitFork,
-    iconColor: "text-violet-400",
-    testId: "nav-funnel-grid",
-    matchPaths: ["/funnel-grid"],
-    collaboratorVisible: false,
-  },
-  {
-    title: "Video Studio",
-    url: "/video-studio",
-    icon: Wrench,
-    iconColor: "text-rose-400",
-    testId: "nav-video-studio",
-    collaboratorVisible: false,
-    activeClass: "!bg-rose-500/15",
-    subMenuBorderClass: "!border-rose-500/40",
-    children: [
-      {
-        title: "Research",
-        url: "/video-studio/research",
-        testId: "nav-topic-pulse",
-        matchPaths: ["/video-studio/research", "/video-studio/research/explore", "/video-studio/research/saved"],
-        activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
-      },
-      {
-        title: "Scripts",
-        url: "/video-studio/scripts",
-        testId: "nav-video-scripts",
-        activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
-      },
-      {
-        title: "Teleprompter",
-        url: "/video-studio/record",
-        testId: "nav-teleprompter",
-        activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
-      },
-      {
-        title: "Video Score",
-        url: "/video-score",
-        testId: "nav-video-score",
-        matchPaths: ["/video-score", "/video-score-upload"],
-        activeClass: "!bg-rose-500/10 !text-rose-200 font-medium",
-      },
-    ],
-  },
-  {
-    title: "Email Tools",
-    url: "/email-tools",
-    icon: Mail,
-    iconColor: "text-teal-400",
-    testId: "nav-email-tools",
-    collaboratorVisible: false,
-    activeClass: "!bg-teal-500/15",
-    subMenuBorderClass: "!border-teal-500/40",
-    children: [
-      {
-        title: "Inbox Analyzer",
-        url: "/email-tools/inbox-analyzer",
-        testId: "nav-inbox-analyzer",
-        activeClass: "!bg-teal-500/10 !text-teal-200 font-medium",
-      },
-      {
-        title: "Sender Reputation",
-        url: "/email-tools/sender-reputation",
-        testId: "nav-sender-rep",
-        activeClass: "!bg-teal-500/10 !text-teal-200 font-medium",
-      },
-      {
-        title: "Inbox Intel",
-        url: "/email-tools/inbox-intel",
-        testId: "nav-inbox-intel",
-        activeClass: "!bg-teal-500/10 !text-teal-200 font-medium",
-      },
-    ],
-  },
-  {
-    title: "Analytics",
-    url: "/analytics",
-    icon: BarChart2,
+    id: "level1",
+    label: "Level 1 · Genesis",
+    icon: Leaf,
     iconColor: "text-emerald-400",
-    testId: "nav-analytics",
-    collaboratorVisible: false,
     activeClass: "!bg-emerald-500/15",
-    subMenuBorderClass: "!border-emerald-500/40",
-    children: [
-      {
-        title: "YouTube",
-        url: "/analytics/youtube",
-        testId: "nav-youtube",
-        activeClass: "!bg-emerald-500/10 !text-emerald-200 font-medium",
-      },
-      {
-        title: "Search Console",
-        url: "/analytics/search-console",
-        testId: "nav-search-console",
-        activeClass: "!bg-emerald-500/10 !text-emerald-200 font-medium",
-      },
+    subBorderClass: "!border-emerald-500/30",
+    testId: "nav-level1",
+    stages: [
+      { label: "Personal Philosophy", url: "/framework/stage-1", testId: "nav-stage-1", num: 1 },
+      { label: "Irresistible Offer", url: "/framework/stage-2", testId: "nav-stage-2", num: 2 },
+      { label: "Sales Funnels & Email", url: "/framework/stage-3", testId: "nav-stage-3", num: 3 },
     ],
   },
   {
-    title: "Link Library",
-    url: "/links",
-    icon: Link2,
-    iconColor: "text-purple-400",
-    testId: "nav-links",
-    collaboratorVisible: false,
-    adminOnly: true,
+    id: "level2",
+    label: "Level 2 · Momentum",
+    icon: Rocket,
+    iconColor: "text-amber-400",
+    activeClass: "!bg-amber-500/15",
+    subBorderClass: "!border-amber-500/30",
+    testId: "nav-level2",
+    stages: [
+      { label: "Social Networking", url: "/framework/stage-4", testId: "nav-stage-4", num: 4 },
+      { label: "Organic Content", url: "/framework/stage-5", testId: "nav-stage-5", num: 5 },
+      { label: "Paid Marketing", url: "/framework/stage-6", testId: "nav-stage-6", num: 6 },
+    ],
+  },
+  {
+    id: "level3",
+    label: "Level 3 · Apex",
+    icon: Trophy,
+    iconColor: "text-violet-400",
+    activeClass: "!bg-violet-500/15",
+    subBorderClass: "!border-violet-500/30",
+    testId: "nav-level3",
+    stages: [
+      { label: "Presentations", url: "/framework/stage-7", testId: "nav-stage-7", num: 7 },
+      { label: "Digital Products", url: "/framework/stage-8", testId: "nav-stage-8", num: 8 },
+      { label: "High Ticket Coaching", url: "/framework/stage-9", testId: "nav-stage-9", num: 9 },
+    ],
   },
 ];
-
-function isChildActive(child: NavChild, location: string) {
-  if (child.matchPaths) {
-    return child.matchPaths.some(
-      (p) => location === p || location.startsWith(p + "/") || location.startsWith(p + "-")
-    );
-  }
-  return location === child.url || location.startsWith(child.url + "/");
-}
-
-function isGroupActive(item: NavItem, location: string): boolean {
-  if (location === item.url) return true;
-  if (item.children) {
-    return item.children.some((child) => isChildActive(child, location));
-  }
-  if (item.matchPaths) {
-    return item.matchPaths.some(
-      (p) => location === p || location.startsWith(p + "/")
-    );
-  }
-  if (item.url !== "/dashboard") {
-    return location.startsWith(item.url);
-  }
-  return false;
-}
 
 export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const { state } = useSidebar();
   const isCollaborator = !!user?.isCollaborator;
-  const navItems = isCollaborator
-    ? allNavItems.filter((item) => item.collaboratorVisible)
-    : allNavItems.filter((item) => !item.adminOnly || user?.isAdmin);
+
+  // Per-level manual expand/collapse state
+  const [level1Expanded, setLevel1Expanded] = useState(false);
+  const [level2Expanded, setLevel2Expanded] = useState(false);
+  const [level3Expanded, setLevel3Expanded] = useState(false);
+
+  const levelExpandedStates = [level1Expanded, level2Expanded, level3Expanded];
+  const levelSetters = [setLevel1Expanded, setLevel2Expanded, setLevel3Expanded];
+
+  // Derive active state for each level
+  const levelActive = LEVELS.map(level =>
+    level.stages.some(s => location === s.url || location.startsWith(s.url + "/"))
+  );
+
+  const analyticsActive = location.startsWith("/analytics");
+  const analyticsChildren = [
+    { label: "YouTube", url: "/analytics/youtube", testId: "nav-youtube" },
+    { label: "Search Console", url: "/analytics/search-console", testId: "nav-search-console" },
+  ];
 
   const handleLogout = async () => {
     await logout();
     setLocation("/");
-  };
-
-  const handleGoToClickFunnels = async () => {
-    try {
-      const res = await fetch("/api/clickfunnels/sso-url", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed");
-      const data = await res.json();
-      window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch {
-      const domain = window.location.hostname;
-      window.open(`https://${domain}`, "_blank", "noopener,noreferrer");
-    }
   };
 
   if (!user) return null;
@@ -292,74 +168,97 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* ── Dashboard ─────────────────────────────────────────────────────── */}
+        {!isCollaborator && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={location === "/dashboard"}
+                    tooltip="Dashboard"
+                    onClick={() => setLocation("/dashboard")}
+                    data-testid="nav-dashboard"
+                  >
+                    <LayoutDashboard className={location === "/dashboard" ? undefined : "text-sky-400"} />
+                    <span>Dashboard</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        <SidebarSeparator />
+
+        {/* ── Keystone Framework ────────────────────────────────────────────── */}
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel className="flex items-center gap-1.5">
+            <Layers className="h-3 w-3" />
+            Keystone Framework
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
-                const groupActive = isGroupActive(item, location);
+              {LEVELS.map((level, idx) => {
+                const isActive = levelActive[idx];
+                const isOpen = isActive || levelExpandedStates[idx];
+                const LevelIcon = level.icon;
 
-                if (item.children) {
-                  return (
-                    <Collapsible key={item.url} open={groupActive}>
-                      <SidebarMenuItem>
+                return (
+                  <Collapsible
+                    key={level.id}
+                    open={isOpen}
+                    onOpenChange={(open) => levelSetters[idx](open)}
+                  >
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
                         <SidebarMenuButton
-                          isActive={groupActive}
-                          tooltip={item.title}
-                          onClick={() => setLocation(item.url)}
-                          data-testid={item.testId}
-                          className={groupActive && item.activeClass ? item.activeClass : ""}
+                          isActive={isActive}
+                          tooltip={level.label}
+                          data-testid={level.testId}
+                          className={isActive ? level.activeClass : ""}
                         >
-                          <item.icon className={groupActive ? undefined : item.iconColor} />
-                          <span>{item.title}</span>
+                          <LevelIcon className={isActive ? undefined : level.iconColor} />
+                          <span>{level.label}</span>
                           <ChevronDown
                             className={cn(
                               "ml-auto h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform duration-200",
-                              groupActive && "rotate-180 text-current"
+                              isOpen && "rotate-180 text-current"
                             )}
                           />
                         </SidebarMenuButton>
-                        <CollapsibleContent>
-                          <SidebarMenuSub className={item.subMenuBorderClass}>
-                            {item.children.map((child) => {
-                              const childIsActive = isChildActive(child, location);
-                              return (
-                                <SidebarMenuSubItem key={child.url}>
-                                  <SidebarMenuSubButton
-                                    isActive={childIsActive}
-                                    onClick={() => setLocation(child.url)}
-                                    data-testid={child.testId}
-                                    style={{ cursor: "pointer" }}
-                                    className={
-                                      childIsActive
-                                        ? child.activeClass
-                                        : "text-white/55 hover:!text-white"
-                                    }
-                                  >
-                                    <span>{child.title}</span>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              );
-                            })}
-                          </SidebarMenuSub>
-                        </CollapsibleContent>
-                      </SidebarMenuItem>
-                    </Collapsible>
-                  );
-                }
-
-                return (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton
-                      isActive={groupActive}
-                      tooltip={item.title}
-                      onClick={() => setLocation(item.url)}
-                      data-testid={item.testId}
-                    >
-                      <item.icon className={groupActive ? undefined : item.iconColor} />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub className={level.subBorderClass}>
+                          {level.stages.map((stage) => {
+                            const stageActive = location === stage.url || location.startsWith(stage.url + "/");
+                            const activeColorClass =
+                              idx === 0
+                                ? "!bg-emerald-500/10 !text-emerald-200 font-medium"
+                                : idx === 1
+                                ? "!bg-amber-500/10 !text-amber-200 font-medium"
+                                : "!bg-violet-500/10 !text-violet-200 font-medium";
+                            return (
+                              <SidebarMenuSubItem key={stage.url}>
+                                <SidebarMenuSubButton
+                                  isActive={stageActive}
+                                  onClick={() => setLocation(stage.url)}
+                                  data-testid={stage.testId}
+                                  style={{ cursor: "pointer" }}
+                                  className={stageActive ? activeColorClass : "text-white/55 hover:!text-white"}
+                                >
+                                  <span className={`text-xs font-mono shrink-0 w-4 ${stageActive ? "" : "text-white/25"}`}>
+                                    {stage.num}
+                                  </span>
+                                  <span>{stage.label}</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            );
+                          })}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
                 );
               })}
             </SidebarMenu>
@@ -367,6 +266,75 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarSeparator />
+
+        {/* ── Workspace ─────────────────────────────────────────────────────── */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {/* Projects */}
+              {!isCollaborator && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={location.startsWith("/projects")}
+                    tooltip="Projects"
+                    onClick={() => setLocation("/projects")}
+                    data-testid="nav-projects"
+                  >
+                    <Briefcase className={location.startsWith("/projects") ? undefined : "text-indigo-400"} />
+                    <span>Projects</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {/* Analytics */}
+              <Collapsible open={analyticsActive}>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={analyticsActive}
+                    tooltip="Analytics"
+                    onClick={() => setLocation("/analytics")}
+                    data-testid="nav-analytics"
+                    className={analyticsActive ? "!bg-emerald-500/15" : ""}
+                  >
+                    <BarChart2 className={analyticsActive ? undefined : "text-emerald-400"} />
+                    <span>Analytics</span>
+                    <ChevronDown
+                      className={cn(
+                        "ml-auto h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform duration-200",
+                        analyticsActive && "rotate-180 text-current"
+                      )}
+                    />
+                  </SidebarMenuButton>
+                  <CollapsibleContent>
+                    <SidebarMenuSub className="!border-emerald-500/40">
+                      {analyticsChildren.map(child => {
+                        const childActive = location === child.url;
+                        return (
+                          <SidebarMenuSubItem key={child.url}>
+                            <SidebarMenuSubButton
+                              isActive={childActive}
+                              onClick={() => setLocation(child.url)}
+                              data-testid={child.testId}
+                              style={{ cursor: "pointer" }}
+                              className={childActive ? "!bg-emerald-500/10 !text-emerald-200 font-medium" : "text-white/55 hover:!text-white"}
+                            >
+                              <span>{child.label}</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        );
+                      })}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        {/* ── Help & Support ────────────────────────────────────────────────── */}
         <SidebarGroup>
           <SidebarGroupLabel>Help &amp; Support</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -397,6 +365,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* ── Admin ─────────────────────────────────────────────────────────── */}
         {user.isAdmin && (
           <>
             <SidebarSeparator />
@@ -413,6 +382,17 @@ export function AppSidebar() {
                     >
                       <Shield className={location === "/admin" ? undefined : "text-violet-400"} />
                       <span>Admin Panel</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location === "/links"}
+                      tooltip="Link Library"
+                      onClick={() => setLocation("/links")}
+                      data-testid="nav-links"
+                    >
+                      <Star className={location === "/links" ? undefined : "text-purple-400"} />
+                      <span>Link Library</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>

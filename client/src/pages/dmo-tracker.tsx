@@ -299,6 +299,95 @@ function PointDots({
   );
 }
 
+// ─── Stage 1 Daily Habits sub-section (Personal Development card) ────────────
+
+const STAGE1_HABITS_DATA = [
+  { id: "prayer_meditation", label: "Prayer / Meditation" },
+  { id: "read_proverbs", label: `Read Proverbs — Chapter ${new Date().getDate()}` },
+  { id: "bible_reading", label: "Bible / Faith Reading" },
+  { id: "read_good_book", label: "Read or Listen to a Good Book (30 min)" },
+  { id: "stage_training", label: "Watch a Stage Training", isWeekly: true },
+];
+
+function Stage1HabitsSection({ timezone, isDone, isFull }: { timezone: string; isDone: boolean; isFull: boolean }) {
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const key = `fia-stage1-habits-${getTodayString(timezone)}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) setChecked(JSON.parse(raw));
+    } catch { /* ignore */ }
+    setMounted(true);
+  }, [timezone]);
+
+  function toggle(id: string) {
+    const key = `fia-stage1-habits-${getTodayString(timezone)}`;
+    setChecked(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
+  if (!mounted) return null;
+
+  const completedCount = STAGE1_HABITS_DATA.filter(h => checked[h.id]).length;
+  const allHabitsDone = completedCount === STAGE1_HABITS_DATA.length;
+
+  return (
+    <div className={`mt-4 pt-4 border-t ${isDone && isFull ? "border-white/20" : "border-border"}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-xs font-semibold uppercase tracking-wider ${isDone && isFull ? "text-white/60" : "text-muted-foreground"}`}>
+          Stage 1 Daily Habits
+        </span>
+        <span className={`text-xs font-semibold ${allHabitsDone ? "text-emerald-400" : isDone && isFull ? "text-white/40" : "text-muted-foreground/50"}`}>
+          {completedCount}/{STAGE1_HABITS_DATA.length}
+        </span>
+      </div>
+      <div className="space-y-1">
+        {STAGE1_HABITS_DATA.map(habit => {
+          const isHabitChecked = !!checked[habit.id];
+          return (
+            <div
+              key={habit.id}
+              onClick={() => toggle(habit.id)}
+              className={`flex items-center gap-2.5 py-1 px-2 rounded-lg cursor-pointer transition-colors select-none ${
+                isHabitChecked
+                  ? isDone && isFull ? "bg-white/10" : "bg-emerald-950/20"
+                  : "hover:bg-white/[0.04]"
+              }`}
+            >
+              <div className={`shrink-0 h-3.5 w-3.5 rounded border flex items-center justify-center transition-colors ${
+                isHabitChecked
+                  ? "bg-emerald-500 border-emerald-500"
+                  : isDone && isFull ? "border-white/30" : "border-muted-foreground/30"
+              }`}>
+                {isHabitChecked && <Check className="h-2.5 w-2.5 text-white" />}
+              </div>
+              <span className={`text-xs leading-tight ${
+                isHabitChecked
+                  ? isDone && isFull ? "text-white/40 line-through" : "text-muted-foreground/50 line-through"
+                  : isDone && isFull ? "text-white/80" : "text-foreground/80"
+              }`}>
+                {habit.label}
+              </span>
+              {habit.isWeekly && (
+                <span className={`text-[9px] px-1 py-px rounded border shrink-0 ${
+                  isDone && isFull ? "text-white/25 border-white/15" : "text-muted-foreground/35 border-muted-foreground/20"
+                }`}>
+                  weekly
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Activity Card ────────────────────────────────────────────────────────────
 
 interface ActivityCardProps {
@@ -963,6 +1052,11 @@ function ActivityCard({ activity, targetMinutes, savedSeconds, savedChecked, tim
               Use − / + to adjust by 5 min.
             </p>
           </div>
+        )}
+
+        {/* Stage 1 daily habits sub-section — Personal Development only */}
+        {activity.key === 'personalDevelopment' && !isConfirming && !editingDone && (
+          <Stage1HabitsSection timezone={timezone} isDone={isDone} isFull={isFull} />
         )}
 
         {/* Quote — visible only when idle/done (not confirming) */}

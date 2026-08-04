@@ -5,3 +5,4 @@
 - [Generate Full Script feature](generate-full-script.md) — how the feature works and a key debugging lesson about server restarts.
 - [Funnel Simulation Roadmap](funnel-simulation-roadmap.md) — planned profitability simulation report using per-node traffic/cost/conversion data already collected in canvasData.
 - [Funnel canvas theme system](funnel-canvas-theme.md) — dark/light toggle via CanvasThemeContext; all nodes use useCanvasTheme(); persists to localStorage.
+- [Keystone Framework navigation](keystone-framework-nav.md) — sidebar restructured around 3-level/9-stage framework; tools live inside stage pages, not sidebar; level colour coding; new DB tables for avatars + email setup.
