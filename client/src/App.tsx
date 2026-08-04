@@ -52,15 +52,6 @@ import AnalyticsYouTubePage from "@/pages/analytics-youtube";
 import AnalyticsGscPage from "@/pages/analytics-gsc";
 import LinksPage from "@/pages/links";
 import NotFound from "@/pages/not-found";
-import Stage1Page from "@/pages/framework/stage-1";
-import Stage2Page from "@/pages/framework/stage-2";
-import Stage3Page from "@/pages/framework/stage-3";
-import Stage4Page from "@/pages/framework/stage-4";
-import Stage5Page from "@/pages/framework/stage-5";
-import Stage6Page from "@/pages/framework/stage-6";
-import Stage7Page from "@/pages/framework/stage-7";
-import Stage8Page from "@/pages/framework/stage-8";
-import Stage9Page from "@/pages/framework/stage-9";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -288,34 +279,6 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/feedback">
         {() => <ProtectedRoute component={FeedbackPage} />}
-      </Route>
-      {/* Keystone Framework */}
-      <Route path="/framework/stage-1">
-        {() => <ProtectedRoute component={Stage1Page} />}
-      </Route>
-      <Route path="/framework/stage-2">
-        {() => <ProtectedRoute component={Stage2Page} />}
-      </Route>
-      <Route path="/framework/stage-3">
-        {() => <ProtectedRoute component={Stage3Page} />}
-      </Route>
-      <Route path="/framework/stage-4">
-        {() => <ProtectedRoute component={Stage4Page} />}
-      </Route>
-      <Route path="/framework/stage-5">
-        {() => <ProtectedRoute component={Stage5Page} />}
-      </Route>
-      <Route path="/framework/stage-6">
-        {() => <ProtectedRoute component={Stage6Page} />}
-      </Route>
-      <Route path="/framework/stage-7">
-        {() => <ProtectedRoute component={Stage7Page} />}
-      </Route>
-      <Route path="/framework/stage-8">
-        {() => <ProtectedRoute component={Stage8Page} />}
-      </Route>
-      <Route path="/framework/stage-9">
-        {() => <ProtectedRoute component={Stage9Page} />}
       </Route>
       <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>

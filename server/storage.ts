@@ -4,8 +4,6 @@ import {
   type PublicApiKey, type Webhook,
   projects, projectTasks,
   dmoEntries, dmoSettings, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
-  frameworkAvatars, frameworkEmailSetup,
-  type FrameworkAvatar, type InsertFrameworkAvatar, type FrameworkEmailSetup,
   workspaceInvites, type WorkspaceInvite, type WorkspaceInviteWithMember,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
   teleprompterScripts, type TeleprompterScript, type InsertTeleprompterScript,
@@ -662,15 +660,6 @@ export interface IStorage {
   deleteAffiliateLink(id: string, userId: string): Promise<void>;
   incrementAffiliateLinkClick(id: string, userId: string): Promise<void>;
   getAffiliateLinkCategories(userId: string): Promise<string[]>;
-  // Keystone Framework: Avatar Builder (Stage 2)
-  getFrameworkAvatars(userId: string): Promise<FrameworkAvatar[]>;
-  getFrameworkAvatar(id: string, userId: string): Promise<FrameworkAvatar | undefined>;
-  createFrameworkAvatar(userId: string, data: InsertFrameworkAvatar): Promise<FrameworkAvatar>;
-  updateFrameworkAvatar(id: string, userId: string, data: Partial<InsertFrameworkAvatar>): Promise<FrameworkAvatar | undefined>;
-  deleteFrameworkAvatar(id: string, userId: string): Promise<void>;
-  // Keystone Framework: Email Setup Checklist (Stage 3)
-  getFrameworkEmailSetup(userId: string): Promise<FrameworkEmailSetup | undefined>;
-  upsertFrameworkEmailSetup(userId: string, checklist: Record<string, boolean>, autoresponder?: string): Promise<FrameworkEmailSetup>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5048,66 +5037,6 @@ export class DatabaseStorage implements IStorage {
       .where(eq(affiliateLinks.userId, userId))
       .orderBy(asc(affiliateLinks.category));
     return rows.map(r => r.category).filter((c): c is string => !!c);
-  }
-
-  // ── Keystone Framework: Avatar Builder (Stage 2) ──────────────────────────
-
-  async getFrameworkAvatars(userId: string): Promise<FrameworkAvatar[]> {
-    return db.select().from(frameworkAvatars)
-      .where(eq(frameworkAvatars.userId, userId))
-      .orderBy(asc(frameworkAvatars.createdAt));
-  }
-
-  async getFrameworkAvatar(id: string, userId: string): Promise<FrameworkAvatar | undefined> {
-    const [row] = await db.select().from(frameworkAvatars)
-      .where(and(eq(frameworkAvatars.id, id), eq(frameworkAvatars.userId, userId)));
-    return row || undefined;
-  }
-
-  async createFrameworkAvatar(userId: string, data: InsertFrameworkAvatar): Promise<FrameworkAvatar> {
-    const now = new Date();
-    const [created] = await db.insert(frameworkAvatars)
-      .values({ ...data, userId, createdAt: now, updatedAt: now })
-      .returning();
-    return created;
-  }
-
-  async updateFrameworkAvatar(id: string, userId: string, data: Partial<InsertFrameworkAvatar>): Promise<FrameworkAvatar | undefined> {
-    const [updated] = await db.update(frameworkAvatars)
-      .set({ ...data, updatedAt: new Date() })
-      .where(and(eq(frameworkAvatars.id, id), eq(frameworkAvatars.userId, userId)))
-      .returning();
-    return updated || undefined;
-  }
-
-  async deleteFrameworkAvatar(id: string, userId: string): Promise<void> {
-    await db.delete(frameworkAvatars)
-      .where(and(eq(frameworkAvatars.id, id), eq(frameworkAvatars.userId, userId)));
-  }
-
-  // ── Keystone Framework: Email Setup Checklist (Stage 3) ───────────────────
-
-  async getFrameworkEmailSetup(userId: string): Promise<FrameworkEmailSetup | undefined> {
-    const [row] = await db.select().from(frameworkEmailSetup)
-      .where(eq(frameworkEmailSetup.userId, userId));
-    return row || undefined;
-  }
-
-  async upsertFrameworkEmailSetup(userId: string, checklist: Record<string, boolean>, autoresponder?: string): Promise<FrameworkEmailSetup> {
-    const now = new Date();
-    const existing = await this.getFrameworkEmailSetup(userId);
-    if (existing) {
-      const [updated] = await db.update(frameworkEmailSetup)
-        .set({ checklist, autoresponder: autoresponder ?? existing.autoresponder, updatedAt: now })
-        .where(eq(frameworkEmailSetup.userId, userId))
-        .returning();
-      return updated;
-    } else {
-      const [created] = await db.insert(frameworkEmailSetup)
-        .values({ userId, checklist, autoresponder, updatedAt: now })
-        .returning();
-      return created;
-    }
   }
 }
 
