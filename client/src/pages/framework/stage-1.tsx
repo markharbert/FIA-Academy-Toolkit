@@ -3,14 +3,10 @@ import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Target, BookOpen, ChevronRight, Lightbulb, Brain, BookMarked, Headphones, Tv2 } from "lucide-react";
+import { Target, BookOpen, ChevronRight, Lightbulb, Brain, Headphones, Tv2 } from "lucide-react";
 
 function getTodayString() {
   return new Date().toISOString().split("T")[0];
-}
-
-function getProverbsChapter() {
-  return new Date().getDate();
 }
 
 const HABITS = [
@@ -21,16 +17,10 @@ const HABITS = [
     description: "Start the day quiet. Get still before you get busy.",
   },
   {
-    id: "read_proverbs",
-    icon: BookMarked,
-    label: `Read Proverbs — Chapter ${getProverbsChapter()}`,
-    description: "One chapter per day, 31 chapters, repeat for life. Timeless wisdom.",
-  },
-  {
     id: "bible_reading",
     icon: BookOpen,
     label: "Bible / Faith Reading",
-    description: "1–2 chapters of additional scripture or faith-based material.",
+    description: "1–2 chapters of scripture per day. Recommended: include one chapter of Proverbs.",
   },
   {
     id: "read_good_book",

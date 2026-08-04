@@ -303,8 +303,7 @@ function PointDots({
 
 const STAGE1_HABITS_DATA = [
   { id: "prayer_meditation", label: "Prayer / Meditation" },
-  { id: "read_proverbs", label: `Read Proverbs — Chapter ${new Date().getDate()}` },
-  { id: "bible_reading", label: "Bible / Faith Reading" },
+  { id: "bible_reading", label: "Bible / Faith Reading (1–2 chapters; include a chapter of Proverbs)" },
   { id: "read_good_book", label: "Read or Listen to a Good Book (30 min)" },
   { id: "stage_training", label: "Watch a Stage Training", isWeekly: true },
 ];
