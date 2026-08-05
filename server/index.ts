@@ -61,27 +61,6 @@ app.use((_req, res, next) => {
   if (process.env.NODE_ENV === "production") {
     // Force HTTPS for 1 year in production
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-    // Content Security Policy — only enforced in production; dev needs Vite HMR websockets
-    res.setHeader(
-      "Content-Security-Policy",
-      [
-        "default-src 'self'",
-        "script-src 'self'",
-        // unsafe-inline required for Tailwind + React component inline styles
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com",
-        // https: for YouTube thumbnails / channel avatars; blob:/data: for video recording
-        "img-src 'self' data: blob: https:",
-        // blob: for MediaRecorder output during video recording
-        "media-src 'self' blob:",
-        // All API calls go through our own server
-        "connect-src 'self'",
-        // blob: for any web workers (e.g. hls.js)
-        "worker-src 'self' blob:",
-        // Supersedes X-Frame-Options for modern browsers
-        "frame-ancestors 'none'",
-      ].join("; "),
-    );
   }
   next();
 });
