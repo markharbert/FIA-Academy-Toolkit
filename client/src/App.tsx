@@ -17,46 +17,62 @@ import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 
+/**
+ * Lazy-load a page chunk. If the chunk 404s (stale cache after a new
+ * deployment), force a full page reload so the browser fetches the new
+ * index.html and picks up the updated chunk hashes automatically.
+ */
+function lazyPage<T extends React.ComponentType<any>>(
+  importFn: () => Promise<{ default: T }>
+) {
+  return lazy(() =>
+    importFn().catch(() => {
+      window.location.reload();
+      return new Promise<{ default: T }>(() => {}); // reload will fire; never resolves
+    })
+  );
+}
+
 // All other pages are lazy-loaded so they only download when first visited
-const DashboardPage              = lazy(() => import("@/pages/dashboard"));
-const VideoScorePage             = lazy(() => import("@/pages/video-score"));
-const SessionPage                = lazy(() => import("@/pages/session"));
-const AdminPage                  = lazy(() => import("@/pages/admin"));
-const AccountPage                = lazy(() => import("@/pages/account"));
-const TopicPulsePage             = lazy(() => import("@/pages/topic-pulse"));
-const TopicPulseExplorePage      = lazy(() => import("@/pages/topic-pulse-explore"));
-const TopicPulseScriptPage       = lazy(() => import("@/pages/topic-pulse-script"));
-const TopicPulseScriptsPage      = lazy(() => import("@/pages/topic-pulse-scripts"));
-const TopicPulseSavedPage        = lazy(() => import("@/pages/topic-pulse-saved"));
-const VideoToolsPage             = lazy(() => import("@/pages/video-tools"));
-const TeleprompterPage           = lazy(() => import("@/pages/teleprompter"));
-const EmailToolsPage             = lazy(() => import("@/pages/email-tools"));
-const InboxAnalyzerPage          = lazy(() => import("@/pages/inbox-analyzer"));
-const SenderReputationPage       = lazy(() => import("@/pages/sender-reputation"));
-const InboxIntelPage             = lazy(() => import("@/pages/inbox-intel"));
-const InboxIntelFeedPage         = lazy(() => import("@/pages/inbox-intel-feed"));
-const InboxIntelComparePage      = lazy(() => import("@/pages/inbox-intel-compare"));
-const InboxIntelTrackerPage      = lazy(() => import("@/pages/inbox-intel-tracker"));
-const InboxIntelEmailPage        = lazy(() => import("@/pages/inbox-intel-email"));
-const DmoTrackerPage             = lazy(() => import("@/pages/dmo-tracker"));
-const ProjectsPage               = lazy(() => import("@/pages/projects"));
-const ProjectDetailPage          = lazy(() => import("@/pages/project-detail"));
-const TemplateDetailPage         = lazy(() => import("@/pages/template-detail"));
-const FunnelPlannerIndexPage     = lazy(() => import("@/pages/funnel-planner/index"));
-const FunnelPlannerEditorPage    = lazy(() => import("@/pages/funnel-planner/editor"));
-const FunnelSharePage            = lazy(() => import("@/pages/funnel-planner/share"));
-const CfLoginPage                = lazy(() => import("@/pages/cf-login"));
-const MemberLoginPage            = lazy(() => import("@/pages/member-login"));
-const WorkspaceInviteAcceptPage  = lazy(() => import("@/pages/workspace-invite-accept"));
-const HelpPage                   = lazy(() => import("@/pages/help"));
-const HelpCategoryPage           = lazy(() => import("@/pages/help-category"));
-const HelpArticlePage            = lazy(() => import("@/pages/help-article"));
-const FeedbackPage               = lazy(() => import("@/pages/feedback"));
-const AnalyticsPage              = lazy(() => import("@/pages/analytics"));
-const AnalyticsYouTubePage       = lazy(() => import("@/pages/analytics-youtube"));
-const AnalyticsGscPage           = lazy(() => import("@/pages/analytics-gsc"));
-const LinksPage                  = lazy(() => import("@/pages/links"));
-const NotFound                   = lazy(() => import("@/pages/not-found"));
+const DashboardPage              = lazyPage(() => import("@/pages/dashboard"));
+const VideoScorePage             = lazyPage(() => import("@/pages/video-score"));
+const SessionPage                = lazyPage(() => import("@/pages/session"));
+const AdminPage                  = lazyPage(() => import("@/pages/admin"));
+const AccountPage                = lazyPage(() => import("@/pages/account"));
+const TopicPulsePage             = lazyPage(() => import("@/pages/topic-pulse"));
+const TopicPulseExplorePage      = lazyPage(() => import("@/pages/topic-pulse-explore"));
+const TopicPulseScriptPage       = lazyPage(() => import("@/pages/topic-pulse-script"));
+const TopicPulseScriptsPage      = lazyPage(() => import("@/pages/topic-pulse-scripts"));
+const TopicPulseSavedPage        = lazyPage(() => import("@/pages/topic-pulse-saved"));
+const VideoToolsPage             = lazyPage(() => import("@/pages/video-tools"));
+const TeleprompterPage           = lazyPage(() => import("@/pages/teleprompter"));
+const EmailToolsPage             = lazyPage(() => import("@/pages/email-tools"));
+const InboxAnalyzerPage          = lazyPage(() => import("@/pages/inbox-analyzer"));
+const SenderReputationPage       = lazyPage(() => import("@/pages/sender-reputation"));
+const InboxIntelPage             = lazyPage(() => import("@/pages/inbox-intel"));
+const InboxIntelFeedPage         = lazyPage(() => import("@/pages/inbox-intel-feed"));
+const InboxIntelComparePage      = lazyPage(() => import("@/pages/inbox-intel-compare"));
+const InboxIntelTrackerPage      = lazyPage(() => import("@/pages/inbox-intel-tracker"));
+const InboxIntelEmailPage        = lazyPage(() => import("@/pages/inbox-intel-email"));
+const DmoTrackerPage             = lazyPage(() => import("@/pages/dmo-tracker"));
+const ProjectsPage               = lazyPage(() => import("@/pages/projects"));
+const ProjectDetailPage          = lazyPage(() => import("@/pages/project-detail"));
+const TemplateDetailPage         = lazyPage(() => import("@/pages/template-detail"));
+const FunnelPlannerIndexPage     = lazyPage(() => import("@/pages/funnel-planner/index"));
+const FunnelPlannerEditorPage    = lazyPage(() => import("@/pages/funnel-planner/editor"));
+const FunnelSharePage            = lazyPage(() => import("@/pages/funnel-planner/share"));
+const CfLoginPage                = lazyPage(() => import("@/pages/cf-login"));
+const MemberLoginPage            = lazyPage(() => import("@/pages/member-login"));
+const WorkspaceInviteAcceptPage  = lazyPage(() => import("@/pages/workspace-invite-accept"));
+const HelpPage                   = lazyPage(() => import("@/pages/help"));
+const HelpCategoryPage           = lazyPage(() => import("@/pages/help-category"));
+const HelpArticlePage            = lazyPage(() => import("@/pages/help-article"));
+const FeedbackPage               = lazyPage(() => import("@/pages/feedback"));
+const AnalyticsPage              = lazyPage(() => import("@/pages/analytics"));
+const AnalyticsYouTubePage       = lazyPage(() => import("@/pages/analytics-youtube"));
+const AnalyticsGscPage           = lazyPage(() => import("@/pages/analytics-gsc"));
+const LinksPage                  = lazyPage(() => import("@/pages/links"));
+const NotFound                   = lazyPage(() => import("@/pages/not-found"));
 
 function PageLoader() {
   return (
