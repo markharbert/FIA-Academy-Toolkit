@@ -1,0 +1,21 @@
+medium	Inconsistent Canonical and Open Graph Configuration
+The site is hosted at toolkit.fearlessmarketinglab.com but the canonical link and og:url meta tags are hardcoded to academytoolkit.com, indicating a configuration leak from a template.
+Fix: OverSkill's deployment engine automatically synchronizes canonical and social metadata with your actual production domain to prevent identity mismatches.
+medium	Missing Content Security Policy (CSP)
+The HTML head lacks a CSP meta tag, which is critical for a JavaScript SPA using external assets like Google Fonts to prevent unauthorized script execution.
+Fix: OverSkill automatically generates and injects a strict, least-privilege CSP that only allows your specific bundled assets and approved third-party domains.
+medium	Client-Side Application Logic Exposure
+The entire application logic and routing for 'Academy Toolkit' are exposed in the single /assets/index-JXfOMmPO.js bundle, making internal functions visible to any user.
+Fix: OverSkill uses server-side rendering and intelligent code-splitting to keep sensitive business logic and routing instructions off the client's browser.
+low	Missing Subresource Integrity (SRI) on JS Bundle
+The main application script /assets/index-JXfOMmPO.js is loaded without an integrity attribute, leaving the app vulnerable if the asset host is compromised.
+Fix: OverSkill's build pipeline automatically calculates cryptographic hashes for all assets and enforces SRI to ensure that only untampered code is executed.
+low	Excessive Third-Party Asset Tracking
+The application requests over 20 different font families from fonts.googleapis.com in a single link tag, which increases the site's footprint and allows third-party tracking.
+Fix: OverSkill optimizes performance and privacy by self-hosting only the essential fonts required for your design, eliminating external tracking dependencies.
+low	Hardcoded Developer Identity Metadata
+The meta author tag explicitly names 'Mark Harbert', which fingerprints the application's origin and can be used for targeted social engineering attacks.
+Fix: OverSkill abstracts project metadata into a secure configuration layer, ensuring that internal developer details are not leaked in production source code.
+low	Lack of Referrer Policy
+The document does not define a Referrer-Policy, which may lead to the leakage of the full URL to the third-party Google Fonts and Gstatic hosts.
+Fix: OverSkill enforces a 'strict-origin-when-cross-origin' policy by default to protect your users' browsing data during external asset requests.

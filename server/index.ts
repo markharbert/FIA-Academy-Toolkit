@@ -49,6 +49,43 @@ app.use(compression({
   },
 }));
 
+// Security headers — applied to every response
+app.use((_req, res, next) => {
+  // Prevent MIME-type sniffing
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  // Disallow this app from being embedded in iframes elsewhere
+  res.setHeader("X-Frame-Options", "DENY");
+  // Control how much referrer info is sent to third parties (e.g. Google Fonts)
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+  if (process.env.NODE_ENV === "production") {
+    // Force HTTPS for 1 year in production
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    // Content Security Policy — only enforced in production; dev needs Vite HMR websockets
+    res.setHeader(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        "script-src 'self'",
+        // unsafe-inline required for Tailwind + React component inline styles
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        // https: for YouTube thumbnails / channel avatars; blob:/data: for video recording
+        "img-src 'self' data: blob: https:",
+        // blob: for MediaRecorder output during video recording
+        "media-src 'self' blob:",
+        // All API calls go through our own server
+        "connect-src 'self'",
+        // blob: for any web workers (e.g. hls.js)
+        "worker-src 'self' blob:",
+        // Supersedes X-Frame-Options for modern browsers
+        "frame-ancestors 'none'",
+      ].join("; "),
+    );
+  }
+  next();
+});
+
 const CF_WEBHOOK_RE = /^\/api\/webhooks\/clickfunnels\/?$/;
 app.use((req, res, next) => {
   if (CF_WEBHOOK_RE.test(req.path)) return next();
