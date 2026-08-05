@@ -3,7 +3,7 @@ import compression from "compression";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { bootstrapSuperAdmins, storage } from "./storage";
+import { bootstrapSuperAdmins, runMigrations, storage } from "./storage";
 import { startNotificationScheduler } from "./notificationScheduler";
 
 import { configureEmailSender } from "./email-sendgrid";
@@ -879,6 +879,8 @@ async function runStartupMigrations() {
     async () => {
       log(`serving on port ${port}`);
       
+      // Run startup migrations (additive index creation)
+      await runMigrations();
       // Bootstrap super admins from environment
       await bootstrapSuperAdmins();
       // Load email sender settings from DB into the sendgrid module

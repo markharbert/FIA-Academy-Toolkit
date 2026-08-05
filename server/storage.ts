@@ -5042,6 +5042,63 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
+// Run startup migrations — purely additive index creation.
+// Each statement uses IF NOT EXISTS so it is safe to run on every boot.
+export async function runMigrations(): Promise<void> {
+  const migrations: { name: string; sql: string }[] = [
+    // sessions: userId + createdAt — used by getSessionsByUser, getSessionsByFolder,
+    // activity feed, and admin session lookups (all filter by userId and sort by createdAt).
+    {
+      name: "idx_sessions_user_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_sessions_user_created
+            ON sessions (user_id, created_at DESC)`,
+    },
+    // user_action_log: userId + createdAt — used by getUserActionLogs (cursor pagination)
+    // and getAdminActivityFeed (filters by userId and sorts by createdAt).
+    {
+      name: "idx_user_action_log_user_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_user_action_log_user_created
+            ON user_action_log (user_id, created_at DESC)`,
+    },
+    // user_action_log: ip + createdAt — used by admin activity feed when filtering
+    // by IP address with date ordering.
+    {
+      name: "idx_user_action_log_ip_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_user_action_log_ip_created
+            ON user_action_log (ip, created_at DESC)`,
+    },
+    // topic_runs: userId + createdAt — used by getTopicRunsByUser (order by createdAt).
+    {
+      name: "idx_topic_runs_user_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_topic_runs_user_created
+            ON topic_runs (user_id, created_at DESC)`,
+    },
+    // saved_topics: userId + createdAt — used by getSavedTopicsByUser.
+    {
+      name: "idx_saved_topics_user_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_saved_topics_user_created
+            ON saved_topics (user_id, created_at DESC)`,
+    },
+    // users.email functional index — getUserByEmail uses LOWER(TRIM(email)) so a
+    // plain btree on the raw column is never used; this expression index is.
+    {
+      name: "idx_users_email_lower_trim",
+      sql: `CREATE INDEX IF NOT EXISTS idx_users_email_lower_trim
+            ON users (LOWER(TRIM(email)))`,
+    },
+  ];
+
+  for (const migration of migrations) {
+    try {
+      await pool.query(migration.sql);
+      console.log(`[migration] index ensured: ${migration.name}`);
+    } catch (err: any) {
+      // Non-fatal: log and continue so a single failure doesn't block startup.
+      console.error(`[migration] failed to create index ${migration.name}:`, err?.message);
+    }
+  }
+}
+
 // Bootstrap super admins from environment variable
 export async function bootstrapSuperAdmins(): Promise<void> {
   const superAdminEmails = process.env.SUPER_ADMIN_EMAILS;
