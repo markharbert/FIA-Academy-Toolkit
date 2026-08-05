@@ -1145,6 +1145,7 @@ export default function SessionPage() {
                           <img 
                             src={`/api/sessions/${session?.id}/poster`}
                             alt="Video thumbnail"
+                            loading="lazy"
                             className="w-full aspect-video object-cover rounded-lg"
                             data-testid="img-video-poster"
                           />
@@ -1156,6 +1157,7 @@ export default function SessionPage() {
                       <img 
                         src={`/api/sessions/${session?.id}/poster`}
                         alt="Video thumbnail"
+                        loading="lazy"
                         className="w-full aspect-video object-cover"
                         data-testid="img-video-poster"
                       />

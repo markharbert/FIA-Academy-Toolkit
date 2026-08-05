@@ -213,7 +213,7 @@ function ReconnectBanner({ onConnect }: { onConnect: () => void }) {
 function CommentAvatar({ src, name }: { src: string; name: string }) {
   const initials = name ? name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase() : "?";
   if (src) {
-    return <img src={src} alt={name} className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-border" />;
+    return <img src={src} alt={name} loading="lazy" className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-border" />;
   }
   return (
     <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 text-[10px] font-bold text-muted-foreground">
@@ -1191,7 +1191,7 @@ function BulkEditTab() {
                 </button>
 
                 {/* Thumbnail + title */}
-                <img src={item.video.thumbnail} alt="" className="w-14 h-10 rounded object-cover shrink-0" />
+                <img src={item.video.thumbnail} alt="" loading="lazy" className="w-14 h-10 rounded object-cover shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-foreground truncate">{item.video.title}</p>
 
@@ -1965,7 +1965,7 @@ export default function AnalyticsYouTubePage() {
               <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
               <CardContent className="p-5 flex items-center gap-4">
                 {status.channel.thumbnail ? (
-                  <img src={status.channel.thumbnail} alt={status.channel.title}
+                  <img src={status.channel.thumbnail} alt={status.channel.title} loading="lazy"
                     className="w-14 h-14 rounded-full object-cover ring-2 ring-red-500/30" />
                 ) : (
                   <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center">
@@ -2172,7 +2172,7 @@ export default function AnalyticsYouTubePage() {
                               {i + 1}
                             </span>
                             {v.thumbnail
-                              ? <img src={v.thumbnail} alt="" className="shrink-0 w-16 h-10 object-cover rounded-lg" />
+                              ? <img src={v.thumbnail} alt="" loading="lazy" className="shrink-0 w-16 h-10 object-cover rounded-lg" />
                               : <div className="shrink-0 w-16 h-10 bg-muted rounded-lg flex items-center justify-center"><Video className="h-3.5 w-3.5 text-muted-foreground" /></div>}
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-foreground group-hover:text-red-500 transition-colors truncate leading-snug">{v.title}</p>
@@ -2304,7 +2304,7 @@ export default function AnalyticsYouTubePage() {
                                   <div className="flex items-center gap-3 min-w-0">
                                     <div className="shrink-0 relative group/thumb">
                                       {v.thumbnail
-                                        ? <img src={v.thumbnail} alt="" className="w-20 h-12 object-cover rounded-lg" />
+                                        ? <img src={v.thumbnail} alt="" loading="lazy" className="w-20 h-12 object-cover rounded-lg" />
                                         : <div className="w-20 h-12 bg-muted rounded-lg flex items-center justify-center"><Video className="h-4 w-4 text-muted-foreground" /></div>}
                                       {/* Play overlay hint */}
                                       <div className={`absolute inset-0 rounded-lg flex items-center justify-center bg-black/40 transition-opacity ${isExpanded ? "opacity-100" : "opacity-0 group-hover/thumb:opacity-100"}`}>

@@ -30,6 +30,28 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React runtime — tiny, stable, cached independently
+          "vendor-react": ["react", "react-dom"],
+          // Charting — heavy, shared by analytics/dmo/email pages
+          "vendor-charts": ["recharts"],
+          // Funnel canvas — XYFlow is large, only used on one route
+          "vendor-xyflow": ["@xyflow/react"],
+          // Rich-text editor — only used in script pages
+          "vendor-tiptap": [
+            "@tiptap/react",
+            "@tiptap/starter-kit",
+            "@tiptap/extension-placeholder",
+          ],
+          // PDF/image export — only used in teleprompter & funnel export
+          "vendor-export": ["jspdf", "html-to-image"],
+          // Data-fetching layer
+          "vendor-query": ["@tanstack/react-query"],
+        },
+      },
+    },
   },
   server: {
     fs: {

@@ -1,4 +1,5 @@
 import { Switch, Route, Redirect, useParams } from "wouter";
+import { lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,48 +11,59 @@ import { Footer } from "@/components/footer";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { Loader2, ExternalLink } from "lucide-react";
 
+// Public pages — kept eager so the login screen renders instantly
 import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
-import DashboardPage from "@/pages/dashboard";
-import VideoScorePage from "@/pages/video-score";
-import SessionPage from "@/pages/session";
-import AdminPage from "@/pages/admin";
-import AccountPage from "@/pages/account";
-import TopicPulsePage from "@/pages/topic-pulse";
-import TopicPulseExplorePage from "@/pages/topic-pulse-explore";
-import TopicPulseScriptPage from "@/pages/topic-pulse-script";
-import TopicPulseScriptsPage from "@/pages/topic-pulse-scripts";
-import TopicPulseSavedPage from "@/pages/topic-pulse-saved";
-import VideoToolsPage from "@/pages/video-tools";
-import TeleprompterPage from "@/pages/teleprompter";
-import EmailToolsPage from "@/pages/email-tools";
-import InboxAnalyzerPage from "@/pages/inbox-analyzer";
-import SenderReputationPage from "@/pages/sender-reputation";
-import InboxIntelPage from "@/pages/inbox-intel";
-import InboxIntelFeedPage from "@/pages/inbox-intel-feed";
-import InboxIntelComparePage from "@/pages/inbox-intel-compare";
-import InboxIntelTrackerPage from "@/pages/inbox-intel-tracker";
-import InboxIntelEmailPage from "@/pages/inbox-intel-email";
-import DmoTrackerPage from "@/pages/dmo-tracker";
-import ProjectsPage from "@/pages/projects";
-import ProjectDetailPage from "@/pages/project-detail";
-import TemplateDetailPage from "@/pages/template-detail";
-import FunnelPlannerIndexPage from "@/pages/funnel-planner/index";
-import FunnelPlannerEditorPage from "@/pages/funnel-planner/editor";
-import FunnelSharePage from "@/pages/funnel-planner/share";
-import CfLoginPage from "@/pages/cf-login";
-import MemberLoginPage from "@/pages/member-login";
-import WorkspaceInviteAcceptPage from "@/pages/workspace-invite-accept";
-import HelpPage from "@/pages/help";
-import HelpCategoryPage from "@/pages/help-category";
-import HelpArticlePage from "@/pages/help-article";
-import FeedbackPage from "@/pages/feedback";
-import AnalyticsPage from "@/pages/analytics";
-import AnalyticsYouTubePage from "@/pages/analytics-youtube";
-import AnalyticsGscPage from "@/pages/analytics-gsc";
-import LinksPage from "@/pages/links";
-import NotFound from "@/pages/not-found";
+
+// All other pages are lazy-loaded so they only download when first visited
+const DashboardPage              = lazy(() => import("@/pages/dashboard"));
+const VideoScorePage             = lazy(() => import("@/pages/video-score"));
+const SessionPage                = lazy(() => import("@/pages/session"));
+const AdminPage                  = lazy(() => import("@/pages/admin"));
+const AccountPage                = lazy(() => import("@/pages/account"));
+const TopicPulsePage             = lazy(() => import("@/pages/topic-pulse"));
+const TopicPulseExplorePage      = lazy(() => import("@/pages/topic-pulse-explore"));
+const TopicPulseScriptPage       = lazy(() => import("@/pages/topic-pulse-script"));
+const TopicPulseScriptsPage      = lazy(() => import("@/pages/topic-pulse-scripts"));
+const TopicPulseSavedPage        = lazy(() => import("@/pages/topic-pulse-saved"));
+const VideoToolsPage             = lazy(() => import("@/pages/video-tools"));
+const TeleprompterPage           = lazy(() => import("@/pages/teleprompter"));
+const EmailToolsPage             = lazy(() => import("@/pages/email-tools"));
+const InboxAnalyzerPage          = lazy(() => import("@/pages/inbox-analyzer"));
+const SenderReputationPage       = lazy(() => import("@/pages/sender-reputation"));
+const InboxIntelPage             = lazy(() => import("@/pages/inbox-intel"));
+const InboxIntelFeedPage         = lazy(() => import("@/pages/inbox-intel-feed"));
+const InboxIntelComparePage      = lazy(() => import("@/pages/inbox-intel-compare"));
+const InboxIntelTrackerPage      = lazy(() => import("@/pages/inbox-intel-tracker"));
+const InboxIntelEmailPage        = lazy(() => import("@/pages/inbox-intel-email"));
+const DmoTrackerPage             = lazy(() => import("@/pages/dmo-tracker"));
+const ProjectsPage               = lazy(() => import("@/pages/projects"));
+const ProjectDetailPage          = lazy(() => import("@/pages/project-detail"));
+const TemplateDetailPage         = lazy(() => import("@/pages/template-detail"));
+const FunnelPlannerIndexPage     = lazy(() => import("@/pages/funnel-planner/index"));
+const FunnelPlannerEditorPage    = lazy(() => import("@/pages/funnel-planner/editor"));
+const FunnelSharePage            = lazy(() => import("@/pages/funnel-planner/share"));
+const CfLoginPage                = lazy(() => import("@/pages/cf-login"));
+const MemberLoginPage            = lazy(() => import("@/pages/member-login"));
+const WorkspaceInviteAcceptPage  = lazy(() => import("@/pages/workspace-invite-accept"));
+const HelpPage                   = lazy(() => import("@/pages/help"));
+const HelpCategoryPage           = lazy(() => import("@/pages/help-category"));
+const HelpArticlePage            = lazy(() => import("@/pages/help-article"));
+const FeedbackPage               = lazy(() => import("@/pages/feedback"));
+const AnalyticsPage              = lazy(() => import("@/pages/analytics"));
+const AnalyticsYouTubePage       = lazy(() => import("@/pages/analytics-youtube"));
+const AnalyticsGscPage           = lazy(() => import("@/pages/analytics-gsc"));
+const LinksPage                  = lazy(() => import("@/pages/links"));
+const NotFound                   = lazy(() => import("@/pages/not-found"));
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -147,6 +159,7 @@ function OldScriptRedirect() {
 
 function ProtectedRoutes() {
   return (
+    <Suspense fallback={<PageLoader />}>
     <Switch>
       <Route path="/dashboard">
         {() => <ProtectedRoute component={DashboardPage} />}
@@ -282,6 +295,7 @@ function ProtectedRoutes() {
       </Route>
       <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>
+    </Suspense>
   );
 }
 
@@ -371,6 +385,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
+          <Suspense fallback={<PageLoader />}>
           <Switch>
             {/* Standalone pages — no sidebar, no auth check */}
             <Route path="/cf-login">{() => <CfLoginPage />}</Route>
@@ -379,6 +394,7 @@ function App() {
             <Route path="/funnels/share/:token">{() => <FunnelSharePage />}</Route>
             <Route>{() => <AppLayout />}</Route>
           </Switch>
+          </Suspense>
           <Toaster />
         </AuthProvider>
       </TooltipProvider>

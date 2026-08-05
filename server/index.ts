@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -39,6 +40,15 @@ declare module "http" {
 // raw-body collector (with 1 MB cap + absolute timeout) has authoritative
 // control over that stream from the start. Regex handles trailing-slash
 // variants so the bypass is not circumventable by appending a slash.
+// Gzip/Brotli all text responses — skip SSE and large upload routes
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress SSE streams or file-upload paths
+    if (req.path.startsWith("/api/sessions") && req.method === "POST") return false;
+    return compression.filter(req, res);
+  },
+}));
+
 const CF_WEBHOOK_RE = /^\/api\/webhooks\/clickfunnels\/?$/;
 app.use((req, res, next) => {
   if (CF_WEBHOOK_RE.test(req.path)) return next();
