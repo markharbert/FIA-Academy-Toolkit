@@ -560,11 +560,21 @@ function buildLinkCard(link, container) {
   const top = document.createElement("div");
   top.className = "link-card-top";
 
-  // Emoji
-  const emoji = document.createElement("span");
-  emoji.className = "link-card-emoji";
-  emoji.textContent = link.emoji || "🔗";
-  top.appendChild(emoji);
+  // Screenshot thumbnail (Microlink)
+  const thumb = document.createElement("div");
+  thumb.className = "link-thumb";
+  const thumbImg = document.createElement("img");
+  thumbImg.loading = "lazy";
+  thumbImg.alt = link.title;
+  thumbImg.src = `https://api.microlink.io/?url=${encodeURIComponent(link.url)}&screenshot=true&meta=false&embed=screenshot.url`;
+  const thumbPh = document.createElement("span");
+  thumbPh.className = "link-thumb-ph";
+  thumbPh.textContent = "🌐";
+  thumbImg.addEventListener("load",  () => { thumbImg.classList.add("loaded"); });
+  thumbImg.addEventListener("error", () => { thumbImg.style.display = "none"; thumbPh.textContent = "🔗"; });
+  thumb.appendChild(thumbImg);
+  thumb.appendChild(thumbPh);
+  top.appendChild(thumb);
 
   // Body: title + meta + description
   const body = document.createElement("div");
@@ -731,20 +741,7 @@ function buildLinksForm(container) {
   urlField.appendChild(urlInput);
   form.appendChild(urlField);
 
-  // Emoji + Category row
-  const rowDiv = document.createElement("div");
-  rowDiv.className = "links-form-row";
-
-  const emojiField = document.createElement("div");
-  emojiField.style.cssText = "flex:0 0 72px;display:flex;flex-direction:column;gap:3px;";
-  emojiField.innerHTML = `<div class="links-form-label">Emoji</div>`;
-  const emojiInput = document.createElement("input");
-  emojiInput.className = "links-form-input"; emojiInput.type = "text";
-  emojiInput.placeholder = "🔗"; emojiInput.value = link?.emoji || "🔗";
-  emojiInput.style.textAlign = "center";
-  emojiField.appendChild(emojiInput);
-  rowDiv.appendChild(emojiField);
-
+  // Category field
   const catField = document.createElement("div");
   catField.className = "links-form-field";
   catField.innerHTML = `<div class="links-form-label">Category</div>`;
@@ -758,8 +755,7 @@ function buildLinksForm(container) {
   dl.id = "lf-cats-dl";
   existingCats.forEach(c => { const o = document.createElement("option"); o.value = c; dl.appendChild(o); });
   catField.appendChild(dl);
-  rowDiv.appendChild(catField);
-  form.appendChild(rowDiv);
+  form.appendChild(catField);
 
   // Description
   const descField = document.createElement("div");
@@ -808,7 +804,6 @@ function buildLinksForm(container) {
     if (!tv || !uv) return;
     const payload = {
       title: tv, url: uv,
-      emoji: emojiInput.value.trim() || "🔗",
       category: catInput.value.trim() || null,
       description: descInput.value.trim() || null,
       isActive,
