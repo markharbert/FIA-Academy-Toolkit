@@ -256,7 +256,7 @@
       border-bottom: 1px solid var(--tab-border);
     }
     .tab-btn {
-      flex: 1; padding: 9px 0; font-size: 12px; font-weight: 500;
+      flex: 1; padding: 8px 0; font-size: 11px; font-weight: 500;
       color: var(--tab-idle); border: none; background: transparent; cursor: pointer;
       border-bottom: 2px solid transparent; font-family: inherit;
       transition: color .15s, border-color .15s;
@@ -487,6 +487,153 @@
     .log-bf-date-input:focus { border-color: var(--accent); }
     .log-bf-notes-row { display: flex; flex-direction: column; gap: 4px; }
 
+    /* ─── Links tab ──────────────────────────────────────────────────────── */
+    .links-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px 5px;
+    }
+    .links-title { font-size: 13px; font-weight: 700; color: var(--text); }
+    .links-add-btn {
+      padding: 4px 11px; border-radius: 7px; border: 1px solid var(--accent);
+      background: transparent; color: var(--accent); font-size: 11px; font-weight: 600;
+      cursor: pointer; font-family: inherit; transition: background .12s, color .12s;
+    }
+    .links-add-btn:hover { background: var(--accent); color: #fff; }
+    .links-filters { padding: 0 10px 5px; }
+    .links-search-input {
+      width: 100%; padding: 6px 10px; border-radius: 8px;
+      background: var(--bg-input); border: 1px solid var(--border-med);
+      color: var(--text); font-size: 12px; outline: none; font-family: inherit;
+    }
+    .links-search-input:focus { border-color: var(--accent); }
+    .links-search-input::placeholder { color: var(--text-muted); }
+    .links-cats {
+      display: flex; gap: 5px; overflow-x: auto; padding: 4px 10px 7px;
+      scrollbar-width: none;
+    }
+    .links-cats::-webkit-scrollbar { display: none; }
+    .links-cat-pill {
+      flex-shrink: 0; padding: 3px 10px; border-radius: 14px;
+      border: 1px solid var(--border-med); background: transparent;
+      color: var(--text-sub); font-size: 11px; cursor: pointer; font-family: inherit;
+      white-space: nowrap; transition: all .12s;
+    }
+    .links-cat-pill:hover { border-color: var(--accent); color: var(--accent); }
+    .links-cat-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+    .links-list { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 5px; }
+    .links-empty {
+      padding: 28px 16px; text-align: center; font-size: 12px;
+      color: var(--text-muted); line-height: 1.6;
+    }
+    .links-loading { padding: 28px 16px; display: flex; align-items: center; justify-content: center; }
+
+    /* Link card */
+    .link-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px 10px;
+      display: flex; flex-direction: column; gap: 3px;
+      transition: border-color .12s;
+    }
+    .link-card:hover { border-color: var(--border-med); }
+    .link-card.inactive { opacity: .6; }
+    .link-card-top { display: flex; align-items: flex-start; gap: 7px; }
+    .link-card-emoji { font-size: 16px; flex-shrink: 0; line-height: 1.3; }
+    .link-card-body { flex: 1; min-width: 0; }
+    .link-card-title {
+      font-size: 12px; font-weight: 600; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .link-card-meta { display: flex; align-items: center; gap: 4px; margin-top: 2px; flex-wrap: wrap; }
+    .link-card-cat {
+      font-size: 10px; font-weight: 600; padding: 1px 6px;
+      border-radius: 8px; background: var(--pts-bg); color: var(--pts-text);
+    }
+    .link-card-inactive-badge {
+      font-size: 10px; color: var(--text-muted);
+      border: 1px solid var(--border-med); padding: 1px 5px; border-radius: 6px;
+    }
+    .link-card-desc {
+      font-size: 11px; color: var(--text-sub); margin-top: 1px;
+      overflow: hidden; display: -webkit-box;
+      -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+    }
+    .link-card-url {
+      font-size: 10px; color: var(--text-muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .link-card-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: 3px; }
+    .link-copy-btn {
+      padding: 3px 9px; border-radius: 6px; border: none; cursor: pointer;
+      background: var(--accent); color: #fff; font-size: 11px; font-weight: 600;
+      font-family: inherit; transition: background .12s; white-space: nowrap;
+    }
+    .link-copy-btn.copied { background: var(--green); }
+    .link-copy-btn:hover { opacity: .88; }
+    .link-icon-btn {
+      width: 25px; height: 25px; border-radius: 6px; border: 1px solid var(--border-med);
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: color .12s, background .12s, border-color .12s;
+    }
+    .link-icon-btn:hover { color: var(--text); background: var(--bg-input); }
+    .link-icon-btn.del:hover { color: var(--red); border-color: var(--red); background: rgba(218,0,16,.06); }
+    .link-del-confirm { display: flex; align-items: center; gap: 4px; }
+    .link-del-label { font-size: 10px; color: var(--red); white-space: nowrap; }
+
+    /* Add/edit form */
+    .links-form-panel {
+      margin: 0 10px 7px; padding: 12px; border-radius: 10px;
+      border: 1px solid var(--accent); background: var(--bg-card);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .links-form-heading { font-size: 12px; font-weight: 700; color: var(--text); }
+    .links-form-row { display: flex; gap: 7px; }
+    .links-form-field { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+    .links-form-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--text-muted);
+    }
+    .links-form-input {
+      padding: 6px 9px; border-radius: 7px; width: 100%;
+      background: var(--bg-input); border: 1px solid var(--border-med);
+      color: var(--text); font-size: 12px; outline: none; font-family: inherit;
+    }
+    .links-form-input:focus { border-color: var(--accent); }
+    .links-form-input::placeholder { color: var(--text-muted); }
+    .links-form-input.error { border-color: var(--red); }
+    .links-form-textarea {
+      padding: 6px 9px; border-radius: 7px; resize: vertical; width: 100%;
+      background: var(--bg-input); border: 1px solid var(--border-med);
+      color: var(--text); font-size: 12px; outline: none; font-family: inherit;
+    }
+    .links-form-textarea:focus { border-color: var(--accent); }
+    .links-form-textarea::placeholder { color: var(--text-muted); }
+    .links-form-active-row { display: flex; align-items: center; gap: 8px; }
+    .links-form-active-label { font-size: 11px; color: var(--text-sub); }
+    .links-toggle {
+      width: 32px; height: 18px; border-radius: 9px; border: none; cursor: pointer;
+      background: var(--border-med); position: relative; transition: background .15s; flex-shrink: 0;
+    }
+    .links-toggle.on { background: var(--green); }
+    .links-toggle::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s;
+    }
+    .links-toggle.on::after { left: 16px; }
+    .links-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    .links-form-save {
+      padding: 5px 14px; border-radius: 7px; border: none; cursor: pointer;
+      background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; font-family: inherit;
+    }
+    .links-form-save:hover { opacity: .88; }
+    .links-form-save:disabled { opacity: .4; cursor: not-allowed; }
+    .links-form-cancel {
+      padding: 5px 10px; border-radius: 7px;
+      border: 1px solid var(--border-med); background: transparent;
+      color: var(--text-muted); font-size: 12px; cursor: pointer; font-family: inherit;
+    }
+    .links-form-cancel:hover { color: var(--text); }
+
     /* ─── Settings tab ────────────────────────────────────────────────────── */
     .settings-panel { padding: 14px 14px; display: flex; flex-direction: column; gap: 12px; }
     .settings-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
@@ -577,6 +724,7 @@
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="today">Today</button>
     <button class="tab-btn" data-tab="log">Log</button>
+    <button class="tab-btn" data-tab="links">Links</button>
     <button class="tab-btn" data-tab="settings">Settings</button>
   </div>
 
@@ -597,6 +745,11 @@
   <!-- Log -->
   <div id="tab-log" class="tab-panel">
     <div id="log-content"></div>
+  </div>
+
+  <!-- Links -->
+  <div id="tab-links" class="tab-panel">
+    <div id="links-content"></div>
   </div>
 
   <!-- Settings -->

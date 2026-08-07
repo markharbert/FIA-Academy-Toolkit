@@ -32,6 +32,15 @@ let logEditMode     = null;   // null | "times" | "notes" | "backfill"
 let logTimeEdits    = {};
 let logNotesEdit    = "";
 
+// ─── Links tab state ───────────────────────────────────────────────────────
+let linksAll            = [];
+let linksSearch         = "";
+let linksCategory       = "all";
+let linksFormOpen       = false;
+let linksEditingLink    = null;
+let linksCopiedId       = null;
+let linksDeleteConfirmId = null;
+
 // ─── DOM helpers ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
@@ -400,6 +409,404 @@ function renderActivities() {
   }
 
   updateHeader();
+}
+
+// ─── Links tab ─────────────────────────────────────────────────────────────
+async function renderLinks() {
+  const container = $("links-content");
+  if (!container) return;
+  container.innerHTML = `<div class="links-loading"><div class="spinner" style="border-top-color:var(--accent)"></div></div>`;
+  try {
+    const data = await apiFetch("/api/v1/links?activeOnly=false");
+    linksAll = data.links || [];
+    renderLinksList(container);
+  } catch (err) {
+    if (err instanceof MembershipError) { showSuspended(); return; }
+    container.innerHTML = `<div class="links-empty">Could not load links. Check your connection.</div>`;
+  }
+}
+
+function renderLinksList(container) {
+  container.innerHTML = "";
+
+  // ── Header ──
+  const header = document.createElement("div");
+  header.className = "links-header";
+  const titleSpan = document.createElement("span");
+  titleSpan.className = "links-title";
+  titleSpan.textContent = "🔗 Link Library";
+  const addBtn = document.createElement("button");
+  addBtn.className = "links-add-btn";
+  addBtn.textContent = (linksFormOpen && !linksEditingLink) ? "✕ Cancel" : "+ Add Link";
+  addBtn.addEventListener("click", () => {
+    if (linksFormOpen && !linksEditingLink) {
+      linksFormOpen = false;
+    } else {
+      linksFormOpen = true; linksEditingLink = null;
+    }
+    renderLinksList(container);
+  });
+  header.appendChild(titleSpan);
+  header.appendChild(addBtn);
+  container.appendChild(header);
+
+  // ── Add/edit form ──
+  if (linksFormOpen) container.appendChild(buildLinksForm(container));
+
+  // ── Search ──
+  const filtersDiv = document.createElement("div");
+  filtersDiv.className = "links-filters";
+  const searchInput = document.createElement("input");
+  searchInput.className = "links-search-input";
+  searchInput.type = "text";
+  searchInput.placeholder = "Search links…";
+  searchInput.value = linksSearch;
+  filtersDiv.appendChild(searchInput);
+  container.appendChild(filtersDiv);
+  searchInput.addEventListener("input", () => {
+    linksSearch = searchInput.value;
+    redrawLinksBody(container);
+  });
+
+  // ── Category pills ──
+  const cats = ["all", ...new Set(linksAll.map(l => l.category).filter(Boolean))];
+  const pillsDiv = document.createElement("div");
+  pillsDiv.className = "links-cats";
+  cats.forEach(cat => {
+    const pill = document.createElement("button");
+    pill.className = "links-cat-pill" + (linksCategory === cat ? " active" : "");
+    pill.dataset.cat = cat;
+    pill.textContent = cat === "all" ? "All" : cat;
+    pill.addEventListener("click", () => {
+      linksCategory = cat;
+      container.querySelectorAll(".links-cat-pill").forEach(p =>
+        p.classList.toggle("active", p.dataset.cat === cat));
+      redrawLinksBody(container);
+    });
+    pillsDiv.appendChild(pill);
+  });
+  container.appendChild(pillsDiv);
+
+  drawLinksBody(container);
+}
+
+function getFilteredLinks() {
+  const q = linksSearch.toLowerCase();
+  return linksAll.filter(l => {
+    const matchQ = !q || l.title.toLowerCase().includes(q) ||
+      (l.url || "").toLowerCase().includes(q) ||
+      (l.description || "").toLowerCase().includes(q) ||
+      (l.category || "").toLowerCase().includes(q);
+    const matchCat = linksCategory === "all" || l.category === linksCategory;
+    return matchQ && matchCat;
+  });
+}
+
+function redrawLinksBody(container) {
+  const old = container.querySelector(".links-list, .links-empty");
+  if (old) old.remove();
+  drawLinksBody(container);
+}
+
+function drawLinksBody(container) {
+  const filtered = getFilteredLinks();
+  if (!filtered.length) {
+    const empty = document.createElement("div");
+    empty.className = "links-empty";
+    empty.textContent = linksAll.length
+      ? "No links match your search."
+      : "No links yet. Tap + Add Link to save your first one.";
+    container.appendChild(empty);
+    return;
+  }
+  const list = document.createElement("div");
+  list.className = "links-list";
+  filtered.forEach(link => list.appendChild(buildLinkCard(link, container)));
+  container.appendChild(list);
+}
+
+function buildLinkCard(link, container) {
+  const card = document.createElement("div");
+  card.className = "link-card" + (!link.isActive ? " inactive" : "");
+
+  const top = document.createElement("div");
+  top.className = "link-card-top";
+
+  // Emoji
+  const emoji = document.createElement("span");
+  emoji.className = "link-card-emoji";
+  emoji.textContent = link.emoji || "🔗";
+  top.appendChild(emoji);
+
+  // Body: title + meta + description
+  const body = document.createElement("div");
+  body.className = "link-card-body";
+  const titleEl = document.createElement("div");
+  titleEl.className = "link-card-title";
+  titleEl.textContent = link.title;
+  titleEl.title = link.title;
+  body.appendChild(titleEl);
+
+  if (link.category || !link.isActive) {
+    const meta = document.createElement("div");
+    meta.className = "link-card-meta";
+    if (link.category) {
+      const cat = document.createElement("span");
+      cat.className = "link-card-cat";
+      cat.textContent = link.category;
+      meta.appendChild(cat);
+    }
+    if (!link.isActive) {
+      const badge = document.createElement("span");
+      badge.className = "link-card-inactive-badge";
+      badge.textContent = "Inactive";
+      meta.appendChild(badge);
+    }
+    body.appendChild(meta);
+  }
+
+  if (link.description) {
+    const desc = document.createElement("div");
+    desc.className = "link-card-desc";
+    desc.textContent = link.description;
+    body.appendChild(desc);
+  }
+  top.appendChild(body);
+
+  // Actions
+  const actions = document.createElement("div");
+  actions.className = "link-card-actions";
+
+  if (linksDeleteConfirmId === link.id) {
+    // Inline delete confirm
+    const wrap = document.createElement("div");
+    wrap.className = "link-del-confirm";
+    const lbl = document.createElement("span");
+    lbl.className = "link-del-label";
+    lbl.textContent = "Delete?";
+    const yesBtn = document.createElement("button");
+    yesBtn.className = "link-icon-btn del";
+    yesBtn.title = "Confirm";
+    yesBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const noBtn = document.createElement("button");
+    noBtn.className = "link-icon-btn";
+    noBtn.title = "Cancel";
+    noBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    wrap.appendChild(lbl); wrap.appendChild(yesBtn); wrap.appendChild(noBtn);
+    actions.appendChild(wrap);
+
+    yesBtn.addEventListener("click", async () => {
+      yesBtn.disabled = true;
+      try {
+        await apiFetch(`/api/v1/links/${link.id}`, { method: "DELETE" });
+        linksAll = linksAll.filter(l => l.id !== link.id);
+        linksDeleteConfirmId = null;
+        redrawLinksBody(container);
+      } catch (err) {
+        if (err instanceof MembershipError) { showSuspended(); return; }
+        yesBtn.disabled = false;
+      }
+    });
+    noBtn.addEventListener("click", () => { linksDeleteConfirmId = null; redrawLinksBody(container); });
+
+  } else {
+    // Copy
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "link-copy-btn" + (linksCopiedId === link.id ? " copied" : "");
+    copyBtn.textContent = linksCopiedId === link.id ? "✓ Copied" : "Copy";
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(link.url);
+        linksCopiedId = link.id;
+        copyBtn.className = "link-copy-btn copied"; copyBtn.textContent = "✓ Copied";
+        apiFetch(`/api/v1/links/${link.id}/click`, { method: "POST" }).catch(() => {});
+        setTimeout(() => {
+          linksCopiedId = null;
+          copyBtn.className = "link-copy-btn"; copyBtn.textContent = "Copy";
+        }, 2000);
+      } catch (_) {}
+    });
+    actions.appendChild(copyBtn);
+
+    // Open
+    const openBtn = document.createElement("button");
+    openBtn.className = "link-icon-btn";
+    openBtn.title = "Open link";
+    openBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+    openBtn.addEventListener("click", () => window.open(link.url, "_blank"));
+    actions.appendChild(openBtn);
+
+    // Edit
+    const editBtn = document.createElement("button");
+    editBtn.className = "link-icon-btn";
+    editBtn.title = "Edit";
+    editBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    editBtn.addEventListener("click", () => {
+      linksEditingLink = link; linksFormOpen = true; linksDeleteConfirmId = null;
+      renderLinksList(container);
+    });
+    actions.appendChild(editBtn);
+
+    // Delete
+    const delBtn = document.createElement("button");
+    delBtn.className = "link-icon-btn del";
+    delBtn.title = "Delete";
+    delBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+    delBtn.addEventListener("click", () => { linksDeleteConfirmId = link.id; redrawLinksBody(container); });
+    actions.appendChild(delBtn);
+  }
+
+  top.appendChild(actions);
+  card.appendChild(top);
+
+  // URL strip
+  const urlEl = document.createElement("div");
+  urlEl.className = "link-card-url";
+  urlEl.textContent = link.url;
+  card.appendChild(urlEl);
+
+  return card;
+}
+
+function buildLinksForm(container) {
+  const isEdit = !!linksEditingLink;
+  const link = linksEditingLink;
+  const existingCats = [...new Set(linksAll.map(l => l.category).filter(Boolean))];
+  let isActive = link ? link.isActive : true;
+
+  const form = document.createElement("div");
+  form.className = "links-form-panel";
+
+  const heading = document.createElement("div");
+  heading.className = "links-form-heading";
+  heading.textContent = isEdit ? "✎ Edit Link" : "+ New Link";
+  form.appendChild(heading);
+
+  // Title
+  const titleField = document.createElement("div");
+  titleField.className = "links-form-field";
+  titleField.innerHTML = `<div class="links-form-label">Title</div>`;
+  const titleInput = document.createElement("input");
+  titleInput.className = "links-form-input"; titleInput.type = "text";
+  titleInput.placeholder = "e.g. Kajabi 30-Day Trial";
+  titleInput.value = link?.title || "";
+  titleField.appendChild(titleInput);
+  form.appendChild(titleField);
+
+  // URL
+  const urlField = document.createElement("div");
+  urlField.className = "links-form-field";
+  urlField.innerHTML = `<div class="links-form-label">URL</div>`;
+  const urlInput = document.createElement("input");
+  urlInput.className = "links-form-input"; urlInput.type = "url";
+  urlInput.placeholder = "https://…"; urlInput.value = link?.url || "";
+  urlField.appendChild(urlInput);
+  form.appendChild(urlField);
+
+  // Emoji + Category row
+  const rowDiv = document.createElement("div");
+  rowDiv.className = "links-form-row";
+
+  const emojiField = document.createElement("div");
+  emojiField.style.cssText = "flex:0 0 72px;display:flex;flex-direction:column;gap:3px;";
+  emojiField.innerHTML = `<div class="links-form-label">Emoji</div>`;
+  const emojiInput = document.createElement("input");
+  emojiInput.className = "links-form-input"; emojiInput.type = "text";
+  emojiInput.placeholder = "🔗"; emojiInput.value = link?.emoji || "🔗";
+  emojiInput.style.textAlign = "center";
+  emojiField.appendChild(emojiInput);
+  rowDiv.appendChild(emojiField);
+
+  const catField = document.createElement("div");
+  catField.className = "links-form-field";
+  catField.innerHTML = `<div class="links-form-label">Category</div>`;
+  const catInput = document.createElement("input");
+  catInput.className = "links-form-input"; catInput.type = "text";
+  catInput.placeholder = "e.g. Social Media";
+  catInput.value = link?.category || "";
+  catInput.setAttribute("list", "lf-cats-dl");
+  catField.appendChild(catInput);
+  const dl = document.createElement("datalist");
+  dl.id = "lf-cats-dl";
+  existingCats.forEach(c => { const o = document.createElement("option"); o.value = c; dl.appendChild(o); });
+  catField.appendChild(dl);
+  rowDiv.appendChild(catField);
+  form.appendChild(rowDiv);
+
+  // Description
+  const descField = document.createElement("div");
+  descField.className = "links-form-field";
+  descField.innerHTML = `<div class="links-form-label">Description <span style="opacity:.5;font-weight:400">(optional)</span></div>`;
+  const descInput = document.createElement("textarea");
+  descInput.className = "links-form-textarea"; descInput.rows = 2;
+  descInput.placeholder = "Short note or description…";
+  descInput.value = link?.description || "";
+  descField.appendChild(descInput);
+  form.appendChild(descField);
+
+  // Active toggle
+  const activeRow = document.createElement("div");
+  activeRow.className = "links-form-active-row";
+  const toggleBtn = document.createElement("button");
+  toggleBtn.className = "links-toggle" + (isActive ? " on" : "");
+  toggleBtn.type = "button";
+  const activeLbl = document.createElement("span");
+  activeLbl.className = "links-form-active-label";
+  activeLbl.textContent = isActive ? "Active" : "Inactive";
+  toggleBtn.addEventListener("click", () => {
+    isActive = !isActive;
+    toggleBtn.className = "links-toggle" + (isActive ? " on" : "");
+    activeLbl.textContent = isActive ? "Active" : "Inactive";
+  });
+  activeRow.appendChild(toggleBtn); activeRow.appendChild(activeLbl);
+  form.appendChild(activeRow);
+
+  // Save / Cancel
+  const actionsRow = document.createElement("div");
+  actionsRow.className = "links-form-actions";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "links-form-cancel"; cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", () => {
+    linksFormOpen = false; linksEditingLink = null; renderLinksList(container);
+  });
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "links-form-save";
+  saveBtn.textContent = isEdit ? "Save Changes" : "Add Link";
+  saveBtn.addEventListener("click", async () => {
+    const tv = titleInput.value.trim();
+    const uv = urlInput.value.trim();
+    titleInput.classList.toggle("error", !tv);
+    urlInput.classList.toggle("error", !uv);
+    if (!tv || !uv) return;
+    const payload = {
+      title: tv, url: uv,
+      emoji: emojiInput.value.trim() || "🔗",
+      category: catInput.value.trim() || null,
+      description: descInput.value.trim() || null,
+      isActive,
+    };
+    saveBtn.textContent = "Saving…"; saveBtn.disabled = true;
+    try {
+      let res;
+      if (isEdit) {
+        res = await apiFetch(`/api/v1/links/${link.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        const idx = linksAll.findIndex(l => l.id === link.id);
+        if (idx !== -1) linksAll[idx] = res.link;
+      } else {
+        res = await apiFetch("/api/v1/links", { method: "POST", body: JSON.stringify(payload) });
+        linksAll.unshift(res.link);
+      }
+      linksFormOpen = false; linksEditingLink = null;
+      renderLinksList(container);
+    } catch (err) {
+      if (err instanceof MembershipError) { showSuspended(); return; }
+      saveBtn.textContent = isEdit ? "Save Changes" : "Add Link";
+      saveBtn.disabled = false;
+    }
+  });
+  actionsRow.appendChild(cancelBtn); actionsRow.appendChild(saveBtn);
+  form.appendChild(actionsRow);
+  return form;
 }
 
 // ─── Render log ────────────────────────────────────────────────────────────
@@ -872,8 +1279,13 @@ function switchTab(name) {
     b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p =>
     p.classList.toggle("active", p.id === `tab-${name}`));
-  if (name === "log")      renderLog();
-  if (name === "settings") renderTargetRows();
+  if (name === "log")      { renderLog(); }
+  if (name === "links")    { renderLinks(); }
+  if (name === "settings") { renderTargetRows(); }
+  // Reset links transient state when leaving the links tab
+  if (name !== "links") {
+    linksFormOpen = false; linksEditingLink = null; linksDeleteConfirmId = null;
+  }
 }
 
 // ─── API key validation ────────────────────────────────────────────────────

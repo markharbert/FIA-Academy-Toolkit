@@ -196,7 +196,7 @@ const allNavItems: NavItem[] = [
     iconColor: "text-purple-400",
     testId: "nav-links",
     collaboratorVisible: false,
-    adminOnly: true,
+    adminOnly: false,
   },
 ];
 

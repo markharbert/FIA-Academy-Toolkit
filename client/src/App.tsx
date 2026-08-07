@@ -197,7 +197,7 @@ function ProtectedRoutes() {
         {() => <AdminRoute component={AdminPage} />}
       </Route>
       <Route path="/links">
-        {() => <AdminRoute component={LinksPage} />}
+        {() => <ProtectedRoute component={LinksPage} />}
       </Route>
       <Route path="/account">
         {() => <ProtectedRoute component={AccountPage} />}

@@ -572,10 +572,6 @@ export default function LinksPage() {
     );
   }
 
-  if (!user?.isAdmin) {
-    return <Redirect to="/dashboard" />;
-  }
-
   const totalClicks = links.reduce((sum, l) => sum + l.clickCount, 0);
 
   return (

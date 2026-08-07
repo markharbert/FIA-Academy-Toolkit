@@ -12094,7 +12094,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const user = (req as any).apiUser;
       const { q, category } = req.query as { q?: string; category?: string };
-      const links = await storage.getAffiliateLinks(user.id, { q, category, activeOnly: true });
+      // Default activeOnly=true for backward compat; pass activeOnly=false to see all (e.g. extension management)
+      const activeOnly = req.query.activeOnly !== "false";
+      const links = await storage.getAffiliateLinks(user.id, { q, category, activeOnly });
       res.json({ links });
     } catch (err) {
       console.error("[v1] links list error:", err);
@@ -12138,6 +12140,17 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (err) {
       console.error("[v1] links delete error:", err);
       res.status(500).json({ message: "Failed to delete link" });
+    }
+  });
+
+  app.post("/api/v1/links/:id/click", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      await storage.incrementAffiliateLinkClick(req.params.id, user.id);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[v1] links click error:", err);
+      res.status(500).json({ message: "Failed to record click" });
     }
   });
 
