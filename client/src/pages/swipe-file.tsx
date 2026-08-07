@@ -35,7 +35,6 @@ type SwipeItem = {
   imagePath: string | null;
   sourceUrl: string | null;
   notes: string | null;
-  promoLinks: PromoLink[];
   shareToken: string | null;
   viewCount: number;
   createdAt: string;
@@ -297,8 +296,6 @@ function EditDialog({ item, onClose }: { item: SwipeItem; onClose: () => void })
   const [title, setTitle] = useState(item.title);
   const [notes, setNotes] = useState(item.notes ?? "");
   const [sourceUrl, setSourceUrl] = useState(item.sourceUrl ?? "");
-  const [promoLinks, setPromoLinks] = useState<PromoLink[]>(item.promoLinks ?? []);
-  const [newPromo, setNewPromo] = useState({ title: "", url: "", description: "" });
 
   const updateMutation = useMutation({
     mutationFn: (body: object) => apiFetch(`/api/swipe/${item.id}`, {
@@ -313,16 +310,6 @@ function EditDialog({ item, onClose }: { item: SwipeItem; onClose: () => void })
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
-
-  function addPromo() {
-    if (!newPromo.title.trim() || !newPromo.url.trim()) return;
-    setPromoLinks(p => [...p, { ...newPromo }]);
-    setNewPromo({ title: "", url: "", description: "" });
-  }
-
-  function removePromo(i: number) {
-    setPromoLinks(p => p.filter((_, idx) => idx !== i));
-  }
 
   return (
     <Dialog open onOpenChange={v => !v && onClose()}>
@@ -345,44 +332,11 @@ function EditDialog({ item, onClose }: { item: SwipeItem; onClose: () => void })
             <Label>Personal Notes</Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
           </div>
-
-          {/* Promo Links */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-1.5">
-              <Link2 className="h-4 w-4 text-primary" /> Promotional Links on Share Page
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              These links appear on the public share page anyone with the link can see.
-            </p>
-            {promoLinks.map((pl, i) => (
-              <div key={i} className="flex items-start gap-2 rounded-md border px-3 py-2 bg-muted/30">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{pl.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">{pl.url}</p>
-                </div>
-                <button onClick={() => removePromo(i)} className="text-muted-foreground hover:text-destructive mt-0.5">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            <div className="rounded-md border p-3 space-y-2 bg-muted/10">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add Promo Link</p>
-              <Input placeholder="Link title (e.g. Get My Course)" value={newPromo.title}
-                onChange={e => setNewPromo(p => ({ ...p, title: e.target.value }))} />
-              <Input type="url" placeholder="https://…" value={newPromo.url}
-                onChange={e => setNewPromo(p => ({ ...p, url: e.target.value }))} />
-              <Input placeholder="Short description (optional)" value={newPromo.description}
-                onChange={e => setNewPromo(p => ({ ...p, description: e.target.value }))} />
-              <Button size="sm" variant="outline" onClick={addPromo} className="w-full">
-                <Plus className="h-4 w-4 mr-1" /> Add Link
-              </Button>
-            </div>
-          </div>
         </div>
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-4">
           <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-          <Button onClick={() => updateMutation.mutate({ title, notes, sourceUrl, promoLinks })}
+          <Button onClick={() => updateMutation.mutate({ title, notes, sourceUrl })}
             disabled={updateMutation.isPending} className="flex-1">
             {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
             Save Changes
@@ -390,6 +344,120 @@ function EditDialog({ item, onClose }: { item: SwipeItem; onClose: () => void })
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---- Account-level Promotional Links Manager ----
+function PromoLinksManager() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [newLink, setNewLink] = useState({ title: "", url: "", description: "" });
+
+  const { data, isLoading } = useQuery<{ promoLinks: PromoLink[] }>({
+    queryKey: ["/api/swipe/promo-links"],
+    queryFn: () => apiFetch("/api/swipe/promo-links"),
+  });
+
+  const links = data?.promoLinks ?? [];
+
+  const saveMutation = useMutation({
+    mutationFn: (promoLinks: PromoLink[]) => apiFetch("/api/swipe/promo-links", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ promoLinks }),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/swipe/promo-links"] });
+      toast({ title: "Promotional links saved" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function addLink() {
+    if (!newLink.title.trim() || !newLink.url.trim()) return;
+    saveMutation.mutate([...links, { ...newLink }]);
+    setNewLink({ title: "", url: "", description: "" });
+  }
+
+  function removeLink(i: number) {
+    saveMutation.mutate(links.filter((_, idx) => idx !== i));
+  }
+
+  return (
+    <div className="border rounded-lg bg-card p-5 space-y-4">
+      <div className="flex items-start gap-3">
+        <Link2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+        <div>
+          <h3 className="font-semibold leading-tight">Promotional Links</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            These links appear on <strong>every</strong> share page in your account. Add them once here — update them anytime and they change everywhere instantly.
+          </p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {links.length > 0 ? (
+            <div className="space-y-2">
+              {links.map((pl, i) => (
+                <div key={i} className="flex items-start gap-2 rounded-md border px-3 py-2 bg-muted/30">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{pl.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{pl.url}</p>
+                    {pl.description && <p className="text-xs text-muted-foreground/70 truncate">{pl.description}</p>}
+                  </div>
+                  <button
+                    onClick={() => removeLink(i)}
+                    disabled={saveMutation.isPending}
+                    className="text-muted-foreground hover:text-destructive mt-0.5 disabled:opacity-40"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No promotional links yet — add one below.</p>
+          )}
+
+          <div className="rounded-md border p-3 space-y-2 bg-muted/10">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add a Link</p>
+            <Input
+              placeholder="Title (e.g. Get My Free Course)"
+              value={newLink.title}
+              onChange={e => setNewLink(p => ({ ...p, title: e.target.value }))}
+            />
+            <Input
+              type="url"
+              placeholder="https://…"
+              value={newLink.url}
+              onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))}
+            />
+            <Input
+              placeholder="Short description (optional)"
+              value={newLink.description}
+              onChange={e => setNewLink(p => ({ ...p, description: e.target.value }))}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={addLink}
+              disabled={saveMutation.isPending || !newLink.title.trim() || !newLink.url.trim()}
+              className="w-full"
+            >
+              {saveMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <Plus className="h-4 w-4 mr-1" />}
+              Add Link
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -588,6 +656,11 @@ export default function SwipeFilePage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Promotional Links Manager */}
+      <div className="max-w-6xl mx-auto px-6 pt-6">
+        <PromoLinksManager />
       </div>
 
       {/* Toolbar */}

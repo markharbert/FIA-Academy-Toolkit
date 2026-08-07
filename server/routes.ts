@@ -12261,8 +12261,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.patch("/api/swipe/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const { title, notes, sourceUrl, promoLinks } = req.body;
-      const item = await storage.updateSwipeItem(req.params.id, userId, { title, notes, sourceUrl, promoLinks });
+      const { title, notes, sourceUrl } = req.body;
+      const item = await storage.updateSwipeItem(req.params.id, userId, { title, notes, sourceUrl });
       if (!item) return res.status(404).json({ message: "Not found" });
       res.json({ item });
     } catch (err) {
@@ -12317,6 +12317,34 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // ---- Account-level Promotional Links ----
+
+  // Get current user's account-level promo links
+  app.get("/api/swipe/promo-links", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const user = await storage.getUser(userId);
+      res.json({ promoLinks: user?.swipePromoLinks ?? [] });
+    } catch (err) {
+      console.error("[swipe] promo-links get error:", err);
+      res.status(500).json({ message: "Failed to load promo links" });
+    }
+  });
+
+  // Replace current user's account-level promo links
+  app.put("/api/swipe/promo-links", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { promoLinks } = req.body;
+      if (!Array.isArray(promoLinks)) return res.status(400).json({ message: "promoLinks must be an array" });
+      await storage.updateUser(userId, { swipePromoLinks: promoLinks });
+      res.json({ promoLinks });
+    } catch (err) {
+      console.error("[swipe] promo-links update error:", err);
+      res.status(500).json({ message: "Failed to update promo links" });
+    }
+  });
+
   // ---- Swipe File – Public Share Routes (no auth required) ----
 
   // Get public item metadata by token
@@ -12325,9 +12353,12 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const item = await storage.getSwipeItemByToken(req.params.token);
       if (!item) return res.status(404).json({ message: "Not found or link has been revoked" });
       await storage.incrementSwipeItemViewCount(req.params.token);
-      // Return safe subset (no userId)
-      const { userId: _uid, ...safe } = item;
-      res.json({ item: safe });
+      // Attach account-level promo links from the item owner
+      const owner = await storage.getUser(item.userId);
+      const promoLinks = owner?.swipePromoLinks ?? [];
+      // Return safe subset (no userId, replace per-item promo links with account-level ones)
+      const { userId: _uid, promoLinks: _itemPromo, ...safe } = item;
+      res.json({ item: { ...safe, promoLinks } });
     } catch (err) {
       console.error("[swipe] public get error:", err);
       res.status(500).json({ message: "Failed to load item" });

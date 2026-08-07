@@ -818,6 +818,9 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_layout JSONB`);
     console.log("[startup] dashboard_layout migration complete");
 
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS swipe_promo_links JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    console.log("[startup] swipe_promo_links migration complete");
+
     // CF grace period and revocation columns (may be absent on older DBs)
     await db.execute(sql`
       ALTER TABLE users
