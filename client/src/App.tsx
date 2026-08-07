@@ -74,6 +74,7 @@ const AnalyticsGscPage           = lazyPage(() => import("@/pages/analytics-gsc"
 const LinksPage                  = lazyPage(() => import("@/pages/links"));
 const SwipeFilePage              = lazyPage(() => import("@/pages/swipe-file"));
 const SwipeSharePage             = lazyPage(() => import("@/pages/swipe-share"));
+const PrivacyPolicyPage          = lazyPage(() => import("@/pages/privacy-policy"));
 const NotFound                   = lazyPage(() => import("@/pages/not-found"));
 
 function PageLoader() {
@@ -416,6 +417,7 @@ function App() {
                 <Route path="/workspace/accept">{() => <WorkspaceInviteAcceptPage />}</Route>
                 <Route path="/funnels/share/:token">{() => <FunnelSharePage />}</Route>
                 <Route path="/swipe/:token">{() => <SwipeSharePage />}</Route>
+                <Route path="/privacy-policy">{() => <PrivacyPolicyPage />}</Route>
                 <Route>{() => <AppLayout />}</Route>
               </Switch>
             </Suspense>
