@@ -50,18 +50,24 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       }
       const croppedDataUrl = "data:image/png;base64," + btoa(binary);
 
-      await chrome.storage.session.set({
-        pendingCapture: { dataUrl: croppedDataUrl, type: "section" },
-      });
+      // Auto-save directly — no popup interaction needed
+      const tabTitle = sender.tab?.title ?? "Section Screenshot";
+      const item = await swipeAutoSave(croppedDataUrl, tabTitle);
+      await chrome.storage.session.set({ swipeRecentlySaved: true });
 
       chrome.notifications.create("fia-section-ready", {
         type:    "basic",
         iconUrl: "icons/icon128.png",
-        title:   "FIA Toolkit — Section Captured",
-        message: "Click the extension icon to title and save it.",
+        title:   "FIA Toolkit — Section Saved!",
+        message: `"${item.title}" saved to your Swipe File.`,
       });
     } catch (err) {
       console.error("[FIA SW] section crop error:", err);
+      chrome.notifications.create("fia-section-error", {
+        type: "basic", iconUrl: "icons/icon128.png",
+        title: "FIA Toolkit — Section Failed",
+        message: String(err?.message || "Could not save the section."),
+      });
     }
   });
 });
@@ -69,6 +75,34 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // ─── Full Page capture: native scroll-and-stitch ─────────────────────────────
 
 function swSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Auto-save helper: upload PNG dataUrl → create swipe item ─────────────────
+async function swipeAutoSave(dataUrl, title) {
+  const { apiKey } = await chrome.storage.local.get("apiKey");
+  if (!apiKey) throw new Error("No API key — open the extension and log in first.");
+
+  const blob = await (await fetch(dataUrl)).blob();
+
+  const upRes = await fetch(`${API_BASE}/api/v1/swipe/request-upload-url`, {
+    method: "POST", headers: { "Authorization": `Bearer ${apiKey}` },
+  });
+  if (!upRes.ok) throw new Error(`Upload URL failed (${upRes.status})`);
+  const { uploadURL, objectPath } = await upRes.json();
+
+  const putRes = await fetch(uploadURL, {
+    method: "PUT", headers: { "Content-Type": "image/png" }, body: blob,
+  });
+  if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
+
+  const itemRes = await fetch(`${API_BASE}/api/v1/swipe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify({ type: "upload", title: title || "Screenshot", imagePath: objectPath }),
+  });
+  if (!itemRes.ok) throw new Error(`Save failed (${itemRes.status})`);
+  const { item } = await itemRes.json();
+  return item;
+}
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.action !== "startFullPageCapture") return false;
@@ -151,14 +185,13 @@ async function handleFullPageCapture(tabId, title) {
     }
     const finalDataUrl = "data:image/png;base64," + btoa(binary);
 
-    // 7. Store for popup + notify
-    await chrome.storage.session.set({
-      pendingCapture: { dataUrl: finalDataUrl, title, type: "fullpage" },
-    });
+    // 7. Auto-save + notify
+    const item = await swipeAutoSave(finalDataUrl, title);
+    await chrome.storage.session.set({ swipeRecentlySaved: true });
     chrome.notifications.create("fia-fullpage-ready", {
       type: "basic", iconUrl: "icons/icon128.png",
-      title: "FIA Toolkit — Page Captured!",
-      message: "Click the extension icon to save it.",
+      title: "FIA Toolkit — Full Page Saved!",
+      message: `"${item.title}" saved to your Swipe File.`,
     });
 
   } catch (err) {

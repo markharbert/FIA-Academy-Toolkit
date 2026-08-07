@@ -1000,48 +1000,12 @@
         </button>
       </div>
 
-      <!-- Section instruction (auto-closes popup after showing) -->
-      <div id="swipe-section-instr" class="swipe-hint" style="display:none">
-        🎯 <strong>Switch to the page</strong> and drag to select a region. Press <strong>ESC</strong> to cancel.
-      </div>
-
-      <!-- Save form (shown after any capture lands in pendingCapture) -->
-      <div class="swipe-save-form" id="swipe-save-form" style="display:none">
-        <img class="swipe-save-preview" id="swipe-save-preview" src="" alt="Preview" />
-        <div class="swipe-progress" id="swipe-progress" style="display:none">
-          <div class="swipe-progress-fill" id="swipe-progress-fill" style="width:0%"></div>
-        </div>
-        <div class="swipe-field-label">Title</div>
-        <input class="swipe-field-input" id="swipe-save-title" placeholder="Give this screenshot a title…" />
-        <div class="swipe-form-actions">
-          <button class="swipe-form-save" id="swipe-form-save-btn">Save to Swipe File</button>
-          <button class="swipe-form-cancel" id="swipe-form-cancel-btn">Cancel</button>
-        </div>
-      </div>
-
-      <!-- Success state -->
-      <div class="swipe-success" id="swipe-success" style="display:none">
-        <div class="swipe-success-heading">✓ Saved to your Swipe File!</div>
-        <div class="swipe-success-name" id="swipe-success-name"></div>
-        <div class="swipe-success-actions">
-          <button class="swipe-btn-green" id="swipe-copy-link-btn">Copy share link</button>
-          <button class="swipe-form-cancel" id="swipe-new-capture-btn">New capture</button>
-        </div>
-      </div>
+      <!-- Single status line: spinner during save, instruction text, brief success -->
+      <div id="swipe-status" class="swipe-hint" style="display:none; align-items:center; gap:8px;"></div>
 
       <!-- Quick Clip hint -->
       <div class="swipe-hint">
         💡 Select text on any page, then <strong>right-click → Save to Swipe File</strong> to clip a snippet.
-      </div>
-
-      <!-- Capture by URL -->
-      <div class="swipe-section-label">Capture by URL</div>
-      <div id="swipe-url-form" style="display:flex;flex-direction:column;gap:7px;">
-        <input class="swipe-field-input" id="swipe-url-input" type="url" placeholder="https://example.com/sales-page" />
-        <button class="swipe-form-save" id="swipe-url-btn" style="background:var(--gold);color:#1a1a1a;">
-          🌐 Capture Full Page
-        </button>
-        <div id="swipe-url-status" style="display:none; font-size:11px; color:var(--text-muted); line-height:1.5;"></div>
       </div>
 
       <!-- Recent saves list -->

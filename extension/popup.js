@@ -47,10 +47,8 @@ let linksDeleteConfirmId = null;
 const LINKS_PAGE_SIZE    = 15;
 
 // ─── Swipe File tab state ──────────────────────────────────────────────────
-let swipeItems           = [];
-let swipeCapturedDataUrl = null;
-let swipeLastSaved       = null;   // { id, token, title }
-const SWIPE_RECENT_MAX   = 5;
+let swipeItems         = [];
+const SWIPE_RECENT_MAX = 5;
 
 // ─── DOM helpers ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -1361,31 +1359,27 @@ function updateSubtitle() {
 
 // ─── Swipe File functions ──────────────────────────────────────────────────
 
-// ── State helpers ──────────────────────────────────────────────────────────
-
 const SWIPE_BTN_IDS = ["swipe-btn-fullpage", "swipe-btn-visible", "swipe-btn-section"];
 
-function swipeShowBtns() {
-  const row = $("swipe-btn-row");
-  if (row) row.style.display = "flex";
-  ["swipe-save-form", "swipe-success", "swipe-section-instr"].forEach(id => {
-    const el = $(id); if (el) el.style.display = "none";
-  });
-  const prog = $("swipe-progress"); if (prog) prog.style.display = "none";
-  const fill = $("swipe-progress-fill"); if (fill) fill.style.width = "0%";
-  SWIPE_BTN_IDS.forEach(id => {
-    const b = $(id); if (b) { b.disabled = false; b.classList.remove("active"); }
-  });
-  const sl = $("swipe-copy-link-btn"); if (sl) sl.style.display = "";
+// ── Status helpers ─────────────────────────────────────────────────────────
+
+function swipeShowStatus(html, autoHideMs = 0) {
+  const el = $("swipe-status");
+  if (!el) return;
+  el.innerHTML = html;
+  el.style.display = "flex";
+  if (autoHideMs > 0) setTimeout(() => { el.style.display = "none"; el.innerHTML = ""; }, autoHideMs);
 }
 
-function swipeReset() {
-  swipeCapturedDataUrl = null;
-  swipeLastSaved = null;
-  swipeShowBtns();
-  const t = $("swipe-save-title");   if (t) t.value = "";
-  const p = $("swipe-save-preview"); if (p) p.src   = "";
+function swipeHideStatus() {
+  const el = $("swipe-status"); if (el) { el.style.display = "none"; el.innerHTML = ""; }
 }
+
+function swipeEnableBtns() {
+  SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) { b.disabled = false; b.classList.remove("active"); } });
+}
+
+function swipeReset() { swipeEnableBtns(); swipeHideStatus(); }
 
 // ── Full Page (native scroll-and-stitch via service worker) ──────────────────
 
@@ -1393,33 +1387,28 @@ async function swipeCaptureFullPage() {
   let tab;
   try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) {}
   const url = tab?.url ?? "";
-  if (!url.startsWith("http")) {
-    alert("Full Page capture only works on http/https pages.");
-    return;
-  }
+  if (!url.startsWith("http")) { alert("Full Page capture only works on http/https pages."); return; }
 
   SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
   $("swipe-btn-fullpage").classList.add("active");
 
-  // Fire-and-forget to service worker — capture runs in background while popup closes
   chrome.runtime.sendMessage({
     action: "startFullPageCapture",
     tabId:  tab.id,
     title:  (tab.title || url).substring(0, 140),
   });
 
-  // Show brief instruction then close so the page is visible during scrolling
-  const instr = $("swipe-section-instr");
-  instr.textContent = "📄 Capturing full page in background — open the extension when done to save it.";
-  instr.style.display = "block";
-  setTimeout(() => window.close(), 2000);
+  swipeShowStatus("📄 Capturing full page in background — you'll get a notification when it's saved.");
+  setTimeout(() => window.close(), 2200);
 }
 
-// ── Visible Area (captureVisibleTab) ──────────────────────────────────────
+// ── Visible Area (captureVisibleTab → auto-save) ──────────────────────────
 
 async function swipeCaptureVisibleArea() {
   SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
   $("swipe-btn-visible").classList.add("active");
+  swipeShowStatus('<span class="spinner" style="width:12px;height:12px;border-width:2px;border-top-color:var(--accent);flex-shrink:0;"></span>&nbsp; Saving…');
+
   try {
     const dataUrl = await new Promise((resolve, reject) => {
       chrome.tabs.captureVisibleTab(null, { format: "png" }, url => {
@@ -1427,21 +1416,30 @@ async function swipeCaptureVisibleArea() {
         else resolve(url);
       });
     });
-    swipeCapturedDataUrl = dataUrl;
-    let pageTitle = "";
-    try { const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); pageTitle = tab?.title ?? ""; } catch (_) {}
-    $("swipe-btn-row").style.display = "none";
-    $("swipe-save-preview").src = dataUrl;
-    $("swipe-save-title").value = pageTitle;
-    $("swipe-save-form").style.display = "flex";
-    $("swipe-save-title").focus(); $("swipe-save-title").select();
+
+    let title = "Visible Area";
+    try { const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); title = tab?.title || title; } catch (_) {}
+
+    const { uploadURL, objectPath } = await apiFetch("/api/v1/swipe/request-upload-url", { method: "POST" });
+    const blob = await (await fetch(dataUrl)).blob();
+    await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": "image/png" }, body: blob });
+    await apiFetch("/api/v1/swipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "upload", title, imagePath: objectPath }),
+    });
+
+    swipeEnableBtns();
+    swipeShowStatus("✓ Saved to your Swipe File!", 2500);
+    renderSwipe();
   } catch (err) {
-    swipeShowBtns();
-    console.error("[FIA Swipe] visible capture failed:", err.message);
+    swipeEnableBtns();
+    swipeHideStatus();
+    console.error("[FIA Swipe] visible area save failed:", err.message);
   }
 }
 
-// ── Section (inject overlay, close popup so user can drag) ────────────────
+// ── Section (inject overlay → SW auto-saves) ──────────────────────────────
 
 async function swipeCaptureSection() {
   let tab;
@@ -1452,112 +1450,13 @@ async function swipeCaptureSection() {
   $("swipe-btn-section").classList.add("active");
 
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files:  ["selection-overlay.js"],
-    });
-    $("swipe-section-instr").style.display = "block";
-    setTimeout(() => window.close(), 1600);
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["selection-overlay.js"] });
+    swipeShowStatus("🎯 Switch to the page and drag to select a region. Press <strong>ESC</strong> to cancel.");
+    setTimeout(() => window.close(), 1800);
   } catch (err) {
-    swipeShowBtns();
+    swipeEnableBtns();
+    swipeHideStatus();
     console.error("[FIA Swipe] section inject failed:", err.message);
-  }
-}
-
-// ── Save visible/section capture ──────────────────────────────────────────
-
-async function swipeSaveCapture() {
-  if (!swipeCapturedDataUrl) return;
-  const title   = ($("swipe-save-title").value || "").trim() || "Untitled Screenshot";
-  const saveBtn = $("swipe-form-save-btn");
-  saveBtn.disabled = true; saveBtn.textContent = "Saving…";
-  const progress = $("swipe-progress");
-  const fill     = $("swipe-progress-fill");
-  progress.style.display = "block"; fill.style.width = "8%";
-
-  try {
-    const blob = await (await fetch(swipeCapturedDataUrl)).blob();
-    fill.style.width = "18%";
-
-    const { uploadURL, objectPath } = await apiFetch("/api/v1/swipe/request-upload-url", { method: "POST" });
-    fill.style.width = "28%";
-
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", uploadURL);
-      xhr.setRequestHeader("Content-Type", "image/png");
-      xhr.upload.onprogress = e => {
-        if (e.lengthComputable) fill.style.width = `${28 + Math.round((e.loaded / e.total) * 55)}%`;
-      };
-      xhr.onload  = () => xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`));
-      xhr.onerror = () => reject(new Error("Network error during upload"));
-      xhr.send(blob);
-    });
-    fill.style.width = "85%";
-
-    const { item } = await apiFetch("/api/v1/swipe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "upload", title, imagePath: objectPath }),
-    });
-    fill.style.width = "92%";
-
-    let token = item.shareToken;
-    try { const sd = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" }); token = sd.token; } catch (_) {}
-    fill.style.width = "100%";
-
-    swipeLastSaved = { id: item.id, token, title };
-    setTimeout(() => {
-      $("swipe-save-form").style.display = "none";
-      $("swipe-success").style.display = "flex";
-      $("swipe-success-name").textContent = `"${title}"`;
-      if (!token) $("swipe-copy-link-btn").style.display = "none";
-      renderSwipe();
-    }, 350);
-  } catch (err) {
-    saveBtn.disabled = false; saveBtn.textContent = "Save to Swipe File";
-    progress.style.display = "none"; fill.style.width = "0%";
-    console.error("[FIA Swipe] save failed:", err.message);
-  }
-}
-
-// ── Capture by URL (manual URL input) ────────────────────────────────────
-
-async function swipeCaptureUrl() {
-  const input  = $("swipe-url-input");
-  const btn    = $("swipe-url-btn");
-  const status = $("swipe-url-status");
-  const url    = input.value.trim();
-
-  if (!url) { input.focus(); return; }
-  try { new URL(url); } catch {
-    status.textContent = "⚠ Please enter a valid URL starting with https://";
-    status.style.display = "block"; return;
-  }
-
-  btn.disabled = true; btn.textContent = "🌐 Capturing…";
-  status.textContent = "Launching headless browser… this takes 10–30 seconds.";
-  status.style.display = "block";
-
-  try {
-    const { item } = await apiFetch("/api/v1/swipe/capture-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    });
-    let token = item.shareToken;
-    try { const sd = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" }); token = sd.token; } catch (_) {}
-    input.value = "";
-    btn.disabled = false; btn.textContent = "🌐 Capture Full Page";
-    status.style.display = "none";
-    swipeLastSaved = { id: item.id, token, title: item.title };
-    $("swipe-success-name").textContent = `"${item.title}"`;
-    if (!token) $("swipe-copy-link-btn").style.display = "none";
-    $("swipe-success").style.display = "flex";
-    renderSwipe();
-  } catch (err) {
-    btn.disabled = false; btn.textContent = "🌐 Capture Full Page";
-    status.textContent = `⚠ ${err.message ?? "Capture failed — check the URL and try again."}`;
   }
 }
 
@@ -1769,26 +1668,14 @@ async function boot() {
   $("swipe-btn-fullpage").addEventListener("click", swipeCaptureFullPage);
   $("swipe-btn-visible").addEventListener("click", swipeCaptureVisibleArea);
   $("swipe-btn-section").addEventListener("click", swipeCaptureSection);
-  $("swipe-form-save-btn").addEventListener("click", swipeSaveCapture);
-  $("swipe-form-cancel-btn").addEventListener("click", swipeReset);
-  $("swipe-copy-link-btn").addEventListener("click", swipeCopyShareLink);
-  $("swipe-new-capture-btn").addEventListener("click", swipeReset);
-  $("swipe-url-btn").addEventListener("click", swipeCaptureUrl);
-  $("swipe-url-input").addEventListener("keydown", e => { if (e.key === "Enter") swipeCaptureUrl(); });
 
-  // Check for a pending section capture stored by the service worker
+  // If SW auto-saved while popup was closed, flash success and refresh list
   try {
-    const stored = await chrome.storage.session.get("pendingCapture");
-    if (stored.pendingCapture?.dataUrl) {
-      const { dataUrl } = stored.pendingCapture;
-      await chrome.storage.session.remove("pendingCapture");
-      swipeCapturedDataUrl = dataUrl;
-      $("swipe-save-preview").src  = dataUrl;
-      $("swipe-save-title").value  = stored.pendingCapture.title ?? "";
-      $("swipe-btn-row").style.display  = "none";
-      $("swipe-save-form").style.display = "flex";
+    const stored = await chrome.storage.session.get("swipeRecentlySaved");
+    if (stored.swipeRecentlySaved) {
+      await chrome.storage.session.remove("swipeRecentlySaved");
       switchPrimaryTab("swipe");
-      setTimeout(() => { $("swipe-save-title").focus(); }, 100);
+      swipeShowStatus("✓ Saved to your Swipe File!", 3000);
     }
   } catch (_) {}
 
