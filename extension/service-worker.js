@@ -16,16 +16,15 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.action !== "sectionSelected") return;
-  const { rect, dpr } = msg;
-  const windowId = sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT;
+  const { rect, dpr }  = msg;
+  const sectionTabId   = sender.tab?.id;
+  const tabTitle       = sender.tab?.title ?? "Section Screenshot";
 
-    const sectionTabId = sender.tab?.id;
-  chrome.tabs.captureVisibleTab(windowId, { format: "png" }, async (dataUrl) => {
-    if (chrome.runtime.lastError || !dataUrl) {
-      console.error("[FIA SW] captureVisibleTab failed:", chrome.runtime.lastError?.message);
-      return;
-    }
+  // Use captureTab (requires `tabs` permission, no activeTab needed)
+  (async () => {
     try {
+      const dataUrl = await chrome.tabs.captureTab(sectionTabId, { format: "png" });
+
       const blob   = await (await fetch(dataUrl)).blob();
       const bitmap = await createImageBitmap(blob);
 
@@ -51,8 +50,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       }
       const croppedDataUrl = "data:image/png;base64," + btoa(binary);
 
-      // Auto-save directly — no popup interaction needed
-      const tabTitle = sender.tab?.title ?? "Section Screenshot";
       const item = await swipeAutoSave(croppedDataUrl, tabTitle);
       await chrome.storage.session.set({ swipeRecentlySaved: true });
       injectSaveToast(sectionTabId);
@@ -60,7 +57,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       console.error("[FIA SW] section crop error:", err);
       injectErrorToast(sectionTabId, "Capture failed — try again");
     }
-  });
+  })();
 });
 
 // ─── Full Page capture: native scroll-and-stitch ─────────────────────────────
@@ -176,8 +173,8 @@ async function handleFullPageCapture(tabId, title) {
     const ctx    = canvas.getContext("2d");
 
     // 4. Scroll → capture → stitch
+    // captureTab uses the `tabs` permission — no activeTab dependency
     const totalSteps = Math.min(Math.ceil(scrollH / vpH), MAX_STEPS);
-    const windowId   = (await chrome.tabs.get(tabId)).windowId;
 
     for (let i = 0; i < totalSteps; i++) {
       // Last step always flushes to the very bottom so nothing is clipped
@@ -190,12 +187,7 @@ async function handleFullPageCapture(tabId, title) {
       });
       await swSleep(150);
 
-      const dataUrl = await new Promise((resolve, reject) => {
-        chrome.tabs.captureVisibleTab(windowId, { format: "png" }, url => {
-          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-          else resolve(url);
-        });
-      });
+      const dataUrl = await chrome.tabs.captureTab(tabId, { format: "png" });
 
       const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
       ctx.drawImage(bitmap, 0, Math.round(scrollTop * dpr));

@@ -1471,8 +1471,8 @@ async function swipeCaptureSection() {
 
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["selection-overlay.js"] });
-    swipeShowStatus("🎯 Switch to the page and drag to select a region. Press <strong>ESC</strong> to cancel.");
-    setTimeout(() => window.close(), 1800);
+    // Close immediately so the full page is visible for selection
+    window.close();
   } catch (err) {
     swipeEnableBtns();
     swipeHideStatus();
