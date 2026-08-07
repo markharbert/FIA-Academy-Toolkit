@@ -560,6 +560,22 @@
     }
     .links-loading { padding: 28px 16px; display: flex; align-items: center; justify-content: center; }
 
+    /* Pagination */
+    .links-pagination {
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      padding: 8px 10px 14px;
+    }
+    .links-page-btn {
+      width: 30px; height: 30px; border-radius: 7px;
+      border: 1px solid var(--border-med); background: transparent;
+      color: var(--text-sub); cursor: pointer; font-size: 16px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      font-family: inherit; transition: border-color .12s, color .12s;
+    }
+    .links-page-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .links-page-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .links-page-info { font-size: 11px; color: var(--text-muted); min-width: 80px; text-align: center; }
+
     /* Link card */
     .link-card {
       background: var(--bg-card); border: 1px solid var(--border);

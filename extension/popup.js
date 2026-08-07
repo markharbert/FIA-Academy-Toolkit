@@ -36,13 +36,15 @@ let logTimeEdits    = {};
 let logNotesEdit    = "";
 
 // ─── Links tab state ───────────────────────────────────────────────────────
-let linksAll            = [];
-let linksSearch         = "";
-let linksCategory       = "all";
-let linksFormOpen       = false;
-let linksEditingLink    = null;
-let linksCopiedId       = null;
+let linksAll             = [];
+let linksSearch          = "";
+let linksCategory        = "all";
+let linksPage            = 1;
+let linksFormOpen        = false;
+let linksEditingLink     = null;
+let linksCopiedId        = null;
 let linksDeleteConfirmId = null;
+const LINKS_PAGE_SIZE    = 15;
 
 // ─── DOM helpers ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -493,6 +495,7 @@ function renderLinksList(container) {
   container.appendChild(filtersDiv);
   searchInput.addEventListener("input", () => {
     linksSearch = searchInput.value;
+    linksPage = 1;
     redrawLinksBody(container);
   });
 
@@ -507,6 +510,7 @@ function renderLinksList(container) {
     pill.textContent = cat === "all" ? "All" : cat;
     pill.addEventListener("click", () => {
       linksCategory = cat;
+      linksPage = 1;
       container.querySelectorAll(".links-cat-pill").forEach(p =>
         p.classList.toggle("active", p.dataset.cat === cat));
       redrawLinksBody(container);
@@ -531,8 +535,8 @@ function getFilteredLinks() {
 }
 
 function redrawLinksBody(container) {
-  const old = container.querySelector(".links-list, .links-empty");
-  if (old) old.remove();
+  container.querySelectorAll(".links-list, .links-empty, .links-pagination")
+    .forEach(el => el.remove());
   drawLinksBody(container);
 }
 
@@ -547,10 +551,46 @@ function drawLinksBody(container) {
     container.appendChild(empty);
     return;
   }
+
+  const totalPages = Math.ceil(filtered.length / LINKS_PAGE_SIZE);
+  if (linksPage > totalPages) linksPage = totalPages;
+  if (linksPage < 1)          linksPage = 1;
+
+  const start     = (linksPage - 1) * LINKS_PAGE_SIZE;
+  const pageLinks = filtered.slice(start, start + LINKS_PAGE_SIZE);
+
   const list = document.createElement("div");
   list.className = "links-list";
-  filtered.forEach(link => list.appendChild(buildLinkCard(link, container)));
+  pageLinks.forEach(link => list.appendChild(buildLinkCard(link, container)));
   container.appendChild(list);
+
+  if (totalPages > 1) {
+    const pager = document.createElement("div");
+    pager.className = "links-pagination";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.className = "links-page-btn";
+    prevBtn.innerHTML = "&#8249;";
+    prevBtn.title = "Previous page";
+    prevBtn.disabled = linksPage <= 1;
+    prevBtn.addEventListener("click", () => { linksPage--; redrawLinksBody(container); });
+
+    const info = document.createElement("span");
+    info.className = "links-page-info";
+    info.textContent = `${start + 1}–${Math.min(start + LINKS_PAGE_SIZE, filtered.length)} of ${filtered.length}`;
+
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "links-page-btn";
+    nextBtn.innerHTML = "&#8250;";
+    nextBtn.title = "Next page";
+    nextBtn.disabled = linksPage >= totalPages;
+    nextBtn.addEventListener("click", () => { linksPage++; redrawLinksBody(container); });
+
+    pager.appendChild(prevBtn);
+    pager.appendChild(info);
+    pager.appendChild(nextBtn);
+    container.appendChild(pager);
+  }
 }
 
 function buildLinkCard(link, container) {
