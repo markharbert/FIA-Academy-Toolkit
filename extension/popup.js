@@ -25,6 +25,13 @@ let statusClearTimer = null;
 let currentTheme    = "light";   // "light" | "dark"
 const AUTO_SAVE_MS  = 10_000;
 
+// ─── Log tab state ─────────────────────────────────────────────────────────
+let logEntries      = [];
+let logExpandedDate = null;
+let logEditMode     = null;   // null | "times" | "notes" | "backfill"
+let logTimeEdits    = {};
+let logNotesEdit    = "";
+
 // ─── DOM helpers ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
@@ -383,37 +390,345 @@ async function renderLog() {
   if (!container) return;
   container.innerHTML = `<div class="log-loading"><div class="spinner" style="border-top-color:var(--accent)"></div></div>`;
   try {
-    const data    = await apiFetch("/api/v1/dmo/history?limit=30");
-    const entries = data.entries || [];
-    if (!entries.length) {
-      container.innerHTML = `<div class="log-empty">No entries yet. Start tracking to build your log.</div>`;
-      return;
-    }
-    const list = document.createElement("div");
-    list.className = "log-list";
-    entries.forEach(entry => {
-      const totalSecs = ACTS.reduce((s, a) => s + (entry[a.secsKey] || 0), 0);
-      const pts = ACTS.reduce((s, a) => {
-        const tgt = (targets[a.key] ?? a.defaultMins) * 60;
-        return s + Math.min(5, (entry[a.secsKey] || 0) / tgt * 5);
-      }, 0);
-      const dots = ACTS.map(a =>
-        `<div class="log-dot${(entry[a.key] || (entry[a.secsKey] || 0) > 0) ? "" : " off"}" title="${a.label}"></div>`
-      ).join("");
-      const row = document.createElement("div");
-      row.className = "log-row";
-      row.innerHTML = `
-        <span class="log-date">${fmtDate(entry.date)}</span>
-        <div class="log-dots">${dots}</div>
-        <span class="log-pts">${pts.toFixed(1)} pts</span>
-        <span class="log-time">${fmtMins(totalSecs)}</span>`;
-      list.appendChild(row);
-    });
-    container.innerHTML = "";
-    container.appendChild(list);
+    const data = await apiFetch("/api/v1/dmo/history?limit=60");
+    logEntries = data.entries || [];
+    renderLogList(container);
   } catch {
     container.innerHTML = `<div class="log-empty">Could not load log. Check your connection.</div>`;
   }
+}
+
+function renderLogList(container) {
+  container.innerHTML = "";
+
+  // "+ Log Past Day" button
+  const backfillBar = document.createElement("div");
+  backfillBar.className = "log-backfill-bar";
+  const bfBtn = document.createElement("button");
+  bfBtn.className = "log-backfill-btn" + (logEditMode === "backfill" ? " open" : "");
+  bfBtn.id = "log-backfill-btn";
+  bfBtn.textContent = logEditMode === "backfill" ? "✕ Cancel" : "+ Log Past Day";
+  backfillBar.appendChild(bfBtn);
+  container.appendChild(backfillBar);
+
+  bfBtn.addEventListener("click", () => {
+    if (logEditMode === "backfill") {
+      logEditMode = null;
+    } else {
+      logEditMode = "backfill";
+      logExpandedDate = null;
+      logTimeEdits = {};
+      ACTS.forEach(a => { logTimeEdits[a.key] = ""; });
+      logNotesEdit = "";
+    }
+    renderLogList(container);
+  });
+
+  // Backfill form
+  if (logEditMode === "backfill") {
+    container.appendChild(buildBackfillForm(container));
+  }
+
+  if (!logEntries.length) {
+    const empty = document.createElement("div");
+    empty.className = "log-empty";
+    empty.textContent = "No entries yet. Start tracking to build your log.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "log-list";
+  logEntries.forEach(entry => renderLogRow(entry, list, container));
+  container.appendChild(list);
+}
+
+function renderLogRow(entry, list, container) {
+  const totalSecs = ACTS.reduce((s, a) => s + (entry[a.secsKey] || 0), 0);
+  const pts = ACTS.reduce((s, a) => {
+    const tgt = (targets[a.key] ?? a.defaultMins) * 60;
+    return s + Math.min(5, (entry[a.secsKey] || 0) / tgt * 5);
+  }, 0);
+  const dots = ACTS.map(a =>
+    `<div class="log-dot${(entry[a.key] || (entry[a.secsKey] || 0) > 0) ? "" : " off"}" title="${a.label}"></div>`
+  ).join("");
+
+  const isExpanded = logExpandedDate === entry.date;
+  const wrap = document.createElement("div");
+  wrap.className = "log-entry-wrap";
+
+  const row = document.createElement("div");
+  row.className = "log-row" + (isExpanded ? " expanded" : "");
+  row.innerHTML = `
+    <span class="log-date">${fmtDate(entry.date)}</span>
+    <div class="log-dots">${dots}</div>
+    <span class="log-pts">${pts.toFixed(1)} pts</span>
+    <span class="log-time">${fmtMins(totalSecs)}</span>
+    <span class="log-chevron">${isExpanded ? "▾" : "▸"}</span>`;
+  wrap.appendChild(row);
+
+  if (isExpanded) {
+    wrap.appendChild(buildEntryDetail(entry, container));
+  }
+
+  row.addEventListener("click", () => {
+    if (logExpandedDate === entry.date) {
+      logExpandedDate = null;
+      logEditMode = null;
+    } else {
+      logExpandedDate = entry.date;
+      logEditMode = null;
+    }
+    renderLogList(container);
+  });
+
+  list.appendChild(wrap);
+}
+
+function buildEntryDetail(entry, container) {
+  const detail = document.createElement("div");
+  detail.className = "log-detail";
+
+  const isEditingTimes = logEditMode === "times";
+  const isEditingNotes = logEditMode === "notes";
+
+  // ── Activity rows ──
+  const actsDiv = document.createElement("div");
+  actsDiv.className = "log-detail-acts";
+  ACTS.forEach(a => {
+    const secs = entry[a.secsKey] || 0;
+    const tgtSecs = (targets[a.key] ?? a.defaultMins) * 60;
+    const pct = tgtSecs > 0 ? Math.min(100, secs / tgtSecs * 100) : 0;
+    const goalMet = secs >= tgtSecs;
+
+    const actRow = document.createElement("div");
+    actRow.className = "log-act-row";
+
+    if (isEditingTimes) {
+      actRow.innerHTML = `
+        <span class="log-act-icon">${a.icon}</span>
+        <span class="log-act-label">${a.label}</span>
+        <input class="log-time-input" id="log-edit-${a.key}"
+               type="number" min="0" max="480" placeholder="0"
+               value="${logTimeEdits[a.key] ?? (secs > 0 ? Math.round(secs / 60) : "")}" />
+        <span class="log-act-unit">min</span>`;
+    } else {
+      actRow.innerHTML = `
+        <span class="log-act-icon">${a.icon}</span>
+        <span class="log-act-label">${a.label}</span>
+        <div class="log-act-right">
+          <div class="log-act-bar-track"><div class="log-act-bar-fill" style="width:${pct}%"></div></div>
+          <span class="log-act-time${secs === 0 ? " zero" : ""}">${secs > 0 ? fmtMins(secs) : "—"}</span>
+          <span class="log-act-check">${goalMet && secs > 0 ? "✓" : ""}</span>
+        </div>`;
+    }
+    actsDiv.appendChild(actRow);
+  });
+  detail.appendChild(actsDiv);
+
+  // ── Time edit controls ──
+  if (isEditingTimes) {
+    const editRow = document.createElement("div");
+    editRow.className = "log-edit-row";
+    editRow.innerHTML = `
+      <span class="log-edit-hint">Minutes per activity (0 to clear)</span>
+      <button class="log-cancel-btn" id="log-time-cancel">Cancel</button>
+      <button class="log-save-btn"   id="log-time-save">Save Times</button>`;
+    detail.appendChild(editRow);
+
+    editRow.querySelector("#log-time-cancel").addEventListener("click", e => {
+      e.stopPropagation();
+      logEditMode = null;
+      renderLogList(container);
+    });
+    editRow.querySelector("#log-time-save").addEventListener("click", async e => {
+      e.stopPropagation();
+      ACTS.forEach(a => {
+        const inp = detail.querySelector(`#log-edit-${a.key}`);
+        if (inp) logTimeEdits[a.key] = inp.value;
+      });
+      const btn = e.currentTarget;
+      btn.textContent = "Saving…"; btn.disabled = true;
+      try {
+        const payload = { date: entry.date, notes: entry.notes ?? "" };
+        ACTS.forEach(a => {
+          const mins = parseFloat(logTimeEdits[a.key]);
+          const secs = (!isNaN(mins) && mins > 0) ? Math.round(mins * 60) : 0;
+          payload[a.secsKey] = secs;
+          payload[a.key] = secs > 0 ? true : (entry[a.key] || false);
+        });
+        await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(payload) });
+        logEditMode = null;
+        const data = await apiFetch("/api/v1/dmo/history?limit=60");
+        logEntries = data.entries || [];
+        renderLogList(container);
+      } catch {
+        btn.textContent = "Save Times"; btn.disabled = false;
+      }
+    });
+  } else if (!isEditingNotes) {
+    const editRow = document.createElement("div");
+    editRow.className = "log-edit-row log-edit-row-right";
+    editRow.innerHTML = `<button class="log-edit-btn" id="log-times-edit-btn">✎ Edit Times</button>`;
+    detail.appendChild(editRow);
+    editRow.querySelector("#log-times-edit-btn").addEventListener("click", e => {
+      e.stopPropagation();
+      logTimeEdits = {};
+      ACTS.forEach(a => { logTimeEdits[a.key] = entry[a.secsKey] > 0 ? String(Math.round(entry[a.secsKey] / 60)) : ""; });
+      logEditMode = "times";
+      renderLogList(container);
+    });
+  }
+
+  // ── Notes section ──
+  const notesSection = document.createElement("div");
+  notesSection.className = "log-notes-section";
+  const notesText = entry.notes?.trim() || "";
+
+  const notesHeader = document.createElement("div");
+  notesHeader.className = "log-notes-header";
+  notesHeader.innerHTML = `<span class="log-notes-label">📝 Notes</span>`;
+  if (!isEditingNotes && !isEditingTimes) {
+    const editNotesBtn = document.createElement("button");
+    editNotesBtn.className = "log-edit-btn";
+    editNotesBtn.textContent = "✎ Edit";
+    editNotesBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      logNotesEdit = entry.notes ?? "";
+      logEditMode = "notes";
+      renderLogList(container);
+    });
+    notesHeader.appendChild(editNotesBtn);
+  }
+  notesSection.appendChild(notesHeader);
+
+  if (isEditingNotes) {
+    const textarea = document.createElement("textarea");
+    textarea.className = "log-notes-textarea";
+    textarea.id = "log-notes-textarea";
+    textarea.rows = 3;
+    textarea.placeholder = "Add notes for this day…";
+    textarea.value = logNotesEdit;
+    notesSection.appendChild(textarea);
+
+    const notesEditRow = document.createElement("div");
+    notesEditRow.className = "log-edit-row log-edit-row-right";
+    notesEditRow.innerHTML = `
+      <button class="log-cancel-btn" id="log-notes-cancel">Cancel</button>
+      <button class="log-save-btn"   id="log-notes-save">Save Notes</button>`;
+    notesSection.appendChild(notesEditRow);
+
+    notesEditRow.querySelector("#log-notes-cancel").addEventListener("click", e => {
+      e.stopPropagation();
+      logEditMode = null;
+      renderLogList(container);
+    });
+    notesEditRow.querySelector("#log-notes-save").addEventListener("click", async e => {
+      e.stopPropagation();
+      const notes = notesSection.querySelector("#log-notes-textarea")?.value ?? logNotesEdit;
+      const btn = e.currentTarget;
+      btn.textContent = "Saving…"; btn.disabled = true;
+      try {
+        const payload = { date: entry.date, notes };
+        ACTS.forEach(a => {
+          payload[a.secsKey] = entry[a.secsKey] || 0;
+          payload[a.key]     = entry[a.key] || (entry[a.secsKey] > 0);
+        });
+        await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(payload) });
+        logEditMode = null;
+        const data = await apiFetch("/api/v1/dmo/history?limit=60");
+        logEntries = data.entries || [];
+        renderLogList(container);
+      } catch {
+        btn.textContent = "Save Notes"; btn.disabled = false;
+      }
+    });
+  } else {
+    const p = document.createElement("p");
+    p.className = "log-notes-text" + (notesText ? "" : " placeholder");
+    p.textContent = notesText || "No notes for this day. Tap Edit to add.";
+    notesSection.appendChild(p);
+  }
+
+  detail.appendChild(notesSection);
+  return detail;
+}
+
+function buildBackfillForm(container) {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const maxDate = yesterday.toISOString().slice(0, 10);
+
+  const form = document.createElement("div");
+  form.className = "log-backfill-form";
+
+  const dateRow = document.createElement("div");
+  dateRow.className = "log-bf-date-row";
+  dateRow.innerHTML = `
+    <label class="log-bf-label">Date</label>
+    <input type="date" id="bf-date" class="log-bf-date-input"
+           value="${maxDate}" max="${maxDate}" />`;
+  form.appendChild(dateRow);
+
+  ACTS.forEach(a => {
+    const actRow = document.createElement("div");
+    actRow.className = "log-act-row";
+    actRow.innerHTML = `
+      <span class="log-act-icon">${a.icon}</span>
+      <span class="log-act-label">${a.label}</span>
+      <input class="log-time-input" id="bf-${a.key}" type="number"
+             min="0" max="480" placeholder="0"
+             value="${logTimeEdits[a.key] || ""}" />
+      <span class="log-act-unit">min</span>`;
+    form.appendChild(actRow);
+  });
+
+  const notesRow = document.createElement("div");
+  notesRow.className = "log-bf-notes-row";
+  notesRow.innerHTML = `
+    <label class="log-bf-label">Notes <span style="font-weight:400;opacity:.5">(optional)</span></label>
+    <textarea id="bf-notes" class="log-notes-textarea" rows="2"
+              placeholder="Add notes for this day…">${logNotesEdit}</textarea>`;
+  form.appendChild(notesRow);
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "log-edit-row log-edit-row-right";
+  btnRow.innerHTML = `
+    <button class="log-cancel-btn" id="bf-cancel">Cancel</button>
+    <button class="log-save-btn"   id="bf-save">Save Day</button>`;
+  form.appendChild(btnRow);
+
+  btnRow.querySelector("#bf-cancel").addEventListener("click", () => {
+    logEditMode = null;
+    renderLogList(container);
+  });
+
+  btnRow.querySelector("#bf-save").addEventListener("click", async () => {
+    const dateVal = form.querySelector("#bf-date")?.value;
+    if (!dateVal) return;
+    const btn = form.querySelector("#bf-save");
+    btn.textContent = "Saving…"; btn.disabled = true;
+    try {
+      const notes = form.querySelector("#bf-notes")?.value ?? "";
+      const payload = { date: dateVal, notes };
+      ACTS.forEach(a => {
+        const mins = parseFloat(form.querySelector(`#bf-${a.key}`)?.value || "0");
+        const secs = (!isNaN(mins) && mins > 0) ? Math.round(mins * 60) : 0;
+        payload[a.secsKey] = secs;
+        payload[a.key] = secs > 0;
+      });
+      await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(payload) });
+      logEditMode = null;
+      logExpandedDate = dateVal; // auto-expand the saved entry
+      const data = await apiFetch("/api/v1/dmo/history?limit=60");
+      logEntries = data.entries || [];
+      renderLogList(container);
+    } catch {
+      btn.textContent = "Save Day"; btn.disabled = false;
+    }
+  });
+
+  return form;
 }
 
 // ─── Render settings target rows ───────────────────────────────────────────
