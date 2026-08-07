@@ -10144,7 +10144,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         storage.getDmoEntry(user.id, todayKey),
         storage.getDmoStreak(user.id),
       ]);
-      res.json({ date: todayKey, entry: entry?.data ?? null, streak });
+      res.json({ date: todayKey, entry: entry ?? null, streak });
     } catch (err) {
       console.error("[v1] dmo error:", err);
       res.status(500).json({ message: "Failed to load DMO data" });
