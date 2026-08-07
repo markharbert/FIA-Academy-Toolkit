@@ -12633,20 +12633,18 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const fs   = await import("fs");
       const path = await import("path");
-      const zipPath = path.resolve("extension/fia-toolkit-latest.zip");
+      // Read version from manifest, then serve the versioned zip
+      const manifestPath = path.resolve("extension/manifest.json");
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      const version = manifest.version || "latest";
+      const filename = `fia-toolkit-extension-v${version}.zip`;
+      const zipPath = path.resolve(`extension/${filename}`);
       if (!fs.existsSync(zipPath)) {
         return res.status(404).json({ message: "Extension package not found" });
       }
-      // Read version from manifest so the downloaded filename is versioned
-      let version = "latest";
-      try {
-        const manifestPath = path.resolve("extension/manifest.json");
-        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-        if (manifest.version) version = `v${manifest.version}`;
-      } catch (_) {}
       const stat = fs.statSync(zipPath);
       res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", `attachment; filename="fia-toolkit-extension-${version}.zip"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", stat.size);
       fs.createReadStream(zipPath).pipe(res);
     } catch (err) {
