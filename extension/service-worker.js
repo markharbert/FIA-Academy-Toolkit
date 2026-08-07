@@ -56,20 +56,9 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       const item = await swipeAutoSave(croppedDataUrl, tabTitle);
       await chrome.storage.session.set({ swipeRecentlySaved: true });
       injectSaveToast(sectionTabId);
-
-      chrome.notifications.create("fia-section-ready", {
-        type:    "basic",
-        iconUrl: "icons/icon128.png",
-        title:   "FIA Toolkit — Section Saved!",
-        message: `"${item.title}" saved to your Swipe File.`,
-      });
     } catch (err) {
       console.error("[FIA SW] section crop error:", err);
-      chrome.notifications.create("fia-section-error", {
-        type: "basic", iconUrl: "icons/icon128.png",
-        title: "FIA Toolkit — Section Failed",
-        message: String(err?.message || "Could not save the section."),
-      });
+      injectErrorToast(sectionTabId, "Capture failed — try again");
     }
   });
 });
@@ -78,10 +67,32 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 function swSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ── Page-level save toast (injected into the active tab) ─────────────────────
+// ── Page-level toasts (injected into the active tab) ─────────────────────────
 function injectSaveToast(tabId) {
   if (!tabId) return;
   chrome.scripting.executeScript({ target: { tabId }, files: ["save-toast.js"] }).catch(() => {});
+}
+
+function injectErrorToast(tabId, message) {
+  if (!tabId) return;
+  chrome.scripting.executeScript({
+    target: { tabId },
+    func: (msg) => {
+      const TOAST_ID = "__fia_save_toast__", STYLE_ID = "__fia_toast_style__";
+      [TOAST_ID, STYLE_ID].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+      const style = document.createElement("style");
+      style.id = STYLE_ID;
+      style.textContent = "@keyframes _fia_in{from{opacity:0;transform:translateX(-50%) scale(.75)}to{opacity:1;transform:translateX(-50%) scale(1)}}@keyframes _fia_out{from{opacity:1;transform:translateX(-50%) scale(1)}to{opacity:0;transform:translateX(-50%) scale(.75)}}";
+      document.head.appendChild(style);
+      const toast = document.createElement("div");
+      toast.id = TOAST_ID;
+      toast.style.cssText = "position:fixed;top:28px;left:50%;transform:translateX(-50%);z-index:2147483647;background:linear-gradient(135deg,#e85d5d 0%,#b52b2b 100%);padding:11px 22px 11px 14px;border-radius:999px;box-shadow:0 8px 28px rgba(185,43,43,.45);display:flex;align-items:center;gap:10px;animation:_fia_in .4s cubic-bezier(.34,1.56,.64,1) both;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,sans-serif;user-select:none;-webkit-user-select:none";
+      toast.innerHTML = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" style="flex-shrink:0"><circle cx="13" cy="13" r="12" fill="rgba(255,255,255,0.22)"/><path d="M8.5 8.5l9 9M17.5 8.5l-9 9" stroke="white" stroke-width="2.6" stroke-linecap="round"/></svg><span style="color:#fff;font-size:14px;font-weight:650;white-space:nowrap">${msg}</span>`;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.animation = "_fia_out .32s ease-in both"; setTimeout(() => { toast.remove(); style.remove(); }, 350); }, 4000);
+    },
+    args: [message],
+  }).catch(() => {});
 }
 
 // ── Auto-save helper: upload PNG dataUrl → create swipe item ─────────────────
@@ -210,19 +221,10 @@ async function handleFullPageCapture(tabId, title) {
     const item = await swipeAutoSave(finalDataUrl, title);
     await chrome.storage.session.set({ swipeRecentlySaved: true });
     injectSaveToast(tabId);
-    chrome.notifications.create("fia-fullpage-ready", {
-      type: "basic", iconUrl: "icons/icon128.png",
-      title: "FIA Toolkit — Full Page Saved!",
-      message: `"${item.title}" saved to your Swipe File.`,
-    });
 
   } catch (err) {
     console.error("[FIA SW] full page capture error:", err);
-    chrome.notifications.create("fia-fullpage-error", {
-      type: "basic", iconUrl: "icons/icon128.png",
-      title: "FIA Toolkit — Capture Failed",
-      message: String(err?.message || "Could not capture the page."),
-    });
+    injectErrorToast(tabId, "Capture failed — try again");
   }
 }
 
@@ -242,12 +244,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       headers: { "Content-Type": "application/json", "X-API-Key": key },
       body:    JSON.stringify({ type: "snippet", title, content: text, sourceUrl }),
     });
-    chrome.notifications.create({
-      type:    "basic",
-      iconUrl: "icons/icon128.png",
-      title:   "FIA Toolkit — Swipe File",
-      message: `Snippet saved: "${title.substring(0, 60)}"`,
-    });
+    injectSaveToast(tab?.id);
   } catch (err) {
     console.error("[FIA] Snippet save failed:", err.message);
   }

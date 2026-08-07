@@ -1545,15 +1545,7 @@ function drawSwipeList() {
   });
 }
 
-function switchSubTab(name) {
-  currentSubTab = name;
-  document.querySelectorAll(".sub-tab-btn").forEach(b =>
-    b.classList.toggle("active", b.dataset.tab === name));
-  document.querySelectorAll(".tab-panel").forEach(p =>
-    p.classList.toggle("active", p.id === `tab-${name}`));
-  if (name === "log")   renderLog();
-  if (name === "goals") renderTargetRows();
-}
+// (switchSubTab moved up, defined together with switchPrimaryTab)
 
 function switchPrimaryTab(name) {
   currentPrimaryTab = name;
@@ -1566,6 +1558,18 @@ function switchPrimaryTab(name) {
   if (name !== "links") {
     linksFormOpen = false; linksEditingLink = null; linksDeleteConfirmId = null;
   }
+  chrome.storage.local.set({ lastPrimaryTab: name }).catch(() => {});
+}
+
+function switchSubTab(name) {
+  currentSubTab = name;
+  document.querySelectorAll(".sub-tab-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab-panel").forEach(p =>
+    p.classList.toggle("active", p.id === `tab-${name}`));
+  if (name === "log")   renderLog();
+  if (name === "goals") renderTargetRows();
+  chrome.storage.local.set({ lastSubTab: name }).catch(() => {});
 }
 
 // ─── API key validation ────────────────────────────────────────────────────
@@ -1603,7 +1607,7 @@ async function boot() {
   showScreen("loading");
 
   // Load and apply saved theme
-  const stored = await chrome.storage.local.get(["apiKey", "theme", "targets", "cachedDmo"]);
+  const stored = await chrome.storage.local.get(["apiKey", "theme", "targets", "cachedDmo", "lastPrimaryTab", "lastSubTab"]);
   applyTheme(stored.theme || "light");   // light is default
 
   // Theme toggle
@@ -1689,16 +1693,6 @@ async function boot() {
   $("swipe-btn-visible").addEventListener("click", swipeCaptureVisibleArea);
   $("swipe-btn-section").addEventListener("click", swipeCaptureSection);
 
-  // If SW auto-saved while popup was closed, flash success and refresh list
-  try {
-    const stored = await chrome.storage.session.get("swipeRecentlySaved");
-    if (stored.swipeRecentlySaved) {
-      await chrome.storage.session.remove("swipeRecentlySaved");
-      switchPrimaryTab("swipe");
-      swipeShowStatus("✓ Saved to your Swipe File!", 3000);
-    }
-  } catch (_) {}
-
   // Suspended screen — "Check Again" button triggers an immediate live re-check.
   // The service-worker alarm continues running independently in the background.
   $("suspended-check-btn")?.addEventListener("click", async () => {
@@ -1773,6 +1767,21 @@ async function boot() {
       // First-ever open — must wait for the network
       await loadDMO();
     }
+
+    // Restore whichever tab the user was on last
+    if (stored.lastPrimaryTab) switchPrimaryTab(stored.lastPrimaryTab);
+    if (stored.lastSubTab) switchSubTab(stored.lastSubTab);
+
+    // If the SW auto-saved a capture while the popup was closed, override to the
+    // Swipe tab so the user sees the new item (this runs after restore, so it wins).
+    try {
+      const sess = await chrome.storage.session.get("swipeRecentlySaved");
+      if (sess.swipeRecentlySaved) {
+        await chrome.storage.session.remove("swipeRecentlySaved");
+        switchPrimaryTab("swipe");
+        swipeShowStatus("✓ Saved to your Swipe File!", 3000);
+      }
+    } catch (_) {}
   } else {
     showScreen("setup");
   }
