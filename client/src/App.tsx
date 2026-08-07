@@ -203,7 +203,7 @@ function ProtectedRoutes() {
         {() => <ProtectedRoute component={LinksPage} />}
       </Route>
       <Route path="/swipe-file">
-        {() => <AdminRoute component={SwipeFilePage} />}
+        {() => <ProtectedRoute component={SwipeFilePage} />}
       </Route>
       <Route path="/account">
         {() => <ProtectedRoute component={AccountPage} />}

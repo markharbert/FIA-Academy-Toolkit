@@ -12200,18 +12200,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // ---- Swipe File (admin-only) ----
-
-  function requireAdmin(req: Request, res: Response, next: Function) {
-    if (!(req as any).session?.userId) return res.status(401).json({ message: "Unauthorized" });
-    if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
-    next();
-  }
+  // ---- Swipe File (all authenticated members) ----
 
   // List items
   app.get("/api/swipe", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const userId = (req.session as any).userId as string;
       const items = await storage.getSwipeItems(userId);
       res.json({ items });
@@ -12224,7 +12217,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Request upload URL (returns signed PUT URL + objectPath for client-side upload)
   app.post("/api/swipe/request-upload-url", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
       res.json({ uploadURL, objectPath });
@@ -12237,7 +12229,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Create item (snippet or confirmed upload)
   app.post("/api/swipe", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const userId = (req.session as any).userId as string;
       const { title, type, content, imagePath, sourceUrl, notes } = req.body;
       if (!title) return res.status(400).json({ message: "title is required" });
@@ -12255,7 +12246,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Serve image (authenticated, owner only)
   app.get("/api/swipe/:id/image", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const userId = (req.session as any).userId as string;
       const item = await storage.getSwipeItem(req.params.id, userId);
       if (!item || !item.imagePath) return res.status(404).json({ message: "Not found" });
@@ -12270,7 +12260,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Update item
   app.patch("/api/swipe/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const userId = (req.session as any).userId as string;
       const { title, notes, sourceUrl, promoLinks } = req.body;
       const item = await storage.updateSwipeItem(req.params.id, userId, { title, notes, sourceUrl, promoLinks });
@@ -12285,7 +12274,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Delete item (also delete GCS object if present)
   app.delete("/api/swipe/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const userId = (req.session as any).userId as string;
       const item = await storage.getSwipeItem(req.params.id, userId);
       if (!item) return res.status(404).json({ message: "Not found" });
@@ -12303,7 +12291,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Generate share token
   app.post("/api/swipe/:id/share", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const userId = (req.session as any).userId as string;
       const existing = await storage.getSwipeItem(req.params.id, userId);
       if (!existing) return res.status(404).json({ message: "Not found" });
@@ -12320,7 +12307,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Revoke share token
   app.delete("/api/swipe/:id/share", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
       const userId = (req.session as any).userId as string;
       const item = await storage.setSwipeItemShareToken(req.params.id, userId, null);
       if (!item) return res.status(404).json({ message: "Not found" });
