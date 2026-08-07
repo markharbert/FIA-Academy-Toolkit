@@ -1694,6 +1694,13 @@ async function boot() {
   });
   $("save-targets-btn").addEventListener("click", saveTargets);
 
+  // Populate version badge in Settings
+  try {
+    const { version } = chrome.runtime.getManifest();
+    const badge = $("settings-version-badge");
+    if (badge) badge.textContent = `v${version}`;
+  } catch (_) {}
+
   // Swipe File panel
   $("swipe-capture-btn").addEventListener("click", swipeCaptureTab);
   $("swipe-form-save-btn").addEventListener("click", swipeSaveCapture);
