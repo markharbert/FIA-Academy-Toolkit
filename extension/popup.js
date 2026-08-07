@@ -1436,8 +1436,16 @@ async function swipeCaptureVisibleArea() {
     });
 
     swipeEnableBtns();
-    swipeShowStatus("✓ Saved to your Swipe File!", 2500);
+    swipeShowStatus("✓ Saved!", 2500);
     renderSwipe();
+
+    // Inject page-level toast on the captured tab
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab?.id) {
+        chrome.scripting.executeScript({ target: { tabId: activeTab.id }, files: ["save-toast.js"] }).catch(() => {});
+      }
+    } catch (_) {}
   } catch (err) {
     swipeEnableBtns();
     swipeHideStatus();

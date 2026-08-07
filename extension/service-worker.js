@@ -19,6 +19,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   const { rect, dpr } = msg;
   const windowId = sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT;
 
+    const sectionTabId = sender.tab?.id;
   chrome.tabs.captureVisibleTab(windowId, { format: "png" }, async (dataUrl) => {
     if (chrome.runtime.lastError || !dataUrl) {
       console.error("[FIA SW] captureVisibleTab failed:", chrome.runtime.lastError?.message);
@@ -54,6 +55,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       const tabTitle = sender.tab?.title ?? "Section Screenshot";
       const item = await swipeAutoSave(croppedDataUrl, tabTitle);
       await chrome.storage.session.set({ swipeRecentlySaved: true });
+      injectSaveToast(sectionTabId);
 
       chrome.notifications.create("fia-section-ready", {
         type:    "basic",
@@ -75,6 +77,12 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // ─── Full Page capture: native scroll-and-stitch ─────────────────────────────
 
 function swSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Page-level save toast (injected into the active tab) ─────────────────────
+function injectSaveToast(tabId) {
+  if (!tabId) return;
+  chrome.scripting.executeScript({ target: { tabId }, files: ["save-toast.js"] }).catch(() => {});
+}
 
 // ── Auto-save helper: upload PNG dataUrl → create swipe item ─────────────────
 async function swipeAutoSave(dataUrl, title) {
@@ -188,6 +196,7 @@ async function handleFullPageCapture(tabId, title) {
     // 7. Auto-save + notify
     const item = await swipeAutoSave(finalDataUrl, title);
     await chrome.storage.session.set({ swipeRecentlySaved: true });
+    injectSaveToast(tabId);
     chrome.notifications.create("fia-fullpage-ready", {
       type: "basic", iconUrl: "icons/icon128.png",
       title: "FIA Toolkit — Full Page Saved!",
