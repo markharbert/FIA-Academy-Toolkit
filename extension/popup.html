@@ -142,6 +142,19 @@
       font-size: 11px; color: var(--text-muted); background: none; border: none;
       cursor: pointer; text-decoration: underline; font-family: inherit;
     }
+    .suspended-check-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 9px 20px; border-radius: 8px; border: 1px solid var(--border-med);
+      background: transparent; color: var(--text-sub);
+      font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+      transition: color .15s, border-color .15s;
+    }
+    .suspended-check-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+    .suspended-check-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .suspended-check-msg {
+      font-size: 11px; color: var(--text-muted); min-height: 16px;
+    }
+    .suspended-check-msg.error { color: var(--red); }
 
     /* ─── Base ────────────────────────────────────────────────────────────── */
     body {
@@ -674,6 +687,10 @@
     Access to the FIA Toolkit requires an active Fearless Influencer Academy membership.
     If you believe this is an error, please contact support to resolve it.
   </p>
+  <button class="suspended-check-btn" id="suspended-check-btn">
+    🔄 Check Again
+  </button>
+  <span class="suspended-check-msg" id="suspended-check-msg"></span>
   <a href="mailto:support@markharbert.com?subject=FIA%20Toolkit%20Access%20Issue"
      class="suspended-support" target="_blank">
     Contact Support

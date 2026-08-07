@@ -1353,6 +1353,33 @@ async function boot() {
   });
   $("save-targets-btn").addEventListener("click", saveTargets);
 
+  // Suspended screen — "Check Again" button triggers a forced live re-check
+  $("suspended-check-btn")?.addEventListener("click", async () => {
+    const btn = $("suspended-check-btn");
+    const msg = $("suspended-check-msg");
+    if (!btn || !apiKey) return;
+
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;border-top-color:var(--accent)"></span> Checking…`;
+    if (msg) { msg.textContent = ""; msg.className = "suspended-check-msg"; }
+
+    try {
+      const data = await apiFetch("/api/v1/membership/check", { method: "POST" });
+      if (data.enrolled) {
+        // Membership restored — load the tracker normally
+        await loadDMO();
+      } else {
+        if (msg) { msg.textContent = "Still inactive — contact support"; msg.className = "suspended-check-msg error"; }
+        btn.disabled = false;
+        btn.innerHTML = "🔄 Check Again";
+      }
+    } catch {
+      if (msg) { msg.textContent = "Check failed — try again later"; msg.className = "suspended-check-msg error"; }
+      btn.disabled = false;
+      btn.innerHTML = "🔄 Check Again";
+    }
+  });
+
   // Suspended screen — disconnect clears everything
   $("suspended-disconnect")?.addEventListener("click", async () => {
     stopTick();

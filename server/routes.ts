@@ -10083,6 +10083,73 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     next();
   });
 
+  // Force a live CF enrollment re-check, bypassing the 24-hour cache.
+  // Used by the extension's "Check Again" button on the suspended screen so
+  // a re-enrolled member can regain access within seconds.
+  //
+  // Disabled-user handling:
+  //   • CF-suspended users (isDisabled=true, cfEnrolled=false, cfRevokedAt set)
+  //     are allowed through — the whole point is to let them recover.
+  //   • Administratively disabled users (isDisabled=true but NOT CF-revoked)
+  //     are blocked immediately; live CF check cannot override admin action.
+  app.post("/api/v1/membership/check", async (req: Request, res: Response) => {
+    const authHeader = req.headers["authorization"] || "";
+    const xApiKey = req.headers["x-api-key"] as string | undefined;
+    let rawKey = xApiKey || "";
+    if (!rawKey && authHeader.toLowerCase().startsWith("bearer ")) {
+      rawKey = authHeader.slice(7).trim();
+    }
+    if (!rawKey || !rawKey.startsWith("ftk_")) {
+      return res.status(401).json({ message: "Missing or invalid API key." });
+    }
+    try {
+      const { createHash } = await import("crypto");
+      const keyHash = createHash("sha256").update(rawKey).digest("hex");
+      const user = await storage.getUserByPublicApiKeyHash(keyHash);
+      if (!user) return res.status(401).json({ message: "API key not found or revoked." });
+
+      // A CF-suspended user has isDisabled=true, cfEnrolled=false, and cfRevokedAt set.
+      // Only those users should be allowed through to attempt membership recovery.
+      // Administratively disabled accounts (no cfRevokedAt, or cfEnrolled not explicitly false)
+      // must remain blocked regardless of CF status.
+      const isCfSuspended = user.isDisabled && user.cfEnrolled === false && !!user.cfRevokedAt;
+      if (user.isDisabled && !isCfSuspended) {
+        return res.status(403).json({ enrolled: false, message: "Account is disabled." });
+      }
+
+      if (!user.email || !CF_API_TOKEN || !CF_COURSE_ID) {
+        // CF not configured — treat as enrolled (no-op restriction)
+        return res.json({ enrolled: true });
+      }
+
+      const cfInfo = await checkCfEnrollmentByEmail(user.email, user.cfContactId ?? undefined);
+      if (cfInfo.enrolled) {
+        // Membership restored — re-enable the account and update CF fields
+        await storage.updateUser(user.id, {
+          cfEnrolled: true,
+          cfEnrolledAt: user.cfEnrolledAt ?? new Date(),
+          cfRevokedAt: null,
+          isDisabled: false,
+          cfContactId: cfInfo.contactId ?? user.cfContactId,
+        });
+      } else {
+        // Still not enrolled — keep disabled, refresh the revoked timestamp
+        await storage.updateUser(user.id, {
+          cfEnrolled: false,
+          cfRevokedAt: new Date(),
+        });
+      }
+      // Reset the 24-hour cache stamp so the next regular requireApiKey call
+      // also sees the fresh result instead of skipping the check.
+      await storage.touchPublicApiKey(keyHash, true);
+
+      return res.json({ enrolled: cfInfo.enrolled });
+    } catch (err) {
+      console.error("[v1/membership/check] error:", err);
+      return res.status(503).json({ enrolled: false, message: "Could not reach membership system. Please try again shortly." });
+    }
+  });
+
   app.get("/api/v1/me", requireApiKey, async (req: Request, res: Response) => {
     const user = (req as any).apiUser;
     res.json({
