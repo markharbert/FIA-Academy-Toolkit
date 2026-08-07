@@ -1433,12 +1433,23 @@ async function boot() {
   // Settings tab
   $("update-key-btn").addEventListener("click", () =>
     validateAndSave($("settings-key-input").value.trim(), $("settings-error")));
-  $("disconnect-btn").addEventListener("click", async () => {
+  $("disconnect-btn").addEventListener("click", () => {
+    $("disconnect-btn").style.display = "none";
+    $("disconnect-confirm").style.display = "flex";
+  });
+  $("disconnect-confirm-cancel").addEventListener("click", () => {
+    $("disconnect-confirm").style.display = "none";
+    $("disconnect-btn").style.display = "";
+  });
+  $("disconnect-confirm-yes").addEventListener("click", async () => {
     stopTick();
     const savedTheme = currentTheme;
     await chrome.storage.local.clear();
     await chrome.storage.local.set({ theme: savedTheme }); // keep theme pref
     apiKey = null; timers = {}; notesValue = ""; serverEntry = null;
+    $("disconnect-confirm").style.display = "none";
+    $("disconnect-btn").style.display = "";
+    $("settings-overlay").classList.remove("open");
     showScreen("setup");
   });
   $("save-targets-btn").addEventListener("click", saveTargets);
