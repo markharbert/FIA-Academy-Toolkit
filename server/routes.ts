@@ -12637,9 +12637,16 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       if (!fs.existsSync(zipPath)) {
         return res.status(404).json({ message: "Extension package not found" });
       }
+      // Read version from manifest so the downloaded filename is versioned
+      let version = "latest";
+      try {
+        const manifestPath = path.resolve("extension/manifest.json");
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        if (manifest.version) version = `v${manifest.version}`;
+      } catch (_) {}
       const stat = fs.statSync(zipPath);
       res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", `attachment; filename="fia-toolkit-latest.zip"`);
+      res.setHeader("Content-Disposition", `attachment; filename="fia-toolkit-extension-${version}.zip"`);
       res.setHeader("Content-Length", stat.size);
       fs.createReadStream(zipPath).pipe(res);
     } catch (err) {
