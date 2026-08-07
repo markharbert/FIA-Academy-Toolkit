@@ -287,6 +287,7 @@ function renderActivities() {
       timerHTML = `<span class="timer paused" id="timer-${key}">${fmtTimer(secs)}</span>`;
       btnsHTML  = `<div class="btn-row">
         <button class="cbtn cbtn-resume" data-key="${key}">▶ Resume</button>
+        <button class="cbtn cbtn-edit"   data-key="${key}">✎ Edit</button>
         <button class="cbtn cbtn-done"   data-key="${key}">✓ Done</button>
       </div>`;
     } else { // done
@@ -329,14 +330,22 @@ function renderActivities() {
   container.querySelectorAll(".cbtn-done").forEach(b =>
     b.addEventListener("click", () => doneTimer(b.dataset.key)));
   container.querySelectorAll(".cbtn-edit").forEach(b =>
-    b.addEventListener("click", () => {
-      const row = $(`manual-row-${b.dataset.key}`);
-      if (row) {
-        const input = $(`manual-val-${b.dataset.key}`);
-        if (input) input.value = Math.round(currentSecs(b.dataset.key) / 60);
-        row.classList.add("open");
+    b.addEventListener("click", async () => {
+      const key = b.dataset.key;
+      const t = timers[key];
+      if (!t) return;
+      if (t.status === "done") {
+        // Flip to paused then re-render; open row in the fresh DOM
+        t.status = "paused";
+        await persist();
+        renderActivities();
       }
-      editTimer(b.dataset.key);
+      // Whether we just re-rendered (done→paused) or are already paused,
+      // the row is now in the DOM — open it and pre-fill current time
+      const row   = $(`manual-row-${key}`);
+      const input = $(`manual-val-${key}`);
+      if (input) input.value = Math.round(currentSecs(key) / 60);
+      if (row) row.classList.add("open");
     }));
   container.querySelectorAll(".cbtn-manual").forEach(b =>
     b.addEventListener("click", () => {
@@ -351,10 +360,6 @@ function renderActivities() {
   container.querySelectorAll(".m-cancel").forEach(b =>
     b.addEventListener("click", () => {
       $(`manual-row-${b.dataset.key}`)?.classList.remove("open");
-      const t = timers[b.dataset.key];
-      if (t && t.status === "paused" && (t.accumulatedSeconds || 0) > 0) {
-        t.status = "done"; persist(); renderActivities();
-      }
     }));
 
   // Notes
