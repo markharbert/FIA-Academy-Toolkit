@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "FIA Toolkit",
-  "version": "1.7.1",
-  "description": "Log your Daily Method of Operation and receive updates from the FIA Academy Toolkit.",
-  "permissions": ["storage", "notifications", "alarms"],
+  "version": "1.8.0",
+  "description": "Log your Daily Method of Operation, save swipe-file captures, and manage links — all from the FIA Academy Toolkit.",
+  "permissions": ["storage", "notifications", "alarms", "activeTab", "tabs", "contextMenus"],
   "host_permissions": ["https://toolkit.fearlessmarketinglab.com/*"],
   "background": {
     "service_worker": "service-worker.js",

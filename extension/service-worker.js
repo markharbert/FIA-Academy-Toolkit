@@ -1,6 +1,43 @@
 "use strict";
 
 const API_BASE = "https://toolkit.fearlessmarketinglab.com";
+
+// ─── Context Menu: Save to Swipe File ────────────────────────────────────────
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "fia-save-snippet",
+    title: "Save to Swipe File",
+    contexts: ["selection"],
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== "fia-save-snippet") return;
+  const text      = info.selectionText ?? "";
+  const sourceUrl = tab?.url ?? "";
+  const title     = (tab?.title ?? "Snippet").substring(0, 120);
+
+  const stored = await chrome.storage.local.get(["apiKey"]);
+  const key = stored.apiKey;
+  if (!key) return;
+
+  try {
+    await fetch(`${API_BASE}/api/v1/swipe`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": key },
+      body:    JSON.stringify({ type: "snippet", title, content: text, sourceUrl }),
+    });
+    chrome.notifications.create({
+      type:    "basic",
+      iconUrl: "icons/icon128.png",
+      title:   "FIA Toolkit — Swipe File",
+      message: `Snippet saved: "${title.substring(0, 60)}"`,
+    });
+  } catch (err) {
+    console.error("[FIA] Snippet save failed:", err.message);
+  }
+});
 // This public key is safe to embed — it is designed to be shared with clients.
 const VAPID_PUBLIC_KEY = "BPdIbvBytx7rxn5z3S3QJ2vI0GhB-PTDrtKpnpyyMa52g_nGrS7MCxYnUpbXEUMGPosBYYFydnRbXFm3rmnRBZE";
 

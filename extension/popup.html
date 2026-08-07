@@ -743,6 +743,116 @@
     }
     .btn-save-goals:hover { opacity: .88; }
     .settings-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    /* ─── Swipe File panel ─────────────────────────────────────────────────── */
+    .swipe-panel { padding: 12px 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* Capture button */
+    .swipe-capture-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 15px; border-radius: 10px; border: 2px dashed var(--border-med);
+      background: var(--bg-card); color: var(--text); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all .15s; font-family: inherit; width: 100%;
+    }
+    .swipe-capture-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); }
+    .swipe-capture-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .swipe-capture-btn.capturing { border-style: solid; border-color: var(--accent); background: var(--accent-dim); }
+
+    /* Save form */
+    .swipe-save-form {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 12px; border-radius: 10px;
+      border: 1px solid var(--accent); background: var(--bg-card);
+    }
+    .swipe-save-preview {
+      width: 100%; max-height: 100px; object-fit: cover; border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .swipe-field-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+    .swipe-field-input {
+      padding: 6px 9px; border-radius: 7px; width: 100%;
+      background: var(--bg-input); border: 1px solid var(--border-med);
+      color: var(--text); font-size: 12px; outline: none; font-family: inherit;
+    }
+    .swipe-field-input:focus { border-color: var(--accent); }
+    .swipe-field-input::placeholder { color: var(--text-muted); }
+    .swipe-form-actions { display: flex; gap: 6px; }
+    .swipe-form-save {
+      flex: 1; padding: 7px; border-radius: 7px; border: none; cursor: pointer;
+      background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; font-family: inherit;
+    }
+    .swipe-form-save:hover:not(:disabled) { opacity: .88; }
+    .swipe-form-save:disabled { opacity: .4; cursor: not-allowed; }
+    .swipe-form-cancel {
+      padding: 7px 12px; border-radius: 7px;
+      border: 1px solid var(--border-med); background: transparent;
+      color: var(--text-muted); font-size: 12px; cursor: pointer; font-family: inherit;
+    }
+    .swipe-form-cancel:hover { color: var(--text); }
+
+    /* Upload progress bar */
+    .swipe-progress { height: 3px; border-radius: 2px; background: var(--prog-track); overflow: hidden; }
+    .swipe-progress-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width .25s; }
+
+    /* Success state */
+    .swipe-success {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 12px; border-radius: 10px;
+      border: 1px solid var(--green); background: rgba(22,163,74,.06);
+    }
+    .swipe-success-heading { font-size: 12px; font-weight: 700; color: var(--green); }
+    .swipe-success-name { font-size: 12px; color: var(--text); }
+    .swipe-success-actions { display: flex; gap: 6px; }
+    .swipe-btn-green {
+      flex: 1; padding: 6px; border-radius: 7px; border: none; cursor: pointer;
+      background: var(--green); color: #fff; font-size: 12px; font-weight: 600; font-family: inherit;
+    }
+    .swipe-btn-green:hover { opacity: .88; }
+    .swipe-btn-green.copied { background: var(--accent); }
+
+    /* Hint */
+    .swipe-hint {
+      font-size: 11px; color: var(--text-muted); line-height: 1.5;
+      padding: 6px 10px; border-radius: 8px; background: var(--bg-card);
+      border: 1px solid var(--border);
+    }
+
+    /* Divider label */
+    .swipe-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
+
+    /* Recent item cards */
+    .swipe-item-list { display: flex; flex-direction: column; gap: 5px; }
+    .swipe-item-card {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 8px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg-card);
+    }
+    .swipe-item-thumb {
+      width: 44px; height: 30px; border-radius: 4px; overflow: hidden;
+      border: 1px solid var(--border); flex-shrink: 0;
+      background: var(--bg-input); display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .swipe-item-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .swipe-item-body { flex: 1; min-width: 0; }
+    .swipe-item-title { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .swipe-item-meta { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+    .swipe-item-acts { display: flex; gap: 3px; flex-shrink: 0; }
+    .swipe-link-btn {
+      padding: 3px 8px; border-radius: 5px; border: none; cursor: pointer;
+      background: var(--accent); color: #fff; font-size: 10px; font-weight: 600; font-family: inherit;
+    }
+    .swipe-link-btn:hover { opacity: .88; }
+    .swipe-link-btn.copied { background: var(--green); }
+    .swipe-share-btn {
+      padding: 3px 8px; border-radius: 5px; font-size: 10px; font-weight: 600;
+      border: 1px solid var(--border-med); background: transparent; color: var(--text-sub);
+      cursor: pointer; font-family: inherit;
+    }
+    .swipe-share-btn:hover { color: var(--text); }
+    .swipe-empty { font-size: 12px; color: var(--text-muted); text-align: center; padding: 8px 0 2px; }
+    .swipe-open-link { font-size: 11px; color: var(--accent); text-decoration: none; font-weight: 500; text-align: center; display: block; padding-top: 2px; }
+    .swipe-open-link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -813,10 +923,11 @@
     </div>
   </div>
 
-  <!-- Primary tab bar: DMO Tracker | Links -->
+  <!-- Primary tab bar: DMO Tracker | Links | Swipe File -->
   <div class="primary-tab-bar">
     <button class="primary-tab-btn active" data-primary="dmo">DMO Tracker</button>
     <button class="primary-tab-btn" data-primary="links">Links</button>
+    <button class="primary-tab-btn" data-primary="swipe">Swipe File</button>
   </div>
 
   <!-- ── DMO Tracker primary panel ── -->
@@ -862,6 +973,55 @@
   <!-- ── Links primary panel ── -->
   <div id="primary-links" class="primary-panel">
     <div id="links-content"></div>
+  </div>
+
+  <!-- ── Swipe File primary panel ── -->
+  <div id="primary-swipe" class="primary-panel">
+    <div class="swipe-panel">
+
+      <!-- Capture button -->
+      <button class="swipe-capture-btn" id="swipe-capture-btn">
+        📷&nbsp; Screenshot this tab
+      </button>
+
+      <!-- Save form (shown after capture) -->
+      <div class="swipe-save-form" id="swipe-save-form" style="display:none">
+        <img class="swipe-save-preview" id="swipe-save-preview" src="" alt="Preview" />
+        <div class="swipe-progress" id="swipe-progress" style="display:none">
+          <div class="swipe-progress-fill" id="swipe-progress-fill" style="width:0%"></div>
+        </div>
+        <div class="swipe-field-label">Title</div>
+        <input class="swipe-field-input" id="swipe-save-title" placeholder="Give this screenshot a title…" />
+        <div class="swipe-form-actions">
+          <button class="swipe-form-save" id="swipe-form-save-btn">Save to Swipe File</button>
+          <button class="swipe-form-cancel" id="swipe-form-cancel-btn">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Success state -->
+      <div class="swipe-success" id="swipe-success" style="display:none">
+        <div class="swipe-success-heading">✓ Saved to your Swipe File!</div>
+        <div class="swipe-success-name" id="swipe-success-name"></div>
+        <div class="swipe-success-actions">
+          <button class="swipe-btn-green" id="swipe-copy-link-btn">Copy share link</button>
+          <button class="swipe-form-cancel" id="swipe-new-capture-btn">New capture</button>
+        </div>
+      </div>
+
+      <!-- Hint -->
+      <div class="swipe-hint">
+        💡 Select text on any page, then <strong>right-click → Save to Swipe File</strong> to clip a snippet.
+      </div>
+
+      <!-- Recent saves list -->
+      <div class="swipe-section-label">Recent Saves</div>
+      <div id="swipe-list"></div>
+
+      <a href="https://toolkit.fearlessmarketinglab.com/swipe-file" target="_blank" class="swipe-open-link">
+        Open full Swipe File →
+      </a>
+
+    </div>
   </div>
 
   <!-- ── Settings overlay (gear icon) ── -->

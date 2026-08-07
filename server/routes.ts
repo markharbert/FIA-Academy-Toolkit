@@ -12426,6 +12426,65 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // ---- v1 API – Swipe File (extension access) ----
+
+  // List recent items
+  app.get("/api/v1/swipe", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const items = await storage.getSwipeItems(user.id);
+      res.json({ items });
+    } catch (err) {
+      console.error("[v1] swipe list error:", err);
+      res.status(500).json({ message: "Failed to load swipe items" });
+    }
+  });
+
+  // Request a signed upload URL
+  app.post("/api/v1/swipe/request-upload-url", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const uploadURL  = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      res.json({ uploadURL, objectPath });
+    } catch (err) {
+      console.error("[v1] swipe upload-url error:", err);
+      res.status(500).json({ message: "Failed to generate upload URL" });
+    }
+  });
+
+  // Create a swipe item (snippet or upload)
+  app.post("/api/v1/swipe", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { title, type, content, imagePath, sourceUrl, notes } = req.body;
+      if (!title)  return res.status(400).json({ message: "title is required" });
+      if (!type || !["upload", "snippet"].includes(type))
+        return res.status(400).json({ message: "type must be upload or snippet" });
+      if (type === "snippet" && !content)   return res.status(400).json({ message: "content required for snippets" });
+      if (type === "upload"  && !imagePath) return res.status(400).json({ message: "imagePath required for uploads" });
+      const item = await storage.createSwipeItem(user.id, { title, type, content, imagePath, sourceUrl, notes });
+      res.json({ item });
+    } catch (err) {
+      console.error("[v1] swipe create error:", err);
+      res.status(500).json({ message: "Failed to create swipe item" });
+    }
+  });
+
+  // Generate / retrieve share token
+  app.post("/api/v1/swipe/:id/share", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user     = (req as any).apiUser;
+      const existing = await storage.getSwipeItem(req.params.id, user.id);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      const token = existing.shareToken ?? crypto.randomBytes(24).toString("hex");
+      const item  = await storage.setSwipeItemShareToken(req.params.id, user.id, token);
+      res.json({ item, token });
+    } catch (err) {
+      console.error("[v1] swipe share error:", err);
+      res.status(500).json({ message: "Failed to generate share link" });
+    }
+  });
+
   // ─── Chrome Extension: Push Subscriptions ────────────────────────────────
   // Save or replace push subscription for the authenticated member
   app.post("/api/extension/subscribe", requireApiKey, async (req: Request, res: Response) => {
