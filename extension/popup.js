@@ -10,28 +10,46 @@ const ACTS = [
   { key: "connecting",          label: "Connect with People",  icon: "🤝", secsKey: "connectingSeconds", defaultMins: 60 },
 ];
 
-// ─── App state ────────────────────────────────────────────────────────────────
+// ─── App state ─────────────────────────────────────────────────────────────
 let apiKey      = null;
-let todayDate   = null;           // "YYYY-MM-DD"
-let serverEntry = null;           // last saved entry from server
-let targets     = {};             // { visionMeditation: 30, ... } minutes
-
-// Per-activity timer state (persisted in chrome.storage.local under "timers"):
-//   { status: "idle"|"running"|"paused"|"done", accumulatedSeconds: 0, startedAt: null }
-let timers = {};
-
-let notesValue     = "";
-let notesDirty     = false;
-let notesSaveTimer = null;
-
+let todayDate   = null;
+let serverEntry = null;
+let targets     = {};
+let timers      = {};
+let notesValue  = "";
+let notesDirty  = false;
+let notesSaveTimer  = null;
 let tickInterval    = null;
 let lastServerSave  = 0;
-const AUTO_SAVE_MS  = 10_000;
 let statusClearTimer = null;
+let currentTheme    = "light";   // "light" | "dark"
+const AUTO_SAVE_MS  = 10_000;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── DOM helpers ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
+// ─── Theme ─────────────────────────────────────────────────────────────────
+const SUN_SVG  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+const MOON_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  if (theme === "dark") {
+    document.body.classList.add("dark");
+  } else {
+    document.body.classList.remove("dark");
+  }
+  const btn = $("theme-btn");
+  if (btn) btn.innerHTML = theme === "dark" ? SUN_SVG : MOON_SVG;
+}
+
+async function toggleTheme() {
+  const next = currentTheme === "light" ? "dark" : "light";
+  applyTheme(next);
+  await chrome.storage.local.set({ theme: next });
+}
+
+// ─── Format helpers ────────────────────────────────────────────────────────
 function fmtTimer(totalSecs) {
   const s = Math.floor(Math.max(0, totalSecs));
   const h = Math.floor(s / 3600);
@@ -52,6 +70,7 @@ function fmtDate(dateStr) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+// ─── Timer math ────────────────────────────────────────────────────────────
 function currentSecs(key) {
   const t = timers[key];
   if (!t) return 0;
@@ -61,8 +80,7 @@ function currentSecs(key) {
 }
 
 function targetSecs(key) {
-  const mins = targets[key] ?? ACTS.find(a => a.key === key)?.defaultMins ?? 60;
-  return mins * 60;
+  return (targets[key] ?? ACTS.find(a => a.key === key)?.defaultMins ?? 60) * 60;
 }
 
 function calcPts(key) {
@@ -73,67 +91,57 @@ function totalPts() {
   return ACTS.reduce((s, a) => s + calcPts(a.key), 0);
 }
 
-function setStatus(msg, clearAfterMs) {
+// ─── Status message ────────────────────────────────────────────────────────
+function setStatus(msg, clearMs) {
   clearTimeout(statusClearTimer);
   const el = $("save-status");
   if (el) el.textContent = msg;
-  if (clearAfterMs) statusClearTimer = setTimeout(() => { if (el) el.textContent = ""; }, clearAfterMs);
+  if (clearMs) statusClearTimer = setTimeout(() => { if ($("save-status")) $("save-status").textContent = ""; }, clearMs);
 }
 
-// ─── API ──────────────────────────────────────────────────────────────────────
-async function apiFetch(path, options = {}) {
+// ─── API ───────────────────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: { "X-API-Key": apiKey, "Content-Type": "application/json", ...(options.headers || {}) },
+    ...opts,
+    headers: { "X-API-Key": apiKey, "Content-Type": "application/json", ...(opts.headers || {}) },
   });
-  if (!res.ok) {
-    const err = new Error(`HTTP ${res.status}`);
-    err.status = res.status;
-    throw err;
-  }
+  if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
   return res.json();
 }
 
-function buildSavePayload() {
-  const payload = { notes: notesValue };
+function buildPayload() {
+  const p = { notes: notesValue };
   ACTS.forEach(({ key, secsKey }) => {
     const secs = Math.floor(currentSecs(key));
-    payload[secsKey] = secs;
-    payload[key]     = secs > 0 || !!(serverEntry?.[key]);
+    p[secsKey] = secs;
+    p[key]     = secs > 0 || !!(serverEntry?.[key]);
   });
-  return payload;
+  return p;
 }
 
 async function saveToServer(showStatus = false) {
   try {
-    const data = await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(buildSavePayload()) });
+    const data = await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(buildPayload()) });
     if (data.entry) serverEntry = data.entry;
     lastServerSave = Date.now();
     notesDirty = false;
     if (showStatus) setStatus("Saved ✓", 2500);
-  } catch (e) {
-    if (showStatus) setStatus("Save failed", 3000);
-  }
+  } catch { if (showStatus) setStatus("Save failed", 3000); }
 }
 
-// ─── Persistence ──────────────────────────────────────────────────────────────
+// ─── Persistence ───────────────────────────────────────────────────────────
 async function persist() {
   await chrome.storage.local.set({ timers, todayDate, notesValue });
 }
 
 async function loadPersisted(todayKey) {
   const s = await chrome.storage.local.get(["timers", "todayDate", "notesValue"]);
-  if (s.todayDate !== todayKey) {
-    // New day — reset in-progress timers
-    timers = {};
-    notesValue = "";
-    return;
-  }
+  if (s.todayDate !== todayKey) { timers = {}; notesValue = ""; return; }
   timers     = s.timers     || {};
   notesValue = s.notesValue || "";
 }
 
-// ─── Timer controls ───────────────────────────────────────────────────────────
+// ─── Timer controls ────────────────────────────────────────────────────────
 function ensureTimer(key) {
   if (!timers[key]) timers[key] = { status: "idle", accumulatedSeconds: 0, startedAt: null };
 }
@@ -151,8 +159,7 @@ async function pauseTimer(key) {
   const t = timers[key];
   if (!t || t.status !== "running") return;
   t.accumulatedSeconds = (t.accumulatedSeconds || 0) + (Date.now() - t.startedAt) / 1000;
-  t.startedAt = null;
-  t.status    = "paused";
+  t.startedAt = null; t.status = "paused";
   await persist();
   await saveToServer(true);
   renderActivities();
@@ -160,10 +167,9 @@ async function pauseTimer(key) {
 }
 
 async function resumeTimer(key) {
-  const t = timers[key];
-  if (!t) return;
-  t.status    = "running";
-  t.startedAt = Date.now();
+  ensureTimer(key);
+  timers[key].status    = "running";
+  timers[key].startedAt = Date.now();
   await persist();
   startTick();
   renderActivities();
@@ -184,7 +190,6 @@ async function doneTimer(key) {
 }
 
 async function editTimer(key) {
-  // Allow re-editing a done entry by switching back to paused
   const t = timers[key];
   if (!t) return;
   if (t.status === "running") {
@@ -196,14 +201,12 @@ async function editTimer(key) {
   renderActivities();
 }
 
-async function applyManualTime(key, minutes) {
+async function applyManual(key, minutes) {
   ensureTimer(key);
-  // Stop any running first
-  if (timers[key].status === "running") {
-    timers[key].startedAt = null;
-  }
-  timers[key].accumulatedSeconds = Math.max(0, minutes) * 60;
-  timers[key].status             = "done";
+  const t = timers[key];
+  if (t.status === "running") t.startedAt = null;
+  t.accumulatedSeconds = Math.max(0, minutes) * 60;
+  t.status = "done";
   await persist();
   await saveToServer(true);
   renderActivities();
@@ -214,42 +217,34 @@ function checkAllStopped() {
   if (!ACTS.some(a => timers[a.key]?.status === "running")) stopTick();
 }
 
-// ─── Tick ─────────────────────────────────────────────────────────────────────
+// ─── Tick ──────────────────────────────────────────────────────────────────
 function startTick() {
   if (tickInterval) return;
   tickInterval = setInterval(onTick, 1000);
 }
-function stopTick() {
-  clearInterval(tickInterval);
-  tickInterval = null;
-}
+function stopTick() { clearInterval(tickInterval); tickInterval = null; }
 
 async function onTick() {
-  // Live-update timer displays and progress bars without full re-render
   ACTS.forEach(({ key }) => {
-    const t = timers[key];
-    if (!t || t.status !== "running") return;
+    if (timers[key]?.status !== "running") return;
     const secs = currentSecs(key);
-
     const timerEl = $(`timer-${key}`);
     if (timerEl) timerEl.textContent = fmtTimer(secs);
-
     const pb = $(`prog-${key}`);
     if (pb) pb.style.width = Math.min(100, secs / targetSecs(key) * 100) + "%";
-
     const ptsEl = $(`pts-${key}`);
     if (ptsEl) {
       const pts = calcPts(key);
       ptsEl.textContent = pts.toFixed(1) + " pts";
-      ptsEl.className = "act-pts" + (pts >= 5 ? " full" : "");
+      ptsEl.className = "pts-badge" + (pts >= 5 ? " full" : "");
     }
   });
-  updatePointsHeader();
+  updateHeader();
   await persist();
   if (Date.now() - lastServerSave >= AUTO_SAVE_MS) await saveToServer();
 }
 
-function updatePointsHeader() {
+function updateHeader() {
   const pts = totalPts();
   const el  = $("total-pts");
   if (el) el.textContent = pts.toFixed(1);
@@ -257,7 +252,7 @@ function updatePointsHeader() {
   if (pb) pb.style.width = Math.min(100, pts / 25 * 100) + "%";
 }
 
-// ─── Render Today tab ─────────────────────────────────────────────────────────
+// ─── Render activities ─────────────────────────────────────────────────────
 function renderActivities() {
   const container = $("activities");
   if (!container) return;
@@ -275,108 +270,94 @@ function renderActivities() {
     const isIdle  = t.status === "idle";
     const tMins   = targets[key] ?? defaultMins;
 
-    let timerHTML = "";
-    let btnsHTML  = "";
+    let timerHTML = "", btnsHTML = "";
 
     if (isIdle) {
-      timerHTML = `<span class="timer-display idle" id="timer-${key}">Not started</span>`;
-      btnsHTML  = `
-        <div class="btn-row">
-          <button class="card-btn btn-start"  data-key="${key}">▶ Start</button>
-          <button class="card-btn btn-manual" data-key="${key}" id="manual-open-${key}">+ Manual</button>
-        </div>`;
+      timerHTML = `<span class="timer idle" id="timer-${key}">Not started</span>`;
+      btnsHTML  = `<div class="btn-row">
+        <button class="cbtn cbtn-start"  data-key="${key}">▶ Start</button>
+        <button class="cbtn cbtn-manual" data-key="${key}" id="open-manual-${key}">+ Manual</button>
+      </div>`;
     } else if (isRun) {
-      timerHTML = `<span class="timer-display running" id="timer-${key}">${fmtTimer(secs)}</span>`;
-      btnsHTML  = `
-        <div class="btn-row">
-          <button class="card-btn btn-pause" data-key="${key}">⏸ Pause</button>
-        </div>`;
+      timerHTML = `<span class="timer running" id="timer-${key}">${fmtTimer(secs)}</span>`;
+      btnsHTML  = `<div class="btn-row">
+        <button class="cbtn cbtn-pause" data-key="${key}">⏸ Pause</button>
+      </div>`;
     } else if (isPause) {
-      timerHTML = `<span class="timer-display paused" id="timer-${key}">${fmtTimer(secs)}</span>`;
-      btnsHTML  = `
-        <div class="btn-row">
-          <button class="card-btn btn-resume" data-key="${key}">▶ Resume</button>
-          <button class="card-btn btn-done"   data-key="${key}">✓ Done</button>
-        </div>`;
-    } else if (isDone) {
-      timerHTML = `<span class="timer-display done" id="timer-${key}">✓ ${fmtMins(secs)}</span>`;
-      btnsHTML  = `
-        <div class="btn-row">
-          <button class="card-btn btn-resume" data-key="${key}">▶ Add more</button>
-          <button class="card-btn btn-edit"   data-key="${key}">Edit</button>
-        </div>`;
+      timerHTML = `<span class="timer paused" id="timer-${key}">${fmtTimer(secs)}</span>`;
+      btnsHTML  = `<div class="btn-row">
+        <button class="cbtn cbtn-resume" data-key="${key}">▶ Resume</button>
+        <button class="cbtn cbtn-done"   data-key="${key}">✓ Done</button>
+      </div>`;
+    } else { // done
+      timerHTML = `<span class="timer done" id="timer-${key}">✓ ${fmtMins(secs)}</span>`;
+      btnsHTML  = `<div class="btn-row">
+        <button class="cbtn cbtn-resume" data-key="${key}">▶ Add more</button>
+        <button class="cbtn cbtn-edit"   data-key="${key}">Edit</button>
+      </div>`;
     }
 
     const card = document.createElement("div");
-    card.className = "activity-card" + (isRun ? " running" : "") + (isDone ? " done" : "");
+    card.className = "act-card" + (isRun ? " running" : "") + (isDone ? " done" : "");
     card.innerHTML = `
       <div class="card-top">
-        <span class="act-icon">${icon}</span>
+        <span class="act-emoji">${icon}</span>
         <div class="act-info">
           <div class="act-name">${label}</div>
-          <div class="act-meta">Goal: ${tMins} min</div>
+          <div class="act-goal">Goal: ${tMins} min</div>
         </div>
-        <span class="act-pts${pts >= 5 ? " full" : ""}" id="pts-${key}">${pts.toFixed(1)} pts</span>
+        <span class="pts-badge${pts >= 5 ? " full" : ""}" id="pts-${key}">${pts.toFixed(1)} pts</span>
       </div>
       <div class="prog-track"><div class="prog-fill" id="prog-${key}" style="width:${pct}%"></div></div>
-      <div class="card-bottom">
-        ${timerHTML}
-        ${btnsHTML}
-      </div>
+      <div class="card-bottom">${timerHTML}${btnsHTML}</div>
       <div class="manual-row" id="manual-row-${key}">
         <input type="number" id="manual-val-${key}" placeholder="0" min="0" max="480" step="1" />
-        <span class="m-label">min</span>
-        <button class="btn-save-m"   data-key="${key}">Save</button>
-        <button class="btn-cancel-m" data-key="${key}">×</button>
-      </div>
-    `;
+        <span class="m-unit">min</span>
+        <button class="m-save"   data-key="${key}">Save</button>
+        <button class="m-cancel" data-key="${key}">×</button>
+      </div>`;
     container.appendChild(card);
   });
 
-  // Wire buttons
-  container.querySelectorAll(".btn-start").forEach(b =>
+  // Wire events
+  container.querySelectorAll(".cbtn-start").forEach(b =>
     b.addEventListener("click", () => startTimer(b.dataset.key)));
-  container.querySelectorAll(".btn-pause").forEach(b =>
+  container.querySelectorAll(".cbtn-pause").forEach(b =>
     b.addEventListener("click", () => pauseTimer(b.dataset.key)));
-  container.querySelectorAll(".btn-resume").forEach(b =>
+  container.querySelectorAll(".cbtn-resume").forEach(b =>
     b.addEventListener("click", () => resumeTimer(b.dataset.key)));
-  container.querySelectorAll(".btn-done").forEach(b =>
+  container.querySelectorAll(".cbtn-done").forEach(b =>
     b.addEventListener("click", () => doneTimer(b.dataset.key)));
-  container.querySelectorAll(".btn-edit").forEach(b =>
+  container.querySelectorAll(".cbtn-edit").forEach(b =>
     b.addEventListener("click", () => {
+      const row = $(`manual-row-${b.dataset.key}`);
+      if (row) {
+        const input = $(`manual-val-${b.dataset.key}`);
+        if (input) input.value = Math.round(currentSecs(b.dataset.key) / 60);
+        row.classList.add("open");
+      }
       editTimer(b.dataset.key);
-      // Pre-fill manual input with current time
-      const input = $(`manual-val-${b.dataset.key}`);
-      if (input) input.value = Math.round(currentSecs(b.dataset.key) / 60);
-      const row = $(`manual-row-${b.dataset.key}`);
-      if (row) row.classList.add("open");
     }));
-  container.querySelectorAll(".btn-manual").forEach(b =>
+  container.querySelectorAll(".cbtn-manual").forEach(b =>
     b.addEventListener("click", () => {
-      const row = $(`manual-row-${b.dataset.key}`);
-      if (row) row.classList.add("open");
+      $(`manual-row-${b.dataset.key}`)?.classList.add("open");
     }));
-  container.querySelectorAll(".btn-save-m").forEach(b =>
+  container.querySelectorAll(".m-save").forEach(b =>
     b.addEventListener("click", () => {
       const input = $(`manual-val-${b.dataset.key}`);
-      const mins  = parseFloat(input?.value);
-      if (isNaN(mins) || mins < 0) return;
-      applyManualTime(b.dataset.key, mins);
+      const mins = parseFloat(input?.value);
+      if (!isNaN(mins) && mins >= 0) applyManual(b.dataset.key, mins);
     }));
-  container.querySelectorAll(".btn-cancel-m").forEach(b =>
+  container.querySelectorAll(".m-cancel").forEach(b =>
     b.addEventListener("click", () => {
-      const row = $(`manual-row-${b.dataset.key}`);
-      if (row) row.classList.remove("open");
-      // If was in paused state just for edit, restore done
+      $(`manual-row-${b.dataset.key}`)?.classList.remove("open");
       const t = timers[b.dataset.key];
       if (t && t.status === "paused" && (t.accumulatedSeconds || 0) > 0) {
-        t.status = "done";
-        persist();
-        renderActivities();
+        t.status = "done"; persist(); renderActivities();
       }
     }));
 
-  // Notes field
+  // Notes
   const notesEl = $("notes-field");
   if (notesEl) {
     notesEl.value = notesValue;
@@ -388,18 +369,18 @@ function renderActivities() {
     };
   }
 
-  updatePointsHeader();
+  updateHeader();
 }
 
-// ─── Render Log tab ───────────────────────────────────────────────────────────
+// ─── Render log ────────────────────────────────────────────────────────────
 async function renderLog() {
   const container = $("log-content");
   if (!container) return;
-  container.innerHTML = `<div class="log-empty"><div class="spinner" style="margin:auto"></div></div>`;
+  container.innerHTML = `<div class="log-loading"><div class="spinner" style="border-top-color:var(--accent)"></div></div>`;
   try {
-    const data = await apiFetch("/api/v1/dmo/history?limit=30");
+    const data    = await apiFetch("/api/v1/dmo/history?limit=30");
     const entries = data.entries || [];
-    if (entries.length === 0) {
+    if (!entries.length) {
       container.innerHTML = `<div class="log-empty">No entries yet. Start tracking to build your log.</div>`;
       return;
     }
@@ -411,27 +392,26 @@ async function renderLog() {
         const tgt = (targets[a.key] ?? a.defaultMins) * 60;
         return s + Math.min(5, (entry[a.secsKey] || 0) / tgt * 5);
       }, 0);
+      const dots = ACTS.map(a =>
+        `<div class="log-dot${(entry[a.key] || (entry[a.secsKey] || 0) > 0) ? "" : " off"}" title="${a.label}"></div>`
+      ).join("");
       const row = document.createElement("div");
       row.className = "log-row";
-      const dots = ACTS.map(a =>
-        `<div class="log-dot${entry[a.key] || (entry[a.secsKey] || 0) > 0 ? "" : " off"}" title="${a.label}"></div>`
-      ).join("");
       row.innerHTML = `
         <span class="log-date">${fmtDate(entry.date)}</span>
-        <div class="log-acts">${dots}</div>
+        <div class="log-dots">${dots}</div>
         <span class="log-pts">${pts.toFixed(1)} pts</span>
-        <span class="log-time">${fmtMins(totalSecs)}</span>
-      `;
+        <span class="log-time">${fmtMins(totalSecs)}</span>`;
       list.appendChild(row);
     });
     container.innerHTML = "";
     container.appendChild(list);
-  } catch (e) {
+  } catch {
     container.innerHTML = `<div class="log-empty">Could not load log. Check your connection.</div>`;
   }
 }
 
-// ─── Render Settings tab ──────────────────────────────────────────────────────
+// ─── Render settings target rows ───────────────────────────────────────────
 function renderTargetRows() {
   const container = $("target-rows");
   if (!container) return;
@@ -441,59 +421,46 @@ function renderTargetRows() {
     row.className = "target-row";
     row.innerHTML = `
       <span class="target-act">${icon} ${label}</span>
-      <div style="display:flex;align-items:center;gap:4px">
+      <div class="target-right">
         <input type="number" class="target-input" id="target-${key}"
-          value="${targets[key] ?? defaultMins}" min="1" max="480" />
-        <span class="target-min">min</span>
-      </div>
-    `;
+               value="${targets[key] ?? defaultMins}" min="1" max="480" />
+        <span class="target-unit">min</span>
+      </div>`;
     container.appendChild(row);
   });
 }
 
 async function saveTargets() {
+  // Map extension keys → server setting field names
+  const MAP = {
+    visionMeditation: "visionTarget", personalDevelopment: "personalTarget",
+    expandSkills: "expandTarget",     execution: "executionTarget", connecting: "connectingTarget",
+  };
   const payload = {};
-  ACTS.forEach(({ key }) => {
+  ACTS.forEach(({ key, defaultMins }) => {
     const val = parseInt($(`target-${key}`)?.value, 10);
-    if (val > 0) payload[key + "Target"] = val; // server field names e.g. visionTarget
+    if (val > 0) { targets[key] = val; payload[MAP[key]] = val; }
+    else targets[key] = defaultMins;
   });
-  // Map to server field names
-  const serverPayload = {};
-  if (payload["visionMeditationTarget"])    serverPayload.visionTarget    = payload["visionMeditationTarget"];
-  if (payload["personalDevelopmentTarget"]) serverPayload.personalTarget  = payload["personalDevelopmentTarget"];
-  if (payload["expandSkillsTarget"])        serverPayload.expandTarget    = payload["expandSkillsTarget"];
-  if (payload["executionTarget"])           serverPayload.executionTarget  = payload["executionTarget"];
-  if (payload["connectingTarget"])          serverPayload.connectingTarget = payload["connectingTarget"];
-
   try {
-    await apiFetch("/api/dmo/settings", { method: "POST", body: JSON.stringify(serverPayload) });
-    // Update local targets
-    ACTS.forEach(({ key, defaultMins }) => {
-      const val = parseInt($(`target-${key}`)?.value, 10);
-      targets[key] = val > 0 ? val : defaultMins;
-    });
+    await apiFetch("/api/dmo/settings", { method: "POST", body: JSON.stringify(payload) });
     await chrome.storage.local.set({ targets });
     setStatus("Goals saved ✓", 2500);
-    // Re-render activities to show updated goals
     renderActivities();
-  } catch (e) {
-    setStatus("Save failed", 3000);
-  }
+  } catch { setStatus("Save failed", 3000); }
 }
 
-// ─── Load DMO data ────────────────────────────────────────────────────────────
+// ─── Load DMO ──────────────────────────────────────────────────────────────
 async function loadDMO() {
   try {
-    // Load server data + settings in parallel
     const [dmoData, settingsData] = await Promise.all([
       apiFetch("/api/v1/dmo"),
       apiFetch("/api/v1/dmo/settings").catch(() => null),
     ]);
 
-    todayDate = dmoData.date;
+    todayDate   = dmoData.date;
     serverEntry = dmoData.entry || null;
 
-    // Apply settings
     if (settingsData) {
       targets = {
         visionMeditation:    settingsData.visionTarget    ?? 30,
@@ -503,66 +470,50 @@ async function loadDMO() {
         connecting:          settingsData.connectingTarget?? 60,
       };
     } else {
-      // Use stored or defaults
-      const stored = await chrome.storage.local.get("targets");
-      targets = stored.targets || {
-        visionMeditation: 30, personalDevelopment: 30,
-        expandSkills: 60, execution: 60, connecting: 60,
-      };
+      const s = await chrome.storage.local.get("targets");
+      targets = s.targets || { visionMeditation:30, personalDevelopment:30, expandSkills:60, execution:60, connecting:60 };
     }
     await chrome.storage.local.set({ targets });
 
-    // Load persisted timer state (checks if same day)
     await loadPersisted(todayDate);
 
-    // Merge server entry into timer state for activities not yet locally tracked
+    // Seed timer state from server for activities not yet locally tracked
     if (serverEntry) {
       ACTS.forEach(({ key, secsKey }) => {
-        const localT = timers[key];
-        // Only use server data if no local timer in progress
-        if (!localT || localT.status === "idle") {
-          const serverSecs = serverEntry[secsKey] || 0;
-          const serverBool = serverEntry[key] || false;
-          if (serverSecs > 0 || serverBool) {
-            timers[key] = { status: "done", accumulatedSeconds: serverSecs, startedAt: null };
+        const local = timers[key];
+        if (!local || local.status === "idle") {
+          const srvSecs = serverEntry[secsKey] || 0;
+          const srvBool = serverEntry[key] || false;
+          if (srvSecs > 0 || srvBool) {
+            timers[key] = { status: "done", accumulatedSeconds: srvSecs, startedAt: null };
           }
         }
       });
-      // Merge notes (local wins if user typed something)
       if (!notesValue && serverEntry.notes) notesValue = serverEntry.notes;
     }
 
-    // Update streak display
     const streak = dmoData.streak?.currentStreak ?? dmoData.streak?.current ?? 0;
-    const el = $("streak-count");
-    if (el) el.textContent = streak;
+    const sc = $("streak-count");
+    if (sc) sc.textContent = streak;
+    const ds = $("date-sub");
+    if (ds) ds.textContent = fmtDate(todayDate);
 
-    // Date label
-    const dateEl = $("date-sub");
-    if (dateEl) dateEl.textContent = fmtDate(todayDate);
-
-    // Render
     renderActivities();
     renderTargetRows();
-
-    // Start tick if any timer is running
     if (ACTS.some(a => timers[a.key]?.status === "running")) startTick();
-
     showScreen("main");
   } catch (e) {
     if (e.status === 401 || e.status === 403) {
       await chrome.storage.local.remove("apiKey");
-      apiKey = null;
-      showScreen("setup");
+      apiKey = null; showScreen("setup");
     } else {
-      renderActivities();
-      showScreen("main");
-      setStatus("Could not load data", 4000);
+      renderActivities(); showScreen("main");
+      setStatus("Could not load — check connection", 5000);
     }
   }
 }
 
-// ─── Screen management ────────────────────────────────────────────────────────
+// ─── Screen management ─────────────────────────────────────────────────────
 function showScreen(name) {
   ["loading", "setup", "main"].forEach(s => {
     const el = $(`${s}-screen`);
@@ -571,29 +522,26 @@ function showScreen(name) {
   });
 }
 
-// ─── Tab management ───────────────────────────────────────────────────────────
-function switchTab(tabName) {
+// ─── Tab management ────────────────────────────────────────────────────────
+function switchTab(name) {
   document.querySelectorAll(".tab-btn").forEach(b =>
-    b.classList.toggle("active", b.dataset.tab === tabName));
+    b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p =>
-    p.classList.toggle("active", p.id === `tab-${tabName}`));
-  if (tabName === "log") renderLog();
-  if (tabName === "settings") renderTargetRows();
+    p.classList.toggle("active", p.id === `tab-${name}`));
+  if (name === "log")      renderLog();
+  if (name === "settings") renderTargetRows();
 }
 
-// ─── API key flow ──────────────────────────────────────────────────────────────
+// ─── API key validation ────────────────────────────────────────────────────
 async function validateAndSave(key, errorEl) {
   errorEl.style.display = "none";
   if (!key.startsWith("ftk_")) {
-    errorEl.textContent = "Key must start with ftk_";
-    errorEl.style.display = "block";
-    return;
+    errorEl.textContent = "Key must start with ftk_"; errorEl.style.display = "block"; return;
   }
   apiKey = key;
   try {
-    await apiFetch("/api/v1/dmo"); // validate
+    await apiFetch("/api/v1/dmo");
     await chrome.storage.local.set({ apiKey: key });
-    // Register for push notifications (best-effort)
     try {
       const sw = await navigator.serviceWorker.ready;
       if (sw.active) sw.active.postMessage({ type: "SUBSCRIBE_PUSH", apiKey: key });
@@ -602,16 +550,26 @@ async function validateAndSave(key, errorEl) {
   } catch (e) {
     apiKey = null;
     errorEl.textContent = (e.status === 401 || e.status === 403)
-      ? "Invalid API key. Check your Account page."
+      ? "Invalid API key — check your Account page."
       : `Connection error: ${e.message}`;
-    errorEl.style.display = "block";
-    showScreen("setup");
+    errorEl.style.display = "block"; showScreen("setup");
   }
 }
 
-// ─── Boot ─────────────────────────────────────────────────────────────────────
+// ─── Boot ──────────────────────────────────────────────────────────────────
 async function boot() {
   showScreen("loading");
+
+  // Load and apply saved theme
+  const stored = await chrome.storage.local.get(["apiKey", "theme", "targets"]);
+  applyTheme(stored.theme || "light");   // light is default
+
+  // Theme toggle
+  $("theme-btn").addEventListener("click", toggleTheme);
+
+  // Tabs
+  document.querySelectorAll(".tab-btn").forEach(b =>
+    b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
   // Setup screen
   $("save-key-btn").addEventListener("click", () =>
@@ -620,32 +578,30 @@ async function boot() {
     if (e.key === "Enter") $("save-key-btn").click();
   });
 
-  // Tabs
-  document.querySelectorAll(".tab-btn").forEach(b =>
-    b.addEventListener("click", () => switchTab(b.dataset.tab)));
-
-  // Settings tab wiring
+  // Settings tab
   $("update-key-btn").addEventListener("click", () =>
     validateAndSave($("settings-key-input").value.trim(), $("settings-error")));
   $("disconnect-btn").addEventListener("click", async () => {
     stopTick();
+    const savedTheme = currentTheme;
     await chrome.storage.local.clear();
+    await chrome.storage.local.set({ theme: savedTheme }); // keep theme pref
     apiKey = null; timers = {}; notesValue = ""; serverEntry = null;
     showScreen("setup");
   });
   $("save-targets-btn").addEventListener("click", saveTargets);
 
-  // Populate settings key field when tab opens
+  // Pre-fill key in settings tab when opened
   document.querySelector('[data-tab="settings"]').addEventListener("click", () => {
     const el = $("settings-key-input");
     if (el && apiKey) el.value = apiKey;
     $("settings-error").style.display = "none";
   });
 
-  // Load stored API key
-  const stored = await chrome.storage.local.get("apiKey");
+  // Load API key and go
   if (stored.apiKey) {
     apiKey = stored.apiKey;
+    if (stored.targets) targets = stored.targets;
     await loadDMO();
   } else {
     showScreen("setup");
