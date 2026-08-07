@@ -109,6 +109,19 @@ async function swipeAutoSave(dataUrl, title) {
   });
   if (!itemRes.ok) throw new Error(`Save failed (${itemRes.status})`);
   const { item } = await itemRes.json();
+
+  // Auto-generate share token so Recent Saves shows thumbnail + "Copy link" immediately
+  try {
+    const shareRes = await fetch(`${API_BASE}/api/v1/swipe/${item.id}/share`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}` },
+    });
+    if (shareRes.ok) {
+      const { token } = await shareRes.json();
+      item.shareToken = token;
+    }
+  } catch (_) {}
+
   return item;
 }
 

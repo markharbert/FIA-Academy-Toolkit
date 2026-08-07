@@ -1429,11 +1429,17 @@ async function swipeCaptureVisibleArea() {
     const { uploadURL, objectPath } = await apiFetch("/api/v1/swipe/request-upload-url", { method: "POST" });
     const blob = await (await fetch(dataUrl)).blob();
     await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": "image/png" }, body: blob });
-    await apiFetch("/api/v1/swipe", {
+    const { item: savedItem } = await apiFetch("/api/v1/swipe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "upload", title, imagePath: objectPath }),
     });
+
+    // Auto-generate share token so Recent Saves shows thumbnail + "Copy link" immediately
+    try {
+      const { token } = await apiFetch(`/api/v1/swipe/${savedItem.id}/share`, { method: "POST" });
+      savedItem.shareToken = token;
+    } catch (_) {}
 
     swipeEnableBtns();
     swipeShowStatus("✓ Saved!", 2500);
