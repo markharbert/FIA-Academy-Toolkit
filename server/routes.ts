@@ -17,7 +17,8 @@ import path from "path";
 import fs from "fs";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { pool } from "./db";
+import { pool, db } from "./db";
+import { sql } from "drizzle-orm";
 import { logUserAction, ActionLabels } from "./userActionLog";
 import * as emailTemplates from "./email-templates";
 import { processSession, subscribeToSession } from "./processing";
@@ -12126,6 +12127,104 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (err) {
       console.error("[v1] links delete error:", err);
       res.status(500).json({ message: "Failed to delete link" });
+    }
+  });
+
+  // ─── Chrome Extension: Push Subscriptions ────────────────────────────────
+  // Save or replace push subscription for the authenticated member
+  app.post("/api/extension/subscribe", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const { endpoint, keys } = req.body;
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        return res.status(400).json({ message: "Invalid subscription object" });
+      }
+      await db.execute(sql`
+        INSERT INTO extension_push_subscriptions (user_id, endpoint, p256dh, auth)
+        VALUES (${user.id}, ${endpoint}, ${keys.p256dh}, ${keys.auth})
+        ON CONFLICT (user_id) DO UPDATE
+          SET endpoint = EXCLUDED.endpoint,
+              p256dh   = EXCLUDED.p256dh,
+              auth     = EXCLUDED.auth,
+              created_at = CURRENT_TIMESTAMP
+      `);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[extension] subscribe error:", err);
+      res.status(500).json({ message: "Failed to save subscription" });
+    }
+  });
+
+  // Remove push subscription when user disconnects the extension
+  app.delete("/api/extension/unsubscribe", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      await db.execute(sql`DELETE FROM extension_push_subscriptions WHERE user_id = ${user.id}`);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[extension] unsubscribe error:", err);
+      res.status(500).json({ message: "Failed to remove subscription" });
+    }
+  });
+
+  // Admin: count of active extension subscribers
+  app.get("/api/admin/extension-stats", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const rows = await db.execute(sql`SELECT COUNT(*)::int AS count FROM extension_push_subscriptions`);
+      res.json({ subscribers: (rows.rows[0] as any).count ?? 0 });
+    } catch (err) {
+      console.error("[extension] stats error:", err);
+      res.status(500).json({ message: "Failed to load stats" });
+    }
+  });
+
+  // Admin: broadcast a Web Push notification to all extension subscribers
+  app.post("/api/admin/notify-extension", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { title, body } = req.body;
+      if (!title?.trim() || !body?.trim()) {
+        return res.status(400).json({ message: "title and body are required" });
+      }
+      const vapidPublicKey  = process.env.VAPID_PUBLIC_KEY;
+      const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+      const vapidContact    = process.env.VAPID_CONTACT || "mailto:admin@fearlessmarketinglab.com";
+      if (!vapidPublicKey || !vapidPrivateKey) {
+        return res.status(500).json({ message: "VAPID keys not configured" });
+      }
+
+      const webpush = await import("web-push");
+      webpush.default.setVapidDetails(vapidContact, vapidPublicKey, vapidPrivateKey);
+
+      const rows = await db.execute(sql`SELECT endpoint, p256dh, auth FROM extension_push_subscriptions`);
+      const subs = rows.rows as { endpoint: string; p256dh: string; auth: string }[];
+
+      const payload = JSON.stringify({ title: title.trim(), body: body.trim() });
+      let sent = 0, failed = 0, pruned = 0;
+
+      await Promise.allSettled(
+        subs.map(async (sub) => {
+          try {
+            await webpush.default.sendNotification(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+              payload,
+            );
+            sent++;
+          } catch (err: any) {
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              // Subscription expired — prune it
+              await db.execute(sql`DELETE FROM extension_push_subscriptions WHERE endpoint = ${sub.endpoint}`).catch(() => {});
+              pruned++;
+            } else {
+              failed++;
+            }
+          }
+        }),
+      );
+
+      res.json({ ok: true, sent, failed, pruned, total: subs.length });
+    } catch (err) {
+      console.error("[extension] notify error:", err);
+      res.status(500).json({ message: "Failed to send notifications" });
     }
   });
 

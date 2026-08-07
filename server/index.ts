@@ -817,6 +817,21 @@ async function runStartupMigrations() {
 
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_layout JSONB`);
     console.log("[startup] dashboard_layout migration complete");
+
+    // Chrome extension push notification subscriptions
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS extension_push_subscriptions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id)
+      )
+    `);
+    console.log("[startup] extension_push_subscriptions migration complete");
+
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

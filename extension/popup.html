@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FIA Toolkit</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 360px;
+      min-height: 200px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: hsl(230, 75%, 8%);
+      color: #fff;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid hsl(230, 45%, 18%);
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .logo {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, hsl(230,75%,40%), hsl(280,70%,50%));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; color: #fff;
+    }
+    .app-name { font-size: 14px; font-weight: 700; color: #fff; }
+    .streak-badge {
+      display: flex; align-items: center; gap: 5px;
+      background: hsl(230,45%,16%);
+      border: 1px solid hsl(230,45%,24%);
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 12px; font-weight: 600; color: hsl(40,90%,65%);
+    }
+    .gear-btn {
+      background: none; border: none; cursor: pointer;
+      color: hsl(230,30%,55%); padding: 4px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      transition: color 0.15s;
+    }
+    .gear-btn:hover { color: #fff; }
+
+    /* ── Date bar ── */
+    .date-bar {
+      padding: 8px 16px;
+      font-size: 11px; font-weight: 500;
+      color: hsl(230,30%,55%);
+      border-bottom: 1px solid hsl(230,45%,14%);
+    }
+
+    /* ── Activities ── */
+    .activities { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .activity-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s;
+      border: 1px solid transparent;
+    }
+    .activity-row:hover { background: hsl(230,45%,13%); }
+    .activity-row.checked {
+      background: hsl(230,55%,14%);
+      border-color: hsl(230,60%,30%);
+    }
+    .checkbox {
+      width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
+      border: 2px solid hsl(230,45%,35%);
+      background: transparent;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .activity-row.checked .checkbox {
+      background: linear-gradient(135deg, hsl(230,75%,50%), hsl(280,70%,55%));
+      border-color: transparent;
+    }
+    .checkmark { display: none; }
+    .activity-row.checked .checkmark { display: block; }
+    .activity-icon { font-size: 16px; }
+    .activity-label { font-size: 13px; font-weight: 500; color: hsl(230,20%,80%); flex: 1; }
+    .activity-row.checked .activity-label { color: #fff; }
+    .saving-dot { width: 6px; height: 6px; border-radius: 50%; background: hsl(140,60%,50%); opacity: 0; transition: opacity 0.2s; }
+    .saving-dot.visible { opacity: 1; }
+
+    /* ── Progress ── */
+    .progress-bar-wrap {
+      margin: 0 12px 10px;
+      background: hsl(230,45%,14%);
+      border-radius: 4px; overflow: hidden; height: 4px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, hsl(230,75%,50%), hsl(280,70%,55%));
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 10px 16px;
+      border-top: 1px solid hsl(230,45%,14%);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .open-link {
+      font-size: 11px; color: hsl(230,60%,60%);
+      text-decoration: none; font-weight: 500;
+    }
+    .open-link:hover { color: hsl(230,80%,75%); }
+    .status-text { font-size: 11px; color: hsl(230,30%,45%); }
+
+    /* ── Setup screen ── */
+    #setup-screen { padding: 20px 16px; display: none; flex-direction: column; gap: 16px; }
+    #setup-screen.active { display: flex; }
+    #main-screen { display: none; flex-direction: column; }
+    #main-screen.active { display: flex; }
+    #settings-screen { padding: 16px; display: none; flex-direction: column; gap: 12px; }
+    #settings-screen.active { display: flex; }
+
+    .setup-title { font-size: 15px; font-weight: 700; color: #fff; }
+    .setup-desc { font-size: 12px; color: hsl(230,30%,55%); line-height: 1.5; }
+    .setup-desc a { color: hsl(230,70%,65%); }
+    .input-label { font-size: 11px; font-weight: 600; color: hsl(230,30%,55%); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+    .text-input {
+      width: 100%; padding: 9px 12px; border-radius: 8px;
+      background: hsl(230,45%,13%); border: 1px solid hsl(230,45%,25%);
+      color: #fff; font-size: 13px; outline: none;
+      transition: border-color 0.15s;
+    }
+    .text-input:focus { border-color: hsl(230,75%,50%); }
+    .btn-primary {
+      padding: 9px 16px; border-radius: 8px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, hsl(230,75%,45%), hsl(280,70%,50%));
+      color: #fff; font-size: 13px; font-weight: 600;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost {
+      padding: 7px 12px; border-radius: 8px; border: 1px solid hsl(230,45%,25%);
+      background: transparent; color: hsl(230,30%,55%); font-size: 12px; cursor: pointer;
+    }
+    .btn-ghost:hover { border-color: hsl(230,45%,40%); color: #fff; }
+    .error-msg { font-size: 12px; color: hsl(0,70%,65%); }
+    .back-link { font-size: 12px; color: hsl(230,60%,60%); cursor: pointer; text-decoration: none; }
+    .back-link:hover { color: hsl(230,80%,75%); }
+    .settings-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+
+    /* ── Loading ── */
+    #loading-screen {
+      display: flex; align-items: center; justify-content: center;
+      height: 120px;
+    }
+    .spinner {
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 2px solid hsl(230,45%,20%);
+      border-top-color: hsl(230,75%,55%);
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading-screen"><div class="spinner"></div></div>
+
+<!-- Setup: enter API key -->
+<div id="setup-screen">
+  <div class="setup-title">Connect to FIA Toolkit</div>
+  <p class="setup-desc">
+    Enter your API key to start tracking your DMO from any page.
+    Generate one at <a href="https://toolkit.fearlessmarketinglab.com/account" target="_blank">toolkit.fearlessmarketinglab.com/account</a> → API Access.
+  </p>
+  <div>
+    <div class="input-label">API Key</div>
+    <input type="password" id="api-key-input" class="text-input" placeholder="ftk_…" autocomplete="off" />
+  </div>
+  <div id="setup-error" class="error-msg" style="display:none"></div>
+  <button id="save-key-btn" class="btn-primary">Connect</button>
+</div>
+
+<!-- Main: DMO tracker -->
+<div id="main-screen">
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">F</div>
+      <div class="app-name">DMO Tracker</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="streak-badge">
+        <span>🔥</span>
+        <span id="streak-count">0</span>
+      </div>
+      <button class="gear-btn" id="settings-btn" title="Settings">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+          <path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="date-bar" id="date-bar">Today</div>
+
+  <div id="activities" class="activities">
+    <!-- Populated by JS -->
+  </div>
+
+  <div class="progress-bar-wrap">
+    <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+  </div>
+
+  <div class="footer">
+    <a href="https://toolkit.fearlessmarketinglab.com/dmo-tracker" target="_blank" class="open-link">Open Full Tracker →</a>
+    <span class="status-text" id="save-status"></span>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="settings-screen">
+  <a class="back-link" id="back-btn">← Back</a>
+  <div class="settings-title">Settings</div>
+  <div>
+    <div class="input-label">API Key</div>
+    <input type="password" id="settings-key-input" class="text-input" placeholder="ftk_…" />
+  </div>
+  <div id="settings-error" class="error-msg" style="display:none"></div>
+  <button id="update-key-btn" class="btn-primary">Update Key</button>
+  <button id="disconnect-btn" class="btn-ghost">Disconnect & clear data</button>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

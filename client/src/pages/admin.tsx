@@ -2775,6 +2775,100 @@ function AnnouncementCard({
   );
 }
 
+// ─── Extension Broadcast Notifications ───────────────────────────────────────
+function ExtensionNotificationCard() {
+  const { toast } = useToast();
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+
+  const { data: stats } = useQuery<{ subscribers: number }>({
+    queryKey: ["/api/admin/extension-stats"],
+    refetchInterval: 30_000,
+  });
+
+  const subscribers = stats?.subscribers ?? 0;
+
+  async function sendNotification() {
+    setSending(true);
+    setConfirm(false);
+    try {
+      const res = await apiRequest("POST", "/api/admin/notify-extension", { title, body });
+      toast({
+        title: `Sent to ${res.sent} member${res.sent !== 1 ? "s" : ""}`,
+        description: res.failed > 0 ? `${res.failed} failed` : undefined,
+      });
+      setTitle("");
+      setBody("");
+    } catch (err: any) {
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Card data-testid="card-extension-notify">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Smartphone className="h-4 w-4 text-muted-foreground" />
+          <div className="flex-1">
+            <CardTitle className="text-base">Extension Broadcast</CardTitle>
+            <CardDescription className="text-sm mt-0.5">
+              Send a browser notification to every member who has the FIA Toolkit Chrome extension installed.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-muted border border-border text-muted-foreground">
+            <Bell className="h-3 w-3" />
+            {subscribers} subscriber{subscribers !== 1 ? "s" : ""}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Title</label>
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. New feature available"
+            maxLength={60}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Message</label>
+          <Textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Write your message to members…"
+            rows={3}
+            maxLength={200}
+          />
+          <p className="text-xs text-muted-foreground text-right">{body.length}/200</p>
+        </div>
+        {!confirm ? (
+          <Button
+            size="sm"
+            disabled={!title.trim() || !body.trim() || sending || subscribers === 0}
+            onClick={() => setConfirm(true)}
+          >
+            <Send className="h-3.5 w-3.5 mr-1.5" />
+            {subscribers === 0 ? "No subscribers yet" : `Send to ${subscribers} member${subscribers !== 1 ? "s" : ""}`}
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={sendNotification} disabled={sending}>
+              {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+              {sending ? "Sending…" : "Confirm Send"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)} disabled={sending}>Cancel</Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -4256,6 +4350,7 @@ export default function AdminPage() {
 
         <TabsContent value="email-templates" className="space-y-6">
           <EmailSenderCard />
+          <ExtensionNotificationCard />
           <EmailTemplatesTab />
         </TabsContent>
 

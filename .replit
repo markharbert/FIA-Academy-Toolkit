@@ -47,6 +47,9 @@ integrations = ["javascript_database:1.0.0", "javascript_gemini_ai_integrations:
 [userenv.shared]
 SUPER_ADMIN_EMAILS = "mh@markharbert.com"
 APP_BASE_URL = "https://toolkit.fearlessmarketinglab.com"
+VAPID_CONTACT = "mailto:admin@fearlessmarketinglab.com"
+VAPID_PRIVATE_KEY = "c4aqxgX35N_-3WTSY66GigQ_M3Ro7Ydxp9-VJRTX_5o"
+VAPID_PUBLIC_KEY = "BPdIbvBytx7rxn5z3S3QJ2vI0GhB-PTDrtKpnpyyMa52g_nGrS7MCxYnUpbXEUMGPosBYYFydnRbXFm3rmnRBZE"
 
 [postMerge]
 path = "scripts/post-merge.sh"
