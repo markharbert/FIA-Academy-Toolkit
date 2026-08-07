@@ -131,6 +131,21 @@ export async function sendWelcomeEmail(params: {
   }
 }
 
+export async function sendMembershipLapsedEmail(params: {
+  email: string;
+  firstName: string | null;
+}): Promise<boolean> {
+  const rendered = emailTemplates.membershipLapsedEmail({ firstName: params.firstName, email: params.email });
+  try {
+    await sendEmail({ to: params.email, subject: rendered.subject, html: rendered.html, text: rendered.text });
+    console.log(`[Email] Membership-lapsed email sent to ${params.email}`);
+    return true;
+  } catch (error) {
+    console.error("[Email] Failed to send membership-lapsed email:", error);
+    return false;
+  }
+}
+
 export function isEmailConfigured(): boolean {
   return !!process.env.SENDGRID_API_TOKEN;
 }

@@ -858,3 +858,35 @@ export function magicLinkLoginEmail(params: {
 
   return { subject, html: wrap(subject, body, resources), text };
 }
+
+export function membershipLapsedEmail(params: {
+  firstName: string | null;
+  email: string;
+}): { subject: string; html: string; text: string } {
+  const name = params.firstName || "there";
+  const subject = "Your Academy Toolkit access has been paused";
+
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hi ${name},</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+      We noticed your <strong>Fearless Influencer Academy</strong> membership is no longer active,
+      so your Academy Toolkit access has been paused.
+    </p>
+    <div style="margin:0 0 24px;padding:16px 20px;background:#fef2f2;border-left:3px solid #ef4444;border-radius:0 8px 8px 0;">
+      <p style="margin:0;font-size:14px;color:#7f1d1d;line-height:1.6;">
+        Your account is currently <strong>disabled</strong>. Any active sessions have been signed out.
+      </p>
+    </div>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+      If you believe this is a mistake — for example, if a payment recently went through — your membership
+      may not have synced yet. Renewing or reactivating through ClickFunnels will automatically restore your
+      Toolkit access within a few minutes.
+    </p>
+    <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6;">
+      Questions? Reply to this email and we'll help sort it out.
+    </p>`;
+
+  const text = `Hi ${name},\n\nYour Fearless Influencer Academy membership is no longer active, so your Academy Toolkit access has been paused and your account has been disabled.\n\nIf you believe this is a mistake — for example if a payment recently went through — renewing or reactivating through ClickFunnels will automatically restore your access.\n\nQuestions? Reply to this email and we'll help.`;
+
+  return { subject, html: wrap(subject, body), text };
+}

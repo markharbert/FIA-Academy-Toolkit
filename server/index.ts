@@ -818,6 +818,14 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS dashboard_layout JSONB`);
     console.log("[startup] dashboard_layout migration complete");
 
+    // CF grace period and revocation columns (may be absent on older DBs)
+    await db.execute(sql`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS cf_revoked_grace_until TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS cf_revoked_at TIMESTAMP
+    `);
+    console.log("[startup] users cf_revoked_grace_until + cf_revoked_at migration complete");
+
     // Chrome extension push notification subscriptions
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS extension_push_subscriptions (

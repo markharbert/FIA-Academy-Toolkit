@@ -160,6 +160,9 @@ export interface IStorage {
   getCfEnrolledUsers(): Promise<{ enrolledCount: number; revokedCount: number }>;
   getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>>;
 
+  /** Returns non-admin accounts whose grace period has expired but isDisabled is still false. */
+  getUsersWithExpiredGracePeriod(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>>>;
+
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
   getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }>;
   setCfButtonSettings(settings: { text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }): Promise<void>;
@@ -1048,6 +1051,23 @@ export class DatabaseStorage implements IStorage {
     }
 
     return query.orderBy(desc(users.cfEnrolledAt));
+  }
+
+  async getUsersWithExpiredGracePeriod(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>>> {
+    const now = new Date();
+    const rows = await db
+      .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(
+        and(
+          eq(users.cfEnrolled, false),
+          eq(users.isDisabled, false),
+          eq(users.isAdmin, false),
+          sql`${users.cfRevokedGraceUntil} IS NOT NULL`,
+          lt(users.cfRevokedGraceUntil, now),
+        )
+      );
+    return rows;
   }
 
   async getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>> {

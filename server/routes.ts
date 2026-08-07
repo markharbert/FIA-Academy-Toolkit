@@ -12,7 +12,7 @@ import multer from "multer";
 import rateLimit from "express-rate-limit";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { sendPasswordResetEmail, sendWorkspaceInviteEmail, sendWelcomeEmail } from "./email";
+import { sendPasswordResetEmail, sendWorkspaceInviteEmail, sendWelcomeEmail, sendMembershipLapsedEmail, isEmailConfigured } from "./email";
 import path from "path";
 import fs from "fs";
 import session from "express-session";
@@ -12337,6 +12337,44 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       res.status(500).json({ message: "Failed to send notifications" });
     }
   });
+
+  // ── Hourly sweep: disable accounts whose CF grace period has expired ─────────
+  // When a revoke webhook fires, members get a 48-hour grace window in case
+  // their payment retry succeeds. If it doesn't, `isDisabled` is never set to
+  // true automatically, so the admin panel never reflects the real state.
+  // This job corrects that by scanning for cfEnrolled=false users whose
+  // cfRevokedGraceUntil has passed and who are still not flagged as disabled.
+  async function runGracePeriodExpirySweep() {
+    if (!process.env.CF_API_TOKEN && !process.env.CF_COURSE_ID) {
+      // CF not configured — nothing to do
+      return;
+    }
+    try {
+      const expired = await storage.getUsersWithExpiredGracePeriod();
+      if (expired.length === 0) return;
+
+      console.log(`[GracePeriodSweep] Found ${expired.length} account(s) with expired grace period — disabling`);
+      for (const user of expired) {
+        try {
+          await storage.updateUser(user.id, { isDisabled: true });
+          console.log(`[GracePeriodSweep] Disabled account: ${user.email}`);
+          // Send a lapsed-membership notification if email is configured
+          if (user.email && isEmailConfigured()) {
+            await sendMembershipLapsedEmail({ email: user.email, firstName: user.firstName ?? null });
+          }
+        } catch (userErr) {
+          console.warn(`[GracePeriodSweep] Failed to process user ${user.id}:`, userErr);
+        }
+      }
+    } catch (sweepErr) {
+      console.error("[GracePeriodSweep] Sweep error:", sweepErr);
+    }
+  }
+
+  // Run once at startup (catches anything that expired while the server was down)
+  // then repeat every hour.
+  runGracePeriodExpirySweep().catch(() => {});
+  setInterval(runGracePeriodExpirySweep, 60 * 60 * 1000); // every hour
 
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
