@@ -25,7 +25,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from "date-fns";
 
 // ---- Types ----
-type PromoLink = { title: string; url: string; description?: string };
+type PromoLink = { title: string; url: string; description?: string; emoji?: string };
+type AffiliateLink = {
+  id: string;
+  title: string;
+  url: string;
+  description: string | null;
+  category: string | null;
+  emoji: string;
+  isActive: boolean;
+  sortOrder: number;
+};
 type SwipeItem = {
   id: string;
   userId: string;
@@ -347,116 +357,144 @@ function EditDialog({ item, onClose }: { item: SwipeItem; onClose: () => void })
   );
 }
 
-// ---- Account-level Promotional Links Manager ----
-function PromoLinksManager() {
+// ---- Promotional Links Tab ----
+function PromoLinksTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [newLink, setNewLink] = useState({ title: "", url: "", description: "" });
 
-  const { data, isLoading } = useQuery<{ promoLinks: PromoLink[] }>({
+  const { data: linksData, isLoading: linksLoading } = useQuery<AffiliateLink[]>({
+    queryKey: ["/api/affiliate-links"],
+    queryFn: () => apiFetch("/api/affiliate-links"),
+  });
+
+  const { data: promoData, isLoading: promoLoading } = useQuery<{ promoLinkIds: string[] }>({
     queryKey: ["/api/swipe/promo-links"],
     queryFn: () => apiFetch("/api/swipe/promo-links"),
   });
 
-  const links = data?.promoLinks ?? [];
-
   const saveMutation = useMutation({
-    mutationFn: (promoLinks: PromoLink[]) => apiFetch("/api/swipe/promo-links", {
+    mutationFn: (promoLinkIds: string[]) => apiFetch("/api/swipe/promo-links", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ promoLinks }),
+      body: JSON.stringify({ promoLinkIds }),
     }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/swipe/promo-links"] });
-      toast({ title: "Promotional links saved" });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/swipe/promo-links"] }),
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  function addLink() {
-    if (!newLink.title.trim() || !newLink.url.trim()) return;
-    saveMutation.mutate([...links, { ...newLink }]);
-    setNewLink({ title: "", url: "", description: "" });
+  const allLinks = linksData ?? [];
+  const promoLinkIds = promoData?.promoLinkIds ?? [];
+  const promoSet = new Set(promoLinkIds);
+
+  // Ordered list of added links (preserves user's add order)
+  const addedLinks = promoLinkIds
+    .map(id => allLinks.find(l => l.id === id))
+    .filter(Boolean) as AffiliateLink[];
+
+  // Active links from library not yet added
+  const availableLinks = allLinks.filter(l => l.isActive && !promoSet.has(l.id));
+
+  function addLink(id: string) {
+    saveMutation.mutate([...promoLinkIds, id]);
   }
 
-  function removeLink(i: number) {
-    saveMutation.mutate(links.filter((_, idx) => idx !== i));
+  function removeLink(id: string) {
+    saveMutation.mutate(promoLinkIds.filter(lid => lid !== id));
+  }
+
+  if (linksLoading || promoLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   return (
-    <div className="border rounded-lg bg-card p-5 space-y-4">
-      <div className="flex items-start gap-3">
+    <div className="space-y-8">
+      {/* Explainer */}
+      <div className="rounded-lg border bg-card px-5 py-4 flex items-start gap-3">
         <Link2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-        <div>
-          <h3 className="font-semibold leading-tight">Promotional Links</h3>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            These links appear on <strong>every</strong> share page in your account. Add them once here — update them anytime and they change everywhere instantly.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Pick links from your library. They appear on <strong className="text-foreground">every</strong> share page
+          in your account — change them here and every page updates instantly.
+        </p>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {links.length > 0 ? (
-            <div className="space-y-2">
-              {links.map((pl, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-md border px-3 py-2 bg-muted/30">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{pl.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{pl.url}</p>
-                    {pl.description && <p className="text-xs text-muted-foreground/70 truncate">{pl.description}</p>}
-                  </div>
-                  <button
-                    onClick={() => removeLink(i)}
-                    disabled={saveMutation.isPending}
-                    className="text-muted-foreground hover:text-destructive mt-0.5 disabled:opacity-40"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">No promotional links yet — add one below.</p>
-          )}
-
-          <div className="rounded-md border p-3 space-y-2 bg-muted/10">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add a Link</p>
-            <Input
-              placeholder="Title (e.g. Get My Free Course)"
-              value={newLink.title}
-              onChange={e => setNewLink(p => ({ ...p, title: e.target.value }))}
-            />
-            <Input
-              type="url"
-              placeholder="https://…"
-              value={newLink.url}
-              onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))}
-            />
-            <Input
-              placeholder="Short description (optional)"
-              value={newLink.description}
-              onChange={e => setNewLink(p => ({ ...p, description: e.target.value }))}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={addLink}
-              disabled={saveMutation.isPending || !newLink.title.trim() || !newLink.url.trim()}
-              className="w-full"
-            >
-              {saveMutation.isPending
-                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                : <Plus className="h-4 w-4 mr-1" />}
-              Add Link
-            </Button>
+      {/* Currently on share pages */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+          On your share pages {addedLinks.length > 0 && `· ${addedLinks.length}`}
+        </p>
+        {addedLinks.length === 0 ? (
+          <div className="rounded-lg border border-dashed flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
+            <Link2 className="h-7 w-7 opacity-25" />
+            <p className="text-sm">Nothing added yet — pick from your library below.</p>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="space-y-2">
+            {addedLinks.map(link => (
+              <div key={link.id}
+                className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
+                <span className="text-lg shrink-0">{link.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{link.title}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {link.url.replace(/^https?:\/\//, "")}
+                  </p>
+                </div>
+                <Button size="sm" variant="ghost"
+                  className="text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => removeLink(link.id)}
+                  disabled={saveMutation.isPending}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Link library picker */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+          Your link library {availableLinks.length > 0 && `· ${availableLinks.length} available`}
+        </p>
+        {allLinks.length === 0 ? (
+          <div className="rounded-lg border border-dashed flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
+            <p className="text-sm">You don't have any links in your library yet.</p>
+            <a href="/links" className="text-primary text-sm hover:underline">Go to Link Library →</a>
+          </div>
+        ) : availableLinks.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">All active links are already on your share pages.</p>
+        ) : (
+          <div className="space-y-2">
+            {availableLinks.map(link => (
+              <div key={link.id}
+                className="flex items-center gap-3 rounded-lg border bg-muted/20 px-4 py-3">
+                <span className="text-lg shrink-0">{link.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{link.title}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {link.url.replace(/^https?:\/\//, "")}
+                  </p>
+                  {link.description && (
+                    <p className="text-xs text-muted-foreground/60 truncate">{link.description}</p>
+                  )}
+                </div>
+                {link.category && (
+                  <Badge variant="outline" className="text-xs shrink-0">{link.category}</Badge>
+                )}
+                <Button size="sm" variant="outline" className="shrink-0 gap-1.5"
+                  onClick={() => addLink(link.id)}
+                  disabled={saveMutation.isPending}>
+                  <Plus className="h-3.5 w-3.5" /> Add
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -579,6 +617,7 @@ export default function SwipeFilePage() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
+  const [activeTab, setActiveTab] = useState("swipe");
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<SwipeItem | null>(null);
   const [deleteItem, setDeleteItem] = useState<SwipeItem | null>(null);
@@ -636,9 +675,11 @@ export default function SwipeFilePage() {
                 Save screenshots and text snippets from around the web. Share them with a link that showcases your offers.
               </p>
             </div>
-            <Button onClick={() => setAddOpen(true)} className="gap-2 shrink-0">
-              <Plus className="h-4 w-4" /> Add Item
-            </Button>
+            {activeTab === "swipe" && (
+              <Button onClick={() => setAddOpen(true)} className="gap-2 shrink-0">
+                <Plus className="h-4 w-4" /> Add Item
+              </Button>
+            )}
           </div>
 
           {/* Stats */}
@@ -658,69 +699,96 @@ export default function SwipeFilePage() {
         </div>
       </div>
 
-      {/* Promotional Links Manager */}
-      <div className="max-w-6xl mx-auto px-6 pt-6">
-        <PromoLinksManager />
-      </div>
-
-      {/* Toolbar */}
-      <div className="max-w-6xl mx-auto px-6 py-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <Input
-            placeholder="Search swipe file…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="max-w-xs"
-          />
-          <div className="flex gap-1">
-            {(["all", "upload", "snippet"] as const).map(f => (
-              <Button key={f} size="sm" variant={typeFilter === f ? "default" : "outline"}
-                onClick={() => setTypeFilter(f)} className="capitalize gap-1.5">
-                {f === "all" ? "All" : f === "upload" ? <><Camera className="h-3.5 w-3.5" />Images</> : <><FileText className="h-3.5 w-3.5" />Snippets</>}
-              </Button>
-            ))}
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-0">
+        <div className="border-b bg-card">
+          <div className="max-w-6xl mx-auto px-6">
+            <TabsList className="h-auto bg-transparent p-0 gap-0 rounded-none">
+              <TabsTrigger
+                value="swipe"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium gap-2"
+              >
+                <Camera className="h-4 w-4" /> Swipe File
+              </TabsTrigger>
+              <TabsTrigger
+                value="promo"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium gap-2"
+              >
+                <Link2 className="h-4 w-4" /> Promotional Links
+              </TabsTrigger>
+            </TabsList>
           </div>
         </div>
-      </div>
 
-      {/* Grid */}
-      <div className="max-w-6xl mx-auto px-6 pb-12">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
-            <div className="rounded-full bg-muted p-5">
-              <Camera className="h-10 w-10 text-muted-foreground/50" />
+        {/* Swipe File Tab */}
+        <TabsContent value="swipe" className="mt-0 focus-visible:outline-none">
+          {/* Toolbar */}
+          <div className="max-w-6xl mx-auto px-6 py-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Input
+                placeholder="Search swipe file…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="max-w-xs"
+              />
+              <div className="flex gap-1">
+                {(["all", "upload", "snippet"] as const).map(f => (
+                  <Button key={f} size="sm" variant={typeFilter === f ? "default" : "outline"}
+                    onClick={() => setTypeFilter(f)} className="capitalize gap-1.5">
+                    {f === "all" ? "All" : f === "upload" ? <><Camera className="h-3.5 w-3.5" />Images</> : <><FileText className="h-3.5 w-3.5" />Snippets</>}
+                  </Button>
+                ))}
+              </div>
             </div>
-            <h3 className="font-semibold text-lg">
-              {items.length === 0 ? "Your swipe file is empty" : "No items match your filters"}
-            </h3>
-            <p className="text-muted-foreground text-sm max-w-sm">
-              {items.length === 0
-                ? "Save screenshots and text snippets from around the web. Add your promo links and share with anyone."
-                : "Try a different search term or filter."}
-            </p>
-            {items.length === 0 && (
-              <Button onClick={() => setAddOpen(true)} className="mt-2 gap-2">
-                <Plus className="h-4 w-4" /> Add Your First Item
-              </Button>
+          </div>
+
+          {/* Grid */}
+          <div className="max-w-6xl mx-auto px-6 pb-12">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
+                <div className="rounded-full bg-muted p-5">
+                  <Camera className="h-10 w-10 text-muted-foreground/50" />
+                </div>
+                <h3 className="font-semibold text-lg">
+                  {items.length === 0 ? "Your swipe file is empty" : "No items match your filters"}
+                </h3>
+                <p className="text-muted-foreground text-sm max-w-sm">
+                  {items.length === 0
+                    ? "Save screenshots and text snippets from around the web. Share them with a link that showcases your offers."
+                    : "Try a different search term or filter."}
+                </p>
+                {items.length === 0 && (
+                  <Button onClick={() => setAddOpen(true)} className="mt-2 gap-2">
+                    <Plus className="h-4 w-4" /> Add Your First Item
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filtered.map(item => (
+                  <SwipeCard
+                    key={item.id}
+                    item={item}
+                    onEdit={() => setEditItem(item)}
+                    onDelete={() => setDeleteItem(item)}
+                  />
+                ))}
+              </div>
             )}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map(item => (
-              <SwipeCard
-                key={item.id}
-                item={item}
-                onEdit={() => setEditItem(item)}
-                onDelete={() => setDeleteItem(item)}
-              />
-            ))}
+        </TabsContent>
+
+        {/* Promotional Links Tab */}
+        <TabsContent value="promo" className="mt-0 focus-visible:outline-none">
+          <div className="max-w-3xl mx-auto px-6 py-8">
+            <PromoLinksTab />
           </div>
-        )}
-      </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Dialogs */}
       <AddItemDialog open={addOpen} onClose={() => setAddOpen(false)} />

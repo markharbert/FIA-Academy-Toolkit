@@ -12319,26 +12319,26 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
 
   // ---- Account-level Promotional Links ----
 
-  // Get current user's account-level promo links
+  // Get current user's promotional link IDs (references into their link library)
   app.get("/api/swipe/promo-links", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
       const user = await storage.getUser(userId);
-      res.json({ promoLinks: user?.swipePromoLinks ?? [] });
+      res.json({ promoLinkIds: user?.swipePromoLinks ?? [] });
     } catch (err) {
       console.error("[swipe] promo-links get error:", err);
       res.status(500).json({ message: "Failed to load promo links" });
     }
   });
 
-  // Replace current user's account-level promo links
+  // Replace current user's promotional link IDs (ordered list of affiliate link IDs)
   app.put("/api/swipe/promo-links", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const { promoLinks } = req.body;
-      if (!Array.isArray(promoLinks)) return res.status(400).json({ message: "promoLinks must be an array" });
-      await storage.updateUser(userId, { swipePromoLinks: promoLinks });
-      res.json({ promoLinks });
+      const { promoLinkIds } = req.body;
+      if (!Array.isArray(promoLinkIds)) return res.status(400).json({ message: "promoLinkIds must be an array" });
+      await storage.updateUser(userId, { swipePromoLinks: promoLinkIds });
+      res.json({ promoLinkIds });
     } catch (err) {
       console.error("[swipe] promo-links update error:", err);
       res.status(500).json({ message: "Failed to update promo links" });
@@ -12353,10 +12353,19 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const item = await storage.getSwipeItemByToken(req.params.token);
       if (!item) return res.status(404).json({ message: "Not found or link has been revoked" });
       await storage.incrementSwipeItemViewCount(req.params.token);
-      // Attach account-level promo links from the item owner
+      // Resolve owner's promotional link IDs → full affiliate link data
       const owner = await storage.getUser(item.userId);
-      const promoLinks = owner?.swipePromoLinks ?? [];
-      // Return safe subset (no userId, replace per-item promo links with account-level ones)
+      const promoLinkIds = (owner?.swipePromoLinks ?? []) as string[];
+      let promoLinks: object[] = [];
+      if (promoLinkIds.length > 0) {
+        const allLinks = await storage.getAffiliateLinks(item.userId, {});
+        const byId = new Map(allLinks.map(l => [l.id, l]));
+        promoLinks = promoLinkIds
+          .map(id => byId.get(id))
+          .filter(l => l && l.isActive)
+          .map(l => ({ title: l!.title, url: l!.url, description: l!.description, emoji: l!.emoji }));
+      }
+      // Return safe subset (no userId, replace per-item promo_links with account-level ones)
       const { userId: _uid, promoLinks: _itemPromo, ...safe } = item;
       res.json({ item: { ...safe, promoLinks } });
     } catch (err) {

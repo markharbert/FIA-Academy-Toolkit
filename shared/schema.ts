@@ -43,7 +43,7 @@ export const users = pgTable("users", {
   cfRevokedGraceUntil: timestamp("cf_revoked_grace_until"),
   icalToken: text("ical_token"),
   dashboardLayout: jsonb("dashboard_layout"),
-  swipePromoLinks: jsonb("swipe_promo_links").$type<{ title: string; url: string; description?: string }[]>().default(sql`'[]'::jsonb`),
+  swipePromoLinks: jsonb("swipe_promo_links").$type<string[]>().default(sql`'[]'::jsonb`),
 });
 
 // User identities table for OAuth providers (supports multiple providers per user)
