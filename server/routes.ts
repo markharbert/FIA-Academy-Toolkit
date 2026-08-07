@@ -10367,6 +10367,17 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  app.get("/api/v1/dmo/settings", requireApiKey, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).apiUser;
+      const settings = await storage.getDmoSettings(user.id);
+      res.json(settings);
+    } catch (err) {
+      console.error("[v1] dmo settings error:", err);
+      res.status(500).json({ message: "Failed to load DMO settings" });
+    }
+  });
+
   app.get("/api/v1/dmo/history", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;

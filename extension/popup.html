@@ -2,240 +2,357 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FIA Toolkit</title>
+  <title>FIA DMO Tracker</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      width: 360px;
-      min-height: 200px;
+      width: 420px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: hsl(230, 75%, 8%);
       color: #fff;
+      overflow-x: hidden;
     }
 
-    /* ── Header ── */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 16px 12px;
-      border-bottom: 1px solid hsl(230, 45%, 18%);
-    }
-    .header-left { display: flex; align-items: center; gap: 10px; }
-    .logo {
-      width: 30px; height: 30px;
-      background: linear-gradient(135deg, hsl(230,75%,40%), hsl(280,70%,50%));
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 800; color: #fff;
-    }
-    .app-name { font-size: 14px; font-weight: 700; color: #fff; }
-    .streak-badge {
-      display: flex; align-items: center; gap: 5px;
-      background: hsl(230,45%,16%);
-      border: 1px solid hsl(230,45%,24%);
-      border-radius: 20px;
-      padding: 4px 10px;
-      font-size: 12px; font-weight: 600; color: hsl(40,90%,65%);
-    }
-    .gear-btn {
-      background: none; border: none; cursor: pointer;
-      color: hsl(230,30%,55%); padding: 4px; border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      transition: color 0.15s;
-    }
-    .gear-btn:hover { color: #fff; }
+    /* ── Screens ─────────────────────────────────────────────────────── */
+    .screen { display: none; flex-direction: column; }
+    .screen.active { display: flex; }
+    #loading-screen { align-items: center; justify-content: center; min-height: 180px; }
 
-    /* ── Date bar ── */
-    .date-bar {
-      padding: 8px 16px;
-      font-size: 11px; font-weight: 500;
-      color: hsl(230,30%,55%);
-      border-bottom: 1px solid hsl(230,45%,14%);
+    .spinner {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 2px solid hsl(230,45%,20%);
+      border-top-color: hsl(230,75%,55%);
+      animation: spin 0.7s linear infinite;
     }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Activities ── */
-    .activities { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
-    .activity-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 9px 10px;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: background 0.15s;
-      border: 1px solid transparent;
-    }
-    .activity-row:hover { background: hsl(230,45%,13%); }
-    .activity-row.checked {
-      background: hsl(230,55%,14%);
-      border-color: hsl(230,60%,30%);
-    }
-    .checkbox {
-      width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
-      border: 2px solid hsl(230,45%,35%);
-      background: transparent;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.15s;
-    }
-    .activity-row.checked .checkbox {
-      background: linear-gradient(135deg, hsl(230,75%,50%), hsl(280,70%,55%));
-      border-color: transparent;
-    }
-    .checkmark { display: none; }
-    .activity-row.checked .checkmark { display: block; }
-    .activity-icon { font-size: 16px; }
-    .activity-label { font-size: 13px; font-weight: 500; color: hsl(230,20%,80%); flex: 1; }
-    .activity-row.checked .activity-label { color: #fff; }
-    .saving-dot { width: 6px; height: 6px; border-radius: 50%; background: hsl(140,60%,50%); opacity: 0; transition: opacity 0.2s; }
-    .saving-dot.visible { opacity: 1; }
-
-    /* ── Progress ── */
-    .progress-bar-wrap {
-      margin: 0 12px 10px;
-      background: hsl(230,45%,14%);
-      border-radius: 4px; overflow: hidden; height: 4px;
-    }
-    .progress-bar {
-      height: 100%;
-      background: linear-gradient(90deg, hsl(230,75%,50%), hsl(280,70%,55%));
-      border-radius: 4px;
-      transition: width 0.3s ease;
-    }
-
-    /* ── Footer ── */
-    .footer {
-      padding: 10px 16px;
-      border-top: 1px solid hsl(230,45%,14%);
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .open-link {
-      font-size: 11px; color: hsl(230,60%,60%);
-      text-decoration: none; font-weight: 500;
-    }
-    .open-link:hover { color: hsl(230,80%,75%); }
-    .status-text { font-size: 11px; color: hsl(230,30%,45%); }
-
-    /* ── Setup screen ── */
-    #setup-screen { padding: 20px 16px; display: none; flex-direction: column; gap: 16px; }
-    #setup-screen.active { display: flex; }
-    #main-screen { display: none; flex-direction: column; }
-    #main-screen.active { display: flex; }
-    #settings-screen { padding: 16px; display: none; flex-direction: column; gap: 12px; }
-    #settings-screen.active { display: flex; }
-
-    .setup-title { font-size: 15px; font-weight: 700; color: #fff; }
-    .setup-desc { font-size: 12px; color: hsl(230,30%,55%); line-height: 1.5; }
+    /* ── Setup ───────────────────────────────────────────────────────── */
+    #setup-screen { padding: 24px 20px; gap: 16px; }
+    .setup-title { font-size: 16px; font-weight: 700; }
+    .setup-desc { font-size: 12px; color: hsl(230,30%,55%); line-height: 1.6; }
     .setup-desc a { color: hsl(230,70%,65%); }
-    .input-label { font-size: 11px; font-weight: 600; color: hsl(230,30%,55%); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+
+    /* ── Shared inputs/buttons ───────────────────────────────────────── */
+    .field-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .06em; color: hsl(230,30%,50%); margin-bottom: 5px;
+    }
     .text-input {
       width: 100%; padding: 9px 12px; border-radius: 8px;
       background: hsl(230,45%,13%); border: 1px solid hsl(230,45%,25%);
       color: #fff; font-size: 13px; outline: none;
-      transition: border-color 0.15s;
     }
     .text-input:focus { border-color: hsl(230,75%,50%); }
     .btn-primary {
       padding: 9px 16px; border-radius: 8px; border: none; cursor: pointer;
       background: linear-gradient(135deg, hsl(230,75%,45%), hsl(280,70%,50%));
       color: #fff; font-size: 13px; font-weight: 600;
-      transition: opacity 0.15s;
+      transition: opacity .15s; width: 100%;
     }
-    .btn-primary:hover { opacity: 0.9; }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary:hover { opacity: .9; }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
     .btn-ghost {
-      padding: 7px 12px; border-radius: 8px; border: 1px solid hsl(230,45%,25%);
-      background: transparent; color: hsl(230,30%,55%); font-size: 12px; cursor: pointer;
+      padding: 8px 14px; border-radius: 8px;
+      border: 1px solid hsl(230,45%,25%);
+      background: transparent; color: hsl(230,30%,55%);
+      font-size: 12px; cursor: pointer; width: 100%;
     }
     .btn-ghost:hover { border-color: hsl(230,45%,40%); color: #fff; }
     .error-msg { font-size: 12px; color: hsl(0,70%,65%); }
-    .back-link { font-size: 12px; color: hsl(230,60%,60%); cursor: pointer; text-decoration: none; }
-    .back-link:hover { color: hsl(230,80%,75%); }
-    .settings-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
 
-    /* ── Loading ── */
-    #loading-screen {
+    /* ── Main screen ─────────────────────────────────────────────────── */
+    #main-screen { min-height: 200px; }
+
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid hsl(230,45%,14%);
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .logo {
+      width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0;
+      background: linear-gradient(135deg, hsl(230,75%,40%), hsl(280,70%,50%));
       display: flex; align-items: center; justify-content: center;
-      height: 120px;
+      font-size: 13px; font-weight: 800;
     }
-    .spinner {
-      width: 24px; height: 24px; border-radius: 50%;
-      border: 2px solid hsl(230,45%,20%);
-      border-top-color: hsl(230,75%,55%);
-      animation: spin 0.7s linear infinite;
+    .app-name { font-size: 13px; font-weight: 700; }
+    .date-sub { font-size: 10px; color: hsl(230,30%,50%); margin-top: 1px; }
+
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .streak-chip {
+      display: flex; align-items: center; gap: 4px;
+      background: hsl(230,45%,15%); border: 1px solid hsl(230,45%,22%);
+      border-radius: 20px; padding: 3px 9px;
+      font-size: 11px; font-weight: 600; color: hsl(40,90%,65%);
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .pts-chip {
+      font-size: 11px; font-weight: 600;
+      color: hsl(230,60%,70%);
+      background: hsl(230,45%,15%); border: 1px solid hsl(230,45%,22%);
+      border-radius: 20px; padding: 3px 9px;
+    }
+
+    /* ── Tabs ────────────────────────────────────────────────────────── */
+    .tab-bar {
+      display: flex; border-bottom: 1px solid hsl(230,45%,14%);
+      background: hsl(230,75%,7%);
+    }
+    .tab-btn {
+      flex: 1; padding: 8px 0; font-size: 12px; font-weight: 500;
+      color: hsl(230,30%,50%); border: none; background: transparent;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn.active { color: #fff; border-bottom-color: hsl(230,75%,55%); }
+    .tab-btn:hover:not(.active) { color: hsl(230,20%,75%); }
+
+    /* ── Tab panels ──────────────────────────────────────────────────── */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Points progress strip ───────────────────────────────────────── */
+    .pts-strip {
+      background: hsl(230,45%,12%);
+      height: 3px; overflow: hidden;
+    }
+    .pts-fill {
+      height: 100%;
+      background: linear-gradient(90deg, hsl(230,75%,50%), hsl(280,70%,55%));
+      transition: width .4s ease;
+    }
+
+    /* ── Activity cards ──────────────────────────────────────────────── */
+    .activities { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+
+    .activity-card {
+      border-radius: 10px;
+      background: hsl(230,50%,11%);
+      border: 1px solid hsl(230,45%,17%);
+      overflow: hidden;
+      transition: border-color .15s;
+    }
+    .activity-card.running { border-color: hsl(230,60%,35%); }
+    .activity-card.done    { border-color: hsl(140,50%,30%); }
+
+    .card-top {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px 6px;
+    }
+    .act-icon { font-size: 18px; flex-shrink: 0; }
+    .act-info { flex: 1; min-width: 0; }
+    .act-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .act-meta { font-size: 10px; color: hsl(230,30%,50%); margin-top: 1px; }
+
+    .act-pts {
+      font-size: 11px; font-weight: 700;
+      padding: 2px 7px; border-radius: 12px;
+      background: hsl(230,45%,16%); color: hsl(230,60%,70%);
+      flex-shrink: 0;
+    }
+    .act-pts.full { background: hsl(140,50%,16%); color: hsl(140,60%,60%); }
+
+    .prog-track {
+      height: 3px; background: hsl(230,45%,16%);
+      margin: 0 12px;
+    }
+    .prog-fill {
+      height: 100%;
+      background: linear-gradient(90deg, hsl(230,75%,50%), hsl(280,70%,55%));
+      transition: width .3s ease;
+    }
+    .activity-card.done .prog-fill { background: linear-gradient(90deg, hsl(140,55%,40%), hsl(160,55%,45%)); }
+
+    .card-bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 12px 9px; gap: 8px;
+    }
+    .timer-display {
+      font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+      letter-spacing: .02em; min-width: 54px;
+    }
+    .timer-display.idle   { font-size: 12px; color: hsl(230,30%,45%); font-weight: 500; }
+    .timer-display.running{ color: hsl(230,80%,75%); }
+    .timer-display.paused { color: hsl(230,40%,65%); }
+    .timer-display.done   { color: hsl(140,60%,60%); font-size: 15px; }
+
+    .btn-row { display: flex; align-items: center; gap: 6px; }
+    .card-btn {
+      padding: 5px 11px; border-radius: 7px; border: none;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: opacity .15s, background .15s;
+    }
+    .card-btn:hover { opacity: .85; }
+    .card-btn:active { opacity: .7; }
+    .btn-start  { background: hsl(230,75%,50%); color: #fff; }
+    .btn-pause  { background: hsl(230,45%,22%); color: hsl(230,60%,75%); border: 1px solid hsl(230,45%,30%); }
+    .btn-resume { background: hsl(230,75%,45%); color: #fff; }
+    .btn-done   { background: hsl(140,55%,35%); color: #fff; }
+    .btn-edit   { background: hsl(230,45%,20%); color: hsl(230,50%,70%); border: 1px solid hsl(230,45%,28%); font-size: 11px; }
+    .btn-manual { background: transparent; color: hsl(230,40%,60%); border: 1px solid hsl(230,45%,25%); font-size: 11px; }
+
+    /* Manual input row */
+    .manual-row {
+      display: none; align-items: center; gap: 6px;
+      padding: 0 12px 9px;
+    }
+    .manual-row.open { display: flex; }
+    .manual-row input {
+      width: 80px; padding: 5px 8px; border-radius: 6px;
+      background: hsl(230,45%,14%); border: 1px solid hsl(230,45%,28%);
+      color: #fff; font-size: 13px; outline: none;
+    }
+    .manual-row input:focus { border-color: hsl(230,75%,50%); }
+    .manual-row .m-label { font-size: 11px; color: hsl(230,30%,50%); }
+    .btn-save-m  { background: hsl(230,75%,48%); color: #fff; padding: 5px 10px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-cancel-m{ background: transparent; color: hsl(230,30%,50%); border: none; font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 4px; }
+
+    /* ── Notes ───────────────────────────────────────────────────────── */
+    .notes-section { padding: 4px 12px 10px; }
+    .notes-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: hsl(230,30%,45%); margin-bottom: 5px; }
+    .notes-input {
+      width: 100%; padding: 8px 10px; border-radius: 8px;
+      background: hsl(230,45%,11%); border: 1px solid hsl(230,45%,20%);
+      color: #fff; font-size: 12px; resize: vertical; outline: none;
+      font-family: inherit; line-height: 1.5;
+    }
+    .notes-input:focus { border-color: hsl(230,75%,45%); }
+    .notes-input::placeholder { color: hsl(230,30%,38%); }
+
+    /* ── Footer ─────────────────────────────────────────────────────── */
+    .tracker-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px 10px;
+      border-top: 1px solid hsl(230,45%,13%);
+    }
+    .open-link { font-size: 11px; color: hsl(230,60%,60%); text-decoration: none; font-weight: 500; }
+    .open-link:hover { color: hsl(230,80%,75%); }
+    .save-status { font-size: 11px; color: hsl(230,30%,45%); }
+
+    /* ── Log tab ─────────────────────────────────────────────────────── */
+    .log-list { padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .log-empty { padding: 24px 16px; text-align: center; font-size: 13px; color: hsl(230,30%,45%); }
+    .log-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 9px;
+      background: hsl(230,50%,11%); border: 1px solid hsl(230,45%,16%);
+    }
+    .log-date { font-size: 11px; font-weight: 600; color: hsl(230,30%,65%); min-width: 70px; }
+    .log-acts { display: flex; gap: 3px; flex: 1; }
+    .log-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: hsl(140,50%,40%);
+    }
+    .log-dot.off { background: hsl(230,45%,22%); }
+    .log-pts { font-size: 11px; font-weight: 700; color: hsl(230,60%,65%); min-width: 30px; text-align: right; }
+    .log-time { font-size: 10px; color: hsl(230,30%,45%); min-width: 45px; text-align: right; }
+
+    /* ── Settings tab ────────────────────────────────────────────────── */
+    .settings-panel { padding: 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .settings-title { font-size: 13px; font-weight: 700; }
+    .settings-section { display: flex; flex-direction: column; gap: 8px; }
+    .target-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 10px; border-radius: 8px; background: hsl(230,50%,11%);
+      border: 1px solid hsl(230,45%,17%);
+    }
+    .target-act { font-size: 12px; }
+    .target-input {
+      width: 60px; padding: 4px 8px; border-radius: 6px; text-align: center;
+      background: hsl(230,45%,14%); border: 1px solid hsl(230,45%,28%);
+      color: #fff; font-size: 12px; outline: none;
+    }
+    .target-input:focus { border-color: hsl(230,75%,50%); }
+    .target-min { font-size: 11px; color: hsl(230,30%,45%); margin-left: 4px; }
+    .btn-save-settings { 
+      padding: 9px 16px; border-radius: 8px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, hsl(230,75%,45%), hsl(280,70%,50%));
+      color: #fff; font-size: 12px; font-weight: 600; align-self: flex-start;
+    }
+    .settings-divider { border: none; border-top: 1px solid hsl(230,45%,16%); margin: 0; }
+    .api-key-section { display: flex; flex-direction: column; gap: 8px; }
   </style>
 </head>
 <body>
 
 <!-- Loading -->
-<div id="loading-screen"><div class="spinner"></div></div>
+<div id="loading-screen" class="screen active"><div class="spinner"></div></div>
 
 <!-- Setup: enter API key -->
-<div id="setup-screen">
+<div id="setup-screen" class="screen">
   <div class="setup-title">Connect to FIA Toolkit</div>
   <p class="setup-desc">
-    Enter your API key to start tracking your DMO from any page.
-    Generate one at <a href="https://toolkit.fearlessmarketinglab.com/account" target="_blank">toolkit.fearlessmarketinglab.com/account</a> → API Access.
+    Enter your API key to track your Daily Method of Operation from any page.
+    Generate one at <a href="https://toolkit.fearlessmarketinglab.com/account" target="_blank">toolkit.fearlessmarketinglab.com</a> → Account → API Access.
   </p>
   <div>
-    <div class="input-label">API Key</div>
+    <div class="field-label">API Key</div>
     <input type="password" id="api-key-input" class="text-input" placeholder="ftk_…" autocomplete="off" />
   </div>
   <div id="setup-error" class="error-msg" style="display:none"></div>
   <button id="save-key-btn" class="btn-primary">Connect</button>
 </div>
 
-<!-- Main: DMO tracker -->
-<div id="main-screen">
+<!-- Main -->
+<div id="main-screen" class="screen">
+
   <div class="header">
     <div class="header-left">
       <div class="logo">F</div>
-      <div class="app-name">DMO Tracker</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div class="streak-badge">
-        <span>🔥</span>
-        <span id="streak-count">0</span>
+      <div>
+        <div class="app-name">DMO Tracker</div>
+        <div class="date-sub" id="date-sub">Today</div>
       </div>
-      <button class="gear-btn" id="settings-btn" title="Settings">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
-          <path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>
-        </svg>
-      </button>
+    </div>
+    <div class="header-right">
+      <div class="streak-chip">🔥 <span id="streak-count">0</span></div>
+      <div class="pts-chip"><span id="total-pts">0.0</span><span style="color:hsl(230,30%,45%)">/25 pts</span></div>
     </div>
   </div>
 
-  <div class="date-bar" id="date-bar">Today</div>
-
-  <div id="activities" class="activities">
-    <!-- Populated by JS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="today">Today</button>
+    <button class="tab-btn" data-tab="log">Log</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
   </div>
 
-  <div class="progress-bar-wrap">
-    <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+  <!-- Today -->
+  <div id="tab-today" class="tab-panel active">
+    <div class="pts-strip"><div class="pts-fill" id="pts-bar" style="width:0%"></div></div>
+    <div id="activities" class="activities"></div>
+    <div class="notes-section">
+      <div class="notes-label">Notes</div>
+      <textarea id="notes-field" class="notes-input" placeholder="Add notes for today…" rows="3"></textarea>
+    </div>
+    <div class="tracker-footer">
+      <a href="https://toolkit.fearlessmarketinglab.com/dmo-tracker" target="_blank" class="open-link">Open Full Tracker →</a>
+      <span class="save-status" id="save-status"></span>
+    </div>
   </div>
 
-  <div class="footer">
-    <a href="https://toolkit.fearlessmarketinglab.com/dmo-tracker" target="_blank" class="open-link">Open Full Tracker →</a>
-    <span class="status-text" id="save-status"></span>
+  <!-- Log -->
+  <div id="tab-log" class="tab-panel">
+    <div id="log-content"></div>
   </div>
-</div>
 
-<!-- Settings -->
-<div id="settings-screen">
-  <a class="back-link" id="back-btn">← Back</a>
-  <div class="settings-title">Settings</div>
-  <div>
-    <div class="input-label">API Key</div>
-    <input type="password" id="settings-key-input" class="text-input" placeholder="ftk_…" />
+  <!-- Settings -->
+  <div id="tab-settings" class="tab-panel">
+    <div class="settings-panel">
+      <div class="settings-title">Daily Goals (minutes)</div>
+      <div class="settings-section" id="target-rows"></div>
+      <button class="btn-save-settings" id="save-targets-btn">Save Goals</button>
+      <hr class="settings-divider" />
+      <div class="settings-title">API Key</div>
+      <div class="api-key-section">
+        <input type="password" id="settings-key-input" class="text-input" placeholder="ftk_…" />
+        <div id="settings-error" class="error-msg" style="display:none"></div>
+        <button id="update-key-btn" class="btn-primary">Update Key</button>
+        <button id="disconnect-btn" class="btn-ghost">Disconnect &amp; clear all data</button>
+      </div>
+    </div>
   </div>
-  <div id="settings-error" class="error-msg" style="display:none"></div>
-  <button id="update-key-btn" class="btn-primary">Update Key</button>
-  <button id="disconnect-btn" class="btn-ghost">Disconnect & clear data</button>
-</div>
+
+</div><!-- /main-screen -->
 
 <script src="popup.js"></script>
 </body>
