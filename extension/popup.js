@@ -25,6 +25,9 @@ let statusClearTimer = null;
 let currentTheme    = "light";   // "light" | "dark"
 const AUTO_SAVE_MS  = 10_000;
 
+let suspendedCountdownInterval = null;
+const SUSPENDED_CHECK_SECS     = 5 * 60; // 5 minutes — matches SW alarm interval
+
 // ─── Log tab state ─────────────────────────────────────────────────────────
 let logEntries      = [];
 let logExpandedDate = null;
@@ -139,6 +142,26 @@ async function apiFetch(path, opts = {}) {
 // Uses chrome.runtime.sendMessage — the correct MV3 extension messaging API.
 function messageServiceWorker(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
+}
+
+// ─── Suspended countdown ───────────────────────────────────────────────────
+function startSuspendedCountdown() {
+  clearSuspendedCountdown();
+  let secsLeft = SUSPENDED_CHECK_SECS;
+  const el = $("suspended-countdown");
+  function tick() {
+    if (el) el.textContent = `Next check in ${fmtTimer(secsLeft)}`;
+    secsLeft = secsLeft <= 0 ? SUSPENDED_CHECK_SECS : secsLeft - 1;
+  }
+  tick(); // render immediately before first interval fires
+  suspendedCountdownInterval = setInterval(tick, 1000);
+}
+
+function clearSuspendedCountdown() {
+  clearInterval(suspendedCountdownInterval);
+  suspendedCountdownInterval = null;
+  const el = $("suspended-countdown");
+  if (el) el.textContent = "";
 }
 
 // ─── Suspended screen ──────────────────────────────────────────────────────
@@ -1278,9 +1301,11 @@ function showScreen(name) {
   if (name === "suspended") {
     // Ask the service worker to set a persistent alarm that survives popup close.
     messageServiceWorker({ type: "START_SUSPENDED_CHECK" });
+    startSuspendedCountdown();
   } else {
     // Cancel the alarm — membership is no longer suspended from our perspective.
     messageServiceWorker({ type: "STOP_SUSPENDED_CHECK" });
+    clearSuspendedCountdown();
   }
 }
 
