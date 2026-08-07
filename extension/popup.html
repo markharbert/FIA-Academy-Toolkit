@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>FIA DMO Tracker</title>
+  <title>FIA Toolkit</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -263,21 +263,38 @@
     }
     .theme-btn:hover { color: #fff; background: rgba(255,255,255,.08); }
 
-    /* ── Tab bar ── */
-    .tab-bar {
+    /* ── Primary tab bar (on brand dark bg) ── */
+    .primary-tab-bar {
+      display: flex; background: var(--brand);
+      border-bottom: 2px solid rgba(255,255,255,.08);
+    }
+    .primary-tab-btn {
+      flex: 1; padding: 9px 0; font-size: 12px; font-weight: 600;
+      color: rgba(255,255,255,.42); border: none; background: transparent; cursor: pointer;
+      border-bottom: 3px solid transparent; font-family: inherit;
+      transition: color .15s, border-color .15s;
+      margin-bottom: -2px;
+    }
+    .primary-tab-btn.active { color: #fff; border-bottom-color: var(--gold); }
+    .primary-tab-btn:hover:not(.active) { color: rgba(255,255,255,.68); }
+
+    /* ── Sub-tab bar ── */
+    .sub-tab-bar {
       display: flex; background: var(--tab-bg);
       border-bottom: 1px solid var(--tab-border);
     }
-    .tab-btn {
-      flex: 1; padding: 8px 0; font-size: 11px; font-weight: 500;
+    .sub-tab-btn {
+      flex: 1; padding: 7px 0; font-size: 11px; font-weight: 500;
       color: var(--tab-idle); border: none; background: transparent; cursor: pointer;
       border-bottom: 2px solid transparent; font-family: inherit;
       transition: color .15s, border-color .15s;
     }
-    .tab-btn.active { color: var(--tab-active); border-bottom-color: var(--accent); font-weight: 600; }
-    .tab-btn:hover:not(.active) { color: var(--text-sub); }
+    .sub-tab-btn.active { color: var(--tab-active); border-bottom-color: var(--accent); font-weight: 600; }
+    .sub-tab-btn:hover:not(.active) { color: var(--text-sub); }
 
-    /* ── Tab panels ── */
+    /* ── Panels ── */
+    .primary-panel { display: none; }
+    .primary-panel.active { display: block; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
@@ -724,7 +741,7 @@
     <div class="header-left">
       <div class="header-icon"><img src="icons/icon128.png" alt="FIA" /></div>
       <div>
-        <div class="header-title">DMO Tracker</div>
+        <div class="header-title">FIA Toolkit</div>
         <div class="header-sub" id="date-sub">Today</div>
       </div>
     </div>
@@ -737,53 +754,63 @@
     </div>
   </div>
 
-  <!-- Tabs -->
-  <div class="tab-bar">
-    <button class="tab-btn active" data-tab="today">Today</button>
-    <button class="tab-btn" data-tab="log">Log</button>
-    <button class="tab-btn" data-tab="links">Links</button>
-    <button class="tab-btn" data-tab="settings">Settings</button>
+  <!-- Primary tab bar: DMO Tracker | Links -->
+  <div class="primary-tab-bar">
+    <button class="primary-tab-btn active" data-primary="dmo">DMO Tracker</button>
+    <button class="primary-tab-btn" data-primary="links">Links</button>
   </div>
 
-  <!-- Today -->
-  <div id="tab-today" class="tab-panel active">
-    <div class="pts-strip"><div class="pts-fill" id="pts-bar" style="width:0%"></div></div>
-    <div id="activities" class="activities"></div>
-    <div class="notes-wrap">
-      <div class="notes-label">Notes</div>
-      <textarea id="notes-field" class="notes-input" placeholder="Add notes for today…" rows="3"></textarea>
+  <!-- ── DMO Tracker primary panel ── -->
+  <div id="primary-dmo" class="primary-panel active">
+
+    <!-- Sub-tabs: Today | Log | Settings -->
+    <div class="sub-tab-bar">
+      <button class="sub-tab-btn active" data-tab="today">Today</button>
+      <button class="sub-tab-btn" data-tab="log">Log</button>
+      <button class="sub-tab-btn" data-tab="settings">Settings</button>
     </div>
-    <div class="tracker-footer">
-      <a href="https://toolkit.fearlessmarketinglab.com/dmo-tracker" target="_blank" class="open-link">Open full tracker →</a>
-      <span class="save-status" id="save-status"></span>
-    </div>
-  </div>
 
-  <!-- Log -->
-  <div id="tab-log" class="tab-panel">
-    <div id="log-content"></div>
-  </div>
-
-  <!-- Links -->
-  <div id="tab-links" class="tab-panel">
-    <div id="links-content"></div>
-  </div>
-
-  <!-- Settings -->
-  <div id="tab-settings" class="tab-panel">
-    <div class="settings-panel">
-      <div class="settings-section-title">Daily Goals</div>
-      <div class="settings-block" id="target-rows"></div>
-      <button class="btn-save-goals" id="save-targets-btn">Save Goals</button>
-      <hr class="settings-divider" />
-      <div class="settings-section-title">API Key</div>
-      <div class="settings-block">
-        <input type="password" id="settings-key-input" class="text-input" placeholder="ftk_…" />
-        <div id="settings-error" class="error-msg" style="display:none"></div>
-        <button id="update-key-btn" class="btn-primary">Update Key</button>
-        <button id="disconnect-btn" class="btn-ghost">Disconnect &amp; clear all data</button>
+    <!-- Today -->
+    <div id="tab-today" class="tab-panel active">
+      <div class="pts-strip"><div class="pts-fill" id="pts-bar" style="width:0%"></div></div>
+      <div id="activities" class="activities"></div>
+      <div class="notes-wrap">
+        <div class="notes-label">Notes</div>
+        <textarea id="notes-field" class="notes-input" placeholder="Add notes for today…" rows="3"></textarea>
+      </div>
+      <div class="tracker-footer">
+        <a href="https://toolkit.fearlessmarketinglab.com/dmo-tracker" target="_blank" class="open-link">Open full tracker →</a>
+        <span class="save-status" id="save-status"></span>
       </div>
     </div>
+
+    <!-- Log -->
+    <div id="tab-log" class="tab-panel">
+      <div id="log-content"></div>
+    </div>
+
+    <!-- Settings -->
+    <div id="tab-settings" class="tab-panel">
+      <div class="settings-panel">
+        <div class="settings-section-title">Daily Goals</div>
+        <div class="settings-block" id="target-rows"></div>
+        <button class="btn-save-goals" id="save-targets-btn">Save Goals</button>
+        <hr class="settings-divider" />
+        <div class="settings-section-title">API Key</div>
+        <div class="settings-block">
+          <input type="password" id="settings-key-input" class="text-input" placeholder="ftk_…" />
+          <div id="settings-error" class="error-msg" style="display:none"></div>
+          <button id="update-key-btn" class="btn-primary">Update Key</button>
+          <button id="disconnect-btn" class="btn-ghost">Disconnect &amp; clear all data</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /primary-dmo -->
+
+  <!-- ── Links primary panel ── -->
+  <div id="primary-links" class="primary-panel">
+    <div id="links-content"></div>
   </div>
 
 </div><!-- /main-screen -->

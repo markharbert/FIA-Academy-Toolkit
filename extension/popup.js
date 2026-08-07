@@ -1248,8 +1248,7 @@ async function loadDMO() {
     const streak = dmoData.streak?.currentStreak ?? dmoData.streak?.current ?? 0;
     const sc = $("streak-count");
     if (sc) sc.textContent = streak;
-    const ds = $("date-sub");
-    if (ds) ds.textContent = fmtDate(todayDate);
+    updateSubtitle(currentPrimaryTab, currentSubTab);
 
     renderActivities();
     renderTargetRows();
@@ -1286,15 +1285,38 @@ function showScreen(name) {
 }
 
 // ─── Tab management ────────────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll(".tab-btn").forEach(b =>
+let currentPrimaryTab = "dmo";
+let currentSubTab     = "today";
+
+function updateSubtitle(primary, subTab) {
+  const ds = $("date-sub");
+  if (!ds) return;
+  if (primary === "links") { ds.textContent = "Link Library"; return; }
+  if (subTab === "today" && todayDate) { ds.textContent = fmtDate(todayDate); }
+  else if (subTab === "log")           { ds.textContent = "Log"; }
+  else if (subTab === "settings")      { ds.textContent = "Settings"; }
+  else                                 { ds.textContent = "DMO Tracker"; }
+}
+
+function switchSubTab(name) {
+  currentSubTab = name;
+  document.querySelectorAll(".sub-tab-btn").forEach(b =>
     b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p =>
     p.classList.toggle("active", p.id === `tab-${name}`));
-  if (name === "log")      { renderLog(); }
-  if (name === "links")    { renderLinks(); }
-  if (name === "settings") { renderTargetRows(); }
-  // Reset links transient state when leaving the links tab
+  updateSubtitle("dmo", name);
+  if (name === "log")      renderLog();
+  if (name === "settings") renderTargetRows();
+}
+
+function switchPrimaryTab(name) {
+  currentPrimaryTab = name;
+  document.querySelectorAll(".primary-tab-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.primary === name));
+  document.querySelectorAll(".primary-panel").forEach(p =>
+    p.classList.toggle("active", p.id === `primary-${name}`));
+  updateSubtitle(name, currentSubTab);
+  if (name === "links") renderLinks();
   if (name !== "links") {
     linksFormOpen = false; linksEditingLink = null; linksDeleteConfirmId = null;
   }
@@ -1341,9 +1363,12 @@ async function boot() {
   // Theme toggle
   $("theme-btn").addEventListener("click", toggleTheme);
 
-  // Tabs
-  document.querySelectorAll(".tab-btn").forEach(b =>
-    b.addEventListener("click", () => switchTab(b.dataset.tab)));
+  // Primary tabs (DMO Tracker | Links)
+  document.querySelectorAll(".primary-tab-btn").forEach(b =>
+    b.addEventListener("click", () => switchPrimaryTab(b.dataset.primary)));
+  // Sub-tabs (Today | Log | Settings)
+  document.querySelectorAll(".sub-tab-btn").forEach(b =>
+    b.addEventListener("click", () => switchSubTab(b.dataset.tab)));
 
   // Setup screen
   $("save-key-btn").addEventListener("click", () =>
@@ -1405,7 +1430,7 @@ async function boot() {
   });
 
   // Pre-fill key in settings tab when opened
-  document.querySelector('[data-tab="settings"]').addEventListener("click", () => {
+  document.querySelector('.sub-tab-btn[data-tab="settings"]').addEventListener("click", () => {
     const el = $("settings-key-input");
     if (el && apiKey) el.value = apiKey;
     $("settings-error").style.display = "none";
