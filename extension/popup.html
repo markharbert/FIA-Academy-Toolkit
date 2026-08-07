@@ -225,8 +225,27 @@
     .error-msg { font-size: 12px; color: var(--red); }
 
     /* ─── Main screen ─────────────────────────────────────────────────────── */
-    #main-screen { display: none; flex-direction: column; }
+    #main-screen { display: none; flex-direction: column; position: relative; }
     #main-screen.active { display: flex; }
+
+    /* ─── Settings overlay (gear icon) ───────────────────────────────────── */
+    .settings-overlay {
+      display: none; position: absolute; inset: 0;
+      background: var(--bg); z-index: 50; flex-direction: column; overflow-y: auto;
+    }
+    .settings-overlay.open { display: flex; }
+    .settings-ovl-head {
+      background: var(--brand); display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px 10px; flex-shrink: 0;
+    }
+    .settings-ovl-back {
+      background: none; border: none; color: rgba(255,255,255,.55); cursor: pointer;
+      padding: 4px 5px; border-radius: 6px; display: flex; align-items: center;
+      transition: color .15s, background .15s; line-height: 1;
+    }
+    .settings-ovl-back:hover { color: #fff; background: rgba(255,255,255,.1); }
+    .settings-ovl-title { font-size: 14px; font-weight: 700; color: #fff; }
+    .settings-ovl-body { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 
     /* ── Header (always brand dark) ── */
     .header {
@@ -785,6 +804,9 @@
     <div class="header-right">
       <div class="streak-pill">🔥 <span id="streak-count">0</span></div>
       <div class="pts-pill"><span id="total-pts">0.0</span><span class="pts-denom">/25 pts</span></div>
+      <button class="theme-btn" id="settings-gear-btn" title="Settings">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
       <button class="theme-btn" id="theme-btn" title="Toggle light/dark">
         <!-- icon injected by JS -->
       </button>
@@ -800,11 +822,11 @@
   <!-- ── DMO Tracker primary panel ── -->
   <div id="primary-dmo" class="primary-panel active">
 
-    <!-- Sub-tabs: Today | Log | Settings -->
+    <!-- Sub-tabs: Today | Log | Goals -->
     <div class="sub-tab-bar">
       <button class="sub-tab-btn active" data-tab="today">Today</button>
       <button class="sub-tab-btn" data-tab="log">Log</button>
-      <button class="sub-tab-btn" data-tab="settings">Settings</button>
+      <button class="sub-tab-btn" data-tab="goals">Goals</button>
     </div>
 
     <!-- Today -->
@@ -826,20 +848,12 @@
       <div id="log-content"></div>
     </div>
 
-    <!-- Settings -->
-    <div id="tab-settings" class="tab-panel">
+    <!-- Goals -->
+    <div id="tab-goals" class="tab-panel">
       <div class="settings-panel">
         <div class="settings-section-title">Daily Goals</div>
         <div class="settings-block" id="target-rows"></div>
         <button class="btn-save-goals" id="save-targets-btn">Save Goals</button>
-        <hr class="settings-divider" />
-        <div class="settings-section-title">API Key</div>
-        <div class="settings-block">
-          <input type="password" id="settings-key-input" class="text-input" placeholder="ftk_…" />
-          <div id="settings-error" class="error-msg" style="display:none"></div>
-          <button id="update-key-btn" class="btn-primary">Update Key</button>
-          <button id="disconnect-btn" class="btn-ghost">Disconnect &amp; clear all data</button>
-        </div>
       </div>
     </div>
 
@@ -848,6 +862,25 @@
   <!-- ── Links primary panel ── -->
   <div id="primary-links" class="primary-panel">
     <div id="links-content"></div>
+  </div>
+
+  <!-- ── Settings overlay (gear icon) ── -->
+  <div id="settings-overlay" class="settings-overlay">
+    <div class="settings-ovl-head">
+      <button class="settings-ovl-back" id="settings-ovl-close" title="Back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="settings-ovl-title">Settings</span>
+    </div>
+    <div class="settings-ovl-body">
+      <div class="settings-section-title">API Key</div>
+      <div class="settings-block">
+        <input type="password" id="settings-key-input" class="text-input" placeholder="ftk_…" />
+        <div id="settings-error" class="error-msg" style="display:none"></div>
+        <button id="update-key-btn" class="btn-primary">Update Key</button>
+        <button id="disconnect-btn" class="btn-ghost">Disconnect &amp; clear all data</button>
+      </div>
+    </div>
   </div>
 
 </div><!-- /main-screen -->

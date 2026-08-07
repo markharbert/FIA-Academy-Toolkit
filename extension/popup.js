@@ -1306,7 +1306,7 @@ async function loadDMO() {
     const streak = dmoData.streak?.currentStreak ?? dmoData.streak?.current ?? 0;
     const sc = $("streak-count");
     if (sc) sc.textContent = streak;
-    updateSubtitle(currentPrimaryTab, currentSubTab);
+    updateSubtitle();
 
     renderActivities();
     renderTargetRows();
@@ -1348,14 +1348,9 @@ function showScreen(name) {
 let currentPrimaryTab = "dmo";
 let currentSubTab     = "today";
 
-function updateSubtitle(primary, subTab) {
+function updateSubtitle() {
   const ds = $("date-sub");
-  if (!ds) return;
-  if (primary === "links") { ds.textContent = "Link Library"; return; }
-  if (subTab === "today" && todayDate) { ds.textContent = fmtDate(todayDate); }
-  else if (subTab === "log")           { ds.textContent = "Log"; }
-  else if (subTab === "settings")      { ds.textContent = "Settings"; }
-  else                                 { ds.textContent = "DMO Tracker"; }
+  if (ds && todayDate) ds.textContent = fmtDate(todayDate);
 }
 
 function switchSubTab(name) {
@@ -1364,9 +1359,8 @@ function switchSubTab(name) {
     b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach(p =>
     p.classList.toggle("active", p.id === `tab-${name}`));
-  updateSubtitle("dmo", name);
-  if (name === "log")      renderLog();
-  if (name === "settings") renderTargetRows();
+  if (name === "log")   renderLog();
+  if (name === "goals") renderTargetRows();
 }
 
 function switchPrimaryTab(name) {
@@ -1375,7 +1369,6 @@ function switchPrimaryTab(name) {
     b.classList.toggle("active", b.dataset.primary === name));
   document.querySelectorAll(".primary-panel").forEach(p =>
     p.classList.toggle("active", p.id === `primary-${name}`));
-  updateSubtitle(name, currentSubTab);
   if (name === "links") renderLinks();
   if (name !== "links") {
     linksFormOpen = false; linksEditingLink = null; linksDeleteConfirmId = null;
@@ -1489,11 +1482,16 @@ async function boot() {
     showScreen("setup");
   });
 
-  // Pre-fill key in settings tab when opened
-  document.querySelector('.sub-tab-btn[data-tab="settings"]').addEventListener("click", () => {
+  // Gear icon → open settings overlay; back arrow → close it
+  $("settings-gear-btn").addEventListener("click", () => {
     const el = $("settings-key-input");
     if (el && apiKey) el.value = apiKey;
-    $("settings-error").style.display = "none";
+    const errEl = $("settings-error");
+    if (errEl) errEl.style.display = "none";
+    $("settings-overlay").classList.add("open");
+  });
+  $("settings-ovl-close").addEventListener("click", () => {
+    $("settings-overlay").classList.remove("open");
   });
 
   // Listen for MEMBERSHIP_RESTORED pushed by the service-worker alarm.
