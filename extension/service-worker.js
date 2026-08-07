@@ -66,6 +66,111 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   });
 });
 
+// ─── Full Page capture: native scroll-and-stitch ─────────────────────────────
+
+function swSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.action !== "startFullPageCapture") return false;
+  sendResponse({ ok: true }); // ack immediately; async work runs below
+  handleFullPageCapture(msg.tabId, msg.title);
+  return false;
+});
+
+async function handleFullPageCapture(tabId, title) {
+  const MAX_STEPS   = 20;
+  const MAX_H_LOGIC = 14000; // cap logical-px height to stay inside canvas limits
+
+  try {
+    // 1. Read page geometry + save original scroll position
+    const [{ result: dims }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => ({
+        scrollH: Math.min(
+          Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0),
+          14000
+        ),
+        vpH:   window.innerHeight,
+        vpW:   window.innerWidth,
+        origX: window.scrollX,
+        origY: window.scrollY,
+        dpr:   Math.min(window.devicePixelRatio || 1, 2),
+      }),
+    });
+    const { scrollH, vpH, vpW, origX, origY, dpr } = dims;
+
+    // 2. Scroll to top
+    await chrome.scripting.executeScript({
+      target: { tabId }, func: () => window.scrollTo(0, 0),
+    });
+    await swSleep(200);
+
+    // 3. OffscreenCanvas at full-page dimensions
+    const canvas = new OffscreenCanvas(Math.round(vpW * dpr), Math.round(scrollH * dpr));
+    const ctx    = canvas.getContext("2d");
+
+    // 4. Scroll → capture → stitch
+    const totalSteps = Math.min(Math.ceil(scrollH / vpH), MAX_STEPS);
+    const windowId   = (await chrome.tabs.get(tabId)).windowId;
+
+    for (let i = 0; i < totalSteps; i++) {
+      // Last step always flushes to the very bottom so nothing is clipped
+      const scrollTop = (i === totalSteps - 1)
+        ? Math.max(0, scrollH - vpH)
+        : i * vpH;
+
+      await chrome.scripting.executeScript({
+        target: { tabId }, func: (y) => window.scrollTo(0, y), args: [scrollTop],
+      });
+      await swSleep(150);
+
+      const dataUrl = await new Promise((resolve, reject) => {
+        chrome.tabs.captureVisibleTab(windowId, { format: "png" }, url => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve(url);
+        });
+      });
+
+      const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+      ctx.drawImage(bitmap, 0, Math.round(scrollTop * dpr));
+      bitmap.close();
+    }
+
+    // 5. Restore scroll position
+    await chrome.scripting.executeScript({
+      target: { tabId }, func: (x, y) => window.scrollTo(x, y), args: [origX, origY],
+    });
+
+    // 6. PNG → base64 dataUrl
+    const blob  = await canvas.convertToBlob({ type: "image/png" });
+    const u8    = new Uint8Array(await blob.arrayBuffer());
+    const CHUNK = 65536;
+    let binary  = "";
+    for (let i = 0; i < u8.length; i += CHUNK) {
+      binary += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK));
+    }
+    const finalDataUrl = "data:image/png;base64," + btoa(binary);
+
+    // 7. Store for popup + notify
+    await chrome.storage.session.set({
+      pendingCapture: { dataUrl: finalDataUrl, title, type: "fullpage" },
+    });
+    chrome.notifications.create("fia-fullpage-ready", {
+      type: "basic", iconUrl: "icons/icon128.png",
+      title: "FIA Toolkit — Page Captured!",
+      message: "Click the extension icon to save it.",
+    });
+
+  } catch (err) {
+    console.error("[FIA SW] full page capture error:", err);
+    chrome.notifications.create("fia-fullpage-error", {
+      type: "basic", iconUrl: "icons/icon128.png",
+      title: "FIA Toolkit — Capture Failed",
+      message: String(err?.message || "Could not capture the page."),
+    });
+  }
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "fia-save-snippet") return;
   const text      = info.selectionText ?? "";

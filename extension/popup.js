@@ -1368,7 +1368,7 @@ const SWIPE_BTN_IDS = ["swipe-btn-fullpage", "swipe-btn-visible", "swipe-btn-sec
 function swipeShowBtns() {
   const row = $("swipe-btn-row");
   if (row) row.style.display = "flex";
-  ["swipe-save-form", "swipe-success", "swipe-section-instr", "swipe-fullpage-loading"].forEach(id => {
+  ["swipe-save-form", "swipe-success", "swipe-section-instr"].forEach(id => {
     const el = $(id); if (el) el.style.display = "none";
   });
   const prog = $("swipe-progress"); if (prog) prog.style.display = "none";
@@ -1387,7 +1387,7 @@ function swipeReset() {
   const p = $("swipe-save-preview"); if (p) p.src   = "";
 }
 
-// ── Full Page (current tab URL → server Puppeteer) ────────────────────────
+// ── Full Page (native scroll-and-stitch via service worker) ──────────────────
 
 async function swipeCaptureFullPage() {
   let tab;
@@ -1397,35 +1397,22 @@ async function swipeCaptureFullPage() {
     alert("Full Page capture only works on http/https pages.");
     return;
   }
-  const title = (tab?.title ?? url).substring(0, 140);
 
   SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
   $("swipe-btn-fullpage").classList.add("active");
-  $("swipe-fullpage-loading").style.display = "flex";
 
-  try {
-    const { item } = await apiFetch("/api/v1/swipe/capture-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, title }),
-    });
-    let token = item.shareToken;
-    try {
-      const sd = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" });
-      token = sd.token;
-    } catch (_) {}
+  // Fire-and-forget to service worker — capture runs in background while popup closes
+  chrome.runtime.sendMessage({
+    action: "startFullPageCapture",
+    tabId:  tab.id,
+    title:  (tab.title || url).substring(0, 140),
+  });
 
-    swipeLastSaved = { id: item.id, token, title: item.title };
-    $("swipe-fullpage-loading").style.display = "none";
-    $("swipe-success").style.display = "flex";
-    $("swipe-success-name").textContent = `"${item.title}"`;
-    if (!token) $("swipe-copy-link-btn").style.display = "none";
-    renderSwipe();
-  } catch (err) {
-    swipeShowBtns();
-    const st = $("swipe-url-status");
-    if (st) { st.textContent = `⚠ Full page capture failed: ${err.message}`; st.style.display = "block"; }
-  }
+  // Show brief instruction then close so the page is visible during scrolling
+  const instr = $("swipe-section-instr");
+  instr.textContent = "📄 Capturing full page in background — open the extension when done to save it.";
+  instr.style.display = "block";
+  setTimeout(() => window.close(), 2000);
 }
 
 // ── Visible Area (captureVisibleTab) ──────────────────────────────────────
@@ -1639,127 +1626,6 @@ function drawSwipeList() {
   });
 }
 
-function swipeReset() {
-  swipeCapturedDataUrl = null;
-  swipeLastSaved = null;
-  const captureBtn = $("swipe-capture-btn");
-  if (captureBtn) { captureBtn.style.display = ""; captureBtn.disabled = false; captureBtn.textContent = "📷\u00a0 Screenshot this tab"; captureBtn.classList.remove("capturing"); }
-  const saveForm  = $("swipe-save-form");  if (saveForm)  { saveForm.style.display = "none"; }
-  const success   = $("swipe-success");    if (success)   { success.style.display = "none"; }
-  const progress  = $("swipe-progress");   if (progress)  { progress.style.display = "none"; }
-  const progFill  = $("swipe-progress-fill"); if (progFill) progFill.style.width = "0%";
-  const titleIn   = $("swipe-save-title"); if (titleIn)   titleIn.value = "";
-}
-
-async function swipeCaptureTab() {
-  const btn = $("swipe-capture-btn");
-  btn.disabled = true; btn.textContent = "📷\u00a0 Capturing…"; btn.classList.add("capturing");
-  try {
-    const dataUrl = await new Promise((resolve, reject) => {
-      chrome.tabs.captureVisibleTab(null, { format: "png" }, url => {
-        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-        else resolve(url);
-      });
-    });
-    swipeCapturedDataUrl = dataUrl;
-
-    // Pre-fill title from the active tab
-    let pageTitle = "";
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      pageTitle = tab?.title ?? "";
-    } catch (_) {}
-
-    btn.style.display = "none";
-    $("swipe-save-preview").src = dataUrl;
-    $("swipe-save-title").value = pageTitle;
-    $("swipe-save-form").style.display = "flex";
-    $("swipe-save-title").focus();
-    $("swipe-save-title").select();
-  } catch (err) {
-    btn.disabled = false; btn.classList.remove("capturing"); btn.textContent = "📷\u00a0 Screenshot this tab";
-    console.error("[FIA Swipe] capture failed:", err.message);
-  }
-}
-
-async function swipeSaveCapture() {
-  if (!swipeCapturedDataUrl) return;
-  const titleEl = $("swipe-save-title");
-  const title   = titleEl.value.trim() || "Untitled Screenshot";
-  const saveBtn = $("swipe-form-save-btn");
-  saveBtn.disabled = true; saveBtn.textContent = "Saving…";
-
-  const progress = $("swipe-progress");
-  const fill     = $("swipe-progress-fill");
-  progress.style.display = "block"; fill.style.width = "8%";
-
-  try {
-    // Blob from dataUrl
-    const blob = await (await fetch(swipeCapturedDataUrl)).blob();
-    fill.style.width = "18%";
-
-    // Get signed URL
-    const { uploadURL, objectPath } = await apiFetch("/api/v1/swipe/request-upload-url", { method: "POST" });
-    fill.style.width = "28%";
-
-    // PUT directly to storage
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", uploadURL);
-      xhr.setRequestHeader("Content-Type", "image/png");
-      xhr.upload.onprogress = e => {
-        if (e.lengthComputable) fill.style.width = `${28 + Math.round((e.loaded / e.total) * 55)}%`;
-      };
-      xhr.onload  = () => xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`));
-      xhr.onerror = () => reject(new Error("Network error during upload"));
-      xhr.send(blob);
-    });
-    fill.style.width = "85%";
-
-    // Create swipe item
-    const { item } = await apiFetch("/api/v1/swipe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "upload", title, imagePath: objectPath }),
-    });
-    fill.style.width = "92%";
-
-    // Auto-generate share link
-    let token = item.shareToken;
-    try {
-      const shareData = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" });
-      token = shareData.token;
-    } catch (_) {}
-    fill.style.width = "100%";
-
-    swipeLastSaved = { id: item.id, token, title };
-
-    setTimeout(() => {
-      $("swipe-save-form").style.display = "none";
-      $("swipe-success").style.display = "flex";
-      $("swipe-success-name").textContent = `"${title}"`;
-      if (!token) $("swipe-copy-link-btn").style.display = "none";
-      renderSwipe(); // refresh list
-    }, 350);
-  } catch (err) {
-    saveBtn.disabled = false; saveBtn.textContent = "Save to Swipe File";
-    progress.style.display = "none"; fill.style.width = "0%";
-    console.error("[FIA Swipe] save failed:", err.message);
-  }
-}
-
-function swipeCopyShareLink() {
-  if (!swipeLastSaved?.token) return;
-  const url = `${API_BASE}/swipe/${swipeLastSaved.token}`;
-  navigator.clipboard.writeText(url).catch(() => {});
-  const btn = $("swipe-copy-link-btn");
-  btn.textContent = "Copied!"; btn.classList.add("copied");
-  setTimeout(() => { btn.textContent = "Copy share link"; btn.classList.remove("copied"); }, 2000);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-
 function switchSubTab(name) {
   currentSubTab = name;
   document.querySelectorAll(".sub-tab-btn").forEach(b =>
@@ -1918,7 +1784,7 @@ async function boot() {
       await chrome.storage.session.remove("pendingCapture");
       swipeCapturedDataUrl = dataUrl;
       $("swipe-save-preview").src  = dataUrl;
-      $("swipe-save-title").value  = "";
+      $("swipe-save-title").value  = stored.pendingCapture.title ?? "";
       $("swipe-btn-row").style.display  = "none";
       $("swipe-save-form").style.display = "flex";
       switchPrimaryTab("swipe");

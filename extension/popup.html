@@ -1005,13 +1005,7 @@
         🎯 <strong>Switch to the page</strong> and drag to select a region. Press <strong>ESC</strong> to cancel.
       </div>
 
-      <!-- Full Page loading indicator -->
-      <div id="swipe-fullpage-loading" class="swipe-hint" style="display:none; flex-direction:row; align-items:center; gap:8px;">
-        <span style="display:inline-block;width:13px;height:13px;border:2px solid var(--border-med);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;"></span>
-        <span>Capturing full page… (10–30 sec)</span>
-      </div>
-
-      <!-- Save form (shown after Visible Area / Section capture) -->
+      <!-- Save form (shown after any capture lands in pendingCapture) -->
       <div class="swipe-save-form" id="swipe-save-form" style="display:none">
         <img class="swipe-save-preview" id="swipe-save-preview" src="" alt="Preview" />
         <div class="swipe-progress" id="swipe-progress" style="display:none">
