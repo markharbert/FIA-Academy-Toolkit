@@ -1361,6 +1361,181 @@ function updateSubtitle() {
 
 // ─── Swipe File functions ──────────────────────────────────────────────────
 
+// ── State helpers ──────────────────────────────────────────────────────────
+
+const SWIPE_BTN_IDS = ["swipe-btn-fullpage", "swipe-btn-visible", "swipe-btn-section"];
+
+function swipeShowBtns() {
+  const row = $("swipe-btn-row");
+  if (row) row.style.display = "flex";
+  ["swipe-save-form", "swipe-success", "swipe-section-instr", "swipe-fullpage-loading"].forEach(id => {
+    const el = $(id); if (el) el.style.display = "none";
+  });
+  const prog = $("swipe-progress"); if (prog) prog.style.display = "none";
+  const fill = $("swipe-progress-fill"); if (fill) fill.style.width = "0%";
+  SWIPE_BTN_IDS.forEach(id => {
+    const b = $(id); if (b) { b.disabled = false; b.classList.remove("active"); }
+  });
+  const sl = $("swipe-copy-link-btn"); if (sl) sl.style.display = "";
+}
+
+function swipeReset() {
+  swipeCapturedDataUrl = null;
+  swipeLastSaved = null;
+  swipeShowBtns();
+  const t = $("swipe-save-title");   if (t) t.value = "";
+  const p = $("swipe-save-preview"); if (p) p.src   = "";
+}
+
+// ── Full Page (current tab URL → server Puppeteer) ────────────────────────
+
+async function swipeCaptureFullPage() {
+  let tab;
+  try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) {}
+  const url = tab?.url ?? "";
+  if (!url.startsWith("http")) {
+    alert("Full Page capture only works on http/https pages.");
+    return;
+  }
+  const title = (tab?.title ?? url).substring(0, 140);
+
+  SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
+  $("swipe-btn-fullpage").classList.add("active");
+  $("swipe-fullpage-loading").style.display = "flex";
+
+  try {
+    const { item } = await apiFetch("/api/v1/swipe/capture-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, title }),
+    });
+    let token = item.shareToken;
+    try {
+      const sd = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" });
+      token = sd.token;
+    } catch (_) {}
+
+    swipeLastSaved = { id: item.id, token, title: item.title };
+    $("swipe-fullpage-loading").style.display = "none";
+    $("swipe-success").style.display = "flex";
+    $("swipe-success-name").textContent = `"${item.title}"`;
+    if (!token) $("swipe-copy-link-btn").style.display = "none";
+    renderSwipe();
+  } catch (err) {
+    swipeShowBtns();
+    const st = $("swipe-url-status");
+    if (st) { st.textContent = `⚠ Full page capture failed: ${err.message}`; st.style.display = "block"; }
+  }
+}
+
+// ── Visible Area (captureVisibleTab) ──────────────────────────────────────
+
+async function swipeCaptureVisibleArea() {
+  SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
+  $("swipe-btn-visible").classList.add("active");
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      chrome.tabs.captureVisibleTab(null, { format: "png" }, url => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(url);
+      });
+    });
+    swipeCapturedDataUrl = dataUrl;
+    let pageTitle = "";
+    try { const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); pageTitle = tab?.title ?? ""; } catch (_) {}
+    $("swipe-btn-row").style.display = "none";
+    $("swipe-save-preview").src = dataUrl;
+    $("swipe-save-title").value = pageTitle;
+    $("swipe-save-form").style.display = "flex";
+    $("swipe-save-title").focus(); $("swipe-save-title").select();
+  } catch (err) {
+    swipeShowBtns();
+    console.error("[FIA Swipe] visible capture failed:", err.message);
+  }
+}
+
+// ── Section (inject overlay, close popup so user can drag) ────────────────
+
+async function swipeCaptureSection() {
+  let tab;
+  try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) {}
+  if (!tab?.id) { alert("No active tab found."); return; }
+
+  SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
+  $("swipe-btn-section").classList.add("active");
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files:  ["selection-overlay.js"],
+    });
+    $("swipe-section-instr").style.display = "block";
+    setTimeout(() => window.close(), 1600);
+  } catch (err) {
+    swipeShowBtns();
+    console.error("[FIA Swipe] section inject failed:", err.message);
+  }
+}
+
+// ── Save visible/section capture ──────────────────────────────────────────
+
+async function swipeSaveCapture() {
+  if (!swipeCapturedDataUrl) return;
+  const title   = ($("swipe-save-title").value || "").trim() || "Untitled Screenshot";
+  const saveBtn = $("swipe-form-save-btn");
+  saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+  const progress = $("swipe-progress");
+  const fill     = $("swipe-progress-fill");
+  progress.style.display = "block"; fill.style.width = "8%";
+
+  try {
+    const blob = await (await fetch(swipeCapturedDataUrl)).blob();
+    fill.style.width = "18%";
+
+    const { uploadURL, objectPath } = await apiFetch("/api/v1/swipe/request-upload-url", { method: "POST" });
+    fill.style.width = "28%";
+
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", uploadURL);
+      xhr.setRequestHeader("Content-Type", "image/png");
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable) fill.style.width = `${28 + Math.round((e.loaded / e.total) * 55)}%`;
+      };
+      xhr.onload  = () => xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`));
+      xhr.onerror = () => reject(new Error("Network error during upload"));
+      xhr.send(blob);
+    });
+    fill.style.width = "85%";
+
+    const { item } = await apiFetch("/api/v1/swipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "upload", title, imagePath: objectPath }),
+    });
+    fill.style.width = "92%";
+
+    let token = item.shareToken;
+    try { const sd = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" }); token = sd.token; } catch (_) {}
+    fill.style.width = "100%";
+
+    swipeLastSaved = { id: item.id, token, title };
+    setTimeout(() => {
+      $("swipe-save-form").style.display = "none";
+      $("swipe-success").style.display = "flex";
+      $("swipe-success-name").textContent = `"${title}"`;
+      if (!token) $("swipe-copy-link-btn").style.display = "none";
+      renderSwipe();
+    }, 350);
+  } catch (err) {
+    saveBtn.disabled = false; saveBtn.textContent = "Save to Swipe File";
+    progress.style.display = "none"; fill.style.width = "0%";
+    console.error("[FIA Swipe] save failed:", err.message);
+  }
+}
+
+// ── Capture by URL (manual URL input) ────────────────────────────────────
+
 async function swipeCaptureUrl() {
   const input  = $("swipe-url-input");
   const btn    = $("swipe-url-btn");
@@ -1383,19 +1558,11 @@ async function swipeCaptureUrl() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
     });
-
-    // Auto-share
     let token = item.shareToken;
-    try {
-      const shareData = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" });
-      token = shareData.token;
-    } catch (_) {}
-
+    try { const sd = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" }); token = sd.token; } catch (_) {}
     input.value = "";
     btn.disabled = false; btn.textContent = "🌐 Capture Full Page";
     status.style.display = "none";
-
-    // Show success inline
     swipeLastSaved = { id: item.id, token, title: item.title };
     $("swipe-success-name").textContent = `"${item.title}"`;
     if (!token) $("swipe-copy-link-btn").style.display = "none";
@@ -1592,6 +1759,7 @@ function swipeCopyShareLink() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+
 function switchSubTab(name) {
   currentSubTab = name;
   document.querySelectorAll(".sub-tab-btn").forEach(b =>
@@ -1731,14 +1899,32 @@ async function boot() {
       .catch(() => {/* silently ignore network errors */});
   } catch (_) {}
 
-  // Swipe File panel
-  $("swipe-capture-btn").addEventListener("click", swipeCaptureTab);
+  // Swipe File panel — three capture buttons
+  $("swipe-btn-fullpage").addEventListener("click", swipeCaptureFullPage);
+  $("swipe-btn-visible").addEventListener("click", swipeCaptureVisibleArea);
+  $("swipe-btn-section").addEventListener("click", swipeCaptureSection);
   $("swipe-form-save-btn").addEventListener("click", swipeSaveCapture);
   $("swipe-form-cancel-btn").addEventListener("click", swipeReset);
   $("swipe-copy-link-btn").addEventListener("click", swipeCopyShareLink);
   $("swipe-new-capture-btn").addEventListener("click", swipeReset);
   $("swipe-url-btn").addEventListener("click", swipeCaptureUrl);
   $("swipe-url-input").addEventListener("keydown", e => { if (e.key === "Enter") swipeCaptureUrl(); });
+
+  // Check for a pending section capture stored by the service worker
+  try {
+    const stored = await chrome.storage.session.get("pendingCapture");
+    if (stored.pendingCapture?.dataUrl) {
+      const { dataUrl } = stored.pendingCapture;
+      await chrome.storage.session.remove("pendingCapture");
+      swipeCapturedDataUrl = dataUrl;
+      $("swipe-save-preview").src  = dataUrl;
+      $("swipe-save-title").value  = "";
+      $("swipe-btn-row").style.display  = "none";
+      $("swipe-save-form").style.display = "flex";
+      switchPrimaryTab("swipe");
+      setTimeout(() => { $("swipe-save-title").focus(); }, 100);
+    }
+  } catch (_) {}
 
   // Suspended screen — "Check Again" button triggers an immediate live re-check.
   // The service-worker alarm continues running independently in the background.

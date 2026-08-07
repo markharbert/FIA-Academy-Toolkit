@@ -12,6 +12,60 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// ─── Section capture: crop & store for popup ─────────────────────────────────
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.action !== "sectionSelected") return;
+  const { rect, dpr } = msg;
+  const windowId = sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT;
+
+  chrome.tabs.captureVisibleTab(windowId, { format: "png" }, async (dataUrl) => {
+    if (chrome.runtime.lastError || !dataUrl) {
+      console.error("[FIA SW] captureVisibleTab failed:", chrome.runtime.lastError?.message);
+      return;
+    }
+    try {
+      const blob   = await (await fetch(dataUrl)).blob();
+      const bitmap = await createImageBitmap(blob);
+
+      const cw = Math.max(1, Math.round(rect.width  * dpr));
+      const ch = Math.max(1, Math.round(rect.height * dpr));
+      const canvas = new OffscreenCanvas(cw, ch);
+      const ctx    = canvas.getContext("2d");
+      ctx.drawImage(
+        bitmap,
+        Math.round(rect.x * dpr), Math.round(rect.y * dpr), cw, ch,
+        0, 0, cw, ch
+      );
+
+      const croppedBlob = await canvas.convertToBlob({ type: "image/png" });
+      const arrayBuffer = await croppedBlob.arrayBuffer();
+      const uint8       = new Uint8Array(arrayBuffer);
+
+      // Convert to base64 in chunks (btoa can't handle huge strings in one call)
+      const CHUNK = 65536;
+      let binary = "";
+      for (let i = 0; i < uint8.length; i += CHUNK) {
+        binary += String.fromCharCode.apply(null, uint8.subarray(i, i + CHUNK));
+      }
+      const croppedDataUrl = "data:image/png;base64," + btoa(binary);
+
+      await chrome.storage.session.set({
+        pendingCapture: { dataUrl: croppedDataUrl, type: "section" },
+      });
+
+      chrome.notifications.create("fia-section-ready", {
+        type:    "basic",
+        iconUrl: "icons/icon128.png",
+        title:   "FIA Toolkit — Section Captured",
+        message: "Click the extension icon to title and save it.",
+      });
+    } catch (err) {
+      console.error("[FIA SW] section crop error:", err);
+    }
+  });
+});
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "fia-save-snippet") return;
   const text      = info.selectionText ?? "";

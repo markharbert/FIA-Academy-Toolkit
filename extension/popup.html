@@ -743,20 +743,24 @@
     }
     .btn-save-goals:hover { opacity: .88; }
     .settings-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     /* ─── Swipe File panel ─────────────────────────────────────────────────── */
     .swipe-panel { padding: 12px 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 
-    /* Capture button */
-    .swipe-capture-btn {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      padding: 15px; border-radius: 10px; border: 2px dashed var(--border-med);
-      background: var(--bg-card); color: var(--text); font-size: 13px; font-weight: 600;
-      cursor: pointer; transition: all .15s; font-family: inherit; width: 100%;
+    /* Three capture buttons */
+    .swipe-btn-row { display: flex; gap: 6px; }
+    .swipe-cap-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px;
+      padding: 12px 6px 10px; border-radius: 10px;
+      border: 1px solid var(--border-med); background: var(--bg-card);
+      color: var(--text); cursor: pointer; transition: all .15s; font-family: inherit;
     }
-    .swipe-capture-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); }
-    .swipe-capture-btn:disabled { opacity: .5; cursor: not-allowed; }
-    .swipe-capture-btn.capturing { border-style: solid; border-color: var(--accent); background: var(--accent-dim); }
+    .swipe-cap-btn .swipe-cap-icon { font-size: 20px; line-height: 1; }
+    .swipe-cap-btn .swipe-cap-label { font-size: 11px; font-weight: 600; white-space: nowrap; }
+    .swipe-cap-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); }
+    .swipe-cap-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .swipe-cap-btn.active { border-color: var(--accent); background: var(--accent-dim); }
 
     /* Save form */
     .swipe-save-form {
@@ -979,12 +983,35 @@
   <div id="primary-swipe" class="primary-panel">
     <div class="swipe-panel">
 
-      <!-- Capture button -->
-      <button class="swipe-capture-btn" id="swipe-capture-btn">
-        📷&nbsp; Screenshot this tab
-      </button>
+      <!-- Three capture buttons -->
+      <div class="swipe-section-label">Screenshot</div>
+      <div id="swipe-btn-row" class="swipe-btn-row">
+        <button class="swipe-cap-btn" id="swipe-btn-fullpage">
+          <span class="swipe-cap-icon">📄</span>
+          <span class="swipe-cap-label">Full Page</span>
+        </button>
+        <button class="swipe-cap-btn" id="swipe-btn-visible">
+          <span class="swipe-cap-icon">🖥</span>
+          <span class="swipe-cap-label">Visible Area</span>
+        </button>
+        <button class="swipe-cap-btn" id="swipe-btn-section">
+          <span class="swipe-cap-icon">✂️</span>
+          <span class="swipe-cap-label">Section</span>
+        </button>
+      </div>
 
-      <!-- Save form (shown after capture) -->
+      <!-- Section instruction (auto-closes popup after showing) -->
+      <div id="swipe-section-instr" class="swipe-hint" style="display:none">
+        🎯 <strong>Switch to the page</strong> and drag to select a region. Press <strong>ESC</strong> to cancel.
+      </div>
+
+      <!-- Full Page loading indicator -->
+      <div id="swipe-fullpage-loading" class="swipe-hint" style="display:none; flex-direction:row; align-items:center; gap:8px;">
+        <span style="display:inline-block;width:13px;height:13px;border:2px solid var(--border-med);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;"></span>
+        <span>Capturing full page… (10–30 sec)</span>
+      </div>
+
+      <!-- Save form (shown after Visible Area / Section capture) -->
       <div class="swipe-save-form" id="swipe-save-form" style="display:none">
         <img class="swipe-save-preview" id="swipe-save-preview" src="" alt="Preview" />
         <div class="swipe-progress" id="swipe-progress" style="display:none">
@@ -1008,19 +1035,19 @@
         </div>
       </div>
 
-      <!-- Hint -->
-      <!-- Full-page URL capture -->
-      <div class="swipe-section-label" style="margin-top:2px;">Capture Full Page from URL</div>
+      <!-- Quick Clip hint -->
+      <div class="swipe-hint">
+        💡 Select text on any page, then <strong>right-click → Save to Swipe File</strong> to clip a snippet.
+      </div>
+
+      <!-- Capture by URL -->
+      <div class="swipe-section-label">Capture by URL</div>
       <div id="swipe-url-form" style="display:flex;flex-direction:column;gap:7px;">
         <input class="swipe-field-input" id="swipe-url-input" type="url" placeholder="https://example.com/sales-page" />
         <button class="swipe-form-save" id="swipe-url-btn" style="background:var(--gold);color:#1a1a1a;">
           🌐 Capture Full Page
         </button>
         <div id="swipe-url-status" style="display:none; font-size:11px; color:var(--text-muted); line-height:1.5;"></div>
-      </div>
-
-      <div class="swipe-hint">
-        💡 Select text on any page, then <strong>right-click → Save to Swipe File</strong> to clip a snippet.
       </div>
 
       <!-- Recent saves list -->
