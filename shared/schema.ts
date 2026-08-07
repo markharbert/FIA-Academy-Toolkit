@@ -40,6 +40,7 @@ export const users = pgTable("users", {
   cfContactId: text("cf_contact_id"),
   cfEnrolledAt: timestamp("cf_enrolled_at"),
   cfRevokedAt: timestamp("cf_revoked_at"),
+  cfRevokedGraceUntil: timestamp("cf_revoked_grace_until"),
   icalToken: text("ical_token"),
   dashboardLayout: jsonb("dashboard_layout"),
 });

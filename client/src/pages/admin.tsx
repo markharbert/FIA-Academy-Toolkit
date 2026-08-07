@@ -170,6 +170,7 @@ interface AdminUser {
   cfEnrolled: boolean | null;
   cfEnrolledAt: string | null;
   cfRevokedAt: string | null;
+  cfRevokedGraceUntil?: string | null;
   cfContactId?: string | null;
   role?: string | null;
   themePreference?: string | null;
@@ -305,6 +306,7 @@ interface CfUser {
   cfEnrolledAt: string | null;
   cfRevokedAt: string | null;
   cfContactId: string | null;
+  cfRevokedGraceUntil: string | null;
 }
 
 function EmailSenderCard() {
@@ -3904,10 +3906,17 @@ export default function AdminPage() {
                                     Enrolled
                                   </Badge>
                                 ) : u.cfRevokedAt ? (
-                                  <Badge variant="outline" className="text-red-600 border-red-300 dark:text-red-400 gap-1" title={`Revoked ${format(new Date(u.cfRevokedAt), "MMM d, yyyy")}`}>
-                                    <UserX className="h-3 w-3" />
-                                    Revoked
-                                  </Badge>
+                                  u.cfRevokedGraceUntil && new Date(u.cfRevokedGraceUntil) > new Date() ? (
+                                    <Badge variant="outline" className="text-amber-600 border-amber-300 dark:text-amber-400 gap-1" title={`Revoked ${format(new Date(u.cfRevokedAt), "MMM d, yyyy")} — grace period until ${format(new Date(u.cfRevokedGraceUntil), "MMM d, yyyy h:mm a")}`}>
+                                      <UserX className="h-3 w-3" />
+                                      Grace Period
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-red-600 border-red-300 dark:text-red-400 gap-1" title={`Revoked ${format(new Date(u.cfRevokedAt), "MMM d, yyyy")}`}>
+                                      <UserX className="h-3 w-3" />
+                                      Revoked
+                                    </Badge>
+                                  )
                                 ) : (
                                   <Badge variant="outline" className="text-muted-foreground gap-1">
                                     <UserMinus className="h-3 w-3" />

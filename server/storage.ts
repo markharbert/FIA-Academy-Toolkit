@@ -158,7 +158,7 @@ export interface IStorage {
 
   // ClickFunnels
   getCfEnrolledUsers(): Promise<{ enrolledCount: number; revokedCount: number }>;
-  getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId'>>>;
+  getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>>;
 
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
   getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }>;
@@ -1025,7 +1025,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId'>>> {
+  async getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>> {
     let query = db.select({
       id: users.id,
       email: users.email,
@@ -1036,6 +1036,7 @@ export class DatabaseStorage implements IStorage {
       cfEnrolledAt: users.cfEnrolledAt,
       cfRevokedAt: users.cfRevokedAt,
       cfContactId: users.cfContactId,
+      cfRevokedGraceUntil: users.cfRevokedGraceUntil,
     }).from(users).$dynamic();
 
     if (filter === 'enrolled') {

@@ -141,6 +141,7 @@ export async function handleCfEnrollmentEvent(
         cfContactId: contactId || user.cfContactId,
         cfEnrolledAt: new Date(),
         cfRevokedAt: null,
+        cfRevokedGraceUntil: null,
         // Re-enabling the account ensures previously revoked (and thus disabled)
         // members can log in again after their membership is reinstated in CF.
         isDisabled: false,
@@ -167,12 +168,19 @@ export async function handleCfEnrollmentEvent(
 
   if (isRevokeEvent) {
     if (user) {
+      // Grant a 48-hour grace window instead of hard-blocking immediately.
+      // Payment processors allow retry windows, so cutting access the instant
+      // the webhook arrives can lock out members whose payment may still succeed.
+      const graceUntil = new Date(Date.now() + 48 * 60 * 60 * 1000);
       await storage.updateUser(user.id, {
         cfEnrolled: false,
         cfRevokedAt: new Date(),
-        isDisabled: true,
+        cfRevokedGraceUntil: graceUntil,
+        // Do NOT set isDisabled: true here — requireAuth/requireApiKey honour
+        // cfRevokedGraceUntil and will let active sessions continue until it passes.
       });
-      return { action: "revoked", email: contactEmail };
+      console.log(`[CF Webhook] Revocation with grace period until ${graceUntil.toISOString()} for: ${contactEmail}`);
+      return { action: "revoked_grace", email: contactEmail };
     }
     return { action: "no_local_user", email: contactEmail };
   }

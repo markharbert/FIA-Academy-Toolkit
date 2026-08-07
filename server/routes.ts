@@ -190,19 +190,31 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
         return res.status(403).json({ message: "Workspace access has been revoked" });
       }
       if (process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && owner.cfEnrolled !== true) {
-        req.session.destroy(() => {});
-        return res.status(403).json({ message: "Workspace access has been revoked" });
+        const ownerInGrace =
+          owner.cfRevokedGraceUntil &&
+          new Date(owner.cfRevokedGraceUntil) > new Date();
+        if (!ownerInGrace) {
+          req.session.destroy(() => {});
+          return res.status(403).json({ message: "Workspace access has been revoked" });
+        }
       }
     } else if (!isImpersonating && process.env.CF_API_TOKEN && process.env.CF_COURSE_ID && !user.isAdmin) {
       // When CF is configured, enforce active membership on every authenticated
       // request so revoked members are denied mid-session without waiting for
       // their session to naturally expire. Admins are always exempt.
       if (user.cfEnrolled !== true) {
-        req.session.destroy(() => {});
-        return res.status(403).json({
-          message: "Active ClickFunnels membership required",
-          error: "cf_not_enrolled",
-        });
+        // If the member is within their revocation grace window, let the request
+        // through — their payment may still succeed during the retry window.
+        const inGrace =
+          user.cfRevokedGraceUntil &&
+          new Date(user.cfRevokedGraceUntil) > new Date();
+        if (!inGrace) {
+          req.session.destroy(() => {});
+          return res.status(403).json({
+            message: "Active ClickFunnels membership required",
+            error: "cf_not_enrolled",
+          });
+        }
       }
     }
   } catch (err) {
@@ -10063,7 +10075,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
 
       if (!cfEnrolled && !user.isAdmin) {
-        return res.status(403).json({ message: "Active Fearless Influencer Academy membership required." });
+        // Honour the revocation grace window so that API key callers mid-session
+        // are not immediately cut off when the webhook arrives.
+        const inGrace =
+          user.cfRevokedGraceUntil &&
+          new Date(user.cfRevokedGraceUntil) > new Date();
+        if (!inGrace) {
+          return res.status(403).json({ message: "Active Fearless Influencer Academy membership required." });
+        }
       }
 
       (req as any).apiUser = user;
