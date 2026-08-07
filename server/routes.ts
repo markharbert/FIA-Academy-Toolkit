@@ -9986,6 +9986,31 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
     }
   });
 
+  // ─── Admin: CF Grace Period Setting ──────────────────────────────────────
+  app.get("/api/admin/settings/cf-grace-period", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const hours = await storage.getCfGracePeriodHours();
+      res.json({ hours });
+    } catch (err) {
+      console.error("[cf-grace-period] get error:", err);
+      res.status(500).json({ message: "Failed to get CF grace period setting" });
+    }
+  });
+
+  app.put("/api/admin/settings/cf-grace-period", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { hours } = req.body as { hours: number };
+      if (typeof hours !== "number" || isNaN(hours) || hours < 0) {
+        return res.status(400).json({ message: "hours must be a non-negative number" });
+      }
+      await storage.setCfGracePeriodHours(hours);
+      res.json({ hours });
+    } catch (err) {
+      console.error("[cf-grace-period] set error:", err);
+      res.status(500).json({ message: "Failed to update CF grace period setting" });
+    }
+  });
+
   // ─── User: Public API Key Management ─────────────────────────────────────
   app.get("/api/account/api-key", requireAuth, async (req: Request, res: Response) => {
     try {

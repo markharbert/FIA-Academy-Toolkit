@@ -380,6 +380,8 @@ export interface IStorage {
   setApiAccessEnabled(enabled: boolean): Promise<void>;
   getEmailSenderSettings(): Promise<{ fromName: string; fromEmail: string }>;
   setEmailSenderSettings(fromName: string, fromEmail: string): Promise<void>;
+  getCfGracePeriodHours(): Promise<number>;
+  setCfGracePeriodHours(hours: number): Promise<void>;
 
   // Public API Keys
   getUserPublicApiKey(userId: string): Promise<PublicApiKey | undefined>;
@@ -2389,6 +2391,22 @@ export class DatabaseStorage implements IStorage {
         .values({ key: "email_from_email", value: fromEmail, updatedAt: now })
         .onConflictDoUpdate({ target: appSettings.key, set: { value: fromEmail, updatedAt: now } }),
     ]);
+  }
+
+  async getCfGracePeriodHours(): Promise<number> {
+    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, "cf_grace_period_hours"));
+    if (row) {
+      const parsed = parseFloat(row.value);
+      if (!isNaN(parsed) && parsed >= 0) return parsed;
+    }
+    return 48; // default
+  }
+
+  async setCfGracePeriodHours(hours: number): Promise<void> {
+    const now = new Date();
+    await db.insert(appSettings)
+      .values({ key: "cf_grace_period_hours", value: String(hours), updatedAt: now })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value: String(hours), updatedAt: now } });
   }
 
   // Public API Keys
