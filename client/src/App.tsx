@@ -72,6 +72,8 @@ const AnalyticsPage              = lazyPage(() => import("@/pages/analytics"));
 const AnalyticsYouTubePage       = lazyPage(() => import("@/pages/analytics-youtube"));
 const AnalyticsGscPage           = lazyPage(() => import("@/pages/analytics-gsc"));
 const LinksPage                  = lazyPage(() => import("@/pages/links"));
+const SwipeFilePage              = lazyPage(() => import("@/pages/swipe-file"));
+const SwipeSharePage             = lazyPage(() => import("@/pages/swipe-share"));
 const NotFound                   = lazyPage(() => import("@/pages/not-found"));
 
 function PageLoader() {
@@ -198,6 +200,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/links">
         {() => <ProtectedRoute component={LinksPage} />}
+      </Route>
+      <Route path="/swipe-file">
+        {() => <AdminRoute component={SwipeFilePage} />}
       </Route>
       <Route path="/account">
         {() => <ProtectedRoute component={AccountPage} />}
@@ -410,6 +415,7 @@ function App() {
                 <Route path="/member-login">{() => <MemberLoginPage />}</Route>
                 <Route path="/workspace/accept">{() => <WorkspaceInviteAcceptPage />}</Route>
                 <Route path="/funnels/share/:token">{() => <FunnelSharePage />}</Route>
+                <Route path="/swipe/:token">{() => <SwipeSharePage />}</Route>
                 <Route>{() => <AppLayout />}</Route>
               </Switch>
             </Suspense>

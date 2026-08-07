@@ -12200,6 +12200,167 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // ---- Swipe File (admin-only) ----
+
+  function requireAdmin(req: Request, res: Response, next: Function) {
+    if (!(req as any).session?.userId) return res.status(401).json({ message: "Unauthorized" });
+    if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+    next();
+  }
+
+  // List items
+  app.get("/api/swipe", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const userId = (req.session as any).userId as string;
+      const items = await storage.getSwipeItems(userId);
+      res.json({ items });
+    } catch (err) {
+      console.error("[swipe] list error:", err);
+      res.status(500).json({ message: "Failed to load swipe items" });
+    }
+  });
+
+  // Request upload URL (returns signed PUT URL + objectPath for client-side upload)
+  app.post("/api/swipe/request-upload-url", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      res.json({ uploadURL, objectPath });
+    } catch (err) {
+      console.error("[swipe] request-upload-url error:", err);
+      res.status(500).json({ message: "Failed to generate upload URL" });
+    }
+  });
+
+  // Create item (snippet or confirmed upload)
+  app.post("/api/swipe", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const userId = (req.session as any).userId as string;
+      const { title, type, content, imagePath, sourceUrl, notes } = req.body;
+      if (!title) return res.status(400).json({ message: "title is required" });
+      if (!type || !["upload", "snippet"].includes(type)) return res.status(400).json({ message: "type must be upload or snippet" });
+      if (type === "snippet" && !content) return res.status(400).json({ message: "content is required for snippets" });
+      if (type === "upload" && !imagePath) return res.status(400).json({ message: "imagePath is required for uploads" });
+      const item = await storage.createSwipeItem(userId, { title, type, content, imagePath, sourceUrl, notes });
+      res.json({ item });
+    } catch (err) {
+      console.error("[swipe] create error:", err);
+      res.status(500).json({ message: "Failed to create swipe item" });
+    }
+  });
+
+  // Serve image (authenticated, owner only)
+  app.get("/api/swipe/:id/image", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const userId = (req.session as any).userId as string;
+      const item = await storage.getSwipeItem(req.params.id, userId);
+      if (!item || !item.imagePath) return res.status(404).json({ message: "Not found" });
+      const file = await objectStorageService.getObjectEntityFile(item.imagePath);
+      await objectStorageService.downloadObject(file, res, 3600);
+    } catch (err) {
+      console.error("[swipe] image error:", err);
+      res.status(500).json({ message: "Failed to serve image" });
+    }
+  });
+
+  // Update item
+  app.patch("/api/swipe/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const userId = (req.session as any).userId as string;
+      const { title, notes, sourceUrl, promoLinks } = req.body;
+      const item = await storage.updateSwipeItem(req.params.id, userId, { title, notes, sourceUrl, promoLinks });
+      if (!item) return res.status(404).json({ message: "Not found" });
+      res.json({ item });
+    } catch (err) {
+      console.error("[swipe] update error:", err);
+      res.status(500).json({ message: "Failed to update swipe item" });
+    }
+  });
+
+  // Delete item (also delete GCS object if present)
+  app.delete("/api/swipe/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const userId = (req.session as any).userId as string;
+      const item = await storage.getSwipeItem(req.params.id, userId);
+      if (!item) return res.status(404).json({ message: "Not found" });
+      if (item.imagePath) {
+        try { await objectStorageService.deleteObject(item.imagePath); } catch (_) {}
+      }
+      await storage.deleteSwipeItem(req.params.id, userId);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[swipe] delete error:", err);
+      res.status(500).json({ message: "Failed to delete swipe item" });
+    }
+  });
+
+  // Generate share token
+  app.post("/api/swipe/:id/share", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const userId = (req.session as any).userId as string;
+      const existing = await storage.getSwipeItem(req.params.id, userId);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      // Reuse existing token if already shared
+      const token = existing.shareToken ?? crypto.randomBytes(24).toString("hex");
+      const item = await storage.setSwipeItemShareToken(req.params.id, userId, token);
+      res.json({ item, token });
+    } catch (err) {
+      console.error("[swipe] share error:", err);
+      res.status(500).json({ message: "Failed to generate share link" });
+    }
+  });
+
+  // Revoke share token
+  app.delete("/api/swipe/:id/share", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+      const userId = (req.session as any).userId as string;
+      const item = await storage.setSwipeItemShareToken(req.params.id, userId, null);
+      if (!item) return res.status(404).json({ message: "Not found" });
+      res.json({ item });
+    } catch (err) {
+      console.error("[swipe] unshare error:", err);
+      res.status(500).json({ message: "Failed to revoke share link" });
+    }
+  });
+
+  // ---- Swipe File – Public Share Routes (no auth required) ----
+
+  // Get public item metadata by token
+  app.get("/api/swipe/public/:token", async (req: Request, res: Response) => {
+    try {
+      const item = await storage.getSwipeItemByToken(req.params.token);
+      if (!item) return res.status(404).json({ message: "Not found or link has been revoked" });
+      await storage.incrementSwipeItemViewCount(req.params.token);
+      // Return safe subset (no userId)
+      const { userId: _uid, ...safe } = item;
+      res.json({ item: safe });
+    } catch (err) {
+      console.error("[swipe] public get error:", err);
+      res.status(500).json({ message: "Failed to load item" });
+    }
+  });
+
+  // Serve public image by token
+  app.get("/api/swipe/public/:token/image", async (req: Request, res: Response) => {
+    try {
+      const item = await storage.getSwipeItemByToken(req.params.token);
+      if (!item || !item.imagePath) return res.status(404).json({ message: "Not found" });
+      const file = await objectStorageService.getObjectEntityFile(item.imagePath);
+      await objectStorageService.downloadObject(file, res, 3600);
+    } catch (err) {
+      console.error("[swipe] public image error:", err);
+      res.status(500).json({ message: "Failed to serve image" });
+    }
+  });
+
   // v1 API – Affiliate Links
   app.get("/api/v1/links", requireApiKey, async (req: Request, res: Response) => {
     try {

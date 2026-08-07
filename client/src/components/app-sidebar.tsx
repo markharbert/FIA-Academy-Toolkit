@@ -36,6 +36,7 @@ import {
   ChevronDown,
   GitFork,
   Link2,
+  Camera,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -197,6 +198,15 @@ const allNavItems: NavItem[] = [
     testId: "nav-links",
     collaboratorVisible: false,
     adminOnly: false,
+  },
+  {
+    title: "Swipe File",
+    url: "/swipe-file",
+    icon: Camera,
+    iconColor: "text-amber-400",
+    testId: "nav-swipe-file",
+    collaboratorVisible: false,
+    adminOnly: true,
   },
 ];
 

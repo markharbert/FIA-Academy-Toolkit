@@ -53,6 +53,7 @@ import {
   funnelTemplates, type FunnelTemplate,
   announcements, dismissedAnnouncements, type Announcement, type InsertAnnouncement,
   affiliateLinks, type AffiliateLink, type InsertAffiliateLink,
+  swipeItems, type SwipeItem, type InsertSwipeItem, type PromoLink,
 } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
@@ -665,6 +666,16 @@ export interface IStorage {
   deleteAffiliateLink(id: string, userId: string): Promise<void>;
   incrementAffiliateLinkClick(id: string, userId: string): Promise<void>;
   getAffiliateLinkCategories(userId: string): Promise<string[]>;
+
+  // Swipe File
+  getSwipeItems(userId: string): Promise<SwipeItem[]>;
+  getSwipeItem(id: string, userId: string): Promise<SwipeItem | undefined>;
+  getSwipeItemByToken(token: string): Promise<SwipeItem | undefined>;
+  createSwipeItem(userId: string, data: Partial<InsertSwipeItem>): Promise<SwipeItem>;
+  updateSwipeItem(id: string, userId: string, updates: Partial<InsertSwipeItem>): Promise<SwipeItem | undefined>;
+  deleteSwipeItem(id: string, userId: string): Promise<void>;
+  setSwipeItemShareToken(id: string, userId: string, token: string | null): Promise<SwipeItem | undefined>;
+  incrementSwipeItemViewCount(token: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5076,6 +5087,60 @@ export class DatabaseStorage implements IStorage {
       .where(eq(affiliateLinks.userId, userId))
       .orderBy(asc(affiliateLinks.category));
     return rows.map(r => r.category).filter((c): c is string => !!c);
+  }
+
+  // ---- Swipe File ----
+
+  async getSwipeItems(userId: string): Promise<SwipeItem[]> {
+    return db.select().from(swipeItems)
+      .where(eq(swipeItems.userId, userId))
+      .orderBy(desc(swipeItems.createdAt));
+  }
+
+  async getSwipeItem(id: string, userId: string): Promise<SwipeItem | undefined> {
+    const [item] = await db.select().from(swipeItems)
+      .where(and(eq(swipeItems.id, id), eq(swipeItems.userId, userId)));
+    return item;
+  }
+
+  async getSwipeItemByToken(token: string): Promise<SwipeItem | undefined> {
+    const [item] = await db.select().from(swipeItems)
+      .where(eq(swipeItems.shareToken, token));
+    return item;
+  }
+
+  async createSwipeItem(userId: string, data: Partial<InsertSwipeItem>): Promise<SwipeItem> {
+    const [item] = await db.insert(swipeItems)
+      .values({ ...data, userId } as InsertSwipeItem)
+      .returning();
+    return item;
+  }
+
+  async updateSwipeItem(id: string, userId: string, updates: Partial<InsertSwipeItem>): Promise<SwipeItem | undefined> {
+    const [item] = await db.update(swipeItems)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(swipeItems.id, id), eq(swipeItems.userId, userId)))
+      .returning();
+    return item;
+  }
+
+  async deleteSwipeItem(id: string, userId: string): Promise<void> {
+    await db.delete(swipeItems)
+      .where(and(eq(swipeItems.id, id), eq(swipeItems.userId, userId)));
+  }
+
+  async setSwipeItemShareToken(id: string, userId: string, token: string | null): Promise<SwipeItem | undefined> {
+    const [item] = await db.update(swipeItems)
+      .set({ shareToken: token, updatedAt: new Date() })
+      .where(and(eq(swipeItems.id, id), eq(swipeItems.userId, userId)))
+      .returning();
+    return item;
+  }
+
+  async incrementSwipeItemViewCount(token: string): Promise<void> {
+    await db.update(swipeItems)
+      .set({ viewCount: sql`${swipeItems.viewCount} + 1` })
+      .where(eq(swipeItems.shareToken, token));
   }
 }
 

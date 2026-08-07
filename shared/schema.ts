@@ -2023,5 +2023,40 @@ export const insertAffiliateLinkSchema = createInsertSchema(affiliateLinks).omit
   createdAt: true,
   updatedAt: true,
 });
+
+// ---- Swipe File ----
+
+export type PromoLink = {
+  title: string;
+  url: string;
+  description?: string;
+};
+
+export const swipeItems = pgTable("swipe_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  type: varchar("type", { length: 20 }).notNull().default("upload"), // 'upload' | 'snippet'
+  content: text("content"),
+  imagePath: text("image_path"),
+  sourceUrl: text("source_url"),
+  notes: text("notes"),
+  promoLinks: jsonb("promo_links").$type<PromoLink[]>().default(sql`'[]'::jsonb`),
+  shareToken: varchar("share_token", { length: 64 }).unique(),
+  viewCount: integer("view_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export type SwipeItem = typeof swipeItems.$inferSelect;
+export type InsertSwipeItem = typeof swipeItems.$inferInsert;
+
+export const insertSwipeItemSchema = createInsertSchema(swipeItems).omit({
+  id: true,
+  viewCount: true,
+  shareToken: true,
+  createdAt: true,
+  updatedAt: true,
+});
 export type InsertAffiliateLink = z.infer<typeof insertAffiliateLinkSchema>;
 export type AffiliateLink = typeof affiliateLinks.$inferSelect;

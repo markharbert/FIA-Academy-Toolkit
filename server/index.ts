@@ -840,6 +840,25 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] extension_push_subscriptions migration complete");
 
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS swipe_items (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        type VARCHAR(20) NOT NULL DEFAULT 'upload',
+        content TEXT,
+        image_path TEXT,
+        source_url TEXT,
+        notes TEXT,
+        promo_links JSONB NOT NULL DEFAULT '[]'::jsonb,
+        share_token VARCHAR(64) UNIQUE,
+        view_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log("[startup] swipe_items migration complete");
+
   } catch (err) {
     console.error("[startup] migration error:", err);
   }
