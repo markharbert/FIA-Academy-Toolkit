@@ -1481,13 +1481,23 @@ async function swipeCaptureSection() {
 }
 
 async function renderSwipe() {
-  try {
-    const data = await apiFetch("/api/v1/swipe");
-    swipeItems = data.items || [];
-  } catch (_) {
-    swipeItems = [];
+  // Show cached items instantly, then refresh from the server in the background.
+  // This keeps the list in sync with the web app while feeling immediate.
+  const cached = await chrome.storage.local.get("cachedSwipeItems");
+  if (cached.cachedSwipeItems?.length) {
+    swipeItems = cached.cachedSwipeItems;
+    drawSwipeList();
   }
-  drawSwipeList();
+
+  try {
+    const data  = await apiFetch("/api/v1/swipe");
+    swipeItems  = data.items || [];
+    // Persist for next open
+    chrome.storage.local.set({ cachedSwipeItems: swipeItems }).catch(() => {});
+  } catch (_) {
+    if (!cached.cachedSwipeItems) swipeItems = [];
+  }
+  drawSwipeList(); // always re-draw with fresh (or empty-fallback) data
 }
 
 function drawSwipeList() {
