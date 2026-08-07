@@ -1266,66 +1266,72 @@ async function saveTargets() {
 }
 
 // ─── Load DMO ──────────────────────────────────────────────────────────────
-async function loadDMO() {
+// Apply DMO data to local state + re-render (no network, no screen change).
+async function applyDmoData(dmoData, settingsData) {
+  todayDate   = dmoData.date;
+  serverEntry = dmoData.entry || null;
+
+  if (settingsData) {
+    targets = {
+      visionMeditation:    settingsData.visionTarget    ?? 30,
+      personalDevelopment: settingsData.personalTarget  ?? 30,
+      expandSkills:        settingsData.expandTarget    ?? 60,
+      execution:           settingsData.executionTarget ?? 60,
+      connecting:          settingsData.connectingTarget?? 60,
+    };
+  } else {
+    const s = await chrome.storage.local.get("targets");
+    targets = s.targets || { visionMeditation:30, personalDevelopment:30, expandSkills:60, execution:60, connecting:60 };
+  }
+  await chrome.storage.local.set({ targets });
+  await loadPersisted(todayDate);
+
+  if (serverEntry) {
+    ACTS.forEach(({ key, secsKey }) => {
+      const local = timers[key];
+      if (!local || local.status === "idle") {
+        const srvSecs = serverEntry[secsKey] || 0;
+        const srvBool = serverEntry[key]     || false;
+        if (srvSecs > 0 || srvBool) {
+          timers[key] = { status: "done", accumulatedSeconds: srvSecs, startedAt: null };
+        }
+      }
+    });
+    if (!notesValue && serverEntry.notes) notesValue = serverEntry.notes;
+  }
+
+  const streak = dmoData.streak?.currentStreak ?? dmoData.streak?.current ?? 0;
+  const sc = $("streak-count");
+  if (sc) sc.textContent = streak;
+  updateSubtitle();
+  renderActivities();
+  renderTargetRows();
+  if (ACTS.some(a => timers[a.key]?.status === "running")) startTick();
+}
+
+// Fetch fresh DMO data from server.
+// background=true → update silently without touching the loading screen.
+async function loadDMO(background = false) {
   try {
     const [dmoData, settingsData] = await Promise.all([
       apiFetch("/api/v1/dmo"),
       apiFetch("/api/v1/dmo/settings").catch(() => null),
     ]);
 
-    todayDate   = dmoData.date;
-    serverEntry = dmoData.entry || null;
+    // Persist for next cache-first open
+    chrome.storage.local.set({ cachedDmo: { dmoData, settingsData } }).catch(() => {});
 
-    if (settingsData) {
-      targets = {
-        visionMeditation:    settingsData.visionTarget    ?? 30,
-        personalDevelopment: settingsData.personalTarget  ?? 30,
-        expandSkills:        settingsData.expandTarget    ?? 60,
-        execution:           settingsData.executionTarget ?? 60,
-        connecting:          settingsData.connectingTarget?? 60,
-      };
-    } else {
-      const s = await chrome.storage.local.get("targets");
-      targets = s.targets || { visionMeditation:30, personalDevelopment:30, expandSkills:60, execution:60, connecting:60 };
-    }
-    await chrome.storage.local.set({ targets });
-
-    await loadPersisted(todayDate);
-
-    // Seed timer state from server for activities not yet locally tracked
-    if (serverEntry) {
-      ACTS.forEach(({ key, secsKey }) => {
-        const local = timers[key];
-        if (!local || local.status === "idle") {
-          const srvSecs = serverEntry[secsKey] || 0;
-          const srvBool = serverEntry[key] || false;
-          if (srvSecs > 0 || srvBool) {
-            timers[key] = { status: "done", accumulatedSeconds: srvSecs, startedAt: null };
-          }
-        }
-      });
-      if (!notesValue && serverEntry.notes) notesValue = serverEntry.notes;
-    }
-
-    const streak = dmoData.streak?.currentStreak ?? dmoData.streak?.current ?? 0;
-    const sc = $("streak-count");
-    if (sc) sc.textContent = streak;
-    updateSubtitle();
-
-    renderActivities();
-    renderTargetRows();
-    if (ACTS.some(a => timers[a.key]?.status === "running")) startTick();
-    showScreen("main");
+    await applyDmoData(dmoData, settingsData);
+    if (!background) showScreen("main");
   } catch (e) {
     if (e instanceof MembershipError) {
-      // Keep the API key — membership may be restored later. Just block access.
       showScreen("suspended");
     } else if (e.status === 401) {
       await chrome.storage.local.remove("apiKey");
       apiKey = null; showScreen("setup");
     } else {
-      renderActivities(); showScreen("main");
-      setStatus("Could not load — check connection", 5000);
+      if (!background) { renderActivities(); showScreen("main"); }
+      setStatus("Could not refresh — check connection", 5000);
     }
   }
 }
@@ -1583,7 +1589,7 @@ async function boot() {
   showScreen("loading");
 
   // Load and apply saved theme
-  const stored = await chrome.storage.local.get(["apiKey", "theme", "targets"]);
+  const stored = await chrome.storage.local.get(["apiKey", "theme", "targets", "cachedDmo"]);
   applyTheme(stored.theme || "light");   // light is default
 
   // Theme toggle
@@ -1739,11 +1745,20 @@ async function boot() {
     }
   });
 
-  // Load API key and go
+  // Load API key and go — cache-first so the popup feels instant
   if (stored.apiKey) {
     apiKey = stored.apiKey;
     if (stored.targets) targets = stored.targets;
-    await loadDMO();
+
+    if (stored.cachedDmo?.dmoData) {
+      // Show UI immediately from last cached response (~0ms), then refresh in background
+      await applyDmoData(stored.cachedDmo.dmoData, stored.cachedDmo.settingsData);
+      showScreen("main");
+      loadDMO(true).catch(() => {}); // silent background refresh
+    } else {
+      // First-ever open — must wait for the network
+      await loadDMO();
+    }
   } else {
     showScreen("setup");
   }
