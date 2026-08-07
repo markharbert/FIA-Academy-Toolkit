@@ -107,6 +107,42 @@
       --streak-b:   rgba(255,255,255,.12);
     }
 
+    /* ─── Suspended / membership revoked screen ──────────────────────────── */
+    #suspended-screen {
+      display: none; flex-direction: column; align-items: center;
+      gap: 14px; padding: 32px 24px; text-align: center;
+    }
+    #suspended-screen.active { display: flex; }
+    .suspended-icon {
+      width: 72px; height: 72px; border-radius: 50%; overflow: hidden;
+      box-shadow: 0 0 0 3px rgba(218,0,16,.3);
+      opacity: .75;
+    }
+    .suspended-icon img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(.6); }
+    .suspended-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 12px; border-radius: 20px;
+      background: rgba(218,0,16,.1); border: 1px solid rgba(218,0,16,.25);
+      font-size: 11px; font-weight: 700; color: var(--red); letter-spacing: .04em;
+    }
+    .suspended-title {
+      font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.4;
+    }
+    .suspended-body {
+      font-size: 12px; color: var(--text-sub); line-height: 1.65; max-width: 300px;
+    }
+    .suspended-support {
+      display: inline-block; padding: 9px 20px; border-radius: 8px;
+      background: var(--brand); color: #fff;
+      font-size: 12px; font-weight: 600; text-decoration: none;
+      transition: opacity .15s;
+    }
+    .suspended-support:hover { opacity: .85; }
+    .suspended-dismiss {
+      font-size: 11px; color: var(--text-muted); background: none; border: none;
+      cursor: pointer; text-decoration: underline; font-family: inherit;
+    }
+
     /* ─── Base ────────────────────────────────────────────────────────────── */
     body {
       width: 400px;
@@ -481,6 +517,24 @@
 
 <!-- Loading -->
 <div id="loading-screen"><div class="spinner"></div></div>
+
+<!-- Suspended / membership revoked -->
+<div id="suspended-screen">
+  <div class="suspended-icon"><img src="icons/icon128.png" alt="FIA" /></div>
+  <div class="suspended-badge">⚠ Membership Inactive</div>
+  <p class="suspended-title">Your membership is not active</p>
+  <p class="suspended-body">
+    Access to the FIA Toolkit requires an active Fearless Influencer Academy membership.
+    If you believe this is an error, please contact support to resolve it.
+  </p>
+  <a href="mailto:support@markharbert.com?subject=FIA%20Toolkit%20Access%20Issue"
+     class="suspended-support" target="_blank">
+    Contact Support
+  </a>
+  <button class="suspended-dismiss" id="suspended-disconnect">
+    Disconnect &amp; clear saved key
+  </button>
+</div>
 
 <!-- Setup -->
 <div id="setup-screen">

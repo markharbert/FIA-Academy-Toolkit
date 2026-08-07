@@ -106,14 +106,32 @@ function setStatus(msg, clearMs) {
   if (clearMs) statusClearTimer = setTimeout(() => { if ($("save-status")) $("save-status").textContent = ""; }, clearMs);
 }
 
+// ─── Membership error ──────────────────────────────────────────────────────
+class MembershipError extends Error {
+  constructor(msg) { super(msg); this.name = "MembershipError"; }
+}
+
 // ─── API ───────────────────────────────────────────────────────────────────
 async function apiFetch(path, opts = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: { "X-API-Key": apiKey, "Content-Type": "application/json", ...(opts.headers || {}) },
   });
+  if (res.status === 403) {
+    let msg = "Membership not active.";
+    try { const j = await res.json(); msg = j.message || msg; } catch {}
+    throw new MembershipError(msg);
+  }
   if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
   return res.json();
+}
+
+// ─── Suspended screen ──────────────────────────────────────────────────────
+function showSuspended() {
+  $("loading-screen")?.classList.remove("active");
+  $("setup-screen")?.classList.remove("active");
+  $("main-screen")?.classList.remove("active");
+  $("suspended-screen")?.classList.add("active");
 }
 
 function buildPayload() {
@@ -562,7 +580,8 @@ function buildEntryDetail(entry, container) {
         const data = await apiFetch("/api/v1/dmo/history?limit=60");
         logEntries = data.entries || [];
         renderLogList(container);
-      } catch {
+      } catch (err) {
+        if (err instanceof MembershipError) { showSuspended(); return; }
         btn.textContent = "Save Times"; btn.disabled = false;
       }
     });
@@ -639,7 +658,8 @@ function buildEntryDetail(entry, container) {
         const data = await apiFetch("/api/v1/dmo/history?limit=60");
         logEntries = data.entries || [];
         renderLogList(container);
-      } catch {
+      } catch (err) {
+        if (err instanceof MembershipError) { showSuspended(); return; }
         btn.textContent = "Save Notes"; btn.disabled = false;
       }
     });
@@ -723,7 +743,8 @@ function buildBackfillForm(container) {
       const data = await apiFetch("/api/v1/dmo/history?limit=60");
       logEntries = data.entries || [];
       renderLogList(container);
-    } catch {
+    } catch (err) {
+      if (err instanceof MembershipError) { showSuspended(); return; }
       btn.textContent = "Save Day"; btn.disabled = false;
     }
   });
@@ -823,7 +844,10 @@ async function loadDMO() {
     if (ACTS.some(a => timers[a.key]?.status === "running")) startTick();
     showScreen("main");
   } catch (e) {
-    if (e.status === 401 || e.status === 403) {
+    if (e instanceof MembershipError) {
+      // Keep the API key — membership may be restored later. Just block access.
+      showScreen("suspended");
+    } else if (e.status === 401) {
       await chrome.storage.local.remove("apiKey");
       apiKey = null; showScreen("setup");
     } else {
@@ -835,7 +859,7 @@ async function loadDMO() {
 
 // ─── Screen management ─────────────────────────────────────────────────────
 function showScreen(name) {
-  ["loading", "setup", "main"].forEach(s => {
+  ["loading", "suspended", "setup", "main"].forEach(s => {
     const el = $(`${s}-screen`);
     if (!el) return;
     el.classList.toggle("active", s === name);
@@ -868,11 +892,17 @@ async function validateAndSave(key, errorEl) {
     } catch (_) {}
     await loadDMO();
   } catch (e) {
-    apiKey = null;
-    errorEl.textContent = (e.status === 401 || e.status === 403)
-      ? "Invalid API key — check your Account page."
-      : `Connection error: ${e.message}`;
-    errorEl.style.display = "block"; showScreen("setup");
+    if (e instanceof MembershipError) {
+      // Key is valid but membership is inactive — save it and show suspended screen
+      await chrome.storage.local.set({ apiKey: key });
+      showScreen("suspended");
+    } else {
+      apiKey = null;
+      errorEl.textContent = e.status === 401
+        ? "API key not found or revoked — check your Account page."
+        : `Connection error: ${e.message}`;
+      errorEl.style.display = "block"; showScreen("setup");
+    }
   }
 }
 
@@ -910,6 +940,16 @@ async function boot() {
     showScreen("setup");
   });
   $("save-targets-btn").addEventListener("click", saveTargets);
+
+  // Suspended screen — disconnect clears everything
+  $("suspended-disconnect")?.addEventListener("click", async () => {
+    stopTick();
+    const savedTheme = currentTheme;
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set({ theme: savedTheme });
+    apiKey = null; timers = {}; notesValue = ""; serverEntry = null;
+    showScreen("setup");
+  });
 
   // Pre-fill key in settings tab when opened
   document.querySelector('[data-tab="settings"]').addEventListener("click", () => {
