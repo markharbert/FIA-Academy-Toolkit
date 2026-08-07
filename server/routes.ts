@@ -12544,6 +12544,89 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Save or replace push subscription for the authenticated member
   // ---- Extension version check + download (public, no auth) ----
 
+  // ---- Public pages (no auth, server-rendered HTML) ----
+
+  app.get("/privacy-policy", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — FIA Academy Toolkit</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; line-height: 1.7; background: #fff; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+    h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+    .meta { color: #888; font-size: 14px; margin-bottom: 40px; }
+    h2 { font-size: 18px; font-weight: 700; margin: 32px 0 8px; }
+    p { margin-bottom: 12px; }
+    ul { padding-left: 24px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+    code { font-size: 13px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+    hr { border: none; border-top: 1px solid #e5e5e5; margin: 48px 0 16px; }
+    .footer { font-size: 13px; color: #999; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Privacy Policy</h1>
+  <p class="meta">FIA Academy Toolkit Chrome Extension &nbsp;·&nbsp; Last updated: July 2026</p>
+
+  <h2>Overview</h2>
+  <p>The FIA Academy Toolkit extension ("Extension") is a private tool exclusively for members of the Fearless Influence Academy ("FIA Academy"). This policy explains what data the Extension collects, how it is used, and how it is stored. We do not sell, share, or rent your data to any third party.</p>
+
+  <h2>Data We Collect</h2>
+  <p>The Extension collects and transmits the following data:</p>
+  <ul>
+    <li><strong>API Key.</strong> A personal API key that authenticates you to the FIA Academy Toolkit server. This key is stored locally in <code>chrome.storage.local</code> on your device and is sent with every request to the Toolkit server. It is never shared with any third party.</li>
+    <li><strong>DMO Activity Logs.</strong> When you log Daily Method of Operation (DMO) activities, those entries are sent to and stored on the FIA Academy Toolkit server associated with your account.</li>
+    <li><strong>Affiliate &amp; Resource Links.</strong> Links you manage through the Extension are stored on the FIA Academy Toolkit server and synced to your account.</li>
+    <li><strong>Swipe File Captures.</strong> Screenshots you take of browser tabs, text snippets you clip via right-click, and full-page captures submitted by URL are uploaded to and stored on the FIA Academy Toolkit server under your account. You control whether individual items are shared publicly via a share link.</li>
+    <li><strong>Page URL &amp; Title.</strong> When you capture a screenshot, the URL and title of the active browser tab are read solely to pre-fill a title field and record the source of the capture. This information is only used locally in the popup and, if saved, stored as part of your Swipe File entry.</li>
+    <li><strong>Selected Text.</strong> When you use the right-click "Save to Swipe File" context menu on a text selection, the selected text is sent to the FIA Academy Toolkit server and stored as a snippet in your Swipe File.</li>
+  </ul>
+
+  <h2>How We Use Your Data</h2>
+  <ul>
+    <li>To provide and operate the features of the Extension and the FIA Academy Toolkit platform.</li>
+    <li>To authenticate your account and ensure only authorized members can access the Toolkit.</li>
+    <li>To store your activity logs, links, and Swipe File captures in your personal account.</li>
+    <li>To display your data back to you within the Extension and on the FIA Academy Toolkit website.</li>
+  </ul>
+  <p>We do not use your data for advertising, profiling, or any purpose beyond operating the Toolkit.</p>
+
+  <h2>Data Storage &amp; Security</h2>
+  <p>Your API key is stored locally on your device using Chrome's built-in <code>chrome.storage.local</code> API. All other data is stored on our servers hosted on Google Cloud infrastructure. Data in transit is encrypted via HTTPS. We follow industry-standard security practices to protect your information.</p>
+
+  <h2>Permissions Used</h2>
+  <ul>
+    <li><strong>storage</strong> — stores your API key and settings locally on your device.</li>
+    <li><strong>activeTab / tabs</strong> — reads the URL and title of the current tab when you initiate a screenshot capture. The Extension does not access tab content passively.</li>
+    <li><strong>contextMenus</strong> — adds a "Save to Swipe File" option when you right-click selected text. The Extension only reads the selected text when you explicitly invoke this menu item.</li>
+    <li><strong>notifications</strong> — displays a confirmation notification after a snippet is saved via right-click.</li>
+    <li><strong>alarms</strong> — powers timed reminders and DMO tracking features.</li>
+  </ul>
+
+  <h2>Third Parties</h2>
+  <p>The Extension communicates exclusively with the FIA Academy Toolkit server (<strong>toolkit.fearlessmarketinglab.com</strong>). No data is sent to any advertising network, analytics provider, or other third party.</p>
+
+  <h2>Data Deletion</h2>
+  <p>You can remove your locally stored API key at any time by clicking "Disconnect &amp; clear all data" in the Extension's Settings panel. To request deletion of your account data from our servers, contact FIA Academy support.</p>
+
+  <h2>Changes to This Policy</h2>
+  <p>We may update this policy as the Extension evolves. The "last updated" date at the top of this page reflects the most recent revision. Continued use of the Extension after changes are posted constitutes acceptance of the updated policy.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy? Reach out through the FIA Academy member support channels.</p>
+
+  <hr />
+  <p class="footer">&copy; 2026 FIA Academy &nbsp;·&nbsp; FIA Academy Toolkit</p>
+</div>
+</body>
+</html>`);
+  });
+
   app.get("/api/extension/version", async (_req: Request, res: Response) => {
     try {
       const fs   = await import("fs");
