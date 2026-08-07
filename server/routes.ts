@@ -12542,6 +12542,43 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
 
   // ─── Chrome Extension: Push Subscriptions ────────────────────────────────
   // Save or replace push subscription for the authenticated member
+  // ---- Extension version check + download (public, no auth) ----
+
+  app.get("/api/extension/version", async (_req: Request, res: Response) => {
+    try {
+      const fs   = await import("fs");
+      const path = await import("path");
+      const manifestPath = path.resolve("extension/manifest.json");
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      res.json({
+        version:     manifest.version,
+        downloadUrl: "/api/extension/download",
+      });
+    } catch (err) {
+      console.error("[extension/version]", err);
+      res.status(500).json({ message: "Could not read extension version" });
+    }
+  });
+
+  app.get("/api/extension/download", async (_req: Request, res: Response) => {
+    try {
+      const fs   = await import("fs");
+      const path = await import("path");
+      const zipPath = path.resolve("extension/fia-toolkit-latest.zip");
+      if (!fs.existsSync(zipPath)) {
+        return res.status(404).json({ message: "Extension package not found" });
+      }
+      const stat = fs.statSync(zipPath);
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="fia-toolkit-latest.zip"`);
+      res.setHeader("Content-Length", stat.size);
+      fs.createReadStream(zipPath).pipe(res);
+    } catch (err) {
+      console.error("[extension/download]", err);
+      res.status(500).json({ message: "Download failed" });
+    }
+  });
+
   app.post("/api/extension/subscribe", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;

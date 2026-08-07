@@ -1694,11 +1694,41 @@ async function boot() {
   });
   $("save-targets-btn").addEventListener("click", saveTargets);
 
-  // Populate version badge in Settings
+  // Populate version badge + check for updates
   try {
-    const { version } = chrome.runtime.getManifest();
+    const currentVersion = chrome.runtime.getManifest().version;
     const badge = $("settings-version-badge");
-    if (badge) badge.textContent = `v${version}`;
+    if (badge) badge.textContent = `v${currentVersion}`;
+
+    // Fetch latest version from server (fire-and-forget, no auth needed)
+    fetch(`${API_BASE}/api/extension/version`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.version) return;
+        const latest  = data.version;
+        const current = currentVersion;
+        // Simple semver-style comparison (major.minor.patch)
+        const toNum = v => v.split(".").reduce((acc, n, i) => acc + parseInt(n, 10) * Math.pow(1000, 2 - i), 0);
+        if (toNum(latest) > toNum(current)) {
+          // Show red dot on gear icon
+          const gear = $("settings-gear-btn");
+          if (gear && !gear.querySelector(".update-dot")) {
+            const dot = document.createElement("span");
+            dot.className = "update-dot";
+            dot.style.cssText = "position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--red);pointer-events:none;";
+            gear.style.position = "relative";
+            gear.appendChild(dot);
+          }
+          // Show update card in Settings
+          const card  = $("settings-update-card");
+          const label = $("settings-update-new-ver");
+          const link  = $("settings-update-dl-link");
+          if (card)  card.style.display = "flex";
+          if (label) label.textContent  = `v${latest}`;
+          if (link && data.downloadUrl)  link.href = `${API_BASE}${data.downloadUrl}`;
+        }
+      })
+      .catch(() => {/* silently ignore network errors */});
   } catch (_) {}
 
   // Swipe File panel

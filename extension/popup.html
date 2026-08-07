@@ -1069,8 +1069,13 @@
           <span style="font-size:12px; color:var(--text);">FIA Academy Toolkit</span>
           <span id="settings-version-badge" style="font-size:11px; font-weight:600; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border); border-radius:20px; padding:2px 9px; letter-spacing:.03em;">v—</span>
         </div>
-        <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">
-          <span id="settings-update-note"></span>
+        <div id="settings-update-card" style="display:none; margin-top:6px; padding:10px 12px; border-radius:9px; border:1px solid var(--accent); background:var(--accent-dim); flex-direction:column; gap:6px;">
+          <div style="font-size:12px; font-weight:700; color:var(--accent);">🎉 Update available!</div>
+          <div style="font-size:11px; color:var(--text); line-height:1.5;">Version <strong id="settings-update-new-ver"></strong> is ready. Download the ZIP and drag it onto <code style="font-size:10px; background:var(--bg-card); padding:1px 4px; border-radius:4px;">chrome://extensions</code> to update.</div>
+          <a id="settings-update-dl-link" href="/api/extension/download" download="fia-toolkit-latest.zip"
+             style="display:inline-block; padding:6px 12px; border-radius:7px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; text-decoration:none; text-align:center;">
+            ⬇ Download update
+          </a>
         </div>
       </div>
     </div>
