@@ -1361,6 +1361,52 @@ function updateSubtitle() {
 
 // ─── Swipe File functions ──────────────────────────────────────────────────
 
+async function swipeCaptureUrl() {
+  const input  = $("swipe-url-input");
+  const btn    = $("swipe-url-btn");
+  const status = $("swipe-url-status");
+  const url    = input.value.trim();
+
+  if (!url) { input.focus(); return; }
+  try { new URL(url); } catch {
+    status.textContent = "⚠ Please enter a valid URL starting with https://";
+    status.style.display = "block"; return;
+  }
+
+  btn.disabled = true; btn.textContent = "🌐 Capturing…";
+  status.textContent = "Launching headless browser… this takes 10–30 seconds.";
+  status.style.display = "block";
+
+  try {
+    const { item } = await apiFetch("/api/v1/swipe/capture-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+
+    // Auto-share
+    let token = item.shareToken;
+    try {
+      const shareData = await apiFetch(`/api/v1/swipe/${item.id}/share`, { method: "POST" });
+      token = shareData.token;
+    } catch (_) {}
+
+    input.value = "";
+    btn.disabled = false; btn.textContent = "🌐 Capture Full Page";
+    status.style.display = "none";
+
+    // Show success inline
+    swipeLastSaved = { id: item.id, token, title: item.title };
+    $("swipe-success-name").textContent = `"${item.title}"`;
+    if (!token) $("swipe-copy-link-btn").style.display = "none";
+    $("swipe-success").style.display = "flex";
+    renderSwipe();
+  } catch (err) {
+    btn.disabled = false; btn.textContent = "🌐 Capture Full Page";
+    status.textContent = `⚠ ${err.message ?? "Capture failed — check the URL and try again."}`;
+  }
+}
+
 async function renderSwipe() {
   try {
     const data = await apiFetch("/api/v1/swipe");
@@ -1654,6 +1700,8 @@ async function boot() {
   $("swipe-form-cancel-btn").addEventListener("click", swipeReset);
   $("swipe-copy-link-btn").addEventListener("click", swipeCopyShareLink);
   $("swipe-new-capture-btn").addEventListener("click", swipeReset);
+  $("swipe-url-btn").addEventListener("click", swipeCaptureUrl);
+  $("swipe-url-input").addEventListener("keydown", e => { if (e.key === "Enter") swipeCaptureUrl(); });
 
   // Suspended screen — "Check Again" button triggers an immediate live re-check.
   // The service-worker alarm continues running independently in the background.

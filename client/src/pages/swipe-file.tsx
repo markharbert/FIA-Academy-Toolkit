@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Camera, FileText, Plus, Copy, Share2, Trash2, Edit3,
   ExternalLink, Eye, EyeOff, Link2, X, Check, Upload,
-  Image as ImageIcon, Loader2, Globe,
+  Image as ImageIcon, Loader2, Globe, Scroll,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +63,7 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
   const qc = useQueryClient();
 
   // Shared
-  const [tab, setTab] = useState<"upload" | "snippet">("upload");
+  const [tab, setTab] = useState<"upload" | "snippet" | "url">("upload");
   const [title, setTitle] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [notes, setNotes] = useState("");
@@ -77,9 +77,14 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
   // Snippet
   const [content, setContent] = useState("");
 
+  // Full-page URL capture
+  const [captureUrl, setCaptureUrl] = useState("");
+  const [captureTitle, setCaptureTitle] = useState("");
+
   const reset = () => {
     setTitle(""); setSourceUrl(""); setNotes(""); setFile(null);
     setContent(""); setUploading(false); setUploadProgress(0);
+    setCaptureUrl(""); setCaptureTitle("");
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -133,7 +138,29 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
     createMutation.mutate({ type: "snippet", title: title.trim(), content: content.trim(), sourceUrl: sourceUrl.trim() || undefined, notes: notes.trim() || undefined });
   }
 
-  const busy = uploading || createMutation.isPending;
+  const captureMutation = useMutation({
+    mutationFn: (body: object) => apiFetch("/api/swipe/capture-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/swipe"] });
+      toast({ title: "Full-page capture saved!" });
+      handleClose();
+    },
+    onError: (e: Error) => toast({ title: "Capture failed", description: e.message, variant: "destructive" }),
+  });
+
+  function handleUrlSubmit() {
+    if (!captureUrl.trim()) return toast({ title: "URL is required", variant: "destructive" });
+    try { new URL(captureUrl.trim()); } catch {
+      return toast({ title: "Enter a valid URL (starting with https://…)", variant: "destructive" });
+    }
+    captureMutation.mutate({ url: captureUrl.trim(), title: captureTitle.trim() || undefined });
+  }
+
+  const busy = uploading || createMutation.isPending || captureMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
@@ -147,11 +174,14 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
 
         <Tabs value={tab} onValueChange={v => setTab(v as any)}>
           <TabsList className="w-full">
-            <TabsTrigger value="upload" className="flex-1 gap-2">
-              <Upload className="h-4 w-4" /> Image Upload
+            <TabsTrigger value="upload" className="flex-1 gap-2 text-xs">
+              <Upload className="h-3.5 w-3.5" /> Upload
             </TabsTrigger>
-            <TabsTrigger value="snippet" className="flex-1 gap-2">
-              <FileText className="h-4 w-4" /> Text Snippet
+            <TabsTrigger value="snippet" className="flex-1 gap-2 text-xs">
+              <FileText className="h-3.5 w-3.5" /> Snippet
+            </TabsTrigger>
+            <TabsTrigger value="url" className="flex-1 gap-2 text-xs">
+              <Scroll className="h-3.5 w-3.5" /> Full Page
             </TabsTrigger>
           </TabsList>
 
@@ -201,24 +231,58 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
                 placeholder="Paste the text you want to save…" rows={5} />
             </TabsContent>
 
-            <div>
-              <Label htmlFor="sw-source">Source URL</Label>
-              <Input id="sw-source" type="url" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)}
-                placeholder="https://example.com/original-page" />
-            </div>
-            <div>
-              <Label htmlFor="sw-notes">Personal Notes</Label>
-              <Textarea id="sw-notes" value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Why did you save this? What's the hook?" rows={2} />
-            </div>
+            {tab !== "url" && (
+              <>
+                <div>
+                  <Label htmlFor="sw-source">Source URL</Label>
+                  <Input id="sw-source" type="url" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)}
+                    placeholder="https://example.com/original-page" />
+                </div>
+                <div>
+                  <Label htmlFor="sw-notes">Personal Notes</Label>
+                  <Textarea id="sw-notes" value={notes} onChange={e => setNotes(e.target.value)}
+                    placeholder="Why did you save this? What's the hook?" rows={2} />
+                </div>
+              </>
+            )}
+
+            <TabsContent value="url" className="m-0 space-y-3">
+              <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <Scroll className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>Captures the <strong>full scrolling page</strong> at that URL using a headless browser. Works on public pages only. Takes 10–30 seconds.</span>
+              </div>
+              <div>
+                <Label htmlFor="sw-cap-url">Page URL *</Label>
+                <Input id="sw-cap-url" type="url" value={captureUrl} onChange={e => setCaptureUrl(e.target.value)}
+                  placeholder="https://example.com/sales-page" />
+              </div>
+              <div>
+                <Label htmlFor="sw-cap-title">Title (optional)</Label>
+                <Input id="sw-cap-title" value={captureTitle} onChange={e => setCaptureTitle(e.target.value)}
+                  placeholder="Saved as the page's domain if blank" />
+              </div>
+              {captureMutation.isPending && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Launching headless browser and capturing full page…
+                  </div>
+                  <p className="text-xs text-muted-foreground">This usually takes 10–30 seconds.</p>
+                </div>
+              )}
+            </TabsContent>
           </div>
         </Tabs>
 
         <div className="flex gap-2 pt-2">
           <Button variant="outline" onClick={handleClose} disabled={busy} className="flex-1">Cancel</Button>
-          <Button onClick={tab === "upload" ? handleUploadSubmit : handleSnippetSubmit} disabled={busy} className="flex-1">
+          <Button
+            onClick={tab === "upload" ? handleUploadSubmit : tab === "snippet" ? handleSnippetSubmit : handleUrlSubmit}
+            disabled={busy}
+            className="flex-1"
+          >
             {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-            {uploading ? `Uploading… ${uploadProgress}%` : "Save to Swipe File"}
+            {uploading ? `Uploading… ${uploadProgress}%` : tab === "url" ? (captureMutation.isPending ? "Capturing…" : "Capture Full Page") : "Save to Swipe File"}
           </Button>
         </div>
       </DialogContent>

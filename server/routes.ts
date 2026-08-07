@@ -12485,6 +12485,61 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // Full-page capture via Puppeteer (v1 API key — for extension)
+  app.post("/api/v1/swipe/capture-url", requireApiKey, async (req: Request, res: Response) => {
+    const user = (req as any).apiUser;
+    const { url, title } = req.body;
+    if (!url) return res.status(400).json({ message: "url is required" });
+    let parsedUrl: URL;
+    try { parsedUrl = new URL(url); } catch { return res.status(400).json({ message: "Invalid URL" }); }
+    if (!["http:", "https:"].includes(parsedUrl.protocol))
+      return res.status(400).json({ message: "Only http/https URLs are supported" });
+    try {
+      const { captureFullPage } = await import("./puppeteerCapture");
+      console.log(`[v1 swipe] capturing full page: ${url}`);
+      const buffer = await captureFullPage(url, 45_000);
+      const uploadURL  = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      await objectStorageService.uploadFile(objectPath, buffer, "image/png");
+      const itemTitle = (title ?? "").trim() || new URL(url).hostname;
+      const item = await storage.createSwipeItem(user.id, {
+        type: "upload", title: itemTitle, imagePath: objectPath, sourceUrl: url,
+      });
+      res.json({ item });
+    } catch (err: any) {
+      console.error("[v1 swipe] capture-url error:", err);
+      res.status(500).json({ message: err?.message ?? "Capture failed" });
+    }
+  });
+
+  // Full-page capture (session auth — for web app)
+  app.post("/api/swipe/capture-url", requireAuth, async (req: Request, res: Response) => {
+    if (!(req as any).user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+    const userId = (req.session as any).userId as string;
+    const { url, title } = req.body;
+    if (!url) return res.status(400).json({ message: "url is required" });
+    let parsedUrl: URL;
+    try { parsedUrl = new URL(url); } catch { return res.status(400).json({ message: "Invalid URL" }); }
+    if (!["http:", "https:"].includes(parsedUrl.protocol))
+      return res.status(400).json({ message: "Only http/https URLs are supported" });
+    try {
+      const { captureFullPage } = await import("./puppeteerCapture");
+      console.log(`[swipe] capturing full page: ${url}`);
+      const buffer = await captureFullPage(url, 45_000);
+      const uploadURL  = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      await objectStorageService.uploadFile(objectPath, buffer, "image/png");
+      const itemTitle = (title ?? "").trim() || new URL(url).hostname;
+      const item = await storage.createSwipeItem(userId, {
+        type: "upload", title: itemTitle, imagePath: objectPath, sourceUrl: url,
+      });
+      res.json({ item });
+    } catch (err: any) {
+      console.error("[swipe] capture-url error:", err);
+      res.status(500).json({ message: err?.message ?? "Capture failed" });
+    }
+  });
+
   // ─── Chrome Extension: Push Subscriptions ────────────────────────────────
   // Save or replace push subscription for the authenticated member
   app.post("/api/extension/subscribe", requireApiKey, async (req: Request, res: Response) => {
