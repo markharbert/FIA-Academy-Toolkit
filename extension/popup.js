@@ -135,12 +135,17 @@ async function apiFetch(path, opts = {}) {
   return res.json();
 }
 
+// ─── Service-worker messaging ──────────────────────────────────────────────
+// Uses chrome.runtime.sendMessage — the correct MV3 extension messaging API.
+function messageServiceWorker(msg) {
+  chrome.runtime.sendMessage(msg).catch(() => {});
+}
+
 // ─── Suspended screen ──────────────────────────────────────────────────────
 function showSuspended() {
-  $("loading-screen")?.classList.remove("active");
-  $("setup-screen")?.classList.remove("active");
-  $("main-screen")?.classList.remove("active");
-  $("suspended-screen")?.classList.add("active");
+  // Delegate to showScreen so the SW alarm is always started,
+  // including mid-session 403 flows that call showSuspended() directly.
+  showScreen("suspended");
 }
 
 function buildPayload() {
@@ -1271,6 +1276,13 @@ function showScreen(name) {
     if (!el) return;
     el.classList.toggle("active", s === name);
   });
+  if (name === "suspended") {
+    // Ask the service worker to set a persistent alarm that survives popup close.
+    messageServiceWorker({ type: "START_SUSPENDED_CHECK" });
+  } else {
+    // Cancel the alarm — membership is no longer suspended from our perspective.
+    messageServiceWorker({ type: "STOP_SUSPENDED_CHECK" });
+  }
 }
 
 // ─── Tab management ────────────────────────────────────────────────────────
@@ -1353,7 +1365,8 @@ async function boot() {
   });
   $("save-targets-btn").addEventListener("click", saveTargets);
 
-  // Suspended screen — "Check Again" button triggers a forced live re-check
+  // Suspended screen — "Check Again" button triggers an immediate live re-check.
+  // The service-worker alarm continues running independently in the background.
   $("suspended-check-btn")?.addEventListener("click", async () => {
     const btn = $("suspended-check-btn");
     const msg = $("suspended-check-msg");
@@ -1366,7 +1379,8 @@ async function boot() {
     try {
       const data = await apiFetch("/api/v1/membership/check", { method: "POST" });
       if (data.enrolled) {
-        // Membership restored — load the tracker normally
+        // Membership restored — loadDMO() will call showScreen("main") which
+        // sends STOP_SUSPENDED_CHECK to the SW to cancel the background alarm.
         await loadDMO();
       } else {
         if (msg) { msg.textContent = "Still inactive — contact support"; msg.className = "suspended-check-msg error"; }
@@ -1395,6 +1409,15 @@ async function boot() {
     const el = $("settings-key-input");
     if (el && apiKey) el.value = apiKey;
     $("settings-error").style.display = "none";
+  });
+
+  // Listen for MEMBERSHIP_RESTORED pushed by the service-worker alarm.
+  // Uses chrome.runtime.onMessage — the correct MV3 extension messaging API.
+  // Fires when the background alarm detects restored membership while the popup is open.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === "MEMBERSHIP_RESTORED") {
+      loadDMO();
+    }
   });
 
   // Load API key and go

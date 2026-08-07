@@ -51,9 +51,85 @@ async function unsubscribeFromPush(apiKey) {
   }
 }
 
+// ─── Suspended-membership auto-recovery (chrome.alarms) ──────────────────────
+
+const SUSPENDED_ALARM      = "fia-suspended-check";
+const SUSPENDED_CHECK_MINS = 5;
+
+// Fires every 5 minutes while the member is suspended.
+// Survives popup close because it runs in the service worker.
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== SUSPENDED_ALARM) return;
+  checkMembershipAlarm();
+});
+
+async function checkMembershipAlarm() {
+  const { apiKey, suspended } = await chrome.storage.local.get(["apiKey", "suspended"]);
+  if (!apiKey || !suspended) {
+    // State no longer requires background checking — cancel the alarm.
+    chrome.alarms.clear(SUSPENDED_ALARM);
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/membership/check`, {
+      method: "POST",
+      headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+    });
+    if (!res.ok) return; // Silent — will retry on next alarm
+    const data = await res.json();
+    if (!data.enrolled) return; // Still inactive — will retry on next alarm
+
+    // ── Membership restored ──
+    chrome.alarms.clear(SUSPENDED_ALARM);
+    await chrome.storage.local.set({ suspended: false });
+
+    // Tell the popup if it is currently open (throws if popup is closed — that's fine).
+    try {
+      await chrome.runtime.sendMessage({ type: "MEMBERSHIP_RESTORED" });
+    } catch {}
+
+    // Show a system notification so the member knows even when the popup is closed.
+    try {
+      chrome.notifications.create("fia-membership-restored", {
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: "FIA Toolkit — Access Restored 🎉",
+        message: "Your membership is active again. Open the extension to continue.",
+        priority: 2,
+      });
+    } catch {}
+  } catch {
+    // Network error — silent, will retry on next alarm
+  }
+}
+
+// ─── Runtime messages from popup ─────────────────────────────────────────────
+// Uses chrome.runtime.onMessage (the correct MV3 extension messaging API).
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  const { type, apiKey } = message || {};
+
+  if (type === "START_SUSPENDED_CHECK") {
+    chrome.storage.local.set({ suspended: true }).then(() =>
+      chrome.alarms.create(SUSPENDED_ALARM, { periodInMinutes: SUSPENDED_CHECK_MINS })
+    );
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (type === "STOP_SUSPENDED_CHECK") {
+    chrome.storage.local.set({ suspended: false }).then(() =>
+      chrome.alarms.clear(SUSPENDED_ALARM)
+    );
+    sendResponse({ ok: true });
+    return false;
+  }
+});
+
 // ─── Event listeners ──────────────────────────────────────────────────────────
 
-// Messages from popup
+// Messages from popup (push subscription — kept on the existing web-SW channel
+// used by the rest of the extension push flow).
 self.addEventListener("message", (event) => {
   const { type, apiKey } = event.data || {};
   if (type === "SUBSCRIBE_PUSH") {
