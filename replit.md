@@ -57,3 +57,7 @@ Preferred communication style: Simple, everyday language.
 ### Third-Party APIs
 - **ClickFunnels API**: For membership enforcement and SSO.
 - **Microlink (`api.microlink.io`)**: For capturing website screenshots for Inbox Intel.
+
+## User Preferences
+
+- **Extension versioning:** Every time any extension file changes, bump `extension/manifest.json` version AND rename the zip to match (e.g. `fia-toolkit-extension-v1.8.7.zip`). Delete the old zip. Never ship a zip whose filename doesn't match the manifest version inside it.
