@@ -13,6 +13,25 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type: mime });
 }
 
+// Convert Blob → data URL without fetch (safe in SW; uses small apply chunks).
+async function blobToDataUrl(blob) {
+  const arrayBuffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  const CHUNK = 1024; // well within V8's argument-count limit
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK, bytes.length)));
+  }
+  return `data:${blob.type};base64,${btoa(binary)}`;
+}
+
+// Store blob in session storage then open the annotation editor in a new tab.
+async function openAnnotationTab(blob, title) {
+  const dataUrl = await blobToDataUrl(blob);
+  await chrome.storage.session.set({ pendingAnnotation: { dataUrl, title } });
+  chrome.tabs.create({ url: chrome.runtime.getURL("annotate.html") });
+}
+
 // ─── Context Menu: Save to Swipe File ────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -52,9 +71,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
       const croppedBlob = await canvas.convertToBlob({ type: "image/png" });
 
-      const item = await swipeAutoSave(croppedBlob, tabTitle);
-      await chrome.storage.session.set({ swipeRecentlySaved: true });
-      injectSaveToast(sectionTabId);
+      await openAnnotationTab(croppedBlob, tabTitle);
     } catch (err) {
       console.error("[FIA SW] section crop error:", err);
       injectErrorToast(sectionTabId, `Capture failed: ${err.message}`);
@@ -210,10 +227,8 @@ async function handleFullPageCapture(tabId, title) {
     // 6. Get final PNG blob
     const finalBlob = await canvas.convertToBlob({ type: "image/png" });
 
-    // 7. Auto-save + notify
-    const item = await swipeAutoSave(finalBlob, title);
-    await chrome.storage.session.set({ swipeRecentlySaved: true });
-    injectSaveToast(tabId);
+    // 7. Open annotation editor — user saves from there
+    await openAnnotationTab(finalBlob, title);
 
   } catch (err) {
     console.error("[FIA SW] full page capture error:", err);

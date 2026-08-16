@@ -1413,7 +1413,7 @@ async function swipeCaptureFullPage() {
 async function swipeCaptureVisibleArea() {
   SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
   $("swipe-btn-visible").classList.add("active");
-  swipeShowStatus('<span class="spinner" style="width:12px;height:12px;border-width:2px;border-top-color:var(--accent);flex-shrink:0;"></span>&nbsp; Saving…');
+  swipeShowStatus('<span class="spinner" style="width:12px;height:12px;border-width:2px;border-top-color:var(--accent);flex-shrink:0;"></span>&nbsp; Opening editor…');
 
   try {
     const dataUrl = await new Promise((resolve, reject) => {
@@ -1426,32 +1426,10 @@ async function swipeCaptureVisibleArea() {
     let title = "Visible Area";
     try { const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); title = tab?.title || title; } catch (_) {}
 
-    const { uploadURL, objectPath } = await apiFetch("/api/v1/swipe/request-upload-url", { method: "POST" });
-    const blob = await (await fetch(dataUrl)).blob();
-    await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": "image/png" }, body: blob });
-    const { item: savedItem } = await apiFetch("/api/v1/swipe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "upload", title, imagePath: objectPath }),
-    });
-
-    // Auto-generate share token so Recent Saves shows thumbnail + "Copy link" immediately
-    try {
-      const { token } = await apiFetch(`/api/v1/swipe/${savedItem.id}/share`, { method: "POST" });
-      savedItem.shareToken = token;
-    } catch (_) {}
-
-    swipeEnableBtns();
-    swipeShowStatus("✓ Saved!", 2500);
-    renderSwipe();
-
-    // Inject page-level toast on the captured tab
-    try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (activeTab?.id) {
-        chrome.scripting.executeScript({ target: { tabId: activeTab.id }, files: ["save-toast.js"] }).catch(() => {});
-      }
-    } catch (_) {}
+    // Hand off to the annotation editor — it handles upload after annotations are added
+    await chrome.storage.session.set({ pendingAnnotation: { dataUrl, title } });
+    chrome.tabs.create({ url: chrome.runtime.getURL("annotate.html") });
+    window.close();
   } catch (err) {
     swipeEnableBtns();
     swipeHideStatus();

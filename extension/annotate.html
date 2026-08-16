@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Annotate — FIA Toolkit</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #111827;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      color: #e2e8f0;
+    }
+
+    /* ── Toolbar ─────────────────────────────────────────────────────────── */
+    #toolbar {
+      background: #1e2538;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 14px;
+      flex-shrink: 0;
+      height: 54px;
+      user-select: none;
+    }
+
+    .sep {
+      width: 1px;
+      background: #2d3748;
+      height: 30px;
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+
+    .spacer { flex: 1; }
+
+    .tb-label {
+      color: #4a5568;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      white-space: nowrap;
+    }
+
+    /* Tool buttons */
+    .tool-btn {
+      background: transparent;
+      border: 1.5px solid #2d3748;
+      color: #a0aec0;
+      border-radius: 7px;
+      padding: 5px 11px;
+      cursor: pointer;
+      font-size: 12.5px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: border-color .12s, color .12s, background .12s;
+      white-space: nowrap;
+    }
+    .tool-btn:hover { border-color: #4a90d9; color: #fff; }
+    .tool-btn.active { background: #4a90d9; border-color: #4a90d9; color: #fff; }
+
+    /* Color swatches */
+    .swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2.5px solid transparent;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform .12s, border-color .12s;
+    }
+    .swatch:hover { transform: scale(1.2); }
+    .swatch.active { border-color: #fff; transform: scale(1.2); }
+    .swatch[data-color="#ffffff"] { box-shadow: 0 0 0 1px #4a5568; }
+
+    /* Stroke buttons */
+    .stroke-btn {
+      background: transparent;
+      border: 1.5px solid #2d3748;
+      color: #a0aec0;
+      border-radius: 6px;
+      padding: 3px 9px;
+      cursor: pointer;
+      font-size: 11.5px;
+      font-weight: 700;
+      transition: border-color .12s, color .12s, background .12s;
+    }
+    .stroke-btn:hover { border-color: #4a90d9; color: #fff; }
+    .stroke-btn.active { background: #4a90d9; border-color: #4a90d9; color: #fff; }
+
+    /* Undo / Clear */
+    .util-btn {
+      background: transparent;
+      border: 1.5px solid #2d3748;
+      color: #a0aec0;
+      border-radius: 7px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 12.5px;
+      font-weight: 600;
+      transition: border-color .12s, color .12s;
+      white-space: nowrap;
+    }
+    .util-btn:hover { border-color: #e2a000; color: #e2a000; }
+
+    /* Discard */
+    #btn-discard {
+      background: transparent;
+      border: 1.5px solid #4a5568;
+      color: #718096;
+      border-radius: 7px;
+      padding: 5px 14px;
+      cursor: pointer;
+      font-size: 12.5px;
+      font-weight: 600;
+      transition: border-color .12s, color .12s;
+    }
+    #btn-discard:hover { border-color: #e53e3e; color: #e53e3e; }
+
+    /* Save */
+    #btn-save {
+      background: linear-gradient(135deg, #34c172, #1a9e55);
+      border: none;
+      color: #fff;
+      border-radius: 8px;
+      padding: 7px 20px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(26,158,85,.4);
+      transition: opacity .12s;
+      white-space: nowrap;
+    }
+    #btn-save:hover { opacity: .9; }
+    #btn-save:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* ── Canvas area ──────────────────────────────────────────────────────── */
+    #canvas-wrap {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px;
+      background: #0d1117;
+    }
+
+    #canvas {
+      display: block;
+      box-shadow: 0 8px 40px rgba(0,0,0,.7);
+      cursor: crosshair;
+      max-width: 100%;
+      /* CSS max-height lets large images scale down while preserving logical px for coords */
+    }
+    #canvas.cur-text { cursor: text; }
+
+    #status {
+      margin: auto;
+      color: #4a5568;
+      font-size: 15px;
+      text-align: center;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <!-- Tools -->
+  <span class="tb-label">Tool</span>
+
+  <button class="tool-btn active" id="tool-rect" title="Draw a rectangle (R)">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <rect x="1" y="1" width="11" height="11" rx="1.5" stroke="currentColor" stroke-width="2"/>
+    </svg>
+    Rectangle
+  </button>
+
+  <button class="tool-btn" id="tool-arrow" title="Draw an arrow (A)">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <line x1="2" y1="11" x2="11" y2="2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <polyline points="6.5,2 11,2 11,6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    Arrow
+  </button>
+
+  <button class="tool-btn" id="tool-text" title="Add text (T)">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <text x="1" y="12" font-size="13" font-weight="bold" fill="currentColor" font-family="Arial">T</text>
+    </svg>
+    Text
+  </button>
+
+  <div class="sep"></div>
+
+  <!-- Colors -->
+  <span class="tb-label">Color</span>
+  <div class="swatch active"  data-color="#e74c3c" style="background:#e74c3c" title="Red"></div>
+  <div class="swatch"         data-color="#f39c12" style="background:#f39c12" title="Orange"></div>
+  <div class="swatch"         data-color="#f1c40f" style="background:#f1c40f" title="Yellow"></div>
+  <div class="swatch"         data-color="#2ecc71" style="background:#2ecc71" title="Green"></div>
+  <div class="swatch"         data-color="#3498db" style="background:#3498db" title="Blue"></div>
+  <div class="swatch"         data-color="#ffffff" style="background:#ffffff" title="White"></div>
+  <div class="swatch"         data-color="#1a1a1a" style="background:#1a1a1a" title="Black"></div>
+
+  <div class="sep"></div>
+
+  <!-- Stroke size -->
+  <span class="tb-label">Size</span>
+  <button class="stroke-btn"        data-stroke="2" title="Thin">S</button>
+  <button class="stroke-btn active" data-stroke="3" title="Medium">M</button>
+  <button class="stroke-btn"        data-stroke="5" title="Large">L</button>
+  <button class="stroke-btn"        data-stroke="8" title="Extra large">XL</button>
+
+  <div class="sep"></div>
+
+  <!-- Undo / Clear -->
+  <button class="util-btn" id="btn-undo"  title="Undo last (Ctrl+Z)">↩ Undo</button>
+  <button class="util-btn" id="btn-clear" title="Remove all annotations">✕ Clear</button>
+
+  <div class="spacer"></div>
+
+  <button id="btn-discard">Discard</button>
+  <button id="btn-save">Save to Swipe File ✓</button>
+</div>
+
+<div id="canvas-wrap">
+  <p id="status">Loading screenshot…</p>
+  <canvas id="canvas" style="display:none"></canvas>
+</div>
+
+<script src="annotate.js"></script>
+</body>
+</html>
