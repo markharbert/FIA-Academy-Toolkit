@@ -2,6 +2,17 @@
 
 const API_BASE = "https://toolkit.fearlessmarketinglab.com";
 
+// fetch() does not support data: URLs inside a service worker (throws TypeError).
+// Use this helper instead wherever a data URL needs to become a Blob.
+function dataUrlToBlob(dataUrl) {
+  const [meta, b64] = dataUrl.split(",");
+  const mime = meta.match(/:(.*?);/)[1];
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 // ─── Context Menu: Save to Swipe File ────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -26,7 +37,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     try {
       const dataUrl = await chrome.tabs.captureVisibleTab(sectionWinId, { format: "png" });
 
-      const blob   = await (await fetch(dataUrl)).blob();
+      const blob   = dataUrlToBlob(dataUrl);
       const bitmap = await createImageBitmap(blob);
 
       const cw = Math.max(1, Math.round(rect.width  * dpr));
@@ -56,7 +67,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       injectSaveToast(sectionTabId);
     } catch (err) {
       console.error("[FIA SW] section crop error:", err);
-      injectErrorToast(sectionTabId, "Capture failed — try again");
+      injectErrorToast(sectionTabId, `Capture failed: ${err.message}`);
     }
   })();
 });
@@ -98,7 +109,7 @@ async function swipeAutoSave(dataUrl, title) {
   const { apiKey } = await chrome.storage.local.get("apiKey");
   if (!apiKey) throw new Error("No API key — open the extension and log in first.");
 
-  const blob = await (await fetch(dataUrl)).blob();
+  const blob = dataUrlToBlob(dataUrl);
 
   const upRes = await fetch(`${API_BASE}/api/v1/swipe/request-upload-url`, {
     method: "POST", headers: { "Authorization": `Bearer ${apiKey}` },
@@ -193,7 +204,7 @@ async function handleFullPageCapture(tabId, title) {
 
       const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
 
-      const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+      const bitmap = await createImageBitmap(dataUrlToBlob(dataUrl));
       ctx.drawImage(bitmap, 0, Math.round(scrollTop * dpr));
       bitmap.close();
     }
@@ -220,7 +231,7 @@ async function handleFullPageCapture(tabId, title) {
 
   } catch (err) {
     console.error("[FIA SW] full page capture error:", err);
-    injectErrorToast(tabId, "Capture failed — try again");
+    injectErrorToast(tabId, `Capture failed: ${err.message}`);
   }
 }
 
