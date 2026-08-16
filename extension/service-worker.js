@@ -51,18 +51,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       );
 
       const croppedBlob = await canvas.convertToBlob({ type: "image/png" });
-      const arrayBuffer = await croppedBlob.arrayBuffer();
-      const uint8       = new Uint8Array(arrayBuffer);
 
-      // Convert to base64 in chunks (btoa can't handle huge strings in one call)
-      const CHUNK = 65536;
-      let binary = "";
-      for (let i = 0; i < uint8.length; i += CHUNK) {
-        binary += String.fromCharCode.apply(null, uint8.subarray(i, i + CHUNK));
-      }
-      const croppedDataUrl = "data:image/png;base64," + btoa(binary);
-
-      const item = await swipeAutoSave(croppedDataUrl, tabTitle);
+      const item = await swipeAutoSave(croppedBlob, tabTitle);
       await chrome.storage.session.set({ swipeRecentlySaved: true });
       injectSaveToast(sectionTabId);
     } catch (err) {
@@ -105,11 +95,14 @@ function injectErrorToast(tabId, message) {
 }
 
 // ── Auto-save helper: upload PNG dataUrl → create swipe item ─────────────────
-async function swipeAutoSave(dataUrl, title) {
+// blob may be a Blob (from canvas) or a data-URL string (legacy path — converted here)
+async function swipeAutoSave(blobOrDataUrl, title) {
   const { apiKey } = await chrome.storage.local.get("apiKey");
   if (!apiKey) throw new Error("No API key — open the extension and log in first.");
 
-  const blob = dataUrlToBlob(dataUrl);
+  const blob = (blobOrDataUrl instanceof Blob)
+    ? blobOrDataUrl
+    : dataUrlToBlob(blobOrDataUrl);
 
   const upRes = await fetch(`${API_BASE}/api/v1/swipe/request-upload-url`, {
     method: "POST", headers: { "Authorization": `Bearer ${apiKey}` },
@@ -214,18 +207,11 @@ async function handleFullPageCapture(tabId, title) {
       target: { tabId }, func: (x, y) => window.scrollTo(x, y), args: [origX, origY],
     });
 
-    // 6. PNG → base64 dataUrl
-    const blob  = await canvas.convertToBlob({ type: "image/png" });
-    const u8    = new Uint8Array(await blob.arrayBuffer());
-    const CHUNK = 65536;
-    let binary  = "";
-    for (let i = 0; i < u8.length; i += CHUNK) {
-      binary += String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK));
-    }
-    const finalDataUrl = "data:image/png;base64," + btoa(binary);
+    // 6. Get final PNG blob
+    const finalBlob = await canvas.convertToBlob({ type: "image/png" });
 
     // 7. Auto-save + notify
-    const item = await swipeAutoSave(finalDataUrl, title);
+    const item = await swipeAutoSave(finalBlob, title);
     await chrome.storage.session.set({ swipeRecentlySaved: true });
     injectSaveToast(tabId);
 
