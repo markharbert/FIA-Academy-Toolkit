@@ -18,12 +18,13 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.action !== "sectionSelected") return;
   const { rect, dpr }  = msg;
   const sectionTabId   = sender.tab?.id;
+  const sectionWinId   = sender.tab?.windowId;
   const tabTitle       = sender.tab?.title ?? "Section Screenshot";
 
-  // Use captureTab (requires `tabs` permission, no activeTab needed)
+  // captureVisibleTab requires windowId; <all_urls> in host_permissions makes it work on any site
   (async () => {
     try {
-      const dataUrl = await chrome.tabs.captureTab(sectionTabId, { format: "png" });
+      const dataUrl = await chrome.tabs.captureVisibleTab(sectionWinId, { format: "png" });
 
       const blob   = await (await fetch(dataUrl)).blob();
       const bitmap = await createImageBitmap(blob);
@@ -162,6 +163,9 @@ async function handleFullPageCapture(tabId, title) {
     });
     const { scrollH, vpH, vpW, origX, origY, dpr } = dims;
 
+    // 1b. Get windowId for captureVisibleTab (captureTab doesn't exist in MV3)
+    const { windowId } = await chrome.tabs.get(tabId);
+
     // 2. Scroll to top
     await chrome.scripting.executeScript({
       target: { tabId }, func: () => window.scrollTo(0, 0),
@@ -187,7 +191,7 @@ async function handleFullPageCapture(tabId, title) {
       });
       await swSleep(150);
 
-      const dataUrl = await chrome.tabs.captureTab(tabId, { format: "png" });
+      const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
 
       const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
       ctx.drawImage(bitmap, 0, Math.round(scrollTop * dpr));
