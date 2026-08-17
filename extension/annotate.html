@@ -83,16 +83,59 @@
 
     /* Background-colour swatches — same shape as .swatch */
     .bg-swatch {
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       border-radius: 50%;
       border: 2.5px solid transparent;
       cursor: pointer;
       flex-shrink: 0;
       transition: transform .12s, border-color .12s;
     }
-    .bg-swatch:hover  { transform: scale(1.2); }
-    .bg-swatch.active { border-color: #fff; transform: scale(1.2); }
+    .bg-swatch:hover  { transform: scale(1.18); }
+    .bg-swatch.active { border-color: #fff; transform: scale(1.18); }
+
+    /* Floating context bar — appears below a selected text annotation */
+    #text-ctx-bar {
+      display: none;           /* JS toggles to flex */
+      position: fixed;
+      z-index: 9999;
+      align-items: center;
+      gap: 6px;
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 7px 12px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.55);
+      pointer-events: auto;
+    }
+    /* Upward caret */
+    #text-ctx-caret {
+      position: absolute;
+      top: -7px;
+      left: 20px;
+      width: 0; height: 0;
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-bottom: 7px solid #2d3748;
+    }
+    #text-ctx-caret::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: -6px;
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-bottom: 6px solid #1a202c;
+    }
+    .ctx-label {
+      font-size: 10px;
+      color: #718096;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      margin-right: 2px;
+      user-select: none;
+    }
 
     /* Stroke buttons */
     .stroke-btn {
@@ -234,26 +277,6 @@
 
   <div class="sep"></div>
 
-  <!-- Text background color -->
-  <span class="tb-label">Text BG</span>
-
-  <!-- "None" swatch — diagonal red line through a grey circle -->
-  <div class="bg-swatch" data-bg-color="none" title="No background"
-       style="display:flex;align-items:center;justify-content:center;border-color:#2d3748;">
-    <svg width="14" height="14" viewBox="0 0 14 14">
-      <circle cx="7" cy="7" r="5.5" fill="none" stroke="#4a5568" stroke-width="1.5"/>
-      <line x1="2.5" y1="11.5" x2="11.5" y2="2.5" stroke="#e53e3e" stroke-width="1.5"/>
-    </svg>
-  </div>
-
-  <div class="bg-swatch active" data-bg-color="#1e2538" style="background:#1e2538;border-color:#4a90d9;" title="Dark navy (default)"></div>
-  <div class="bg-swatch"        data-bg-color="#000000" style="background:#000000" title="Black"></div>
-  <div class="bg-swatch"        data-bg-color="#7b341e" style="background:#7b341e" title="Dark red"></div>
-  <div class="bg-swatch"        data-bg-color="#f1c40f" style="background:#f1c40f" title="Yellow"></div>
-  <div class="bg-swatch"        data-bg-color="#ffffff" style="background:#ffffff;box-shadow:0 0 0 1px #4a5568" title="White"></div>
-
-  <div class="sep"></div>
-
   <!-- Stroke size -->
   <span class="tb-label">Size</span>
   <button class="stroke-btn"        data-stroke="2" title="Thin">S</button>
@@ -271,6 +294,25 @@
 
   <button id="btn-discard">Discard</button>
   <button id="btn-save">Save to Swipe File ✓</button>
+</div>
+
+<!-- Floating BG context bar — visible only when a text annotation is selected -->
+<div id="text-ctx-bar">
+  <div id="text-ctx-caret"></div>
+  <span class="ctx-label">BG</span>
+
+  <div class="bg-swatch" data-bg-color="none" title="No background"
+       style="display:flex;align-items:center;justify-content:center;">
+    <svg width="14" height="14" viewBox="0 0 14 14">
+      <circle cx="7" cy="7" r="5.5" fill="none" stroke="#4a5568" stroke-width="1.5"/>
+      <line x1="2.5" y1="11.5" x2="11.5" y2="2.5" stroke="#e53e3e" stroke-width="1.5"/>
+    </svg>
+  </div>
+  <div class="bg-swatch active" data-bg-color="#1e2538" style="background:#1e2538" title="Dark navy (default)"></div>
+  <div class="bg-swatch"        data-bg-color="#000000" style="background:#000000" title="Black"></div>
+  <div class="bg-swatch"        data-bg-color="#7b341e" style="background:#7b341e" title="Dark red"></div>
+  <div class="bg-swatch"        data-bg-color="#f1c40f" style="background:#f1c40f" title="Yellow"></div>
+  <div class="bg-swatch"        data-bg-color="#ffffff" style="background:#ffffff;box-shadow:0 0 0 1px #4a5568" title="White"></div>
 </div>
 
 <div id="canvas-wrap">

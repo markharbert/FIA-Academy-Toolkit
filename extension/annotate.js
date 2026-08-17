@@ -226,6 +226,34 @@ function render() {
     drawAnnotation(ann);
     if (i === selectedIndex) drawSelectionOverlay(ann);
   });
+  updateCtxBar();
+}
+
+// ── Floating text-BG context bar ──────────────────────────────────────────────
+function updateCtxBar() {
+  const bar = document.getElementById("text-ctx-bar");
+  if (!bar) return;
+
+  const ann = selectedIndex >= 0 ? annotations[selectedIndex] : null;
+  if (!ann || ann.type !== "text") {
+    bar.style.display = "none";
+    return;
+  }
+
+  const fontSize = Math.max(18, ann.stroke * 7);
+  const pad      = Math.max(5,  ann.stroke * 2);
+  const r        = canvas.getBoundingClientRect();
+  const sx       = r.width  / canvas.width;
+  const sy       = r.height / canvas.height;
+
+  // Anchor: just below the bottom edge of the background pill
+  const screenX = r.left + ann.x1 * sx;
+  const screenY = r.top  + (ann.y1 + pad) * sy + 10;
+
+  bar.style.left    = `${Math.max(8, Math.min(screenX, window.innerWidth - 240))}px`;
+  bar.style.top     = `${Math.min(screenY, window.innerHeight - 58)}px`;
+  bar.style.display = "flex";
+  syncBgUI();
 }
 
 function drawAnnotation(ann) {
