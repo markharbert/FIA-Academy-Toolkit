@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ExternalLink, FileText, Globe, Loader2,
-  Camera, AlertCircle, ArrowUpRight, ZoomIn, ZoomOut,
+  Camera, AlertCircle, ArrowUpRight, ZoomIn, ZoomOut, Pencil,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -282,10 +282,42 @@ export default function SwipeSharePage() {
 
   const item = data?.item;
 
+  // Editable title state
+  const [localTitle, setLocalTitle]     = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft]     = useState("");
+  const [savedFlash, setSavedFlash]     = useState(false);
+
+  const displayedTitle = localTitle ?? item?.title ?? "";
+
+  const updateTitle = useMutation({
+    mutationFn: async (title: string) => {
+      const r = await fetch(`/api/swipe/public/${token}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      if (!r.ok) throw new Error("Failed to save");
+      return title;
+    },
+    onSuccess: (title: string) => {
+      setLocalTitle(title);
+      document.title = `${title} — FIA Toolkit Swipe File`;
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 1800);
+    },
+  });
+
+  const commitTitle = () => {
+    setEditingTitle(false);
+    const trimmed = titleDraft.trim();
+    if (trimmed && trimmed !== displayedTitle) updateTitle.mutate(trimmed);
+  };
+
   useEffect(() => {
-    if (item) document.title = `${item.title} — FIA Toolkit Swipe File`;
+    if (item) document.title = `${localTitle ?? item.title} — FIA Toolkit Swipe File`;
     return () => { document.title = "FIA Academy Toolkit"; };
-  }, [item]);
+  }, [item, localTitle]);
 
   if (isLoading) {
     return (
@@ -317,17 +349,59 @@ export default function SwipeSharePage() {
     <div className="min-h-screen bg-slate-50">
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Camera className="h-5 w-5 text-primary" />
-          <span className="font-semibold text-sm tracking-wide text-gray-700">
-            FIA Toolkit · Swipe File
+      <header className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3">
+
+        {/* Branding */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Camera className="h-4 w-4 text-primary" />
+          <span className="font-semibold text-xs tracking-wide text-gray-400 hidden sm:inline">
+            FIA Toolkit
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+
+        <div className="w-px h-4 bg-gray-200 shrink-0" />
+
+        {/* Editable title */}
+        <div className="flex-1 min-w-0 flex items-center gap-1.5">
+          {editingTitle ? (
+            <input
+              autoFocus
+              className="flex-1 min-w-0 text-sm font-semibold text-gray-800 bg-transparent
+                         border-b border-primary outline-none px-0.5 py-0.5 leading-tight"
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={e => {
+                if (e.key === "Enter")  commitTitle();
+                if (e.key === "Escape") setEditingTitle(false);
+              }}
+            />
+          ) : (
+            <button
+              className="group flex items-center gap-1.5 min-w-0 text-left"
+              onClick={() => { setTitleDraft(displayedTitle); setEditingTitle(true); }}
+              title="Click to rename"
+            >
+              <span className="text-sm font-semibold text-gray-800 truncate leading-tight">
+                {displayedTitle}
+              </span>
+              <Pencil className="h-3 w-3 text-gray-300 group-hover:text-primary shrink-0
+                                 opacity-0 group-hover:opacity-100 transition-all" />
+            </button>
+          )}
+          {savedFlash && (
+            <span className="text-[10px] text-emerald-500 font-medium shrink-0 animate-pulse">
+              Saved
+            </span>
+          )}
+        </div>
+
+        {/* View count */}
+        <div className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
           <Globe className="h-3.5 w-3.5" />
           <span>{item.viewCount.toLocaleString()} view{item.viewCount !== 1 ? "s" : ""}</span>
         </div>
+
       </header>
 
       {/* ── Main ──────────────────────────────────────────────────────────── */}
@@ -374,9 +448,8 @@ export default function SwipeSharePage() {
               {/* Scrollable body */}
               <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
-                {/* Title + meta */}
+                {/* Meta */}
                 <div className="space-y-2">
-                  <h1 className="text-lg font-bold text-gray-900 leading-snug">{item.title}</h1>
                   <div className="space-y-1 text-xs text-gray-400">
                     <div className="flex items-center gap-1.5">
                       <Camera className="h-3 w-3 shrink-0" />
@@ -468,7 +541,6 @@ export default function SwipeSharePage() {
           <div className="max-w-3xl mx-auto space-y-5 pt-2">
 
             <div className="space-y-1">
-              <h1 className="text-2xl font-bold text-gray-900 leading-tight">{item.title}</h1>
               <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
                 <span className="flex items-center gap-1">
                   <FileText className="h-3.5 w-3.5" /> Text Snippet
