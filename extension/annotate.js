@@ -6,18 +6,28 @@ const canvas   = document.getElementById("canvas");
 const ctx      = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 
+// ── Core state ────────────────────────────────────────────────────────────────
 let bgImage      = null;
 let annotations  = [];
-let activeTool   = "rect";
+let activeTool   = "rect";   // "select" | "rect" | "arrow" | "text"
 let activeColor  = "#e74c3c";
 let activeStroke = 3;
-let drawing      = false;
-let startX = 0, startY = 0;
 let pendingTitle = "Screenshot";
-let isFullPage   = false; // true when loaded from IndexedDB full-page strip set
+let isFullPage   = false;
+
+// Draw-mode state (rect / arrow)
+let drawing    = false;
+let drawStartX = 0, drawStartY = 0;
+
+// Select-mode state
+let selectedIndex = -1;     // index into annotations[]; -1 = none
+let dragMode      = null;   // null | "move" | "handle"
+let dragHandle    = null;   // rect: "nw"|"n"|"ne"|"e"|"se"|"s"|"sw"|"w"  arrow: "start"|"end"
+let dragAnchorX   = 0;     // canvas coords at mousedown
+let dragAnchorY   = 0;
+let dragOrigAnn   = null;  // snapshot of annotation at drag start
 
 // ── IndexedDB helpers ─────────────────────────────────────────────────────────
-// Shared with service-worker.js (same DB name + object store).
 function idbOpenDb() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open("fia-toolkit", 1);
@@ -45,7 +55,7 @@ async function idbDelete(key) {
   });
 }
 
-// ── Load a data-URL string into an HTMLImageElement ───────────────────────────
+// ── Image loader ──────────────────────────────────────────────────────────────
 function loadAsImage(src) {
   return new Promise((resolve, reject) => {
     const img   = new Image();
@@ -55,88 +65,155 @@ function loadAsImage(src) {
   });
 }
 
-// ── Entry point: check session storage first, then IndexedDB ──────────────────
+// ── Entry point ───────────────────────────────────────────────────────────────
 (async () => {
   try {
-    // 1. Visible-area / section capture → session storage
     const { pendingAnnotation } = await chrome.storage.session.get("pendingAnnotation");
     if (pendingAnnotation?.dataUrl) {
       await initSingleImage(pendingAnnotation.dataUrl, pendingAnnotation.title);
       return;
     }
-
-    // 2. Full-page capture → IndexedDB
     const pending = await idbGet("pendingFullPage");
     if (pending?.strips?.length) {
       isFullPage = true;
       await initFullPage(pending);
       return;
     }
-
     statusEl.innerHTML = "No screenshot found.<br>Close this tab and try again.";
   } catch (err) {
     statusEl.textContent = `Load error: ${err.message}`;
   }
 })();
 
-// ── Single image (visible area / section) ────────────────────────────────────
+// ── Single image init ─────────────────────────────────────────────────────────
 async function initSingleImage(dataUrl, title) {
   pendingTitle = title || "Screenshot";
   const img    = await loadAsImage(dataUrl);
-
   bgImage       = img;
   canvas.width  = img.naturalWidth;
   canvas.height = img.naturalHeight;
-
-  // Hide status before showing canvas so flex layout doesn't briefly show both.
   statusEl.style.display = "none";
-
-  // Scale display down to fit the viewport; preserve aspect ratio via maxHeight.
-  // max-width: 100% from the stylesheet handles width — leave maxWidth unset.
-  const maxH = window.innerHeight - 54 - 48; // toolbar (54px) + wrap padding (24px*2)
+  const maxH = window.innerHeight - 54 - 48;
   canvas.style.maxHeight = maxH + "px";
   canvas.style.display   = "block";
   render();
 }
 
-// ── Full page (multi-strip stitch) ────────────────────────────────────────────
+// ── Full-page init (multi-strip stitch) ───────────────────────────────────────
 async function initFullPage({ strips, title, scrollH, vpH, vpW }) {
   pendingTitle = title || "Full Page";
-
-  // Show progress while stitching
   statusEl.textContent   = `Stitching full page (0 / ${strips.length})…`;
   statusEl.style.display = "block";
-
-  // Canvas at logical-pixel resolution — stays within Chrome's 32 767 px dimension limit.
-  // Each strip was already scaled to logical resolution in the service worker.
   canvas.width  = vpW;
   canvas.height = scrollH;
 
   for (let i = 0; i < strips.length; i++) {
     statusEl.textContent = `Stitching full page (${i + 1} / ${strips.length})…`;
-    const img = await loadAsImage(strips[i]);
-    // Last strip flushes to the exact page bottom (mirrors SW capture logic).
+    const img  = await loadAsImage(strips[i]);
     const yPos = (i === strips.length - 1) ? Math.max(0, scrollH - vpH) : i * vpH;
-    // Strips are at device DPR (naturalWidth = vpW*dpr, naturalHeight = vpH*dpr).
-    // 9-arg drawImage scales from physical resolution to logical canvas coords.
     ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, 0, yPos, vpW, vpH);
   }
 
-  // Snapshot stitched canvas as ImageBitmap so render() can clear+redraw cheaply.
   bgImage = await createImageBitmap(canvas);
-
-  // Full page: override the stylesheet's max-width/max-height so the canvas
-  // renders at its natural logical-pixel size; the canvas-wrap div scrolls.
-  // (removeProperty only affects inline styles, so we set inline overrides instead.)
   canvas.style.maxHeight = "none";
   canvas.style.maxWidth  = "none";
   canvas.style.display   = "block";
   statusEl.style.display = "none";
-
   render();
-
-  // Free IndexedDB slot; if the user discards, the handler is a no-op.
   await idbDelete("pendingFullPage").catch(() => {});
+}
+
+// ── Geometry helpers ──────────────────────────────────────────────────────────
+// Normalise rect so x1≤x2, y1≤y2 (needed for handle math)
+function normRect(ann) {
+  return {
+    x1: Math.min(ann.x1, ann.x2), y1: Math.min(ann.y1, ann.y2),
+    x2: Math.max(ann.x1, ann.x2), y2: Math.max(ann.y1, ann.y2),
+  };
+}
+
+function getRectHandles(x1, y1, x2, y2) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  return [
+    ["nw", x1, y1], ["n", mx, y1], ["ne", x2, y1],
+    ["w",  x1, my],                ["e",  x2, my],
+    ["sw", x1, y2], ["s", mx, y2], ["se", x2, y2],
+  ];
+}
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+// Convert a desired on-screen pixel size to canvas units (accounts for CSS scale).
+function scaledR(screenPx) {
+  const r  = canvas.getBoundingClientRect();
+  const sx = r.width  > 0 ? canvas.width  / r.width  : 1;
+  const sy = r.height > 0 ? canvas.height / r.height : 1;
+  return screenPx * (sx + sy) / 2;
+}
+
+// ── Hit testing ───────────────────────────────────────────────────────────────
+function hitTest(ann, x, y) {
+  const hr = scaledR(12); // handle hit radius
+  const bt = scaledR(10); // body tolerance
+
+  if (ann.type === "rect") {
+    const { x1, y1, x2, y2 } = normRect(ann);
+    for (const [name, hx, hy] of getRectHandles(x1, y1, x2, y2)) {
+      if (Math.abs(x - hx) <= hr && Math.abs(y - hy) <= hr)
+        return { hit: "handle", handle: name };
+    }
+    if (x >= x1 - bt && x <= x2 + bt && y >= y1 - bt && y <= y2 + bt)
+      return { hit: "move" };
+  }
+
+  if (ann.type === "arrow") {
+    if (Math.hypot(x - ann.x1, y - ann.y1) <= hr) return { hit: "handle", handle: "start" };
+    if (Math.hypot(x - ann.x2, y - ann.y2) <= hr) return { hit: "handle", handle: "end" };
+    if (distToSegment(x, y, ann.x1, ann.y1, ann.x2, ann.y2) <= scaledR(8 + ann.stroke))
+      return { hit: "move" };
+  }
+
+  if (ann.type === "text") {
+    const fontSize = Math.max(18, ann.stroke * 7);
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    const w = ctx.measureText(ann.text).width;
+    if (x >= ann.x1 - bt && x <= ann.x1 + w + bt &&
+        y >= ann.y1 - fontSize - bt && y <= ann.y1 + bt)
+      return { hit: "move" };
+  }
+
+  return null;
+}
+
+// Find topmost annotation under (x,y). Returns {index, hit, handle?} or null.
+function findHit(x, y) {
+  for (let i = annotations.length - 1; i >= 0; i--) {
+    const result = hitTest(annotations[i], x, y);
+    if (result) return { index: i, ...result };
+  }
+  return null;
+}
+
+// Apply a handle drag delta to a rect annotation (orig must already be normalised).
+function applyRectHandle(orig, handle, dx, dy) {
+  const out = { ...orig };
+  switch (handle) {
+    case "nw": out.x1 += dx; out.y1 += dy; break;
+    case "n":               out.y1 += dy; break;
+    case "ne": out.x2 += dx; out.y1 += dy; break;
+    case "e":  out.x2 += dx;              break;
+    case "se": out.x2 += dx; out.y2 += dy; break;
+    case "s":               out.y2 += dy; break;
+    case "sw": out.x1 += dx; out.y2 += dy; break;
+    case "w":  out.x1 += dx;              break;
+  }
+  return out;
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -144,7 +221,10 @@ function render() {
   if (!bgImage) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bgImage, 0, 0);
-  annotations.forEach(ann => drawAnnotation(ann));
+  annotations.forEach((ann, i) => {
+    drawAnnotation(ann);
+    if (i === selectedIndex) drawSelectionOverlay(ann);
+  });
 }
 
 function drawAnnotation(ann) {
@@ -156,19 +236,62 @@ function drawAnnotation(ann) {
   ctx.lineJoin    = "round";
 
   if (ann.type === "rect") {
-    ctx.strokeRect(ann.x1, ann.y1, ann.x2 - ann.x1, ann.y2 - ann.y1);
-
+    const { x1, y1, x2, y2 } = normRect(ann);
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
   } else if (ann.type === "arrow") {
     drawArrow(ann.x1, ann.y1, ann.x2, ann.y2, ann.stroke);
-
   } else if (ann.type === "text") {
     const fontSize = Math.max(18, ann.stroke * 7);
-    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.font          = `bold ${fontSize}px Arial, sans-serif`;
     ctx.shadowColor   = "rgba(0,0,0,0.6)";
     ctx.shadowBlur    = 3;
     ctx.shadowOffsetX = 1;
     ctx.shadowOffsetY = 1;
     ctx.fillText(ann.text, ann.x1, ann.y1);
+  }
+
+  ctx.restore();
+}
+
+function drawSelectionOverlay(ann) {
+  const hs  = scaledR(5);    // handle half-size (≈5 px on screen)
+  const lw  = scaledR(1.5);  // selection border line width
+  const pad = scaledR(4);    // inset padding around annotation
+
+  ctx.save();
+  ctx.strokeStyle = "#4a90d9";
+  ctx.fillStyle   = "#ffffff";
+  ctx.lineWidth   = lw;
+
+  if (ann.type === "rect") {
+    const { x1, y1, x2, y2 } = normRect(ann);
+    ctx.setLineDash([scaledR(5), scaledR(3)]);
+    ctx.strokeRect(x1 - pad, y1 - pad, (x2 - x1) + pad * 2, (y2 - y1) + pad * 2);
+    ctx.setLineDash([]);
+    // 8 square handles
+    for (const [, hx, hy] of getRectHandles(x1, y1, x2, y2)) {
+      ctx.fillRect(hx - hs, hy - hs, hs * 2, hs * 2);
+      ctx.strokeRect(hx - hs, hy - hs, hs * 2, hs * 2);
+    }
+  } else if (ann.type === "arrow") {
+    ctx.setLineDash([]);
+    const r = scaledR(7);
+    [[ann.x1, ann.y1], [ann.x2, ann.y2]].forEach(([x, y]) => {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+  } else if (ann.type === "text") {
+    const fontSize = Math.max(18, ann.stroke * 7);
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    const w = ctx.measureText(ann.text).width;
+    ctx.setLineDash([scaledR(5), scaledR(3)]);
+    ctx.strokeRect(ann.x1 - pad, ann.y1 - fontSize - pad, w + pad * 2, fontSize + pad * 2);
+    ctx.setLineDash([]);
+    // Move handle: small square at top-left of text box
+    ctx.fillRect(ann.x1 - pad - hs, ann.y1 - fontSize - pad - hs, hs * 2, hs * 2);
+    ctx.strokeRect(ann.x1 - pad - hs, ann.y1 - fontSize - pad - hs, hs * 2, hs * 2);
   }
 
   ctx.restore();
@@ -191,8 +314,7 @@ function drawArrow(x1, y1, x2, y2, strokeW) {
   ctx.stroke();
 }
 
-// ── Canvas coordinate helper (CSS scale-aware) ────────────────────────────────
-// Works correctly whether the canvas is CSS-scaled (single image) or natural-size (full page).
+// ── Canvas coordinate helper ──────────────────────────────────────────────────
 function canvasPos(e) {
   const r  = canvas.getBoundingClientRect();
   const sx = canvas.width  / r.width;
@@ -200,18 +322,90 @@ function canvasPos(e) {
   return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
 }
 
-// ── Mouse/pointer events ──────────────────────────────────────────────────────
+// ── Cursor management (select mode only) ──────────────────────────────────────
+const HANDLE_CURSORS = {
+  nw: "nw-resize", n: "ns-resize", ne: "ne-resize",
+  e: "ew-resize",  se: "se-resize", s: "ns-resize",
+  sw: "sw-resize", w: "ew-resize",
+  start: "crosshair", end: "crosshair",
+};
+
+function updateCursor(x, y) {
+  if (activeTool !== "select") return;
+  const h = findHit(x, y);
+  if (!h)                 { canvas.style.cursor = "default"; return; }
+  if (h.hit === "handle") { canvas.style.cursor = HANDLE_CURSORS[h.handle] || "crosshair"; return; }
+  canvas.style.cursor = "move";
+}
+
+// ── Mouse events ──────────────────────────────────────────────────────────────
 canvas.addEventListener("mousedown", (e) => {
-  if (activeTool === "text") return;
+  if (e.button !== 0) return;
   const { x, y } = canvasPos(e);
-  drawing = true;
-  startX  = x;
-  startY  = y;
+
+  if (activeTool === "select") {
+    const h = findHit(x, y);
+    if (h) {
+      selectedIndex = h.index;
+      dragMode      = h.hit;
+      dragHandle    = h.handle ?? null;
+      dragAnchorX   = x;
+      dragAnchorY   = y;
+      // Normalise rect now so handle math is always clean
+      if (annotations[h.index].type === "rect") {
+        annotations[h.index] = { ...annotations[h.index], ...normRect(annotations[h.index]) };
+      }
+      dragOrigAnn = { ...annotations[h.index] };
+    } else {
+      selectedIndex = -1;
+    }
+    render();
+    return;
+  }
+
+  if (activeTool === "text") return; // handled via click
+
+  drawing    = true;
+  drawStartX = x;
+  drawStartY = y;
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (!drawing) return;
   const { x, y } = canvasPos(e);
+
+  // Update cursor when not dragging
+  if (activeTool === "select" && !dragMode) {
+    updateCursor(x, y);
+  }
+
+  // ── Handle drag ──
+  if (dragMode) {
+    const dx = x - dragAnchorX;
+    const dy = y - dragAnchorY;
+    const ann = annotations[selectedIndex];
+
+    if (dragMode === "move") {
+      annotations[selectedIndex] = {
+        ...dragOrigAnn,
+        x1: dragOrigAnn.x1 + dx, y1: dragOrigAnn.y1 + dy,
+        x2: dragOrigAnn.x2 + dx, y2: dragOrigAnn.y2 + dy,
+      };
+    } else { // "handle"
+      if (ann.type === "rect") {
+        annotations[selectedIndex] = applyRectHandle(dragOrigAnn, dragHandle, dx, dy);
+      } else if (ann.type === "arrow") {
+        const out = { ...dragOrigAnn };
+        if (dragHandle === "start") { out.x1 = dragOrigAnn.x1 + dx; out.y1 = dragOrigAnn.y1 + dy; }
+        if (dragHandle === "end")   { out.x2 = dragOrigAnn.x2 + dx; out.y2 = dragOrigAnn.y2 + dy; }
+        annotations[selectedIndex] = out;
+      }
+    }
+    render();
+    return;
+  }
+
+  // ── Draw preview ──
+  if (!drawing) return;
   render();
   ctx.save();
   ctx.strokeStyle = activeColor;
@@ -220,41 +414,81 @@ canvas.addEventListener("mousemove", (e) => {
   ctx.lineCap     = "round";
   ctx.lineJoin    = "round";
   ctx.globalAlpha = 0.75;
-  if (activeTool === "rect")  ctx.strokeRect(startX, startY, x - startX, y - startY);
-  if (activeTool === "arrow") drawArrow(startX, startY, x, y, activeStroke);
+  if (activeTool === "rect")  ctx.strokeRect(drawStartX, drawStartY, x - drawStartX, y - drawStartY);
+  if (activeTool === "arrow") drawArrow(drawStartX, drawStartY, x, y, activeStroke);
   ctx.restore();
 });
 
 canvas.addEventListener("mouseup", (e) => {
+  // Finish a drag
+  if (dragMode) {
+    dragMode    = null;
+    dragOrigAnn = null;
+    render();
+    return;
+  }
+
   if (!drawing) return;
   drawing = false;
   const { x, y } = canvasPos(e);
-  if (Math.abs(x - startX) < 5 && Math.abs(y - startY) < 5) { render(); return; }
-  annotations.push({ type: activeTool, x1: startX, y1: startY, x2: x, y2: y, color: activeColor, stroke: activeStroke });
+  if (Math.abs(x - drawStartX) < 5 && Math.abs(y - drawStartY) < 5) { render(); return; }
+
+  // Commit the annotation, normalise rects so handles work cleanly
+  let ann = { type: activeTool, x1: drawStartX, y1: drawStartY, x2: x, y2: y, color: activeColor, stroke: activeStroke };
+  if (ann.type === "rect") ann = { ...ann, ...normRect(ann) };
+  annotations.push(ann);
+  selectedIndex = annotations.length - 1;
+
+  // Auto-switch to select so the user can immediately reposition / resize
+  activeTool = "select";
+  syncToolUI();
   render();
 });
 
-canvas.addEventListener("mouseleave", () => {
-  if (drawing) { drawing = false; render(); }
+// Stop drag if mouse released anywhere (including outside canvas)
+document.addEventListener("mouseup", () => {
+  if (dragMode) { dragMode = null; dragOrigAnn = null; render(); }
+  if (drawing)  { drawing  = false; render(); }
 });
 
+canvas.addEventListener("mouseleave", () => {
+  if (!dragMode) canvas.style.cursor = "";
+});
+
+// Single-click in text mode → open input
 canvas.addEventListener("click", (e) => {
   if (activeTool !== "text") return;
   const { x, y } = canvasPos(e);
   showTextInput(x, y, e.clientX, e.clientY);
 });
 
+// Double-click in select mode on a text annotation → re-open input to edit
+canvas.addEventListener("dblclick", (e) => {
+  if (activeTool !== "select") return;
+  const { x, y } = canvasPos(e);
+  const h = findHit(x, y);
+  if (!h || annotations[h.index].type !== "text") return;
+  selectedIndex = h.index;
+  const ann = annotations[h.index];
+  // Remove the annotation temporarily; re-add on commit
+  annotations.splice(h.index, 1);
+  selectedIndex = -1;
+  render();
+  showTextInput(ann.x1, ann.y1, e.clientX, e.clientY, ann.text);
+});
+
 // ── Inline text input ─────────────────────────────────────────────────────────
-function showTextInput(canvX, canvY, screenX, screenY) {
+function showTextInput(canvX, canvY, screenX, screenY, prefill = "") {
   const old = document.getElementById("__fia_txt__");
   if (old) old.remove();
 
-  const wrap  = document.createElement("div");
-  wrap.id     = "__fia_txt__";
+  const wrap      = document.createElement("div");
+  wrap.id         = "__fia_txt__";
   wrap.style.cssText = `position:fixed;left:${screenX}px;top:${screenY}px;z-index:9999;`;
 
   const input = document.createElement("input");
   input.type        = "text";
+  input.value       = prefill;
   input.placeholder = "Type and press Enter…";
   input.style.cssText = [
     "background:#1e2538", "border:2px solid " + activeColor,
@@ -266,43 +500,67 @@ function showTextInput(canvX, canvY, screenX, screenY) {
   wrap.appendChild(input);
   document.body.appendChild(wrap);
   input.focus();
+  input.select();
 
   function commit() {
     const text = input.value.trim();
     wrap.remove();
     if (!text) return;
     annotations.push({ type: "text", x1: canvX, y1: canvY, text, color: activeColor, stroke: activeStroke });
+    selectedIndex = annotations.length - 1;
+    // Auto-switch to select so the user can immediately drag the text
+    activeTool = "select";
+    syncToolUI();
     render();
   }
 
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter")  commit();
-    if (e.key === "Escape") wrap.remove();
-    e.stopPropagation();
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter")  commit();
+    if (ev.key === "Escape") wrap.remove();
+    ev.stopPropagation();
   });
   input.addEventListener("blur", () => setTimeout(() => { if (document.contains(wrap)) wrap.remove(); }, 150));
 }
 
 // ── Toolbar: tools ────────────────────────────────────────────────────────────
-["rect", "arrow", "text"].forEach(t => {
+["select", "rect", "arrow", "text"].forEach(t => {
   document.getElementById(`tool-${t}`).addEventListener("click", () => {
     activeTool = t;
+    if (t !== "select") { selectedIndex = -1; render(); }
     syncToolUI();
   });
 });
 
 document.addEventListener("keydown", (e) => {
   if (document.getElementById("__fia_txt__")) return;
-  if (e.key === "r" || e.key === "R") { activeTool = "rect";  syncToolUI(); }
-  if (e.key === "a" || e.key === "A") { activeTool = "arrow"; syncToolUI(); }
-  if (e.key === "t" || e.key === "T") { activeTool = "text";  syncToolUI(); }
-  if ((e.ctrlKey || e.metaKey) && e.key === "z") { annotations.pop(); render(); }
+  if (e.key === "Escape" || e.key === "v" || e.key === "V") { activeTool = "select"; syncToolUI(); }
+  if (e.key === "r" || e.key === "R") { activeTool = "rect";  selectedIndex = -1; render(); syncToolUI(); }
+  if (e.key === "a" || e.key === "A") { activeTool = "arrow"; selectedIndex = -1; render(); syncToolUI(); }
+  if (e.key === "t" || e.key === "T") { activeTool = "text";  selectedIndex = -1; render(); syncToolUI(); }
+
+  if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+    annotations.pop();
+    if (selectedIndex >= annotations.length) selectedIndex = -1;
+    render();
+  }
+
+  // Delete / Backspace removes selected annotation
+  if ((e.key === "Delete" || e.key === "Backspace") && selectedIndex >= 0 && activeTool === "select") {
+    annotations.splice(selectedIndex, 1);
+    selectedIndex = -1;
+    render();
+  }
 });
 
 // ── Toolbar: colors ───────────────────────────────────────────────────────────
 document.querySelectorAll(".swatch").forEach(el => {
   el.addEventListener("click", () => {
     activeColor = el.dataset.color;
+    // Live-update selected annotation's colour
+    if (selectedIndex >= 0) {
+      annotations[selectedIndex] = { ...annotations[selectedIndex], color: activeColor };
+      render();
+    }
     syncColorUI();
   });
 });
@@ -311,22 +569,31 @@ document.querySelectorAll(".swatch").forEach(el => {
 document.querySelectorAll(".stroke-btn").forEach(el => {
   el.addEventListener("click", () => {
     activeStroke = parseInt(el.dataset.stroke, 10);
+    // Live-update selected annotation's stroke
+    if (selectedIndex >= 0) {
+      annotations[selectedIndex] = { ...annotations[selectedIndex], stroke: activeStroke };
+      render();
+    }
     syncStrokeUI();
   });
 });
 
 // ── Undo / Clear ──────────────────────────────────────────────────────────────
-document.getElementById("btn-undo").addEventListener("click", () => { annotations.pop(); render(); });
+document.getElementById("btn-undo").addEventListener("click", () => {
+  annotations.pop();
+  if (selectedIndex >= annotations.length) selectedIndex = -1;
+  render();
+});
 
 document.getElementById("btn-clear").addEventListener("click", () => {
   if (!annotations.length) return;
-  annotations = [];
+  annotations   = [];
+  selectedIndex = -1;
   render();
 });
 
 // ── Discard ───────────────────────────────────────────────────────────────────
 document.getElementById("btn-discard").addEventListener("click", async () => {
-  // Clean up whichever storage mechanism was used
   await chrome.storage.session.remove("pendingAnnotation").catch(() => {});
   if (isFullPage) await idbDelete("pendingFullPage").catch(() => {});
   window.close();
@@ -342,26 +609,25 @@ document.getElementById("btn-save").addEventListener("click", async () => {
     const { apiKey } = await chrome.storage.local.get("apiKey");
     if (!apiKey) throw new Error("Not logged in — open the FIA Toolkit extension first.");
 
-    // Export final annotated canvas to PNG blob
+    // Deselect before exporting so handles don't appear in the saved image
+    selectedIndex = -1;
     render();
+
     const blob = await new Promise((res, rej) => {
       canvas.toBlob(b => b ? res(b) : rej(new Error("Canvas export failed")), "image/png");
     });
 
-    // 1. Request signed upload URL
     const upRes = await fetch(`${API_BASE}/api/v1/swipe/request-upload-url`, {
       method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
     });
     if (!upRes.ok) throw new Error(`Upload URL failed (${upRes.status})`);
     const { uploadURL, objectPath } = await upRes.json();
 
-    // 2. PUT blob to GCS
     const putRes = await fetch(uploadURL, {
       method: "PUT", headers: { "Content-Type": "image/png" }, body: blob,
     });
     if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
 
-    // 3. Create swipe item
     const saveRes = await fetch(`${API_BASE}/api/v1/swipe`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -370,14 +636,12 @@ document.getElementById("btn-save").addEventListener("click", async () => {
     if (!saveRes.ok) throw new Error(`Save failed (${saveRes.status})`);
     const { item } = await saveRes.json();
 
-    // 4. Auto-generate share token
     try {
       await fetch(`${API_BASE}/api/v1/swipe/${item.id}/share`, {
         method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
       });
     } catch (_) {}
 
-    // 5. Clean up pending data and signal popup to refresh
     await chrome.storage.session.remove("pendingAnnotation").catch(() => {});
     if (isFullPage) await idbDelete("pendingFullPage").catch(() => {});
     await chrome.storage.session.set({ swipeRecentlySaved: true });
@@ -396,10 +660,12 @@ document.getElementById("btn-save").addEventListener("click", async () => {
 
 // ── UI sync helpers ───────────────────────────────────────────────────────────
 function syncToolUI() {
-  ["rect", "arrow", "text"].forEach(t => {
+  ["select", "rect", "arrow", "text"].forEach(t => {
     document.getElementById(`tool-${t}`).classList.toggle("active", t === activeTool);
   });
-  canvas.className = activeTool === "text" ? "cur-text" : "";
+  if      (activeTool === "text")   canvas.style.cursor = "text";
+  else if (activeTool === "select") canvas.style.cursor = "default";
+  else                              canvas.style.cursor = "crosshair";
 }
 
 function syncColorUI() {
