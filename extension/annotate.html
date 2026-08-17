@@ -167,20 +167,41 @@
     #capture-title:hover  { border-bottom-color: #4a5568; }
     #capture-title:focus  { border-bottom-color: #4a90d9; }
 
-    /* Stroke buttons */
-    .stroke-btn {
-      background: transparent;
-      border: 1.5px solid #2d3748;
-      color: #a0aec0;
-      border-radius: 6px;
-      padding: 3px 9px;
+    /* Stroke slider */
+    .stroke-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 96px;
+      height: 4px;
+      border-radius: 2px;
+      background: #2d3748;
+      outline: none;
       cursor: pointer;
-      font-size: 11.5px;
-      font-weight: 700;
-      transition: border-color .12s, color .12s, background .12s;
+      flex-shrink: 0;
     }
-    .stroke-btn:hover { border-color: #4a90d9; color: #fff; }
-    .stroke-btn.active { background: #4a90d9; border-color: #4a90d9; color: #fff; }
+    .stroke-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #4a90d9;
+      cursor: pointer;
+    }
+    .stroke-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #4a90d9;
+      cursor: pointer;
+      border: none;
+    }
+    .stroke-val {
+      font-size: 10px;
+      color: #718096;
+      font-weight: 700;
+      min-width: 16px;
+      text-align: left;
+    }
 
     /* Undo / Clear */
     .util-btn {
@@ -321,10 +342,8 @@
   <div class="swatch"         data-color="#1a1a1a" style="background:#1a1a1a" title="Black"></div>
   <div class="ctx-sep"></div>
   <span class="ctx-label">Size</span>
-  <button class="stroke-btn"        data-stroke="2">S</button>
-  <button class="stroke-btn"        data-stroke="3">M</button>
-  <button class="stroke-btn"        data-stroke="5">L</button>
-  <button class="stroke-btn active" data-stroke="8">XL</button>
+  <input type="range" class="stroke-slider" min="2" max="30" value="12" step="1" />
+  <span class="stroke-val">12</span>
 </div>
 
 <!-- ── Context bar: text ───────────────────────────────────────────────────── -->
@@ -340,10 +359,8 @@
   <div class="swatch"         data-color="#1a1a1a" style="background:#1a1a1a" title="Black"></div>
   <div class="ctx-sep"></div>
   <span class="ctx-label">Size</span>
-  <button class="stroke-btn"        data-stroke="2">S</button>
-  <button class="stroke-btn"        data-stroke="3">M</button>
-  <button class="stroke-btn"        data-stroke="5">L</button>
-  <button class="stroke-btn active" data-stroke="8">XL</button>
+  <input type="range" class="stroke-slider" min="2" max="30" value="12" step="1" />
+  <span class="stroke-val">12</span>
   <div class="ctx-sep"></div>
   <span class="ctx-label">BG</span>
   <div class="bg-swatch" data-bg-color="none" title="No background"

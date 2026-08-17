@@ -11,7 +11,7 @@ let bgImage      = null;
 let annotations  = [];
 let activeTool   = "rect";   // "select" | "rect" | "arrow" | "text"
 let activeColor  = "#e74c3c";
-let activeStroke = 8;
+let activeStroke = 14;
 let activeBgColor = "#1e2538"; // text-label background ("none" = transparent)
 let pendingTitle = "Screenshot";
 let isFullPage   = false;
@@ -185,7 +185,7 @@ function hitTest(ann, x, y) {
   }
 
   if (ann.type === "text") {
-    const fontSize = Math.max(18, ann.stroke * 7);
+    const fontSize = Math.max(14, ann.stroke * 2 + 6);
     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
     const w = ctx.measureText(ann.text).width;
     if (x >= ann.x1 - bt && x <= ann.x1 + w + bt &&
@@ -295,7 +295,7 @@ function drawAnnotation(ann) {
   } else if (ann.type === "arrow") {
     drawArrow(ann.x1, ann.y1, ann.x2, ann.y2, ann.stroke);
   } else if (ann.type === "text") {
-    const fontSize = Math.max(18, ann.stroke * 7);
+    const fontSize = Math.max(14, ann.stroke * 2 + 6);
     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
 
     // Background pill behind the text
@@ -366,7 +366,7 @@ function drawSelectionOverlay(ann) {
       ctx.stroke();
     });
   } else if (ann.type === "text") {
-    const fontSize = Math.max(18, ann.stroke * 7);
+    const fontSize = Math.max(14, ann.stroke * 2 + 6);
     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
     const w = ctx.measureText(ann.text).width;
     ctx.setLineDash([scaledR(5), scaledR(3)]);
@@ -661,11 +661,10 @@ document.querySelectorAll(".bg-swatch").forEach(el => {
   });
 });
 
-// ── Toolbar: stroke size ──────────────────────────────────────────────────────
-document.querySelectorAll(".stroke-btn").forEach(el => {
-  el.addEventListener("click", () => {
-    activeStroke = parseInt(el.dataset.stroke, 10);
-    // Live-update selected annotation's stroke
+// ── Context bars: stroke slider ───────────────────────────────────────────────
+document.querySelectorAll(".stroke-slider").forEach(el => {
+  el.addEventListener("input", () => {
+    activeStroke = parseInt(el.value, 10);
     if (selectedIndex >= 0) {
       annotations[selectedIndex] = { ...annotations[selectedIndex], stroke: activeStroke };
       render();
@@ -841,7 +840,6 @@ function syncBgUI() {
 }
 
 function syncStrokeUI() {
-  document.querySelectorAll(".stroke-btn").forEach(el => {
-    el.classList.toggle("active", el.dataset.stroke === String(activeStroke));
-  });
+  document.querySelectorAll(".stroke-slider").forEach(el => { el.value = String(activeStroke); });
+  document.querySelectorAll(".stroke-val").forEach(el => { el.textContent = String(activeStroke); });
 }
