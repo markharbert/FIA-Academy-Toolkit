@@ -11,7 +11,7 @@ let bgImage      = null;
 let annotations  = [];
 let activeTool   = "rect";   // "select" | "rect" | "arrow" | "text"
 let activeColor  = "#e74c3c";
-let activeStroke = 3;
+let activeStroke = 8;
 let activeBgColor = "#1e2538"; // text-label background ("none" = transparent)
 let pendingTitle = "Screenshot";
 let isFullPage   = false;
