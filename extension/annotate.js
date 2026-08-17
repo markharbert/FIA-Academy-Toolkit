@@ -84,17 +84,18 @@ async function initSingleImage(dataUrl, title) {
   pendingTitle = title || "Screenshot";
   const img    = await loadAsImage(dataUrl);
 
-  bgImage        = img;
-  canvas.width   = img.naturalWidth;
-  canvas.height  = img.naturalHeight;
+  bgImage       = img;
+  canvas.width  = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+
+  // Hide status before showing canvas so flex layout doesn't briefly show both.
+  statusEl.style.display = "none";
 
   // Scale display down to fit the viewport; preserve aspect ratio via maxHeight.
-  const maxH = window.innerHeight - 54 - 48; // toolbar + wrap padding
+  // max-width: 100% from the stylesheet handles width — leave maxWidth unset.
+  const maxH = window.innerHeight - 54 - 48; // toolbar (54px) + wrap padding (24px*2)
   canvas.style.maxHeight = maxH + "px";
-  // max-width: 100% from CSS handles width — no explicit width override needed
-
-  canvas.style.display  = "block";
-  statusEl.style.display = "none";
+  canvas.style.display   = "block";
   render();
 }
 
@@ -123,9 +124,11 @@ async function initFullPage({ strips, title, scrollH, vpH, vpW }) {
   // Snapshot stitched canvas as ImageBitmap so render() can clear+redraw cheaply.
   bgImage = await createImageBitmap(canvas);
 
-  // Full page: no CSS constraints — the canvas-wrap div scrolls.
-  canvas.style.removeProperty("max-height");
-  canvas.style.removeProperty("max-width");
+  // Full page: override the stylesheet's max-width/max-height so the canvas
+  // renders at its natural logical-pixel size; the canvas-wrap div scrolls.
+  // (removeProperty only affects inline styles, so we set inline overrides instead.)
+  canvas.style.maxHeight = "none";
+  canvas.style.maxWidth  = "none";
   canvas.style.display   = "block";
   statusEl.style.display = "none";
 

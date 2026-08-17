@@ -160,6 +160,9 @@ async function handleFullPageCapture(tabId, title) {
     });
     const { scrollH, vpH, vpW, origX, origY } = dims;
 
+    // Guard: degenerate viewport (some iframes / SPAs) — avoids Math.ceil(x/0) = Infinity.
+    if (!vpH || !vpW) throw new Error("Capture aborted: viewport dimensions are zero.");
+
     // 2. Get windowId for captureVisibleTab
     const { windowId } = await chrome.tabs.get(tabId);
 
@@ -197,9 +200,11 @@ async function handleFullPageCapture(tabId, title) {
       // Scale captured image (at device DPR) down to logical resolution (vpW × vpH).
       // Keeping strips at logical px prevents the stitched canvas from exceeding
       // Chrome's 32 767 px per-dimension limit on any display density.
-      const bitmap        = await createImageBitmap(dataUrlToBlob(dataUrl));
-      const logCanvas     = new OffscreenCanvas(vpW, vpH);
-      logCanvas.getContext("2d").drawImage(bitmap, 0, 0, vpW, vpH);
+      const bitmap    = await createImageBitmap(dataUrlToBlob(dataUrl));
+      const logCanvas = new OffscreenCanvas(vpW, vpH);
+      const logCtx    = logCanvas.getContext("2d");
+      if (!logCtx) throw new Error("OffscreenCanvas 2D context unavailable");
+      logCtx.drawImage(bitmap, 0, 0, vpW, vpH);
       bitmap.close();
       const scaledBlob    = await logCanvas.convertToBlob({ type: "image/png" });
       const scaledDataUrl = await blobToDataUrl(scaledBlob);
