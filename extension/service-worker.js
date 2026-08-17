@@ -193,7 +193,9 @@ async function handleFullPageCapture(tabId, title) {
       await chrome.scripting.executeScript({
         target: { tabId }, func: (y) => window.scrollTo(0, y), args: [scrollTop],
       });
-      await swSleep(150);
+      // Chrome enforces MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND (≈ 2/s).
+      // 600 ms gives scroll time to settle and keeps us comfortably under the limit.
+      await swSleep(600);
 
       // Capture at device DPR and store the raw data URL directly.
       // OffscreenCanvas.convertToBlob() is unreliable in extension SW contexts;
