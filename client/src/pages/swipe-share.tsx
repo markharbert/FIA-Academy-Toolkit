@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   ExternalLink, FileText, Globe, Loader2,
-  Camera, AlertCircle, ArrowUpRight,
+  Camera, AlertCircle, ArrowUpRight, ZoomIn, ZoomOut,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -14,7 +14,7 @@ type PublicSwipeItem = {
   type: "upload" | "snippet";
   content: string | null;
   imagePath: string | null;
-  strips: string[] | null;   // ordered GCS paths for full-page multi-strip captures
+  strips: string[] | null;
   sourceUrl: string | null;
   notes: string | null;
   promoLinks: PromoLink[];
@@ -23,6 +23,249 @@ type PublicSwipeItem = {
   createdAt: string;
 };
 
+// ── Pan + Zoom image viewer ────────────────────────────────────────────────────
+// All frame-by-frame state lives in refs to avoid per-frame React re-renders.
+// Only `displayZoom` and `loaded` drive re-renders (toolbar + fade-in).
+function PanZoomViewer({ src, alt }: { src: string; alt: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef       = useRef<HTMLImageElement>(null);
+  const [loaded,      setLoaded]      = useState(false);
+  const [displayZoom, setDisplayZoom] = useState(100);
+  const [dragging,    setDragging]    = useState(false);
+
+  // Mutable transform — mutated via applyTransform, never triggers renders
+  const T           = useRef({ scale: 1, tx: 0, ty: 0, fitScale: 1 });
+  const dragOrigin  = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
+  const pinchOrigin = useRef<{ dist: number; scale: number } | null>(null);
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+  const applyTransform = (tx: number, ty: number, scale: number) => {
+    if (imgRef.current)
+      imgRef.current.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+    T.current = { ...T.current, tx, ty, scale };
+  };
+
+  // Keep image within the container bounds
+  const clamp = (tx: number, ty: number, scale: number) => {
+    const c = containerRef.current, img = imgRef.current;
+    if (!c || !img) return { tx, ty };
+    const cw = c.clientWidth,  ch = c.clientHeight;
+    const iw = img.naturalWidth * scale, ih = img.naturalHeight * scale;
+    return {
+      // Wider than container → allow left/right pan; narrower → center it
+      tx: iw >= cw ? Math.min(0, Math.max(cw - iw, tx)) : (cw - iw) / 2,
+      // Taller than container → allow up/down pan; shorter → pin to top
+      ty: ih >= ch ? Math.min(0, Math.max(ch - ih, ty)) : 0,
+    };
+  };
+
+  // Zoom centered on (pivotX, pivotY) in container-local px
+  const zoomAt = (newScale: number, pivotX: number, pivotY: number) => {
+    const { scale, tx, ty, fitScale } = T.current;
+    // clamp scale: 95 % of fit-width … 8× fit-width
+    const s     = Math.min(Math.max(fitScale * 0.95, newScale), fitScale * 8);
+    const ratio = s / scale;
+    const { tx: ntx, ty: nty } = clamp(
+      pivotX - (pivotX - tx) * ratio,
+      pivotY - (pivotY - ty) * ratio,
+      s,
+    );
+    applyTransform(ntx, nty, s);
+    setDisplayZoom(Math.round((s / fitScale) * 100));
+  };
+
+  // ── image load: initialise fit-to-width ──────────────────────────────────
+  const onImageLoad = () => {
+    const c = containerRef.current, img = imgRef.current;
+    if (!c || !img) return;
+    const fit = img.naturalWidth > 0 ? c.clientWidth / img.naturalWidth : 1;
+    T.current.fitScale = fit;
+    const { tx, ty } = clamp(0, 0, fit);
+    applyTransform(tx, ty, fit);
+    setLoaded(true);
+    setDisplayZoom(100);
+  };
+
+  // ── non-passive wheel + touchmove (must use native addEventListener) ──────
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      zoomAt(
+        T.current.scale * (e.deltaY < 0 ? 1.12 : 1 / 1.12),
+        e.clientX - r.left,
+        e.clientY - r.top,
+      );
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 2 && pinchOrigin.current) {
+        const t0 = e.touches[0], t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const r  = el.getBoundingClientRect();
+        const mx = (t0.clientX + t1.clientX) / 2 - r.left;
+        const my = (t0.clientY + t1.clientY) / 2 - r.top;
+        zoomAt(pinchOrigin.current.scale * (dist / pinchOrigin.current.dist), mx, my);
+      } else if (e.touches.length === 1 && dragOrigin.current) {
+        const t = e.touches[0], o = dragOrigin.current;
+        const { tx, ty } = clamp(o.tx + t.clientX - o.x, o.ty + t.clientY - o.y, T.current.scale);
+        applyTransform(tx, ty, T.current.scale);
+      }
+    };
+
+    el.addEventListener("wheel",     onWheel,     { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener("wheel",     onWheel);
+      el.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []); // reads refs only — no stale-closure risk
+
+  // ── mouse ─────────────────────────────────────────────────────────────────
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    dragOrigin.current = { x: e.clientX, y: e.clientY, tx: T.current.tx, ty: T.current.ty };
+    setDragging(true);
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragOrigin.current) return;
+    const o = dragOrigin.current;
+    const { tx, ty } = clamp(o.tx + e.clientX - o.x, o.ty + e.clientY - o.y, T.current.scale);
+    applyTransform(tx, ty, T.current.scale);
+  };
+  const onMouseUp = () => { dragOrigin.current = null; setDragging(false); };
+
+  // Double-click: toggle between fit-width and 2× zoom at cursor
+  const onDblClick = (e: React.MouseEvent) => {
+    const c = containerRef.current;
+    if (!c) return;
+    const { fitScale, scale } = T.current;
+    const r = c.getBoundingClientRect();
+    if (scale > fitScale * 1.1) {
+      const { tx, ty } = clamp(0, 0, fitScale);
+      applyTransform(tx, ty, fitScale);
+      setDisplayZoom(100);
+    } else {
+      zoomAt(fitScale * 2, e.clientX - r.left, e.clientY - r.top);
+    }
+  };
+
+  // ── touch start / end ─────────────────────────────────────────────────────
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const t0 = e.touches[0], t1 = e.touches[1];
+      pinchOrigin.current = {
+        dist:  Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY),
+        scale: T.current.scale,
+      };
+      dragOrigin.current = null;
+    } else {
+      const t = e.touches[0];
+      dragOrigin.current  = { x: t.clientX, y: t.clientY, tx: T.current.tx, ty: T.current.ty };
+      pinchOrigin.current = null;
+    }
+  };
+  const onTouchEnd = () => { pinchOrigin.current = null; };
+
+  // ── toolbar helpers ───────────────────────────────────────────────────────
+  const zoomCenter = (factor: number) => {
+    const c = containerRef.current;
+    if (!c) return;
+    zoomAt(T.current.scale * factor, c.clientWidth / 2, c.clientHeight / 2);
+  };
+  const resetFit = () => {
+    const { fitScale } = T.current;
+    const { tx, ty } = clamp(0, 0, fitScale);
+    applyTransform(tx, ty, fitScale);
+    setDisplayZoom(100);
+  };
+
+  return (
+    <div className="flex flex-col h-full select-none bg-gray-950">
+
+      {/* ── Canvas ──────────────────────────────────────────────────────── */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden relative"
+        style={{ cursor: dragging ? "grabbing" : "grab" }}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onDoubleClick={onDblClick}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        {!loaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-600" />
+          </div>
+        )}
+        <img
+          ref={imgRef}
+          src={src}
+          alt={alt}
+          onLoad={onImageLoad}
+          draggable={false}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            transformOrigin: "0 0",
+            maxWidth: "none",
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            opacity: loaded ? 1 : 0,
+            transition: "opacity 0.25s",
+          }}
+        />
+      </div>
+
+      {/* ── Toolbar ──────────────────────────────────────────────────────── */}
+      <div className="shrink-0 flex items-center justify-center gap-1.5 px-4 py-2 bg-gray-900 border-t border-white/5">
+        <button
+          onClick={() => zoomCenter(1 / 1.4)}
+          title="Zoom out (scroll wheel)"
+          className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <ZoomOut className="h-4 w-4" />
+        </button>
+
+        <span className="text-xs font-mono text-gray-400 w-11 text-center tabular-nums">
+          {displayZoom}%
+        </span>
+
+        <button
+          onClick={() => zoomCenter(1.4)}
+          title="Zoom in (scroll wheel)"
+          className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <ZoomIn className="h-4 w-4" />
+        </button>
+
+        <div className="w-px h-4 bg-white/10 mx-0.5" />
+
+        <button
+          onClick={resetFit}
+          title="Fit to width"
+          className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          Fit
+        </button>
+
+        <span className="hidden sm:block ml-2 text-[10px] text-gray-600">
+          drag to pan · scroll to zoom · double-click to toggle · pinch on touch
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Share page ─────────────────────────────────────────────────────────────────
 export default function SwipeSharePage() {
   const { token } = useParams<{ token: string }>();
 
@@ -66,14 +309,14 @@ export default function SwipeSharePage() {
     );
   }
 
-  const hasPromos   = item.promoLinks && item.promoLinks.length > 0;
-  const isImage     = item.type === "upload" && item.imagePath;
+  const hasPromos    = item.promoLinks && item.promoLinks.length > 0;
+  const isImage      = item.type === "upload" && item.imagePath;
   const isMultiStrip = isImage && Array.isArray(item.strips) && item.strips.length > 1;
 
   return (
     <div className="min-h-screen bg-slate-50">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* ── Header ────────────────────────────────────────────────────────── */}
       <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Camera className="h-5 w-5 text-primary" />
@@ -87,48 +330,46 @@ export default function SwipeSharePage() {
         </div>
       </header>
 
-      {/* ── Main (with margin on all sides) ────────────────────────────────── */}
+      {/* ── Main ──────────────────────────────────────────────────────────── */}
       <main className="p-4 lg:p-6">
 
         {isImage ? (
-          /* ── IMAGE: 75 / 25 split card ────────────────────────────────── */
+          /* ── IMAGE: 75 / 25 split card ───────────────────────────────── */
           <div
-            className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col lg:flex-row"
-            style={{ minHeight: "calc(100vh - 120px)" }}
+            className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden
+                       flex flex-col lg:flex-row"
+            style={{ height: "calc(100vh - 120px)" }}
           >
-            {/* Left 75% — image (single) or scrollable strip stack (full-page) */}
-            {isMultiStrip ? (
-              /* Multi-strip (legacy strip-upload) — stacked scrollable strips */
-              <div
-                className="lg:w-3/4 bg-gray-950 overflow-y-auto"
-                style={{ maxHeight: "calc(100vh - 120px)" }}
-              >
-                {item.strips!.map((_, i) => (
-                  <img
-                    key={i}
-                    src={`/api/swipe/public/${item.shareToken}/strip/${i}`}
-                    alt={`${item.title} — section ${i + 1}`}
-                    style={{ display: "block", width: "100%" }}
-                    loading={i === 0 ? "eager" : "lazy"}
-                  />
-                ))}
-              </div>
-            ) : (
-              /* Single image — scrollable so tall full-page captures are readable */
-              <div
-                className="lg:w-3/4 bg-gray-950 overflow-y-auto"
-                style={{ maxHeight: "calc(100vh - 120px)" }}
-              >
-                <img
+            {/* Left 75 % — image viewer */}
+            <div
+              className="lg:w-3/4 flex flex-col overflow-hidden"
+              style={{ minHeight: "55vw", maxHeight: "60vh" }}
+            >
+              {isMultiStrip ? (
+                /* Legacy multi-strip: stacked scrollable strips */
+                <div className="flex-1 bg-gray-950 overflow-y-auto">
+                  {item.strips!.map((_, i) => (
+                    <img
+                      key={i}
+                      src={`/api/swipe/public/${item.shareToken}/strip/${i}`}
+                      alt={`${item.title} — section ${i + 1}`}
+                      style={{ display: "block", width: "100%" }}
+                      loading={i === 0 ? "eager" : "lazy"}
+                    />
+                  ))}
+                </div>
+              ) : (
+                /* Single image — pan + zoom viewer */
+                <PanZoomViewer
                   src={`/api/swipe/public/${item.shareToken}/image`}
                   alt={item.title}
-                  style={{ display: "block", width: "100%" }}
                 />
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Right 25% — info + promo */}
-            <div className="lg:w-1/4 border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col">
+            {/* Right 25 % — info + promo */}
+            <div className="lg:w-1/4 border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col
+                            min-h-0 lg:h-full">
 
               {/* Scrollable body */}
               <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -171,10 +412,9 @@ export default function SwipeSharePage() {
                   </div>
                 )}
 
-                {/* Divider */}
                 <div className="h-px bg-gray-100" />
 
-                {/* Promo links — or placeholder */}
+                {/* Promo links */}
                 {hasPromos ? (
                   <div className="space-y-2">
                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
@@ -187,7 +427,8 @@ export default function SwipeSharePage() {
                           href={pl.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="group flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-primary/5 hover:border-primary/30 p-3 transition-all"
+                          className="group flex items-start gap-2 rounded-xl border border-gray-200
+                                     bg-gray-50 hover:bg-primary/5 hover:border-primary/30 p-3 transition-all"
                         >
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-xs text-gray-900 group-hover:text-primary transition-colors">
@@ -223,10 +464,9 @@ export default function SwipeSharePage() {
           </div>
 
         ) : (
-          /* ── SNIPPET / FALLBACK: centered single-column ───────────────── */
+          /* ── SNIPPET / FALLBACK: single column ──────────────────────── */
           <div className="max-w-3xl mx-auto space-y-5 pt-2">
 
-            {/* Title + meta */}
             <div className="space-y-1">
               <h1 className="text-2xl font-bold text-gray-900 leading-tight">{item.title}</h1>
               <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
@@ -248,7 +488,6 @@ export default function SwipeSharePage() {
               </div>
             </div>
 
-            {/* Snippet body */}
             {item.content && (
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                 <p className="text-gray-800 leading-relaxed whitespace-pre-wrap font-mono text-sm">
@@ -268,7 +507,6 @@ export default function SwipeSharePage() {
               </div>
             )}
 
-            {/* Notes */}
             {item.notes && (
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1.5">
@@ -278,7 +516,6 @@ export default function SwipeSharePage() {
               </div>
             )}
 
-            {/* Promo links */}
             {hasPromos && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -295,7 +532,8 @@ export default function SwipeSharePage() {
                       href={pl.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="group flex items-start gap-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-primary/30 p-4 transition-all shadow-sm"
+                      className="group flex items-start gap-3 rounded-xl border border-gray-200
+                                 bg-white hover:bg-gray-50 hover:border-primary/30 p-4 transition-all shadow-sm"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm text-gray-900 group-hover:text-primary transition-colors">
