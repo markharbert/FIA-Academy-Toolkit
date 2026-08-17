@@ -182,6 +182,36 @@ async function handleFullPageCapture(tabId, title) {
     await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollTo(0, 0) });
     await swSleep(250);
 
+    // 4a. Hide fixed + sticky-top elements (headers, navbars) so they don't
+    //     repeat in every strip. Our own injected elements (id starts "__fia_")
+    //     are excluded. Original visibility is stashed in data-fia-orig-vis.
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        document.querySelectorAll("*").forEach(el => {
+          if (el.id && el.id.startsWith("__fia_")) return;
+          const st  = window.getComputedStyle(el);
+          const pos = st.position;
+          if (pos !== "fixed" && pos !== "sticky") return;
+          const rect = el.getBoundingClientRect();
+          if (rect.height <= 0 || rect.width <= 0) return;
+          let hide = false;
+          if (pos === "fixed") {
+            // Hide fixed elements whose top edge sits in the top 35 % of viewport
+            hide = rect.top >= -5 && rect.top < window.innerHeight * 0.35;
+          } else {
+            // Hide sticky elements whose CSS `top` anchors them near the top (≤ 20 px)
+            const topPx = parseFloat(st.top);
+            hide = !isNaN(topPx) && topPx <= 20;
+          }
+          if (hide) {
+            el.dataset.fiaOrigVis = el.style.visibility;
+            el.style.setProperty("visibility", "hidden", "important");
+          }
+        });
+      },
+    });
+
     // 5. Capture each strip, scale to logical pixels, convert to data URL
     const totalSteps = Math.ceil(scrollH / vpH);
     const strips     = [];
@@ -214,7 +244,18 @@ async function handleFullPageCapture(tabId, title) {
       });
     }
 
-    // 6. Restore scroll position
+    // 6. Restore hidden fixed/sticky elements now that capture is complete
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        document.querySelectorAll("[data-fia-orig-vis]").forEach(el => {
+          el.style.visibility = el.dataset.fiaOrigVis;
+          delete el.dataset.fiaOrigVis;
+        });
+      },
+    });
+
+    // 7. Restore scroll position
     await chrome.scripting.executeScript({
       target: { tabId }, func: (x, y) => window.scrollTo(x, y), args: [origX, origY],
     });
@@ -233,9 +274,17 @@ async function handleFullPageCapture(tabId, title) {
 
   } catch (err) {
     console.error("[FIA SW] full page capture error:", err);
+    // Restore any hidden fixed/sticky elements before showing the error
     chrome.scripting.executeScript({
       target: { tabId },
-      func: () => { const el = document.getElementById("__fia_progress__"); if (el) el.remove(); },
+      func: () => {
+        document.querySelectorAll("[data-fia-orig-vis]").forEach(el => {
+          el.style.visibility = el.dataset.fiaOrigVis;
+          delete el.dataset.fiaOrigVis;
+        });
+        const banner = document.getElementById("__fia_progress__");
+        if (banner) banner.remove();
+      },
     }).catch(() => {});
     injectErrorToast(tabId, `Capture failed: ${err.message}`);
   }
