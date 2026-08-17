@@ -195,20 +195,11 @@ async function handleFullPageCapture(tabId, title) {
       });
       await swSleep(150);
 
+      // Capture at device DPR and store the raw data URL directly.
+      // OffscreenCanvas.convertToBlob() is unreliable in extension SW contexts;
+      // the annotate editor uses 9-arg drawImage to handle DPR scaling instead.
       const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
-
-      // Scale captured image (at device DPR) down to logical resolution (vpW × vpH).
-      // Keeping strips at logical px prevents the stitched canvas from exceeding
-      // Chrome's 32 767 px per-dimension limit on any display density.
-      const bitmap    = await createImageBitmap(dataUrlToBlob(dataUrl));
-      const logCanvas = new OffscreenCanvas(vpW, vpH);
-      const logCtx    = logCanvas.getContext("2d");
-      if (!logCtx) throw new Error("OffscreenCanvas 2D context unavailable");
-      logCtx.drawImage(bitmap, 0, 0, vpW, vpH);
-      bitmap.close();
-      const scaledBlob    = await logCanvas.convertToBlob({ type: "image/png" });
-      const scaledDataUrl = await blobToDataUrl(scaledBlob);
-      strips.push(scaledDataUrl);
+      strips.push(dataUrl);
 
       // Update progress banner
       await chrome.scripting.executeScript({

@@ -117,8 +117,9 @@ async function initFullPage({ strips, title, scrollH, vpH, vpW }) {
     const img = await loadAsImage(strips[i]);
     // Last strip flushes to the exact page bottom (mirrors SW capture logic).
     const yPos = (i === strips.length - 1) ? Math.max(0, scrollH - vpH) : i * vpH;
-    // Strips are already vpW × vpH — draw 1:1, no scaling needed.
-    ctx.drawImage(img, 0, yPos);
+    // Strips are at device DPR (naturalWidth = vpW*dpr, naturalHeight = vpH*dpr).
+    // 9-arg drawImage scales from physical resolution to logical canvas coords.
+    ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, 0, yPos, vpW, vpH);
   }
 
   // Snapshot stitched canvas as ImageBitmap so render() can clear+redraw cheaply.
