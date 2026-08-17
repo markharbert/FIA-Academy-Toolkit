@@ -89,6 +89,8 @@ function loadAsImage(src) {
 // ── Single image init ─────────────────────────────────────────────────────────
 async function initSingleImage(dataUrl, title) {
   pendingTitle = title || "Screenshot";
+  const titleEl = document.getElementById("capture-title");
+  if (titleEl) titleEl.value = pendingTitle;
   const img    = await loadAsImage(dataUrl);
   bgImage       = img;
   canvas.width  = img.naturalWidth;
@@ -103,6 +105,8 @@ async function initSingleImage(dataUrl, title) {
 // ── Full-page init (multi-strip stitch) ───────────────────────────────────────
 async function initFullPage({ strips, title, scrollH, vpH, vpW }) {
   pendingTitle = title || "Full Page";
+  const titleEl = document.getElementById("capture-title");
+  if (titleEl) titleEl.value = pendingTitle;
   statusEl.textContent   = `Stitching full page (0 / ${strips.length})…`;
   statusEl.style.display = "block";
   canvas.width  = vpW;
@@ -723,7 +727,7 @@ document.getElementById("btn-save").addEventListener("click", async () => {
     const saveRes = await fetch(`${API_BASE}/api/v1/swipe`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ type: "upload", title: pendingTitle, imagePath: objectPath }),
+      body: JSON.stringify({ type: "upload", title: (document.getElementById("capture-title")?.value?.trim() || pendingTitle), imagePath: objectPath }),
     });
     if (!saveRes.ok) throw new Error(`Save failed (${saveRes.status})`);
     const { item } = await saveRes.json();

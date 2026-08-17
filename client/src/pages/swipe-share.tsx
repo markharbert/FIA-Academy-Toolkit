@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   ExternalLink, FileText, Globe, Loader2,
-  Camera, AlertCircle, ArrowUpRight, ZoomIn, ZoomOut, Pencil,
+  Camera, AlertCircle, ArrowUpRight, ZoomIn, ZoomOut,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -282,42 +282,10 @@ export default function SwipeSharePage() {
 
   const item = data?.item;
 
-  // Editable title state
-  const [localTitle, setLocalTitle]     = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft]     = useState("");
-  const [savedFlash, setSavedFlash]     = useState(false);
-
-  const displayedTitle = localTitle ?? item?.title ?? "";
-
-  const updateTitle = useMutation({
-    mutationFn: async (title: string) => {
-      const r = await fetch(`/api/swipe/public/${token}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      if (!r.ok) throw new Error("Failed to save");
-      return title;
-    },
-    onSuccess: (title: string) => {
-      setLocalTitle(title);
-      document.title = `${title} — FIA Toolkit Swipe File`;
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 1800);
-    },
-  });
-
-  const commitTitle = () => {
-    setEditingTitle(false);
-    const trimmed = titleDraft.trim();
-    if (trimmed && trimmed !== displayedTitle) updateTitle.mutate(trimmed);
-  };
-
   useEffect(() => {
-    if (item) document.title = `${localTitle ?? item.title} — FIA Toolkit Swipe File`;
+    if (item) document.title = `${item.title} — FIA Toolkit Swipe File`;
     return () => { document.title = "FIA Academy Toolkit"; };
-  }, [item, localTitle]);
+  }, [item]);
 
   if (isLoading) {
     return (
@@ -361,40 +329,10 @@ export default function SwipeSharePage() {
 
         <div className="w-px h-4 bg-gray-200 shrink-0" />
 
-        {/* Editable title */}
-        <div className="flex-1 min-w-0 flex items-center gap-1.5">
-          {editingTitle ? (
-            <input
-              autoFocus
-              className="flex-1 min-w-0 text-sm font-semibold text-gray-800 bg-transparent
-                         border-b border-primary outline-none px-0.5 py-0.5 leading-tight"
-              value={titleDraft}
-              onChange={e => setTitleDraft(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={e => {
-                if (e.key === "Enter")  commitTitle();
-                if (e.key === "Escape") setEditingTitle(false);
-              }}
-            />
-          ) : (
-            <button
-              className="group flex items-center gap-1.5 min-w-0 text-left"
-              onClick={() => { setTitleDraft(displayedTitle); setEditingTitle(true); }}
-              title="Click to rename"
-            >
-              <span className="text-sm font-semibold text-gray-800 truncate leading-tight">
-                {displayedTitle}
-              </span>
-              <Pencil className="h-3 w-3 text-gray-300 group-hover:text-primary shrink-0
-                                 opacity-0 group-hover:opacity-100 transition-all" />
-            </button>
-          )}
-          {savedFlash && (
-            <span className="text-[10px] text-emerald-500 font-medium shrink-0 animate-pulse">
-              Saved
-            </span>
-          )}
-        </div>
+        {/* Title — read-only on public page */}
+        <h1 className="flex-1 min-w-0 text-base font-bold text-gray-900 truncate leading-tight">
+          {item.title}
+        </h1>
 
         {/* View count */}
         <div className="flex items-center gap-1 text-xs text-gray-400 shrink-0">

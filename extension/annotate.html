@@ -144,6 +144,29 @@
       flex-shrink: 0;
     }
 
+    /* Inline capture-title field */
+    #capture-title {
+      flex: 1;
+      min-width: 120px;
+      max-width: 320px;
+      background: transparent;
+      border: none;
+      border-bottom: 1.5px solid transparent;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      padding: 3px 4px;
+      outline: none;
+      transition: border-color .15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #capture-title::placeholder { color: #4a5568; font-weight: 400; }
+    #capture-title:hover  { border-bottom-color: #4a5568; }
+    #capture-title:focus  { border-bottom-color: #4a90d9; }
+
     /* Stroke buttons */
     .stroke-btn {
       background: transparent;
@@ -266,6 +289,12 @@
     </svg>
     Text
   </button>
+
+  <div class="sep"></div>
+
+  <!-- Editable capture title -->
+  <input id="capture-title" type="text" placeholder="Add a title…"
+         title="Rename this capture before saving" autocomplete="off" spellcheck="false" />
 
   <div class="sep"></div>
 

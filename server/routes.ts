@@ -12377,22 +12377,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Update title via share token (no auth — token holder == owner in practice)
-  app.patch("/api/swipe/public/:token", async (req: Request, res: Response) => {
-    try {
-      const { title } = req.body;
-      if (!title || typeof title !== "string" || !title.trim())
-        return res.status(400).json({ message: "Title required" });
-      const item = await storage.getSwipeItemByToken(req.params.token);
-      if (!item) return res.status(404).json({ message: "Not found" });
-      await storage.updateSwipeItem(item.id, item.userId, { title: title.trim() });
-      res.json({ ok: true });
-    } catch (err) {
-      console.error("[swipe] public patch error:", err);
-      res.status(500).json({ message: "Failed to update" });
-    }
-  });
-
   // Serve public image by token (first strip or single image)
   app.get("/api/swipe/public/:token/image", async (req: Request, res: Response) => {
     try {
