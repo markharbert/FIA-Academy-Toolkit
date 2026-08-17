@@ -13,6 +13,26 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type: mime });
 }
 
+// ── IndexedDB helpers (shared key-value store for large cross-context data) ───
+// Same DB used by annotate.js. Works in both service worker and extension pages.
+function idbOpenDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("fia-toolkit", 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore("pending");
+    req.onsuccess  = e => resolve(e.target.result);
+    req.onerror    = () => reject(req.error);
+  });
+}
+async function idbPut(key, value) {
+  const db = await idbOpenDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("pending", "readwrite");
+    tx.objectStore("pending").put(value, key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror    = () => { db.close(); reject(tx.error); };
+  });
+}
+
 // Convert Blob → data URL without fetch (safe in SW; uses small apply chunks).
 async function blobToDataUrl(blob) {
   const arrayBuffer = await blob.arrayBuffer();
@@ -121,33 +141,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 async function handleFullPageCapture(tabId, title) {
-  // Strip-based approach: capture each scroll position as a separate PNG and upload
-  // directly to GCS. No OffscreenCanvas stitching — no browser canvas size limits.
+  // Strip-based capture → annotate-editor approach:
+  // Each strip is scaled to logical-pixel resolution (DPR=1) via OffscreenCanvas,
+  // stored as data URLs in IndexedDB (no 10 MB session-storage cap), then the
+  // annotation editor opens and stitches them into one scrollable canvas.
 
   try {
-    // 1. Fetch API key
-    const { apiKey } = await chrome.storage.local.get("apiKey");
-    if (!apiKey) {
-      injectErrorToast(tabId, "Not logged in — open the FIA Toolkit extension first.");
-      return;
-    }
-
-    // 2. Read page geometry + save original scroll position
+    // 1. Read page geometry
     const [{ result: dims }] = await chrome.scripting.executeScript({
       target: { tabId },
       func: () => ({
         scrollH: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0),
         vpH:     window.innerHeight,
+        vpW:     window.innerWidth,
         origX:   window.scrollX,
         origY:   window.scrollY,
       }),
     });
-    const { scrollH, vpH, origX, origY } = dims;
+    const { scrollH, vpH, vpW, origX, origY } = dims;
 
-    // 3. Get windowId for captureVisibleTab
+    // 2. Get windowId for captureVisibleTab
     const { windowId } = await chrome.tabs.get(tabId);
 
-    // 4. Inject a "capturing" progress banner so the user knows it's working
+    // 3. Inject progress banner
     await chrome.scripting.executeScript({
       target: { tabId },
       func: () => {
@@ -159,98 +175,66 @@ async function handleFullPageCapture(tabId, title) {
       },
     });
 
-    // 5. Scroll to top
-    await chrome.scripting.executeScript({
-      target: { tabId }, func: () => window.scrollTo(0, 0),
-    });
+    // 4. Scroll to top
+    await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollTo(0, 0) });
     await swSleep(250);
 
-    // 6. Scroll → capture → upload each strip
+    // 5. Capture each strip, scale to logical pixels, convert to data URL
     const totalSteps = Math.ceil(scrollH / vpH);
-    const stripPaths = [];
+    const strips     = [];
 
     for (let i = 0; i < totalSteps; i++) {
-      // Last step flushes to the exact bottom so nothing is clipped
-      const scrollTop = (i === totalSteps - 1)
-        ? Math.max(0, scrollH - vpH)
-        : i * vpH;
+      // Last step flushes to the exact bottom so no content is clipped
+      const scrollTop = (i === totalSteps - 1) ? Math.max(0, scrollH - vpH) : i * vpH;
 
       await chrome.scripting.executeScript({
         target: { tabId }, func: (y) => window.scrollTo(0, y), args: [scrollTop],
       });
       await swSleep(150);
 
-      // Capture this viewport position
       const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
-      const blob    = dataUrlToBlob(dataUrl);
 
-      // Request a signed upload URL and PUT the strip blob directly to GCS
-      const upRes = await fetch(`${API_BASE}/api/v1/swipe/request-upload-url`, {
-        method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!upRes.ok) throw new Error(`Upload URL failed (${upRes.status})`);
-      const { uploadURL, objectPath } = await upRes.json();
+      // Scale captured image (at device DPR) down to logical resolution (vpW × vpH).
+      // Keeping strips at logical px prevents the stitched canvas from exceeding
+      // Chrome's 32 767 px per-dimension limit on any display density.
+      const bitmap        = await createImageBitmap(dataUrlToBlob(dataUrl));
+      const logCanvas     = new OffscreenCanvas(vpW, vpH);
+      logCanvas.getContext("2d").drawImage(bitmap, 0, 0, vpW, vpH);
+      bitmap.close();
+      const scaledBlob    = await logCanvas.convertToBlob({ type: "image/png" });
+      const scaledDataUrl = await blobToDataUrl(scaledBlob);
+      strips.push(scaledDataUrl);
 
-      const putRes = await fetch(uploadURL, {
-        method: "PUT", headers: { "Content-Type": "image/png" }, body: blob,
-      });
-      if (!putRes.ok) throw new Error(`Strip upload failed (${putRes.status})`);
-
-      stripPaths.push(objectPath);
-
-      // Update progress label
+      // Update progress banner
       await chrome.scripting.executeScript({
         target: { tabId },
         func: (cur, tot) => {
           const el = document.getElementById("__fia_progress__");
-          if (el) el.textContent = `FIA Toolkit: capturing full page… ${cur}/${tot}`;
+          if (el) el.textContent = `FIA Toolkit: capturing full page… ${cur} / ${tot}`;
         },
         args: [i + 1, totalSteps],
       });
     }
 
-    // 7. Restore scroll position
+    // 6. Restore scroll position
     await chrome.scripting.executeScript({
       target: { tabId }, func: (x, y) => window.scrollTo(x, y), args: [origX, origY],
     });
 
-    // 8. Create swipe item — imagePath = first strip (for thumbnail), strips = full list
-    const saveRes = await fetch(`${API_BASE}/api/v1/swipe`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        type:      "upload",
-        title:     title || "Full Page",
-        imagePath: stripPaths[0],
-        strips:    stripPaths,
-      }),
-    });
-    if (!saveRes.ok) throw new Error(`Save failed (${saveRes.status})`);
-    const { item } = await saveRes.json();
-
-    // 9. Auto-generate share token
-    try {
-      await fetch(`${API_BASE}/api/v1/swipe/${item.id}/share`, {
-        method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
-      });
-    } catch (_) {}
-
-    // 10. Signal popup to refresh, then show success banner → green toast
-    await chrome.storage.session.set({ swipeRecentlySaved: true });
-
+    // 7. Remove progress banner
     await chrome.scripting.executeScript({
       target: { tabId },
-      func: (n) => {
-        const el = document.getElementById("__fia_progress__");
-        if (el) el.remove();
-      },
-      args: [0],
+      func: () => { const el = document.getElementById("__fia_progress__"); if (el) el.remove(); },
     });
-    injectSaveToast(tabId);
+
+    // 8. Store strips in IndexedDB (no size cap; works across SW + extension page contexts)
+    await idbPut("pendingFullPage", { strips, title: title || "Full Page", scrollH, vpH, vpW });
+
+    // 9. Open annotation editor — it will stitch + save the full image
+    chrome.tabs.create({ url: chrome.runtime.getURL("annotate.html") });
 
   } catch (err) {
     console.error("[FIA SW] full page capture error:", err);
-    // Remove progress banner if still showing
     chrome.scripting.executeScript({
       target: { tabId },
       func: () => { const el = document.getElementById("__fia_progress__"); if (el) el.remove(); },

@@ -98,6 +98,7 @@ export default function SwipeSharePage() {
           >
             {/* Left 75% — image (single) or scrollable strip stack (full-page) */}
             {isMultiStrip ? (
+              /* Multi-strip (legacy strip-upload) — stacked scrollable strips */
               <div
                 className="lg:w-3/4 bg-gray-950 overflow-y-auto"
                 style={{ maxHeight: "calc(100vh - 120px)" }}
@@ -113,12 +114,15 @@ export default function SwipeSharePage() {
                 ))}
               </div>
             ) : (
-              <div className="lg:w-3/4 bg-gray-100 flex items-center justify-center p-6 lg:p-10 min-h-[50vh] lg:min-h-0">
+              /* Single image — scrollable so tall full-page captures are readable */
+              <div
+                className="lg:w-3/4 bg-gray-950 overflow-y-auto"
+                style={{ maxHeight: "calc(100vh - 120px)" }}
+              >
                 <img
                   src={`/api/swipe/public/${item.shareToken}/image`}
                   alt={item.title}
-                  className="w-full object-contain rounded-lg"
-                  style={{ maxHeight: "calc(100vh - 160px)" }}
+                  style={{ display: "block", width: "100%" }}
                 />
               </div>
             )}
