@@ -81,6 +81,19 @@
     .swatch.active { border-color: #fff; transform: scale(1.2); }
     .swatch[data-color="#ffffff"] { box-shadow: 0 0 0 1px #4a5568; }
 
+    /* Background-colour swatches — same shape as .swatch */
+    .bg-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2.5px solid transparent;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform .12s, border-color .12s;
+    }
+    .bg-swatch:hover  { transform: scale(1.2); }
+    .bg-swatch.active { border-color: #fff; transform: scale(1.2); }
+
     /* Stroke buttons */
     .stroke-btn {
       background: transparent;
@@ -218,6 +231,26 @@
   <div class="swatch"         data-color="#3498db" style="background:#3498db" title="Blue"></div>
   <div class="swatch"         data-color="#ffffff" style="background:#ffffff" title="White"></div>
   <div class="swatch"         data-color="#1a1a1a" style="background:#1a1a1a" title="Black"></div>
+
+  <div class="sep"></div>
+
+  <!-- Text background color -->
+  <span class="tb-label">Text BG</span>
+
+  <!-- "None" swatch — diagonal red line through a grey circle -->
+  <div class="bg-swatch" data-bg-color="none" title="No background"
+       style="display:flex;align-items:center;justify-content:center;border-color:#2d3748;">
+    <svg width="14" height="14" viewBox="0 0 14 14">
+      <circle cx="7" cy="7" r="5.5" fill="none" stroke="#4a5568" stroke-width="1.5"/>
+      <line x1="2.5" y1="11.5" x2="11.5" y2="2.5" stroke="#e53e3e" stroke-width="1.5"/>
+    </svg>
+  </div>
+
+  <div class="bg-swatch active" data-bg-color="#1e2538" style="background:#1e2538;border-color:#4a90d9;" title="Dark navy (default)"></div>
+  <div class="bg-swatch"        data-bg-color="#000000" style="background:#000000" title="Black"></div>
+  <div class="bg-swatch"        data-bg-color="#7b341e" style="background:#7b341e" title="Dark red"></div>
+  <div class="bg-swatch"        data-bg-color="#f1c40f" style="background:#f1c40f" title="Yellow"></div>
+  <div class="bg-swatch"        data-bg-color="#ffffff" style="background:#ffffff;box-shadow:0 0 0 1px #4a5568" title="White"></div>
 
   <div class="sep"></div>
 

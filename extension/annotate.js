@@ -12,6 +12,7 @@ let annotations  = [];
 let activeTool   = "rect";   // "select" | "rect" | "arrow" | "text"
 let activeColor  = "#e74c3c";
 let activeStroke = 3;
+let activeBgColor = "#1e2538"; // text-label background ("none" = transparent)
 let pendingTitle = "Screenshot";
 let isFullPage   = false;
 
@@ -242,7 +243,36 @@ function drawAnnotation(ann) {
     drawArrow(ann.x1, ann.y1, ann.x2, ann.y2, ann.stroke);
   } else if (ann.type === "text") {
     const fontSize = Math.max(18, ann.stroke * 7);
-    ctx.font          = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+
+    // Background pill behind the text
+    const bg = ann.bgColor ?? activeBgColor;
+    if (bg && bg !== "none") {
+      const w   = ctx.measureText(ann.text).width;
+      const pad = Math.max(5, ann.stroke * 2);
+      ctx.save();
+      ctx.globalAlpha = 0.88;
+      ctx.fillStyle   = bg;
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur  = 0;
+      // Slightly rounded rect via path
+      const rx = ann.x1 - pad, ry = ann.y1 - fontSize - pad;
+      const rw = w + pad * 2, rh = fontSize + pad * 2, r2 = 4;
+      ctx.beginPath();
+      ctx.moveTo(rx + r2, ry);
+      ctx.lineTo(rx + rw - r2, ry);
+      ctx.arcTo(rx + rw, ry,    rx + rw, ry + r2,    r2);
+      ctx.lineTo(rx + rw, ry + rh - r2);
+      ctx.arcTo(rx + rw, ry + rh, rx + rw - r2, ry + rh, r2);
+      ctx.lineTo(rx + r2, ry + rh);
+      ctx.arcTo(rx, ry + rh, rx, ry + rh - r2, r2);
+      ctx.lineTo(rx, ry + r2);
+      ctx.arcTo(rx, ry, rx + r2, ry, r2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
     ctx.shadowColor   = "rgba(0,0,0,0.6)";
     ctx.shadowBlur    = 3;
     ctx.shadowOffsetX = 1;
@@ -506,7 +536,7 @@ function showTextInput(canvX, canvY, screenX, screenY, prefill = "") {
     const text = input.value.trim();
     wrap.remove();
     if (!text) return;
-    annotations.push({ type: "text", x1: canvX, y1: canvY, text, color: activeColor, stroke: activeStroke });
+    annotations.push({ type: "text", x1: canvX, y1: canvY, text, color: activeColor, stroke: activeStroke, bgColor: activeBgColor });
     selectedIndex = annotations.length - 1;
     // Auto-switch to select so the user can immediately drag the text
     activeTool = "select";
@@ -552,7 +582,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// ── Toolbar: colors ───────────────────────────────────────────────────────────
+// ── Toolbar: text color ───────────────────────────────────────────────────────
 document.querySelectorAll(".swatch").forEach(el => {
   el.addEventListener("click", () => {
     activeColor = el.dataset.color;
@@ -562,6 +592,19 @@ document.querySelectorAll(".swatch").forEach(el => {
       render();
     }
     syncColorUI();
+  });
+});
+
+// ── Toolbar: text background color ────────────────────────────────────────────
+document.querySelectorAll(".bg-swatch").forEach(el => {
+  el.addEventListener("click", () => {
+    activeBgColor = el.dataset.bgColor;
+    // Live-update selected text annotation's background
+    if (selectedIndex >= 0 && annotations[selectedIndex].type === "text") {
+      annotations[selectedIndex] = { ...annotations[selectedIndex], bgColor: activeBgColor };
+      render();
+    }
+    syncBgUI();
   });
 });
 
@@ -671,6 +714,12 @@ function syncToolUI() {
 function syncColorUI() {
   document.querySelectorAll(".swatch").forEach(el => {
     el.classList.toggle("active", el.dataset.color === activeColor);
+  });
+}
+
+function syncBgUI() {
+  document.querySelectorAll(".bg-swatch").forEach(el => {
+    el.classList.toggle("active", el.dataset.bgColor === activeBgColor);
   });
 }
 
