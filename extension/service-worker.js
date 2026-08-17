@@ -68,6 +68,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
         Math.round(rect.x * dpr), Math.round(rect.y * dpr), cw, ch,
         0, 0, cw, ch
       );
+      bitmap.close(); // release GPU memory
 
       const croppedBlob = await canvas.convertToBlob({ type: "image/png" });
 

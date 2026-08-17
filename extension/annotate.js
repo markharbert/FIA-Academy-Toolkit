@@ -31,10 +31,10 @@ chrome.storage.session.get("pendingAnnotation", ({ pendingAnnotation }) => {
     canvas.height = img.naturalHeight;
     // Scale display down so it fits the viewport (CSS max-width handles width;
     // set an explicit pixel height cap so tall pages don't overflow)
-    const maxH = window.innerHeight - 54 - 48; // minus toolbar + padding
-    if (img.naturalHeight > maxH) {
-      canvas.style.height = maxH + "px";
-    }
+    // Cap display height so tall pages don't overflow; max-width:100% handles width.
+    // Using maxHeight (not height) lets CSS preserve the aspect ratio on both axes.
+    const maxH = window.innerHeight - 54 - 48; // toolbar + padding
+    canvas.style.maxHeight = maxH + "px";
     canvas.style.display = "block";
     statusEl.style.display = "none";
     render();
