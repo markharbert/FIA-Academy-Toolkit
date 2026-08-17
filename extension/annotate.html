@@ -94,8 +94,8 @@
     .bg-swatch:hover  { transform: scale(1.18); }
     .bg-swatch.active { border-color: #fff; transform: scale(1.18); }
 
-    /* Floating context bar — appears below a selected text annotation */
-    #text-ctx-bar {
+    /* Floating context bars — appear below the selected annotation */
+    .ctx-bar {
       display: none;           /* JS toggles to flex */
       position: fixed;
       z-index: 9999;
@@ -109,7 +109,7 @@
       pointer-events: auto;
     }
     /* Upward caret */
-    #text-ctx-caret {
+    .ctx-caret {
       position: absolute;
       top: -7px;
       left: 20px;
@@ -118,7 +118,7 @@
       border-right: 7px solid transparent;
       border-bottom: 7px solid #2d3748;
     }
-    #text-ctx-caret::after {
+    .ctx-caret::after {
       content: '';
       position: absolute;
       top: 2px; left: -6px;
@@ -135,6 +135,13 @@
       text-transform: uppercase;
       margin-right: 2px;
       user-select: none;
+    }
+    .ctx-sep {
+      width: 1px;
+      height: 20px;
+      background: #2d3748;
+      margin: 0 4px;
+      flex-shrink: 0;
     }
 
     /* Stroke buttons */
@@ -230,9 +237,6 @@
 <body>
 
 <div id="toolbar">
-  <!-- Tools -->
-  <span class="tb-label">Tool</span>
-
   <button class="tool-btn" id="tool-select" title="Select &amp; move (V / Esc)">
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
       <path d="M2 1 L2 10.5 L4.8 8.2 L6.4 12 L8 11.3 L6.4 7.5 L10 7.5 Z"
@@ -265,27 +269,6 @@
 
   <div class="sep"></div>
 
-  <!-- Colors -->
-  <span class="tb-label">Color</span>
-  <div class="swatch active"  data-color="#e74c3c" style="background:#e74c3c" title="Red"></div>
-  <div class="swatch"         data-color="#f39c12" style="background:#f39c12" title="Orange"></div>
-  <div class="swatch"         data-color="#f1c40f" style="background:#f1c40f" title="Yellow"></div>
-  <div class="swatch"         data-color="#2ecc71" style="background:#2ecc71" title="Green"></div>
-  <div class="swatch"         data-color="#3498db" style="background:#3498db" title="Blue"></div>
-  <div class="swatch"         data-color="#ffffff" style="background:#ffffff" title="White"></div>
-  <div class="swatch"         data-color="#1a1a1a" style="background:#1a1a1a" title="Black"></div>
-
-  <div class="sep"></div>
-
-  <!-- Stroke size -->
-  <span class="tb-label">Size</span>
-  <button class="stroke-btn"        data-stroke="2" title="Thin">S</button>
-  <button class="stroke-btn"        data-stroke="3" title="Medium">M</button>
-  <button class="stroke-btn"        data-stroke="5" title="Large">L</button>
-  <button class="stroke-btn active" data-stroke="8" title="Extra large">XL</button>
-
-  <div class="sep"></div>
-
   <!-- Undo / Clear -->
   <button class="util-btn" id="btn-undo"  title="Undo last (Ctrl+Z)">↩ Undo</button>
   <button class="util-btn" id="btn-clear" title="Remove all annotations">✕ Clear</button>
@@ -296,11 +279,44 @@
   <button id="btn-save">Save to Swipe File ✓</button>
 </div>
 
-<!-- Floating BG context bar — visible only when a text annotation is selected -->
-<div id="text-ctx-bar">
-  <div id="text-ctx-caret"></div>
-  <span class="ctx-label">BG</span>
+<!-- ── Context bar: rect & arrow ──────────────────────────────────────────── -->
+<div id="ctx-bar-shapes" class="ctx-bar">
+  <div class="ctx-caret"></div>
+  <span class="ctx-label">Color</span>
+  <div class="swatch active"  data-color="#e74c3c" style="background:#e74c3c" title="Red"></div>
+  <div class="swatch"         data-color="#f39c12" style="background:#f39c12" title="Orange"></div>
+  <div class="swatch"         data-color="#f1c40f" style="background:#f1c40f" title="Yellow"></div>
+  <div class="swatch"         data-color="#2ecc71" style="background:#2ecc71" title="Green"></div>
+  <div class="swatch"         data-color="#3498db" style="background:#3498db" title="Blue"></div>
+  <div class="swatch"         data-color="#ffffff" style="background:#ffffff" title="White"></div>
+  <div class="swatch"         data-color="#1a1a1a" style="background:#1a1a1a" title="Black"></div>
+  <div class="ctx-sep"></div>
+  <span class="ctx-label">Size</span>
+  <button class="stroke-btn"        data-stroke="2">S</button>
+  <button class="stroke-btn"        data-stroke="3">M</button>
+  <button class="stroke-btn"        data-stroke="5">L</button>
+  <button class="stroke-btn active" data-stroke="8">XL</button>
+</div>
 
+<!-- ── Context bar: text ───────────────────────────────────────────────────── -->
+<div id="ctx-bar-text" class="ctx-bar">
+  <div class="ctx-caret"></div>
+  <span class="ctx-label">Color</span>
+  <div class="swatch active"  data-color="#e74c3c" style="background:#e74c3c" title="Red"></div>
+  <div class="swatch"         data-color="#f39c12" style="background:#f39c12" title="Orange"></div>
+  <div class="swatch"         data-color="#f1c40f" style="background:#f1c40f" title="Yellow"></div>
+  <div class="swatch"         data-color="#2ecc71" style="background:#2ecc71" title="Green"></div>
+  <div class="swatch"         data-color="#3498db" style="background:#3498db" title="Blue"></div>
+  <div class="swatch"         data-color="#ffffff" style="background:#ffffff" title="White"></div>
+  <div class="swatch"         data-color="#1a1a1a" style="background:#1a1a1a" title="Black"></div>
+  <div class="ctx-sep"></div>
+  <span class="ctx-label">Size</span>
+  <button class="stroke-btn"        data-stroke="2">S</button>
+  <button class="stroke-btn"        data-stroke="3">M</button>
+  <button class="stroke-btn"        data-stroke="5">L</button>
+  <button class="stroke-btn active" data-stroke="8">XL</button>
+  <div class="ctx-sep"></div>
+  <span class="ctx-label">BG</span>
   <div class="bg-swatch" data-bg-color="none" title="No background"
        style="display:flex;align-items:center;justify-content:center;">
     <svg width="14" height="14" viewBox="0 0 14 14">

@@ -226,34 +226,55 @@ function render() {
     drawAnnotation(ann);
     if (i === selectedIndex) drawSelectionOverlay(ann);
   });
-  updateCtxBar();
+  updateCtxBars();
 }
 
-// ── Floating text-BG context bar ──────────────────────────────────────────────
-function updateCtxBar() {
-  const bar = document.getElementById("text-ctx-bar");
-  if (!bar) return;
+// ── Context bars (one per annotation type) ────────────────────────────────────
+function updateCtxBars() {
+  const shapeBar = document.getElementById("ctx-bar-shapes");
+  const textBar  = document.getElementById("ctx-bar-text");
+  shapeBar.style.display = "none";
+  textBar.style.display  = "none";
 
   const ann = selectedIndex >= 0 ? annotations[selectedIndex] : null;
-  if (!ann || ann.type !== "text") {
-    bar.style.display = "none";
-    return;
+  if (!ann) return;
+
+  if (ann.type === "rect" || ann.type === "arrow") {
+    positionCtxBar(shapeBar, ann);
+  } else if (ann.type === "text") {
+    positionCtxBar(textBar, ann);
   }
 
-  const fontSize = Math.max(18, ann.stroke * 7);
-  const pad      = Math.max(5,  ann.stroke * 2);
-  const r        = canvas.getBoundingClientRect();
-  const sx       = r.width  / canvas.width;
-  const sy       = r.height / canvas.height;
-
-  // Anchor: just below the bottom edge of the background pill
-  const screenX = r.left + ann.x1 * sx;
-  const screenY = r.top  + (ann.y1 + pad) * sy + 10;
-
-  bar.style.left    = `${Math.max(8, Math.min(screenX, window.innerWidth - 240))}px`;
-  bar.style.top     = `${Math.min(screenY, window.innerHeight - 58)}px`;
-  bar.style.display = "flex";
+  syncColorUI();
+  syncStrokeUI();
   syncBgUI();
+}
+
+function positionCtxBar(bar, ann) {
+  const r  = canvas.getBoundingClientRect();
+  const sx = r.width  / canvas.width;
+  const sy = r.height / canvas.height;
+
+  let anchorX, anchorY;
+
+  if (ann.type === "rect") {
+    const n  = normRect(ann);
+    anchorX  = r.left + n.x1 * sx;
+    anchorY  = r.top  + n.y2 * sy + 10;
+  } else if (ann.type === "arrow") {
+    // Anchor below the lower of the two endpoints
+    anchorX  = r.left + Math.min(ann.x1, ann.x2) * sx;
+    anchorY  = r.top  + Math.max(ann.y1, ann.y2) * sy + 14;
+  } else if (ann.type === "text") {
+    const pad = Math.max(5, ann.stroke * 2);
+    anchorX   = r.left + ann.x1 * sx;
+    anchorY   = r.top  + (ann.y1 + pad) * sy + 10;
+  }
+
+  // Keep bar on-screen
+  bar.style.left    = `${Math.max(8, Math.min(anchorX, window.innerWidth  - bar.offsetWidth  - 8))}px`;
+  bar.style.top     = `${Math.max(8, Math.min(anchorY, window.innerHeight - bar.offsetHeight - 8))}px`;
+  bar.style.display = "flex";
 }
 
 function drawAnnotation(ann) {
