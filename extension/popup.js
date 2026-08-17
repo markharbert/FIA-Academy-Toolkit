@@ -1404,7 +1404,7 @@ async function swipeCaptureFullPage() {
     title:  (tab.title || url).substring(0, 140),
   });
 
-  swipeShowStatus("📄 Capturing full page in background — you'll get a notification when it's saved.");
+  swipeShowStatus("📄 Capturing full page… the annotation editor will open in a new tab when ready.");
   setTimeout(() => window.close(), 2200);
 }
 

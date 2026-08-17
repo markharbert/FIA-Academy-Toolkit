@@ -14,7 +14,6 @@ let activeStroke = 3;
 let drawing      = false;
 let startX = 0, startY = 0;
 let pendingTitle = "Screenshot";
-let apiKey       = "";
 
 // ── Load image from session storage ──────────────────────────────────────────
 chrome.storage.session.get("pendingAnnotation", ({ pendingAnnotation }) => {
@@ -29,10 +28,8 @@ chrome.storage.session.get("pendingAnnotation", ({ pendingAnnotation }) => {
     bgImage = img;
     canvas.width  = img.naturalWidth;
     canvas.height = img.naturalHeight;
-    // Scale display down so it fits the viewport (CSS max-width handles width;
-    // set an explicit pixel height cap so tall pages don't overflow)
     // Cap display height so tall pages don't overflow; max-width:100% handles width.
-    // Using maxHeight (not height) lets CSS preserve the aspect ratio on both axes.
+    // Using maxHeight (not height) lets CSS preserve aspect ratio on both axes.
     const maxH = window.innerHeight - 54 - 48; // toolbar + padding
     canvas.style.maxHeight = maxH + "px";
     canvas.style.display = "block";
@@ -42,8 +39,6 @@ chrome.storage.session.get("pendingAnnotation", ({ pendingAnnotation }) => {
   img.onerror = () => { statusEl.textContent = "Failed to load screenshot."; };
   img.src = pendingAnnotation.dataUrl;
 });
-
-chrome.storage.local.get("apiKey", ({ apiKey: k }) => { apiKey = k || ""; });
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
@@ -259,16 +254,15 @@ document.getElementById("btn-discard").addEventListener("click", () => {
 
 // ── Save ──────────────────────────────────────────────────────────────────────
 document.getElementById("btn-save").addEventListener("click", async () => {
-  if (!apiKey) {
-    alert("Not logged in. Open the FIA Toolkit extension first.");
-    return;
-  }
-
   const btn = document.getElementById("btn-save");
   btn.disabled    = true;
   btn.textContent = "Saving…";
 
   try {
+    // Fetch apiKey fresh here — avoids a race condition with the module-level callback
+    const { apiKey } = await chrome.storage.local.get("apiKey");
+    if (!apiKey) throw new Error("Not logged in — open the FIA Toolkit extension first.");
+
     // Render final state, then export canvas to blob
     render();
     const blob = await new Promise((res, rej) => {

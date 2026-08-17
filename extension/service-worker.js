@@ -112,49 +112,6 @@ function injectErrorToast(tabId, message) {
   }).catch(() => {});
 }
 
-// ── Auto-save helper: upload PNG dataUrl → create swipe item ─────────────────
-// blob may be a Blob (from canvas) or a data-URL string (legacy path — converted here)
-async function swipeAutoSave(blobOrDataUrl, title) {
-  const { apiKey } = await chrome.storage.local.get("apiKey");
-  if (!apiKey) throw new Error("No API key — open the extension and log in first.");
-
-  const blob = (blobOrDataUrl instanceof Blob)
-    ? blobOrDataUrl
-    : dataUrlToBlob(blobOrDataUrl);
-
-  const upRes = await fetch(`${API_BASE}/api/v1/swipe/request-upload-url`, {
-    method: "POST", headers: { "Authorization": `Bearer ${apiKey}` },
-  });
-  if (!upRes.ok) throw new Error(`Upload URL failed (${upRes.status})`);
-  const { uploadURL, objectPath } = await upRes.json();
-
-  const putRes = await fetch(uploadURL, {
-    method: "PUT", headers: { "Content-Type": "image/png" }, body: blob,
-  });
-  if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
-
-  const itemRes = await fetch(`${API_BASE}/api/v1/swipe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify({ type: "upload", title: title || "Screenshot", imagePath: objectPath }),
-  });
-  if (!itemRes.ok) throw new Error(`Save failed (${itemRes.status})`);
-  const { item } = await itemRes.json();
-
-  // Auto-generate share token so Recent Saves shows thumbnail + "Copy link" immediately
-  try {
-    const shareRes = await fetch(`${API_BASE}/api/v1/swipe/${item.id}/share`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}` },
-    });
-    if (shareRes.ok) {
-      const { token } = await shareRes.json();
-      item.shareToken = token;
-    }
-  } catch (_) {}
-
-  return item;
-}
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.action !== "startFullPageCapture") return false;
