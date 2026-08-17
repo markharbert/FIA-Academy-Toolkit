@@ -227,18 +227,30 @@ async function handleFullPageCapture(tabId, title) {
       // 600 ms gives scroll time to settle and keeps us comfortably under the limit.
       await swSleep(600);
 
+      // Hide the progress banner so it doesn't bake into the captured strip.
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const el = document.getElementById("__fia_progress__");
+          if (el) el.style.visibility = "hidden";
+        },
+      });
+
       // Capture at device DPR and store the raw data URL directly.
       // OffscreenCanvas.convertToBlob() is unreliable in extension SW contexts;
       // the annotate editor uses 9-arg drawImage to handle DPR scaling instead.
       const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
       strips.push(dataUrl);
 
-      // Update progress banner
+      // Restore the progress banner and update its counter.
       await chrome.scripting.executeScript({
         target: { tabId },
         func: (cur, tot) => {
           const el = document.getElementById("__fia_progress__");
-          if (el) el.textContent = `FIA Toolkit: capturing full page… ${cur} / ${tot}`;
+          if (el) {
+            el.style.visibility = "visible";
+            el.textContent = `FIA Toolkit: capturing full page… ${cur} / ${tot}`;
+          }
         },
         args: [i + 1, totalSteps],
       });
