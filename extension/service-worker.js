@@ -121,46 +121,56 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 async function handleFullPageCapture(tabId, title) {
-  const MAX_STEPS   = 20;
-  const MAX_H_LOGIC = 14000; // cap logical-px height to stay inside canvas limits
+  // Strip-based approach: capture each scroll position as a separate PNG and upload
+  // directly to GCS. No OffscreenCanvas stitching — no browser canvas size limits.
 
   try {
-    // 1. Read page geometry + save original scroll position
+    // 1. Fetch API key
+    const { apiKey } = await chrome.storage.local.get("apiKey");
+    if (!apiKey) {
+      injectErrorToast(tabId, "Not logged in — open the FIA Toolkit extension first.");
+      return;
+    }
+
+    // 2. Read page geometry + save original scroll position
     const [{ result: dims }] = await chrome.scripting.executeScript({
       target: { tabId },
       func: () => ({
-        scrollH: Math.min(
-          Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0),
-          14000
-        ),
-        vpH:   window.innerHeight,
-        vpW:   window.innerWidth,
-        origX: window.scrollX,
-        origY: window.scrollY,
-        dpr:   Math.min(window.devicePixelRatio || 1, 2),
+        scrollH: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0),
+        vpH:     window.innerHeight,
+        origX:   window.scrollX,
+        origY:   window.scrollY,
       }),
     });
-    const { scrollH, vpH, vpW, origX, origY, dpr } = dims;
+    const { scrollH, vpH, origX, origY } = dims;
 
-    // 1b. Get windowId for captureVisibleTab (captureTab doesn't exist in MV3)
+    // 3. Get windowId for captureVisibleTab
     const { windowId } = await chrome.tabs.get(tabId);
 
-    // 2. Scroll to top
+    // 4. Inject a "capturing" progress banner so the user knows it's working
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const el = document.createElement("div");
+        el.id = "__fia_progress__";
+        el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1a1a2e;color:#fff;font:600 13px -apple-system,sans-serif;padding:9px 18px;text-align:center;pointer-events:none";
+        el.textContent = "FIA Toolkit: capturing full page…";
+        document.documentElement.appendChild(el);
+      },
+    });
+
+    // 5. Scroll to top
     await chrome.scripting.executeScript({
       target: { tabId }, func: () => window.scrollTo(0, 0),
     });
-    await swSleep(200);
+    await swSleep(250);
 
-    // 3. OffscreenCanvas at full-page dimensions
-    const canvas = new OffscreenCanvas(Math.round(vpW * dpr), Math.round(scrollH * dpr));
-    const ctx    = canvas.getContext("2d");
-
-    // 4. Scroll → capture → stitch
-    // captureTab uses the `tabs` permission — no activeTab dependency
-    const totalSteps = Math.min(Math.ceil(scrollH / vpH), MAX_STEPS);
+    // 6. Scroll → capture → upload each strip
+    const totalSteps = Math.ceil(scrollH / vpH);
+    const stripPaths = [];
 
     for (let i = 0; i < totalSteps; i++) {
-      // Last step always flushes to the very bottom so nothing is clipped
+      // Last step flushes to the exact bottom so nothing is clipped
       const scrollTop = (i === totalSteps - 1)
         ? Math.max(0, scrollH - vpH)
         : i * vpH;
@@ -170,26 +180,81 @@ async function handleFullPageCapture(tabId, title) {
       });
       await swSleep(150);
 
+      // Capture this viewport position
       const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+      const blob    = dataUrlToBlob(dataUrl);
 
-      const bitmap = await createImageBitmap(dataUrlToBlob(dataUrl));
-      ctx.drawImage(bitmap, 0, Math.round(scrollTop * dpr));
-      bitmap.close();
+      // Request a signed upload URL and PUT the strip blob directly to GCS
+      const upRes = await fetch(`${API_BASE}/api/v1/swipe/request-upload-url`, {
+        method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!upRes.ok) throw new Error(`Upload URL failed (${upRes.status})`);
+      const { uploadURL, objectPath } = await upRes.json();
+
+      const putRes = await fetch(uploadURL, {
+        method: "PUT", headers: { "Content-Type": "image/png" }, body: blob,
+      });
+      if (!putRes.ok) throw new Error(`Strip upload failed (${putRes.status})`);
+
+      stripPaths.push(objectPath);
+
+      // Update progress label
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (cur, tot) => {
+          const el = document.getElementById("__fia_progress__");
+          if (el) el.textContent = `FIA Toolkit: capturing full page… ${cur}/${tot}`;
+        },
+        args: [i + 1, totalSteps],
+      });
     }
 
-    // 5. Restore scroll position
+    // 7. Restore scroll position
     await chrome.scripting.executeScript({
       target: { tabId }, func: (x, y) => window.scrollTo(x, y), args: [origX, origY],
     });
 
-    // 6. Get final PNG blob
-    const finalBlob = await canvas.convertToBlob({ type: "image/png" });
+    // 8. Create swipe item — imagePath = first strip (for thumbnail), strips = full list
+    const saveRes = await fetch(`${API_BASE}/api/v1/swipe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        type:      "upload",
+        title:     title || "Full Page",
+        imagePath: stripPaths[0],
+        strips:    stripPaths,
+      }),
+    });
+    if (!saveRes.ok) throw new Error(`Save failed (${saveRes.status})`);
+    const { item } = await saveRes.json();
 
-    // 7. Open annotation editor — user saves from there
-    await openAnnotationTab(finalBlob, title);
+    // 9. Auto-generate share token
+    try {
+      await fetch(`${API_BASE}/api/v1/swipe/${item.id}/share`, {
+        method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
+      });
+    } catch (_) {}
+
+    // 10. Signal popup to refresh, then show success banner → green toast
+    await chrome.storage.session.set({ swipeRecentlySaved: true });
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (n) => {
+        const el = document.getElementById("__fia_progress__");
+        if (el) el.remove();
+      },
+      args: [0],
+    });
+    injectSaveToast(tabId);
 
   } catch (err) {
     console.error("[FIA SW] full page capture error:", err);
+    // Remove progress banner if still showing
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => { const el = document.getElementById("__fia_progress__"); if (el) el.remove(); },
+    }).catch(() => {});
     injectErrorToast(tabId, `Capture failed: ${err.message}`);
   }
 }

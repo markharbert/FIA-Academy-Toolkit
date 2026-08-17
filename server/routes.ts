@@ -12230,12 +12230,15 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.post("/api/swipe", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const { title, type, content, imagePath, sourceUrl, notes } = req.body;
+      const { title, type, content, sourceUrl, notes } = req.body;
+      let { imagePath, strips } = req.body;
       if (!title) return res.status(400).json({ message: "title is required" });
       if (!type || !["upload", "snippet"].includes(type)) return res.status(400).json({ message: "type must be upload or snippet" });
       if (type === "snippet" && !content) return res.status(400).json({ message: "content is required for snippets" });
+      // For multi-strip (full-page) captures, imagePath defaults to first strip
+      if (type === "upload" && !imagePath && Array.isArray(strips) && strips.length > 0) imagePath = strips[0];
       if (type === "upload" && !imagePath) return res.status(400).json({ message: "imagePath is required for uploads" });
-      const item = await storage.createSwipeItem(userId, { title, type, content, imagePath, sourceUrl, notes });
+      const item = await storage.createSwipeItem(userId, { title, type, content, imagePath, strips: strips ?? null, sourceUrl, notes });
       res.json({ item });
     } catch (err) {
       console.error("[swipe] create error:", err);
@@ -12374,7 +12377,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Serve public image by token
+  // Serve public image by token (first strip or single image)
   app.get("/api/swipe/public/:token/image", async (req: Request, res: Response) => {
     try {
       const item = await storage.getSwipeItemByToken(req.params.token);
@@ -12384,6 +12387,23 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (err) {
       console.error("[swipe] public image error:", err);
       res.status(500).json({ message: "Failed to serve image" });
+    }
+  });
+
+  // Serve individual strip by index for multi-strip (full-page) captures
+  app.get("/api/swipe/public/:token/strip/:index", async (req: Request, res: Response) => {
+    try {
+      const item = await storage.getSwipeItemByToken(req.params.token);
+      if (!item) return res.status(404).json({ message: "Not found" });
+      const strips = item.strips as string[] | null;
+      const idx = parseInt(req.params.index, 10);
+      if (!strips || isNaN(idx) || idx < 0 || idx >= strips.length)
+        return res.status(404).json({ message: "Strip not found" });
+      const file = await objectStorageService.getObjectEntityFile(strips[idx]);
+      await objectStorageService.downloadObject(file, res, 3600);
+    } catch (err) {
+      console.error("[swipe] public strip error:", err);
+      res.status(500).json({ message: "Failed to serve strip" });
     }
   });
 
@@ -12482,13 +12502,16 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.post("/api/v1/swipe", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
-      const { title, type, content, imagePath, sourceUrl, notes } = req.body;
+      const { title, type, content, sourceUrl, notes } = req.body;
+      let { imagePath, strips } = req.body;
       if (!title)  return res.status(400).json({ message: "title is required" });
       if (!type || !["upload", "snippet"].includes(type))
         return res.status(400).json({ message: "type must be upload or snippet" });
-      if (type === "snippet" && !content)   return res.status(400).json({ message: "content required for snippets" });
-      if (type === "upload"  && !imagePath) return res.status(400).json({ message: "imagePath required for uploads" });
-      const item = await storage.createSwipeItem(user.id, { title, type, content, imagePath, sourceUrl, notes });
+      if (type === "snippet" && !content) return res.status(400).json({ message: "content required for snippets" });
+      // For multi-strip (full-page) captures, imagePath defaults to first strip
+      if (type === "upload" && !imagePath && Array.isArray(strips) && strips.length > 0) imagePath = strips[0];
+      if (type === "upload" && !imagePath) return res.status(400).json({ message: "imagePath required for uploads" });
+      const item = await storage.createSwipeItem(user.id, { title, type, content, imagePath, strips: strips ?? null, sourceUrl, notes });
       res.json({ item });
     } catch (err) {
       console.error("[v1] swipe create error:", err);

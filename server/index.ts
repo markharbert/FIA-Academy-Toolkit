@@ -862,6 +862,9 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] swipe_items migration complete");
 
+    await db.execute(sql`ALTER TABLE swipe_items ADD COLUMN IF NOT EXISTS strips JSONB`);
+    console.log("[startup] swipe_items strips column migration complete");
+
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

@@ -14,6 +14,7 @@ type PublicSwipeItem = {
   type: "upload" | "snippet";
   content: string | null;
   imagePath: string | null;
+  strips: string[] | null;   // ordered GCS paths for full-page multi-strip captures
   sourceUrl: string | null;
   notes: string | null;
   promoLinks: PromoLink[];
@@ -65,8 +66,9 @@ export default function SwipeSharePage() {
     );
   }
 
-  const hasPromos = item.promoLinks && item.promoLinks.length > 0;
-  const isImage   = item.type === "upload" && item.imagePath;
+  const hasPromos   = item.promoLinks && item.promoLinks.length > 0;
+  const isImage     = item.type === "upload" && item.imagePath;
+  const isMultiStrip = isImage && Array.isArray(item.strips) && item.strips.length > 1;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -94,15 +96,32 @@ export default function SwipeSharePage() {
             className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col lg:flex-row"
             style={{ minHeight: "calc(100vh - 120px)" }}
           >
-            {/* Left 75% — image */}
-            <div className="lg:w-3/4 bg-gray-100 flex items-center justify-center p-6 lg:p-10 min-h-[50vh] lg:min-h-0">
-              <img
-                src={`/api/swipe/public/${item.shareToken}/image`}
-                alt={item.title}
-                className="w-full object-contain rounded-lg"
-                style={{ maxHeight: "calc(100vh - 160px)" }}
-              />
-            </div>
+            {/* Left 75% — image (single) or scrollable strip stack (full-page) */}
+            {isMultiStrip ? (
+              <div
+                className="lg:w-3/4 bg-gray-950 overflow-y-auto"
+                style={{ maxHeight: "calc(100vh - 120px)" }}
+              >
+                {item.strips!.map((_, i) => (
+                  <img
+                    key={i}
+                    src={`/api/swipe/public/${item.shareToken}/strip/${i}`}
+                    alt={`${item.title} — section ${i + 1}`}
+                    style={{ display: "block", width: "100%" }}
+                    loading={i === 0 ? "eager" : "lazy"}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="lg:w-3/4 bg-gray-100 flex items-center justify-center p-6 lg:p-10 min-h-[50vh] lg:min-h-0">
+                <img
+                  src={`/api/swipe/public/${item.shareToken}/image`}
+                  alt={item.title}
+                  className="w-full object-contain rounded-lg"
+                  style={{ maxHeight: "calc(100vh - 160px)" }}
+                />
+              </div>
+            )}
 
             {/* Right 25% — info + promo */}
             <div className="lg:w-1/4 border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col">

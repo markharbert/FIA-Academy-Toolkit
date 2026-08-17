@@ -2043,6 +2043,7 @@ export const swipeItems = pgTable("swipe_items", {
   sourceUrl: text("source_url"),
   notes: text("notes"),
   promoLinks: jsonb("promo_links").$type<PromoLink[]>().default(sql`'[]'::jsonb`),
+  strips: jsonb("strips").$type<string[]>(), // ordered GCS paths for full-page multi-strip captures
   shareToken: varchar("share_token", { length: 64 }).unique(),
   viewCount: integer("view_count").notNull().default(0),
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
