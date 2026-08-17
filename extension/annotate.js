@@ -728,20 +728,29 @@ document.getElementById("btn-save").addEventListener("click", async () => {
     if (!saveRes.ok) throw new Error(`Save failed (${saveRes.status})`);
     const { item } = await saveRes.json();
 
+    let shareToken = null;
     try {
-      await fetch(`${API_BASE}/api/v1/swipe/${item.id}/share`, {
+      const shareRes = await fetch(`${API_BASE}/api/v1/swipe/${item.id}/share`, {
         method: "POST", headers: { Authorization: `Bearer ${apiKey}` },
       });
+      if (shareRes.ok) shareToken = (await shareRes.json()).token ?? null;
     } catch (_) {}
 
     await chrome.storage.session.remove("pendingAnnotation").catch(() => {});
     if (isFullPage) await idbDelete("pendingFullPage").catch(() => {});
     await chrome.storage.session.set({ swipeRecentlySaved: true });
 
+    // Copy share link to clipboard and show confirmation toast
+    if (shareToken) {
+      const shareUrl = `${API_BASE}/swipe/${shareToken}`;
+      try { await navigator.clipboard.writeText(shareUrl); } catch (_) {}
+      showCopiedToast();
+    }
+
     btn.textContent      = "✓ Saved!";
     btn.style.background = "linear-gradient(135deg,#34c172,#1a9e55)";
     btn.style.boxShadow  = "0 2px 12px rgba(26,158,85,.6)";
-    setTimeout(() => window.close(), 1100);
+    setTimeout(() => window.close(), 1800);
 
   } catch (err) {
     btn.disabled    = false;
@@ -749,6 +758,61 @@ document.getElementById("btn-save").addEventListener("click", async () => {
     alert(`Save failed: ${err.message}`);
   }
 });
+
+// ── Clipboard-copied toast ────────────────────────────────────────────────────
+function showCopiedToast() {
+  const prev = document.getElementById("__fia_copy_toast__");
+  if (prev) prev.remove();
+
+  if (!document.getElementById("__fia_copy_style__")) {
+    const s = document.createElement("style");
+    s.id = "__fia_copy_style__";
+    s.textContent = `
+      @keyframes _ctIn  { from{opacity:0;transform:translateX(-50%) scale(.75)} to{opacity:1;transform:translateX(-50%) scale(1)} }
+      @keyframes _ctOut { from{opacity:1;transform:translateX(-50%) scale(1)}   to{opacity:0;transform:translateX(-50%) scale(.75)} }
+      @keyframes _ctClip { from{stroke-dashoffset:48} to{stroke-dashoffset:0} }
+    `;
+    document.head.appendChild(s);
+  }
+
+  const toast = document.createElement("div");
+  toast.id = "__fia_copy_toast__";
+  Object.assign(toast.style, {
+    position:    "fixed",
+    top:         "72px",
+    left:        "50%",
+    zIndex:      "99999",
+    background:  "linear-gradient(135deg,#34c172 0%,#1a9e55 100%)",
+    padding:     "10px 22px 10px 15px",
+    borderRadius:"999px",
+    boxShadow:   "0 8px 28px rgba(26,158,85,.55),0 2px 8px rgba(0,0,0,.3)",
+    display:     "flex",
+    alignItems:  "center",
+    gap:         "10px",
+    pointerEvents:"none",
+    fontFamily:  "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    animation:   "_ctIn .38s cubic-bezier(.34,1.56,.64,1) both",
+  });
+
+  toast.innerHTML = `
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+         stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+         style="flex-shrink:0;stroke-dasharray:48;stroke-dashoffset:48;
+                animation:_ctClip .42s ease-out .2s forwards">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+    <span style="color:#fff;font-size:13.5px;font-weight:650;letter-spacing:.01em;white-space:nowrap;">
+      Share link copied to clipboard!
+    </span>
+  `;
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.animation = "_ctOut .3s ease-in both";
+    setTimeout(() => toast.remove(), 320);
+  }, 2400);
+}
 
 // ── UI sync helpers ───────────────────────────────────────────────────────────
 function syncToolUI() {
