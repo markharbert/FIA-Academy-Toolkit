@@ -182,37 +182,7 @@ async function handleFullPageCapture(tabId, title) {
     await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollTo(0, 0) });
     await swSleep(250);
 
-    // 4a. Hide fixed + sticky-top elements (headers, navbars) so they don't
-    //     repeat in every strip. Our own injected elements (id starts "__fia_")
-    //     are excluded. Original visibility is stashed in data-fia-orig-vis.
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        document.querySelectorAll("*").forEach(el => {
-          if (el.id && el.id.startsWith("__fia_")) return;
-          const st  = window.getComputedStyle(el);
-          const pos = st.position;
-          if (pos !== "fixed" && pos !== "sticky") return;
-          const rect = el.getBoundingClientRect();
-          if (rect.height <= 0 || rect.width <= 0) return;
-          let hide = false;
-          if (pos === "fixed") {
-            // Hide fixed elements whose top edge sits in the top 35 % of viewport
-            hide = rect.top >= -5 && rect.top < window.innerHeight * 0.35;
-          } else {
-            // Hide sticky elements whose CSS `top` anchors them near the top (≤ 20 px)
-            const topPx = parseFloat(st.top);
-            hide = !isNaN(topPx) && topPx <= 20;
-          }
-          if (hide) {
-            el.dataset.fiaOrigVis = el.style.visibility;
-            el.style.setProperty("visibility", "hidden", "important");
-          }
-        });
-      },
-    });
-
-    // 5. Capture each strip, scale to logical pixels, convert to data URL
+    // 5. Capture each strip
     const totalSteps = Math.ceil(scrollH / vpH);
     const strips     = [];
 
@@ -227,7 +197,37 @@ async function handleFullPageCapture(tabId, title) {
       // 600 ms gives scroll time to settle and keeps us comfortably under the limit.
       await swSleep(600);
 
-      // Hide the progress banner so it doesn't bake into the captured strip.
+      // After strip 0 is captured we hide fixed/sticky top elements so they don't
+      // repeat in every subsequent strip. Strip 0 shows them naturally (correct).
+      if (i === 1) {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            document.querySelectorAll("*").forEach(el => {
+              if (el.id && el.id.startsWith("__fia_")) return;
+              const st  = window.getComputedStyle(el);
+              const pos = st.position;
+              if (pos !== "fixed" && pos !== "sticky") return;
+              const rect = el.getBoundingClientRect();
+              if (rect.height <= 0 || rect.width <= 0) return;
+              let hide = false;
+              if (pos === "fixed") {
+                hide = rect.top >= -5 && rect.top < window.innerHeight * 0.35;
+              } else {
+                const topPx = parseFloat(st.top);
+                hide = !isNaN(topPx) && topPx <= 20;
+              }
+              if (hide) {
+                el.dataset.fiaOrigVis = el.style.visibility;
+                el.style.setProperty("visibility", "hidden", "important");
+              }
+            });
+          },
+        });
+      }
+
+      // Hide the progress banner so it doesn't bake into the captured strip,
+      // then sleep briefly so the browser repaints before the screenshot fires.
       await chrome.scripting.executeScript({
         target: { tabId },
         func: () => {
@@ -235,6 +235,7 @@ async function handleFullPageCapture(tabId, title) {
           if (el) el.style.visibility = "hidden";
         },
       });
+      await swSleep(80); // repaint gap — without this the banner can still be visible in the capture
 
       // Capture at device DPR and store the raw data URL directly.
       // OffscreenCanvas.convertToBlob() is unreliable in extension SW contexts;
