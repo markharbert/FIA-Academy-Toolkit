@@ -713,7 +713,7 @@ function PromoLinksTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: linksData, isLoading: linksLoading } = useQuery<AffiliateLink[]>({
+  const { data: linksData, isLoading: linksLoading } = useQuery<{ links: AffiliateLink[] }>({
     queryKey: ["/api/affiliate-links"],
     queryFn: () => apiFetch("/api/affiliate-links"),
   });
@@ -733,7 +733,7 @@ function PromoLinksTab() {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const allLinks = linksData ?? [];
+  const allLinks = linksData?.links ?? [];
   const promoLinkIds = promoData?.promoLinkIds ?? [];
   const promoSet = new Set(promoLinkIds);
   const addedLinks = promoLinkIds.map(id => allLinks.find(l => l.id === id)).filter(Boolean) as AffiliateLink[];
