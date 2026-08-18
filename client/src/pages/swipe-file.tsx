@@ -664,28 +664,38 @@ export default function SwipeFilePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card">
-        <div className="max-w-6xl mx-auto px-6 py-6">
-          <div className="flex items-start justify-between gap-4">
+
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(35_60%_16%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-amber-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+
+        <div className="relative max-w-6xl mx-auto px-6 py-8">
+          <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Camera className="h-7 w-7 text-primary" />
-                Swipe File
-              </h1>
-              <p className="text-muted-foreground mt-1 text-sm">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/20 ring-1 ring-amber-400/30 flex items-center justify-center shrink-0">
+                  <Camera className="h-5 w-5 text-amber-300" />
+                </div>
+                <h1 className="text-3xl font-bold text-white tracking-tight">Swipe File</h1>
+              </div>
+              <p className="text-white/60 text-sm mt-1 max-w-xl">
                 Save screenshots and text snippets from around the web. Share them with a link that showcases your offers.
               </p>
             </div>
             {activeTab === "swipe" && (
-              <Button onClick={() => setAddOpen(true)} className="gap-2 shrink-0">
+              <Button
+                onClick={() => setAddOpen(true)}
+                className="bg-white text-[hsl(35,60%,25%)] hover:bg-white/90 shadow-lg gap-2 shrink-0"
+              >
                 <Plus className="h-4 w-4" /> Add Item
               </Button>
             )}
           </div>
 
           {/* Stats */}
-          <div className="flex gap-6 mt-5">
+          <div className="flex gap-6 mt-6">
             {[
               { label: "Total Items", value: items.length },
               { label: "Images", value: items.filter(i => i.type === "upload").length },
@@ -693,13 +703,14 @@ export default function SwipeFilePage() {
               { label: "Shared", value: sharedCount, highlight: true },
             ].map(s => (
               <div key={s.label}>
-                <p className={`text-2xl font-bold ${s.highlight ? "text-primary" : ""}`}>{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
+                <p className={`text-2xl font-bold ${s.highlight ? "text-amber-300" : "text-white"}`}>{s.value}</p>
+                <p className="text-xs text-white/60">{s.label}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
+      {/* ─────────────────────────────────────────────────────────────────── */}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-0">

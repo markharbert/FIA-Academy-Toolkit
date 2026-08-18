@@ -576,28 +576,29 @@ export default function LinksPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        <div className="mb-8">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-purple-500/15 flex items-center justify-center shrink-0">
-                <Link2 className="h-5 w-5 text-purple-400" />
+
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(270_60%_18%)]" />
+        <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-purple-500/20 blur-3xl" />
+        <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-8">
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-10 w-10 rounded-xl bg-purple-500/20 ring-1 ring-purple-400/30 flex items-center justify-center shrink-0">
+                  <Link2 className="h-5 w-5 text-purple-300" />
+                </div>
+                <h1 className="text-3xl font-bold text-white tracking-tight">Link Vault</h1>
               </div>
-              <div>
-                <h1 className="text-2xl font-bold text-foreground tracking-tight">
-                  Link Vault
-                </h1>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  All your affiliate links in one place — copy and share in seconds
-                </p>
-              </div>
+              <p className="text-white/60 text-sm mt-1 max-w-xl">
+                All your affiliate links in one place — copy and share in seconds.
+              </p>
             </div>
             <Button
-              onClick={() => {
-                setEditingLink(null);
-                setModalOpen(true);
-              }}
-              className="shrink-0"
+              onClick={() => { setEditingLink(null); setModalOpen(true); }}
+              className="bg-white text-[hsl(270,60%,30%)] hover:bg-white/90 shadow-lg shrink-0"
               data-testid="button-add-link"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -605,31 +606,36 @@ export default function LinksPage() {
             </Button>
           </div>
 
-          <div className="flex items-center gap-3 mt-5 flex-wrap">
-            <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-1.5">
-              <span className="text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground">{links.length}</span>{" "}
+          {/* Stats */}
+          <div className="flex items-center gap-3 mt-6 flex-wrap">
+            <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
+              <span className="text-xs text-white/70">
+                <span className="font-semibold text-white">{links.length}</span>{" "}
                 {links.length === 1 ? "link" : "links"}
               </span>
             </div>
             {categories.length > 0 && (
-              <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-1.5">
-                <span className="text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">{categories.length}</span>{" "}
+              <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
+                <span className="text-xs text-white/70">
+                  <span className="font-semibold text-white">{categories.length}</span>{" "}
                   {categories.length === 1 ? "category" : "categories"}
                 </span>
               </div>
             )}
             {totalClicks > 0 && (
-              <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-1.5">
-                <MousePointerClick className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">{totalClicks}</span> copies
+              <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
+                <MousePointerClick className="h-3.5 w-3.5 text-white/70" />
+                <span className="text-xs text-white/70">
+                  <span className="font-semibold text-white">{totalClicks}</span> copies
                 </span>
               </div>
             )}
           </div>
         </div>
+      </div>
+      {/* ─────────────────────────────────────────────────────────────────── */}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
 
         <div className="flex items-center gap-3 mb-4">
           <div className="relative flex-1 max-w-xs">
