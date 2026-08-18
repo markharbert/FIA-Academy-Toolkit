@@ -8305,7 +8305,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       }
 
       try {
-        const sites = await fetchGscSites(conn.oauthAccessToken, conn.oauthRefreshToken);
+        const onTokenRefresh = (t: string, exp: Date | null) => storage.updateGscAccessToken(userId, t, exp).catch(() => {});
+        const sites = await fetchGscSites(conn.oauthAccessToken, conn.oauthRefreshToken, onTokenRefresh);
         const selectedSiteUrl = conn.selectedSiteUrl && sites.includes(conn.selectedSiteUrl)
           ? conn.selectedSiteUrl
           : (sites.length === 1 ? sites[0] : null);
@@ -8365,7 +8366,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (cached && (Date.now() - cached.updatedAt.getTime() < GSC_DATA_CACHE_TTL)) {
         return res.json(cached.data);
       }
-      const data = await fetchGscData(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days);
+      const onTokenRefresh = (t: string, exp: Date | null) => storage.updateGscAccessToken(userId, t, exp).catch(() => {});
+      const data = await fetchGscData(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days, onTokenRefresh);
       await storage.setGscAnalyticsCache(userId, cacheKey, data);
       res.json(data);
     } catch (err: any) {
@@ -8397,7 +8399,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!conn?.oauthAccessToken) return res.status(400).json({ message: "Not connected" });
       // Clear all GSC caches so next page load re-fetches everything from Google
       await storage.clearGscAnalyticsCache(userId);
-      const sites = await fetchGscSites(conn.oauthAccessToken, conn.oauthRefreshToken);
+      const onTokenRefresh = (t: string, exp: Date | null) => storage.updateGscAccessToken(userId, t, exp).catch(() => {});
+      const sites = await fetchGscSites(conn.oauthAccessToken, conn.oauthRefreshToken, onTokenRefresh);
       res.json({ success: true, sites });
     } catch (err: any) {
       console.error("[Analytics/GSC] refresh error:", err?.message);
@@ -8431,7 +8434,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (cached && (Date.now() - cached.updatedAt.getTime() < GSC_DATA_CACHE_TTL)) {
         return res.json(cached.data);
       }
-      const data = await fetchGscPageKeywords(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days);
+      const onTokenRefresh = (t: string, exp: Date | null) => storage.updateGscAccessToken(userId, t, exp).catch(() => {});
+      const data = await fetchGscPageKeywords(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days, onTokenRefresh);
       await storage.setGscAnalyticsCache(userId, cacheKey, data);
       res.json(data);
     } catch (err: any) {

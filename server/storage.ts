@@ -531,6 +531,7 @@ export interface IStorage {
   upsertGscConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<GscConnection>;
   setGscSelectedSite(userId: string, siteUrl: string): Promise<void>;
   deleteGscConnection(userId: string): Promise<void>;
+  updateGscAccessToken(userId: string, accessToken: string, expiry: Date | null): Promise<void>;
   // GSC Analytics Cache
   getGscAnalyticsCache(userId: string, cacheKey: string): Promise<{ data: any; updatedAt: Date } | null>;
   setGscAnalyticsCache(userId: string, cacheKey: string, data: any): Promise<void>;
@@ -3929,6 +3930,13 @@ export class DatabaseStorage implements IStorage {
 
   async deleteGscConnection(userId: string): Promise<void> {
     await db.delete(gscConnections).where(eq(gscConnections.userId, userId));
+  }
+
+  async updateGscAccessToken(userId: string, accessToken: string, expiry: Date | null): Promise<void> {
+    await db
+      .update(gscConnections)
+      .set({ oauthAccessToken: accessToken, oauthTokenExpiry: expiry })
+      .where(eq(gscConnections.userId, userId));
   }
 
   async getGscAnalyticsCache(userId: string, cacheKey: string): Promise<{ data: any; updatedAt: Date } | null> {

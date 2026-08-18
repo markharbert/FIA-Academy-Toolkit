@@ -17,12 +17,26 @@ function getOAuthClient() {
   return new google.auth.OAuth2(clientId, clientSecret, getRedirectUri());
 }
 
-function makeAuthClient(accessToken: string, refreshToken: string | null) {
+function makeAuthClient(
+  accessToken: string,
+  refreshToken: string | null,
+  onTokenRefresh?: (newAccessToken: string, expiry: Date | null) => void
+) {
   const client = getOAuthClient();
   client.setCredentials({
     access_token: accessToken,
     refresh_token: refreshToken ?? undefined,
   });
+  if (onTokenRefresh) {
+    client.on("tokens", (tokens) => {
+      if (tokens.access_token) {
+        onTokenRefresh(
+          tokens.access_token,
+          tokens.expiry_date ? new Date(tokens.expiry_date) : null
+        );
+      }
+    });
+  }
   return client;
 }
 
@@ -57,9 +71,10 @@ export async function exchangeGscCode(code: string): Promise<{
 
 export async function fetchGscSites(
   accessToken: string,
-  refreshToken: string | null
+  refreshToken: string | null,
+  onTokenRefresh?: (newAccessToken: string, expiry: Date | null) => void
 ): Promise<string[]> {
-  const auth = makeAuthClient(accessToken, refreshToken);
+  const auth = makeAuthClient(accessToken, refreshToken, onTokenRefresh);
   const sc = google.searchconsole({ version: "v1", auth });
   const { data } = await sc.sites.list();
   return (data.siteEntry || [])
@@ -179,9 +194,10 @@ export async function fetchGscData(
   accessToken: string,
   refreshToken: string | null,
   siteUrl: string,
-  days = 28
+  days = 28,
+  onTokenRefresh?: (newAccessToken: string, expiry: Date | null) => void
 ): Promise<GscData> {
-  const auth = makeAuthClient(accessToken, refreshToken);
+  const auth = makeAuthClient(accessToken, refreshToken, onTokenRefresh);
   const sc = google.searchconsole({ version: "v1", auth });
 
   const endDate = new Date();
@@ -192,15 +208,26 @@ export async function fetchGscData(
 
   const dateRange = { startDate: fmt(startDate), endDate: fmt(endDate) };
 
-  const [queriesRes, pagesRes, timelineRes, devicesRes, countriesRes, appearancesRes] =
+  // searchAppearance is optional — not all properties support it and Google rejects the dimension
+  // for some sites/date ranges.  Run it independently so a failure never poisons the other 5 queries.
+  const [queriesRes, pagesRes, timelineRes, devicesRes, countriesRes] =
     await Promise.all([
       sc.searchanalytics.query({ siteUrl, requestBody: { ...dateRange, dimensions: ["query"], rowLimit: 50 } }),
       sc.searchanalytics.query({ siteUrl, requestBody: { ...dateRange, dimensions: ["page"], rowLimit: 50 } }),
       sc.searchanalytics.query({ siteUrl, requestBody: { ...dateRange, dimensions: ["date"], rowLimit: days } }),
       sc.searchanalytics.query({ siteUrl, requestBody: { ...dateRange, dimensions: ["device"], rowLimit: 10 } }),
       sc.searchanalytics.query({ siteUrl, requestBody: { ...dateRange, dimensions: ["country"], rowLimit: 20 } }),
-      sc.searchanalytics.query({ siteUrl, requestBody: { ...dateRange, dimensions: ["searchAppearance"], rowLimit: 25 } }),
     ]);
+
+  let appearancesRes: any = null;
+  try {
+    appearancesRes = await sc.searchanalytics.query({
+      siteUrl,
+      requestBody: { ...dateRange, dimensions: ["searchAppearance"], rowLimit: 25 },
+    });
+  } catch (err: any) {
+    console.warn("[Analytics/GSC] searchAppearance dimension unsupported for this property — skipping:", err?.message?.slice(0, 120));
+  }
 
   let sitemaps: GscSitemap[] = [];
   try {
@@ -263,7 +290,7 @@ export async function fetchGscData(
       ctr: r.ctr || 0,
       position: r.position || 0,
     })),
-    searchAppearances: (appearancesRes.data.rows || []).map((r) => ({
+    searchAppearances: (appearancesRes?.data?.rows || []).map((r) => ({
       appearance: r.keys?.[0] || "",
       clicks: r.clicks || 0,
       impressions: r.impressions || 0,
@@ -280,9 +307,10 @@ export async function fetchGscPageKeywords(
   accessToken: string,
   refreshToken: string | null,
   siteUrl: string,
-  days = 28
+  days = 28,
+  onTokenRefresh?: (newAccessToken: string, expiry: Date | null) => void
 ): Promise<GscPageKeywordRow[]> {
-  const auth = makeAuthClient(accessToken, refreshToken);
+  const auth = makeAuthClient(accessToken, refreshToken, onTokenRefresh);
   const sc = google.searchconsole({ version: "v1", auth });
 
   const endDate = new Date();
