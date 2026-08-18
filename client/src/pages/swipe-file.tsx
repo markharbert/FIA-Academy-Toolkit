@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Redirect } from "wouter";
@@ -6,7 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Camera, FileText, Plus, Copy, Share2, Trash2, Edit3,
   ExternalLink, Eye, EyeOff, Link2, X, Check, Upload,
-  Image as ImageIcon, Loader2, Globe, Scroll,
+  Image as ImageIcon, Loader2, Globe, Scroll, ChevronLeft, ChevronRight,
+  ZoomIn,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ type SwipeItem = {
   type: "upload" | "snippet";
   content: string | null;
   imagePath: string | null;
+  strips: string[] | null;
   sourceUrl: string | null;
   notes: string | null;
   shareToken: string | null;
@@ -71,22 +73,15 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  // Shared
   const [tab, setTab] = useState<"upload" | "snippet" | "url">("upload");
   const [title, setTitle] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [notes, setNotes] = useState("");
-
-  // Upload
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // Snippet
   const [content, setContent] = useState("");
-
-  // Full-page URL capture
   const [captureUrl, setCaptureUrl] = useState("");
   const [captureTitle, setCaptureTitle] = useState("");
 
@@ -117,9 +112,7 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
     if (!file) return toast({ title: "Please select an image", variant: "destructive" });
     setUploading(true);
     try {
-      // 1. Get signed URL
       const { uploadURL, objectPath } = await apiFetch("/api/swipe/request-upload-url", { method: "POST" });
-      // 2. PUT file directly
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", uploadURL);
@@ -132,7 +125,6 @@ function AddItemDialog({ open, onClose }: { open: boolean; onClose: () => void }
         xhr.send(file);
       });
       setUploadProgress(95);
-      // 3. Confirm
       createMutation.mutate({ type: "upload", title: title.trim(), imagePath: objectPath, sourceUrl: sourceUrl.trim() || undefined, notes: notes.trim() || undefined });
     } catch (e: any) {
       toast({ title: "Upload failed", description: e.message, variant: "destructive" });
@@ -343,7 +335,6 @@ function EditDialog({ item, onClose }: { item: SwipeItem; onClose: () => void })
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
           </div>
         </div>
-
         <div className="flex gap-2 pt-4">
           <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
           <Button onClick={() => updateMutation.mutate({ title, notes, sourceUrl })}
@@ -354,6 +345,330 @@ function EditDialog({ item, onClose }: { item: SwipeItem; onClose: () => void })
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---- Preview Modal ----
+function PreviewModal({
+  item,
+  items,
+  onNavigate,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  item: SwipeItem;
+  items: SwipeItem[];
+  onNavigate: (item: SwipeItem) => void;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [copied, setCopied] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  const currentIndex = items.findIndex(i => i.id === item.id);
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex < items.length - 1;
+
+  // Reset image state when item changes
+  useEffect(() => {
+    setImgError(false);
+    setImgLoaded(false);
+    setCopied(false);
+  }, [item.id]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft" && hasPrev) onNavigate(items[currentIndex - 1]);
+      if (e.key === "ArrowRight" && hasNext) onNavigate(items[currentIndex + 1]);
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [currentIndex, hasPrev, hasNext, items, onNavigate, onClose]);
+
+  const shareMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/swipe/${item.id}/share`, { method: "POST" }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/swipe"] });
+      copyLink(data.token);
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const unshareMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/swipe/${item.id}/share`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/swipe"] }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function copyLink(token?: string) {
+    const t = token ?? item.shareToken;
+    if (!t) return;
+    navigator.clipboard.writeText(shareUrl(t));
+    setCopied(true);
+    toast({ title: "Share link copied!" });
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  const isImage = item.type === "upload" && item.imagePath && !imgError;
+  const isFullPage = isImage && item.strips && item.strips.length > 1;
+
+  return (
+    // Full-screen overlay
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.85)" }}
+      onClick={onClose}
+    >
+      {/* Modal panel — click inside stops propagation */}
+      <div
+        className="relative flex w-full h-full max-w-[1400px] max-h-[96vh] mx-4 my-4 rounded-2xl overflow-hidden shadow-2xl"
+        style={{ background: "hsl(230,45%,10%)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Left: image / content pane ── */}
+        <div className="flex-1 relative flex flex-col bg-[hsl(230,30%,7%)] min-w-0">
+          {/* Navigation counter */}
+          <div className="absolute top-3 left-4 z-10">
+            <span className="text-xs text-white/50 bg-black/40 rounded-full px-3 py-1 backdrop-blur-sm">
+              {currentIndex + 1} / {items.length}
+            </span>
+          </div>
+
+          {/* Content area — scrollable */}
+          <div className="flex-1 overflow-auto flex items-center justify-center p-6 min-h-0">
+            {isImage ? (
+              <div className="relative max-w-full max-h-full flex items-center justify-center">
+                {!imgLoaded && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-white/30" />
+                  </div>
+                )}
+                <img
+                  src={swipeImageUrl(item.id)}
+                  alt={item.title}
+                  className={`max-w-full max-h-full object-contain rounded-lg shadow-xl transition-opacity duration-300 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+                  style={{ maxHeight: "calc(96vh - 8rem)" }}
+                  onLoad={() => setImgLoaded(true)}
+                  onError={() => { setImgError(true); setImgLoaded(true); }}
+                />
+                {isFullPage && (
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+                    <span className="text-xs text-white/60 bg-black/50 rounded-full px-3 py-1 backdrop-blur-sm">
+                      Full-page capture · {item.strips!.length} sections
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : item.type === "snippet" ? (
+              <div className="w-full max-w-3xl">
+                <div className="rounded-xl border border-white/10 bg-[hsl(230,25%,12%)] p-8 shadow-xl">
+                  <p className="text-sm text-white/80 font-mono leading-relaxed whitespace-pre-wrap break-words">
+                    {item.content}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4 text-white/30">
+                <ImageIcon className="h-16 w-16" />
+                <p className="text-sm">Image unavailable</p>
+              </div>
+            )}
+          </div>
+
+          {/* Prev / Next navigation arrows */}
+          {hasPrev && (
+            <button
+              onClick={() => onNavigate(items[currentIndex - 1])}
+              className="absolute left-3 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-black/50 hover:bg-black/70 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all backdrop-blur-sm"
+              title="Previous (←)"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+          {hasNext && (
+            <button
+              onClick={() => onNavigate(items[currentIndex + 1])}
+              className="absolute right-3 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-black/50 hover:bg-black/70 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all backdrop-blur-sm"
+              title="Next (→)"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+
+        {/* ── Right: metadata sidebar ── */}
+        <div
+          className="flex flex-col border-l overflow-hidden shrink-0"
+          style={{ width: "300px", borderColor: "hsl(230,40%,18%)" }}
+        >
+          {/* Sidebar header */}
+          <div className="flex items-start gap-2 p-4 border-b" style={{ borderColor: "hsl(230,40%,18%)" }}>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-sm text-white leading-tight line-clamp-3">{item.title}</h2>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  item.type === "upload"
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                    : "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                }`}>
+                  {item.type === "upload" ? (
+                    <><Camera className="h-3 w-3 inline mr-1" />Image</>
+                  ) : (
+                    <><FileText className="h-3 w-3 inline mr-1" />Snippet</>
+                  )}
+                </span>
+                {item.shareToken && (
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Shared
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Sidebar metadata — scrollable */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Date + views */}
+            <div className="space-y-2 text-xs text-white/50">
+              <div className="flex items-center justify-between">
+                <span>Added</span>
+                <span className="text-white/70">{format(new Date(item.createdAt), "MMM d, yyyy")}</span>
+              </div>
+              {item.shareToken && (
+                <div className="flex items-center justify-between">
+                  <span>Views</span>
+                  <span className="flex items-center gap-1 text-emerald-400">
+                    <Globe className="h-3 w-3" />{item.viewCount}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Source URL */}
+            {item.sourceUrl && (
+              <div>
+                <p className="text-xs font-medium text-white/40 uppercase tracking-widest mb-1.5">Source</p>
+                <a
+                  href={item.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors break-all"
+                >
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                  <span>{item.sourceUrl.replace(/^https?:\/\//, "")}</span>
+                </a>
+              </div>
+            )}
+
+            {/* Notes */}
+            {item.notes && (
+              <div>
+                <p className="text-xs font-medium text-white/40 uppercase tracking-widest mb-1.5">Notes</p>
+                <p className="text-xs text-white/70 leading-relaxed whitespace-pre-wrap">{item.notes}</p>
+              </div>
+            )}
+
+            {/* Snippet content preview (short) in sidebar */}
+            {item.type === "snippet" && item.content && (
+              <div>
+                <p className="text-xs font-medium text-white/40 uppercase tracking-widest mb-1.5">Preview</p>
+                <p className="text-xs text-white/60 font-mono leading-relaxed line-clamp-6">{item.content}</p>
+              </div>
+            )}
+
+            {/* Keyboard hint */}
+            {items.length > 1 && (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                <p className="text-[10px] text-white/40 leading-relaxed">
+                  Use <kbd className="bg-white/10 px-1 rounded text-white/60">←</kbd> <kbd className="bg-white/10 px-1 rounded text-white/60">→</kbd> to navigate · <kbd className="bg-white/10 px-1 rounded text-white/60">Esc</kbd> to close
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar actions */}
+          <div className="p-4 space-y-2 border-t" style={{ borderColor: "hsl(230,40%,18%)" }}>
+            {/* Share / Copy */}
+            {item.shareToken ? (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => copyLink()}
+                >
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? "Copied!" : "Copy Link"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
+                  onClick={() => unshareMutation.mutate()}
+                  disabled={unshareMutation.isPending}
+                  title="Remove share link"
+                >
+                  {unshareMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <EyeOff className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="w-full gap-1.5"
+                variant="outline"
+                style={{ borderColor: "hsl(230,40%,25%)", color: "hsl(0,0%,70%)" }}
+                onClick={() => shareMutation.mutate()}
+                disabled={shareMutation.isPending}
+              >
+                {shareMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Share2 className="h-3.5 w-3.5" />}
+                Share with Link
+              </Button>
+            )}
+
+            {/* Source link */}
+            {item.sourceUrl && (
+              <Button size="sm" variant="outline" className="w-full gap-1.5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white" asChild>
+                <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5" /> Open Source Page
+                </a>
+              </Button>
+            )}
+
+            {/* Edit */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full gap-1.5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
+              onClick={() => { onClose(); setTimeout(onEdit, 50); }}
+            >
+              <Edit3 className="h-3.5 w-3.5" /> Edit Details
+            </Button>
+
+            {/* Delete */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full gap-1.5 border-red-900/50 text-red-400/80 hover:bg-red-950/50 hover:text-red-400 hover:border-red-800/60"
+              onClick={() => { onClose(); setTimeout(onDelete, 50); }}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -385,34 +700,18 @@ function PromoLinksTab() {
   const allLinks = linksData ?? [];
   const promoLinkIds = promoData?.promoLinkIds ?? [];
   const promoSet = new Set(promoLinkIds);
-
-  // Ordered list of added links (preserves user's add order)
-  const addedLinks = promoLinkIds
-    .map(id => allLinks.find(l => l.id === id))
-    .filter(Boolean) as AffiliateLink[];
-
-  // Active links from library not yet added
+  const addedLinks = promoLinkIds.map(id => allLinks.find(l => l.id === id)).filter(Boolean) as AffiliateLink[];
   const availableLinks = allLinks.filter(l => l.isActive && !promoSet.has(l.id));
 
-  function addLink(id: string) {
-    saveMutation.mutate([...promoLinkIds, id]);
-  }
-
-  function removeLink(id: string) {
-    saveMutation.mutate(promoLinkIds.filter(lid => lid !== id));
-  }
+  function addLink(id: string) { saveMutation.mutate([...promoLinkIds, id]); }
+  function removeLink(id: string) { saveMutation.mutate(promoLinkIds.filter(lid => lid !== id)); }
 
   if (linksLoading || promoLoading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <div className="flex items-center justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
   }
 
   return (
     <div className="space-y-8">
-      {/* Explainer */}
       <div className="rounded-lg border bg-card px-5 py-4 flex items-start gap-3">
         <Link2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
         <p className="text-sm text-muted-foreground">
@@ -421,7 +720,6 @@ function PromoLinksTab() {
         </p>
       </div>
 
-      {/* Currently on share pages */}
       <div>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
           On your share pages {addedLinks.length > 0 && `· ${addedLinks.length}`}
@@ -434,19 +732,14 @@ function PromoLinksTab() {
         ) : (
           <div className="space-y-2">
             {addedLinks.map(link => (
-              <div key={link.id}
-                className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
+              <div key={link.id} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
                 <span className="text-lg shrink-0">{link.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{link.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {link.url.replace(/^https?:\/\//, "")}
-                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{link.url.replace(/^https?:\/\//, "")}</p>
                 </div>
-                <Button size="sm" variant="ghost"
-                  className="text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={() => removeLink(link.id)}
-                  disabled={saveMutation.isPending}>
+                <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => removeLink(link.id)} disabled={saveMutation.isPending}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -455,7 +748,6 @@ function PromoLinksTab() {
         )}
       </div>
 
-      {/* Link vault picker */}
       <div>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
           Your link vault {availableLinks.length > 0 && `· ${availableLinks.length} available`}
@@ -470,24 +762,16 @@ function PromoLinksTab() {
         ) : (
           <div className="space-y-2">
             {availableLinks.map(link => (
-              <div key={link.id}
-                className="flex items-center gap-3 rounded-lg border bg-muted/20 px-4 py-3">
+              <div key={link.id} className="flex items-center gap-3 rounded-lg border bg-muted/20 px-4 py-3">
                 <span className="text-lg shrink-0">{link.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{link.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {link.url.replace(/^https?:\/\//, "")}
-                  </p>
-                  {link.description && (
-                    <p className="text-xs text-muted-foreground/60 truncate">{link.description}</p>
-                  )}
+                  <p className="text-xs text-muted-foreground truncate">{link.url.replace(/^https?:\/\//, "")}</p>
+                  {link.description && <p className="text-xs text-muted-foreground/60 truncate">{link.description}</p>}
                 </div>
-                {link.category && (
-                  <Badge variant="outline" className="text-xs shrink-0">{link.category}</Badge>
-                )}
+                {link.category && <Badge variant="outline" className="text-xs shrink-0">{link.category}</Badge>}
                 <Button size="sm" variant="outline" className="shrink-0 gap-1.5"
-                  onClick={() => addLink(link.id)}
-                  disabled={saveMutation.isPending}>
+                  onClick={() => addLink(link.id)} disabled={saveMutation.isPending}>
                   <Plus className="h-3.5 w-3.5" /> Add
                 </Button>
               </div>
@@ -499,8 +783,18 @@ function PromoLinksTab() {
   );
 }
 
-// ---- Swipe Item Card ----
-function SwipeCard({ item, onEdit, onDelete }: { item: SwipeItem; onEdit: () => void; onDelete: () => void }) {
+// ---- Compact Swipe Card ----
+function SwipeCard({
+  item,
+  onPreview,
+  onEdit,
+  onDelete,
+}: {
+  item: SwipeItem;
+  onPreview: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
@@ -515,12 +809,6 @@ function SwipeCard({ item, onEdit, onDelete }: { item: SwipeItem; onEdit: () => 
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const unshareMutation = useMutation({
-    mutationFn: () => apiFetch(`/api/swipe/${item.id}/share`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/swipe"] }),
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
   function copyLink(token?: string) {
     const t = token ?? item.shareToken;
     if (!t) return;
@@ -530,84 +818,104 @@ function SwipeCard({ item, onEdit, onDelete }: { item: SwipeItem; onEdit: () => 
     setTimeout(() => setCopied(false), 2000);
   }
 
+  const isImage = item.type === "upload" && item.imagePath && !imgError;
+
   return (
-    <div className="group rounded-xl border bg-card overflow-hidden flex flex-col hover:shadow-md transition-shadow">
-      {/* Preview area */}
-      {item.type === "upload" && item.imagePath && !imgError ? (
-        <div className="relative bg-muted/40 overflow-hidden" style={{ paddingBottom: "56.25%" }}>
+    <div
+      className="group relative rounded-xl border bg-card overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:border-primary/40 hover:-translate-y-0.5"
+      onClick={onPreview}
+    >
+      {/* Thumbnail */}
+      <div className="relative overflow-hidden bg-muted/30" style={{ paddingBottom: "65%" }}>
+        {isImage ? (
           <img
             src={swipeImageUrl(item.id)}
             alt={item.title}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-400"
             loading="lazy"
             decoding="async"
             onError={() => setImgError(true)}
           />
-        </div>
-      ) : item.type === "snippet" ? (
-        <div className="bg-muted/30 border-b px-4 py-3 h-28 overflow-hidden relative">
-          <p className="text-xs text-muted-foreground font-mono leading-relaxed line-clamp-5">{item.content}</p>
-          <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-muted/50 to-transparent" />
-        </div>
-      ) : (
-        <div className="bg-muted/30 border-b flex items-center justify-center h-28">
-          <ImageIcon className="h-10 w-10 text-muted-foreground/40" />
-        </div>
-      )}
-
-      {/* Content */}
-      <div className="flex-1 p-3 space-y-2">
-        <div className="flex items-start gap-2">
-          <p className="font-medium text-sm flex-1 leading-tight">{item.title}</p>
-          <Badge variant="secondary" className="shrink-0 text-xs capitalize">
-            {item.type === "upload" ? <><Camera className="h-3 w-3 mr-1" />Image</> : <><FileText className="h-3 w-3 mr-1" />Snippet</>}
-          </Badge>
-        </div>
-
-        {item.sourceUrl && (
-          <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary truncate">
-            <ExternalLink className="h-3 w-3 shrink-0" />
-            <span className="truncate">{item.sourceUrl.replace(/^https?:\/\//, "")}</span>
-          </a>
+        ) : item.type === "snippet" ? (
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-950/60 to-slate-900/80 p-3.5 overflow-hidden">
+            <p className="text-[10px] text-white/65 font-mono leading-relaxed line-clamp-8 select-none">{item.content}</p>
+            <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-slate-900/90 to-transparent pointer-events-none" />
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <ImageIcon className="h-8 w-8 text-muted-foreground/25" />
+          </div>
         )}
 
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{format(new Date(item.createdAt), "MMM d, yyyy")}</span>
-          {item.shareToken && (
-            <span className="flex items-center gap-1 text-emerald-500">
-              <Globe className="h-3 w-3" /> {item.viewCount} views
-            </span>
-          )}
+        {/* Hover overlay — preview hint */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition-colors duration-200 flex items-center justify-center pointer-events-none">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/90 dark:bg-white/80 rounded-full p-2.5 shadow-xl">
+            <ZoomIn className="h-4 w-4 text-slate-800" />
+          </div>
         </div>
+
+        {/* Type chip */}
+        <div className="absolute top-2 left-2 pointer-events-none">
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold tracking-wide ${
+            item.type === "upload"
+              ? "bg-amber-500/85 text-white"
+              : "bg-violet-500/85 text-white"
+          }`}>
+            {item.type === "upload" ? "IMG" : "TXT"}
+          </span>
+        </div>
+
+        {/* Shared indicator */}
+        {item.shareToken && (
+          <div className="absolute top-2 right-2 pointer-events-none">
+            <Globe className="h-3.5 w-3.5 text-emerald-400 drop-shadow" />
+          </div>
+        )}
       </div>
 
-      {/* Actions */}
-      <div className="border-t px-3 py-2 flex items-center gap-1">
-        {item.shareToken ? (
-          <>
-            <Button size="sm" variant="ghost" className="flex-1 gap-1.5 text-xs" onClick={() => copyLink()}>
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied!" : "Copy Link"}
-            </Button>
-            <Button size="sm" variant="ghost" className="gap-1.5 text-xs text-muted-foreground"
-              onClick={() => unshareMutation.mutate()} disabled={unshareMutation.isPending}>
-              <EyeOff className="h-3.5 w-3.5" /> Unshare
-            </Button>
-          </>
-        ) : (
-          <Button size="sm" variant="ghost" className="flex-1 gap-1.5 text-xs"
-            onClick={() => shareMutation.mutate()} disabled={shareMutation.isPending}>
-            {shareMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Share2 className="h-3.5 w-3.5" />}
-            Share
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={onEdit}>
-          <Edit3 className="h-3.5 w-3.5" />
-        </Button>
-        <Button size="sm" variant="ghost" className="gap-1.5 text-xs text-muted-foreground hover:text-destructive" onClick={onDelete}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+      {/* Bottom strip: title + micro-actions */}
+      <div className="px-3 py-2.5">
+        <p className="text-sm font-medium truncate leading-snug mb-1.5">{item.title}</p>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-muted-foreground">
+            {format(new Date(item.createdAt), "MMM d, yyyy")}
+          </span>
+          {/* Micro-action icons — stop click from opening preview */}
+          <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+            {item.shareToken ? (
+              <button
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Copy share link"
+                onClick={() => copyLink()}
+              >
+                {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+              </button>
+            ) : (
+              <button
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Share"
+                onClick={() => shareMutation.mutate()}
+                disabled={shareMutation.isPending}
+              >
+                {shareMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Share2 className="h-3 w-3" />}
+              </button>
+            )}
+            <button
+              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Edit"
+              onClick={onEdit}
+            >
+              <Edit3 className="h-3 w-3" />
+            </button>
+            <button
+              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
+              title="Delete"
+              onClick={onDelete}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -623,6 +931,7 @@ export default function SwipeFilePage() {
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<SwipeItem | null>(null);
   const [deleteItem, setDeleteItem] = useState<SwipeItem | null>(null);
+  const [previewItem, setPreviewItem] = useState<SwipeItem | null>(null);
   const [typeFilter, setTypeFilter] = useState<"all" | "upload" | "snippet">("all");
   const [search, setSearch] = useState("");
 
@@ -662,10 +971,15 @@ export default function SwipeFilePage() {
 
   const sharedCount = items.filter(i => !!i.shareToken).length;
 
+  // Keep previewItem in sync with updated data (e.g. after share mutation)
+  const livePreviewItem = previewItem
+    ? (items.find(i => i.id === previewItem.id) ?? previewItem)
+    : null;
+
   return (
     <div className="min-h-screen bg-background">
 
-      {/* ── Hero ──────────────────────────────────────────────────────────── */}
+      {/* ── Hero ── */}
       <div className="relative overflow-hidden border-b border-border">
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(35_60%_16%)]" />
         <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-amber-500/20 blur-3xl" />
@@ -681,7 +995,7 @@ export default function SwipeFilePage() {
                 <h1 className="text-3xl font-bold text-white tracking-tight">Swipe File</h1>
               </div>
               <p className="text-white/60 text-sm mt-1 max-w-xl">
-                Save screenshots and text snippets from around the web. Share them with a link that showcases your offers.
+                Save screenshots and text snippets from around the web. Click any item to preview it full-size.
               </p>
             </div>
             {activeTab === "swipe" && (
@@ -710,7 +1024,6 @@ export default function SwipeFilePage() {
           </div>
         </div>
       </div>
-      {/* ─────────────────────────────────────────────────────────────────── */}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-0">
@@ -747,15 +1060,20 @@ export default function SwipeFilePage() {
               <div className="flex gap-1">
                 {(["all", "upload", "snippet"] as const).map(f => (
                   <Button key={f} size="sm" variant={typeFilter === f ? "default" : "outline"}
-                    onClick={() => setTypeFilter(f)} className="capitalize gap-1.5">
+                    onClick={() => setTypeFilter(f)} className="gap-1.5">
                     {f === "all" ? "All" : f === "upload" ? <><Camera className="h-3.5 w-3.5" />Images</> : <><FileText className="h-3.5 w-3.5" />Snippets</>}
                   </Button>
                 ))}
               </div>
+              {filtered.length > 0 && (
+                <span className="text-sm text-muted-foreground ml-auto">
+                  {filtered.length} item{filtered.length !== 1 ? "s" : ""}
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Grid */}
+          {/* Compact Grid */}
           <div className="max-w-6xl mx-auto px-6 pb-12">
             {isLoading ? (
               <div className="flex items-center justify-center py-24">
@@ -771,7 +1089,7 @@ export default function SwipeFilePage() {
                 </h3>
                 <p className="text-muted-foreground text-sm max-w-sm">
                   {items.length === 0
-                    ? "Save screenshots and text snippets from around the web. Share them with a link that showcases your offers."
+                    ? "Save screenshots and text snippets from around the web. Click any item to preview it full-size."
                     : "Try a different search term or filter."}
                 </p>
                 {items.length === 0 && (
@@ -781,11 +1099,12 @@ export default function SwipeFilePage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {filtered.map(item => (
                   <SwipeCard
                     key={item.id}
                     item={item}
+                    onPreview={() => setPreviewItem(item)}
                     onEdit={() => setEditItem(item)}
                     onDelete={() => setDeleteItem(item)}
                   />
@@ -795,7 +1114,7 @@ export default function SwipeFilePage() {
           </div>
         </TabsContent>
 
-        {/* Promotional Links Tab — only mount when active to defer DB queries */}
+        {/* Promotional Links Tab */}
         <TabsContent value="promo" className="mt-0 focus-visible:outline-none">
           <div className="max-w-3xl mx-auto px-6 py-8">
             {activeTab === "promo" && <PromoLinksTab />}
@@ -803,10 +1122,25 @@ export default function SwipeFilePage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialogs */}
+      {/* ── Preview Modal ── */}
+      {livePreviewItem && (
+        <PreviewModal
+          item={livePreviewItem}
+          items={filtered}
+          onNavigate={setPreviewItem}
+          onClose={() => setPreviewItem(null)}
+          onEdit={() => setEditItem(livePreviewItem)}
+          onDelete={() => setDeleteItem(livePreviewItem)}
+        />
+      )}
+
+      {/* Add Dialog */}
       <AddItemDialog open={addOpen} onClose={() => setAddOpen(false)} />
+
+      {/* Edit Dialog */}
       {editItem && <EditDialog item={editItem} onClose={() => setEditItem(null)} />}
 
+      {/* Delete Confirm */}
       <AlertDialog open={!!deleteItem} onOpenChange={v => !v && setDeleteItem(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
