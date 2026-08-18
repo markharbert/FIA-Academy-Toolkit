@@ -127,27 +127,23 @@ export default function SwipeSharePage() {
         className="px-4 py-3 flex items-center gap-3 shadow-md"
         style={{ background: "hsl(228,45%,14%)" }}
       >
-        {/* Branding — lion + name, both link to affiliate URL */}
+        {/* Lion logo — links to affiliate URL */}
         <a
           href={item.fiaAffiliateLink || "https://www.fearlessinfluencer.com"}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 shrink-0 group"
+          className="shrink-0 opacity-90 hover:opacity-100 transition-opacity"
+          title="Fearless Influencer Academy"
         >
           <img
             src="/lion-logo.png"
             alt="Fearless Influencer Academy"
-            className="h-8 w-8 object-contain"
+            className="h-9 w-9 object-contain"
           />
-          <span className="font-semibold text-sm tracking-wide text-white/90 group-hover:text-white transition-colors hidden sm:inline">
-            Fearless Influencer Academy
-          </span>
         </a>
 
-        <div className="w-px h-5 bg-white/20 shrink-0" />
-
         {/* Title */}
-        <h1 className="flex-1 min-w-0 text-base font-bold text-white truncate leading-tight">
+        <h1 className="flex-1 min-w-0 text-xl font-bold text-white truncate leading-tight">
           {item.title}
         </h1>
 
@@ -236,10 +232,6 @@ export default function SwipeSharePage() {
                     <div className="flex items-center gap-1.5">
                       <Camera className="h-3 w-3 shrink-0" />
                       <span>{format(new Date(item.createdAt), "MMMM d, yyyy")}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Globe className="h-3 w-3 shrink-0" />
-                      <span>{item.viewCount.toLocaleString()} view{item.viewCount !== 1 ? "s" : ""}</span>
                     </div>
                     {item.sourceUrl && (
                       <a
