@@ -1783,37 +1783,45 @@ export default function AnalyticsYouTubePage() {
   const [showCannedDialog, setShowCannedDialog] = useState(false);
   const VIDEOS_PER_PAGE = 25;
 
+  const YT_STALE = 60 * 60 * 1000; // 1 hour — mirrors the server's 24h DB cache; prevents redundant round-trips within a session
+
   const { data: status, isLoading: statusLoading } = useQuery<Status>({
     queryKey: ["/api/analytics/youtube/status"],
+    staleTime: 5 * 60 * 1000, // 5 min — status is cheap once cached on server
   });
   const connected = status?.connected === true;
 
   const { data: videos, isLoading: videosLoading } = useQuery<VideoItem[]>({
     queryKey: ["/api/analytics/youtube/videos"],
     enabled: connected,
+    staleTime: YT_STALE,
   });
 
   const { data: analytics, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
     queryKey: ["/api/analytics/youtube/channel-analytics", days],
     queryFn: () => fetch(`/api/analytics/youtube/channel-analytics?days=${days}`, { credentials: "include" }).then((r) => r.json()),
     enabled: connected,
+    staleTime: YT_STALE,
   });
 
   const { data: breakdowns, isLoading: breakdownsLoading } = useQuery<BreakdownData>({
     queryKey: ["/api/analytics/youtube/breakdowns", days],
     queryFn: () => fetch(`/api/analytics/youtube/breakdowns?days=${days}`, { credentials: "include" }).then((r) => r.json()),
     enabled: connected && tab === "audience",
+    staleTime: YT_STALE,
   });
 
   const { data: videoAnalytics, isLoading: videoAnalyticsLoading } = useQuery<VideoAnalytics[]>({
     queryKey: ["/api/analytics/youtube/video-analytics", days],
     queryFn: () => fetch(`/api/analytics/youtube/video-analytics?days=${days}`, { credentials: "include" }).then((r) => r.json()),
     enabled: connected && tab === "videos",
+    staleTime: YT_STALE,
   });
 
   const { data: cannedResponses = [] } = useQuery<CannedResponse[]>({
     queryKey: ["/api/analytics/youtube/canned-responses"],
     enabled: connected && (tab === "videos" || tab === "comments"),
+    staleTime: 5 * 60 * 1000,
   });
 
   const disconnectMut = useMutation({
@@ -1827,9 +1835,12 @@ export default function AnalyticsYouTubePage() {
   const refreshMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/analytics/youtube/refresh"),
     onSuccess: () => {
+      // Invalidate all YouTube query keys so every tab gets fresh data after a manual refresh
       qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/status"] });
       qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/videos"] });
-      qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/channel-analytics", days] });
+      qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/channel-analytics"] });
+      qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/breakdowns"] });
+      qc.invalidateQueries({ queryKey: ["/api/analytics/youtube/video-analytics"] });
       toast({ title: "Refreshed", description: "Channel data updated." });
     },
     onError: () => toast({ title: "Error", description: "Could not refresh.", variant: "destructive" }),

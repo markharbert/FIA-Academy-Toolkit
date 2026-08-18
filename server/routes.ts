@@ -7861,20 +7861,40 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const userId = req.session!.userId!;
       const conn = await storage.getYouTubeConnection(userId);
       if (!conn?.oauthAccessToken) return res.json({ connected: false });
+
+      const STATUS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — channel stats change slowly
+      const [cachedStatus, currentUser] = await Promise.all([
+        storage.getYoutubeAnalyticsCache(userId, "channel-status"),
+        storage.getUser(userId),
+      ]);
+      const isAdmin = currentUser?.isAdmin ?? false;
+
+      // Serve from cache when fresh — avoids a live YouTube API call on every page open
+      if (cachedStatus && (Date.now() - cachedStatus.updatedAt.getTime() < STATUS_CACHE_TTL_MS)) {
+        return res.json({ connected: true, connectedEmail: conn.connectedEmail, channel: cachedStatus.data, isAdmin, channelId: (cachedStatus.data as any).id });
+      }
+
+      // Cache cold or stale — call live API, then cache the result
       try {
         const channel = await fetchYouTubeChannel(conn.oauthAccessToken, conn.oauthRefreshToken);
-        await storage.updateYouTubeChannel(userId, {
-          channelId: channel.id,
-          channelTitle: channel.title,
-          channelHandle: channel.handle,
-          channelThumbnail: channel.thumbnail,
-          uploadsPlaylistId: channel.uploadsPlaylistId,
-        });
-        const currentUser = await storage.getUser(userId);
-        res.json({ connected: true, connectedEmail: conn.connectedEmail, channel, isAdmin: currentUser?.isAdmin ?? false, channelId: channel.id });
+        await Promise.all([
+          storage.updateYouTubeChannel(userId, {
+            channelId: channel.id,
+            channelTitle: channel.title,
+            channelHandle: channel.handle,
+            channelThumbnail: channel.thumbnail,
+            uploadsPlaylistId: channel.uploadsPlaylistId,
+          }),
+          storage.setYoutubeAnalyticsCache(userId, "channel-status", channel),
+        ]);
+        return res.json({ connected: true, connectedEmail: conn.connectedEmail, channel, isAdmin, channelId: channel.id });
       } catch (apiErr: any) {
         console.error("[Analytics/YouTube] status API error:", apiErr?.message);
-        res.json({ connected: true, connectedEmail: conn.connectedEmail, channel: conn.channelId ? { id: conn.channelId, title: conn.channelTitle, handle: conn.channelHandle, thumbnail: conn.channelThumbnail, subscriberCount: 0, videoCount: 0, viewCount: 0, uploadsPlaylistId: conn.uploadsPlaylistId } : null });
+        // Fall back to DB-stored metadata (subscriber/view counts will be 0 if never cached)
+        const fallbackChannel = conn.channelId
+          ? { id: conn.channelId, title: conn.channelTitle, handle: conn.channelHandle, thumbnail: conn.channelThumbnail, subscriberCount: 0, videoCount: 0, viewCount: 0, uploadsPlaylistId: conn.uploadsPlaylistId }
+          : null;
+        return res.json({ connected: true, connectedEmail: conn.connectedEmail, channel: fallbackChannel, isAdmin });
       }
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch YouTube status" });
