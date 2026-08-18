@@ -370,6 +370,23 @@ function PreviewModal({
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
 
+  // Measure real viewport pixels so the modal is always exactly 75% of the screen,
+  // regardless of scrollbars, browser zoom, or CSS breakpoints.
+  const [modalSize, setModalSize] = useState<{ width: string; height: string }>({
+    width: "75vw",
+    height: "75vh",
+  });
+  useEffect(() => {
+    function measure() {
+      const w = Math.round(window.innerWidth * 0.75);
+      const h = Math.round(window.innerHeight * 0.75);
+      setModalSize({ width: `${w}px`, height: `${h}px` });
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
   const currentIndex = items.findIndex(i => i.id === item.id);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < items.length - 1;
@@ -429,7 +446,7 @@ function PreviewModal({
       {/* Modal panel — click inside stops propagation */}
       <div
         className="relative flex flex-col md:flex-row rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: "hsl(230,45%,10%)", width: "75vw", height: "75vh", maxWidth: "1400px", minWidth: "320px", minHeight: "400px" }}
+        style={{ background: "hsl(230,45%,10%)", width: modalSize.width, height: modalSize.height, maxWidth: "1400px", minWidth: "320px", minHeight: "400px" }}
         onClick={e => e.stopPropagation()}
       >
         {/* ── Image / content pane ── */}
