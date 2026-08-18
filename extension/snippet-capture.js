@@ -1,24 +1,27 @@
-// FIA Toolkit — Snippet HTML capture
-// Runs on every page. On right-click we immediately capture the selection
-// as HTML and stash it in chrome.storage.session so the service worker can
-// read it when the "Save to Swipe File" context menu item is clicked.
-// (By the time onClicked fires the selection is already gone, so we must
-// capture it here, at the contextmenu event, while it still exists.)
+// FIA Toolkit — Snippet HTML capture (content script, runs on every page)
+//
+// Listens for the right-click event BEFORE the context menu appears.
+// At that moment the text selection is still live, so we can clone its
+// HTML and send it to the service worker for storage.
+// The service worker reads it back in the onClicked handler.
 
 document.addEventListener("contextmenu", () => {
   try {
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    if (!sel || sel.rangeCount === 0) return;
 
     const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+
     const wrapper = document.createElement("div");
     wrapper.appendChild(range.cloneContents());
     const html = wrapper.innerHTML;
 
     if (html && html.trim()) {
-      chrome.storage.session.set({ pendingSnippetHtml: html });
+      // Send to service worker — this also wakes the SW if it was sleeping.
+      chrome.runtime.sendMessage({ action: "cacheSnippetHtml", html }).catch(() => {});
     }
   } catch {
-    // Ignore — service worker will fall back to plain selectionText
+    // Restricted page or no selection — service worker falls back to plain text
   }
-}, true); // capture phase so we fire before any page listener cancels it
+}, true); // capture phase fires before any page handler can cancel

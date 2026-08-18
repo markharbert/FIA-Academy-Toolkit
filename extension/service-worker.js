@@ -54,42 +54,28 @@ async function openAnnotationTab(blob, title) {
 
 // ─── Context Menu: Save to Swipe File ────────────────────────────────────────
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "fia-save-snippet",
-    title: "Save to Swipe File",
-    contexts: ["selection"],
-  });
-});
+// Create the context menu item on install/update AND on every SW startup,
+// so it's never missing if the SW was killed and restarted.
+function ensureContextMenu() {
+  chrome.contextMenus.create(
+    { id: "fia-save-snippet", title: "Save to Swipe File", contexts: ["selection"] },
+    () => { void chrome.runtime.lastError; } // silence "already exists" error
+  );
+}
 
-// Capture the selection as HTML the instant the context menu appears.
-// onShown fires in the service worker BEFORE the user clicks any item,
-// so the page selection is still live. We run executeScript immediately
-// and stash the result in session storage for onClicked to read.
-chrome.contextMenus.onShown.addListener(async (info, tab) => {
-  // Only act when our snippet item is present in this menu
-  if (!info.menuIds?.includes("fia-save-snippet")) return;
-  if (!tab?.id) return;
-  try {
-    const [{ result: html }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return null;
-        const div = document.createElement("div");
-        div.appendChild(sel.getRangeAt(0).cloneContents());
-        return div.innerHTML || null;
-      },
-    });
-    if (html && html.trim()) {
-      await chrome.storage.session.set({ pendingSnippetHtml: html });
-    } else {
-      await chrome.storage.session.remove("pendingSnippetHtml");
-    }
-  } catch {
-    await chrome.storage.session.remove("pendingSnippetHtml").catch(() => {});
+chrome.runtime.onInstalled.addListener(ensureContextMenu);
+chrome.runtime.onStartup.addListener(ensureContextMenu);
+ensureContextMenu(); // also run immediately when the SW wakes
+
+// Cache the selection HTML sent by snippet-capture.js (content script).
+// Using message passing is more reliable than calling chrome.storage from
+// a content script directly, because sendMessage wakes the SW if needed.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action === "cacheSnippetHtml" && msg.html) {
+    chrome.storage.session.set({ pendingSnippetHtml: msg.html }).catch(() => {});
   }
 });
+
 
 // ─── Section capture: crop & store for popup ─────────────────────────────────
 
