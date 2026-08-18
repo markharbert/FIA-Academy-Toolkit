@@ -462,7 +462,7 @@ export default function AnalyticsGscPage() {
             </div>
 
             {/* Tab bar */}
-            <div className="flex gap-0.5 border-b border-border overflow-x-auto">
+            <div className="flex gap-0.5 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {TABS.map((t) => (
                 <button key={t.id} onClick={() => setTab(t.id)}
                   className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
