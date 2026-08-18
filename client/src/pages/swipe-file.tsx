@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Redirect } from "wouter";
@@ -436,8 +437,9 @@ function PreviewModal({
   const isImage = item.type === "upload" && item.imagePath && !imgError;
   const isFullPage = isImage && item.strips && item.strips.length > 1;
 
-  return (
-    // Full-screen overlay
+  return createPortal(
+    // Full-screen overlay — portalled into document.body so position:fixed is
+    // always relative to the true viewport, never trapped by overflow:auto parents
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
       style={{ background: "rgba(0,0,0,0.85)" }}
@@ -704,7 +706,8 @@ function PreviewModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
