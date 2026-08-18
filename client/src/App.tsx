@@ -22,39 +22,40 @@ import ResetPasswordPage from "@/pages/reset-password";
  * deployment), force a full page reload so the browser fetches the new
  * index.html and picks up the updated chunk hashes automatically.
  *
- * A sessionStorage counter caps reload attempts at 2. Combined with the
- * server sending index.html with Cache-Control: no-cache, the first reload
- * always fetches a fresh index.html and succeeds. The cap is a belt-and-
- * suspenders guard so a genuinely broken build never causes an infinite loop.
+ * A timestamp throttle limits automatic reloads to ONE per 30 seconds,
+ * globally across all lazy pages. Combined with the server sending index.html
+ * with Cache-Control: no-cache, that single reload fetches a fresh index.html
+ * with updated chunk hashes and all subsequent navigations succeed cleanly.
+ *
+ * The old approach used a per-attempt counter that reset to 0 on every
+ * successful load. This caused a loop: page A fails → reload → A succeeds
+ * (counter reset to 0) → page B fails → reload → B succeeds (counter reset)
+ * → … repeating once per page visited after a deployment. The timestamp
+ * approach prevents more than one automatic reload in any 30-second window
+ * regardless of how many pages succeed or fail.
  */
-const CHUNK_RELOAD_KEY = "__chunkReloadAttempts";
+const CHUNK_RELOAD_KEY = "__chunkLastReload";
+const CHUNK_RELOAD_WINDOW_MS = 30_000; // one auto-reload per 30 s, globally
 
 function lazyPage<T extends React.ComponentType<any>>(
   importFn: () => Promise<{ default: T }>
 ) {
   return lazy(() =>
     importFn()
-      .then((mod) => {
-        // Successful load — reset the counter so future navigations get a
-        // fresh allowance if they ever need it.
-        try { sessionStorage.removeItem(CHUNK_RELOAD_KEY); } catch {}
-        return mod;
-      })
       .catch(() => {
         try {
-          const attempts = parseInt(
-            sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? "0",
-            10
-          );
-          if (attempts < 2) {
-            sessionStorage.setItem(CHUNK_RELOAD_KEY, String(attempts + 1));
+          const last = parseInt(sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? "0", 10);
+          const now = Date.now();
+          if (now - last > CHUNK_RELOAD_WINDOW_MS) {
+            // First failure in this window — reload to pick up fresh chunks.
+            sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now));
             window.location.reload();
             return new Promise<{ default: T }>(() => {}); // reload fires; never resolves
           }
-          // Two reloads didn't fix it — clear and let ErrorBoundary show.
-          sessionStorage.removeItem(CHUNK_RELOAD_KEY);
         } catch {}
-        throw new Error("Page failed to load after multiple attempts. Please hard-refresh (Ctrl+Shift+R).");
+        // A reload already happened within the last 30 s — stop looping and
+        // let the ErrorBoundary surface the problem so the user can act.
+        throw new Error("Page failed to load. Please hard-refresh (Ctrl+Shift+R).");
       })
   );
 }
