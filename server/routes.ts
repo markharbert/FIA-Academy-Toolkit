@@ -12139,9 +12139,14 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.get("/api/affiliate-links", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const { q, category } = req.query as { q?: string; category?: string };
-      const links = await storage.getAffiliateLinks(userId, { q, category });
-      res.json(links);
+      const { q, category, page, limit } = req.query as { q?: string; category?: string; page?: string; limit?: string };
+      const result = await storage.getAffiliateLinksPage(userId, {
+        q,
+        category,
+        page:  page  ? parseInt(page,  10) : 1,
+        limit: limit ? parseInt(limit, 10) : 20,
+      });
+      res.json(result);
     } catch (err) {
       console.error("[affiliate-links] list error:", err);
       res.status(500).json({ message: "Failed to load links" });

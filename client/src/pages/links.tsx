@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Redirect } from "wouter";
@@ -49,6 +49,8 @@ import {
   FolderOpen,
   Globe,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AffiliateLink } from "@shared/schema";
@@ -494,40 +496,61 @@ export default function LinksPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const PAGE_SIZE = 20;
+
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<AffiliateLink | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  const { data: links = [], isLoading: linksLoading } = useQuery<AffiliateLink[]>({
-    queryKey: ["/api/affiliate-links"],
+  // Debounce search → 300 ms before firing a new request; also resets page
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Reset page whenever the category filter changes
+  useEffect(() => { setPage(1); }, [activeCategory]);
+
+  const { data, isLoading: linksLoading, isFetching } = useQuery<{
+    links: AffiliateLink[];
+    total: number;
+    totalAll: number;
+    totalClicks: number;
+  }>({
+    queryKey: ["/api/affiliate-links", debouncedSearch, activeCategory, page],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.set("q", debouncedSearch);
+      if (activeCategory !== "all") params.set("category", activeCategory);
+      params.set("page", String(page));
+      params.set("limit", String(PAGE_SIZE));
+      const res = await fetch(`/api/affiliate-links?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load links");
+      return res.json();
+    },
     enabled: !!user,
+    placeholderData: (prev) => prev,
+    staleTime: 60_000,
   });
+
+  const links       = data?.links       ?? [];
+  const total       = data?.total       ?? 0;
+  const totalAll    = data?.totalAll    ?? 0;
+  const totalClicks = data?.totalClicks ?? 0;
+  const totalPages  = Math.ceil(total / PAGE_SIZE);
 
   const { data: categories = [] } = useQuery<string[]>({
     queryKey: ["/api/affiliate-links/categories"],
     enabled: !!user,
   });
-
-  const filtered = useMemo(() => {
-    let result = links;
-    if (activeCategory !== "all") {
-      result = result.filter((l) => l.category === activeCategory);
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (l) =>
-          l.title.toLowerCase().includes(q) ||
-          l.url.toLowerCase().includes(q) ||
-          l.description?.toLowerCase().includes(q) ||
-          l.category?.toLowerCase().includes(q)
-      );
-    }
-    return result;
-  }, [links, activeCategory, search]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/affiliate-links/${id}`),
@@ -572,8 +595,6 @@ export default function LinksPage() {
     );
   }
 
-  const totalClicks = links.reduce((sum, l) => sum + l.clickCount, 0);
-
   return (
     <div className="min-h-screen bg-background">
 
@@ -610,8 +631,8 @@ export default function LinksPage() {
           <div className="flex items-center gap-3 mt-6 flex-wrap">
             <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
               <span className="text-xs text-white/70">
-                <span className="font-semibold text-white">{links.length}</span>{" "}
-                {links.length === 1 ? "link" : "links"}
+                <span className="font-semibold text-white">{totalAll}</span>{" "}
+                {totalAll === 1 ? "link" : "links"}
               </span>
             </div>
             {categories.length > 0 && (
@@ -648,6 +669,9 @@ export default function LinksPage() {
               data-testid="input-search-links"
             />
           </div>
+          {isFetching && !linksLoading && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+          )}
         </div>
 
         {categories.length > 0 && (
@@ -690,24 +714,24 @@ export default function LinksPage() {
           </div>
         )}
 
-        {!linksLoading && filtered.length === 0 && (
+        {!linksLoading && total === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="h-16 w-16 rounded-2xl bg-muted/40 flex items-center justify-center mb-4">
-              {search || activeCategory !== "all" ? (
+              {debouncedSearch || activeCategory !== "all" ? (
                 <Search className="h-7 w-7 text-muted-foreground/50" />
               ) : (
                 <FolderOpen className="h-7 w-7 text-muted-foreground/50" />
               )}
             </div>
             <h3 className="text-base font-semibold text-foreground mb-1">
-              {search || activeCategory !== "all" ? "No links found" : "No links yet"}
+              {debouncedSearch || activeCategory !== "all" ? "No links found" : "No links yet"}
             </h3>
             <p className="text-sm text-muted-foreground mb-5 max-w-xs">
-              {search || activeCategory !== "all"
+              {debouncedSearch || activeCategory !== "all"
                 ? "Try adjusting your search or clearing the category filter"
                 : "Add your affiliate links here and they'll be ready to copy and share instantly"}
             </p>
-            {!search && activeCategory === "all" && (
+            {!debouncedSearch && activeCategory === "all" && (
               <Button
                 variant="outline"
                 size="sm"
@@ -724,9 +748,9 @@ export default function LinksPage() {
           </div>
         )}
 
-        {!linksLoading && filtered.length > 0 && (
+        {links.length > 0 && (
           <div className="flex flex-col gap-2">
-            {filtered.map((link) => (
+            {links.map((link) => (
               <LinkCard
                 key={link.id}
                 link={link}
@@ -739,6 +763,38 @@ export default function LinksPage() {
                 onDelete={() => setDeleteTarget(link.id)}
               />
             ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
+            <p className="text-xs text-muted-foreground">
+              Showing {Math.min((page - 1) * PAGE_SIZE + 1, total)}–{Math.min(page * PAGE_SIZE, total)} of {total} links
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || isFetching}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground px-1">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || isFetching}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </div>
         )}
       </div>

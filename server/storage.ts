@@ -660,6 +660,7 @@ export interface IStorage {
 
   // Affiliate Links
   getAffiliateLinks(userId: string, opts?: { q?: string; category?: string; activeOnly?: boolean }): Promise<AffiliateLink[]>;
+  getAffiliateLinksPage(userId: string, opts: { q?: string; category?: string; page?: number; limit?: number }): Promise<{ links: AffiliateLink[]; total: number; totalAll: number; totalClicks: number }>;
   getAffiliateLink(id: string, userId: string): Promise<AffiliateLink | undefined>;
   createAffiliateLink(userId: string, data: InsertAffiliateLink): Promise<AffiliateLink>;
   updateAffiliateLink(id: string, userId: string, updates: Partial<InsertAffiliateLink>): Promise<AffiliateLink | undefined>;
@@ -5045,21 +5046,60 @@ export class DatabaseStorage implements IStorage {
     const conditions: any[] = [eq(affiliateLinks.userId, userId)];
     if (opts?.activeOnly) conditions.push(eq(affiliateLinks.isActive, true));
     if (opts?.category) conditions.push(eq(affiliateLinks.category, opts.category));
-
-    const results = await db.select().from(affiliateLinks)
+    if (opts?.q) {
+      const q = `%${opts.q.trim()}%`;
+      conditions.push(or(
+        ilike(affiliateLinks.title, q),
+        ilike(affiliateLinks.url, q),
+        ilike(affiliateLinks.description, q),
+        ilike(affiliateLinks.category, q),
+      )!);
+    }
+    return db.select().from(affiliateLinks)
       .where(and(...conditions))
       .orderBy(asc(affiliateLinks.sortOrder), asc(affiliateLinks.createdAt));
+  }
 
-    if (opts?.q) {
-      const q = opts.q.toLowerCase();
-      return results.filter(l =>
-        l.title.toLowerCase().includes(q) ||
-        l.url.toLowerCase().includes(q) ||
-        (l.description && l.description.toLowerCase().includes(q)) ||
-        (l.category && l.category.toLowerCase().includes(q))
-      );
+  async getAffiliateLinksPage(
+    userId: string,
+    opts: { q?: string; category?: string; page?: number; limit?: number },
+  ): Promise<{ links: AffiliateLink[]; total: number; totalAll: number; totalClicks: number }> {
+    const page  = Math.max(1, opts.page  ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+    const offset = (page - 1) * limit;
+
+    const baseCondition = eq(affiliateLinks.userId, userId);
+    const filterConditions: any[] = [baseCondition];
+    if (opts.category) filterConditions.push(eq(affiliateLinks.category, opts.category));
+    if (opts.q) {
+      const q = `%${opts.q.trim()}%`;
+      filterConditions.push(or(
+        ilike(affiliateLinks.title, q),
+        ilike(affiliateLinks.url, q),
+        ilike(affiliateLinks.description, q),
+        ilike(affiliateLinks.category, q),
+      )!);
     }
-    return results;
+
+    const [links, [countRow], [statsRow]] = await Promise.all([
+      db.select().from(affiliateLinks)
+        .where(and(...filterConditions))
+        .orderBy(asc(affiliateLinks.sortOrder), asc(affiliateLinks.createdAt))
+        .limit(limit).offset(offset),
+      db.select({ total: count() }).from(affiliateLinks)
+        .where(and(...filterConditions)),
+      db.select({
+        totalAll: count(),
+        totalClicks: sql<number>`COALESCE(SUM(${affiliateLinks.clickCount}), 0)`,
+      }).from(affiliateLinks).where(baseCondition),
+    ]);
+
+    return {
+      links,
+      total:       countRow?.total  ?? 0,
+      totalAll:    statsRow?.totalAll    ?? 0,
+      totalClicks: Number(statsRow?.totalClicks ?? 0),
+    };
   }
 
   async getAffiliateLink(id: string, userId: string): Promise<AffiliateLink | undefined> {
