@@ -148,38 +148,53 @@ const TOOLTIP_STYLE = {
   borderRadius: 8, fontSize: 12,
 };
 
+const ICON_COLOR_HEX: Record<string, string> = {
+  "text-red-500":     "#ef4444",
+  "text-rose-500":    "#f43f5e",
+  "text-pink-500":    "#ec4899",
+  "text-orange-500":  "#f97316",
+  "text-emerald-500": "#10b981",
+  "text-blue-500":    "#3b82f6",
+  "text-violet-500":  "#8b5cf6",
+};
+
 function KpiCard({ label, value, sub, icon: Icon, iconColor, trend }: {
   label: string; value: string; sub?: string; icon: React.ElementType;
   iconColor: string; trend?: { value: string; positive: boolean } | null;
 }) {
+  const hex = ICON_COLOR_HEX[iconColor] ?? "#ef4444";
   return (
-    <Card className="border-border bg-card">
-      <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
-          <span className="text-xs text-muted-foreground font-medium">{label}</span>
+    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col">
+      <div className="h-0.5 w-full" style={{ background: `linear-gradient(to right, ${hex}, transparent)` }} />
+      <div className="p-4 flex flex-col flex-1">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <span className="text-xs text-muted-foreground font-medium leading-snug">{label}</span>
+          <div className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${hex}18` }}>
+            <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
+          </div>
         </div>
-        <p className="text-2xl font-bold text-foreground leading-none">{value}</p>
-        {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+        <p className="text-2xl font-bold text-foreground leading-none tabular-nums mt-auto">{value}</p>
+        {sub && <p className="text-xs text-muted-foreground mt-1.5">{sub}</p>}
         {trend && (
-          <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${trend.positive ? "text-emerald-500" : "text-rose-500"}`}>
+          <div className={`flex items-center gap-1 mt-1.5 text-xs font-semibold ${trend.positive ? "text-emerald-500" : "text-rose-500"}`}>
             {trend.positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
             {trend.value}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
 function SectionCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
     <Card className="border-border bg-card overflow-hidden">
-      <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
       <CardContent className="p-5">
-        <h3 className="text-sm font-semibold text-foreground mb-0.5">{title}</h3>
-        {sub && <p className="text-xs text-muted-foreground mb-4">{sub}</p>}
-        {!sub && <div className="mb-4" />}
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+          <div className="mt-3 h-px bg-gradient-to-r from-red-500/40 via-red-500/10 to-transparent" />
+        </div>
         {children}
       </CardContent>
     </Card>
@@ -1892,31 +1907,75 @@ export default function AnalyticsYouTubePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden border-b border-border">
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(358_60%_15%)]" />
         <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-red-500/20 blur-3xl" />
         <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-rose-500/10 blur-3xl" />
         <div className="relative max-w-6xl mx-auto px-6 py-8">
+          {/* Back link */}
           <button onClick={() => setLocation("/analytics")}
-            className="flex items-center gap-1.5 text-white/50 hover:text-white/80 text-sm mb-4 transition-colors"
+            className="flex items-center gap-1.5 text-white/50 hover:text-white/80 text-sm mb-5 transition-colors"
             data-testid="button-back-analytics">
             <ArrowLeft className="h-4 w-4" />Analytics
           </button>
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-red-500/20 ring-1 ring-red-400/30 flex items-center justify-center">
-                <Youtube className="h-5 w-5 text-red-300" />
-              </div>
+
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            {/* Channel identity */}
+            <div className="flex items-center gap-4">
+              {connected && status?.channel?.thumbnail ? (
+                <img src={status.channel.thumbnail} alt={status.channel.title} loading="lazy"
+                  className="w-16 h-16 rounded-full object-cover ring-2 ring-red-400/40 shrink-0" />
+              ) : (
+                <div className="h-14 w-14 rounded-xl bg-red-500/20 ring-1 ring-red-400/30 flex items-center justify-center shrink-0">
+                  <Youtube className="h-7 w-7 text-red-300" />
+                </div>
+              )}
               <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">YouTube Analytics</h1>
-                {connected && status?.connectedEmail && (
+                <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
+                  {connected && status?.channel?.title ? status.channel.title : "YouTube Analytics"}
+                </h1>
+                {connected && status?.channel?.handle && (
+                  <p className="text-white/50 text-sm mt-0.5">
+                    @{status.channel.handle.replace(/^@/, "")}
+                    {status.connectedEmail && (
+                      <span className="text-white/30 ml-2">· {status.connectedEmail}</span>
+                    )}
+                  </p>
+                )}
+                {connected && !status?.channel?.handle && status?.connectedEmail && (
                   <p className="text-white/40 text-xs mt-0.5">{status.connectedEmail}</p>
+                )}
+                {/* All-time channel stats */}
+                {connected && status?.channel && (
+                  <div className="flex items-center gap-5 mt-2.5 flex-wrap">
+                    <span className="flex items-center gap-1.5 text-xs text-white/60">
+                      <Users className="h-3 w-3 text-emerald-400" />
+                      <span className="font-semibold text-white tabular-nums">{fmt(status.channel.subscriberCount)}</span>
+                      <span>subscribers</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-white/60">
+                      <Eye className="h-3 w-3 text-red-400" />
+                      <span className="font-semibold text-white tabular-nums">{fmt(status.channel.viewCount)}</span>
+                      <span>total views</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-white/60">
+                      <Video className="h-3 w-3 text-blue-400" />
+                      <span className="font-semibold text-white tabular-nums">{fmt(status.channel.videoCount)}</span>
+                      <span>videos</span>
+                    </span>
+                    <a href={`https://youtube.com/channel/${status.channel.id}`} target="_blank" rel="noopener noreferrer"
+                      className="text-white/30 hover:text-white/60 transition-colors" data-testid="link-youtube-channel">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
                 )}
               </div>
             </div>
+
+            {/* Actions */}
             {connected && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {status?.isAdmin && (
                   <Button size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10"
                     onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending}
@@ -1934,6 +1993,7 @@ export default function AnalyticsYouTubePage() {
           </div>
         </div>
       </div>
+      {/* ─────────────────────────────────────────────────────────────────── */}
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
 
@@ -1960,33 +2020,6 @@ export default function AnalyticsYouTubePage() {
         {connected && status?.channel && (
           <div className="space-y-6">
 
-            {/* Channel card */}
-            <Card className="border-border bg-card overflow-hidden">
-              <div className="h-1 w-full bg-gradient-to-r from-red-500 to-rose-600" />
-              <CardContent className="p-5 flex items-center gap-4">
-                {status.channel.thumbnail ? (
-                  <img src={status.channel.thumbnail} alt={status.channel.title} loading="lazy"
-                    className="w-14 h-14 rounded-full object-cover ring-2 ring-red-500/30" />
-                ) : (
-                  <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center">
-                    <Youtube className="h-7 w-7 text-red-500" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-bold text-foreground truncate">{status.channel.title}</h2>
-                  {status.channel.handle && <p className="text-sm text-muted-foreground">@{status.channel.handle.replace(/^@/, "")}</p>}
-                  <div className="flex flex-wrap gap-4 mt-1.5">
-                    <span className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{fmt(status.channel.subscriberCount)}</span> subscribers</span>
-                    <span className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{fmt(status.channel.viewCount)}</span> total views</span>
-                    <span className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{fmt(status.channel.videoCount)}</span> videos</span>
-                  </div>
-                </div>
-                <a href={`https://youtube.com/channel/${status.channel.id}`} target="_blank" rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-youtube-channel">
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </CardContent>
-            </Card>
 
             {/* Tab bar + period selector */}
             <div className="flex items-center justify-between flex-wrap gap-3">
@@ -2021,26 +2054,6 @@ export default function AnalyticsYouTubePage() {
             {/* ═══════════════════ OVERVIEW TAB ═══════════════════ */}
             {tab === "overview" && (
               <div className="space-y-5">
-
-                {/* ── All-time hero ── */}
-                <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-white/10">
-                  <div className="px-6 pt-5 pb-1">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-white/40">Channel Totals — All Time</p>
-                  </div>
-                  <div className="grid grid-cols-3 divide-x divide-white/10">
-                    {[
-                      { label: "Subscribers", value: fmt(status.channel.subscriberCount), icon: Users, color: "text-emerald-400" },
-                      { label: "Total Views", value: fmt(status.channel.viewCount), icon: Eye, color: "text-red-400" },
-                      { label: "Videos", value: fmt(status.channel.videoCount), icon: Video, color: "text-blue-400" },
-                    ].map(({ label, value, icon: Icon, color }) => (
-                      <div key={label} className="px-6 py-5 text-center">
-                        <Icon className={`h-5 w-5 ${color} mx-auto mb-2 opacity-80`} />
-                        <p className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-none">{value}</p>
-                        <p className="text-xs text-white/40 mt-1.5 font-medium">{label}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
 
                 {/* ── Period KPI ribbon ── */}
                 <div>
