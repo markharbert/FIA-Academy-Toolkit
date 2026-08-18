@@ -935,6 +935,8 @@ export default function SwipeFilePage() {
   const [previewItem, setPreviewItem] = useState<SwipeItem | null>(null);
   const [typeFilter, setTypeFilter] = useState<"all" | "upload" | "snippet">("all");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 30;
 
   const { data, isLoading } = useQuery<{ items: SwipeItem[] }>({
     queryKey: ["/api/swipe"],
@@ -970,7 +972,13 @@ export default function SwipeFilePage() {
     return true;
   });
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const sharedCount = items.filter(i => !!i.shareToken).length;
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => { setPage(1); }, [search, typeFilter]);
 
   // Keep previewItem in sync with updated data (e.g. after share mutation)
   const livePreviewItem = previewItem
@@ -1100,17 +1108,79 @@ export default function SwipeFilePage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {filtered.map(item => (
-                  <SwipeCard
-                    key={item.id}
-                    item={item}
-                    onPreview={() => setPreviewItem(item)}
-                    onEdit={() => setEditItem(item)}
-                    onDelete={() => setDeleteItem(item)}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {paginated.map(item => (
+                    <SwipeCard
+                      key={item.id}
+                      item={item}
+                      onPreview={() => setPreviewItem(item)}
+                      onEdit={() => setEditItem(item)}
+                      onDelete={() => setDeleteItem(item)}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-8">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="gap-1.5"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                    </Button>
+
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
+                        const isActive = p === page;
+                        const nearCurrent = Math.abs(p - page) <= 2;
+                        const isEdge = p === 1 || p === totalPages;
+                        if (!nearCurrent && !isEdge) {
+                          // Show ellipsis at the boundary positions
+                          if (p === page - 3 || p === page + 3) {
+                            return <span key={p} className="px-1 text-muted-foreground text-sm">…</span>;
+                          }
+                          return null;
+                        }
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => setPage(p)}
+                            className={`h-8 w-8 rounded-md text-sm font-medium transition-colors ${
+                              isActive
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      className="gap-1.5"
+                    >
+                      Next <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
+
+                {/* Item count */}
+                {totalPages > 1 && (
+                  <p className="text-center text-xs text-muted-foreground pt-2 pb-4">
+                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} items
+                  </p>
+                )}
+              </>
             )}
           </div>
         </TabsContent>
