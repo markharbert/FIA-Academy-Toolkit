@@ -398,19 +398,107 @@ export default function AnalyticsGscPage() {
 
         {/* ── Not connected ── */}
         {!status?.connected && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-20 h-20 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-5">
-              <Globe className="h-10 w-10 text-blue-500" />
+          <div className="max-w-2xl mx-auto py-10 space-y-8">
+
+            {/* Hero */}
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 rounded-2xl bg-blue-500/10 ring-1 ring-blue-400/20 flex items-center justify-center mb-4">
+                <Globe className="h-8 w-8 text-blue-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-foreground mb-2">Connect Google Search Console</h2>
+              <p className="text-muted-foreground text-sm max-w-lg leading-relaxed">
+                See exactly what people are searching to find your site, how you rank on Google, and how your traffic is trending — all without leaving the Toolkit. Follow the steps below to get set up.
+              </p>
             </div>
-            <h2 className="text-xl font-bold text-foreground mb-2">Connect Google Search Console</h2>
-            <p className="text-muted-foreground text-sm max-w-md mb-8 leading-relaxed">
-              See exactly what people are searching to find your website, how you rank, and how traffic is trending — all in one place.
-            </p>
-            <Button className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:opacity-90 px-6"
-              onClick={() => { window.location.href = "/api/analytics/gsc/connect"; }} data-testid="button-connect-gsc">
-              <Globe className="h-4 w-4 mr-2" />Connect Search Console
-            </Button>
-            <p className="text-xs text-muted-foreground mt-4 opacity-60">Read-only access — we never modify your data.</p>
+
+            {/* Steps */}
+            <div className="space-y-4">
+
+              {/* Step 1 */}
+              <div className="rounded-xl border border-border bg-card p-5 flex gap-4">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-blue-500/15 text-blue-400 text-sm font-bold flex items-center justify-center ring-1 ring-blue-400/25">1</div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Sign in to Google Search Console</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Open <a href="https://search.google.com/search-console" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline font-medium">search.google.com/search-console</a> in a new tab. Sign in with the Google account that owns (or has admin access to) your website. If you don't have a Google account yet, create one for free at <a href="https://accounts.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline font-medium">accounts.google.com</a>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="rounded-xl border border-border bg-card p-5 flex gap-4">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-blue-500/15 text-blue-400 text-sm font-bold flex items-center justify-center ring-1 ring-blue-400/25">2</div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Add your website as a property</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Click <span className="font-medium text-foreground">+ Add property</span> in the left sidebar. Choose <span className="font-medium text-foreground">URL prefix</span> and enter your full website address exactly as it appears in the browser bar (e.g. <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">https://yourwebsite.com</span>). Make sure to include <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">https://</span> — the address must match your actual site URL including any trailing slash or lack thereof.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="rounded-xl border border-border bg-card p-5 flex gap-4">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-blue-500/15 text-blue-400 text-sm font-bold flex items-center justify-center ring-1 ring-blue-400/25">3</div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Verify that you own the site</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+                    Google needs to confirm you control the website before it shares data with you. Pick whichever verification method works best for your setup:
+                  </p>
+                  <div className="space-y-2.5">
+                    {[
+                      { label: "HTML file upload (easiest)", desc: "Download the small HTML file Google provides, then upload it to your website's root folder using your hosting control panel or FTP. Once the file is live at the URL Google shows you, click Verify." },
+                      { label: "HTML meta tag", desc: "Copy the <meta> tag Google gives you and paste it into the <head> section of your homepage's HTML — before the </head> closing tag. Then click Verify. If you use WordPress, paste it using a plugin like Insert Headers and Footers." },
+                      { label: "Google Analytics (fastest if already connected)", desc: "If your site already has Google Analytics installed with the same Google account, select this method and click Verify — no extra code needed." },
+                      { label: "DNS record (best for domain-wide coverage)", desc: "Log in to your domain registrar (e.g., GoDaddy, Namecheap, Cloudflare), go to the DNS settings for your domain, and add the TXT record Google provides. DNS changes can take up to 48 hours to propagate before Verify succeeds." },
+                    ].map(({ label, desc }) => (
+                      <div key={label} className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
+                        <p className="text-xs font-semibold text-foreground mb-1">{label}</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="rounded-xl border border-border bg-card p-5 flex gap-4">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-blue-500/15 text-blue-400 text-sm font-bold flex items-center justify-center ring-1 ring-blue-400/25">4</div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Wait for Google to collect data</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    After your property is verified, Google will start collecting search performance data. It typically takes <span className="font-medium text-foreground">24–72 hours</span> before you see your first clicks and impressions. Historical data from before you connected is not available — only data from the verification date onward will appear. If your site is brand new, it may also take a few weeks for Google to crawl and index enough pages for meaningful data to show up.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="rounded-xl border border-border bg-card p-5 flex gap-4">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-blue-500/15 text-blue-400 text-sm font-bold flex items-center justify-center ring-1 ring-blue-400/25">5</div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Submit your sitemap (recommended)</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    While you wait for data, go to <span className="font-medium text-foreground">Sitemaps</span> in the left sidebar of Search Console and submit your sitemap URL. Most websites have one at <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">https://yourwebsite.com/sitemap.xml</span>. If you use WordPress, plugins like Yoast SEO or Rank Math generate a sitemap automatically. Submitting a sitemap helps Google find and index your pages faster.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 6 */}
+              <div className="rounded-xl border border-border bg-card p-5 flex gap-4">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 text-sm font-bold flex items-center justify-center ring-1 ring-emerald-400/25">6</div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Connect to the Toolkit</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                    Once your property is verified in Google Search Console, come back here and click the button below. You'll be taken through a quick Google sign-in — just approve read-only access when prompted. Your data will load automatically and refresh on a 24-hour cycle.
+                  </p>
+                  <Button className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:opacity-90 px-6"
+                    onClick={() => { window.location.href = "/api/analytics/gsc/connect"; }} data-testid="button-connect-gsc">
+                    <Globe className="h-4 w-4 mr-2" />Connect Search Console
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-3 opacity-70">Read-only access — we never modify your Search Console data.</p>
+                </div>
+              </div>
+
+            </div>
           </div>
         )}
 
