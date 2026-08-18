@@ -758,8 +758,6 @@ export async function registerRoutes(
       }
     }
 
-    console.log("[Auth] /api/auth/me - user.isAdmin:", user.isAdmin, "user.role:", user.role, "user.email:", user.email);
-    
     // Compute Gravatar URL from email
     let gravatarUrl: string | null = null;
     if (user.email) {

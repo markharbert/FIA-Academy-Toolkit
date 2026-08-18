@@ -21,15 +21,41 @@ import ResetPasswordPage from "@/pages/reset-password";
  * Lazy-load a page chunk. If the chunk 404s (stale cache after a new
  * deployment), force a full page reload so the browser fetches the new
  * index.html and picks up the updated chunk hashes automatically.
+ *
+ * A sessionStorage counter caps reload attempts at 2. Combined with the
+ * server sending index.html with Cache-Control: no-cache, the first reload
+ * always fetches a fresh index.html and succeeds. The cap is a belt-and-
+ * suspenders guard so a genuinely broken build never causes an infinite loop.
  */
+const CHUNK_RELOAD_KEY = "__chunkReloadAttempts";
+
 function lazyPage<T extends React.ComponentType<any>>(
   importFn: () => Promise<{ default: T }>
 ) {
   return lazy(() =>
-    importFn().catch(() => {
-      window.location.reload();
-      return new Promise<{ default: T }>(() => {}); // reload will fire; never resolves
-    })
+    importFn()
+      .then((mod) => {
+        // Successful load — reset the counter so future navigations get a
+        // fresh allowance if they ever need it.
+        try { sessionStorage.removeItem(CHUNK_RELOAD_KEY); } catch {}
+        return mod;
+      })
+      .catch(() => {
+        try {
+          const attempts = parseInt(
+            sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? "0",
+            10
+          );
+          if (attempts < 2) {
+            sessionStorage.setItem(CHUNK_RELOAD_KEY, String(attempts + 1));
+            window.location.reload();
+            return new Promise<{ default: T }>(() => {}); // reload fires; never resolves
+          }
+          // Two reloads didn't fix it — clear and let ErrorBoundary show.
+          sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+        } catch {}
+        throw new Error("Page failed to load after multiple attempts. Please hard-refresh (Ctrl+Shift+R).");
+      })
   );
 }
 
