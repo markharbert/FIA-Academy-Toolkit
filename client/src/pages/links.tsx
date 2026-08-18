@@ -585,7 +585,7 @@ export default function LinksPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-foreground tracking-tight">
-                  Link Library
+                  Link Vault
                 </h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   All your affiliate links in one place — copy and share in seconds

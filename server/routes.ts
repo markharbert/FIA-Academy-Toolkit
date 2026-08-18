@@ -12320,7 +12320,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
 
   // ---- Account-level Promotional Links ----
 
-  // Get current user's promotional link IDs (references into their link library)
+  // Get current user's promotional link IDs (references into their link vault)
   app.get("/api/swipe/promo-links", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;

@@ -455,15 +455,15 @@ function PromoLinksTab() {
         )}
       </div>
 
-      {/* Link library picker */}
+      {/* Link vault picker */}
       <div>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
-          Your link library {availableLinks.length > 0 && `· ${availableLinks.length} available`}
+          Your link vault {availableLinks.length > 0 && `· ${availableLinks.length} available`}
         </p>
         {allLinks.length === 0 ? (
           <div className="rounded-lg border border-dashed flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
             <p className="text-sm">You don't have any links in your library yet.</p>
-            <a href="/links" className="text-primary text-sm hover:underline">Go to Link Library →</a>
+            <a href="/links" className="text-primary text-sm hover:underline">Go to Link Vault →</a>
           </div>
         ) : availableLinks.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">All active links are already on your share pages.</p>

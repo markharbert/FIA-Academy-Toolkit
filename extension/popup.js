@@ -468,7 +468,7 @@ function renderLinksList(container) {
   header.className = "links-header";
   const titleSpan = document.createElement("span");
   titleSpan.className = "links-title";
-  titleSpan.textContent = "🔗 Link Library";
+  titleSpan.textContent = "🔗 Link Vault";
   const addBtn = document.createElement("button");
   addBtn.className = "links-add-btn";
   addBtn.textContent = (linksFormOpen && !linksEditingLink) ? "✕ Cancel" : "+ Add Link";

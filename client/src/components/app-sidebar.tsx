@@ -22,7 +22,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   LayoutDashboard,
-  Wrench,
+  PlayCircle,
   Mail,
   User,
   LogOut,
@@ -111,7 +111,7 @@ const allNavItems: NavItem[] = [
   {
     title: "Video Studio",
     url: "/video-studio",
-    icon: Wrench,
+    icon: PlayCircle,
     iconColor: "text-rose-400",
     testId: "nav-video-studio",
     collaboratorVisible: false,
@@ -211,7 +211,7 @@ const allNavItems: NavItem[] = [
     subMenuBorderClass: "!border-purple-500/40",
     children: [
       {
-        title: "Link Library",
+        title: "Link Vault",
         url: "/links",
         testId: "nav-links",
         activeClass: "!bg-purple-500/10 !text-purple-200 font-medium",
