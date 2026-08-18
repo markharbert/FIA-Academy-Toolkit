@@ -6134,7 +6134,7 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
         actionLabel: ActionLabels.dmo_logged,
         entityType: "dmo",
         entityId: date,
-        metadata: { date, streak: streak.currentStreak },
+        metadata: { date, streak: streak.current },
         req,
       });
     } catch (err) {

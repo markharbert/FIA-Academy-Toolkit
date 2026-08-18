@@ -865,6 +865,17 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE swipe_items ADD COLUMN IF NOT EXISTS strips JSONB`);
     console.log("[startup] swipe_items strips column migration complete");
 
+    // DMO streak aggregate cache columns (added for O(1) reads)
+    await db.execute(sql`
+      ALTER TABLE dmo_settings
+        ADD COLUMN IF NOT EXISTS streak_current integer,
+        ADD COLUMN IF NOT EXISTS streak_best integer,
+        ADD COLUMN IF NOT EXISTS streak_total_days integer,
+        ADD COLUMN IF NOT EXISTS streak_last_active_date varchar(10),
+        ADD COLUMN IF NOT EXISTS streak_updated_at timestamp
+    `);
+    console.log("[startup] dmo_settings streak cache columns migration complete");
+
   } catch (err) {
     console.error("[startup] migration error:", err);
   }
@@ -921,6 +932,37 @@ async function runStartupMigrations() {
       // Start email notification scheduler
       startNotificationScheduler();
       startYouTubeAnalyticsScheduler();
+
+      // Backfill DMO streak cache for existing users who have never had it computed.
+      // Runs in the background so it doesn't delay server startup.
+      (async () => {
+        try {
+          const { pool: pgPool } = await import("./db");
+          // Find users with dmo_entries but no streak cache yet
+          const result = await pgPool.query(`
+            SELECT DISTINCT e.user_id
+            FROM dmo_entries e
+            LEFT JOIN dmo_settings s ON s.user_id = e.user_id
+            WHERE s.streak_updated_at IS NULL
+          `);
+          const userIds: string[] = result.rows.map((r: any) => r.user_id);
+          if (userIds.length === 0) {
+            console.log("[DMO] Streak cache: all users already up to date");
+            return;
+          }
+          console.log(`[DMO] Backfilling streak cache for ${userIds.length} user(s)…`);
+          for (const uid of userIds) {
+            try {
+              await storage.recomputeAndStoreDmoStreak(uid);
+            } catch (e: any) {
+              console.warn(`[DMO] Backfill failed for user ${uid}:`, e?.message);
+            }
+          }
+          console.log("[DMO] Streak cache backfill complete");
+        } catch (e: any) {
+          console.warn("[DMO] Streak cache backfill error:", e?.message);
+        }
+      })();
 
     },
   );

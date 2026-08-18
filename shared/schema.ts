@@ -1092,6 +1092,12 @@ export const dmoSettings = pgTable("dmo_settings", {
   expandTarget: integer("expand_target").default(60).notNull(),
   executionTarget: integer("execution_target").default(60).notNull(),
   connectingTarget: integer("connecting_target").default(60).notNull(),
+  // Streak aggregate cache — updated on each DMO entry save so reads are O(1)
+  streakCurrent: integer("streak_current"),
+  streakBest: integer("streak_best"),
+  streakTotalDays: integer("streak_total_days"),
+  streakLastActiveDate: varchar("streak_last_active_date", { length: 10 }),
+  streakUpdatedAt: timestamp("streak_updated_at"),
 });
 
 export type DmoSettings = typeof dmoSettings.$inferSelect;

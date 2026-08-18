@@ -2509,18 +2509,134 @@ export class DatabaseStorage implements IStorage {
   async upsertDmoEntry(userId: string, date: string, data: DmoEntryData): Promise<DmoEntry> {
     const now = new Date();
     const existing = await this.getDmoEntry(userId, date);
+    let entry: DmoEntry;
     if (existing) {
       const [updated] = await db.update(dmoEntries)
         .set({ ...data, updatedAt: now })
         .where(and(eq(dmoEntries.userId, userId), eq(dmoEntries.date, date)))
         .returning();
-      return updated;
+      entry = updated;
     } else {
       const [created] = await db.insert(dmoEntries)
         .values({ userId, date, ...data, createdAt: now, updatedAt: now })
         .returning();
-      return created;
+      entry = created;
     }
+    // Recompute and persist the streak aggregate so the caller's immediate
+    // getDmoStreak read sees a fresh value.  Must be awaited here.
+    await this.recomputeAndStoreDmoStreak(userId);
+    return entry;
+  }
+
+  /**
+   * Recomputes the streak aggregate for a user and stores it in dmo_settings.
+   * Called after every DMO entry save so getDmoStreak() can serve cached values.
+   */
+  async recomputeAndStoreDmoStreak(userId: string): Promise<void> {
+    // Record the timestamp before querying so the staleness guard in
+    // _storeDmoStreakCache correctly orders concurrent recomputes.
+    const computedAt = new Date();
+
+    const user = await this.getUser(userId);
+    const tz = safeTimezone(user?.timezone);
+    const today = todayKeyInTz(tz);
+    const yesterday = addDaysToKey(today, -1);
+
+    // totalDays: fast indexed COUNT
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(dmoEntries)
+      .where(and(
+        eq(dmoEntries.userId, userId),
+        sql`(${dmoEntries.visionMeditation} OR ${dmoEntries.personalDevelopment} OR ${dmoEntries.expandSkills} OR ${dmoEntries.execution} OR ${dmoEntries.connecting})`
+      ));
+    const totalDays = Number(total);
+
+    if (totalDays === 0) {
+      await this._storeDmoStreakCache(userId, { current: 0, best: 0, totalDays: 0, lastActiveDate: null }, computedAt);
+      return;
+    }
+
+    // Fetch all qualifying dates (ordered desc) to compute current + best streak.
+    // This is still O(history) but only happens on writes, not on every page read.
+    const rows = await db
+      .select({ date: dmoEntries.date })
+      .from(dmoEntries)
+      .where(and(
+        eq(dmoEntries.userId, userId),
+        sql`(${dmoEntries.visionMeditation} OR ${dmoEntries.personalDevelopment} OR ${dmoEntries.expandSkills} OR ${dmoEntries.execution} OR ${dmoEntries.connecting})`
+      ))
+      .orderBy(desc(dmoEntries.date));
+
+    const dates = rows.map(r => r.date); // already sorted desc
+
+    // Current streak: walk back from today
+    let current = 0;
+    const startDate = dates[0] === today || dates[0] === yesterday ? dates[0] : null;
+    if (startDate) {
+      const dateSet = new Set(dates);
+      let cursor = startDate;
+      while (dateSet.has(cursor)) {
+        current++;
+        cursor = addDaysToKey(cursor, -1);
+      }
+    }
+
+    // Best streak: single pass over sorted dates
+    let best = 0;
+    let run = 1;
+    for (let i = 1; i < dates.length; i++) {
+      const diff = (new Date(dates[i - 1]).getTime() - new Date(dates[i]).getTime()) / 86400000;
+      if (Math.round(diff) === 1) {
+        run++;
+        if (run > best) best = run;
+      } else {
+        run = 1;
+      }
+    }
+    best = Math.max(best, current, 1);
+
+    await this._storeDmoStreakCache(userId, {
+      current,
+      best,
+      totalDays,
+      lastActiveDate: dates[0] ?? null,
+    }, computedAt);
+  }
+
+  private async _storeDmoStreakCache(
+    userId: string,
+    streak: { current: number; best: number; totalDays: number; lastActiveDate: string | null },
+    computedAt: Date
+  ): Promise<void> {
+    const defaults = { userId, visionTarget: 30, personalTarget: 30, expandTarget: 60, executionTarget: 60, connectingTarget: 60 };
+    const cacheFields = {
+      streakCurrent: streak.current,
+      streakBest: streak.best,
+      streakTotalDays: streak.totalDays,
+      streakLastActiveDate: streak.lastActiveDate,
+      streakUpdatedAt: computedAt,
+    };
+    // INSERT … ON CONFLICT: only overwrite an existing cache row when our snapshot
+    // is newer than what is already stored, preventing a slow concurrent recompute
+    // from clobbering a more-recent result.
+    await db
+      .insert(dmoSettings)
+      .values({ ...defaults, ...cacheFields })
+      .onConflictDoUpdate({
+        target: dmoSettings.userId,
+        set: {
+          ...cacheFields,
+          // The WHERE clause on onConflictDoUpdate is not yet supported by all
+          // Drizzle versions, so we fall back to a raw SQL conditional expression
+          // embedded in the SET clause using CASE to act as a no-op when stale.
+          streakCurrent: sql`CASE WHEN dmo_settings.streak_updated_at IS NULL OR dmo_settings.streak_updated_at <= ${computedAt} THEN ${streak.current} ELSE dmo_settings.streak_current END`,
+          streakBest: sql`CASE WHEN dmo_settings.streak_updated_at IS NULL OR dmo_settings.streak_updated_at <= ${computedAt} THEN ${streak.best} ELSE dmo_settings.streak_best END`,
+          streakTotalDays: sql`CASE WHEN dmo_settings.streak_updated_at IS NULL OR dmo_settings.streak_updated_at <= ${computedAt} THEN ${streak.totalDays} ELSE dmo_settings.streak_total_days END`,
+          streakLastActiveDate: sql`CASE WHEN dmo_settings.streak_updated_at IS NULL OR dmo_settings.streak_updated_at <= ${computedAt} THEN ${streak.lastActiveDate} ELSE dmo_settings.streak_last_active_date END`,
+          streakUpdatedAt: sql`CASE WHEN dmo_settings.streak_updated_at IS NULL OR dmo_settings.streak_updated_at <= ${computedAt} THEN ${computedAt} ELSE dmo_settings.streak_updated_at END`,
+        },
+      });
   }
 
   async updateDmoNotes(userId: string, date: string, notes: string): Promise<DmoEntry | null> {
@@ -2539,56 +2655,75 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDmoStreak(userId: string): Promise<{ current: number; best: number; totalDays: number }> {
-    const entries = await db.select({ date: dmoEntries.date })
-      .from(dmoEntries)
-      .where(and(
-        eq(dmoEntries.userId, userId),
-        sql`(${dmoEntries.visionMeditation} OR ${dmoEntries.personalDevelopment} OR ${dmoEntries.expandSkills} OR ${dmoEntries.execution} OR ${dmoEntries.connecting})`
-      ))
-      .orderBy(desc(dmoEntries.date));
+    // Read from the pre-computed aggregate stored in dmo_settings (O(1) PK lookup).
+    // If the cache is not yet populated (first call for a legacy user), fall back
+    // to a full recompute and persist the result for future reads.
+    const rows = await db
+      .select({
+        streakCurrent: dmoSettings.streakCurrent,
+        streakBest: dmoSettings.streakBest,
+        streakTotalDays: dmoSettings.streakTotalDays,
+        streakLastActiveDate: dmoSettings.streakLastActiveDate,
+        streakUpdatedAt: dmoSettings.streakUpdatedAt,
+      })
+      .from(dmoSettings)
+      .where(eq(dmoSettings.userId, userId));
 
-    if (entries.length === 0) return { current: 0, best: 0, totalDays: 0 };
+    const cached = rows[0];
 
-    const dates = entries.map(e => e.date).sort().reverse();
-    const totalDays = dates.length;
+    // Cache hit: streakUpdatedAt is set, meaning the aggregate has been written at least once.
+    if (cached?.streakUpdatedAt !== null && cached?.streakUpdatedAt !== undefined) {
+      // The cache stores the streak relative to the date it was last saved.
+      // If the most recent active date is today or yesterday (user's tz), the
+      // cached current streak is still valid.  Otherwise the streak has lapsed
+      // to 0 since the cache was written (a new day passed without a DMO).
+      const user = await this.getUser(userId);
+      const tz = safeTimezone(user?.timezone);
+      const today = todayKeyInTz(tz);
+      const yesterday = addDaysToKey(today, -1);
+      const lastActive = cached.streakLastActiveDate;
+      const currentStreak =
+        lastActive === today || lastActive === yesterday
+          ? (cached.streakCurrent ?? 0)
+          : 0;
 
-    // Resolve "today" / "yesterday" in the user's timezone so the streak doesn't
-    // flip a day at UTC midnight for users far from UTC.
-    const user = await this.getUser(userId);
-    const tz = safeTimezone(user?.timezone);
-    const today = todayKeyInTz(tz);
-    const yesterday = addDaysToKey(today, -1);
-
-    // Calculate current streak
-    let current = 0;
-    let checkDate = dates[0] === today || dates[0] === yesterday ? dates[0] : null;
-
-    if (checkDate) {
-      const dateSet = new Set(dates);
-      let cursor = checkDate;
-      while (dateSet.has(cursor)) {
-        current++;
-        cursor = addDaysToKey(cursor, -1);
-      }
+      return {
+        current: currentStreak,
+        best: cached.streakBest ?? 0,
+        totalDays: cached.streakTotalDays ?? 0,
+      };
     }
 
-    // Calculate best streak
-    let best = 0;
-    let streak = 1;
-    for (let i = 1; i < dates.length; i++) {
-      const prev = new Date(dates[i - 1]);
-      const curr = new Date(dates[i]);
-      const diff = (prev.getTime() - curr.getTime()) / 86400000;
-      if (Math.round(diff) === 1) {
-        streak++;
-        best = Math.max(best, streak);
-      } else {
-        streak = 1;
-      }
-    }
-    best = Math.max(best, current, 1);
+    // Cache miss (legacy user without a cache yet): compute and store, then return.
+    await this.recomputeAndStoreDmoStreak(userId);
+    // Re-read the freshly written values.
+    const fresh = await db
+      .select({
+        streakCurrent: dmoSettings.streakCurrent,
+        streakBest: dmoSettings.streakBest,
+        streakTotalDays: dmoSettings.streakTotalDays,
+        streakLastActiveDate: dmoSettings.streakLastActiveDate,
+      })
+      .from(dmoSettings)
+      .where(eq(dmoSettings.userId, userId));
+    const f = fresh[0];
+    if (!f) return { current: 0, best: 0, totalDays: 0 };
 
-    return { current, best, totalDays };
+    const user2 = await this.getUser(userId);
+    const tz2 = safeTimezone(user2?.timezone);
+    const today2 = todayKeyInTz(tz2);
+    const yesterday2 = addDaysToKey(today2, -1);
+    const lastActive2 = f.streakLastActiveDate;
+    const currentStreak2 =
+      lastActive2 === today2 || lastActive2 === yesterday2
+        ? (f.streakCurrent ?? 0)
+        : 0;
+
+    return {
+      current: currentStreak2,
+      best: f.streakBest ?? 0,
+      totalDays: f.streakTotalDays ?? 0,
+    };
   }
 
   async getDmoSummary(userId: string, period: string) {
