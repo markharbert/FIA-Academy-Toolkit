@@ -9,7 +9,7 @@ import {
   Camera, FileText, Plus, Copy, Share2, Trash2, Edit3,
   ExternalLink, Eye, EyeOff, Link2, X, Check, Upload,
   Image as ImageIcon, Loader2, Globe, Scroll, ChevronLeft, ChevronRight,
-  ZoomIn,
+  ZoomIn, Heart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,7 @@ type SwipeItem = {
   notes: string | null;
   shareToken: string | null;
   viewCount: number;
+  isFavorite: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -465,6 +466,12 @@ function PreviewModal({
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const favoriteMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/swipe/${item.id}/favorite`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/swipe"] }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   function copyLink(token?: string) {
     const t = token ?? item.shareToken;
     if (!t) return;
@@ -714,6 +721,25 @@ function PreviewModal({
 
           {/* Actions */}
           <div className="px-3 py-2.5 md:p-4 space-y-2 border-t shrink-0" style={{ borderColor: "hsl(230,40%,18%)" }}>
+            {/* Favorite */}
+            <Button
+              size="sm"
+              className={`w-full gap-1.5 transition-colors ${
+                item.isFavorite
+                  ? "bg-rose-600 hover:bg-rose-700 border-transparent text-white"
+                  : ""
+              }`}
+              variant={item.isFavorite ? "default" : "outline"}
+              style={item.isFavorite ? {} : { borderColor: "hsl(230,40%,25%)", color: "hsl(0,0%,70%)" }}
+              onClick={() => favoriteMutation.mutate()}
+              disabled={favoriteMutation.isPending}
+            >
+              {favoriteMutation.isPending
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Heart className={`h-3.5 w-3.5 ${item.isFavorite ? "fill-current" : ""}`} />}
+              {item.isFavorite ? "Saved to Favorites" : "Add to Favorites"}
+            </Button>
+
             {/* Share / Copy */}
             {item.shareToken ? (
               <div className="flex gap-2">
@@ -985,6 +1011,12 @@ function SwipeCard({
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const favoriteMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/swipe/${item.id}/favorite`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/swipe"] }),
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   function copyLink(token?: string) {
     const t = token ?? item.shareToken;
     if (!t) return;
@@ -1025,11 +1057,28 @@ function SwipeCard({
           </div>
         )}
 
-        {/* Hover overlay — preview hint */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors duration-200 flex items-center justify-center pointer-events-none">
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/90 dark:bg-white/80 rounded-full p-2.5 shadow-xl">
+        {/* Hover backdrop */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-colors duration-200 pointer-events-none" />
+
+        {/* Hover actions — preview + favorite */}
+        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
+          {/* Preview — inherits card click */}
+          <div className="bg-white/90 dark:bg-white/80 rounded-full p-2.5 shadow-xl pointer-events-none">
             <ZoomIn className="h-4 w-4 text-slate-800" />
           </div>
+          {/* Favorite — stops propagation */}
+          <button
+            className={`rounded-full p-2.5 shadow-xl transition-colors ${
+              item.isFavorite
+                ? "bg-rose-500 text-white"
+                : "bg-white/90 dark:bg-white/80 text-slate-600 hover:bg-rose-100 hover:text-rose-500"
+            }`}
+            title={item.isFavorite ? "Remove from favorites" : "Add to favorites"}
+            onClick={e => { e.stopPropagation(); favoriteMutation.mutate(); }}
+            disabled={favoriteMutation.isPending}
+          >
+            <Heart className={`h-4 w-4 ${item.isFavorite ? "fill-current" : ""}`} />
+          </button>
         </div>
 
         {/* Type chip */}
@@ -1060,6 +1109,19 @@ function SwipeCard({
           </span>
           {/* Micro-action icons — stop click from opening preview */}
           <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+            {/* Favorite */}
+            <button
+              className={`p-1.5 rounded-md transition-colors ${
+                item.isFavorite
+                  ? "text-rose-500"
+                  : "text-muted-foreground hover:bg-muted hover:text-rose-500"
+              }`}
+              title={item.isFavorite ? "Remove from favorites" : "Add to favorites"}
+              onClick={() => favoriteMutation.mutate()}
+              disabled={favoriteMutation.isPending}
+            >
+              <Heart className={`h-3 w-3 ${item.isFavorite ? "fill-current" : ""}`} />
+            </button>
             {item.shareToken ? (
               <button
                 className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
@@ -1125,7 +1187,7 @@ export default function SwipeFilePage() {
   type SwipePage = {
     items: SwipeItem[];
     total: number;
-    counts: { all: number; upload: number; snippet: number; shared: number };
+    counts: { all: number; upload: number; snippet: number; shared: number; favorites: number };
   };
 
   const {
@@ -1135,11 +1197,12 @@ export default function SwipeFilePage() {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery<SwipePage, Error, { pages: SwipePage[]; pageParams: number[] }, string[], number>({
-    queryKey: ["/api/swipe", debouncedSearch, typeFilter],
+    queryKey: ["/api/swipe", debouncedSearch, typeFilter, activeTab],
     queryFn: ({ pageParam }) => {
       const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(pageParam) });
       if (debouncedSearch) p.set("search", debouncedSearch);
       if (typeFilter !== "all") p.set("type", typeFilter);
+      if (activeTab === "favorites") p.set("favorite", "true");
       return apiFetch(`/api/swipe?${p}`);
     },
     getNextPageParam: (_lastPage, allPages) => {
@@ -1170,7 +1233,7 @@ export default function SwipeFilePage() {
   // Flatten all loaded pages into a single item list
   const items = data?.pages.flatMap(pg => pg.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
-  const counts = data?.pages[0]?.counts ?? { all: 0, upload: 0, snippet: 0, shared: 0 };
+  const counts = data?.pages[0]?.counts ?? { all: 0, upload: 0, snippet: 0, shared: 0, favorites: 0 };
 
   // Keep previewItem in sync with updated data (e.g. after share mutation)
   const livePreviewItem = previewItem
@@ -1215,6 +1278,7 @@ export default function SwipeFilePage() {
               { label: "Total Items", value: counts.all },
               { label: "Images", value: counts.upload },
               { label: "Snippets", value: counts.snippet },
+              { label: "Favorites", value: counts.favorites },
               { label: "Shared", value: counts.shared, highlight: true },
             ].map(s => (
               <div key={s.label}>
@@ -1236,6 +1300,17 @@ export default function SwipeFilePage() {
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium gap-2"
               >
                 <Camera className="h-4 w-4" /> Swipe File
+              </TabsTrigger>
+              <TabsTrigger
+                value="favorites"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-rose-500 data-[state=active]:bg-transparent px-4 py-3 font-medium gap-2"
+              >
+                <Heart className="h-4 w-4" /> Favorites
+                {counts.favorites > 0 && (
+                  <span className="ml-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 text-[10px] font-semibold px-1.5 py-0.5 leading-none">
+                    {counts.favorites}
+                  </span>
+                )}
               </TabsTrigger>
               <TabsTrigger
                 value="promo"
@@ -1296,6 +1371,93 @@ export default function SwipeFilePage() {
                 {counts.all === 0 && (
                   <Button onClick={() => setAddOpen(true)} className="mt-2 gap-2">
                     <Plus className="h-4 w-4" /> Add Your First Item
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {items.map(item => (
+                    <SwipeCard
+                      key={item.id}
+                      item={item}
+                      onPreview={() => setPreviewItem(item)}
+                      onEdit={() => setEditItem(item)}
+                      onDelete={() => setDeleteItem(item)}
+                    />
+                  ))}
+                </div>
+
+                {/* Load more */}
+                {hasNextPage && (
+                  <div className="flex flex-col items-center gap-2 pt-8 pb-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                      className="gap-2"
+                    >
+                      {isFetchingNextPage
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Loading…</>
+                        : <>Load more · {total - items.length} remaining</>}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Showing {items.length} of {total}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Favorites Tab */}
+        <TabsContent value="favorites" className="mt-0 focus-visible:outline-none">
+          {/* Toolbar */}
+          <div className="max-w-6xl mx-auto px-6 py-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Input
+                placeholder="Search favorites…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="max-w-xs"
+              />
+              <div className="flex gap-1">
+                {(["all", "upload", "snippet"] as const).map(f => (
+                  <Button key={f} size="sm" variant={typeFilter === f ? "default" : "outline"}
+                    onClick={() => setTypeFilter(f)} className="gap-1.5">
+                    {f === "all" ? "All" : f === "upload" ? <><Camera className="h-3.5 w-3.5" />Images</> : <><FileText className="h-3.5 w-3.5" />Snippets</>}
+                  </Button>
+                ))}
+              </div>
+              {total > 0 && (
+                <span className="text-sm text-muted-foreground ml-auto">
+                  {total} favorite{total !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Favorites Grid */}
+          <div className="max-w-6xl mx-auto px-6 pb-12">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
+                <div className="rounded-full bg-rose-500/10 p-5">
+                  <Heart className="h-10 w-10 text-rose-400/60" />
+                </div>
+                <h3 className="font-semibold text-lg">No favorites yet</h3>
+                <p className="text-muted-foreground text-sm max-w-sm">
+                  {debouncedSearch || typeFilter !== "all"
+                    ? "No favorites match your current filters."
+                    : "Hover over any item in your Swipe File and click the heart icon to save it here for quick access."}
+                </p>
+                {!debouncedSearch && typeFilter === "all" && (
+                  <Button variant="outline" className="mt-2 gap-2" onClick={() => setActiveTab("swipe")}>
+                    <Camera className="h-4 w-4" /> Browse Swipe File
                   </Button>
                 )}
               </div>

@@ -12288,10 +12288,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   app.get("/api/swipe", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const { search, type, limit = "60", offset = "0" } = req.query as Record<string, string>;
+      const { search, type, favorite, limit = "60", offset = "0" } = req.query as Record<string, string>;
       const result = await storage.getSwipeItems(userId, {
         search: search || undefined,
         type: type || undefined,
+        favorite: favorite === "true",
         limit: Math.min(parseInt(limit, 10) || 60, 200),
         offset: parseInt(offset, 10) || 0,
       });
@@ -12415,6 +12416,19 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (err) {
       console.error("[swipe] unshare error:", err);
       res.status(500).json({ message: "Failed to revoke share link" });
+    }
+  });
+
+  // Toggle favorite
+  app.post("/api/swipe/:id/favorite", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const item = await storage.toggleSwipeFavorite(req.params.id, userId);
+      if (!item) return res.status(404).json({ message: "Not found" });
+      res.json({ item });
+    } catch (err) {
+      console.error("[swipe] favorite error:", err);
+      res.status(500).json({ message: "Failed to update favorite" });
     }
   });
 

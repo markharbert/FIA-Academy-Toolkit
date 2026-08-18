@@ -882,6 +882,9 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS fia_affiliate_link TEXT`);
     console.log("[startup] users fia_affiliate_link migration complete");
 
+    await db.execute(sql`ALTER TABLE swipe_items ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN NOT NULL DEFAULT FALSE`);
+    console.log("[startup] swipe_items is_favorite migration complete");
+
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

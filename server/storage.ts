@@ -5317,14 +5317,17 @@ export class DatabaseStorage implements IStorage {
 
   async getSwipeItems(
     userId: string,
-    opts?: { search?: string; type?: string; limit?: number; offset?: number },
+    opts?: { search?: string; type?: string; favorite?: boolean; limit?: number; offset?: number },
   ): Promise<{
     items: SwipeItem[];
     total: number;
-    counts: { all: number; upload: number; snippet: number; shared: number };
+    counts: { all: number; upload: number; snippet: number; shared: number; favorites: number };
   }> {
     // Build filtered WHERE clause
     const filterConditions: any[] = [eq(swipeItems.userId, userId)];
+    if (opts?.favorite) {
+      filterConditions.push(eq(swipeItems.isFavorite, true));
+    }
     if (opts?.type && opts.type !== "all") {
       filterConditions.push(eq(swipeItems.type, opts.type));
     }
@@ -5343,8 +5346,8 @@ export class DatabaseStorage implements IStorage {
     const lim = Math.min(opts?.limit ?? 60, 200);
     const off = opts?.offset ?? 0;
 
-    // Run item page + filtered count + type breakdown in parallel
-    const [items, [{ total }], breakdown] = await Promise.all([
+    // Run item page + filtered count + type breakdown + shared/favorites counts in parallel
+    const [items, [{ total }], breakdown, [{ shared }], [{ favorites }]] = await Promise.all([
       db.select().from(swipeItems)
         .where(where)
         .orderBy(desc(swipeItems.createdAt))
@@ -5355,16 +5358,17 @@ export class DatabaseStorage implements IStorage {
         .from(swipeItems)
         .where(eq(swipeItems.userId, userId))
         .groupBy(swipeItems.type),
+      // count(col) ignores NULLs — gives share_token IS NOT NULL count
+      db.select({ shared: sql<number>`cast(count(${swipeItems.shareToken}) as int)` })
+        .from(swipeItems)
+        .where(eq(swipeItems.userId, userId)),
+      db.select({ favorites: count() })
+        .from(swipeItems)
+        .where(and(eq(swipeItems.userId, userId), eq(swipeItems.isFavorite, true))),
     ]);
 
     const uploadCount = Number(breakdown.find(r => r.type === "upload")?.n ?? 0);
     const snippetCount = Number(breakdown.find(r => r.type === "snippet")?.n ?? 0);
-
-    // count(col) ignores NULLs — gives us share_token IS NOT NULL count
-    const [{ shared }] = await db
-      .select({ shared: sql<number>`cast(count(${swipeItems.shareToken}) as int)` })
-      .from(swipeItems)
-      .where(eq(swipeItems.userId, userId));
 
     return {
       items,
@@ -5374,8 +5378,21 @@ export class DatabaseStorage implements IStorage {
         upload: uploadCount,
         snippet: snippetCount,
         shared: Number(shared),
+        favorites: Number(favorites),
       },
     };
+  }
+
+  async toggleSwipeFavorite(id: string, userId: string): Promise<SwipeItem | undefined> {
+    const [current] = await db.select({ isFavorite: swipeItems.isFavorite })
+      .from(swipeItems)
+      .where(and(eq(swipeItems.id, id), eq(swipeItems.userId, userId)));
+    if (!current) return undefined;
+    const [updated] = await db.update(swipeItems)
+      .set({ isFavorite: !current.isFavorite, updatedAt: new Date() })
+      .where(and(eq(swipeItems.id, id), eq(swipeItems.userId, userId)))
+      .returning();
+    return updated;
   }
 
   async getSwipeItem(id: string, userId: string): Promise<SwipeItem | undefined> {

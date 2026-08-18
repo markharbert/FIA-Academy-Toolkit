@@ -2102,6 +2102,7 @@ export const swipeItems = pgTable("swipe_items", {
   strips: jsonb("strips").$type<string[]>(), // ordered GCS paths for full-page multi-strip captures
   shareToken: varchar("share_token", { length: 64 }).unique(),
   viewCount: integer("view_count").notNull().default(0),
+  isFavorite: boolean("is_favorite").notNull().default(false),
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (t) => ({
