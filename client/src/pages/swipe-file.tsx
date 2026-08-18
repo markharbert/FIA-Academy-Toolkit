@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import DOMPurify from "dompurify";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -67,6 +68,37 @@ function swipeImageUrl(id: string) {
 
 function shareUrl(token: string) {
   return `${window.location.origin}/swipe/${token}`;
+}
+
+// ---- Snippet HTML helpers ----
+const SNIPPET_ALLOWED_TAGS = [
+  "p", "br", "strong", "em", "b", "i", "u", "s", "del", "ins", "mark",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "ul", "ol", "li", "blockquote", "pre", "code",
+  "a", "img", "figure", "figcaption",
+  "table", "thead", "tbody", "tfoot", "tr", "th", "td",
+  "hr", "span", "div", "section", "article",
+];
+const SNIPPET_ALLOWED_ATTR = ["href", "src", "alt", "title", "target", "rel"];
+
+function sanitizeSnippetHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: SNIPPET_ALLOWED_TAGS,
+    ALLOWED_ATTR: SNIPPET_ALLOWED_ATTR,
+    FORCE_BODY: true,
+  });
+}
+
+/** Returns true if the string contains HTML tags — used to pick renderer. */
+function isHtmlSnippet(content: string): boolean {
+  return /<[a-z][\s\S]*?>/i.test(content);
+}
+
+/** Strip HTML tags to produce a plain-text excerpt for thumbnails / sidebar previews. */
+function stripHtml(html: string): string {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = DOMPurify.sanitize(html, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+  return tmp.textContent ?? tmp.innerText ?? "";
 }
 
 // ---- Add Item Dialog ----
@@ -478,11 +510,25 @@ function PreviewModal({
                 )}
               </div>
             ) : item.type === "snippet" ? (
-              <div className="flex items-center justify-center p-4 md:p-6 min-h-full">
+              <div className="flex items-start justify-center p-4 md:p-6 overflow-y-auto min-h-full">
                 <div className="w-full max-w-3xl rounded-xl border border-white/10 bg-[hsl(230,25%,12%)] p-5 md:p-8 shadow-xl">
-                  <p className="text-sm text-white/80 font-mono leading-relaxed whitespace-pre-wrap break-words">
-                    {item.content}
-                  </p>
+                  {item.content && isHtmlSnippet(item.content) ? (
+                    <div
+                      className="prose prose-sm prose-invert max-w-none
+                        prose-headings:text-white/90 prose-p:text-white/80
+                        prose-strong:text-white/90 prose-em:text-white/75
+                        prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+                        prose-blockquote:border-l-white/20 prose-blockquote:text-white/60
+                        prose-code:text-emerald-300 prose-code:bg-white/5 prose-code:rounded prose-code:px-1
+                        prose-pre:bg-black/30 prose-pre:text-emerald-300
+                        prose-li:text-white/80 prose-img:rounded-lg"
+                      dangerouslySetInnerHTML={{ __html: sanitizeSnippetHtml(item.content) }}
+                    />
+                  ) : (
+                    <p className="text-sm text-white/80 font-mono leading-relaxed whitespace-pre-wrap break-words">
+                      {item.content}
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -607,7 +653,9 @@ function PreviewModal({
             {item.type === "snippet" && item.content && (
               <div>
                 <p className="text-xs font-medium text-white/40 uppercase tracking-widest mb-1.5">Preview</p>
-                <p className="text-xs text-white/60 font-mono leading-relaxed line-clamp-6">{item.content}</p>
+                <p className="text-xs text-white/60 font-mono leading-relaxed line-clamp-6">
+                  {isHtmlSnippet(item.content) ? stripHtml(item.content) : item.content}
+                </p>
               </div>
             )}
 
@@ -861,7 +909,9 @@ function SwipeCard({
           />
         ) : item.type === "snippet" ? (
           <div className="absolute inset-0 bg-gradient-to-br from-violet-950/60 to-slate-900/80 p-3.5 overflow-hidden">
-            <p className="text-[10px] text-white/65 font-mono leading-relaxed line-clamp-8 select-none">{item.content}</p>
+            <p className="text-[10px] text-white/65 font-mono leading-relaxed line-clamp-8 select-none">
+              {item.content && isHtmlSnippet(item.content) ? stripHtml(item.content) : item.content}
+            </p>
             <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-slate-900/90 to-transparent pointer-events-none" />
           </div>
         ) : (

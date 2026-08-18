@@ -313,11 +313,31 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const key = stored.apiKey;
   if (!key) return;
 
+  // Capture the selection as HTML to preserve formatting (bold, headings, lists, etc.).
+  // Falls back to plain selectionText if the script can't run (e.g. on chrome:// pages).
+  let content = text;
+  try {
+    const [{ result: html }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        const range = sel.getRangeAt(0);
+        const wrapper = document.createElement("div");
+        wrapper.appendChild(range.cloneContents());
+        return wrapper.innerHTML;
+      },
+    });
+    if (html && html.trim()) content = html;
+  } catch {
+    // Restricted page — plain text fallback is fine
+  }
+
   try {
     await fetch(`${API_BASE}/api/v1/swipe`, {
       method:  "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": key },
-      body:    JSON.stringify({ type: "snippet", title, content: text, sourceUrl }),
+      body:    JSON.stringify({ type: "snippet", title, content, sourceUrl }),
     });
     injectSaveToast(tab?.id);
   } catch (err) {
