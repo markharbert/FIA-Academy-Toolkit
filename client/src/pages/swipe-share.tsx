@@ -3,7 +3,7 @@ import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   ExternalLink, FileText, Globe, Loader2,
-  Camera, AlertCircle, ArrowUpRight, ZoomIn, ZoomOut,
+  Camera, AlertCircle, ArrowUpRight,
 } from "lucide-react";
 import { format } from "date-fns";
 import DOMPurify from "dompurify";
@@ -41,251 +41,38 @@ type PublicSwipeItem = {
   createdAt: string;
 };
 
-// ── Pan + Zoom image viewer ────────────────────────────────────────────────────
-// All frame-by-frame state lives in refs to avoid per-frame React re-renders.
-// Only `displayZoom` and `loaded` drive re-renders (toolbar + fade-in).
-function PanZoomViewer({ src, alt }: { src: string; alt: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef       = useRef<HTMLImageElement>(null);
-  const [loaded,      setLoaded]      = useState(false);
-  const [displayZoom, setDisplayZoom] = useState(100);
-  const [dragging,    setDragging]    = useState(false);
-
-  // Mutable transform — mutated via applyTransform, never triggers renders
-  const T           = useRef({ scale: 1, tx: 0, ty: 0, fitScale: 1 });
-  const dragOrigin  = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
-  const pinchOrigin = useRef<{ dist: number; scale: number } | null>(null);
-
-  // ── helpers ───────────────────────────────────────────────────────────────
-  const applyTransform = (tx: number, ty: number, scale: number) => {
-    if (imgRef.current)
-      imgRef.current.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
-    T.current = { ...T.current, tx, ty, scale };
-  };
-
-  // Keep image within the container bounds
-  const clamp = (tx: number, ty: number, scale: number) => {
-    const c = containerRef.current, img = imgRef.current;
-    if (!c || !img) return { tx, ty };
-    const cw = c.clientWidth,  ch = c.clientHeight;
-    const iw = img.naturalWidth * scale, ih = img.naturalHeight * scale;
-    return {
-      // Wider than container → allow left/right pan; narrower → center it
-      tx: iw >= cw ? Math.min(0, Math.max(cw - iw, tx)) : (cw - iw) / 2,
-      // Taller than container → allow up/down pan; shorter → pin to top
-      ty: ih >= ch ? Math.min(0, Math.max(ch - ih, ty)) : 0,
-    };
-  };
-
-  // Zoom centered on (pivotX, pivotY) in container-local px
-  const zoomAt = (newScale: number, pivotX: number, pivotY: number) => {
-    const { scale, tx, ty, fitScale } = T.current;
-    // clamp scale: 95 % of fit-width … 8× fit-width
-    const s     = Math.min(Math.max(fitScale * 0.95, newScale), fitScale * 8);
-    const ratio = s / scale;
-    const { tx: ntx, ty: nty } = clamp(
-      pivotX - (pivotX - tx) * ratio,
-      pivotY - (pivotY - ty) * ratio,
-      s,
-    );
-    applyTransform(ntx, nty, s);
-    setDisplayZoom(Math.round((s / fitScale) * 100));
-  };
-
-  // ── image load: initialise fit-to-width ──────────────────────────────────
-  const onImageLoad = () => {
-    const c = containerRef.current, img = imgRef.current;
-    if (!c || !img) return;
-    const fit = img.naturalWidth > 0 ? c.clientWidth / img.naturalWidth : 1;
-    T.current.fitScale = fit;
-    const { tx, ty } = clamp(0, 0, fit);
-    applyTransform(tx, ty, fit);
-    setLoaded(true);
-    setDisplayZoom(100);
-  };
-
-  // ── non-passive wheel + touchmove (must use native addEventListener) ──────
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const r = el.getBoundingClientRect();
-      zoomAt(
-        T.current.scale * (e.deltaY < 0 ? 1.12 : 1 / 1.12),
-        e.clientX - r.left,
-        e.clientY - r.top,
-      );
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length === 2 && pinchOrigin.current) {
-        const t0 = e.touches[0], t1 = e.touches[1];
-        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-        const r  = el.getBoundingClientRect();
-        const mx = (t0.clientX + t1.clientX) / 2 - r.left;
-        const my = (t0.clientY + t1.clientY) / 2 - r.top;
-        zoomAt(pinchOrigin.current.scale * (dist / pinchOrigin.current.dist), mx, my);
-      } else if (e.touches.length === 1 && dragOrigin.current) {
-        const t = e.touches[0], o = dragOrigin.current;
-        const { tx, ty } = clamp(o.tx + t.clientX - o.x, o.ty + t.clientY - o.y, T.current.scale);
-        applyTransform(tx, ty, T.current.scale);
-      }
-    };
-
-    el.addEventListener("wheel",     onWheel,     { passive: false });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    return () => {
-      el.removeEventListener("wheel",     onWheel);
-      el.removeEventListener("touchmove", onTouchMove);
-    };
-  }, []); // reads refs only — no stale-closure risk
-
-  // ── mouse ─────────────────────────────────────────────────────────────────
-  const onMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    dragOrigin.current = { x: e.clientX, y: e.clientY, tx: T.current.tx, ty: T.current.ty };
-    setDragging(true);
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!dragOrigin.current) return;
-    const o = dragOrigin.current;
-    const { tx, ty } = clamp(o.tx + e.clientX - o.x, o.ty + e.clientY - o.y, T.current.scale);
-    applyTransform(tx, ty, T.current.scale);
-  };
-  const onMouseUp = () => { dragOrigin.current = null; setDragging(false); };
-
-  // Double-click: toggle between fit-width and 2× zoom at cursor
-  const onDblClick = (e: React.MouseEvent) => {
-    const c = containerRef.current;
-    if (!c) return;
-    const { fitScale, scale } = T.current;
-    const r = c.getBoundingClientRect();
-    if (scale > fitScale * 1.1) {
-      const { tx, ty } = clamp(0, 0, fitScale);
-      applyTransform(tx, ty, fitScale);
-      setDisplayZoom(100);
-    } else {
-      zoomAt(fitScale * 2, e.clientX - r.left, e.clientY - r.top);
-    }
-  };
-
-  // ── touch start / end ─────────────────────────────────────────────────────
-  const onTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      const t0 = e.touches[0], t1 = e.touches[1];
-      pinchOrigin.current = {
-        dist:  Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY),
-        scale: T.current.scale,
-      };
-      dragOrigin.current = null;
-    } else {
-      const t = e.touches[0];
-      dragOrigin.current  = { x: t.clientX, y: t.clientY, tx: T.current.tx, ty: T.current.ty };
-      pinchOrigin.current = null;
-    }
-  };
-  const onTouchEnd = () => { pinchOrigin.current = null; };
-
-  // ── toolbar helpers ───────────────────────────────────────────────────────
-  const zoomCenter = (factor: number) => {
-    const c = containerRef.current;
-    if (!c) return;
-    zoomAt(T.current.scale * factor, c.clientWidth / 2, c.clientHeight / 2);
-  };
-  const resetFit = () => {
-    const { fitScale } = T.current;
-    const { tx, ty } = clamp(0, 0, fitScale);
-    applyTransform(tx, ty, fitScale);
-    setDisplayZoom(100);
-  };
-
-  return (
-    <div className="flex flex-col h-full select-none bg-gray-950">
-
-      {/* ── Canvas ──────────────────────────────────────────────────────── */}
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-hidden relative"
-        style={{ cursor: dragging ? "grabbing" : "grab" }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
-        onDoubleClick={onDblClick}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-      >
-        {!loaded && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-600" />
-          </div>
-        )}
-        <img
-          ref={imgRef}
-          src={src}
-          alt={alt}
-          onLoad={onImageLoad}
-          draggable={false}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            transformOrigin: "0 0",
-            maxWidth: "none",
-            userSelect: "none",
-            WebkitUserSelect: "none",
-            opacity: loaded ? 1 : 0,
-            transition: "opacity 0.25s",
-          }}
-        />
-      </div>
-
-      {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <div className="shrink-0 flex items-center justify-center gap-1.5 px-4 py-2 bg-gray-900 border-t border-white/5">
-        <button
-          onClick={() => zoomCenter(1 / 1.4)}
-          title="Zoom out (scroll wheel)"
-          className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-        >
-          <ZoomOut className="h-4 w-4" />
-        </button>
-
-        <span className="text-xs font-mono text-gray-400 w-11 text-center tabular-nums">
-          {displayZoom}%
-        </span>
-
-        <button
-          onClick={() => zoomCenter(1.4)}
-          title="Zoom in (scroll wheel)"
-          className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-        >
-          <ZoomIn className="h-4 w-4" />
-        </button>
-
-        <div className="w-px h-4 bg-white/10 mx-0.5" />
-
-        <button
-          onClick={resetFit}
-          title="Fit to width"
-          className="px-2.5 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-        >
-          Fit
-        </button>
-
-        <span className="hidden sm:block ml-2 text-[10px] text-gray-600">
-          drag to pan · scroll to zoom · double-click to toggle · pinch on touch
-        </span>
-      </div>
-    </div>
-  );
-}
-
 // ── Share page ─────────────────────────────────────────────────────────────────
 export default function SwipeSharePage() {
   const { token } = useParams<{ token: string }>();
+
+  // ── Resizable split state ────────────────────────────────────────────────
+  const [leftPct,   setLeftPct]   = useState(70);
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const splitRef   = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isDragging.current || !splitRef.current) return;
+      const rect = splitRef.current.getBoundingClientRect();
+      const pct  = ((e.clientX - rect.left) / rect.width) * 100;
+      setLeftPct(Math.min(Math.max(pct, 25), 80));
+    };
+    const onUp = () => { isDragging.current = false; document.body.style.cursor = ""; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+    };
+  }, []);
 
   const { data, isLoading, isError } = useQuery<{ item: PublicSwipeItem }>({
     queryKey: [`/api/swipe/public/${token}`],
@@ -364,20 +151,21 @@ export default function SwipeSharePage() {
       <main className="p-4 lg:p-6">
 
         {isImage ? (
-          /* ── IMAGE: 75 / 25 split card ───────────────────────────────── */
+          /* ── IMAGE: resizable split card ─────────────────────────────── */
           <div
+            ref={splitRef}
             className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden
                        flex flex-col lg:flex-row"
             style={{ height: "calc(100vh - 120px)" }}
           >
-            {/* Left 75 % — image viewer */}
+            {/* Left pane — scrollable image */}
             <div
-              className="lg:w-3/4 flex flex-col overflow-hidden"
-              style={{ minHeight: "55vw", maxHeight: "60vh" }}
+              className="overflow-y-auto bg-gray-950 flex-shrink-0"
+              style={isDesktop ? { width: `${leftPct}%` } : { flex: "1 1 0", minHeight: "55vw", maxHeight: "60vh" }}
             >
               {isMultiStrip ? (
-                /* Legacy multi-strip: stacked scrollable strips */
-                <div className="flex-1 bg-gray-950 overflow-y-auto">
+                /* Multi-strip: stacked strips scroll naturally */
+                <>
                   {item.strips!.map((_, i) => (
                     <img
                       key={i}
@@ -387,18 +175,50 @@ export default function SwipeSharePage() {
                       loading={i === 0 ? "eager" : "lazy"}
                     />
                   ))}
-                </div>
+                </>
               ) : (
-                /* Single image — pan + zoom viewer */
-                <PanZoomViewer
-                  src={`/api/swipe/public/${item.shareToken}/image`}
-                  alt={item.title}
-                />
+                /* Single image — full-width, natural height, scrollable */
+                <>
+                  {!imgLoaded && (
+                    <div className="flex items-center justify-center py-20">
+                      <Loader2 className="h-7 w-7 animate-spin text-gray-600" />
+                    </div>
+                  )}
+                  <img
+                    src={`/api/swipe/public/${item.shareToken}/image`}
+                    alt={item.title}
+                    className="w-full h-auto block"
+                    style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity .25s" }}
+                    onLoad={() => setImgLoaded(true)}
+                  />
+                </>
               )}
             </div>
 
-            {/* Right 25 % — info + promo */}
-            <div className="lg:w-1/4 border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col
+            {/* Drag handle — desktop only */}
+            {isDesktop && (
+              <div
+                className="hidden lg:flex shrink-0 items-center justify-center w-2 bg-gray-100
+                           hover:bg-primary/20 border-x border-gray-200 cursor-col-resize
+                           transition-colors group select-none"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  isDragging.current = true;
+                  document.body.style.cursor = "col-resize";
+                }}
+                title="Drag to resize"
+              >
+                {/* grip dots */}
+                <div className="flex flex-col gap-1">
+                  {[0,1,2,3].map(i => (
+                    <div key={i} className="w-1 h-1 rounded-full bg-gray-300 group-hover:bg-primary/60 transition-colors" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Right pane — info + promo */}
+            <div className="flex-1 border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col
                             min-h-0 lg:h-full">
 
               {/* Scrollable body */}
