@@ -62,6 +62,35 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Capture the selection as HTML the instant the context menu appears.
+// onShown fires in the service worker BEFORE the user clicks any item,
+// so the page selection is still live. We run executeScript immediately
+// and stash the result in session storage for onClicked to read.
+chrome.contextMenus.onShown.addListener(async (info, tab) => {
+  // Only act when our snippet item is present in this menu
+  if (!info.menuIds?.includes("fia-save-snippet")) return;
+  if (!tab?.id) return;
+  try {
+    const [{ result: html }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        const div = document.createElement("div");
+        div.appendChild(sel.getRangeAt(0).cloneContents());
+        return div.innerHTML || null;
+      },
+    });
+    if (html && html.trim()) {
+      await chrome.storage.session.set({ pendingSnippetHtml: html });
+    } else {
+      await chrome.storage.session.remove("pendingSnippetHtml");
+    }
+  } catch {
+    await chrome.storage.session.remove("pendingSnippetHtml").catch(() => {});
+  }
+});
+
 // ─── Section capture: crop & store for popup ─────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
