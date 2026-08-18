@@ -308,7 +308,7 @@ export default function SwipeSharePage() {
                 <p className="text-center text-xs text-gray-300">
                   Shared via{" "}
                   <a
-                    href={item.fiaAffiliateLink || "https://fearlessinfluencer.com"}
+                    href={item.fiaAffiliateLink || "https://www.fearlessinfluencer.com"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-semibold text-primary hover:text-primary/80 transition-colors"
@@ -424,7 +424,7 @@ export default function SwipeSharePage() {
             <p className="text-center text-xs text-gray-300 pb-4">
               Shared via{" "}
               <a
-                href={item.fiaAffiliateLink || "https://fearlessinfluencer.com"}
+                href={item.fiaAffiliateLink || "https://www.fearlessinfluencer.com"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold text-primary hover:text-primary/80 transition-colors"
