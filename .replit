@@ -53,7 +53,7 @@ VAPID_PUBLIC_KEY = "BPdIbvBytx7rxn5z3S3QJ2vI0GhB-PTDrtKpnpyyMa52g_nGrS7MCxYnUpbX
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 20000
+timeoutMs = 120000
 
 [objectStorage]
 defaultBucketID = "replit-objstore-0ae56470-767c-4b7f-9b26-0897b3650d41"

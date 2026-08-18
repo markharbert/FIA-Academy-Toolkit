@@ -428,7 +428,8 @@ function PreviewModal({
     >
       {/* Modal panel — click inside stops propagation */}
       <div
-        className="relative flex w-full h-full max-w-[1400px] max-h-[96vh] mx-4 my-4 rounded-2xl overflow-hidden shadow-2xl"
+        className="relative flex rounded-2xl overflow-hidden shadow-2xl"
+        style={{ width: "75vw", height: "75vh" }}
         style={{ background: "hsl(230,45%,10%)" }}
         onClick={e => e.stopPropagation()}
       >
