@@ -450,40 +450,40 @@ function PreviewModal({
             <X className="h-4 w-4" />
           </button>
 
-          {/* Content area — scrollable */}
-          <div className="flex-1 overflow-auto flex items-center justify-center p-4 md:p-6 min-h-0">
+          {/* Content area — vertically scrollable so tall images can scroll top-to-bottom */}
+          <div className="flex-1 overflow-y-auto min-h-0">
             {isImage ? (
-              <div className="relative max-w-full max-h-full flex items-center justify-center">
+              <div className="p-4 md:p-6">
+                {/* Spinner shown before image loads */}
                 {!imgLoaded && (
-                  <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex items-center justify-center py-20">
                     <Loader2 className="h-8 w-8 animate-spin text-white/30" />
                   </div>
                 )}
+                {/* Image fills pane width, natural height — tall images scroll with mouse wheel */}
                 <img
                   src={swipeImageUrl(item.id)}
                   alt={item.title}
-                  className={`max-w-full max-h-full object-contain rounded-lg shadow-xl transition-opacity duration-300 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+                  className={`w-full h-auto block rounded-lg shadow-xl transition-opacity duration-300 ${imgLoaded ? "opacity-100" : "opacity-0 h-0"}`}
                   onLoad={() => setImgLoaded(true)}
                   onError={() => { setImgError(true); setImgLoaded(true); }}
                 />
-                {isFullPage && (
-                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
-                    <span className="text-xs text-white/60 bg-black/50 rounded-full px-3 py-1 backdrop-blur-sm">
-                      Full-page capture · {item.strips!.length} sections
-                    </span>
-                  </div>
+                {isFullPage && imgLoaded && (
+                  <p className="text-center text-xs text-white/40 mt-3">
+                    Full-page capture · {item.strips!.length} sections — scroll to see all
+                  </p>
                 )}
               </div>
             ) : item.type === "snippet" ? (
-              <div className="w-full max-w-3xl">
-                <div className="rounded-xl border border-white/10 bg-[hsl(230,25%,12%)] p-8 shadow-xl">
+              <div className="flex items-center justify-center p-4 md:p-6 min-h-full">
+                <div className="w-full max-w-3xl rounded-xl border border-white/10 bg-[hsl(230,25%,12%)] p-5 md:p-8 shadow-xl">
                   <p className="text-sm text-white/80 font-mono leading-relaxed whitespace-pre-wrap break-words">
                     {item.content}
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-4 text-white/30">
+              <div className="flex flex-col items-center justify-center gap-4 text-white/30 h-full">
                 <ImageIcon className="h-16 w-16" />
                 <p className="text-sm">Image unavailable</p>
               </div>
