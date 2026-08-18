@@ -432,7 +432,7 @@ function PreviewModal({
       {/* Modal panel — click inside stops propagation */}
       <div
         className="relative flex flex-col md:flex-row rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: "hsl(230,45%,10%)", width: "75vw", height: "75vh", minWidth: "320px", minHeight: "400px" }}
+        style={{ background: "hsl(230,45%,10%)", width: window.innerWidth < 640 ? "95vw" : "75vw", height: window.innerWidth < 640 ? "95vh" : "75vh", minWidth: "320px", minHeight: "400px" }}
         onClick={e => e.stopPropagation()}
       >
         {/* ── Image / content pane ── */}
