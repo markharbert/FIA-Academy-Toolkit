@@ -17,7 +17,7 @@ import {
   AlertCircle, Info, Zap,
 } from "lucide-react";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Legend, PieChart, Pie, Cell, BarChart, Bar,
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
@@ -100,6 +100,11 @@ const COVERAGE_LABELS: Record<string, { label: string; color: string }> = {
   "Server error (5xx)": { label: "Server error", color: "text-red-500" },
 };
 
+const TOOLTIP_STYLE = {
+  background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
+  borderRadius: 8, fontSize: 12,
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Status = {
@@ -163,13 +168,13 @@ function SectionCard({ accent, title, subtitle, icon: Icon, children }: {
 }) {
   return (
     <Card className="border-border bg-card overflow-hidden">
-      <div className={`h-1 w-full ${accent}`} />
       <CardContent className="p-5">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         </div>
-        {subtitle && <p className="text-xs text-muted-foreground mb-4">{subtitle}</p>}
+        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+        <div className={`mt-3 mb-4 h-px w-full ${accent} opacity-60`} />
         {children}
       </CardContent>
     </Card>
@@ -213,8 +218,11 @@ export default function AnalyticsGscPage() {
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
+  const GSC_STALE = 60 * 60 * 1000; // 1 hour — mirrors 24h server DB cache; cuts redundant round-trips
+
   const { data: status, isLoading: statusLoading } = useQuery<Status>({
     queryKey: ["/api/analytics/gsc/status"],
+    staleTime: 5 * 60 * 1000, // 5 min — status is cheap once server has it cached
   });
 
   const siteUrl   = status?.selectedSiteUrl;
@@ -223,6 +231,7 @@ export default function AnalyticsGscPage() {
   const { data: gscData, isLoading: dataLoading } = useQuery<GscData>({
     queryKey: ["/api/analytics/gsc/data", siteUrl, days],
     enabled: connected,
+    staleTime: GSC_STALE,
     queryFn: async () => {
       const p = new URLSearchParams({ days });
       if (siteUrl) p.set("siteUrl", siteUrl);
@@ -235,6 +244,7 @@ export default function AnalyticsGscPage() {
   const { data: pageKeywords, isLoading: pkLoading } = useQuery<GscPageKeyword[]>({
     queryKey: ["/api/analytics/gsc/page-keywords", siteUrl, days],
     enabled: connected && tab === "pages",
+    staleTime: GSC_STALE,
     queryFn: async () => {
       const p = new URLSearchParams({ days });
       if (siteUrl) p.set("siteUrl", siteUrl);
@@ -267,7 +277,10 @@ export default function AnalyticsGscPage() {
   const refreshMut = useMutation({
     mutationFn: () => apiRequest("POST", "/api/analytics/gsc/refresh"),
     onSuccess: () => {
+      // Invalidate all GSC query keys so every tab gets fresh data after a manual refresh
+      qc.invalidateQueries({ queryKey: ["/api/analytics/gsc/status"] });
       qc.invalidateQueries({ queryKey: ["/api/analytics/gsc/data"] });
+      qc.invalidateQueries({ queryKey: ["/api/analytics/gsc/page-keywords"] });
       toast({ title: "Refreshed", description: "Search Console data updated." });
     },
     onError: () => toast({ title: "Error", description: "Could not refresh.", variant: "destructive" }),
@@ -330,31 +343,43 @@ export default function AnalyticsGscPage() {
   return (
     <div className="min-h-screen bg-background">
 
-      {/* ── Header ── */}
+      {/* ── Hero ── */}
       <div className="relative overflow-hidden border-b border-border">
         <div className="absolute inset-0 bg-gradient-to-br from-[hsl(220_70%_8%)] to-[hsl(235_65%_17%)]" />
         <div className="absolute -bottom-24 -right-12 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl" />
         <div className="absolute -top-16 -left-8 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
         <div className="relative max-w-6xl mx-auto px-6 py-8">
           <button onClick={() => setLocation("/analytics")}
-            className="flex items-center gap-1.5 text-white/50 hover:text-white/80 text-sm mb-4 transition-colors"
+            className="flex items-center gap-1.5 text-white/50 hover:text-white/80 text-sm mb-5 transition-colors"
             data-testid="button-back-analytics">
             <ArrowLeft className="h-4 w-4" /> Analytics
           </button>
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-blue-500/20 ring-1 ring-blue-400/30 flex items-center justify-center">
-                <Globe className="h-5 w-5 text-blue-300" />
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-xl bg-blue-500/20 ring-1 ring-blue-400/30 flex items-center justify-center shrink-0">
+                <Globe className="h-7 w-7 text-blue-300" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">Website Analytics</h1>
+                <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">Website Analytics</h1>
+                {status?.connected && siteUrl && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-white/70">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 inline-block" />
+                      {stripProto(siteUrl)}
+                    </span>
+                    <a href={siteUrl} target="_blank" rel="noopener noreferrer"
+                      className="text-white/30 hover:text-white/60 transition-colors" data-testid="link-gsc-site-hero">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                )}
                 {status?.connected && status.connectedEmail && (
                   <p className="text-white/40 text-xs mt-0.5">{status.connectedEmail}</p>
                 )}
               </div>
             </div>
             {status?.connected && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Button size="sm" variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10"
                   onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending} data-testid="button-refresh-gsc">
                   <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshMut.isPending ? "animate-spin" : ""}`} />Refresh
@@ -471,54 +496,71 @@ export default function AnalyticsGscPage() {
                     {/* KPI cards */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       {[
-                        { label: "Total Clicks", value: fmtNum(gscData.overview.totalClicks), icon: MousePointerClick, color: "text-blue-500", tip: "Times someone clicked to your site" },
-                        { label: "Impressions", value: fmtNum(gscData.overview.totalImpressions), icon: Eye, color: "text-indigo-500", tip: "Times your site appeared in results" },
-                        { label: "Avg CTR", value: fmtPct(gscData.overview.avgCtr), icon: Percent, color: "text-sky-500", tip: "% of impressions that became clicks" },
-                        { label: "Avg Position", value: fmtPos(gscData.overview.avgPosition), icon: TrendingUp, color: "text-cyan-500", tip: "Average ranking position (lower = better)" },
+                        { label: "Total Clicks", value: fmtNum(gscData.overview.totalClicks), icon: MousePointerClick, hex: "#3b82f6", tip: "Times someone clicked to your site" },
+                        { label: "Impressions", value: fmtNum(gscData.overview.totalImpressions), icon: Eye, hex: "#8b5cf6", tip: "Times your site appeared in search results" },
+                        { label: "Avg CTR", value: fmtPct(gscData.overview.avgCtr), icon: Percent, hex: "#06b6d4", tip: "% of impressions that became clicks" },
+                        { label: "Avg Position", value: fmtPos(gscData.overview.avgPosition), icon: TrendingUp, hex: "#f59e0b", tip: "Average ranking position (lower = better)" },
                       ].map((kpi) => (
-                        <Card key={kpi.label} className="border-border bg-card" data-testid={`kpi-${kpi.label.toLowerCase().replace(/ /g,"-")}`}>
-                          <CardContent className="p-5">
-                            <div className="flex items-center gap-2 mb-2">
-                              <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
-                              <span className="text-xs text-muted-foreground font-medium leading-tight">{kpi.label}</span>
+                        <div key={kpi.label} className="rounded-xl border border-border bg-card overflow-hidden flex flex-col" data-testid={`kpi-${kpi.label.toLowerCase().replace(/ /g,"-")}`}>
+                          <div className="h-0.5 w-full" style={{ background: `linear-gradient(to right, ${kpi.hex}, transparent)` }} />
+                          <div className="p-4 flex flex-col flex-1">
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <span className="text-xs text-muted-foreground font-medium leading-snug">{kpi.label}</span>
+                              <div className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${kpi.hex}18` }}>
+                                <kpi.icon className="h-3.5 w-3.5" style={{ color: kpi.hex }} />
+                              </div>
                             </div>
-                            <p className="text-3xl font-bold text-foreground">{kpi.value}</p>
-                            <p className="text-xs text-muted-foreground mt-1 opacity-60 leading-tight">{kpi.tip}</p>
-                          </CardContent>
-                        </Card>
+                            <p className="text-2xl font-bold text-foreground leading-none tabular-nums mt-auto">{kpi.value}</p>
+                            <p className="text-xs text-muted-foreground mt-1.5 opacity-70 leading-snug">{kpi.tip}</p>
+                          </div>
+                        </div>
                       ))}
                     </div>
 
-                    {/* Traffic chart */}
+                    {/* Traffic chart — vivid area chart with gradient fills */}
                     {gscData.timeline.length > 0 && (
                       <SectionCard accent="bg-gradient-to-r from-blue-500 to-indigo-600" title="Search Traffic Over Time" subtitle="Clicks and impressions from Google Search" icon={MousePointerClick}>
-                        <ResponsiveContainer width="100%" height={220}>
-                          <LineChart data={gscData.timeline.map(r => ({ ...r, date: shortDate(r.date) }))}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <ResponsiveContainer width="100%" height={240}>
+                          <AreaChart data={gscData.timeline.map(r => ({ ...r, date: shortDate(r.date) }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="gscClicksGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                              </linearGradient>
+                              <linearGradient id="gscImpGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.25} />
+                                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                             <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={fmtNum} />
-                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                              formatter={(v: number, n: string) => [fmtNum(v), n === "clicks" ? "Clicks" : "Impressions"]} />
+                            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, n: string) => [fmtNum(v), n === "clicks" ? "Clicks" : "Impressions"]} />
                             <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v) => v === "clicks" ? "Clicks" : "Impressions"} />
-                            <Line type="monotone" dataKey="clicks" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                            <Line type="monotone" dataKey="impressions" stroke="#a5b4fc" strokeWidth={2} dot={false} strokeDasharray="4 2" />
-                          </LineChart>
+                            <Area type="monotone" dataKey="impressions" stroke="#8b5cf6" strokeWidth={2} fill="url(#gscImpGrad)" dot={false} />
+                            <Area type="monotone" dataKey="clicks" stroke="#3b82f6" strokeWidth={2.5} fill="url(#gscClicksGrad)" dot={false} />
+                          </AreaChart>
                         </ResponsiveContainer>
                       </SectionCard>
                     )}
 
-                    {/* Position chart */}
+                    {/* Position chart — amber area chart, reversed Y axis */}
                     {gscData.timeline.length > 0 && (
-                      <SectionCard accent="bg-gradient-to-r from-cyan-500 to-teal-500" title="Average Ranking Position Over Time" subtitle="Lower is better — position 1 means you ranked #1 in Google" icon={TrendingUp}>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <LineChart data={gscData.timeline.map(r => ({ date: shortDate(r.date), position: parseFloat(r.position.toFixed(1)) }))}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <SectionCard accent="bg-gradient-to-r from-amber-400 to-orange-500" title="Average Ranking Position Over Time" subtitle="Lower is better — position 1 means you ranked #1 in Google" icon={TrendingUp}>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <AreaChart data={gscData.timeline.map(r => ({ date: shortDate(r.date), position: parseFloat(r.position.toFixed(1)) }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="gscPosGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.35} />
+                                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                             <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                             <YAxis reversed tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                              formatter={(v: number) => [`#${v}`, "Avg Position"]} />
-                            <Line type="monotone" dataKey="position" stroke="#06b6d4" strokeWidth={2} dot={false} />
-                          </LineChart>
+                            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [`#${v}`, "Avg Position"]} />
+                            <Area type="monotone" dataKey="position" stroke="#f59e0b" strokeWidth={2.5} fill="url(#gscPosGrad)" dot={false} />
+                          </AreaChart>
                         </ResponsiveContainer>
                       </SectionCard>
                     )}

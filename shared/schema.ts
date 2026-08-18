@@ -1927,6 +1927,15 @@ export const youtubeAnalyticsCache = pgTable("youtube_analytics_cache", {
 }, (t) => [unique("youtube_analytics_cache_user_key").on(t.userId, t.cacheKey)]);
 export type YoutubeAnalyticsCache = typeof youtubeAnalyticsCache.$inferSelect;
 
+export const gscAnalyticsCache = pgTable("gsc_analytics_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  cacheKey: varchar("cache_key", { length: 150 }).notNull(),
+  dataJson: jsonb("data_json").notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => [unique("gsc_analytics_cache_user_key").on(t.userId, t.cacheKey)]);
+export type GscAnalyticsCache = typeof gscAnalyticsCache.$inferSelect;
+
 // Tracks object paths issued by the attachment presigned-URL flow that have not
 // yet been confirmed.  Persisted in DB so orphaned objects are cleaned up even
 // after a process restart.  userId+taskId are stored at issuance time so the

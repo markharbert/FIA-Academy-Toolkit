@@ -8288,21 +8288,35 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   // ── Analytics: Google Search Console ───────────────────────────────────────
 
+  const GSC_STATUS_CACHE_TTL = 60 * 60 * 1000;        // 1 hour — sites list rarely changes
+  const GSC_DATA_CACHE_TTL   = 24 * 60 * 60 * 1000;   // 24 hours — mirrors YouTube pattern
+
   app.get("/api/analytics/gsc/status", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;
       const conn = await storage.getGscConnection(userId);
       if (!conn?.oauthAccessToken) return res.json({ connected: false });
+
+      // Serve from cache when fresh — avoids a live Google API call on every page open
+      const cached = await storage.getGscAnalyticsCache(userId, "gsc-status");
+      if (cached && (Date.now() - cached.updatedAt.getTime() < GSC_STATUS_CACHE_TTL)) {
+        const { sites, selectedSiteUrl } = cached.data as { sites: string[]; selectedSiteUrl: string | null };
+        return res.json({ connected: true, connectedEmail: conn.connectedEmail, sites, selectedSiteUrl });
+      }
+
       try {
         const sites = await fetchGscSites(conn.oauthAccessToken, conn.oauthRefreshToken);
-        const selectedSiteUrl = conn.selectedSiteUrl && sites.includes(conn.selectedSiteUrl) ? conn.selectedSiteUrl : (sites.length === 1 ? sites[0] : null);
+        const selectedSiteUrl = conn.selectedSiteUrl && sites.includes(conn.selectedSiteUrl)
+          ? conn.selectedSiteUrl
+          : (sites.length === 1 ? sites[0] : null);
         if (selectedSiteUrl && selectedSiteUrl !== conn.selectedSiteUrl) {
           await storage.setGscSelectedSite(userId, selectedSiteUrl);
         }
-        res.json({ connected: true, connectedEmail: conn.connectedEmail, sites, selectedSiteUrl });
+        await storage.setGscAnalyticsCache(userId, "gsc-status", { sites, selectedSiteUrl });
+        return res.json({ connected: true, connectedEmail: conn.connectedEmail, sites, selectedSiteUrl });
       } catch (apiErr: any) {
         console.error("[Analytics/GSC] status API error:", apiErr?.message);
-        res.json({ connected: true, connectedEmail: conn.connectedEmail, sites: [], selectedSiteUrl: conn.selectedSiteUrl });
+        return res.json({ connected: true, connectedEmail: conn.connectedEmail, sites: [], selectedSiteUrl: conn.selectedSiteUrl });
       }
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch GSC status" });
@@ -8344,8 +8358,15 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       const siteUrl = (req.query.siteUrl as string) || conn.selectedSiteUrl;
       if (!siteUrl) return res.status(400).json({ message: "No site selected" });
-      const days = Math.min(parseInt((req.query.days as string) || "28", 10), 365);
+      const days = Math.min(parseInt((req.query.days as string) || "28", 10) || 28, 365);
+      // Cache key: truncate siteUrl to keep within column limit
+      const cacheKey = `gsc-data-${days}-${siteUrl.slice(0, 100)}`;
+      const cached = await storage.getGscAnalyticsCache(userId, cacheKey);
+      if (cached && (Date.now() - cached.updatedAt.getTime() < GSC_DATA_CACHE_TTL)) {
+        return res.json(cached.data);
+      }
       const data = await fetchGscData(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days);
+      await storage.setGscAnalyticsCache(userId, cacheKey, data);
       res.json(data);
     } catch (err: any) {
       console.error("[Analytics/GSC] data error:", err?.message);
@@ -8358,7 +8379,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const userId = req.session!.userId!;
       const { siteUrl } = req.body as { siteUrl: string };
       if (!siteUrl) return res.status(400).json({ message: "siteUrl required" });
-      await storage.setGscSelectedSite(userId, siteUrl);
+      // Clear analytics caches when switching sites so stale data from the old site doesn't show
+      await Promise.all([
+        storage.setGscSelectedSite(userId, siteUrl),
+        storage.clearGscAnalyticsCache(userId),
+      ]);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to select site" });
@@ -8370,6 +8395,8 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       const userId = req.session!.userId!;
       const conn = await storage.getGscConnection(userId);
       if (!conn?.oauthAccessToken) return res.status(400).json({ message: "Not connected" });
+      // Clear all GSC caches so next page load re-fetches everything from Google
+      await storage.clearGscAnalyticsCache(userId);
       const sites = await fetchGscSites(conn.oauthAccessToken, conn.oauthRefreshToken);
       res.json({ success: true, sites });
     } catch (err: any) {
@@ -8381,7 +8408,10 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
   app.delete("/api/analytics/gsc/disconnect", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;
-      await storage.deleteGscConnection(userId);
+      await Promise.all([
+        storage.deleteGscConnection(userId),
+        storage.clearGscAnalyticsCache(userId),
+      ]);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to disconnect" });
@@ -8395,8 +8425,14 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
       if (!conn?.oauthAccessToken) return res.status(401).json({ message: "Not connected" });
       const siteUrl = (req.query.siteUrl as string) || conn.selectedSiteUrl;
       if (!siteUrl) return res.status(400).json({ message: "No site selected" });
-      const days = Math.min(parseInt((req.query.days as string) || "28", 10), 365);
+      const days = Math.min(parseInt((req.query.days as string) || "28", 10) || 28, 365);
+      const cacheKey = `gsc-pk-${days}-${siteUrl.slice(0, 100)}`;
+      const cached = await storage.getGscAnalyticsCache(userId, cacheKey);
+      if (cached && (Date.now() - cached.updatedAt.getTime() < GSC_DATA_CACHE_TTL)) {
+        return res.json(cached.data);
+      }
       const data = await fetchGscPageKeywords(conn.oauthAccessToken, conn.oauthRefreshToken, siteUrl, days);
+      await storage.setGscAnalyticsCache(userId, cacheKey, data);
       res.json(data);
     } catch (err: any) {
       console.error("[Analytics/GSC] page-keywords error:", err?.message);

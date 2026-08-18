@@ -16,6 +16,7 @@ import {
   cannedResponses, type CannedResponse,
   youtubeCommentCache, type YoutubeCommentCache,
   youtubeAnalyticsCache,
+  gscAnalyticsCache,
   pendingAttachmentUploads, type PendingAttachmentUpload,
   type User, type InsertUser, 
   type Session, type InsertSession,
@@ -530,6 +531,10 @@ export interface IStorage {
   upsertGscConnection(userId: string, data: { oauthAccessToken: string; oauthRefreshToken: string | null; oauthTokenExpiry: Date | null; connectedEmail: string }): Promise<GscConnection>;
   setGscSelectedSite(userId: string, siteUrl: string): Promise<void>;
   deleteGscConnection(userId: string): Promise<void>;
+  // GSC Analytics Cache
+  getGscAnalyticsCache(userId: string, cacheKey: string): Promise<{ data: any; updatedAt: Date } | null>;
+  setGscAnalyticsCache(userId: string, cacheKey: string, data: any): Promise<void>;
+  clearGscAnalyticsCache(userId: string): Promise<void>;
 
   // Notifications
   getNotificationPrefs(userId: string): Promise<{ allEnabled: boolean; preferences: import("@shared/schema").NotificationPreferences }>;
@@ -3926,6 +3931,29 @@ export class DatabaseStorage implements IStorage {
     await db.delete(gscConnections).where(eq(gscConnections.userId, userId));
   }
 
+  async getGscAnalyticsCache(userId: string, cacheKey: string): Promise<{ data: any; updatedAt: Date } | null> {
+    const [row] = await db
+      .select()
+      .from(gscAnalyticsCache)
+      .where(and(eq(gscAnalyticsCache.userId, userId), eq(gscAnalyticsCache.cacheKey, cacheKey)));
+    if (!row) return null;
+    return { data: row.dataJson, updatedAt: row.updatedAt };
+  }
+
+  async setGscAnalyticsCache(userId: string, cacheKey: string, data: any): Promise<void> {
+    await db
+      .insert(gscAnalyticsCache)
+      .values({ userId, cacheKey, dataJson: data, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [gscAnalyticsCache.userId, gscAnalyticsCache.cacheKey],
+        set: { dataJson: data, updatedAt: new Date() },
+      });
+  }
+
+  async clearGscAnalyticsCache(userId: string): Promise<void> {
+    await db.delete(gscAnalyticsCache).where(eq(gscAnalyticsCache.userId, userId));
+  }
+
   // ── Inbox Intel (Competitor Email Intelligence) ─────────────────────────────
 
   async getCompetitorTrackers(userId: string): Promise<CompetitorTrackerWithStats[]> {
@@ -5333,6 +5361,23 @@ export async function runMigrations(): Promise<void> {
             ON funnel_brain_files (funnel_id, user_id, created_at DESC)`,
     },
   ];
+
+  // Ensure gsc_analytics_cache table exists (created outside Drizzle push)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gsc_analytics_cache (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        cache_key VARCHAR(150) NOT NULL,
+        data_json JSONB NOT NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (user_id, cache_key)
+      )
+    `);
+    console.log("[migration] gsc_analytics_cache table ensured");
+  } catch (err: any) {
+    console.error("[migration] gsc_analytics_cache table failed:", err?.message);
+  }
 
   for (const migration of migrations) {
     try {
