@@ -27,16 +27,13 @@ import {
   User,
   LogOut,
   Shield,
-  Target,
   BookOpen,
-  Briefcase,
   MessageSquarePlus,
   Users,
   BarChart2,
   ChevronDown,
-  GitFork,
-  Link2,
-  Camera,
+  CalendarDays,
+  BookMarked,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -47,6 +44,10 @@ type NavChild = {
   testId: string;
   matchPaths?: string[];
   activeClass: string;
+  /** Hide from workspace collaborators (default: visible) */
+  collaboratorVisible?: boolean;
+  /** Hide from non-admin members (default: visible) */
+  adminOnly?: boolean;
 };
 
 type NavItem = {
@@ -73,30 +74,39 @@ const allNavItems: NavItem[] = [
     collaboratorVisible: false,
   },
   {
-    title: "DMO Tracker",
+    title: "Planning",
     url: "/dmo-tracker",
-    icon: Target,
-    iconColor: "text-amber-400",
-    testId: "nav-dmo-tracker",
-    collaboratorVisible: false,
-  },
-  {
-    title: "Projects",
-    url: "/projects",
-    icon: Briefcase,
-    iconColor: "text-indigo-400",
-    testId: "nav-projects",
-    matchPaths: ["/projects"],
+    icon: CalendarDays,
+    iconColor: "text-orange-400",
+    testId: "nav-planning",
     collaboratorVisible: true,
-  },
-  {
-    title: "Funnel Grid",
-    url: "/funnel-grid",
-    icon: GitFork,
-    iconColor: "text-violet-400",
-    testId: "nav-funnel-grid",
-    matchPaths: ["/funnel-grid"],
-    collaboratorVisible: false,
+    activeClass: "!bg-orange-500/15",
+    subMenuBorderClass: "!border-orange-500/40",
+    children: [
+      {
+        title: "DMO Tracker",
+        url: "/dmo-tracker",
+        testId: "nav-dmo-tracker",
+        activeClass: "!bg-orange-500/10 !text-orange-200 font-medium",
+        collaboratorVisible: false,
+      },
+      {
+        title: "Projects",
+        url: "/projects",
+        testId: "nav-projects",
+        matchPaths: ["/projects"],
+        activeClass: "!bg-orange-500/10 !text-orange-200 font-medium",
+        collaboratorVisible: true,
+      },
+      {
+        title: "Funnel Grid",
+        url: "/funnel-grid",
+        testId: "nav-funnel-grid",
+        matchPaths: ["/funnel-grid"],
+        activeClass: "!bg-orange-500/10 !text-orange-200 font-medium",
+        collaboratorVisible: false,
+      },
+    ],
   },
   {
     title: "Video Studio",
@@ -191,22 +201,28 @@ const allNavItems: NavItem[] = [
     ],
   },
   {
-    title: "Link Library",
+    title: "Library",
     url: "/links",
-    icon: Link2,
+    icon: BookMarked,
     iconColor: "text-purple-400",
-    testId: "nav-links",
+    testId: "nav-library",
     collaboratorVisible: false,
-    adminOnly: false,
-  },
-  {
-    title: "Swipe File",
-    url: "/swipe-file",
-    icon: Camera,
-    iconColor: "text-amber-400",
-    testId: "nav-swipe-file",
-    collaboratorVisible: false,
-    adminOnly: true,
+    activeClass: "!bg-purple-500/15",
+    subMenuBorderClass: "!border-purple-500/40",
+    children: [
+      {
+        title: "Link Library",
+        url: "/links",
+        testId: "nav-links",
+        activeClass: "!bg-purple-500/10 !text-purple-200 font-medium",
+      },
+      {
+        title: "Swipe File",
+        url: "/swipe-file",
+        testId: "nav-swipe-file",
+        activeClass: "!bg-purple-500/10 !text-purple-200 font-medium",
+      },
+    ],
   },
 ];
 
@@ -310,6 +326,13 @@ export function AppSidebar() {
                 const groupActive = isGroupActive(item, location);
 
                 if (item.children) {
+                  // Filter children based on the viewer's role
+                  const visibleChildren = isCollaborator
+                    ? item.children.filter((c) => c.collaboratorVisible !== false)
+                    : item.children.filter((c) => !c.adminOnly || user?.isAdmin);
+
+                  if (visibleChildren.length === 0) return null;
+
                   return (
                     <Collapsible key={item.url} open={groupActive}>
                       <SidebarMenuItem>
@@ -331,7 +354,7 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                         <CollapsibleContent>
                           <SidebarMenuSub className={item.subMenuBorderClass}>
-                            {item.children.map((child) => {
+                            {visibleChildren.map((child) => {
                               const childIsActive = isChildActive(child, location);
                               return (
                                 <SidebarMenuSubItem key={child.url}>
