@@ -313,24 +313,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const key = stored.apiKey;
   if (!key) return;
 
-  // Capture the selection as HTML to preserve formatting (bold, headings, lists, etc.).
-  // Falls back to plain selectionText if the script can't run (e.g. on chrome:// pages).
+  // snippet-capture.js stashes the selection HTML in session storage at the
+  // moment of right-click (before the selection is cleared by the menu click).
+  // Read it here and clear it so it doesn't bleed into the next snippet.
   let content = text;
   try {
-    const [{ result: html }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return null;
-        const range = sel.getRangeAt(0);
-        const wrapper = document.createElement("div");
-        wrapper.appendChild(range.cloneContents());
-        return wrapper.innerHTML;
-      },
-    });
-    if (html && html.trim()) content = html;
+    const session = await chrome.storage.session.get("pendingSnippetHtml");
+    const html = session?.pendingSnippetHtml;
+    if (html && html.trim()) {
+      content = html;
+      await chrome.storage.session.remove("pendingSnippetHtml");
+    }
   } catch {
-    // Restricted page — plain text fallback is fine
+    // Session storage unavailable — plain text fallback is fine
   }
 
   try {
