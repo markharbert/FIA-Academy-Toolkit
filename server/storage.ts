@@ -48,7 +48,7 @@ import {
   type ProjectTemplateTask, type InsertProjectTemplateTask, type UpdateProjectTemplateTask,
   feedbackPosts, feedbackVotes, feedbackComments,
   type FeedbackPost, type InsertFeedbackPost, type FeedbackPostWithMeta, type FeedbackCommentWithUser,
-  funnels, type Funnel, type InsertFunnel,
+  funnels, type Funnel, type FunnelSummary, type InsertFunnel,
   funnelBrainFiles, type FunnelBrainFile,
   funnelTemplates, type FunnelTemplate,
   announcements, dismissedAnnouncements, type Announcement, type InsertAnnouncement,
@@ -554,7 +554,7 @@ export interface IStorage {
   deleteEmailResource(id: string): Promise<void>;
 
   // Funnel Planner
-  getFunnelsByUser(userId: string): Promise<Funnel[]>;
+  getFunnelsByUser(userId: string): Promise<FunnelSummary[]>;
   getFunnelById(id: string): Promise<Funnel | undefined>;
   getFunnel(id: string, userId: string): Promise<Funnel | undefined>;
   getFunnelByShareToken(token: string): Promise<Funnel | undefined>;
@@ -4837,8 +4837,21 @@ export class DatabaseStorage implements IStorage {
 
   // ─── Funnel Planner ───────────────────────────────────────────────────────
 
-  async getFunnelsByUser(userId: string): Promise<Funnel[]> {
-    return db.select().from(funnels).where(eq(funnels.userId, userId)).orderBy(desc(funnels.updatedAt));
+  async getFunnelsByUser(userId: string): Promise<FunnelSummary[]> {
+    // Excludes canvasData (large JSONB) — client only needs metadata for the grid.
+    // nodeCount is computed in DB so the client never needs to parse canvasData.
+    return db.select({
+      id: funnels.id,
+      userId: funnels.userId,
+      name: funnels.name,
+      description: funnels.description,
+      thumbnailData: funnels.thumbnailData,
+      shareToken: funnels.shareToken,
+      brainTargeting: funnels.brainTargeting,
+      createdAt: funnels.createdAt,
+      updatedAt: funnels.updatedAt,
+      nodeCount: sql<number>`COALESCE(jsonb_array_length(${funnels.canvasData}->'nodes'), 0)`,
+    }).from(funnels).where(eq(funnels.userId, userId)).orderBy(desc(funnels.updatedAt));
   }
 
   async getFunnelById(id: string): Promise<Funnel | undefined> {
@@ -5217,6 +5230,67 @@ export async function runMigrations(): Promise<void> {
       name: "idx_swipe_items_user_created",
       sql: `CREATE INDEX IF NOT EXISTS idx_swipe_items_user_created
             ON swipe_items (user_id, created_at DESC)`,
+    },
+    // projects: userId + sortOrder — getProjectsForUser orders by sortOrder within user.
+    {
+      name: "idx_projects_user_sort",
+      sql: `CREATE INDEX IF NOT EXISTS idx_projects_user_sort
+            ON projects (user_id, sort_order)`,
+    },
+    // projects: userId + status — active project filter in getDashboardProjectsSummary.
+    {
+      name: "idx_projects_user_status",
+      sql: `CREATE INDEX IF NOT EXISTS idx_projects_user_status
+            ON projects (user_id, status)`,
+    },
+    // project_tasks: projectId + sortOrder — board and list queries order tasks within a project.
+    {
+      name: "idx_project_tasks_project_sort",
+      sql: `CREATE INDEX IF NOT EXISTS idx_project_tasks_project_sort
+            ON project_tasks (project_id, sort_order)`,
+    },
+    // project_tasks: userId + status — getAllOpenTasks and urgent-task queries filter here.
+    {
+      name: "idx_project_tasks_user_status",
+      sql: `CREATE INDEX IF NOT EXISTS idx_project_tasks_user_status
+            ON project_tasks (user_id, status)`,
+    },
+    // project_tasks: userId + dueDate — overdue and due-this-week queries filter here.
+    {
+      name: "idx_project_tasks_user_due",
+      sql: `CREATE INDEX IF NOT EXISTS idx_project_tasks_user_due
+            ON project_tasks (user_id, due_date)`,
+    },
+    // task_comments: taskId + createdAt — getTaskComments fetches comments per task ordered by date.
+    {
+      name: "idx_task_comments_task_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_task_comments_task_created
+            ON task_comments (task_id, created_at)`,
+    },
+    // task_activity: taskId + createdAt — getTaskActivity fetches activity per task ordered by date.
+    {
+      name: "idx_task_activity_task_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_task_activity_task_created
+            ON task_activity (task_id, created_at)`,
+    },
+    // project_columns: projectId + sortOrder — getProjectColumns orders columns within a project.
+    {
+      name: "idx_project_columns_project_sort",
+      sql: `CREATE INDEX IF NOT EXISTS idx_project_columns_project_sort
+            ON project_columns (project_id, sort_order)`,
+    },
+    // task_attachments: taskId — getTaskAttachments and bulk-delete cleanup fetch by taskId.
+    {
+      name: "idx_task_attachments_task",
+      sql: `CREATE INDEX IF NOT EXISTS idx_task_attachments_task
+            ON task_attachments (task_id)`,
+    },
+    // funnel_brain_files: composite (funnel_id, user_id, created_at) —
+    // brain-file queries filter by both funnel and user then order by date.
+    {
+      name: "idx_funnel_brain_files_funnel_user_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_funnel_brain_files_funnel_user_created
+            ON funnel_brain_files (funnel_id, user_id, created_at DESC)`,
     },
   ];
 

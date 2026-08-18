@@ -1457,7 +1457,12 @@ export const projects = pgTable("projects", {
   sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  // getProjectsForUser filters by userId and orders by sortOrder.
+  userSortIdx: index("idx_projects_user_sort").on(t.userId, t.sortOrder),
+  // status filter used by getDashboardProjectsSummary and active project queries.
+  userStatusIdx: index("idx_projects_user_status").on(t.userId, t.status),
+}));
 
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
@@ -1505,7 +1510,14 @@ export const projectTasks = pgTable("project_tasks", {
   sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  // getProjectTasks filters by projectId; sortOrder used for board ordering.
+  projectSortIdx: index("idx_project_tasks_project_sort").on(t.projectId, t.sortOrder),
+  // getOpenTasksForUser and overdue query filter by userId + status.
+  userStatusIdx: index("idx_project_tasks_user_status").on(t.userId, t.status),
+  // getAllOpenTasks and urgent-task queries filter by userId, status, and dueDate.
+  userDueIdx: index("idx_project_tasks_user_due").on(t.userId, t.dueDate),
+}));
 
 export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
   id: true,
@@ -1541,7 +1553,10 @@ export const taskComments = pgTable("task_comments", {
   body: text("body").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  // getTaskComments fetches by taskId ordered by createdAt.
+  taskCreatedIdx: index("idx_task_comments_task_created").on(t.taskId, t.createdAt),
+}));
 
 export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
   id: true,
@@ -1567,7 +1582,10 @@ export const taskActivity = pgTable("task_activity", {
   type: text("type").notNull(),
   meta: jsonb("meta").$type<Record<string, unknown>>().default({}).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  // getTaskActivity fetches by taskId ordered by createdAt DESC.
+  taskCreatedIdx: index("idx_task_activity_task_created").on(t.taskId, t.createdAt),
+}));
 
 export type TaskActivity = typeof taskActivity.$inferSelect;
 
@@ -1590,7 +1608,10 @@ export const projectColumns = pgTable("project_columns", {
   sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  // getProjectColumns filters by projectId and orders by sortOrder.
+  projectSortIdx: index("idx_project_columns_project_sort").on(t.projectId, t.sortOrder),
+}));
 
 export const insertProjectColumnSchema = createInsertSchema(projectColumns).omit({
   id: true,
@@ -1687,7 +1708,11 @@ export const taskAttachments = pgTable("task_attachments", {
   mimeType: text("mime_type").notNull(),
   size: integer("size").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  // getTaskAttachments fetches all attachments for a task; also used in bulk
+  // deletion cleanup (load all attachments per task before deleting objects).
+  taskIdx: index("idx_task_attachments_task").on(t.taskId),
+}));
 
 export type TaskAttachment = typeof taskAttachments.$inferSelect;
 
@@ -1954,6 +1979,11 @@ export const insertFunnelSchema = createInsertSchema(funnels).omit({
 
 export type InsertFunnel = z.infer<typeof insertFunnelSchema>;
 export type Funnel = typeof funnels.$inferSelect;
+
+/** Lightweight projection returned by the funnel grid list endpoint.
+ *  Excludes canvasData (large JSONB) and sharePasswordHash (sensitive).
+ *  Includes a server-computed nodeCount so the client never needs canvasData for display. */
+export type FunnelSummary = Omit<Funnel, 'canvasData' | 'sharePasswordHash'> & { nodeCount: number };
 
 export const funnelBrainFiles = pgTable("funnel_brain_files", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

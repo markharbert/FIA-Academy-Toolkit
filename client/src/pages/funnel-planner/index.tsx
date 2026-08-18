@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Funnel, FunnelTemplate } from "@shared/schema";
+import type { Funnel, FunnelSummary, FunnelTemplate } from "@shared/schema";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,14 +24,6 @@ function parseThumbnail(raw: string | null | undefined): { data: string; ts: num
   try { return JSON.parse(raw); } catch { return null; }
 }
 
-function countNodes(funnel: Funnel): number {
-  try {
-    const data = funnel.canvasData as { nodes?: unknown[] };
-    return Array.isArray(data?.nodes) ? data.nodes.length : 0;
-  } catch {
-    return 0;
-  }
-}
 
 export default function FunnelPlannerIndex() {
   const [, setLocation] = useLocation();
@@ -42,12 +34,12 @@ export default function FunnelPlannerIndex() {
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Funnel | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FunnelSummary | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [editTplName, setEditTplName] = useState("");
   const [editTplDesc, setEditTplDesc] = useState("");
 
-  const { data: funnels = [], isLoading } = useQuery<Funnel[]>({
+  const { data: funnels = [], isLoading } = useQuery<FunnelSummary[]>({
     queryKey: ["/api/funnels"],
   });
 
@@ -172,7 +164,7 @@ export default function FunnelPlannerIndex() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {funnels.map((funnel) => {
-            const nodeCount = countNodes(funnel);
+            const nodeCount = funnel.nodeCount;
             const thumbnail = parseThumbnail(funnel.thumbnailData);
             return (
               <Card
