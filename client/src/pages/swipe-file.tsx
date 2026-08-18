@@ -801,6 +801,35 @@ function PromoLinksTab() {
     queryFn: () => apiFetch("/api/swipe/promo-links"),
   });
 
+  const { data: affiliateLinkData } = useQuery<{ fiaAffiliateLink: string | null }>({
+    queryKey: ["/api/swipe/affiliate-link"],
+    queryFn: () => apiFetch("/api/swipe/affiliate-link"),
+  });
+
+  const [affiliateInput, setAffiliateInput] = useState("");
+  const [affiliateSaved, setAffiliateSaved] = useState(false);
+
+  // Sync input with fetched value
+  useEffect(() => {
+    if (affiliateLinkData?.fiaAffiliateLink != null) {
+      setAffiliateInput(affiliateLinkData.fiaAffiliateLink);
+    }
+  }, [affiliateLinkData?.fiaAffiliateLink]);
+
+  const saveAffiliateMutation = useMutation({
+    mutationFn: (fiaAffiliateLink: string) => apiFetch("/api/swipe/affiliate-link", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fiaAffiliateLink }),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/swipe/affiliate-link"] });
+      setAffiliateSaved(true);
+      setTimeout(() => setAffiliateSaved(false), 2500);
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   const saveMutation = useMutation({
     mutationFn: (promoLinkIds: string[]) => apiFetch("/api/swipe/promo-links", {
       method: "PUT",
@@ -826,6 +855,39 @@ function PromoLinksTab() {
 
   return (
     <div className="space-y-8">
+
+      {/* ── FIA Affiliate Link – hero card ── */}
+      <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🎓</span>
+          <div>
+            <p className="font-semibold text-sm text-foreground">Your Fearless Influencer Academy Affiliate Link</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              This link appears at the bottom of <strong>every public share page</strong> you create.
+              Leave blank to use the default <span className="text-primary">fearlessinfluencer.com</span>.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={affiliateInput}
+            onChange={e => setAffiliateInput(e.target.value)}
+            placeholder="https://fearlessinfluencer.com/your-affiliate-link"
+            className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm
+                       placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <Button
+            size="sm"
+            onClick={() => saveAffiliateMutation.mutate(affiliateInput)}
+            disabled={saveAffiliateMutation.isPending}
+            className="shrink-0 gap-1.5"
+          >
+            {affiliateSaved ? <><Check className="h-3.5 w-3.5" /> Saved!</> : saveAffiliateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+          </Button>
+        </div>
+      </div>
+
       <div className="rounded-lg border bg-card px-5 py-4 flex items-start gap-3">
         <Link2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
         <p className="text-sm text-muted-foreground">

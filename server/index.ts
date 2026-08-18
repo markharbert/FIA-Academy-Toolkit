@@ -879,6 +879,9 @@ async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE affiliate_links ADD COLUMN IF NOT EXISTS screenshot_url TEXT`);
     console.log("[startup] affiliate_links screenshot_url migration complete");
 
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS fia_affiliate_link TEXT`);
+    console.log("[startup] users fia_affiliate_link migration complete");
+
   } catch (err) {
     console.error("[startup] migration error:", err);
   }

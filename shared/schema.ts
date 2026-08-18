@@ -44,6 +44,7 @@ export const users = pgTable("users", {
   icalToken: text("ical_token"),
   dashboardLayout: jsonb("dashboard_layout"),
   swipePromoLinks: jsonb("swipe_promo_links").$type<string[]>().default(sql`'[]'::jsonb`),
+  fiaAffiliateLink: text("fia_affiliate_link"),
 });
 
 // User identities table for OAuth providers (supports multiple providers per user)

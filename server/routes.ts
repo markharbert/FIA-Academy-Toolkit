@@ -12425,6 +12425,32 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // ---- FIA Affiliate Link (account-level, shown in share page footer) ----
+
+  app.get("/api/swipe/affiliate-link", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const user = await storage.getUser(userId);
+      res.json({ fiaAffiliateLink: user?.fiaAffiliateLink ?? null });
+    } catch (err) {
+      console.error("[swipe] affiliate-link get error:", err);
+      res.status(500).json({ message: "Failed to load affiliate link" });
+    }
+  });
+
+  app.put("/api/swipe/affiliate-link", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any).userId as string;
+      const { fiaAffiliateLink } = req.body;
+      const link = typeof fiaAffiliateLink === "string" ? fiaAffiliateLink.trim() || null : null;
+      await storage.updateUser(userId, { fiaAffiliateLink: link } as any);
+      res.json({ fiaAffiliateLink: link });
+    } catch (err) {
+      console.error("[swipe] affiliate-link update error:", err);
+      res.status(500).json({ message: "Failed to save affiliate link" });
+    }
+  });
+
   // ---- Swipe File – Public Share Routes (no auth required) ----
 
   // Get public item metadata by token
@@ -12447,7 +12473,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       }
       // Return safe subset (no userId, replace per-item promo_links with account-level ones)
       const { userId: _uid, promoLinks: _itemPromo, ...safe } = item;
-      res.json({ item: { ...safe, promoLinks } });
+      res.json({ item: { ...safe, promoLinks, fiaAffiliateLink: owner?.fiaAffiliateLink ?? null } });
     } catch (err) {
       console.error("[swipe] public get error:", err);
       res.status(500).json({ message: "Failed to load item" });

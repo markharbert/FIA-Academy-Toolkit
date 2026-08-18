@@ -39,6 +39,7 @@ type PublicSwipeItem = {
   shareToken: string;
   viewCount: number;
   createdAt: string;
+  fiaAffiliateLink: string | null;
 };
 
 // ── Share page ─────────────────────────────────────────────────────────────────
@@ -306,7 +307,14 @@ export default function SwipeSharePage() {
               <div className="shrink-0 p-4 border-t border-gray-100">
                 <p className="text-center text-xs text-gray-300">
                   Shared via{" "}
-                  <span className="text-gray-400 font-medium">FIA Toolkit</span>
+                  <a
+                    href={item.fiaAffiliateLink || "https://fearlessinfluencer.com"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Fearless Influencer Academy
+                  </a>
                 </p>
               </div>
             </div>
@@ -415,7 +423,14 @@ export default function SwipeSharePage() {
 
             <p className="text-center text-xs text-gray-300 pb-4">
               Shared via{" "}
-              <span className="text-gray-400 font-medium">FIA Toolkit</span>
+              <a
+                href={item.fiaAffiliateLink || "https://fearlessinfluencer.com"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-primary hover:text-primary/80 transition-colors"
+              >
+                Fearless Influencer Academy
+              </a>
             </p>
           </div>
         )}
