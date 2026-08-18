@@ -305,13 +305,13 @@ export default function SwipeSharePage() {
 
               {/* Footer */}
               <div className="shrink-0 p-4 border-t border-gray-100">
-                <p className="text-center text-xs text-gray-300">
+                <p className="text-center text-xs text-gray-500">
                   Shared via{" "}
                   <a
                     href={item.fiaAffiliateLink || "https://www.fearlessinfluencer.com"}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-semibold text-primary hover:text-primary/80 transition-colors"
+                    className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
                   >
                     Fearless Influencer Academy
                   </a>
@@ -421,13 +421,13 @@ export default function SwipeSharePage() {
               </div>
             )}
 
-            <p className="text-center text-xs text-gray-300 pb-4">
+            <p className="text-center text-xs text-gray-500 pb-4">
               Shared via{" "}
               <a
                 href={item.fiaAffiliateLink || "https://www.fearlessinfluencer.com"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-primary hover:text-primary/80 transition-colors"
+                className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
               >
                 Fearless Influencer Academy
               </a>
