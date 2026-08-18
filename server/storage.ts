@@ -5315,10 +5315,67 @@ export class DatabaseStorage implements IStorage {
 
   // ---- Swipe File ----
 
-  async getSwipeItems(userId: string): Promise<SwipeItem[]> {
-    return db.select().from(swipeItems)
-      .where(eq(swipeItems.userId, userId))
-      .orderBy(desc(swipeItems.createdAt));
+  async getSwipeItems(
+    userId: string,
+    opts?: { search?: string; type?: string; limit?: number; offset?: number },
+  ): Promise<{
+    items: SwipeItem[];
+    total: number;
+    counts: { all: number; upload: number; snippet: number; shared: number };
+  }> {
+    // Build filtered WHERE clause
+    const filterConditions: any[] = [eq(swipeItems.userId, userId)];
+    if (opts?.type && opts.type !== "all") {
+      filterConditions.push(eq(swipeItems.type, opts.type));
+    }
+    if (opts?.search?.trim()) {
+      const q = `%${opts.search.trim()}%`;
+      filterConditions.push(
+        or(
+          ilike(swipeItems.title, q),
+          ilike(swipeItems.sourceUrl, q),
+          ilike(swipeItems.notes, q),
+          ilike(swipeItems.content, q),
+        )!,
+      );
+    }
+    const where = and(...filterConditions);
+    const lim = Math.min(opts?.limit ?? 60, 200);
+    const off = opts?.offset ?? 0;
+
+    // Run item page + filtered count + type breakdown in parallel
+    const [items, [{ total }], breakdown] = await Promise.all([
+      db.select().from(swipeItems)
+        .where(where)
+        .orderBy(desc(swipeItems.createdAt))
+        .limit(lim)
+        .offset(off),
+      db.select({ total: count() }).from(swipeItems).where(where),
+      db.select({ type: swipeItems.type, n: count() })
+        .from(swipeItems)
+        .where(eq(swipeItems.userId, userId))
+        .groupBy(swipeItems.type),
+    ]);
+
+    const uploadCount = Number(breakdown.find(r => r.type === "upload")?.n ?? 0);
+    const snippetCount = Number(breakdown.find(r => r.type === "snippet")?.n ?? 0);
+
+    // count(col) ignores NULLs — gives us share_token IS NOT NULL count
+    const [{ shared }] = await db
+      .select({ shared: sql<number>`cast(count(${swipeItems.shareToken}) as int)` })
+      .from(swipeItems)
+      .where(eq(swipeItems.userId, userId));
+
+    return {
+      items,
+      total: Number(total),
+      counts: {
+        all: uploadCount + snippetCount,
+        upload: uploadCount,
+        snippet: snippetCount,
+        shared: Number(shared),
+      },
+    };
   }
 
   async getSwipeItem(id: string, userId: string): Promise<SwipeItem | undefined> {

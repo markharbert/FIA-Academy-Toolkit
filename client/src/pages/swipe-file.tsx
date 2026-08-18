@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
 import { createPortal } from "react-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Redirect } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -1112,13 +1112,44 @@ export default function SwipeFilePage() {
   const [previewItem, setPreviewItem] = useState<SwipeItem | null>(null);
   const [typeFilter, setTypeFilter] = useState<"all" | "upload" | "snippet">("all");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const PAGE_SIZE = 30;
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const { data, isLoading } = useQuery<{ items: SwipeItem[] }>({
-    queryKey: ["/api/swipe"],
-    queryFn: () => apiFetch("/api/swipe"),
+  // Debounce search input 350 ms before hitting the server
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const PAGE_SIZE = 60;
+
+  type SwipePage = {
+    items: SwipeItem[];
+    total: number;
+    counts: { all: number; upload: number; snippet: number; shared: number };
+  };
+
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery<SwipePage, Error, { pages: SwipePage[]; pageParams: number[] }, string[], number>({
+    queryKey: ["/api/swipe", debouncedSearch, typeFilter],
+    queryFn: ({ pageParam }) => {
+      const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(pageParam) });
+      if (debouncedSearch) p.set("search", debouncedSearch);
+      if (typeFilter !== "all") p.set("type", typeFilter);
+      return apiFetch(`/api/swipe?${p}`);
+    },
+    getNextPageParam: (_lastPage, allPages) => {
+      const fetched = allPages.reduce((sum, pg) => sum + pg.items.length, 0);
+      const total = allPages[0]?.total ?? 0;
+      return fetched < total ? fetched : undefined;
+    },
+    initialPageParam: 0,
     enabled: !!user?.isAdmin,
+    staleTime: 60_000,
   });
 
   const deleteMutation = useMutation({
@@ -1136,26 +1167,10 @@ export default function SwipeFilePage() {
   }
   if (!user?.isAdmin) return <Redirect to="/dashboard" />;
 
-  const items = data?.items ?? [];
-  const filtered = items.filter(item => {
-    if (typeFilter !== "all" && item.type !== typeFilter) return false;
-    if (search) {
-      const s = search.toLowerCase();
-      return item.title.toLowerCase().includes(s)
-        || (item.sourceUrl ?? "").toLowerCase().includes(s)
-        || (item.notes ?? "").toLowerCase().includes(s)
-        || (item.content ?? "").toLowerCase().includes(s);
-    }
-    return true;
-  });
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const sharedCount = items.filter(i => !!i.shareToken).length;
-
-  // Reset to page 1 whenever filters change
-  useEffect(() => { setPage(1); }, [search, typeFilter]);
+  // Flatten all loaded pages into a single item list
+  const items = data?.pages.flatMap(pg => pg.items) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
+  const counts = data?.pages[0]?.counts ?? { all: 0, upload: 0, snippet: 0, shared: 0 };
 
   // Keep previewItem in sync with updated data (e.g. after share mutation)
   const livePreviewItem = previewItem
@@ -1197,10 +1212,10 @@ export default function SwipeFilePage() {
           {/* Stats */}
           <div className="flex gap-6 mt-6">
             {[
-              { label: "Total Items", value: items.length },
-              { label: "Images", value: items.filter(i => i.type === "upload").length },
-              { label: "Snippets", value: items.filter(i => i.type === "snippet").length },
-              { label: "Shared", value: sharedCount, highlight: true },
+              { label: "Total Items", value: counts.all },
+              { label: "Images", value: counts.upload },
+              { label: "Snippets", value: counts.snippet },
+              { label: "Shared", value: counts.shared, highlight: true },
             ].map(s => (
               <div key={s.label}>
                 <p className={`text-2xl font-bold ${s.highlight ? "text-amber-300" : "text-white"}`}>{s.value}</p>
@@ -1251,9 +1266,9 @@ export default function SwipeFilePage() {
                   </Button>
                 ))}
               </div>
-              {filtered.length > 0 && (
+              {total > 0 && (
                 <span className="text-sm text-muted-foreground ml-auto">
-                  {filtered.length} item{filtered.length !== 1 ? "s" : ""}
+                  {total} item{total !== 1 ? "s" : ""}
                 </span>
               )}
             </div>
@@ -1265,20 +1280,20 @@ export default function SwipeFilePage() {
               <div className="flex items-center justify-center py-24">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : filtered.length === 0 ? (
+            ) : items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
                 <div className="rounded-full bg-muted p-5">
                   <Camera className="h-10 w-10 text-muted-foreground/50" />
                 </div>
                 <h3 className="font-semibold text-lg">
-                  {items.length === 0 ? "Your swipe file is empty" : "No items match your filters"}
+                  {counts.all === 0 ? "Your swipe file is empty" : "No items match your filters"}
                 </h3>
                 <p className="text-muted-foreground text-sm max-w-sm">
-                  {items.length === 0
+                  {counts.all === 0
                     ? "Save screenshots and text snippets from around the web. Click any item to preview it full-size."
                     : "Try a different search term or filter."}
                 </p>
-                {items.length === 0 && (
+                {counts.all === 0 && (
                   <Button onClick={() => setAddOpen(true)} className="mt-2 gap-2">
                     <Plus className="h-4 w-4" /> Add Your First Item
                   </Button>
@@ -1287,7 +1302,7 @@ export default function SwipeFilePage() {
             ) : (
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {paginated.map(item => (
+                  {items.map(item => (
                     <SwipeCard
                       key={item.id}
                       item={item}
@@ -1298,64 +1313,23 @@ export default function SwipeFilePage() {
                   ))}
                 </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-center gap-2 pt-8">
+                {/* Load more */}
+                {hasNextPage && (
+                  <div className="flex flex-col items-center gap-2 pt-8 pb-4">
                     <Button
                       variant="outline"
-                      size="sm"
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      className="gap-1.5"
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                      className="gap-2"
                     >
-                      <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                      {isFetchingNextPage
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Loading…</>
+                        : <>Load more · {total - items.length} remaining</>}
                     </Button>
-
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => {
-                        const isActive = p === page;
-                        const nearCurrent = Math.abs(p - page) <= 2;
-                        const isEdge = p === 1 || p === totalPages;
-                        if (!nearCurrent && !isEdge) {
-                          // Show ellipsis at the boundary positions
-                          if (p === page - 3 || p === page + 3) {
-                            return <span key={p} className="px-1 text-muted-foreground text-sm">…</span>;
-                          }
-                          return null;
-                        }
-                        return (
-                          <button
-                            key={p}
-                            onClick={() => setPage(p)}
-                            className={`h-8 w-8 rounded-md text-sm font-medium transition-colors ${
-                              isActive
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
-                      className="gap-1.5"
-                    >
-                      Next <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Showing {items.length} of {total}
+                    </p>
                   </div>
-                )}
-
-                {/* Item count */}
-                {totalPages > 1 && (
-                  <p className="text-center text-xs text-muted-foreground pt-2 pb-4">
-                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} items
-                  </p>
                 )}
               </>
             )}
@@ -1374,7 +1348,7 @@ export default function SwipeFilePage() {
       {livePreviewItem && (
         <PreviewModal
           item={livePreviewItem}
-          items={filtered}
+          items={items}
           onNavigate={setPreviewItem}
           onClose={() => setPreviewItem(null)}
           onEdit={() => setEditItem(livePreviewItem)}

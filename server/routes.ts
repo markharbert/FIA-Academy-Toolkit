@@ -12279,12 +12279,23 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
 
   // ---- Swipe File (all authenticated members) ----
 
-  // List items
+  // In-memory ownership cache for the image route — eliminates a DB round-trip per thumbnail.
+  // Key: "userId:itemId" → { imagePath, ts }. TTL 5 minutes.
+  const swipeImageOwnerCache = new Map<string, { imagePath: string; ts: number }>();
+  const SWIPE_IMG_CACHE_TTL = 5 * 60 * 1000;
+
+  // List items — supports server-side search, type filter, and pagination
   app.get("/api/swipe", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const items = await storage.getSwipeItems(userId);
-      res.json({ items });
+      const { search, type, limit = "60", offset = "0" } = req.query as Record<string, string>;
+      const result = await storage.getSwipeItems(userId, {
+        search: search || undefined,
+        type: type || undefined,
+        limit: Math.min(parseInt(limit, 10) || 60, 200),
+        offset: parseInt(offset, 10) || 0,
+      });
+      res.json(result);
     } catch (err) {
       console.error("[swipe] list error:", err);
       res.status(500).json({ message: "Failed to load swipe items" });
@@ -12323,13 +12334,23 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Serve image (authenticated, owner only)
+  // Serve image (authenticated, owner only) — uses in-memory cache to skip DB lookup
   app.get("/api/swipe/:id/image", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const item = await storage.getSwipeItem(req.params.id, userId);
-      if (!item || !item.imagePath) return res.status(404).json({ message: "Not found" });
-      const file = await objectStorageService.getObjectEntityFile(item.imagePath);
+      const { id } = req.params;
+      const cacheKey = `${userId}:${id}`;
+      const cached = swipeImageOwnerCache.get(cacheKey);
+      let imagePath: string;
+      if (cached && Date.now() - cached.ts < SWIPE_IMG_CACHE_TTL) {
+        imagePath = cached.imagePath;
+      } else {
+        const item = await storage.getSwipeItem(id, userId);
+        if (!item || !item.imagePath) return res.status(404).json({ message: "Not found" });
+        swipeImageOwnerCache.set(cacheKey, { imagePath: item.imagePath, ts: Date.now() });
+        imagePath = item.imagePath;
+      }
+      const file = await objectStorageService.getObjectEntityFile(imagePath);
       await objectStorageService.downloadObject(file, res, 3600);
     } catch (err) {
       console.error("[swipe] image error:", err);
