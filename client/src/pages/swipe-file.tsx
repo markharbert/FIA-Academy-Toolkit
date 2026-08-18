@@ -871,7 +871,7 @@ function SwipeCard({
         )}
 
         {/* Hover overlay — preview hint */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition-colors duration-200 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors duration-200 flex items-center justify-center pointer-events-none">
           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/90 dark:bg-white/80 rounded-full p-2.5 shadow-xl">
             <ZoomIn className="h-4 w-4 text-slate-800" />
           </div>
