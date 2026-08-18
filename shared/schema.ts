@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1058,7 +1058,11 @@ export const dmoEntries = pgTable("dmo_entries", {
   notes: text("notes").default(""),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  // Covers every per-user query: getDmoHistory (filter user, order date),
+  // getDmoStreak (filter user, select distinct dates), getDmoToday (filter user + date).
+  userDateIdx: index("idx_dmo_entries_user_date").on(t.userId, t.date),
+}));
 
 export const insertDmoEntrySchema = createInsertSchema(dmoEntries).omit({
   id: true,
@@ -2016,7 +2020,12 @@ export const affiliateLinks = pgTable("affiliate_links", {
   sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => ({
+  // getAffiliateLinks filters by userId and orders by sortOrder.
+  userSortIdx: index("idx_affiliate_links_user_sort").on(t.userId, t.sortOrder),
+  // getAffiliateLinks also filters isActive for available-link queries.
+  userActiveIdx: index("idx_affiliate_links_user_active").on(t.userId, t.isActive),
+}));
 
 export const insertAffiliateLinkSchema = createInsertSchema(affiliateLinks).omit({
   id: true,
@@ -2048,7 +2057,10 @@ export const swipeItems = pgTable("swipe_items", {
   viewCount: integer("view_count").notNull().default(0),
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (t) => ({
+  // getSwipeItems filters by userId and orders by createdAt DESC.
+  userCreatedIdx: index("idx_swipe_items_user_created").on(t.userId, t.createdAt),
+}));
 
 export type SwipeItem = typeof swipeItems.$inferSelect;
 export type InsertSwipeItem = typeof swipeItems.$inferInsert;

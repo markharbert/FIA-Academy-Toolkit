@@ -5190,6 +5190,34 @@ export async function runMigrations(): Promise<void> {
       sql: `CREATE INDEX IF NOT EXISTS idx_users_email_lower_trim
             ON users (LOWER(TRIM(email)))`,
     },
+    // dmo_entries: userId + date — every DMO query (getDmoHistory, getDmoToday,
+    // getDmoStreak) filters by user_id and sorts/filters on date.
+    {
+      name: "idx_dmo_entries_user_date",
+      sql: `CREATE INDEX IF NOT EXISTS idx_dmo_entries_user_date
+            ON dmo_entries (user_id, date DESC)`,
+    },
+    // affiliate_links: userId + sortOrder — getAffiliateLinks always orders by
+    // sort_order within a user's link vault.
+    {
+      name: "idx_affiliate_links_user_sort",
+      sql: `CREATE INDEX IF NOT EXISTS idx_affiliate_links_user_sort
+            ON affiliate_links (user_id, sort_order)`,
+    },
+    // affiliate_links: userId + isActive — promo-link and available-link filters
+    // always combine user_id with is_active.
+    {
+      name: "idx_affiliate_links_user_active",
+      sql: `CREATE INDEX IF NOT EXISTS idx_affiliate_links_user_active
+            ON affiliate_links (user_id, is_active)`,
+    },
+    // swipe_items: userId + createdAt — getSwipeItems filters by user_id and
+    // orders by created_at DESC.
+    {
+      name: "idx_swipe_items_user_created",
+      sql: `CREATE INDEX IF NOT EXISTS idx_swipe_items_user_created
+            ON swipe_items (user_id, created_at DESC)`,
+    },
   ];
 
   for (const migration of migrations) {

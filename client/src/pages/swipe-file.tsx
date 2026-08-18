@@ -539,6 +539,8 @@ function SwipeCard({ item, onEdit, onDelete }: { item: SwipeItem; onEdit: () => 
             src={swipeImageUrl(item.id)}
             alt={item.title}
             className="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
             onError={() => setImgError(true)}
           />
         </div>
@@ -782,10 +784,10 @@ export default function SwipeFilePage() {
           </div>
         </TabsContent>
 
-        {/* Promotional Links Tab */}
+        {/* Promotional Links Tab — only mount when active to defer DB queries */}
         <TabsContent value="promo" className="mt-0 focus-visible:outline-none">
           <div className="max-w-3xl mx-auto px-6 py-8">
-            <PromoLinksTab />
+            {activeTab === "promo" && <PromoLinksTab />}
           </div>
         </TabsContent>
       </Tabs>

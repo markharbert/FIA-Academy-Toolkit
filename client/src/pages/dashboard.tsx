@@ -391,7 +391,8 @@ export default function DashboardPage() {
   const [nowTime, setNowTime] = useState(() => nowTimeLabel(user?.timezone));
   useEffect(() => {
     setNowTime(nowTimeLabel(user?.timezone));
-    const id = setInterval(() => setNowTime(nowTimeLabel(user?.timezone)), 30_000);
+    const tick = () => { if (!document.hidden) setNowTime(nowTimeLabel(user?.timezone)); };
+    const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
   }, [user?.timezone]);
 
@@ -402,8 +403,7 @@ export default function DashboardPage() {
   // ── Active announcements ──────────────────────────────────────────────────────
   const { data: announcementData } = useQuery<{ announcements: ActiveAnnouncement[] }>({
     queryKey: ["/api/announcements/active"],
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 3 * 60 * 1000, // 3 minutes — fresh enough without hitting DB on every nav
   });
   const activeAnnouncements = announcementData?.announcements ?? [];
 
