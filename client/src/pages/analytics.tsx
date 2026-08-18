@@ -60,9 +60,6 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
-        <div className="mb-6 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-300">
-          <strong>Please note:</strong> these tools are currently in development and do not work yet.
-        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {ANALYTICS_TOOLS.map((tool) => {
             const Icon = tool.icon;
