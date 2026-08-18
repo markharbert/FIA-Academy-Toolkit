@@ -12,6 +12,17 @@ type Funnel = {
   updatedAt: string;
 };
 
+function parseThumbnailSrc(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { data?: string };
+    return parsed.data ?? null;
+  } catch {
+    // Fallback: if it's already a plain data URL (old format), use it directly
+    return raw.startsWith("data:") ? raw : null;
+  }
+}
+
 export function FunnelBoardWidget() {
   const { data: funnels = [] } = useQuery<Funnel[]>({
     queryKey: ["/api/funnels"],
@@ -66,9 +77,9 @@ export function FunnelBoardWidget() {
                   className="flex items-center gap-2.5 rounded-xl border border-border bg-background/40 p-2 hover:bg-muted/30 transition-colors group cursor-pointer"
                   data-testid={`funnel-row-${f.id}`}
                 >
-                  {f.thumbnailData ? (
+                  {parseThumbnailSrc(f.thumbnailData) ? (
                     <img
-                      src={f.thumbnailData}
+                      src={parseThumbnailSrc(f.thumbnailData)!}
                       alt={f.name}
                       className="h-10 w-16 object-cover rounded-lg shrink-0 border border-border"
                     />
