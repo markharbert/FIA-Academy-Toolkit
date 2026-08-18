@@ -400,6 +400,7 @@ function PreviewModal({
   const { toast } = useToast();
   const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState<null | "rich" | "plain">(null);
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
 
@@ -413,7 +414,30 @@ function PreviewModal({
     setImgError(false);
     setImgLoaded(false);
     setCopied(false);
+    setCopiedSnippet(null);
   }, [item.id]);
+
+  function copySnippet(type: "rich" | "plain") {
+    if (!item.content) return;
+    const plain = isHtmlSnippet(item.content) ? stripHtml(item.content) : item.content;
+    if (type === "rich" && isHtmlSnippet(item.content)) {
+      const html = sanitizeSnippetHtml(item.content);
+      try {
+        navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([plain], { type: "text/plain" }),
+          }),
+        ]);
+      } catch {
+        navigator.clipboard.writeText(plain);
+      }
+    } else {
+      navigator.clipboard.writeText(plain);
+    }
+    setCopiedSnippet(type);
+    setTimeout(() => setCopiedSnippet(null), 2000);
+  }
 
   // Keyboard navigation
   useEffect(() => {
@@ -512,6 +536,25 @@ function PreviewModal({
             ) : item.type === "snippet" ? (
               <div className="flex items-start justify-center p-4 md:p-6 overflow-y-auto min-h-full">
                 <div className="w-full max-w-3xl rounded-xl border border-white/10 bg-[hsl(230,25%,12%)] p-5 md:p-8 shadow-xl">
+                  {/* Copy buttons */}
+                  {item.content && (
+                    <div className="flex gap-2 mb-4 pb-4 border-b border-white/10">
+                      <button
+                        onClick={() => copySnippet("rich")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/8 hover:bg-white/15 text-white/70 hover:text-white transition-all border border-white/10"
+                      >
+                        {copiedSnippet === "rich" ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedSnippet === "rich" ? "Copied!" : "Copy with Formatting"}
+                      </button>
+                      <button
+                        onClick={() => copySnippet("plain")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/8 hover:bg-white/15 text-white/70 hover:text-white transition-all border border-white/10"
+                      >
+                        {copiedSnippet === "plain" ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedSnippet === "plain" ? "Copied!" : "Copy Plain Text"}
+                      </button>
+                    </div>
+                  )}
                   {item.content && isHtmlSnippet(item.content) ? (
                     <div
                       className="prose prose-sm prose-invert max-w-none
