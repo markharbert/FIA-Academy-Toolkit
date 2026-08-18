@@ -422,28 +422,36 @@ function PreviewModal({
   return (
     // Full-screen overlay
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
       style={{ background: "rgba(0,0,0,0.85)" }}
       onClick={onClose}
     >
       {/* Modal panel — click inside stops propagation */}
       <div
-        className="relative flex rounded-2xl overflow-hidden shadow-2xl"
-        style={{ width: "75vw", height: "75vh" }}
-        style={{ background: "hsl(230,45%,10%)" }}
+        className="relative flex flex-col md:flex-row rounded-2xl overflow-hidden shadow-2xl w-full h-[92vh] md:w-[75vw] md:h-[75vh]"
+        style={{ background: "hsl(230,45%,10%)", maxWidth: "1400px" }}
         onClick={e => e.stopPropagation()}
       >
-        {/* ── Left: image / content pane ── */}
-        <div className="flex-1 relative flex flex-col bg-[hsl(230,30%,7%)] min-w-0">
+        {/* ── Image / content pane ── */}
+        {/* Mobile: top 55% of modal height; Desktop: flex-1 fills remaining width */}
+        <div className="relative flex flex-col bg-[hsl(230,30%,7%)] min-w-0 min-h-0 h-[55%] shrink-0 md:h-auto md:flex-1">
           {/* Navigation counter */}
-          <div className="absolute top-3 left-4 z-10">
-            <span className="text-xs text-white/50 bg-black/40 rounded-full px-3 py-1 backdrop-blur-sm">
+          <div className="absolute top-3 left-3 z-10">
+            <span className="text-xs text-white/50 bg-black/40 rounded-full px-2.5 py-1 backdrop-blur-sm">
               {currentIndex + 1} / {items.length}
             </span>
           </div>
 
+          {/* Close button — mobile only, top-right of image pane */}
+          <button
+            onClick={onClose}
+            className="md:hidden absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white/70 hover:text-white backdrop-blur-sm"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
           {/* Content area — scrollable */}
-          <div className="flex-1 overflow-auto flex items-center justify-center p-6 min-h-0">
+          <div className="flex-1 overflow-auto flex items-center justify-center p-4 md:p-6 min-h-0">
             {isImage ? (
               <div className="relative max-w-full max-h-full flex items-center justify-center">
                 {!imgLoaded && (
@@ -455,7 +463,6 @@ function PreviewModal({
                   src={swipeImageUrl(item.id)}
                   alt={item.title}
                   className={`max-w-full max-h-full object-contain rounded-lg shadow-xl transition-opacity duration-300 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
-                  style={{ maxHeight: "calc(96vh - 8rem)" }}
                   onLoad={() => setImgLoaded(true)}
                   onError={() => { setImgError(true); setImgLoaded(true); }}
                 />
@@ -483,11 +490,11 @@ function PreviewModal({
             )}
           </div>
 
-          {/* Prev / Next navigation arrows */}
+          {/* Prev / Next navigation arrows — larger tap targets on mobile */}
           {hasPrev && (
             <button
               onClick={() => onNavigate(items[currentIndex - 1])}
-              className="absolute left-3 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-black/50 hover:bg-black/70 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all backdrop-blur-sm"
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 h-12 w-12 md:h-10 md:w-10 rounded-full bg-black/50 hover:bg-black/70 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all backdrop-blur-sm"
               title="Previous (←)"
             >
               <ChevronLeft className="h-5 w-5" />
@@ -496,7 +503,7 @@ function PreviewModal({
           {hasNext && (
             <button
               onClick={() => onNavigate(items[currentIndex + 1])}
-              className="absolute right-3 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-black/50 hover:bg-black/70 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all backdrop-blur-sm"
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 h-12 w-12 md:h-10 md:w-10 rounded-full bg-black/50 hover:bg-black/70 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-all backdrop-blur-sm"
               title="Next (→)"
             >
               <ChevronRight className="h-5 w-5" />
@@ -504,13 +511,14 @@ function PreviewModal({
           )}
         </div>
 
-        {/* ── Right: metadata sidebar ── */}
+        {/* ── Metadata sidebar ── */}
+        {/* Mobile: remaining 45% height below image; Desktop: 300px fixed right column */}
         <div
-          className="flex flex-col border-l overflow-hidden shrink-0"
-          style={{ width: "300px", borderColor: "hsl(230,40%,18%)" }}
+          className="flex flex-col border-t md:border-t-0 md:border-l overflow-hidden flex-1 md:flex-none md:w-[300px]"
+          style={{ borderColor: "hsl(230,40%,18%)" }}
         >
-          {/* Sidebar header */}
-          <div className="flex items-start gap-2 p-4 border-b" style={{ borderColor: "hsl(230,40%,18%)" }}>
+          {/* Sidebar header — desktop only (mobile has close btn on the image pane) */}
+          <div className="hidden md:flex items-start gap-2 p-4 border-b" style={{ borderColor: "hsl(230,40%,18%)" }}>
             <div className="flex-1 min-w-0">
               <h2 className="font-semibold text-sm text-white leading-tight line-clamp-3">{item.title}</h2>
               <div className="flex items-center gap-2 mt-2">
@@ -540,20 +548,30 @@ function PreviewModal({
             </button>
           </div>
 
-          {/* Sidebar metadata — scrollable */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Date + views */}
-            <div className="space-y-2 text-xs text-white/50">
-              <div className="flex items-center justify-between">
-                <span>Added</span>
+          {/* Mobile-only compact header (title + type badge) */}
+          <div className="md:hidden flex items-center gap-2 px-3 pt-2.5 pb-1 shrink-0">
+            <h2 className="font-semibold text-sm text-white leading-tight flex-1 truncate">{item.title}</h2>
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
+              item.type === "upload"
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                : "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+            }`}>
+              {item.type === "upload" ? "Image" : "Snippet"}
+            </span>
+          </div>
+
+          {/* Metadata — scrollable */}
+          <div className="flex-1 overflow-y-auto px-3 py-2 md:p-4 space-y-3 md:space-y-4">
+            {/* Date + views — horizontal on mobile to save space */}
+            <div className="flex items-center gap-4 text-xs text-white/50">
+              <div className="flex items-center gap-1.5">
+                <span className="text-white/40">Added</span>
                 <span className="text-white/70">{format(new Date(item.createdAt), "MMM d, yyyy")}</span>
               </div>
               {item.shareToken && (
-                <div className="flex items-center justify-between">
-                  <span>Views</span>
-                  <span className="flex items-center gap-1 text-emerald-400">
-                    <Globe className="h-3 w-3" />{item.viewCount}
-                  </span>
+                <div className="flex items-center gap-1 text-emerald-400">
+                  <Globe className="h-3 w-3" />
+                  <span>{item.viewCount} views</span>
                 </div>
               )}
             </div>
@@ -582,7 +600,7 @@ function PreviewModal({
               </div>
             )}
 
-            {/* Snippet content preview (short) in sidebar */}
+            {/* Snippet content preview in sidebar */}
             {item.type === "snippet" && item.content && (
               <div>
                 <p className="text-xs font-medium text-white/40 uppercase tracking-widest mb-1.5">Preview</p>
@@ -590,9 +608,9 @@ function PreviewModal({
               </div>
             )}
 
-            {/* Keyboard hint */}
+            {/* Keyboard hint — desktop only */}
             {items.length > 1 && (
-              <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+              <div className="hidden md:block rounded-lg border border-white/10 bg-white/5 p-3">
                 <p className="text-[10px] text-white/40 leading-relaxed">
                   Use <kbd className="bg-white/10 px-1 rounded text-white/60">←</kbd> <kbd className="bg-white/10 px-1 rounded text-white/60">→</kbd> to navigate · <kbd className="bg-white/10 px-1 rounded text-white/60">Esc</kbd> to close
                 </p>
@@ -600,8 +618,8 @@ function PreviewModal({
             )}
           </div>
 
-          {/* Sidebar actions */}
-          <div className="p-4 space-y-2 border-t" style={{ borderColor: "hsl(230,40%,18%)" }}>
+          {/* Actions */}
+          <div className="px-3 py-2.5 md:p-4 space-y-2 border-t shrink-0" style={{ borderColor: "hsl(230,40%,18%)" }}>
             {/* Share / Copy */}
             {item.shareToken ? (
               <div className="flex gap-2">
@@ -647,25 +665,25 @@ function PreviewModal({
               </Button>
             )}
 
-            {/* Edit */}
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full gap-1.5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
-              onClick={() => { onClose(); setTimeout(onEdit, 50); }}
-            >
-              <Edit3 className="h-3.5 w-3.5" /> Edit Details
-            </Button>
-
-            {/* Delete */}
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full gap-1.5 border-red-900/50 text-red-400/80 hover:bg-red-950/50 hover:text-red-400 hover:border-red-800/60"
-              onClick={() => { onClose(); setTimeout(onDelete, 50); }}
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Delete
-            </Button>
+            {/* Edit + Delete side by side on mobile to save vertical space */}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 gap-1.5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
+                onClick={() => { onClose(); setTimeout(onEdit, 50); }}
+              >
+                <Edit3 className="h-3.5 w-3.5" /> Edit
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 gap-1.5 border-red-900/50 text-red-400/80 hover:bg-red-950/50 hover:text-red-400 hover:border-red-800/60"
+                onClick={() => { onClose(); setTimeout(onDelete, 50); }}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </Button>
+            </div>
           </div>
         </div>
       </div>
