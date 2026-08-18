@@ -876,10 +876,14 @@ async function runStartupMigrations() {
     `);
     console.log("[startup] dmo_settings streak cache columns migration complete");
 
+    await db.execute(sql`ALTER TABLE affiliate_links ADD COLUMN IF NOT EXISTS screenshot_url TEXT`);
+    console.log("[startup] affiliate_links screenshot_url migration complete");
+
   } catch (err) {
     console.error("[startup] migration error:", err);
   }
 }
+
 
 (async () => {
   await runStartupMigrations();

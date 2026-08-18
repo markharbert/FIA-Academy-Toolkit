@@ -350,9 +350,13 @@ function LinkModal({
   );
 }
 
-function LinkScreenshot({ url, title }: { url: string; title: string }) {
+function LinkScreenshot({ url, title, screenshotUrl }: { url: string; title: string; screenshotUrl?: string | null }) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
-  const src = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
+  // Use the server-cached screenshot URL when available; fall back to a live
+  // Microlink call only if the server hasn't stored one yet.
+  const src = screenshotUrl
+    ? screenshotUrl
+    : `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
 
   return (
     <div className="relative w-[96px] h-[60px] rounded-lg overflow-hidden bg-muted/40 shrink-0 border border-border/50">
@@ -397,7 +401,7 @@ function LinkCard({
       data-testid={`card-link-${link.id}`}
     >
       {/* Page snapshot (replaces emoji) */}
-      <LinkScreenshot url={link.url} title={link.title} />
+      <LinkScreenshot url={link.url} title={link.title} screenshotUrl={link.screenshotUrl} />
 
       {/* Title + description + badges */}
       <div className="min-w-0 flex-[2]">

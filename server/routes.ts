@@ -50,6 +50,17 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
 });
 
+async function fetchMicrolinkScreenshotUrl(url: string): Promise<string | null> {
+  try {
+    const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false`;
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const json = await res.json() as any;
+    return json?.data?.screenshot?.url ?? null;
+  } catch {
+    return null;
+  }
+}
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const SCREENSHOTS_DIR = path.join(process.cwd(), "uploads", "feedback-screenshots");
 const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
@@ -4419,8 +4430,6 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to generate title" });
     }
   });
-
-
 
 
   // PDF report download
@@ -12218,7 +12227,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const userId = (req.session as any).userId as string;
       const parsed = insertAffiliateLinkSchema.safeParse({ ...req.body, userId });
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
-      const link = await storage.createAffiliateLink(userId, parsed.data);
+      const screenshotUrl = await fetchMicrolinkScreenshotUrl(parsed.data.url);
+      const link = await storage.createAffiliateLink(userId, { ...parsed.data, screenshotUrl });
       res.status(201).json(link);
     } catch (err) {
       console.error("[affiliate-links] create error:", err);
@@ -12232,6 +12242,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const parsed = insertAffiliateLinkSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
       const { userId: _uid, ...updates } = parsed.data as any;
+      // If URL is changing, refresh the cached screenshot
+      if (updates.url) {
+        updates.screenshotUrl = await fetchMicrolinkScreenshotUrl(updates.url);
+      }
       const link = await storage.updateAffiliateLink(req.params.id, userId, updates);
       if (!link) return res.status(404).json({ message: "Link not found" });
       res.json(link);
@@ -12490,7 +12504,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const user = (req as any).apiUser;
       const parsed = insertAffiliateLinkSchema.safeParse({ ...req.body, userId: user.id });
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
-      const link = await storage.createAffiliateLink(user.id, parsed.data);
+      const screenshotUrl = await fetchMicrolinkScreenshotUrl(parsed.data.url);
+      const link = await storage.createAffiliateLink(user.id, { ...parsed.data, screenshotUrl });
       res.status(201).json({ link });
     } catch (err) {
       console.error("[v1] links create error:", err);
@@ -12504,6 +12519,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const parsed = insertAffiliateLinkSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten().fieldErrors });
       const { userId: _uid, ...updates } = parsed.data as any;
+      // If URL is changing, refresh the cached screenshot
+      if (updates.url) {
+        updates.screenshotUrl = await fetchMicrolinkScreenshotUrl(updates.url);
+      }
       const link = await storage.updateAffiliateLink(req.params.id, user.id, updates);
       if (!link) return res.status(404).json({ message: "Link not found" });
       res.json({ link });

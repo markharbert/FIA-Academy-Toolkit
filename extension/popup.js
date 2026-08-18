@@ -604,13 +604,16 @@ function buildLinkCard(link, container) {
   const top = document.createElement("div");
   top.className = "link-card-top";
 
-  // Screenshot thumbnail (Microlink)
+  // Screenshot thumbnail — use the server-cached URL when available, fall back
+  // to a live Microlink call only if no cached URL was stored yet.
   const thumb = document.createElement("div");
   thumb.className = "link-thumb";
   const thumbImg = document.createElement("img");
   thumbImg.loading = "lazy";
   thumbImg.alt = link.title;
-  thumbImg.src = `https://api.microlink.io/?url=${encodeURIComponent(link.url)}&screenshot=true&meta=false&embed=screenshot.url`;
+  thumbImg.src = link.screenshotUrl
+    ? link.screenshotUrl
+    : `https://api.microlink.io/?url=${encodeURIComponent(link.url)}&screenshot=true&meta=false&embed=screenshot.url`;
   const thumbPh = document.createElement("span");
   thumbPh.className = "link-thumb-ph";
   thumbPh.textContent = "🌐";

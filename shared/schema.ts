@@ -2060,6 +2060,7 @@ export const affiliateLinks = pgTable("affiliate_links", {
   description: text("description"),
   category: text("category"),
   emoji: text("emoji").default("🔗").notNull(),
+  screenshotUrl: text("screenshot_url"),
   clickCount: integer("click_count").default(0).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   sortOrder: integer("sort_order").default(0).notNull(),
