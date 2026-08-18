@@ -6,6 +6,24 @@ import {
   Camera, AlertCircle, ArrowUpRight, ZoomIn, ZoomOut,
 } from "lucide-react";
 import { format } from "date-fns";
+import DOMPurify from "dompurify";
+
+const SNIPPET_ALLOWED_TAGS = [
+  "p","br","strong","em","b","i","u","s","del","ins","mark",
+  "h1","h2","h3","h4","h5","h6",
+  "ul","ol","li","blockquote","pre","code",
+  "a","img","figure","figcaption",
+  "table","thead","tbody","tfoot","tr","th","td",
+  "hr","span","div","section","article",
+];
+function isHtmlSnippet(content: string) { return /<[a-z][\s\S]*?>/i.test(content); }
+function sanitizeSnippet(html: string) {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: SNIPPET_ALLOWED_TAGS,
+    ALLOWED_ATTR: ["href","src","alt","title","target","rel"],
+    FORCE_BODY: true,
+  });
+}
 
 type PromoLink = { title: string; url: string; description?: string };
 type PublicSwipeItem = {
@@ -500,9 +518,21 @@ export default function SwipeSharePage() {
 
             {item.content && (
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap font-mono text-sm">
-                  {item.content}
-                </p>
+                {isHtmlSnippet(item.content) ? (
+                  <div
+                    className="prose prose-sm max-w-none
+                      prose-headings:text-gray-900 prose-p:text-gray-800
+                      prose-strong:text-gray-900 prose-a:text-blue-600
+                      prose-blockquote:border-l-gray-300 prose-blockquote:text-gray-600
+                      prose-code:text-emerald-700 prose-code:bg-gray-100 prose-code:rounded prose-code:px-1
+                      prose-pre:bg-gray-100 prose-li:text-gray-800 prose-img:rounded-lg"
+                    dangerouslySetInnerHTML={{ __html: sanitizeSnippet(item.content) }}
+                  />
+                ) : (
+                  <p className="text-gray-800 leading-relaxed whitespace-pre-wrap font-mono text-sm">
+                    {item.content}
+                  </p>
+                )}
                 {item.sourceUrl && (
                   <a
                     href={item.sourceUrl}
