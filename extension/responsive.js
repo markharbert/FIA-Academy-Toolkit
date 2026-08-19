@@ -105,11 +105,23 @@
       }
     });
 
-    clone.querySelectorAll("script").forEach(element => element.remove());
+    // The preview is intentionally script-free. Nested documents can execute their
+    // own scripts even when top-level <script> elements have been removed.
+    clone.querySelectorAll("script, iframe, frame, object, embed").forEach(element => element.remove());
     clone.querySelectorAll(`style#${STYLE_ID}, #${ROOT_ID}, [id^="__fia_"]`)
       .forEach(element => element.remove());
-    clone.querySelectorAll('meta[http-equiv="Content-Security-Policy" i]')
+    clone.querySelectorAll('meta[http-equiv="Content-Security-Policy" i], meta[http-equiv="refresh" i]')
       .forEach(element => element.remove());
+    clone.querySelectorAll("*").forEach(element => {
+      Array.from(element.attributes).forEach(attribute => {
+        const name = attribute.name.toLowerCase();
+        const value = attribute.value.trim().toLowerCase();
+        if (name.startsWith("on")
+          || (["href", "src", "action", "formaction"].includes(name) && value.startsWith("javascript:"))) {
+          element.removeAttribute(attribute.name);
+        }
+      });
+    });
 
     return `<!doctype html>\n${clone.outerHTML}`;
   }

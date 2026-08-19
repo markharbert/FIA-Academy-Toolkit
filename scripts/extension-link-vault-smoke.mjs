@@ -112,7 +112,13 @@ function fixtureHtml(kind) {
           }
         </style>
       </head>
-      <body>${fields[kind] || fields.noeditor}</body>
+      <body>
+        ${fields[kind] || fields.noeditor}
+        <iframe id="responsive-script-frame" hidden
+          srcdoc="&lt;script&gt;window.__responsiveNestedScriptRuns = true;&lt;/script&gt;"></iframe>
+        <button id="responsive-inline-handler" hidden onclick="window.__responsiveInlineHandlerRuns = true">Hidden</button>
+        <a id="responsive-javascript-link" hidden href="javascript:window.__responsiveJavascriptUrlRuns = true">Hidden</a>
+      </body>
     </html>`;
 }
 
@@ -271,7 +277,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.8", "the packaged extension is not version 2.4.8");
+  assert.equal(packagedManifest.version, "2.4.9", "the packaged extension is not version 2.4.9");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -515,6 +521,12 @@ async function main() {
 
     const colorUrl = `${fixture.baseUrl}/color`;
     const colorPage = await browser.newPage();
+    const sandboxScriptWarnings = [];
+    colorPage.on("console", message => {
+      if (message.text().includes("Blocked script execution in 'about:blank'")) {
+        sandboxScriptWarnings.push(message.text());
+      }
+    });
     await colorPage.goto(colorUrl, { waitUntil: "domcontentloaded" });
     const colorTab = await tabFor(colorUrl);
     await extensionPage.evaluate(async (tabId) => {
@@ -792,6 +804,32 @@ async function main() {
         frame.contentWindow.__responsiveFixtureScriptRuns),
       undefined,
       "Responsive executed a source-page script inside the preview",
+    );
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame => ({
+        embeddedDocuments: frame.contentDocument.querySelectorAll("iframe, frame, object, embed").length,
+        inlineHandlers: Array.from(frame.contentDocument.querySelectorAll("*")).flatMap(element =>
+          Array.from(element.attributes).filter(attribute => attribute.name.toLowerCase().startsWith("on")),
+        ).length,
+        javascriptUrls: Array.from(frame.contentDocument.querySelectorAll("[href], [src], [action], [formaction]"))
+          .filter(element => Array.from(element.attributes).some(attribute =>
+            ["href", "src", "action", "formaction"].includes(attribute.name.toLowerCase())
+              && attribute.value.trim().toLowerCase().startsWith("javascript:"),
+          )).length,
+        allowsScripts: frame.sandbox.contains("allow-scripts"),
+      })),
+      {
+        embeddedDocuments: 0,
+        inlineHandlers: 0,
+        javascriptUrls: 0,
+        allowsScripts: false,
+      },
+      "Responsive preview retained script-capable page content or weakened its sandbox",
+    );
+    assert.deepEqual(
+      sandboxScriptWarnings,
+      [],
+      `Responsive preview caused sandboxed script warnings: ${sandboxScriptWarnings.join(" | ")}`,
     );
     await colorPage.focus("#__fia_responsive_preset__");
     await colorPage.keyboard.down("Shift");
