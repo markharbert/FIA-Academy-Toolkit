@@ -5,6 +5,7 @@
 // viewport so CSS media queries respond to the selected dimensions.
 
 (() => {
+  function start() {
   const ROOT_ID = "__fia_responsive__";
   const STYLE_ID = "__fia_responsive_style__";
   const MIN_WIDTH = 240;
@@ -304,7 +305,8 @@
       #${ROOT_ID} .fia-responsive-select-wrap { width: 230px !important; }
     }
   `;
-  document.documentElement.appendChild(style);
+  const pageRoot = document.documentElement;
+  pageRoot.appendChild(style);
 
   const host = document.createElement("div");
   host.id = ROOT_ID;
@@ -354,7 +356,7 @@
       </div>
     </main>
   `;
-  document.documentElement.appendChild(host);
+  pageRoot.appendChild(host);
 
   const presetSelect = host.querySelector("#__fia_responsive_preset__");
   const presetValue = host.querySelector(".fia-responsive-select-value");
@@ -568,4 +570,13 @@
   frame.srcdoc = snapshot;
   renderPreview();
   presetSelect.focus({ preventScroll: true });
+  }
+
+  if (document.documentElement) {
+    start();
+  } else if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    queueMicrotask(start);
+  }
 })();
