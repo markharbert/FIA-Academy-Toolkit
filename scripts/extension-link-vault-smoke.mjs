@@ -199,7 +199,12 @@ async function installLinkApiStub(pickerPage) {
 }
 
 async function assertPickerOpeningContract(extensionDir) {
-  const serviceWorker = await readFile(path.join(extensionDir, "service-worker.js"), "utf8");
+  const [serviceWorker, popupHtml, popupJs, rulerScript] = await Promise.all([
+    readFile(path.join(extensionDir, "service-worker.js"), "utf8"),
+    readFile(path.join(extensionDir, "popup.html"), "utf8"),
+    readFile(path.join(extensionDir, "popup.js"), "utf8"),
+    readFile(path.join(extensionDir, "ruler.js"), "utf8"),
+  ]);
   const paletteScanner = serviceWorker.match(
     /async function handleColorPaletteAnalysis[\s\S]*?(?=async function handleFullPageCapture)/,
   )?.[0] || "";
@@ -238,6 +243,21 @@ async function assertPickerOpeningContract(extensionDir) {
     serviceWorker,
     /activeBeforeCapture\?\.id !== tabId[\s\S]*?activeAfterCapture\?\.id !== tabId/,
     "the packaged palette scanner no longer aborts when the source tab becomes inactive",
+  );
+  assert.match(
+    popupHtml,
+    /id="swipe-ruler-row"[\s\S]*?id="swipe-ruler"[\s\S]*?>Ruler</,
+    "the packaged popup does not place the Ruler button on its own row",
+  );
+  assert.match(
+    popupJs,
+    /files: \["ruler\.js"\][\s\S]*?\$\("swipe-ruler"\)\.addEventListener\("click", swipeStartRuler\)/,
+    "the packaged popup no longer injects the Ruler from its button",
+  );
+  assert.match(
+    rulerScript,
+    /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
+    "the packaged Ruler is missing its alignment guides or measurement readout",
   );
 }
 
@@ -486,6 +506,65 @@ async function main() {
           && toast.classList.contains("success");
       },
     );
+    await colorPage.waitForFunction(
+      () => !document.getElementById("__fia_color_picker__"),
+      { timeout: 3_000 },
+    );
+
+    // ── Ruler: guides + forward/reverse drag measurement + cleanup ──────────
+    await extensionPage.evaluate(async (tabId) => {
+      const tab = await chrome.tabs.get(tabId);
+      await chrome.tabs.update(tabId, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["ruler.js"] });
+    }, colorTab.id);
+    await colorPage.waitForSelector("#__fia_ruler__");
+    await colorPage.mouse.move(150, 130);
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_ruler__", element => ({
+        x: element.dataset.guideX,
+        y: element.dataset.guideY,
+      })),
+      { x: "150", y: "130" },
+      "Ruler guides did not follow the pointer",
+    );
+
+    await colorPage.mouse.move(180, 160);
+    await colorPage.mouse.down();
+    await colorPage.mouse.move(420, 340);
+    await colorPage.mouse.up();
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_ruler__", element => ({
+        width: element.dataset.width,
+        height: element.dataset.height,
+        x: element.dataset.x,
+        y: element.dataset.y,
+      })),
+      { width: "240", height: "180", x: "180", y: "160" },
+      "Ruler did not calculate a forward drag correctly",
+    );
+    assert.match(
+      await colorPage.$eval(".fia-ruler-metrics", element => element.textContent || ""),
+      /Width\s*240px[\s\S]*Height\s*180px[\s\S]*X\s*180px[\s\S]*Y\s*160px/,
+      "Ruler readout did not show width, height, X, and Y",
+    );
+
+    await colorPage.mouse.move(500, 400);
+    await colorPage.mouse.down();
+    await colorPage.mouse.move(300, 250);
+    await colorPage.mouse.up();
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_ruler__", element => ({
+        width: element.dataset.width,
+        height: element.dataset.height,
+        x: element.dataset.x,
+        y: element.dataset.y,
+      })),
+      { width: "200", height: "150", x: "300", y: "250" },
+      "Ruler did not replace the measurement or support reverse dragging",
+    );
+    await colorPage.keyboard.press("Escape");
+    await colorPage.waitForFunction(() => !document.getElementById("__fia_ruler__"));
 
     // ── Color Palette: full-page scroll + dominant-color extraction ──────────
     const paletteUrl = `${fixture.baseUrl}/palette`;
@@ -679,6 +758,7 @@ async function main() {
     console.log("  - cancel/reopen and stale-picker tab isolation");
     console.log("  - magnified color picker hex sampling and clipboard copy");
     console.log("  - Site Inspector hover details and Escape cleanup");
+    console.log("  - Ruler alignment guides, drag-any-direction measurement, replacement, and Escape cleanup");
     console.log("  - color palette: streaming full-page scan, six dominant colors, detected font variants, copy/save, tab-switch cleanup");
   } finally {
     await browser?.close();

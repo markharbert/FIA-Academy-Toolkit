@@ -761,6 +761,7 @@
     .swipe-cap-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); }
     .swipe-cap-btn:disabled { opacity: .4; cursor: not-allowed; }
     .swipe-cap-btn.active { border-color: var(--accent); background: var(--accent-dim); }
+    .swipe-tools-stack { display: flex; flex-direction: column; gap: 6px; }
     .swipe-tools-row { display: flex; gap: 6px; }
     .swipe-tool-btn {
       flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
@@ -986,19 +987,27 @@
 
       <!-- Page tools -->
       <div class="swipe-section-label">Tools</div>
-      <div id="swipe-tools-row" class="swipe-tools-row">
-        <button class="swipe-tool-btn" id="swipe-color-picker">
-          <span class="swipe-tool-icon">🎨</span>
-          <span>Color Picker</span>
-        </button>
-        <button class="swipe-tool-btn" id="swipe-color-palette">
-          <span class="swipe-tool-icon">🖌️</span>
-          <span>Color Palette</span>
-        </button>
-        <button class="swipe-tool-btn" id="swipe-site-inspector">
-          <span class="swipe-tool-icon">⌕</span>
-          <span>Site Inspector</span>
-        </button>
+      <div class="swipe-tools-stack">
+        <div id="swipe-tools-row" class="swipe-tools-row">
+          <button class="swipe-tool-btn" id="swipe-color-picker">
+            <span class="swipe-tool-icon">🎨</span>
+            <span>Color Picker</span>
+          </button>
+          <button class="swipe-tool-btn" id="swipe-color-palette">
+            <span class="swipe-tool-icon">🖌️</span>
+            <span>Color Palette</span>
+          </button>
+          <button class="swipe-tool-btn" id="swipe-site-inspector">
+            <span class="swipe-tool-icon">⌕</span>
+            <span>Site Inspector</span>
+          </button>
+        </div>
+        <div id="swipe-ruler-row" class="swipe-tools-row">
+          <button class="swipe-tool-btn" id="swipe-ruler">
+            <span class="swipe-tool-icon">📏</span>
+            <span>Ruler</span>
+          </button>
+        </div>
       </div>
 
       <!-- Single status line: spinner during save, instruction text, brief success -->
