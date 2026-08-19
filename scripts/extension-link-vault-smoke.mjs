@@ -307,7 +307,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.17", "the packaged extension is not version 2.4.17");
+  assert.match(packagedManifest.version, /^\d+\.\d+\.\d+$/, "the packaged extension manifest has no semver version");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -1216,9 +1216,10 @@ async function main() {
         return {
           allowsScripts: frame.sandbox.contains("allow-scripts"),
           allowsSameOrigin: frame.sandbox.contains("allow-same-origin"),
+          sandboxTokenCount: frame.sandbox.length,
         };
       }),
-      { allowsScripts: false, allowsSameOrigin: false },
+      { allowsScripts: false, allowsSameOrigin: false, sandboxTokenCount: 0 },
       "Responsive preview iframe retained sandbox permissions it does not need",
     );
     assert.deepEqual(

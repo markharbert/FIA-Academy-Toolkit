@@ -405,6 +405,16 @@
   // JavaScript or same-origin privileges. Keep the sandbox completely
   // capability-free so Chrome cannot flag an escape-prone permission pair.
   frame.setAttribute("sandbox", "");
+  // Defence in depth: even though the sandbox already blocks scripts, a CSP that
+  // forbids scripts/objects means any executable content that somehow survived
+  // sanitization is refused by policy rather than "blocked" (which Chrome logs
+  // as a warning). Belt-and-braces so the console stays clean on any page.
+  frame.setAttribute("csp", "default-src 'self' data: blob: 'unsafe-inline'; script-src 'none'; object-src 'none'; frame-src 'none'");
+  frame.setAttribute("referrerpolicy", "no-referrer");
+  // Assign the sanitized snapshot BEFORE the frame is attached to the document.
+  // This removes the brief window where an empty about:blank frame lives in the
+  // tree, which is the only moment a page script or observer could target it.
+  frame.srcdoc = snapshot;
   frame.tabIndex = -1;
   frame.style.cssText = [
     "position:absolute !important",
@@ -419,6 +429,10 @@
     // Keeping pointer focus in the host makes Escape reliably close the tool.
     "pointer-events:none !important",
   ].join(";");
+  // Mount the preview iframe inside a shadow root so page CSS cannot restyle it.
+  // Chrome's cross-origin policy already prevents page scripts from reading or
+  // writing into the sandboxed frame regardless of shadow mode, so an open root
+  // is safe and keeps the preview inspectable.
   frameMount.attachShadow({ mode: "open" }).appendChild(frame);
   const sizeLabel = host.querySelector(".fia-responsive-size");
 
@@ -600,7 +614,8 @@
     getState: () => ({ width, height, zoom, fitMode, preset: matchingPreset()?.id || "custom" }),
   };
 
-  frame.srcdoc = snapshot;
+  // srcdoc is already assigned (before attach) so the frame never enters the DOM
+  // empty; only refresh the visual layout here.
   renderPreview();
   presetSelect.focus({ preventScroll: true });
   }
