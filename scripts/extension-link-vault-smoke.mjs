@@ -244,6 +244,7 @@ async function assertPickerOpeningContract(extensionDir) {
     snippetCaptureScript,
     colorPickerScript,
     siteInspectorScript,
+    drawScript,
     manifestText,
   ] = await Promise.all([
     readFile(path.join(extensionDir, "service-worker.js"), "utf8"),
@@ -255,6 +256,7 @@ async function assertPickerOpeningContract(extensionDir) {
     readFile(path.join(extensionDir, "snippet-capture.js"), "utf8"),
     readFile(path.join(extensionDir, "color-picker.js"), "utf8"),
     readFile(path.join(extensionDir, "site-inspector.js"), "utf8"),
+    readFile(path.join(extensionDir, "draw.js"), "utf8"),
     readFile(path.join(extensionDir, "manifest.json"), "utf8"),
   ]);
   const packagedManifest = JSON.parse(manifestText);
@@ -450,6 +452,43 @@ async function assertPickerOpeningContract(extensionDir) {
     siteInspectorScript,
     /#\$\{ROOT_ID\} #\$\{PANEL_ID\} \{[\s\S]*?height: auto;[\s\S]*?max-height: none; overflow: visible; box-sizing: border-box;/,
     "the packaged Site Inspector tooltip no longer forces its content into a scrolling box",
+  );
+
+  // ── Draw tool: the packaged overlay supports a complete live sketch flow ───
+  assert.match(
+    drawScript,
+    /if \(document\.getElementById\(ROOT_ID\)\) \{[\s\S]*?window\.__fiaDrawOverlay\?\.destroy\) window\.__fiaDrawOverlay\.destroy\(\)[\s\S]*?return;/,
+    "the packaged Draw tool no longer toggles an existing overlay off",
+  );
+  assert.match(
+    drawScript,
+    /const TOOLS = \{[\s\S]*?pencil:[\s\S]*?pen:[\s\S]*?highlighter:[\s\S]*?eraser:/,
+    "the packaged Draw tool no longer provides pencil, pen, highlighter, and eraser modes",
+  );
+  assert.match(
+    drawScript,
+    /fia-draw-size-slider" type="range" min="1" max="40" step="0\.5"/,
+    "the packaged Draw tool no longer provides its fractional 1–40px size control",
+  );
+  assert.match(
+    drawScript,
+    /ctx\.globalCompositeOperation = config\.composite[\s\S]*?canvas\.addEventListener\("pointerdown", onCanvasPointerDown\)[\s\S]*?canvas\.addEventListener\("pointermove", onCanvasPointerMove\)[\s\S]*?canvas\.addEventListener\("pointerup", finishCanvasStroke\)/,
+    "the packaged Draw tool no longer supports pointer drawing and compositing erasure",
+  );
+  assert.match(
+    drawScript,
+    /const shadow = root\.attachShadow\(\{ mode: "open" \}\)[\s\S]*?shadow\.append\(style, canvas, toolbar\)[\s\S]*?lostpointercapture/,
+    "the packaged Draw tool no longer isolates its UI from host CSS or clears lost pointer capture",
+  );
+  assert.match(
+    popupHtml,
+    /id="swipe-ruler"[\s\S]*?id="swipe-responsive"[\s\S]*?id="swipe-draw"/,
+    "the popup no longer places Draw after Responsive in the second tools row",
+  );
+  assert.match(
+    popupJs,
+    /async function swipeStartDraw\(\)[\s\S]*?files: \["draw\.js"\][\s\S]*?\$\("swipe-draw"\)\.addEventListener\("click", swipeStartDraw\)/,
+    "the popup no longer launches Draw by injecting the drawing overlay script",
   );
 
   // ── Audit regression: ruler pointercancel/lostcapture/resize cleanup ──────
@@ -710,6 +749,46 @@ async function main() {
     );
     await noEditorPage.keyboard.press("Escape");
     await noEditorPage.waitForFunction(() => !document.getElementById("__fia_site_inspector__"));
+
+    // ── Draw: live stroke, Shadow DOM isolation, Escape and toggle cleanup ──
+    await extensionPage.evaluate(async (tabId) => {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["draw.js"] });
+    }, noEditorTab.id);
+    await noEditorPage.waitForFunction(() => {
+      const host = document.getElementById("__fia_draw__");
+      return host?.shadowRoot?.querySelector(".fia-draw-canvas");
+    });
+    const drawControls = await noEditorPage.evaluate(() => {
+      const shadow = document.getElementById("__fia_draw__")?.shadowRoot;
+      return {
+        tools: [...(shadow?.querySelectorAll(".fia-draw-tool-btn") || [])].map(button => button.dataset.tool),
+        colors: shadow?.querySelectorAll(".fia-draw-color-btn").length,
+        step: shadow?.querySelector(".fia-draw-size-slider")?.getAttribute("step"),
+      };
+    });
+    assert.deepEqual(
+      drawControls,
+      { tools: ["pencil", "pen", "highlighter", "eraser"], colors: 7, step: "0.5" },
+      "Draw did not expose its expected live overlay controls",
+    );
+    await noEditorPage.mouse.move(420, 260);
+    await noEditorPage.mouse.down();
+    await noEditorPage.mouse.move(620, 380, { steps: 12 });
+    await noEditorPage.mouse.up();
+    const drawAlpha = await noEditorPage.evaluate(() => {
+      const canvas = document.getElementById("__fia_draw__")?.shadowRoot?.querySelector(".fia-draw-canvas");
+      if (!canvas) return 0;
+      const dpr = window.devicePixelRatio || 1;
+      return canvas.getContext("2d").getImageData(Math.round(520 * dpr), Math.round(320 * dpr), 1, 1).data[3];
+    });
+    assert.ok(drawAlpha > 0, "Draw did not paint a live canvas stroke");
+    await noEditorPage.keyboard.press("Escape");
+    await noEditorPage.waitForFunction(() => !document.getElementById("__fia_draw__"));
+    await extensionPage.evaluate(async (tabId) => {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["draw.js"] });
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["draw.js"] });
+    }, noEditorTab.id);
+    await noEditorPage.waitForFunction(() => !document.getElementById("__fia_draw__"));
 
     const noEditorPicker = await openPicker(await tabFor(noEditorUrl), "manual-paste-fallback");
     assert.equal(
