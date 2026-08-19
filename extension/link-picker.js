@@ -3,6 +3,7 @@
 const API_BASE = "https://toolkit.fearlessmarketinglab.com";
 const content = document.getElementById("content");
 const result = document.getElementById("result");
+const pickerRequestId = new URLSearchParams(window.location.search).get("request");
 
 function makeState({ icon = "🔗", title, copy, error = false, actionLabel, onAction }) {
   content.replaceChildren();
@@ -80,6 +81,7 @@ async function chooseLink(link, buttons, apiKey) {
       const response = await chrome.runtime.sendMessage({
         action: "pasteVaultLink",
         url: link.url,
+        pickerRequestId,
       });
       inserted = response?.inserted === true;
     } catch {

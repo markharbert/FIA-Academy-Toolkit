@@ -74,6 +74,7 @@ ensureContextMenus(); // also run immediately when the SW wakes
 async function openLinkVaultPicker(tab) {
   const sourceTabId = tab?.id;
   const sourceWindowId = tab?.windowId;
+  const pickerRequestId = crypto.randomUUID();
 
   // Only one picker should be active. Close a stale one before opening another.
   try {
@@ -85,7 +86,7 @@ async function openLinkVaultPicker(tab) {
   }
 
   await chrome.storage.session.set({
-    linkPickerContext: { sourceTabId, sourceWindowId, openedAt: Date.now() },
+    linkPickerContext: { sourceTabId, sourceWindowId, pickerRequestId, openedAt: Date.now() },
   });
 
   let left;
@@ -99,7 +100,7 @@ async function openLinkVaultPicker(tab) {
   }
 
   const picker = await chrome.windows.create({
-    url: chrome.runtime.getURL("link-picker.html"),
+    url: `${chrome.runtime.getURL("link-picker.html")}?request=${encodeURIComponent(pickerRequestId)}`,
     type: "popup",
     width: 380,
     height: 560,
@@ -113,10 +114,19 @@ async function openLinkVaultPicker(tab) {
       sourceTabId,
       sourceWindowId,
       pickerWindowId: picker?.id,
+      pickerRequestId,
       openedAt: Date.now(),
     },
   });
 }
+
+chrome.windows.onRemoved.addListener((windowId) => {
+  chrome.storage.session.get("linkPickerContext").then(({ linkPickerContext }) => {
+    if (linkPickerContext?.pickerWindowId === windowId) {
+      return chrome.storage.session.remove("linkPickerContext");
+    }
+  }).catch(() => {});
+});
 
 // Cache the selection HTML sent by snippet-capture.js (content script).
 // Using message passing is more reliable than calling chrome.storage from
@@ -136,6 +146,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     const stored = await chrome.storage.session.get("linkPickerContext");
     const context = stored?.linkPickerContext || {};
+    if (
+      typeof msg.pickerRequestId !== "string" ||
+      msg.pickerRequestId !== context.pickerRequestId
+    ) {
+      sendResponse({
+        ok: false,
+        inserted: false,
+        error: "This Link Vault picker is no longer active.",
+      });
+      return;
+    }
+
     let inserted = false;
 
     if (Number.isInteger(context.sourceTabId)) {

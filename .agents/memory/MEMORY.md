@@ -6,3 +6,4 @@
 - [Funnel Simulation Roadmap](funnel-simulation-roadmap.md) — planned profitability simulation report using per-node traffic/cost/conversion data already collected in canvasData.
 - [Funnel canvas theme system](funnel-canvas-theme.md) — dark/light toggle via CanvasThemeContext; all nodes use useCanvasTheme(); persists to localStorage.
 - [Replit publish schema warning](replit-publish-schema-warning.md) — "delete column" publish warning means dev DB is missing a column prod has; fix by adding it to dev DB via SQL.
+- [Extension smoke testing](extension-smoke-testing.md) — packaged MV3 smoke tests in headless Chromium need an initial service-worker warmup before Chrome APIs.
