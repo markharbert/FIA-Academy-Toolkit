@@ -326,6 +326,11 @@ async function assertPickerOpeningContract(extensionDir) {
     "the packaged popup does not place Responsive beside Ruler",
   );
   assert.match(
+    popupHtml,
+    /<button class="primary-tab-btn active" data-primary="swipe">Tool Belt<\/button>[\s\S]*?data-primary="dmo">DMO Tracker<\/button>[\s\S]*?data-primary="links">Links<\/button>[\s\S]*?id="primary-dmo" class="primary-panel">[\s\S]*?id="primary-swipe" class="primary-panel active">/,
+    "the packaged popup does not default to Tool Belt in the order Tool Belt, DMO Tracker, Links",
+  );
+  assert.match(
     popupJs,
     /files: \["responsive\.js"\][\s\S]*?\$\("swipe-responsive"\)\.addEventListener\("click", swipeStartResponsive\)/,
     "the packaged popup no longer injects Responsive from its button",

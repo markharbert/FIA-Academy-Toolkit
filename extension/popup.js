@@ -1805,7 +1805,7 @@ async function boot() {
   // Theme toggle
   $("theme-btn").addEventListener("click", toggleTheme);
 
-  // Primary tabs (DMO Tracker | Links)
+  // Primary tabs (Tool Belt | DMO Tracker | Links)
   document.querySelectorAll(".primary-tab-btn").forEach(b =>
     b.addEventListener("click", () => switchPrimaryTab(b.dataset.primary)));
   // Sub-tabs (Today | Log | Settings)
