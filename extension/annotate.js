@@ -27,6 +27,7 @@ let dragHandle    = null;   // rect: "nw"|"n"|"ne"|"e"|"se"|"s"|"sw"|"w"  arrow:
 let dragAnchorX   = 0;     // canvas coords at mousedown
 let dragAnchorY   = 0;
 let dragOrigAnn   = null;  // snapshot of annotation at drag start
+let renderFrame   = 0;     // coalesces rapid slider input into one paint per frame
 
 // ── IndexedDB helpers ─────────────────────────────────────────────────────────
 function idbOpenDb() {
@@ -260,6 +261,14 @@ function render() {
     if (i === selectedIndex) drawSelectionOverlay(ann);
   });
   updateCtxBars();
+}
+
+function scheduleRender() {
+  if (renderFrame) return;
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = 0;
+    render();
+  });
 }
 
 // ── Context bars (one per annotation type) ────────────────────────────────────
@@ -693,12 +702,16 @@ document.querySelectorAll(".bg-swatch").forEach(el => {
 // ── Context bars: stroke slider ───────────────────────────────────────────────
 document.querySelectorAll(".stroke-slider").forEach(el => {
   el.addEventListener("input", () => {
-    activeStroke = parseInt(el.value, 10);
+    activeStroke = Number.parseFloat(el.value);
     if (selectedIndex >= 0) {
       annotations[selectedIndex] = { ...annotations[selectedIndex], stroke: activeStroke };
-      render();
     }
     syncStrokeUI();
+    // Range controls can emit many input events during one pointer drag.
+    // Painting the entire screenshot synchronously for each event makes large
+    // full-page captures visibly lag behind the thumb. Keep the state/UI
+    // immediate, but coalesce canvas work to the next animation frame.
+    scheduleRender();
   });
 });
 
@@ -869,6 +882,9 @@ function syncBgUI() {
 }
 
 function syncStrokeUI() {
+  const displayValue = Number.isInteger(activeStroke)
+    ? String(activeStroke)
+    : activeStroke.toFixed(2).replace(/0+$/, "");
   document.querySelectorAll(".stroke-slider").forEach(el => { el.value = String(activeStroke); });
-  document.querySelectorAll(".stroke-val").forEach(el => { el.textContent = String(activeStroke); });
+  document.querySelectorAll(".stroke-val").forEach(el => { el.textContent = displayValue; });
 }
