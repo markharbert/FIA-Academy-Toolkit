@@ -8,8 +8,11 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const manifest = JSON.parse(
+  await readFile(path.join(rootDir, "extension", "manifest.json"), "utf8"),
+);
 const archivePath = process.env.LINK_VAULT_SMOKE_ARCHIVE
-  || path.join(rootDir, "extension", "fia-toolkit-extension-v2.2.0.zip");
+  || path.join(rootDir, "extension", `fia-toolkit-extension-v${manifest.version}.zip`);
 const linkUrl = "https://example.test/link-vault-smoke";
 
 function fail(message) {

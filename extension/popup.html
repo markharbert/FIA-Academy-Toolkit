@@ -823,40 +823,13 @@
 
     /* Divider label */
     .swipe-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
-
-    /* Recent item cards */
-    .swipe-item-list { display: flex; flex-direction: column; gap: 5px; }
-    .swipe-item-card {
-      display: flex; align-items: center; gap: 8px;
-      padding: 7px 8px; border-radius: 8px;
-      border: 1px solid var(--border); background: var(--bg-card);
+    .swipe-access-btn {
+      display: block; width: 100%; box-sizing: border-box;
+      padding: 9px 12px; border-radius: 8px; text-align: center;
+      background: var(--accent); color: #fff; text-decoration: none;
+      font-size: 12px; font-weight: 700;
     }
-    .swipe-item-thumb {
-      width: 44px; height: 30px; border-radius: 4px; overflow: hidden;
-      border: 1px solid var(--border); flex-shrink: 0;
-      background: var(--bg-input); display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
-    }
-    .swipe-item-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .swipe-item-body { flex: 1; min-width: 0; }
-    .swipe-item-title { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .swipe-item-meta { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
-    .swipe-item-acts { display: flex; gap: 3px; flex-shrink: 0; }
-    .swipe-link-btn {
-      padding: 3px 8px; border-radius: 5px; border: none; cursor: pointer;
-      background: var(--accent); color: #fff; font-size: 10px; font-weight: 600; font-family: inherit;
-    }
-    .swipe-link-btn:hover { opacity: .88; }
-    .swipe-link-btn.copied { background: var(--green); }
-    .swipe-share-btn {
-      padding: 3px 8px; border-radius: 5px; font-size: 10px; font-weight: 600;
-      border: 1px solid var(--border-med); background: transparent; color: var(--text-sub);
-      cursor: pointer; font-family: inherit;
-    }
-    .swipe-share-btn:hover { color: var(--text); }
-    .swipe-empty { font-size: 12px; color: var(--text-muted); text-align: center; padding: 8px 0 2px; }
-    .swipe-open-link { font-size: 11px; color: var(--accent); text-decoration: none; font-weight: 500; text-align: center; display: block; padding-top: 2px; }
-    .swipe-open-link:hover { text-decoration: underline; }
+    .swipe-access-btn:hover { opacity: .88; }
   </style>
 </head>
 <body>
@@ -1008,12 +981,8 @@
         💡 Select text on any page, then <strong>right-click → Save to Swipe File</strong> to clip a snippet.
       </div>
 
-      <!-- Recent saves list -->
-      <div class="swipe-section-label">Recent Saves</div>
-      <div id="swipe-list"></div>
-
-      <a href="https://toolkit.fearlessmarketinglab.com/swipe-file" target="_blank" class="swipe-open-link">
-        Open full Swipe File →
+      <a href="https://toolkit.fearlessmarketinglab.com/swipe-file" target="_blank" class="swipe-access-btn">
+        Access your swipe file
       </a>
 
     </div>

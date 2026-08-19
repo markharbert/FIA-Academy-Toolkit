@@ -46,10 +46,6 @@ let linksCopiedId        = null;
 let linksDeleteConfirmId = null;
 const LINKS_PAGE_SIZE    = 15;
 
-// ─── Swipe File tab state ──────────────────────────────────────────────────
-let swipeItems         = [];
-const SWIPE_RECENT_MAX = 5;
-
 // ─── DOM helpers ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 
@@ -1497,81 +1493,6 @@ async function swipeCaptureSection() {
   }
 }
 
-async function renderSwipe() {
-  // Show cached items instantly, then refresh from the server in the background.
-  // This keeps the list in sync with the web app while feeling immediate.
-  const cached = await chrome.storage.local.get("cachedSwipeItems");
-  if (cached.cachedSwipeItems?.length) {
-    swipeItems = cached.cachedSwipeItems;
-    drawSwipeList();
-  }
-
-  try {
-    const data  = await apiFetch("/api/v1/swipe");
-    swipeItems  = data.items || [];
-    // Persist for next open
-    chrome.storage.local.set({ cachedSwipeItems: swipeItems }).catch(() => {});
-  } catch (_) {
-    if (!cached.cachedSwipeItems) swipeItems = [];
-  }
-  drawSwipeList(); // always re-draw with fresh (or empty-fallback) data
-}
-
-function drawSwipeList() {
-  const container = $("swipe-list");
-  if (!container) return;
-  if (swipeItems.length === 0) {
-    container.innerHTML = `<div class="swipe-empty">Nothing saved yet — try a screenshot!</div>`;
-    return;
-  }
-  const recent = swipeItems.slice(0, SWIPE_RECENT_MAX);
-  const rows = recent.map(item => {
-    const isImg = item.type === "upload" && item.shareToken;
-    const thumb = isImg
-      ? `<div class="swipe-item-thumb"><img src="${API_BASE}/api/swipe/public/${item.shareToken}/image" onerror="this.style.display='none'" /></div>`
-      : `<div class="swipe-item-thumb">${item.type === "upload" ? "📷" : "📝"}</div>`;
-    const action = item.shareToken
-      ? `<button class="swipe-link-btn" data-token="${item.shareToken}">Copy link</button>`
-      : `<button class="swipe-share-btn" data-id="${item.id}">Share</button>`;
-    return `<div class="swipe-item-card">
-      ${thumb}
-      <div class="swipe-item-body">
-        <div class="swipe-item-title">${item.title}</div>
-        <div class="swipe-item-meta">${item.type === "upload" ? "📷 Image" : "📝 Snippet"}</div>
-      </div>
-      <div class="swipe-item-acts">${action}</div>
-    </div>`;
-  }).join("");
-  container.innerHTML = `<div class="swipe-item-list">${rows}</div>`;
-
-  // Copy link buttons
-  container.querySelectorAll(".swipe-link-btn[data-token]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const url = `${API_BASE}/swipe/${btn.dataset.token}`;
-      navigator.clipboard.writeText(url).catch(() => {});
-      btn.textContent = "Copied!"; btn.classList.add("copied");
-      setTimeout(() => { btn.textContent = "Copy link"; btn.classList.remove("copied"); }, 2000);
-    });
-  });
-
-  // Share buttons (no token yet)
-  container.querySelectorAll(".swipe-share-btn[data-id]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      btn.disabled = true; btn.textContent = "…";
-      try {
-        const data = await apiFetch(`/api/v1/swipe/${btn.dataset.id}/share`, { method: "POST" });
-        const url = `${API_BASE}/swipe/${data.token}`;
-        navigator.clipboard.writeText(url).catch(() => {});
-        const item = swipeItems.find(i => i.id === btn.dataset.id);
-        if (item) item.shareToken = data.token;
-        drawSwipeList(); // re-render to show copy button
-      } catch (_) {
-        btn.disabled = false; btn.textContent = "Share";
-      }
-    });
-  });
-}
-
 // (switchSubTab moved up, defined together with switchPrimaryTab)
 
 function switchPrimaryTab(name) {
@@ -1581,7 +1502,6 @@ function switchPrimaryTab(name) {
   document.querySelectorAll(".primary-panel").forEach(p =>
     p.classList.toggle("active", p.id === `primary-${name}`));
   if (name === "links") renderLinks();
-  if (name === "swipe") renderSwipe();
   if (name !== "links") {
     linksFormOpen = false; linksEditingLink = null; linksDeleteConfirmId = null;
   }
