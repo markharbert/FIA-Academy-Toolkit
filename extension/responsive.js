@@ -539,21 +539,6 @@
     }
   }
 
-  function onFrameKeyDown(event) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      destroy();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    event.preventDefault();
-    event.stopPropagation();
-    const controls = toolbarControls();
-    const target = event.shiftKey ? controls.at(-1) : controls[0];
-    target?.focus({ preventScroll: true });
-  }
-
   function toolbarControls() {
     return Array.from(host.querySelectorAll(
       ".fia-responsive-toolbar select, .fia-responsive-toolbar input, .fia-responsive-toolbar button",
@@ -605,12 +590,6 @@
   host.querySelector("#__fia_responsive_exit__").addEventListener("click", destroy);
   document.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("resize", onWindowResize);
-  frame.addEventListener("load", () => {
-    if (destroyed) return;
-    try {
-      frame.contentWindow?.addEventListener("keydown", onFrameKeyDown, true);
-    } catch (_) {}
-  });
 
   window.__fiaResponsive = {
     destroy,

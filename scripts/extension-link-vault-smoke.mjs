@@ -114,7 +114,7 @@ function fixtureHtml(kind) {
       </head>
       <body>
         ${fields[kind] || fields.noeditor}
-        <iframe id="responsive-script-frame" hidden
+        <iframe id="responsive-script-frame" hidden sandbox=""
           srcdoc="&lt;script&gt;window.__responsiveNestedScriptRuns = true;&lt;/script&gt;"></iframe>
         <button id="responsive-inline-handler" hidden onclick="window.__responsiveInlineHandlerRuns = true">Hidden</button>
         <a id="responsive-javascript-link" hidden href="javascript:window.__responsiveJavascriptUrlRuns = true">Hidden</a>
@@ -306,7 +306,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.15", "the packaged extension is not version 2.4.15");
+  assert.equal(packagedManifest.version, "2.4.16", "the packaged extension is not version 2.4.16");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -752,8 +752,14 @@ async function main() {
 
     const colorUrl = `${fixture.baseUrl}/color`;
     const colorPage = await browser.newPage();
+    await colorPage.goto(colorUrl, { waitUntil: "domcontentloaded" });
+    const responsiveConsoleProblems = [];
+    const responsivePageErrors = [];
     const sandboxScriptWarnings = [];
     colorPage.on("console", message => {
+      if (message.type() === "warning" || message.type() === "error") {
+        responsiveConsoleProblems.push(`${message.type()}: ${message.text()}`);
+      }
       if (
         message.text().includes("Blocked script execution in 'about:blank'")
         || message.text().includes("An iframe which has both allow-scripts and allow-same-origin")
@@ -761,7 +767,7 @@ async function main() {
         sandboxScriptWarnings.push(message.text());
       }
     });
-    await colorPage.goto(colorUrl, { waitUntil: "domcontentloaded" });
+    colorPage.on("pageerror", error => responsivePageErrors.push(error.message || String(error)));
     const colorTab = await tabFor(colorUrl);
     await extensionPage.evaluate(async (tabId) => {
       const tab = await chrome.tabs.get(tabId);
@@ -983,6 +989,11 @@ async function main() {
     await colorPage.waitForFunction(() => !document.getElementById("__fia_ruler__"));
 
     // ── Responsive: presets + custom size + zoom/Fit + cleanup ───────────────
+    // Earlier tool tests deliberately dispatch synthetic pointer events. Start a
+    // fresh diagnostic window here so this assertion covers Responsive only.
+    responsiveConsoleProblems.length = 0;
+    responsivePageErrors.length = 0;
+    sandboxScriptWarnings.length = 0;
     await extensionPage.evaluate(async (tabId) => {
       const tab = await chrome.tabs.get(tabId);
       await chrome.tabs.update(tabId, { active: true });
@@ -1208,6 +1219,16 @@ async function main() {
       sandboxScriptWarnings,
       [],
       `Responsive preview caused sandboxed script warnings: ${sandboxScriptWarnings.join(" | ")}`,
+    );
+    assert.deepEqual(
+      responsiveConsoleProblems,
+      [],
+      `Responsive preview emitted browser warnings or errors: ${responsiveConsoleProblems.join(" | ")}`,
+    );
+    assert.deepEqual(
+      responsivePageErrors,
+      [],
+      `Responsive preview caused page errors: ${responsivePageErrors.join(" | ")}`,
     );
     await colorPage.focus("#__fia_responsive_preset__");
     await colorPage.keyboard.down("Shift");

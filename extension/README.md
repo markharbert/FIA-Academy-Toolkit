@@ -8,7 +8,7 @@ Run this before distributing an updated extension archive:
 npm run extension:smoke
 ```
 
-The check extracts `fia-toolkit-extension-v2.4.15.zip` into a temporary folder and launches it in a clean Chromium profile. It verifies:
+The check extracts `fia-toolkit-extension-v2.4.16.zip` into a temporary folder and launches it in a clean Chromium profile. It verifies:
 
 - the archive still connects the right-click Link Vault menu to its originating-tab/window/request handoff;
 - insertion into a Facebook-shaped comment `contenteditable`;
@@ -18,7 +18,7 @@ The check extracts `fia-toolkit-extension-v2.4.15.zip` into a temporary folder a
 - Color Picker sampling, clipboard feedback, and rapid re-opening without stale timers;
 - Site Inspector hover highlighting, computed typography, layout, accessibility details, scroll repositioning, and repeated-toggle cleanup;
 - Ruler crosshair alignment guides, drag-any-direction measurement math, live width/height/X/Y readout, replacement measurements, cancellation/resize cleanup, and Escape cleanup;
-- Responsive Preview FIA branding, 35 device presets including current and upcoming iPhone sizes, editable viewport dimensions, responsive media-query rendering, zoom/Fit controls, and Exit/Escape cleanup; and
+- Responsive Preview FIA branding, 35 device presets including current and upcoming iPhone sizes, editable viewport dimensions, responsive media-query rendering, zoom/Fit controls, Exit/Escape cleanup, and a warning/error-free sandboxed launch; and
 - full-page Color Palette scanning, six-color extraction, detected font families and variants, scroll restoration, individual color copying, the Swipe File save payload, and rejection of conflicting page-scrolling captures; and
 - per-capture annotation handoffs, tab-isolated snippet saves, failed-save feedback, defensive Link Vault filtering, and safe full-page canvas limits.
 
