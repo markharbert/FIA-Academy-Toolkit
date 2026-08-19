@@ -263,6 +263,13 @@
     .header-sub   { font-size: 10px; color: rgba(255,255,255,.45); margin-top: 1px; }
 
     .header-right { display: flex; align-items: center; gap: 7px; }
+    .dashboard-btn {
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+      color: #fff; border-radius: 6px; cursor: pointer; padding: 5px 9px;
+      font-size: 11px; font-weight: 600; font-family: inherit;
+      transition: color .15s, background .15s, border-color .15s;
+    }
+    .dashboard-btn:hover { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.35); }
     .streak-pill {
       display: flex; align-items: center; gap: 4px;
       background: var(--streak-bg); border: 1px solid var(--streak-b);
@@ -901,6 +908,7 @@
       </div>
     </div>
     <div class="header-right">
+      <button class="dashboard-btn" id="dashboard-btn" title="Open the FIA Toolkit dashboard in this tab">Dashboard</button>
       <div class="streak-pill">🔥 <span id="streak-count">0</span></div>
       <div class="pts-pill"><span id="total-pts">0.0</span><span class="pts-denom">/25 pts</span></div>
       <button class="theme-btn" id="settings-gear-btn" title="Settings">

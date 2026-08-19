@@ -331,6 +331,16 @@ async function assertPickerOpeningContract(extensionDir) {
     "the packaged popup does not default to Tool Belt in the order Tool Belt, DMO Tracker, Links",
   );
   assert.match(
+    popupHtml,
+    /id="dashboard-btn"[^>]*>Dashboard</,
+    "the packaged popup is missing the Dashboard header button",
+  );
+  assert.match(
+    popupJs,
+    /async function openDashboardInCurrentTab\(\)[\s\S]*?chrome\.tabs\.query\(\{ active: true, currentWindow: true \}\)[\s\S]*?chrome\.tabs\.update\(tab\.id, \{ url: DASHBOARD_URL \}\)[\s\S]*?window\.close\(\)/,
+    "the packaged Dashboard button does not navigate the current tab and close the popup",
+  );
+  assert.match(
     popupJs,
     /files: \["responsive\.js"\][\s\S]*?\$\("swipe-responsive"\)\.addEventListener\("click", swipeStartResponsive\)/,
     "the packaged popup no longer injects Responsive from its button",

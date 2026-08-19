@@ -1,6 +1,7 @@
 "use strict";
 
 const API_BASE = "https://toolkit.fearlessmarketinglab.com";
+const DASHBOARD_URL = `${API_BASE}/dashboard`;
 
 const ACTS = [
   { key: "visionMeditation",    label: "Vision & Meditation",  icon: "🧘", secsKey: "visionSeconds",    defaultMins: 30 },
@@ -68,6 +69,19 @@ async function toggleTheme() {
   const next = currentTheme === "light" ? "dark" : "light";
   applyTheme(next);
   await chrome.storage.local.set({ theme: next });
+}
+
+async function openDashboardInCurrentTab() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id != null) {
+      await chrome.tabs.update(tab.id, { url: DASHBOARD_URL });
+    }
+  } finally {
+    // Close the popup even if the active tab cannot be updated (for example,
+    // when Chrome is showing a restricted internal page).
+    window.close();
+  }
 }
 
 // ─── Format helpers ────────────────────────────────────────────────────────
@@ -1804,6 +1818,7 @@ async function boot() {
 
   // Theme toggle
   $("theme-btn").addEventListener("click", toggleTheme);
+  $("dashboard-btn").addEventListener("click", openDashboardInCurrentTab);
 
   // Primary tabs (Tool Belt | DMO Tracker | Links)
   document.querySelectorAll(".primary-tab-btn").forEach(b =>
