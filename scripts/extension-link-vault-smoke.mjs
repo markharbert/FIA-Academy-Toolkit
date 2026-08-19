@@ -277,7 +277,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.9", "the packaged extension is not version 2.4.9");
+  assert.equal(packagedManifest.version, "2.4.10", "the packaged extension is not version 2.4.10");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -634,8 +634,20 @@ async function main() {
       true,
       "Responsive overlay was not mounted under the page body",
     );
+    assert.equal(
+      JSON.stringify(await colorPage.$eval("#__fia_responsive__", element => ({
+        lightDomFrames: element.querySelectorAll("iframe").length,
+        shadowFrame: Boolean(
+          element.querySelector(".fia-responsive-frame-mount")?.shadowRoot
+            ?.querySelector(".fia-responsive-frame"),
+        ),
+      }))),
+      JSON.stringify({ lightDomFrames: 0, shadowFrame: true }),
+      "Responsive preview iframe is exposed to page scripts in the light DOM",
+    );
     await colorPage.waitForFunction(() => {
-      const frame = document.querySelector("#__fia_responsive__ .fia-responsive-frame");
+      const frame = document.querySelector("#__fia_responsive__ .fia-responsive-frame-mount")
+        ?.shadowRoot?.querySelector(".fia-responsive-frame");
       return frame?.contentDocument?.readyState === "complete";
     });
     assert.equal(
@@ -794,30 +806,33 @@ async function main() {
       `Responsive preset control paints outside its slot and overlaps W/H: ${JSON.stringify(selectBounds)}`,
     );
     assert.equal(
-      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
-        frame.contentDocument.scripts.length),
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame-mount", mount =>
+        mount.shadowRoot.querySelector(".fia-responsive-frame").contentDocument.scripts.length),
       0,
       "Responsive allowed source-page scripts into the preview snapshot",
     );
     assert.equal(
-      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
-        frame.contentWindow.__responsiveFixtureScriptRuns),
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame-mount", mount =>
+        mount.shadowRoot.querySelector(".fia-responsive-frame").contentWindow.__responsiveFixtureScriptRuns),
       undefined,
       "Responsive executed a source-page script inside the preview",
     );
     assert.deepEqual(
-      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame => ({
-        embeddedDocuments: frame.contentDocument.querySelectorAll("iframe, frame, object, embed").length,
-        inlineHandlers: Array.from(frame.contentDocument.querySelectorAll("*")).flatMap(element =>
-          Array.from(element.attributes).filter(attribute => attribute.name.toLowerCase().startsWith("on")),
-        ).length,
-        javascriptUrls: Array.from(frame.contentDocument.querySelectorAll("[href], [src], [action], [formaction]"))
-          .filter(element => Array.from(element.attributes).some(attribute =>
-            ["href", "src", "action", "formaction"].includes(attribute.name.toLowerCase())
-              && attribute.value.trim().toLowerCase().startsWith("javascript:"),
-          )).length,
-        allowsScripts: frame.sandbox.contains("allow-scripts"),
-      })),
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame-mount", mount => {
+        const frame = mount.shadowRoot.querySelector(".fia-responsive-frame");
+        return {
+          embeddedDocuments: frame.contentDocument.querySelectorAll("iframe, frame, object, embed").length,
+          inlineHandlers: Array.from(frame.contentDocument.querySelectorAll("*")).flatMap(element =>
+            Array.from(element.attributes).filter(attribute => attribute.name.toLowerCase().startsWith("on")),
+          ).length,
+          javascriptUrls: Array.from(frame.contentDocument.querySelectorAll("[href], [src], [action], [formaction]"))
+            .filter(element => Array.from(element.attributes).some(attribute =>
+              ["href", "src", "action", "formaction"].includes(attribute.name.toLowerCase())
+                && attribute.value.trim().toLowerCase().startsWith("javascript:"),
+            )).length,
+          allowsScripts: frame.sandbox.contains("allow-scripts"),
+        };
+      }),
       {
         embeddedDocuments: 0,
         inlineHandlers: 0,
@@ -864,11 +879,13 @@ async function main() {
       "Responsive did not apply the selected phone preset",
     );
     assert.equal(
-      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
-        frame.contentWindow.getComputedStyle(
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame-mount", mount => {
+        const frame = mount.shadowRoot.querySelector(".fia-responsive-frame");
+        return frame.contentWindow.getComputedStyle(
           frame.contentDocument.querySelector("#responsive-probe"),
           "::after",
-        ).content),
+        ).content;
+      }),
       '"mobile"',
       "the preview iframe did not activate the mobile media query",
     );
@@ -897,11 +914,13 @@ async function main() {
         && root?.dataset.preset === "custom";
     });
     assert.equal(
-      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
-        frame.contentWindow.getComputedStyle(
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame-mount", mount => {
+        const frame = mount.shadowRoot.querySelector(".fia-responsive-frame");
+        return frame.contentWindow.getComputedStyle(
           frame.contentDocument.querySelector("#responsive-probe"),
           "::after",
-        ).content),
+        ).content;
+      }),
       '"desktop"',
       "the custom desktop width did not activate the wider media query",
     );
@@ -982,11 +1001,13 @@ async function main() {
       document.querySelectorAll("#__fia_responsive__").length === 1,
     );
     await colorPage.waitForFunction(() =>
-      document.querySelector("#__fia_responsive__ .fia-responsive-frame")?.contentDocument?.readyState === "complete",
+      document.querySelector("#__fia_responsive__ .fia-responsive-frame-mount")
+        ?.shadowRoot?.querySelector(".fia-responsive-frame")?.contentDocument?.readyState === "complete",
     );
     const responsiveFrameBox = await colorPage.$eval(
-      "#__fia_responsive__ .fia-responsive-frame",
-      frame => {
+      "#__fia_responsive__ .fia-responsive-frame-mount",
+      mount => {
+        const frame = mount.shadowRoot.querySelector(".fia-responsive-frame");
         const rect = frame.getBoundingClientRect();
         return { x: rect.left, y: rect.top };
       },

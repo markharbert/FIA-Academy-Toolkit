@@ -305,6 +305,10 @@
       background: #fff !important; box-shadow: 0 14px 38px rgba(0,0,0,.44) !important;
       transition: width .16s ease, height .16s ease !important;
     }
+    #${ROOT_ID} .fia-responsive-frame-mount {
+      position: absolute !important; inset: 0 auto auto 0 !important; display: block !important;
+      margin: 0 !important; padding: 0 !important; border: 0 !important; background: #fff !important;
+    }
     #${ROOT_ID} .fia-responsive-frame {
       position: absolute !important; inset: 0 auto auto 0 !important; display: block !important;
       margin: 0 !important; padding: 0 !important; border: 0 !important;
@@ -369,8 +373,7 @@
       <div class="fia-responsive-canvas">
         <div class="fia-responsive-shell">
           <span class="fia-responsive-size"></span>
-          <iframe class="fia-responsive-frame" title="Responsive preview of the current page"
-            sandbox="allow-same-origin" tabindex="-1"></iframe>
+          <div class="fia-responsive-frame-mount"></div>
         </div>
       </div>
     </main>
@@ -390,7 +393,23 @@
   const fitButton = host.querySelector("#__fia_responsive_fit__");
   const workspace = host.querySelector(".fia-responsive-workspace");
   const shell = host.querySelector(".fia-responsive-shell");
-  const frame = host.querySelector(".fia-responsive-frame");
+  const frameMount = host.querySelector(".fia-responsive-frame-mount");
+  const frame = document.createElement("iframe");
+  frame.className = "fia-responsive-frame";
+  frame.title = "Responsive preview of the current page";
+  frame.setAttribute("sandbox", "allow-same-origin");
+  frame.tabIndex = -1;
+  frame.style.cssText = [
+    "position:absolute !important",
+    "inset:0 auto auto 0 !important",
+    "display:block !important",
+    "margin:0 !important",
+    "padding:0 !important",
+    "border:0 !important",
+    "background:#fff !important",
+    "transform-origin:0 0 !important",
+  ].join(";");
+  frameMount.attachShadow({ mode: "open" }).appendChild(frame);
   const sizeLabel = host.querySelector(".fia-responsive-size");
 
   for (const group of PRESET_GROUPS) {
