@@ -268,7 +268,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.2", "the packaged extension is not version 2.4.2");
+  assert.equal(packagedManifest.version, "2.4.3", "the packaged extension is not version 2.4.3");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -675,15 +675,40 @@ async function main() {
           const prefix = label.querySelector("span");
           const input = label.querySelector("input");
           return {
-            labelDisplay: getComputedStyle(prefix).display,
-            labelAlignItems: getComputedStyle(prefix).alignItems,
-            labelHeight: getComputedStyle(prefix).height,
+            dimensionDisplay: getComputedStyle(label).display,
+            dimensionAlignItems: getComputedStyle(label).alignItems,
+            dimensionHeight: getComputedStyle(label).height,
+            prefixPosition: getComputedStyle(prefix).position,
+            prefixDisplay: getComputedStyle(prefix).display,
+            prefixAlignItems: getComputedStyle(prefix).alignItems,
+            prefixJustifyContent: getComputedStyle(prefix).justifyContent,
+            prefixHeight: getComputedStyle(prefix).height,
             inputLineHeight: getComputedStyle(input).lineHeight,
           };
         })),
       [
-        { labelDisplay: "flex", labelAlignItems: "center", labelHeight: "40px", inputLineHeight: "38px" },
-        { labelDisplay: "flex", labelAlignItems: "center", labelHeight: "40px", inputLineHeight: "38px" },
+        {
+          dimensionDisplay: "flex",
+          dimensionAlignItems: "center",
+          dimensionHeight: "40px",
+          prefixPosition: "static",
+          prefixDisplay: "flex",
+          prefixAlignItems: "center",
+          prefixJustifyContent: "center",
+          prefixHeight: "38px",
+          inputLineHeight: "38px",
+        },
+        {
+          dimensionDisplay: "flex",
+          dimensionAlignItems: "center",
+          dimensionHeight: "40px",
+          prefixPosition: "static",
+          prefixDisplay: "flex",
+          prefixAlignItems: "center",
+          prefixJustifyContent: "center",
+          prefixHeight: "38px",
+          inputLineHeight: "38px",
+        },
       ],
       "Responsive width/height prefixes are not vertically centered in their controls",
     );
