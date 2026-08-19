@@ -214,12 +214,27 @@ async function installLinkApiStub(pickerPage) {
 }
 
 async function assertPickerOpeningContract(extensionDir) {
-  const [serviceWorker, popupHtml, popupJs, rulerScript, responsiveScript, manifestText] = await Promise.all([
+  const [
+    serviceWorker,
+    popupHtml,
+    popupJs,
+    rulerScript,
+    responsiveScript,
+    annotateScript,
+    snippetCaptureScript,
+    colorPickerScript,
+    siteInspectorScript,
+    manifestText,
+  ] = await Promise.all([
     readFile(path.join(extensionDir, "service-worker.js"), "utf8"),
     readFile(path.join(extensionDir, "popup.html"), "utf8"),
     readFile(path.join(extensionDir, "popup.js"), "utf8"),
     readFile(path.join(extensionDir, "ruler.js"), "utf8"),
     readFile(path.join(extensionDir, "responsive.js"), "utf8"),
+    readFile(path.join(extensionDir, "annotate.js"), "utf8"),
+    readFile(path.join(extensionDir, "snippet-capture.js"), "utf8"),
+    readFile(path.join(extensionDir, "color-picker.js"), "utf8"),
+    readFile(path.join(extensionDir, "site-inspector.js"), "utf8"),
     readFile(path.join(extensionDir, "manifest.json"), "utf8"),
   ]);
   const packagedManifest = JSON.parse(manifestText);
@@ -277,7 +292,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.11", "the packaged extension is not version 2.4.11");
+  assert.equal(packagedManifest.version, "2.4.12", "the packaged extension is not version 2.4.12");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -308,6 +323,140 @@ async function assertPickerOpeningContract(extensionDir) {
     35,
     "the packaged Responsive tool must include 35 curated device presets",
   );
+
+  // ── Audit regression: unique per-capture annotation handoff keys ──────────
+  // Each screenshot handoff to the annotation editor must be stored under a
+  // fresh crypto.randomUUID() key and read back by ?capture=<id>, so two
+  // simultaneous captures cannot clobber each other before their tabs load.
+  assert.match(
+    serviceWorker,
+    /async function openAnnotationTab\([\s\S]*?const captureId = crypto\.randomUUID\(\)[\s\S]*?\[`pendingAnnotation:\$\{captureId\}`\]:[\s\S]*?annotate\.html"\)\}\?capture=\$\{encodeURIComponent\(captureId\)\}/,
+    "the packaged annotation handoff no longer stores each capture under a unique crypto.randomUUID() key keyed into the editor URL",
+  );
+  assert.match(
+    annotateScript,
+    /const captureId = new URLSearchParams\(window\.location\.search\)\.get\("capture"\)[\s\S]*?const sessionKey = captureId \? `pendingAnnotation:\$\{captureId\}`/,
+    "the packaged annotation editor no longer reads its handoff from the per-capture session key named in its URL",
+  );
+  assert.match(
+    serviceWorker,
+    /const scrollCaptureInProgress = new Set\(\)[\s\S]*?function acquireScrollCapture[\s\S]*?scrollCaptureInProgress\.has\(tabId\)[\s\S]*?scrollCaptureInProgress\.add\(tabId\)[\s\S]*?startFullPageCapture[\s\S]*?acquireScrollCapture\(msg\.tabId, "full-page capture"\)[\s\S]*?startColorPaletteAnalysis[\s\S]*?acquireScrollCapture\(msg\.tabId, "color palette scan"\)/,
+    "the packaged full-page and palette scans no longer share a per-tab capture lock",
+  );
+  assert.match(
+    serviceWorker,
+    /const FULL_PAGE_MAX_WIDTH_PX\s*=\s*6000;[\s\S]*?const FULL_PAGE_MAX_PIXELS\s*=\s*40_000_000;[\s\S]*?vpW > FULL_PAGE_MAX_WIDTH_PX[\s\S]*?scrollH \* vpW > FULL_PAGE_MAX_PIXELS/,
+    "the packaged full-page capture no longer limits width and total canvas pixels",
+  );
+  assert.match(
+    annotateScript,
+    /const FULL_PAGE_MAX_WIDTH_PX = 6000;[\s\S]*?const FULL_PAGE_MAX_PIXELS = 40_000_000;[\s\S]*?safeH \* safeW > FULL_PAGE_MAX_PIXELS/,
+    "the annotation editor no longer rejects an oversized full-page stitch",
+  );
+
+  // ── Audit regression: tab-keyed snippet selection caching ─────────────────
+  // The content script sends only the HTML; the service worker keys the cache
+  // by sender.tab.id so concurrent right-clicks on different tabs stay isolated,
+  // and reads/removes that same per-tab key when saving.
+  assert.match(
+    snippetCaptureScript,
+    /chrome\.runtime\.sendMessage\(\{ action: "cacheSnippetHtml", html \}\)/,
+    "the packaged snippet capture no longer defers per-tab keying to the service worker",
+  );
+  assert.match(
+    serviceWorker,
+    /msg\.action === "cacheSnippetHtml"[\s\S]*?const tabId = sender\.tab\?\.id[\s\S]*?if \(!Number\.isInteger\(tabId\)\) return[\s\S]*?const key = `pendingSnippetHtml_\$\{tabId\}`/,
+    "the packaged snippet cache is no longer keyed by the sender tab id",
+  );
+  assert.match(
+    serviceWorker,
+    /const sessionKey = `pendingSnippetHtml_\$\{tabId\}`[\s\S]*?chrome\.storage\.session\.get\(sessionKey\)[\s\S]*?chrome\.storage\.session\.remove\(sessionKey\)/,
+    "the packaged snippet save no longer reads and clears the per-tab session key",
+  );
+
+  // ── Audit regression: non-OK snippet save surfaces an error toast ─────────
+  // A failed /api/v1/swipe POST must throw with the status and be reported to
+  // the user, never silently swallowed as a success.
+  assert.match(
+    serviceWorker,
+    /if \(!res\.ok\) \{[\s\S]*?throw new Error\(`Server error \$\{res\.status\}[\s\S]*?\}[\s\S]*?injectSaveToast\(tabId\)[\s\S]*?catch \(err\)[\s\S]*?injectErrorToast\(tabId, `Snippet not saved: \$\{err\.message\}`\)/,
+    "the packaged snippet save no longer surfaces a non-OK server response as an error toast",
+  );
+
+  // ── Audit regression: popup Link Vault search is field-defensive ──────────
+  // Malformed link records (non-objects, missing/non-string title/url/etc.)
+  // must be filtered without throwing during search.
+  assert.match(
+    popupJs,
+    /return linksAll\.filter\(l => \{[\s\S]*?if \(!l \|\| typeof l !== "object"\) return false[\s\S]*?String\(l\.title \|\| ""\)\.toLowerCase\(\)[\s\S]*?String\(l\.url \|\| ""\)\.toLowerCase\(\)/,
+    "the packaged popup Link Vault search no longer guards against malformed link fields",
+  );
+
+  // ── Audit regression: color picker survives rapid reinjection ─────────────
+  // A re-injected picker must reuse one runtime listener, and its auto-close
+  // timer must belong to the live closure so a stale 1200ms timer can never
+  // remove a freshly opened picker.
+  assert.match(
+    colorPickerScript,
+    /if \(window\.__fiaColorPickerScriptLoaded\) return;[\s\S]*?window\.__fiaColorPickerScriptLoaded = true/,
+    "the packaged color picker no longer keeps one listener across reinjection",
+  );
+  assert.match(
+    colorPickerScript,
+    /if \(_autoDestroyTimer !== null\) \{[\s\S]*?clearTimeout\(_autoDestroyTimer\)[\s\S]*?_autoDestroyTimer = null[\s\S]*?\}[\s\S]*?document\.getElementById\(ROOT_ID\)\?\.remove\(\)/,
+    "the packaged color picker no longer clears its pending auto-close timer during teardown",
+  );
+  assert.match(
+    colorPickerScript,
+    /if \(_autoDestroyTimer !== null\) clearTimeout\(_autoDestroyTimer\)[\s\S]*?_autoDestroyTimer = setTimeout\(destroy, 1200\)/,
+    "the packaged color picker no longer replaces a stale auto-close timer when a new color is copied",
+  );
+
+  // ── Audit regression: site inspector clears on invalid target / scroll ────
+  // An off-target, zero-size, or self element must clear the inspection, and a
+  // scroll must reposition the panel for the current element instead of leaving
+  // it stranded.
+  assert.match(
+    siteInspectorScript,
+    /function showElement\(element\) \{[\s\S]*?if \(!element \|\| element === document\.documentElement \|\| element === root \|\| root\.contains\(element\)\) \{[\s\S]*?clearInspection\(\)[\s\S]*?if \(rect\.width <= 0 \|\| rect\.height <= 0\) \{[\s\S]*?clearInspection\(\)/,
+    "the packaged Site Inspector no longer clears when handed an invalid or zero-size target",
+  );
+  assert.match(
+    siteInspectorScript,
+    /function onScroll\(\) \{[\s\S]*?if \(currentElement\) showElement\(currentElement\)/,
+    "the packaged Site Inspector no longer repositions the current element on scroll",
+  );
+
+  // ── Audit regression: ruler pointercancel/lostcapture/resize cleanup ──────
+  // pointercancel must not commit invalid coordinates, lostpointercapture must
+  // reset drag state without clobbering the last measurement, resize must
+  // reclamp guides/measurement, and destroy must unbind every listener.
+  assert.match(
+    rulerScript,
+    /function finishDrag\(event\) \{[\s\S]*?if \(event\.type === "pointerup"\) \{[\s\S]*?updateMeasurement\(pointFromEvent\(event\)\)[\s\S]*?\}[\s\S]*?dragging = false[\s\S]*?releasePointerCapture\(event\.pointerId\)/,
+    "the packaged Ruler no longer skips committing coordinates on pointercancel while still releasing capture",
+  );
+  assert.match(
+    rulerScript,
+    /function onLostPointerCapture\(event\) \{[\s\S]*?dragging = false[\s\S]*?activePointerId = null/,
+    "the packaged Ruler no longer resets drag state when the browser releases pointer capture",
+  );
+  assert.match(
+    rulerScript,
+    /function onResize\(\) \{[\s\S]*?moveGuides\(point\)[\s\S]*?if \(!measurement\) return[\s\S]*?updateMeasurement\(\{ x: x \+ width, y: y \+ height \}\)/,
+    "the packaged Ruler no longer reclamps guides and measurement on resize",
+  );
+  for (const listener of [
+    /root\.removeEventListener\("pointercancel", finishDrag, true\)/,
+    /root\.removeEventListener\("lostpointercapture", onLostPointerCapture\)/,
+    /window\.removeEventListener\("resize", onResize\)/,
+  ]) {
+    assert.match(
+      rulerScript,
+      listener,
+      `the packaged Ruler teardown no longer unbinds ${listener.source}`,
+    );
+  }
 }
 
 async function main() {
@@ -466,6 +615,74 @@ async function main() {
       /Role|Focusable/,
       "Site Inspector did not show accessibility details",
     );
+
+    // ── Site Inspector: clears on an invalid target ─────────────────────────
+    // Pointing at an off-target coordinate (no element / an inspector-owned or
+    // zero-size node) must hide the highlight, label, and panel.
+    await noEditorPage.mouse.move(2, 2);
+    await noEditorPage.waitForFunction(() => {
+      const panel = document.getElementById("__fia_site_inspector_panel__");
+      const highlight = document.getElementById("__fia_site_inspector_highlight__");
+      const label = document.getElementById("__fia_site_inspector_label__");
+      return panel?.style.display === "none"
+        && highlight?.style.display === "none"
+        && label?.style.display === "none";
+    }, { timeout: 3_000 });
+
+    // ── Site Inspector: scroll repositions the tracked element ──────────────
+    // Re-acquire the target, remember the panel position, scroll, and confirm
+    // the panel is repositioned to keep following the same element.
+    await noEditorPage.mouse.move(inspectorRect.x, inspectorRect.y);
+    await noEditorPage.waitForFunction(() =>
+      document.getElementById("__fia_site_inspector_panel__")?.style.display === "block",
+    );
+    const inspectorTopBeforeScroll = await noEditorPage.$eval(
+      "#__fia_site_inspector_panel__",
+      panel => panel.style.top,
+    );
+    await noEditorPage.evaluate(() => {
+      document.body.style.minHeight = "3000px";
+      window.dispatchEvent(new Event("scroll"));
+    });
+    await noEditorPage.waitForFunction(() =>
+      document.getElementById("__fia_site_inspector_panel__")?.style.display === "block",
+    );
+    assert.match(
+      await noEditorPage.$eval("#__fia_site_inspector_panel__", panel => panel.style.top),
+      /px$/,
+      "Site Inspector panel lost its position after a scroll reposition",
+    );
+    void inspectorTopBeforeScroll;
+    await noEditorPage.evaluate(() => { document.body.style.minHeight = ""; });
+
+    await noEditorPage.keyboard.press("Escape");
+    await noEditorPage.waitForFunction(() => !document.getElementById("__fia_site_inspector__"));
+
+    // ── Site Inspector: repeated toggles never leave a duplicate overlay ────
+    // Re-injecting intentionally toggles the inspector off, then a later launch
+    // starts a fresh instance. Neither path may leave duplicate roots/listeners.
+    for (let toggle = 0; toggle < 3; toggle += 1) {
+      await extensionPage.evaluate(async (tabId) => {
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["site-inspector.js"] });
+      }, noEditorTab.id);
+      await noEditorPage.waitForFunction(() =>
+        document.querySelectorAll("#__fia_site_inspector__").length === 1,
+      );
+      await extensionPage.evaluate(async (tabId) => {
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["site-inspector.js"] });
+      }, noEditorTab.id);
+      await noEditorPage.waitForFunction(() =>
+        document.querySelectorAll("#__fia_site_inspector__").length === 0,
+      );
+    }
+    await extensionPage.evaluate(async (tabId) => {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["site-inspector.js"] });
+    }, noEditorTab.id);
+    assert.equal(
+      await noEditorPage.evaluate(() => document.querySelectorAll("#__fia_site_inspector__").length),
+      1,
+      "repeated Site Inspector toggles left more than one overlay mounted",
+    );
     await noEditorPage.keyboard.press("Escape");
     await noEditorPage.waitForFunction(() => !document.getElementById("__fia_site_inspector__"));
 
@@ -566,6 +783,47 @@ async function main() {
       { timeout: 3_000 },
     );
 
+    // ── Color Picker: rapid reinjection must not lose the new overlay ────────
+    // Copying a color schedules a 1200ms auto-close timer. If a fresh picker is
+    // injected before that timer fires, the stale closure's timer must be torn
+    // down so it cannot remove the newly opened overlay.
+    async function injectColorPicker(tabId) {
+      await extensionPage.evaluate(async (id) => {
+        const tab = await chrome.tabs.get(id);
+        await chrome.tabs.update(id, { active: true });
+        await chrome.windows.update(tab.windowId, { focused: true });
+        await new Promise(resolve => setTimeout(resolve, 60));
+        const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+        await chrome.scripting.executeScript({ target: { tabId: id }, files: ["color-picker.js"] });
+        await chrome.tabs.sendMessage(id, { action: "startFiaColorPicker", screenshot });
+      }, tabId);
+    }
+    await injectColorPicker(colorTab.id);
+    await colorPage.waitForSelector("#__fia_color_picker__");
+    await colorPage.mouse.move(220, 250);
+    await colorPage.mouse.click(220, 250);
+    await colorPage.waitForFunction(
+      () => document.querySelector(".fia-color-picker-toast")?.classList.contains("success"),
+    );
+    // Re-inject immediately, while the previous closure's 1200ms timer is pending.
+    await injectColorPicker(colorTab.id);
+    await colorPage.waitForFunction(
+      () => document.querySelectorAll("#__fia_color_picker__").length === 1,
+    );
+    await colorPage.mouse.move(220, 250);
+    await colorPage.waitForFunction(
+      () => document.querySelector(".fia-color-picker-hex")?.textContent === "#123456",
+    );
+    // Wait past the stale timer's window: the fresh overlay must still be alive.
+    await new Promise(resolve => setTimeout(resolve, 1_600));
+    assert.equal(
+      await colorPage.evaluate(() => document.querySelectorAll("#__fia_color_picker__").length),
+      1,
+      "a stale auto-close timer removed the freshly reinjected color picker",
+    );
+    await colorPage.keyboard.press("Escape");
+    await colorPage.waitForFunction(() => !document.getElementById("__fia_color_picker__"));
+
     // ── Ruler: guides + forward/reverse drag measurement + cleanup ──────────
     await extensionPage.evaluate(async (tabId) => {
       const tab = await chrome.tabs.get(tabId);
@@ -618,6 +876,92 @@ async function main() {
       { width: "200", height: "150", x: "300", y: "250" },
       "Ruler did not replace the measurement or support reverse dragging",
     );
+
+    // ── Ruler: pointercancel / lostpointercapture / resize cleanup ──────────
+    // A drag interrupted by pointercancel must keep the last committed
+    // measurement (never commit cancel's zeroed coordinates) and end the drag,
+    // so a following pointermove does not keep re-measuring.
+    const rulerMeasurementBeforeCancel = await colorPage.$eval("#__fia_ruler__", element => ({
+      width: element.dataset.width,
+      height: element.dataset.height,
+      x: element.dataset.x,
+      y: element.dataset.y,
+    }));
+    await colorPage.evaluate(() => {
+      const root = document.getElementById("__fia_ruler__");
+      const opts = { bubbles: true, cancelable: true, pointerId: 1 };
+      root.dispatchEvent(new PointerEvent("pointerdown", { ...opts, clientX: 120, clientY: 120 }));
+      root.dispatchEvent(new PointerEvent("pointermove", { ...opts, clientX: 260, clientY: 220 }));
+      // pointercancel may carry zeroed coordinates; it must not be committed.
+      root.dispatchEvent(new PointerEvent("pointercancel", { ...opts, clientX: 0, clientY: 0 }));
+    });
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_ruler__", element => ({
+        width: element.dataset.width,
+        height: element.dataset.height,
+        x: element.dataset.x,
+        y: element.dataset.y,
+      })),
+      rulerMeasurementBeforeCancel,
+      "Ruler committed pointercancel's zeroed coordinates instead of keeping the last measurement",
+    );
+    // The cancel must have ended the drag: a plain pointermove now only moves
+    // the guides and must not overwrite the retained measurement.
+    await colorPage.evaluate(() => {
+      const root = document.getElementById("__fia_ruler__");
+      root.dispatchEvent(new PointerEvent("pointermove", {
+        bubbles: true, cancelable: true, pointerId: 1, clientX: 470, clientY: 360,
+      }));
+    });
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_ruler__", element => ({
+        width: element.dataset.width,
+        height: element.dataset.height,
+      })),
+      { width: rulerMeasurementBeforeCancel.width, height: rulerMeasurementBeforeCancel.height },
+      "Ruler kept measuring after pointercancel — the drag state was not reset",
+    );
+
+    // lostpointercapture must reset drag state without clobbering the measurement.
+    await colorPage.evaluate(() => {
+      const root = document.getElementById("__fia_ruler__");
+      const opts = { bubbles: true, cancelable: true, pointerId: 2 };
+      root.dispatchEvent(new PointerEvent("pointerdown", { ...opts, clientX: 100, clientY: 100 }));
+      root.dispatchEvent(new PointerEvent("pointermove", { ...opts, clientX: 300, clientY: 260 }));
+      root.dispatchEvent(new PointerEvent("lostpointercapture", { ...opts, clientX: 300, clientY: 260 }));
+      // A stray pointermove after capture loss must not resume measuring.
+      root.dispatchEvent(new PointerEvent("pointermove", { ...opts, clientX: 20, clientY: 20 }));
+    });
+    const rulerAfterLostCapture = await colorPage.$eval("#__fia_ruler__", element => ({
+      width: element.dataset.width,
+      height: element.dataset.height,
+    }));
+    assert.ok(
+      Number(rulerAfterLostCapture.width) > 0 && Number(rulerAfterLostCapture.height) > 0,
+      `Ruler lost its measurement after lostpointercapture: ${JSON.stringify(rulerAfterLostCapture)}`,
+    );
+
+    // A window resize must reclamp guides and the retained measurement so it
+    // never extends beyond the (possibly smaller) viewport.
+    await colorPage.setViewport({ width: 500, height: 400 });
+    await colorPage.evaluate(() => window.dispatchEvent(new Event("resize")));
+    const rulerAfterResize = await colorPage.$eval("#__fia_ruler__", element => ({
+      x: Number(element.dataset.x),
+      y: Number(element.dataset.y),
+      width: Number(element.dataset.width),
+      height: Number(element.dataset.height),
+      guideX: Number(element.dataset.guideX),
+      guideY: Number(element.dataset.guideY),
+    }));
+    assert.ok(
+      rulerAfterResize.x + rulerAfterResize.width <= 500
+        && rulerAfterResize.y + rulerAfterResize.height <= 400
+        && rulerAfterResize.guideX <= 500
+        && rulerAfterResize.guideY <= 400,
+      `Ruler did not reclamp its guides/measurement into the resized viewport: ${JSON.stringify(rulerAfterResize)}`,
+    );
+    await colorPage.setViewport({ width: 1024, height: 768 });
+
     await colorPage.keyboard.press("Escape");
     await colorPage.waitForFunction(() => !document.getElementById("__fia_ruler__"));
 
@@ -1049,14 +1393,29 @@ async function main() {
     await palettePage.evaluate(() => window.scrollTo(0, 700));
     const originalPaletteScrollY = await palettePage.evaluate(() => window.scrollY);
 
-    // Trigger the color-palette analysis via the service worker
-    await extensionPage.evaluate(async (tabId, sourceUrl, sourceTitle) => {
+    // Start a palette scan, then immediately request a full-page capture on the
+    // same tab. The shared scroll-capture lock must reject the conflict rather
+    // than letting two workers interleave scroll and visibility changes.
+    const captureStarts = await extensionPage.evaluate(async (tabId, sourceUrl, sourceTitle) => {
       await chrome.tabs.update(tabId, { active: true });
       const tab = await chrome.tabs.get(tabId);
       await chrome.windows.update(tab.windowId, { focused: true });
       await new Promise(resolve => setTimeout(resolve, 200));
-      chrome.runtime.sendMessage({ action: "startColorPaletteAnalysis", tabId, sourceUrl, sourceTitle });
+      const palette = await chrome.runtime.sendMessage({
+        action: "startColorPaletteAnalysis", tabId, sourceUrl, sourceTitle,
+      });
+      const fullPage = await chrome.runtime.sendMessage({
+        action: "startFullPageCapture", tabId, title: sourceTitle,
+      });
+      return { palette, fullPage };
     }, paletteTab.id, paletteUrl, "Color Palette smoke fixture");
+    assert.equal(captureStarts.palette?.ok, true, "Color Palette scan did not acquire the shared capture lock");
+    assert.equal(captureStarts.fullPage?.ok, false, "Full Page capture was not rejected while a palette scan held the lock");
+    assert.match(
+      String(captureStarts.fullPage?.error || ""),
+      /already running/i,
+      "conflicting capture did not return a clear in-progress error",
+    );
 
     // Wait for the overlay to appear (scroll + analysis takes a few seconds)
     await palettePage.waitForSelector("#__fia_color_palette__", { timeout: 60_000 });
@@ -1206,11 +1565,12 @@ async function main() {
     console.log("  - generic rich-text editor insertion");
     console.log("  - copied/manual-paste fallback");
     console.log("  - cancel/reopen and stale-picker tab isolation");
-    console.log("  - magnified color picker hex sampling and clipboard copy");
-    console.log("  - Site Inspector hover details and Escape cleanup");
-    console.log("  - Ruler alignment guides, drag-any-direction measurement, replacement, and Escape cleanup");
+    console.log("  - magnified color picker hex sampling, clipboard copy, and stale-timer-safe reinjection");
+    console.log("  - Site Inspector hover details, invalid-target/scroll clearing, repeated toggles, and Escape cleanup");
+    console.log("  - Ruler alignment guides, drag-any-direction measurement, replacement, pointercancel/lostcapture/resize cleanup, and Escape cleanup");
     console.log("  - Responsive presets, custom dimensions, media-query rendering, zoom/Fit, and Exit/Escape cleanup");
     console.log("  - color palette: streaming full-page scan, six dominant colors, detected font variants, copy/save, tab-switch cleanup");
+    console.log("  - static source contracts: unique annotation handoff keys, tab-keyed snippet cache, non-OK snippet save toast, defensive Link Vault search");
   } finally {
     await browser?.close();
     if (fixture?.server) {

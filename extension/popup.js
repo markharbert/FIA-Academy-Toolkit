@@ -195,14 +195,25 @@ function buildPayload() {
   return p;
 }
 
-async function saveToServer(showStatus = false) {
-  try {
-    const data = await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(buildPayload()) });
-    if (data.entry) serverEntry = data.entry;
-    lastServerSave = Date.now();
-    notesDirty = false;
-    if (showStatus) setStatus("Saved ✓", 2500);
-  } catch { if (showStatus) setStatus("Save failed", 3000); }
+// Serializing writes preserves the member's newest timer/note state even when
+// a one-second tick, a manual action, and a debounced note save overlap.
+let _serverSaveQueue = Promise.resolve();
+
+function saveToServer(showStatus = false) {
+  const payload = buildPayload();
+  const request = async () => {
+    try {
+      const data = await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(payload) });
+      if (data.entry) serverEntry = data.entry;
+      lastServerSave = Date.now();
+      notesDirty = false;
+      if (showStatus) setStatus("Saved ✓", 2500);
+    } catch {
+      if (showStatus) setStatus("Save failed", 3000);
+    }
+  };
+  _serverSaveQueue = _serverSaveQueue.catch(() => {}).then(request);
+  return _serverSaveQueue;
 }
 
 // ─── Persistence ───────────────────────────────────────────────────────────
@@ -280,7 +291,11 @@ async function editTimer(key) {
 async function applyManual(key, minutes) {
   ensureTimer(key);
   const t = timers[key];
-  if (t.status === "running") t.startedAt = null;
+  // Accumulate any in-flight running time before overwriting with the manual value.
+  if (t.status === "running" && t.startedAt) {
+    t.accumulatedSeconds = (t.accumulatedSeconds || 0) + (Date.now() - t.startedAt) / 1000;
+    t.startedAt = null;
+  }
   t.accumulatedSeconds = Math.max(0, minutes) * 60;
   t.status = "done";
   await persist();
@@ -537,10 +552,11 @@ function renderLinksList(container) {
 function getFilteredLinks() {
   const q = linksSearch.toLowerCase();
   return linksAll.filter(l => {
-    const matchQ = !q || l.title.toLowerCase().includes(q) ||
-      (l.url || "").toLowerCase().includes(q) ||
-      (l.description || "").toLowerCase().includes(q) ||
-      (l.category || "").toLowerCase().includes(q);
+    if (!l || typeof l !== "object") return false;
+    const matchQ = !q || String(l.title || "").toLowerCase().includes(q) ||
+      String(l.url || "").toLowerCase().includes(q) ||
+      String(l.description || "").toLowerCase().includes(q) ||
+      String(l.category || "").toLowerCase().includes(q);
     const matchCat = linksCategory === "all" || l.category === linksCategory;
     return matchQ && matchCat;
   });
@@ -621,7 +637,9 @@ function buildLinkCard(link, container) {
   thumbImg.alt = link.title;
   thumbImg.src = link.screenshotUrl
     ? link.screenshotUrl
-    : `https://api.microlink.io/?url=${encodeURIComponent(link.url)}&screenshot=true&meta=false&embed=screenshot.url`;
+    : link.url
+      ? `https://api.microlink.io/?url=${encodeURIComponent(link.url)}&screenshot=true&meta=false&embed=screenshot.url`
+      : "";
   const thumbPh = document.createElement("span");
   thumbPh.className = "link-thumb-ph";
   thumbPh.textContent = "🌐";
@@ -717,7 +735,11 @@ function buildLinkCard(link, container) {
           linksCopiedId = null;
           copyBtn.className = "link-copy-btn"; copyBtn.textContent = "Copy";
         }, 2000);
-      } catch (_) {}
+      } catch (_) {
+        // Show user-visible feedback instead of silently failing
+        copyBtn.textContent = "Copy failed";
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 2000);
+      }
     });
     actions.appendChild(copyBtn);
 
@@ -1278,7 +1300,10 @@ async function saveTargets() {
 
 // ─── Load DMO ──────────────────────────────────────────────────────────────
 // Apply DMO data to local state + re-render (no network, no screen change).
-async function applyDmoData(dmoData, settingsData) {
+// background=true: called from a silent refresh while the popup is already
+// showing. Skip re-reading persisted timers from storage so we never clobber
+// timer state the user changed after the initial cache render.
+async function applyDmoData(dmoData, settingsData, background = false) {
   todayDate   = dmoData.date;
   serverEntry = dmoData.entry || null;
 
@@ -1295,11 +1320,18 @@ async function applyDmoData(dmoData, settingsData) {
     targets = s.targets || { visionMeditation:30, personalDevelopment:30, expandSkills:60, execution:60, connecting:60 };
   }
   await chrome.storage.local.set({ targets });
-  await loadPersisted(todayDate);
+
+  // For a foreground (initial) load, read persisted timer state from storage.
+  // For a background refresh, keep the in-memory timers as-is so any activity
+  // the user started after the initial render is not overwritten.
+  if (!background) await loadPersisted(todayDate);
 
   if (serverEntry) {
     ACTS.forEach(({ key, secsKey }) => {
       const local = timers[key];
+      // Only seed from server when the timer has never been touched locally.
+      // During a background refresh this also protects running/paused timers
+      // the user may have started between the cache render and this call.
       if (!local || local.status === "idle") {
         const srvSecs = serverEntry[secsKey] || 0;
         const srvBool = serverEntry[key]     || false;
@@ -1332,7 +1364,7 @@ async function loadDMO(background = false) {
     // Persist for next cache-first open
     chrome.storage.local.set({ cachedDmo: { dmoData, settingsData } }).catch(() => {});
 
-    await applyDmoData(dmoData, settingsData);
+    await applyDmoData(dmoData, settingsData, background);
     if (!background) showScreen("main");
   } catch (e) {
     if (e instanceof MembershipError) {
@@ -1409,11 +1441,19 @@ async function swipeCaptureFullPage() {
   SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
   $("swipe-btn-fullpage").classList.add("active");
 
-  chrome.runtime.sendMessage({
-    action: "startFullPageCapture",
-    tabId:  tab.id,
-    title:  (tab.title || url).substring(0, 140),
-  });
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: "startFullPageCapture",
+      tabId:  tab.id,
+      title:  (tab.title || url).substring(0, 140),
+    });
+    if (!response?.ok) throw new Error(response?.error || "Could not start the capture.");
+  } catch (err) {
+    swipeEnableBtns();
+    swipeHideStatus();
+    swipeShowStatus(`Capture could not start: ${err.message || "Please try again."}`);
+    return;
+  }
 
   swipeShowStatus("📄 Capturing full page… the annotation editor will open in a new tab when ready.");
   setTimeout(() => window.close(), 2200);
@@ -1438,8 +1478,13 @@ async function swipeCaptureVisibleArea() {
     try { const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); title = tab?.title || title; } catch (_) {}
 
     // Hand off to the annotation editor — it handles upload after annotations are added
-    await chrome.storage.session.set({ pendingAnnotation: { dataUrl, title } });
-    chrome.tabs.create({ url: chrome.runtime.getURL("annotate.html") });
+    const captureId = crypto.randomUUID();
+    await chrome.storage.session.set({
+      [`pendingAnnotation:${captureId}`]: { dataUrl, title },
+    });
+    await chrome.tabs.create({
+      url: `${chrome.runtime.getURL("annotate.html")}?capture=${encodeURIComponent(captureId)}`,
+    });
     window.close();
   } catch (err) {
     swipeEnableBtns();
@@ -1457,12 +1502,16 @@ async function swipeCaptureVisibleArea() {
             const style = document.createElement("style");
             style.id = STYLE_ID;
             style.textContent = "@keyframes _fia_in{from{opacity:0;transform:translateX(-50%) scale(.75)}to{opacity:1;transform:translateX(-50%) scale(1)}}@keyframes _fia_out{from{opacity:1;transform:translateX(-50%) scale(1)}to{opacity:0;transform:translateX(-50%) scale(.75)}}";
-            document.head.appendChild(style);
+            (document.head || document.documentElement).appendChild(style);
             const toast = document.createElement("div");
             toast.id = TOAST_ID;
             toast.style.cssText = "position:fixed;top:28px;left:50%;transform:translateX(-50%);z-index:2147483647;background:linear-gradient(135deg,#e85d5d 0%,#b52b2b 100%);padding:11px 22px 11px 14px;border-radius:999px;box-shadow:0 8px 28px rgba(185,43,43,.45);display:flex;align-items:center;gap:10px;animation:_fia_in .4s cubic-bezier(.34,1.56,.64,1) both;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,sans-serif;user-select:none;-webkit-user-select:none";
-            toast.innerHTML = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" style="flex-shrink:0"><circle cx="13" cy="13" r="12" fill="rgba(255,255,255,0.22)"/><path d="M8.5 8.5l9 9M17.5 8.5l-9 9" stroke="white" stroke-width="2.6" stroke-linecap="round"/></svg><span style="color:#fff;font-size:14px;font-weight:650;white-space:nowrap">${msg}</span>`;
-            document.body.appendChild(toast);
+            toast.innerHTML = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" style="flex-shrink:0"><circle cx="13" cy="13" r="12" fill="rgba(255,255,255,0.22)"/><path d="M8.5 8.5l9 9M17.5 8.5l-9 9" stroke="white" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+            const label = document.createElement("span");
+            label.style.cssText = "color:#fff;font-size:14px;font-weight:650;white-space:nowrap";
+            label.textContent = msg;
+            toast.appendChild(label);
+            (document.body || document.documentElement).appendChild(toast);
             setTimeout(() => { toast.style.animation = "_fia_out .32s ease-in both"; setTimeout(() => { toast.remove(); style.remove(); }, 350); }, 4000);
           },
           args: ["Capture failed — try again"],
@@ -1543,12 +1592,22 @@ async function swipeStartColorPalette() {
   const button = $("swipe-color-palette");
   if (button) { button.disabled = true; button.innerHTML = '<span class="swipe-tool-icon">🖌️</span><span>Scanning…</span>'; }
 
-  chrome.runtime.sendMessage({
-    action:    "startColorPaletteAnalysis",
-    tabId:     tab.id,
-    sourceUrl: tab.url,
-    sourceTitle: tab.title || "",
-  });
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action:    "startColorPaletteAnalysis",
+      tabId:     tab.id,
+      sourceUrl: tab.url,
+      sourceTitle: tab.title || "",
+    });
+    if (!response?.ok) throw new Error(response?.error || "Could not start the scan.");
+  } catch (err) {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = '<span class="swipe-tool-icon">🖌️</span><span>Color Palette</span>';
+    }
+    swipeShowStatus(`Color Palette could not start: ${err.message || "Please try again."}`);
+    return;
+  }
 
   swipeShowStatus("🖌️ Scanning page colors… the palette overlay will appear on the page when ready.");
   setTimeout(() => window.close(), 2200);

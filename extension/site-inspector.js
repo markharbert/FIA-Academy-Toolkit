@@ -12,13 +12,15 @@
   const PANEL_ID = "__fia_site_inspector_panel__";
   const LABEL_ID = "__fia_site_inspector_label__";
 
-  const existing = document.getElementById(ROOT_ID);
-  if (existing) {
-    existing.remove();
-    document.getElementById(STYLE_ID)?.remove();
-    document.removeEventListener("pointermove", onPointerMove, true);
-    document.removeEventListener("keydown", onKeyDown, true);
-    delete window.__fiaSiteInspector;
+  if (document.getElementById(ROOT_ID)) {
+    // Delegate teardown to the previous instance's destroy() so the correct
+    // closure-bound listener references are removed.
+    if (window.__fiaSiteInspector?.destroy) {
+      window.__fiaSiteInspector.destroy();
+    } else {
+      document.getElementById(ROOT_ID)?.remove();
+      document.getElementById(STYLE_ID)?.remove();
+    }
     return;
   }
 
@@ -260,9 +262,15 @@
   }
 
   function showElement(element) {
-    if (!element || element === document.documentElement || element === root || root.contains(element)) return;
+    if (!element || element === document.documentElement || element === root || root.contains(element)) {
+      clearInspection();
+      return;
+    }
     const rect = element.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+    if (rect.width <= 0 || rect.height <= 0) {
+      clearInspection();
+      return;
+    }
     currentElement = element;
     const styles = window.getComputedStyle(element);
     highlight.style.display = "block";
@@ -278,10 +286,21 @@
     positionPanel(rect);
   }
 
+  function clearInspection() {
+    currentElement = null;
+    highlight.style.display = "none";
+    label.style.display = "none";
+    panel.style.display = "none";
+  }
+
   function onPointerMove(event) {
     if (root.contains(event.target)) return;
     const element = document.elementFromPoint(event.clientX, event.clientY);
     showElement(element);
+  }
+
+  function onScroll() {
+    if (currentElement) showElement(currentElement);
   }
 
   function destroy() {
@@ -289,6 +308,7 @@
     style.remove();
     document.removeEventListener("pointermove", onPointerMove, true);
     document.removeEventListener("keydown", onKeyDown, true);
+    document.removeEventListener("scroll", onScroll, true);
     delete window.__fiaSiteInspector;
   }
 
@@ -307,5 +327,6 @@
   });
   document.addEventListener("pointermove", onPointerMove, true);
   document.addEventListener("keydown", onKeyDown, true);
+  document.addEventListener("scroll", onScroll, true);
   window.__fiaSiteInspector = { destroy, getCurrentElement: () => currentElement };
 })();

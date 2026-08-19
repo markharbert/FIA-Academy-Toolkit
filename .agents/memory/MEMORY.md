@@ -11,3 +11,4 @@
 - [Palette result visibility](palette-result-modal.md) — extracted palettes should appear in a centered, prominent modal with a dimmed backdrop so saving is hard to miss.
 - [Responsive toolbar form sizing](responsive-toolbar-form-sizing.md) — form-control resets must restore border-box sizing or painted controls can overflow their flex slots.
 - [Responsive script-free snapshots](responsive-script-free-snapshots.md) — sanitize nested documents and script entry points without granting iframe script permission.
+- [Scroll capture coordination](scroll-capture-coordination.md) — page-scrolling capture tools must share one per-tab lock to avoid corrupting captures.

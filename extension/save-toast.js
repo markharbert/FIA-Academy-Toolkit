@@ -14,7 +14,7 @@
     @keyframes _fia_out { from { opacity:1; transform:translateX(-50%) scale(1); } to { opacity:0; transform:translateX(-50%) scale(.75); } }
     @keyframes _fia_chk { from { stroke-dashoffset:32; } to { stroke-dashoffset:0; } }
   `;
-  document.head.appendChild(style);
+  (document.head || document.documentElement).appendChild(style);
 
   const toast = document.createElement("div");
   toast.id = TOAST_ID;
@@ -45,7 +45,7 @@
     <span style="color:#fff;font-size:14px;font-weight:650;letter-spacing:.01em;white-space:nowrap;">Saved to Swipe File!</span>
   `;
 
-  document.body.appendChild(toast);
+  (document.body || document.documentElement).appendChild(toast);
 
   setTimeout(() => {
     toast.style.animation = "_fia_out .32s ease-in both";

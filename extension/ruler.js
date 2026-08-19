@@ -138,6 +138,7 @@
   };
   let startPoint = null;
   let measurement = null;
+  let previousMeasurement = null;
   let dragging = false;
   let activePointerId = null;
 
@@ -195,6 +196,7 @@
     event.stopPropagation();
     const point = pointFromEvent(event);
     startPoint = point;
+    previousMeasurement = measurement ? { ...measurement } : null;
     measurement = null;
     dragging = true;
     activePointerId = event.pointerId;
@@ -207,10 +209,55 @@
     if (!dragging || (activePointerId !== null && event.pointerId !== activePointerId)) return;
     event.preventDefault();
     event.stopPropagation();
-    updateMeasurement(pointFromEvent(event));
+    // Only commit the final position on a real pointerup; pointercancel may
+    // carry invalid/zeroed coordinates so we leave the last valid measurement.
+    if (event.type === "pointerup") {
+      updateMeasurement(pointFromEvent(event));
+    } else {
+      restorePreviousMeasurement();
+    }
     dragging = false;
-    root.releasePointerCapture?.(event.pointerId);
+    try { root.releasePointerCapture(event.pointerId); } catch (_) {}
     activePointerId = null;
+    previousMeasurement = null;
+  }
+
+  function restorePreviousMeasurement() {
+    if (!previousMeasurement) {
+      measurement = null;
+      selection.classList.remove("active");
+      return;
+    }
+    startPoint = { x: previousMeasurement.x, y: previousMeasurement.y };
+    updateMeasurement({
+      x: previousMeasurement.x + previousMeasurement.width,
+      y: previousMeasurement.y + previousMeasurement.height,
+    });
+  }
+
+  function onLostPointerCapture(event) {
+    if (activePointerId !== null && event.pointerId !== activePointerId) return;
+    // Capture was released by the browser (e.g. pointer left the window);
+    // restore the replacement target instead of leaving a zero-size selection.
+    if (dragging) restorePreviousMeasurement();
+    dragging = false;
+    activePointerId = null;
+    previousMeasurement = null;
+  }
+
+  function onResize() {
+    const point = {
+      x: clamp(Number(root.dataset.guideX) || 0, 0, window.innerWidth),
+      y: clamp(Number(root.dataset.guideY) || 0, 0, window.innerHeight),
+    };
+    moveGuides(point);
+    if (!measurement) return;
+    const x = clamp(measurement.x, 0, window.innerWidth);
+    const y = clamp(measurement.y, 0, window.innerHeight);
+    const width = Math.min(measurement.width, Math.max(0, window.innerWidth - x));
+    const height = Math.min(measurement.height, Math.max(0, window.innerHeight - y));
+    startPoint = { x, y };
+    updateMeasurement({ x: x + width, y: y + height });
   }
 
   function blockEvent(event) {
@@ -231,6 +278,8 @@
     root.removeEventListener("pointerdown", onPointerDown, true);
     root.removeEventListener("pointerup", finishDrag, true);
     root.removeEventListener("pointercancel", finishDrag, true);
+    root.removeEventListener("lostpointercapture", onLostPointerCapture);
+    window.removeEventListener("resize", onResize);
     root.removeEventListener("wheel", blockEvent, true);
     root.removeEventListener("contextmenu", blockEvent, true);
     root.remove();
@@ -242,6 +291,8 @@
   root.addEventListener("pointerdown", onPointerDown, true);
   root.addEventListener("pointerup", finishDrag, true);
   root.addEventListener("pointercancel", finishDrag, true);
+  root.addEventListener("lostpointercapture", onLostPointerCapture);
+  window.addEventListener("resize", onResize);
   root.addEventListener("wheel", blockEvent, { capture: true, passive: false });
   root.addEventListener("contextmenu", blockEvent, true);
   document.addEventListener("keydown", onKeyDown, true);

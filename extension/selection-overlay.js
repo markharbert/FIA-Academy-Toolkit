@@ -108,20 +108,31 @@
     const h = Math.abs(e.clientY - startY);
     cleanup();
     if (w < 10 || h < 10) {
-      chrome.runtime.sendMessage({ action: "sectionCancelled" });
+      // sectionCancelled has no SW listener; suppress the resulting console error.
+      chrome.runtime.sendMessage({ action: "sectionCancelled" }).catch(() => {});
+      return;
+    }
+    // Clamp the rect to the visible viewport so the SW never receives
+    // negative or out-of-bounds coordinates from edge-drag gestures.
+    const safeX = Math.max(0, Math.round(x));
+    const safeY = Math.max(0, Math.round(y));
+    const safeW = Math.min(Math.round(w), window.innerWidth  - safeX);
+    const safeH = Math.min(Math.round(h), window.innerHeight - safeY);
+    if (safeW < 10 || safeH < 10) {
+      chrome.runtime.sendMessage({ action: "sectionCancelled" }).catch(() => {});
       return;
     }
     chrome.runtime.sendMessage({
       action: "sectionSelected",
-      rect:   { x, y, width: w, height: h },
+      rect:   { x: safeX, y: safeY, width: safeW, height: safeH },
       dpr:    window.devicePixelRatio || 1,
-    });
+    }).catch(() => {});
   });
 
   function onKey(e) {
     if (e.key === "Escape") {
       cleanup();
-      chrome.runtime.sendMessage({ action: "sectionCancelled" });
+      chrome.runtime.sendMessage({ action: "sectionCancelled" }).catch(() => {});
     }
   }
   document.addEventListener("keydown", onKey);

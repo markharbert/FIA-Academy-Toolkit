@@ -46,10 +46,17 @@ async function blobToDataUrl(blob) {
 }
 
 // Store blob in session storage then open the annotation editor in a new tab.
+// Each editor receives a unique handoff key so simultaneous captures cannot
+// overwrite each other before their tabs finish loading.
 async function openAnnotationTab(blob, title) {
   const dataUrl = await blobToDataUrl(blob);
-  await chrome.storage.session.set({ pendingAnnotation: { dataUrl, title } });
-  chrome.tabs.create({ url: chrome.runtime.getURL("annotate.html") });
+  const captureId = crypto.randomUUID();
+  await chrome.storage.session.set({
+    [`pendingAnnotation:${captureId}`]: { dataUrl, title },
+  });
+  await chrome.tabs.create({
+    url: `${chrome.runtime.getURL("annotate.html")}?capture=${encodeURIComponent(captureId)}`,
+  });
 }
 
 // ─── Context menus ───────────────────────────────────────────────────────────
@@ -131,9 +138,15 @@ chrome.windows.onRemoved.addListener((windowId) => {
 // Cache the selection HTML sent by snippet-capture.js (content script).
 // Using message passing is more reliable than calling chrome.storage from
 // a content script directly, because sendMessage wakes the SW if needed.
-chrome.runtime.onMessage.addListener((msg) => {
+// We key the cache by tabId so that concurrent right-clicks on different
+// tabs cannot overwrite each other's selection HTML.
+chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.action === "cacheSnippetHtml" && msg.html) {
-    chrome.storage.session.set({ pendingSnippetHtml: msg.html }).catch(() => {});
+    const tabId = sender.tab?.id;
+    if (!Number.isInteger(tabId)) return;
+    // Store per-tab so a right-click on Tab B never clobbers Tab A's HTML.
+    const key = `pendingSnippetHtml_${tabId}`;
+    chrome.storage.session.set({ [key]: msg.html }).catch(() => {});
   }
 });
 
@@ -259,12 +272,16 @@ function injectErrorToast(tabId, message) {
       const style = document.createElement("style");
       style.id = STYLE_ID;
       style.textContent = "@keyframes _fia_in{from{opacity:0;transform:translateX(-50%) scale(.75)}to{opacity:1;transform:translateX(-50%) scale(1)}}@keyframes _fia_out{from{opacity:1;transform:translateX(-50%) scale(1)}to{opacity:0;transform:translateX(-50%) scale(.75)}}";
-      document.head.appendChild(style);
+      (document.head || document.documentElement).appendChild(style);
       const toast = document.createElement("div");
       toast.id = TOAST_ID;
       toast.style.cssText = "position:fixed;top:28px;left:50%;transform:translateX(-50%);z-index:2147483647;background:linear-gradient(135deg,#e85d5d 0%,#b52b2b 100%);padding:11px 22px 11px 14px;border-radius:999px;box-shadow:0 8px 28px rgba(185,43,43,.45);display:flex;align-items:center;gap:10px;animation:_fia_in .4s cubic-bezier(.34,1.56,.64,1) both;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,sans-serif;user-select:none;-webkit-user-select:none";
-      toast.innerHTML = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" style="flex-shrink:0"><circle cx="13" cy="13" r="12" fill="rgba(255,255,255,0.22)"/><path d="M8.5 8.5l9 9M17.5 8.5l-9 9" stroke="white" stroke-width="2.6" stroke-linecap="round"/></svg><span style="color:#fff;font-size:14px;font-weight:650;white-space:nowrap">${msg}</span>`;
-      document.body.appendChild(toast);
+      toast.innerHTML = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" style="flex-shrink:0"><circle cx="13" cy="13" r="12" fill="rgba(255,255,255,0.22)"/><path d="M8.5 8.5l9 9M17.5 8.5l-9 9" stroke="white" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+      const label = document.createElement("span");
+      label.style.cssText = "color:#fff;font-size:14px;font-weight:650;white-space:nowrap";
+      label.textContent = msg;
+      toast.appendChild(label);
+      (document.body || document.documentElement).appendChild(toast);
       setTimeout(() => { toast.style.animation = "_fia_out .32s ease-in both"; setTimeout(() => { toast.remove(); style.remove(); }, 350); }, 4000);
     },
     args: [message],
@@ -272,8 +289,29 @@ function injectErrorToast(tabId, message) {
 }
 
 
+// Full Page and Color Palette both scroll the source tab, hide fixed elements,
+// and call captureVisibleTab. They must never run together on one tab.
+const scrollCaptureInProgress = new Set();
+
+function acquireScrollCapture(tabId, requestedTool) {
+  if (!Number.isInteger(tabId)) {
+    return { ok: false, error: "The page is no longer available." };
+  }
+  if (scrollCaptureInProgress.has(tabId)) {
+    const error = "Another page scan is already running. Wait for it to finish before starting a new one.";
+    return { ok: false, error };
+  }
+  scrollCaptureInProgress.add(tabId);
+  return { ok: true, requestedTool };
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.action !== "startFullPageCapture") return false;
+  const lock = acquireScrollCapture(msg.tabId, "full-page capture");
+  if (!lock.ok) {
+    sendResponse(lock);
+    return false;
+  }
   sendResponse({ ok: true }); // ack immediately; async work runs below
   handleFullPageCapture(msg.tabId, msg.title);
   return false;
@@ -283,6 +321,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.action !== "startColorPaletteAnalysis") return false;
+  const lock = acquireScrollCapture(msg.tabId, "color palette scan");
+  if (!lock.ok) {
+    sendResponse(lock);
+    return false;
+  }
   sendResponse({ ok: true }); // ack immediately
   handleColorPaletteAnalysis(msg.tabId, msg.sourceUrl, msg.sourceTitle);
   return false;
@@ -679,8 +722,18 @@ async function handleColorPaletteAnalysis(tabId, sourceUrl, sourceTitle) {
         error:  `Color Palette failed: ${err.message}`,
       }))
       .catch(() => injectErrorToast(tabId, `Color Palette failed: ${err.message}`));
+  } finally {
+    scrollCaptureInProgress.delete(tabId);
   }
 }
+
+// Hard limits for full-page canvas to avoid OOM / silent blank-canvas failures.
+// Chrome's maximum canvas dimension is platform-dependent but 16 384 px is safe
+// on all supported platforms; we use a slightly lower value for headroom.
+const FULL_PAGE_MAX_HEIGHT_PX = 15000;
+const FULL_PAGE_MAX_STRIPS    = 60;
+const FULL_PAGE_MAX_WIDTH_PX  = 6000;
+const FULL_PAGE_MAX_PIXELS    = 40_000_000;
 
 async function handleFullPageCapture(tabId, title) {
   // Strip-based capture → annotate-editor approach:
@@ -688,6 +741,7 @@ async function handleFullPageCapture(tabId, title) {
   // stored as data URLs in IndexedDB (no 10 MB session-storage cap), then the
   // annotation editor opens and stitches them into one scrollable canvas.
 
+  let origX = 0, origY = 0;
   try {
     // 1. Read page geometry
     const [{ result: dims }] = await chrome.scripting.executeScript({
@@ -700,10 +754,41 @@ async function handleFullPageCapture(tabId, title) {
         origY:   window.scrollY,
       }),
     });
-    const { scrollH, vpH, vpW, origX, origY } = dims;
+    ({ origX, origY } = dims);
+    const { scrollH, vpH, vpW } = dims;
 
     // Guard: degenerate viewport (some iframes / SPAs) — avoids Math.ceil(x/0) = Infinity.
-    if (!vpH || !vpW) throw new Error("Capture aborted: viewport dimensions are zero.");
+    if (!Number.isFinite(vpH) || !Number.isFinite(vpW) || vpH <= 0 || vpW <= 0) {
+      throw new Error("Capture aborted: viewport dimensions are invalid.");
+    }
+
+    // Guard: canvas memory limit — Chrome silently produces a blank canvas above
+    // ~32 768 px in either dimension. Fail fast with a clear message instead.
+    if (scrollH > FULL_PAGE_MAX_HEIGHT_PX) {
+      throw new Error(
+        `Page is too tall to capture (${scrollH}px). ` +
+        `Maximum supported height is ${FULL_PAGE_MAX_HEIGHT_PX}px.`
+      );
+    }
+    if (vpW > FULL_PAGE_MAX_WIDTH_PX) {
+      throw new Error(
+        `Page is too wide to capture (${vpW}px). ` +
+        `Maximum supported width is ${FULL_PAGE_MAX_WIDTH_PX}px.`
+      );
+    }
+    if (scrollH * vpW > FULL_PAGE_MAX_PIXELS) {
+      throw new Error(
+        `Page is too large to capture safely (${Math.round((scrollH * vpW) / 1_000_000)} million pixels). ` +
+        `Maximum is ${Math.round(FULL_PAGE_MAX_PIXELS / 1_000_000)} million pixels.`
+      );
+    }
+    const totalStepsCheck = Math.ceil(scrollH / vpH);
+    if (totalStepsCheck > FULL_PAGE_MAX_STRIPS) {
+      throw new Error(
+        `Page requires too many capture strips (${totalStepsCheck}). ` +
+        `Maximum is ${FULL_PAGE_MAX_STRIPS}.`
+      );
+    }
 
     // 2. Get windowId for captureVisibleTab
     const { windowId } = await chrome.tabs.get(tabId);
@@ -821,27 +906,38 @@ async function handleFullPageCapture(tabId, title) {
       func: () => { const el = document.getElementById("__fia_progress__"); if (el) el.remove(); },
     });
 
-    // 8. Store strips in IndexedDB (no size cap; works across SW + extension page contexts)
-    await idbPut("pendingFullPage", { strips, title: title || "Full Page", scrollH, vpH, vpW });
+    // 8. Store strips under this capture's unique handoff key.
+    const captureId = crypto.randomUUID();
+    await idbPut(
+      `pendingFullPage:${captureId}`,
+      { strips, title: title || "Full Page", scrollH, vpH, vpW },
+    );
 
     // 9. Open annotation editor — it will stitch + save the full image
-    chrome.tabs.create({ url: chrome.runtime.getURL("annotate.html") });
+    await chrome.tabs.create({
+      url: `${chrome.runtime.getURL("annotate.html")}?capture=${encodeURIComponent(captureId)}`,
+    });
 
   } catch (err) {
     console.error("[FIA SW] full page capture error:", err);
-    // Restore any hidden fixed/sticky elements before showing the error
+    // Restore fixed/sticky elements, scroll position, and remove progress banner.
     chrome.scripting.executeScript({
       target: { tabId },
-      func: () => {
+      func: (ox, oy) => {
         document.querySelectorAll("[data-fia-orig-vis]").forEach(el => {
           el.style.visibility = el.dataset.fiaOrigVis;
           delete el.dataset.fiaOrigVis;
         });
         const banner = document.getElementById("__fia_progress__");
         if (banner) banner.remove();
+        // Restore scroll position so the page doesn't stay pinned at the top/bottom.
+        if (Number.isFinite(ox) && Number.isFinite(oy)) window.scrollTo(ox, oy);
       },
+      args: [origX, origY],
     }).catch(() => {});
     injectErrorToast(tabId, `Capture failed: ${err.message}`);
+  } finally {
+    scrollCaptureInProgress.delete(tabId);
   }
 }
 
@@ -860,35 +956,47 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const text      = info.selectionText ?? "";
   const sourceUrl = tab?.url ?? "";
   const title     = (tab?.title ?? "Snippet").substring(0, 120);
+  const tabId     = tab?.id;
 
   const stored = await chrome.storage.local.get(["apiKey"]);
   const key = stored.apiKey;
-  if (!key) return;
+  if (!key) {
+    // No API key — surface an error instead of silently doing nothing.
+    injectErrorToast(tabId, "Snippet not saved — please connect your API key first.");
+    return;
+  }
 
   // snippet-capture.js stashes the selection HTML in session storage at the
   // moment of right-click (before the selection is cleared by the menu click).
   // Read it here and clear it so it doesn't bleed into the next snippet.
+  // The key is tab-scoped so concurrent right-clicks on different tabs are safe.
   let content = text;
   try {
-    const session = await chrome.storage.session.get("pendingSnippetHtml");
-    const html = session?.pendingSnippetHtml;
+    const sessionKey = `pendingSnippetHtml_${tabId}`;
+    const session = await chrome.storage.session.get(sessionKey);
+    const html = session?.[sessionKey];
     if (html && html.trim()) {
       content = html;
-      await chrome.storage.session.remove("pendingSnippetHtml");
+      await chrome.storage.session.remove(sessionKey);
     }
   } catch {
     // Session storage unavailable — plain text fallback is fine
   }
 
   try {
-    await fetch(`${API_BASE}/api/v1/swipe`, {
+    const res = await fetch(`${API_BASE}/api/v1/swipe`, {
       method:  "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": key },
       body:    JSON.stringify({ type: "snippet", title, content, sourceUrl }),
     });
-    injectSaveToast(tab?.id);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Server error ${res.status}${body ? `: ${body}` : ""}`);
+    }
+    injectSaveToast(tabId);
   } catch (err) {
     console.error("[FIA] Snippet save failed:", err.message);
+    injectErrorToast(tabId, `Snippet not saved: ${err.message}`);
   }
 });
 // This public key is safe to embed — it is designed to be shared with clients.

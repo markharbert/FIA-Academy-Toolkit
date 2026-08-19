@@ -8,18 +8,19 @@ Run this before distributing an updated extension archive:
 npm run extension:smoke
 ```
 
-The check extracts `fia-toolkit-extension-v2.4.11.zip` into a temporary folder and launches it in a clean Chromium profile. It verifies:
+The check extracts `fia-toolkit-extension-v2.4.12.zip` into a temporary folder and launches it in a clean Chromium profile. It verifies:
 
 - the archive still connects the right-click Link Vault menu to its originating-tab/window/request handoff;
 - insertion into a Facebook-shaped comment `contenteditable`;
 - insertion into a separate ProseMirror-shaped rich-text editor;
 - the copied/manual-paste fallback when the source page has no editable destination; and
 - picker cancellation, reopening, and rejection of a stale picker request so a link cannot land in another tab;
-- Color Picker sampling and clipboard feedback;
-- Site Inspector hover highlighting, computed typography, layout, and accessibility details;
-- Ruler crosshair alignment guides, drag-any-direction measurement math, live width/height/X/Y readout, replacement measurements, and Escape cleanup;
+- Color Picker sampling, clipboard feedback, and rapid re-opening without stale timers;
+- Site Inspector hover highlighting, computed typography, layout, accessibility details, scroll repositioning, and repeated-toggle cleanup;
+- Ruler crosshair alignment guides, drag-any-direction measurement math, live width/height/X/Y readout, replacement measurements, cancellation/resize cleanup, and Escape cleanup;
 - Responsive Preview FIA branding, 35 device presets including current and upcoming iPhone sizes, editable viewport dimensions, responsive media-query rendering, zoom/Fit controls, and Exit/Escape cleanup; and
-- full-page Color Palette scanning, six-color extraction, detected font families and variants, scroll restoration, individual color copying, and the Swipe File save payload.
+- full-page Color Palette scanning, six-color extraction, detected font families and variants, scroll restoration, individual color copying, the Swipe File save payload, and rejection of conflicting page-scrolling captures; and
+- per-capture annotation handoffs, tab-isolated snippet saves, failed-save feedback, defensive Link Vault filtering, and safe full-page canvas limits.
 
 It uses Chromium available on the Replit workspace. Set `CHROMIUM_PATH` when running it somewhere Chromium is not available on the normal command path.
 

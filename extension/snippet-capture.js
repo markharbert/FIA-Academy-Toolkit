@@ -178,6 +178,8 @@ document.addEventListener("contextmenu", (event) => {
 
     if (html && html.trim()) {
       // Send to service worker — this also wakes the SW if it was sleeping.
+      // The SW keys the session-storage cache by sender tab ID, so concurrent
+      // right-clicks on different tabs cannot overwrite each other's HTML.
       chrome.runtime.sendMessage({ action: "cacheSnippetHtml", html }).catch(() => {});
     }
   } catch {

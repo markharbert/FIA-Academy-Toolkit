@@ -67,17 +67,28 @@ function loadAsImage(src) {
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
+// Guard flag: prevents a second init if somehow this script runs twice (e.g.
+// duplicate message delivery or hot-reload during development).
+let _editorInitialized = false;
+
 (async () => {
+  if (_editorInitialized) return;
+  _editorInitialized = true;
+
   try {
-    const { pendingAnnotation } = await chrome.storage.session.get("pendingAnnotation");
+    const captureId = new URLSearchParams(window.location.search).get("capture");
+    const sessionKey = captureId ? `pendingAnnotation:${captureId}` : "pendingAnnotation";
+    const { [sessionKey]: pendingAnnotation } = await chrome.storage.session.get(sessionKey);
     if (pendingAnnotation?.dataUrl) {
+      await chrome.storage.session.remove(sessionKey).catch(() => {});
       await initSingleImage(pendingAnnotation.dataUrl, pendingAnnotation.title);
       return;
     }
-    const pending = await idbGet("pendingFullPage");
+    const fullPageKey = captureId ? `pendingFullPage:${captureId}` : "pendingFullPage";
+    const pending = await idbGet(fullPageKey);
     if (pending?.strips?.length) {
       isFullPage = true;
-      await initFullPage(pending);
+      await initFullPage(pending, fullPageKey);
       return;
     }
     statusEl.innerHTML = "No screenshot found.<br>Close this tab and try again.";
@@ -103,20 +114,38 @@ async function initSingleImage(dataUrl, title) {
 }
 
 // ── Full-page init (multi-strip stitch) ───────────────────────────────────────
-async function initFullPage({ strips, title, scrollH, vpH, vpW }) {
+
+// Mirror the SW constant so the editor applies the same safety cap.
+const FULL_PAGE_MAX_HEIGHT_PX = 15000;
+const FULL_PAGE_MAX_WIDTH_PX = 6000;
+const FULL_PAGE_MAX_PIXELS = 40_000_000;
+
+async function initFullPage({ strips, title, scrollH, vpH, vpW }, storageKey = "pendingFullPage") {
   pendingTitle = title || "Full Page";
   const titleEl = document.getElementById("capture-title");
   if (titleEl) titleEl.value = pendingTitle;
+
+  // Clamp canvas dimensions to avoid silent blank-canvas failure.
+  // scrollH is already validated by the SW, but guard here too in case the
+  // IDB record was written by an older SW version without the cap.
+  const safeH = Math.min(scrollH, FULL_PAGE_MAX_HEIGHT_PX);
+  const safeW = Math.min(Math.max(1, vpW), FULL_PAGE_MAX_WIDTH_PX);
+  if (safeH * safeW > FULL_PAGE_MAX_PIXELS) {
+    throw new Error("This full-page image is too large to stitch safely.");
+  }
+
   statusEl.textContent   = `Stitching full page (0 / ${strips.length})…`;
   statusEl.style.display = "block";
-  canvas.width  = vpW;
-  canvas.height = scrollH;
+  canvas.width  = safeW;
+  canvas.height = safeH;
 
   for (let i = 0; i < strips.length; i++) {
     statusEl.textContent = `Stitching full page (${i + 1} / ${strips.length})…`;
     const img  = await loadAsImage(strips[i]);
-    const yPos = (i === strips.length - 1) ? Math.max(0, scrollH - vpH) : i * vpH;
-    ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, 0, yPos, vpW, vpH);
+    const yPos = (i === strips.length - 1) ? Math.max(0, safeH - vpH) : i * vpH;
+    // Clamp yPos so we never draw below the canvas boundary.
+    const clampedY = Math.min(yPos, Math.max(0, safeH - vpH));
+    ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, 0, clampedY, safeW, vpH);
   }
 
   bgImage = await createImageBitmap(canvas);
@@ -125,7 +154,7 @@ async function initFullPage({ strips, title, scrollH, vpH, vpW }) {
   canvas.style.display   = "block";
   statusEl.style.display = "none";
   render();
-  await idbDelete("pendingFullPage").catch(() => {});
+  await idbDelete(storageKey).catch(() => {});
 }
 
 // ── Geometry helpers ──────────────────────────────────────────────────────────

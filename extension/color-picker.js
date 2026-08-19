@@ -1,13 +1,24 @@
 "use strict";
 
 (() => {
+  // The popup may inject this file repeatedly. Keep one runtime listener in the
+  // tab; each start request below tears down the prior picker in this closure.
+  if (window.__fiaColorPickerScriptLoaded) return;
+  window.__fiaColorPickerScriptLoaded = true;
+
   const ROOT_ID = "__fia_color_picker__";
   const STYLE_ID = "__fia_color_picker_style__";
   const MIN_ZOOM = 2;
   const MAX_ZOOM = 8;
   const MAGNIFIER_SIZE = 132;
 
+  let _autoDestroyTimer = null;
+
   function destroy() {
+    if (_autoDestroyTimer !== null) {
+      clearTimeout(_autoDestroyTimer);
+      _autoDestroyTimer = null;
+    }
     document.getElementById(ROOT_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();
     document.removeEventListener("keydown", handleKeyDown, true);
@@ -185,7 +196,10 @@
         toast.textContent = copied ? "Color saved to clipboard" : "Could not save color to clipboard";
         toast.className = `fia-color-picker-toast ${copied ? "success" : "error"} show`;
       }
-      if (copied) setTimeout(destroy, 1200);
+      if (copied) {
+        if (_autoDestroyTimer !== null) clearTimeout(_autoDestroyTimer);
+        _autoDestroyTimer = setTimeout(destroy, 1200);
+      }
     }
 
     root.addEventListener("pointermove", update, true);

@@ -70,11 +70,14 @@ async function chooseLink(link, buttons, apiKey) {
     await copyText(link.url);
 
     // Keep Link Vault usage metrics consistent with the extension's main popup.
-    fetch(`${API_BASE}/api/v1/links/${encodeURIComponent(link.id)}/click`, {
-      method: "POST",
-      headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
-      keepalive: true,
-    }).catch(() => {});
+    // Guard against malformed records that have a missing or invalid id.
+    if (link.id != null) {
+      fetch(`${API_BASE}/api/v1/links/${encodeURIComponent(link.id)}/click`, {
+        method: "POST",
+        headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+        keepalive: true,
+      }).catch(() => {});
+    }
 
     let inserted = false;
     try {

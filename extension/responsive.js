@@ -603,6 +603,7 @@
   document.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("resize", onWindowResize);
   frame.addEventListener("load", () => {
+    if (destroyed) return;
     try {
       frame.contentWindow?.addEventListener("keydown", onFrameKeyDown, true);
     } catch (_) {}

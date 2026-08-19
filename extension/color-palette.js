@@ -12,7 +12,16 @@
   const OVERLAY_ID   = "__fia_color_palette__";
   const STYLE_ID     = "__fia_color_palette_style__";
 
+  let _destroyTimer = null;
+  const _feedbackTimers = new Set();
+
   function destroy() {
+    if (_destroyTimer !== null) {
+      clearTimeout(_destroyTimer);
+      _destroyTimer = null;
+    }
+    _feedbackTimers.forEach(id => clearTimeout(id));
+    _feedbackTimers.clear();
     document.getElementById(OVERLAY_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();
     delete window.__fiaColorPalette;
@@ -285,10 +294,12 @@
         const original = family.textContent;
         family.textContent = copied ? "✓ Copied font family" : "✗ Copy failed";
         card.classList.toggle("fia-pal-copied", copied);
-        setTimeout(() => {
+        const tid = setTimeout(() => {
+          _feedbackTimers.delete(tid);
           family.textContent = original;
           card.classList.remove("fia-pal-copied");
         }, 1500);
+        _feedbackTimers.add(tid);
       });
       list.appendChild(card);
     });
@@ -351,10 +362,12 @@
         if (hexEl) {
           const original = hex;
           hexEl.textContent = copied ? "✓ Copied" : "✗ Failed";
-          setTimeout(() => {
+          const tid = setTimeout(() => {
+            _feedbackTimers.delete(tid);
             hexEl.textContent = original;
             wrap.classList.remove("fia-pal-copied", "fia-pal-copy-fail");
           }, 1500);
+          _feedbackTimers.add(tid);
         }
       });
     });
@@ -387,7 +400,8 @@
           statusEl.className   = "fia-pal-status ok";
           saveBtn.disabled     = false;
           cancelBtn.disabled   = false;
-          setTimeout(destroy, 1800);
+          if (_destroyTimer !== null) clearTimeout(_destroyTimer);
+          _destroyTimer = setTimeout(destroy, 1800);
         } else {
           throw new Error(resp?.error || "Save failed");
         }
@@ -422,7 +436,7 @@
       toast.id = TOAST_ID;
       toast.style.cssText = "position:fixed;top:28px;left:50%;transform:translateX(-50%);z-index:2147483647;background:linear-gradient(135deg,#e85d5d 0%,#b52b2b 100%);padding:11px 22px;border-radius:999px;box-shadow:0 8px 28px rgba(185,43,43,.45);color:#fff;font-size:13px;font-weight:650;font-family:-apple-system,sans-serif;pointer-events:none;white-space:nowrap;";
       toast.textContent = message.error || "Color Palette extraction failed";
-      document.body.appendChild(toast);
+      (document.body || document.documentElement).appendChild(toast);
       setTimeout(() => toast.remove(), 4000);
     }
   });
