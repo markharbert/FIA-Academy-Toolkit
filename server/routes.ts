@@ -12,7 +12,7 @@ import multer from "multer";
 import rateLimit from "express-rate-limit";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { sendPasswordResetEmail, sendWorkspaceInviteEmail, sendWelcomeEmail, sendMembershipLapsedEmail, isEmailConfigured } from "./email";
+import { sendPasswordResetEmail, sendWorkspaceInviteEmail, sendWelcomeEmail, sendMembershipLapsedEmail, sendGraceExpiryWarningEmail, isEmailConfigured } from "./email";
 import path from "path";
 import fs from "fs";
 import session from "express-session";
@@ -1839,6 +1839,8 @@ export async function registerRoutes(
         cfEnrolled: grant,
         cfEnrolledAt: grant ? new Date() : user.cfEnrolledAt,
         cfRevokedAt: grant ? null : new Date(),
+        // Reset the warning flag on grant so a new warning fires on any future revocation.
+        ...(grant ? { cfRevokedGraceUntil: null, cfGraceExpirySentAt: null } : {}),
         // Mirror webhook revocation semantics: revoke disables the account so
         // existing sessions are terminated by requireAuth on the next request.
         // Granting re-enables the account so the user can log in again.
@@ -12961,11 +12963,49 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // true automatically, so the admin panel never reflects the real state.
   // This job corrects that by scanning for cfEnrolled=false users whose
   // cfRevokedGraceUntil has passed and who are still not flagged as disabled.
+  // It also sends a 24-hour warning email before the grace period expires.
   async function runGracePeriodExpirySweep() {
     if (!process.env.CF_API_TOKEN && !process.env.CF_COURSE_ID) {
       // CF not configured — nothing to do
       return;
     }
+
+    // ── Part 1: Send 24-hour warning emails ───────────────────────────────────
+    try {
+      const approaching = await storage.getUsersApproachingGraceExpiry();
+      if (approaching.length > 0) {
+        console.log(`[GracePeriodSweep] Found ${approaching.length} account(s) approaching grace expiry — sending warning`);
+        const reactivateUrl = CF_WORKSPACE_DOMAIN
+          ? `https://${CF_WORKSPACE_DOMAIN}`
+          : "https://members.fearlessinfluenceracademy.com";
+        for (const user of approaching) {
+          try {
+            let warned = true; // assume warned if email not configured (skip without re-attempting)
+            if (user.email && isEmailConfigured()) {
+              warned = await sendGraceExpiryWarningEmail({
+                email: user.email,
+                firstName: user.firstName ?? null,
+                expiresAt: user.cfRevokedGraceUntil!,
+                reactivateUrl,
+              });
+            }
+            if (warned) {
+              // Only stamp as sent after a confirmed successful delivery
+              await storage.updateUser(user.id, { cfGraceExpirySentAt: new Date() });
+              console.log(`[GracePeriodSweep] Grace-expiry warning sent to ${user.email}`);
+            } else {
+              console.warn(`[GracePeriodSweep] Email delivery failed for ${user.email} — will retry on next sweep`);
+            }
+          } catch (userErr) {
+            console.warn(`[GracePeriodSweep] Failed to warn user ${user.id}:`, userErr);
+          }
+        }
+      }
+    } catch (warnErr) {
+      console.error("[GracePeriodSweep] Warning sweep error:", warnErr);
+    }
+
+    // ── Part 2: Disable accounts whose grace period has now expired ───────────
     try {
       const expired = await storage.getUsersWithExpiredGracePeriod();
       if (expired.length === 0) return;

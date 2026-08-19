@@ -859,6 +859,53 @@ export function magicLinkLoginEmail(params: {
   return { subject, html: wrap(subject, body, resources), text };
 }
 
+export function graceExpiryWarningEmail(params: {
+  firstName: string | null;
+  email: string;
+  expiresAt: Date;
+  reactivateUrl: string;
+}): { subject: string; html: string; text: string } {
+  const name = params.firstName || "there";
+  const subject = "⚠️ Your Academy Toolkit access expires in 24 hours";
+
+  // Format the expiry time in a readable form
+  const expiryStr = params.expiresAt.toLocaleString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+    timeZone: "America/New_York",
+  });
+
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hi ${name},</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;line-height:1.6;">
+      This is a heads-up that your <strong>Fearless Influencer Academy</strong> membership payment
+      has not yet been confirmed, and your Academy Toolkit access will be
+      <strong style="color:#dc2626;">paused on ${expiryStr}</strong>.
+    </p>
+    <div style="margin:0 0 24px;padding:16px 20px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:0 8px 8px 0;">
+      <p style="margin:0;font-size:14px;color:#78350f;line-height:1.6;">
+        <strong>You still have time.</strong> If your payment recently went through,
+        please allow a few minutes for it to sync — your access will be restored automatically.
+        If not, reactivating your membership now will keep your access uninterrupted.
+      </p>
+    </div>
+    <p style="margin:0 0 8px;font-size:15px;color:#334155;line-height:1.6;">
+      Click below to reactivate your Fearless Influencer Academy membership:
+    </p>
+    ${btn("Reactivate My Membership", params.reactivateUrl)}
+    <p style="margin:24px 0 0;font-size:13px;color:#94a3b8;line-height:1.6;">
+      Questions? Reply to this email and we'll help sort it out.
+    </p>`;
+
+  const text = `Hi ${name},\n\nYour Fearless Influencer Academy membership payment has not been confirmed, and your Academy Toolkit access will be paused on ${expiryStr}.\n\nYou still have time — reactivate your membership here:\n${params.reactivateUrl}\n\nIf your payment recently went through, allow a few minutes for it to sync automatically.\n\nQuestions? Reply to this email.`;
+
+  return { subject, html: wrap(subject, body), text };
+}
+
 export function accessRestoredEmail(params: {
   firstName: string | null;
   email: string;

@@ -144,6 +144,7 @@ export async function handleCfEnrollmentEvent(
         cfEnrolledAt: new Date(),
         cfRevokedAt: null,
         cfRevokedGraceUntil: null,
+        cfGraceExpirySentAt: null, // reset so a new warning fires on any future revocation
         // Re-enabling the account ensures previously revoked (and thus disabled)
         // members can log in again after their membership is reinstated in CF.
         isDisabled: false,

@@ -131,6 +131,27 @@ export async function sendWelcomeEmail(params: {
   }
 }
 
+export async function sendGraceExpiryWarningEmail(params: {
+  email: string;
+  firstName: string | null;
+  expiresAt: Date;
+  reactivateUrl: string;
+}): Promise<boolean> {
+  const rendered = emailTemplates.graceExpiryWarningEmail({
+    firstName: params.firstName,
+    email: params.email,
+    expiresAt: params.expiresAt,
+    reactivateUrl: params.reactivateUrl,
+  });
+  try {
+    await sendEmail({ to: params.email, subject: rendered.subject, html: rendered.html, text: rendered.text });
+    console.log(`[Email] Grace-expiry warning sent to ${params.email}`);
+    return true;
+  } catch (error) {
+    console.error("[Email] Failed to send grace-expiry warning email:", error);
+    return false;
+  }
+}
 export async function sendMembershipLapsedEmail(params: {
   email: string;
   firstName: string | null;

@@ -165,6 +165,9 @@ export interface IStorage {
   /** Returns non-admin accounts whose grace period has expired but isDisabled is still false. */
   getUsersWithExpiredGracePeriod(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>>>;
 
+  /** Returns non-admin accounts whose grace period expires within the next 24 h and haven't been warned yet. */
+  getUsersApproachingGraceExpiry(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'cfRevokedGraceUntil'>>>;
+
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
   getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }>;
   setCfButtonSettings(settings: { text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }): Promise<void>;
@@ -1085,6 +1088,34 @@ export class DatabaseStorage implements IStorage {
           eq(users.isAdmin, false),
           sql`${users.cfRevokedGraceUntil} IS NOT NULL`,
           lt(users.cfRevokedGraceUntil, now),
+        )
+      );
+    return rows;
+  }
+
+  async getUsersApproachingGraceExpiry(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'cfRevokedGraceUntil'>>> {
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const rows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        cfRevokedGraceUntil: users.cfRevokedGraceUntil,
+      })
+      .from(users)
+      .where(
+        and(
+          eq(users.cfEnrolled, false),
+          eq(users.isDisabled, false),
+          eq(users.isAdmin, false),
+          sql`${users.cfRevokedGraceUntil} IS NOT NULL`,
+          // Grace period expires within the next 24 hours (but not already expired)
+          sql`${users.cfRevokedGraceUntil} > ${now}`,
+          sql`${users.cfRevokedGraceUntil} <= ${in24h}`,
+          // Haven't sent the warning yet for this revocation cycle
+          sql`${users.cfGraceExpirySentAt} IS NULL`,
         )
       );
     return rows;

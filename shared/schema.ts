@@ -41,6 +41,7 @@ export const users = pgTable("users", {
   cfEnrolledAt: timestamp("cf_enrolled_at"),
   cfRevokedAt: timestamp("cf_revoked_at"),
   cfRevokedGraceUntil: timestamp("cf_revoked_grace_until"),
+  cfGraceExpirySentAt: timestamp("cf_grace_expiry_sent_at"),
   icalToken: text("ical_token"),
   dashboardLayout: jsonb("dashboard_layout"),
   swipePromoLinks: jsonb("swipe_promo_links").$type<string[]>().default(sql`'[]'::jsonb`),
