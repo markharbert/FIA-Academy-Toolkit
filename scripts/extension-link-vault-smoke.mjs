@@ -49,7 +49,39 @@ function fixtureHtml(kind) {
         <h1>Color picker fixture</h1>
         <div id="color-swatch"></div>
       </main>`,
+    palette: `
+      <main id="palette-main">
+        <h1>Color Palette fixture — six distinct color bands</h1>
+      </main>`,
   };
+
+  // For the palette fixture we build a long page with six tall color-band sections
+  // so the scroll-based full-page capture samples all six dominant colors.
+  if (kind === "palette") {
+    const bands = [
+      { id: "band-red",    color: "#CC2200" },
+      { id: "band-green",  color: "#116600" },
+      { id: "band-blue",   color: "#003388" },
+      { id: "band-yellow", color: "#DDBB00" },
+      { id: "band-purple", color: "#6600AA" },
+      { id: "band-teal",   color: "#007799" },
+    ];
+    const bandDivs = bands
+      .map(b => `<div id="${b.id}" style="width:100%;height:600px;background:${b.color};"></div>`)
+      .join("\n");
+    return `<!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <title>Color Palette smoke fixture</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font: 16px system-ui, sans-serif; }
+        </style>
+      </head>
+      <body id="palette-body">${bandDivs}</body>
+    </html>`;
+  }
 
   return `<!doctype html>
     <html lang="en">
@@ -73,9 +105,11 @@ async function startFixtureServer() {
       ? "facebook"
       : pathname.includes("richtext")
         ? "richtext"
-        : pathname.includes("color")
-          ? "color"
-          : "noeditor";
+        : pathname.includes("palette")
+          ? "palette"
+          : pathname.includes("color")
+            ? "color"
+            : "noeditor";
 
     response.writeHead(200, {
       "content-type": "text/html; charset=utf-8",
@@ -157,6 +191,9 @@ async function installLinkApiStub(pickerPage) {
 
 async function assertPickerOpeningContract(extensionDir) {
   const serviceWorker = await readFile(path.join(extensionDir, "service-worker.js"), "utf8");
+  const paletteScanner = serviceWorker.match(
+    /async function handleColorPaletteAnalysis[\s\S]*?(?=async function handleFullPageCapture)/,
+  )?.[0] || "";
 
   assert.match(
     serviceWorker,
@@ -177,6 +214,21 @@ async function assertPickerOpeningContract(extensionDir) {
     serviceWorker,
     /pickerWindowId: picker\?\.id,[\s\S]*?pickerRequestId,[\s\S]*?openedAt: Date\.now\(\)/,
     "the packaged picker opener no longer records the popup window used for cancellation cleanup",
+  );
+  assert.match(
+    serviceWorker,
+    /await addScreenshotToPaletteHistogram\(dataUrl, buckets\)/,
+    "the packaged palette scanner no longer analyzes and releases each viewport as it is captured",
+  );
+  assert.doesNotMatch(
+    paletteScanner,
+    /strips\.push\(dataUrl\)/,
+    "the packaged palette scanner retains full-resolution screenshots instead of streaming them",
+  );
+  assert.match(
+    serviceWorker,
+    /activeBeforeCapture\?\.id !== tabId[\s\S]*?activeAfterCapture\?\.id !== tabId/,
+    "the packaged palette scanner no longer aborts when the source tab becomes inactive",
   );
 }
 
@@ -385,12 +437,180 @@ async function main() {
       },
     );
 
+    // ── Color Palette: full-page scroll + dominant-color extraction ──────────
+    const paletteUrl = `${fixture.baseUrl}/palette`;
+    const palettePage = await browser.newPage();
+    await palettePage.goto(paletteUrl, { waitUntil: "domcontentloaded" });
+    const paletteTab = await tabFor(paletteUrl);
+
+    // The save request originates in the extension service worker, so stub fetch
+    // in that execution context (page-level interception cannot see this request).
+    await workerSession.send("Runtime.evaluate", {
+      expression: `
+        globalThis.__fiaSmokeOriginalFetch = globalThis.fetch;
+        globalThis.__fiaPaletteSaveRequest = null;
+        globalThis.fetch = async (url, options = {}) => {
+          if (String(url).includes("/api/v1/swipe") && options.method === "POST") {
+            globalThis.__fiaPaletteSaveRequest = {
+              url: String(url),
+              body: options.body,
+              headers: options.headers,
+            };
+            return new Response(JSON.stringify({ item: { id: "palette-smoke" } }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          return globalThis.__fiaSmokeOriginalFetch(url, options);
+        };
+      `,
+      awaitPromise: true,
+    });
+
+    await palettePage.evaluate(() => window.scrollTo(0, 700));
+    const originalPaletteScrollY = await palettePage.evaluate(() => window.scrollY);
+
+    // Trigger the color-palette analysis via the service worker
+    await extensionPage.evaluate(async (tabId, sourceUrl, sourceTitle) => {
+      await chrome.tabs.update(tabId, { active: true });
+      const tab = await chrome.tabs.get(tabId);
+      await chrome.windows.update(tab.windowId, { focused: true });
+      await new Promise(resolve => setTimeout(resolve, 200));
+      chrome.runtime.sendMessage({ action: "startColorPaletteAnalysis", tabId, sourceUrl, sourceTitle });
+    }, paletteTab.id, paletteUrl, "Color Palette smoke fixture");
+
+    // Wait for the overlay to appear (scroll + analysis takes a few seconds)
+    await palettePage.waitForSelector("#__fia_color_palette__", { timeout: 60_000 });
+
+    // Verify six swatches are present
+    const swatchCount = await palettePage.$$eval(
+      "#__fia_color_palette__ .fia-pal-swatch-wrap",
+      (els) => els.length,
+    );
+    assert.equal(swatchCount, 6, `Expected 6 color swatches, got ${swatchCount}`);
+
+    // Verify each swatch shows an uppercase #RRGGBB hex code
+    const hexCodes = await palettePage.$$eval(
+      "#__fia_color_palette__ .fia-pal-hex",
+      (els) => els.map(el => el.textContent.trim()),
+    );
+    assert.equal(hexCodes.length, 6, "Expected 6 hex labels");
+    for (const hex of hexCodes) {
+      assert.match(hex, /^#[0-9A-F]{6}$/, `Hex code ${hex} is not uppercase #RRGGBB`);
+    }
+    const expectedPaletteColors = ["#CC2200", "#116600", "#003388", "#DDBB00", "#6600AA", "#007799"];
+    for (const expectedColor of expectedPaletteColors) {
+      assert.ok(
+        hexCodes.includes(expectedColor),
+        `Expected dominant color ${expectedColor}; received ${hexCodes.join(", ")}`,
+      );
+    }
+    assert.equal(
+      await palettePage.evaluate(() => window.scrollY),
+      originalPaletteScrollY,
+      "palette scan did not restore the page's original scroll position",
+    );
+
+    // Test per-color clipboard copy: click the first swatch
+    await palettePage.click("#__fia_color_palette__ .fia-pal-swatch-wrap");
+    await palettePage.waitForFunction(
+      () => {
+        const label = document.querySelector("#__fia_color_palette__ .fia-pal-hex");
+        return label?.textContent === "✓ Copied" || label?.textContent === "✗ Failed";
+      },
+      { timeout: 3_000 },
+    );
+
+    // Test Cancel button removes the overlay
+    await palettePage.click("#__fia_pal_cancel__");
+    await palettePage.waitForFunction(
+      () => !document.getElementById("__fia_color_palette__"),
+      { timeout: 3_000 },
+    );
+
+    // Re-trigger the overlay to test Save to Swipe File
+    await extensionPage.evaluate(async (tabId, sourceUrl, sourceTitle) => {
+      await chrome.tabs.update(tabId, { active: true });
+      const tab = await chrome.tabs.get(tabId);
+      await chrome.windows.update(tab.windowId, { focused: true });
+      await new Promise(resolve => setTimeout(resolve, 200));
+      chrome.runtime.sendMessage({ action: "startColorPaletteAnalysis", tabId, sourceUrl, sourceTitle });
+    }, paletteTab.id, paletteUrl, "Color Palette smoke fixture");
+    await palettePage.waitForSelector("#__fia_color_palette__", { timeout: 60_000 });
+
+    // Click Save to Swipe File — the stub responds 200 OK
+    await palettePage.click("#__fia_pal_save__");
+    await palettePage.waitForFunction(
+      () => {
+        const status = document.getElementById("__fia_pal_status__");
+        return status?.textContent?.includes("Saved") || status?.classList?.contains("err");
+      },
+      { timeout: 10_000 },
+    );
+    const statusText = await palettePage.$eval("#__fia_pal_status__", el => el.textContent.trim());
+    assert.ok(
+      statusText.includes("Saved"),
+      `Save to Swipe File status must say "Saved", got: "${statusText}"`,
+    );
+    const saveRequestResult = await workerSession.send("Runtime.evaluate", {
+      expression: "globalThis.__fiaPaletteSaveRequest",
+      returnByValue: true,
+    });
+    const savedPayload = JSON.parse(saveRequestResult.result.value.body);
+    const savedContent = JSON.parse(savedPayload.content);
+    assert.equal(savedPayload.type, "palette");
+    assert.equal(savedPayload.sourceUrl, paletteUrl);
+    assert.equal(savedPayload.title, "Color Palette — Color Palette smoke fixture");
+    assert.equal(savedContent.version, 1);
+    assert.deepEqual([...savedContent.colors].sort(), [...expectedPaletteColors].sort());
+    assert.equal(saveRequestResult.result.value.headers["X-API-Key"], "link-vault-smoke-test");
+
+    // Switching tabs during a scan must abort instead of sampling unrelated content,
+    // and the source page must still be restored to its original scroll position.
+    await palettePage.waitForFunction(
+      () => !document.getElementById("__fia_color_palette__"),
+      { timeout: 5_000 },
+    );
+    await palettePage.evaluate(() => window.scrollTo(0, 900));
+    const beforeAbortedScanScrollY = await palettePage.evaluate(() => window.scrollY);
+    await extensionPage.evaluate(async (tabId, sourceUrl, sourceTitle) => {
+      await chrome.tabs.update(tabId, { active: true });
+      const tab = await chrome.tabs.get(tabId);
+      await chrome.windows.update(tab.windowId, { focused: true });
+      chrome.runtime.sendMessage({ action: "startColorPaletteAnalysis", tabId, sourceUrl, sourceTitle });
+    }, paletteTab.id, paletteUrl, "Color Palette smoke fixture");
+    await palettePage.waitForSelector("#__fia_pal_progress__", { timeout: 5_000 });
+    const switchedTabId = await extensionPage.evaluate(async (windowId, url) => {
+      const tab = await chrome.tabs.create({ windowId, url, active: true });
+      return tab.id;
+    }, paletteTab.windowId, `${fixture.baseUrl}/noeditor?palette-switch=1`);
+    // Background tabs suspend requestAnimationFrame, so use a Node-side delay
+    // instead of Puppeteer's default waitForFunction polling.
+    await new Promise(resolve => setTimeout(resolve, 2_500));
+    assert.equal(
+      await palettePage.evaluate(() => !!document.getElementById("__fia_pal_progress__")),
+      false,
+      "palette scanner did not stop after the source tab became inactive",
+    );
+    assert.equal(
+      await palettePage.evaluate(() => !!document.getElementById("__fia_color_palette__")),
+      false,
+      "palette scanner produced a result after the source tab became inactive",
+    );
+    assert.equal(
+      await palettePage.evaluate(() => window.scrollY),
+      beforeAbortedScanScrollY,
+      "aborted palette scan did not restore the page's original scroll position",
+    );
+    await extensionPage.evaluate((tabId) => chrome.tabs.remove(tabId), switchedTabId);
+
     console.log("✓ Link Vault packaged-extension smoke test passed");
     console.log("  - Facebook-shaped contenteditable insertion");
     console.log("  - generic rich-text editor insertion");
     console.log("  - copied/manual-paste fallback");
     console.log("  - cancel/reopen and stale-picker tab isolation");
     console.log("  - magnified color picker hex sampling and clipboard copy");
+    console.log("  - color palette: streaming full-page scan, six dominant colors, copy/save, tab-switch cleanup");
   } finally {
     await browser?.close();
     if (fixture?.server) {

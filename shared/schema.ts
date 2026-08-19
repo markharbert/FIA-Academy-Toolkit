@@ -2090,11 +2090,21 @@ export type PromoLink = {
   description?: string;
 };
 
+/**
+ * Content JSON contract for palette items.
+ * version: always 1 (for future evolution)
+ * colors: exactly six uppercase #RRGGBB hex strings
+ */
+export type SwipePaletteContent = {
+  version: 1;
+  colors: [string, string, string, string, string, string];
+};
+
 export const swipeItems = pgTable("swipe_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
-  type: varchar("type", { length: 20 }).notNull().default("upload"), // 'upload' | 'snippet'
+  type: varchar("type", { length: 20 }).notNull().default("upload"), // 'upload' | 'snippet' | 'palette'
   content: text("content"),
   imagePath: text("image_path"),
   sourceUrl: text("source_url"),

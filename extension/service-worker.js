@@ -279,6 +279,305 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return false;
 });
 
+// ─── Color Palette: full-page scroll capture + dominant-color analysis ────────
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.action !== "startColorPaletteAnalysis") return false;
+  sendResponse({ ok: true }); // ack immediately
+  handleColorPaletteAnalysis(msg.tabId, msg.sourceUrl, msg.sourceTitle);
+  return false;
+});
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action !== "saveColorPalette") return false;
+
+  (async () => {
+    try {
+      const stored = await chrome.storage.local.get(["apiKey"]);
+      const key = stored.apiKey;
+      if (!key) throw new Error("Not connected — please enter your API key.");
+
+      if (!Array.isArray(msg.colors) || msg.colors.length !== 6) {
+        throw new Error("The palette must contain exactly six colors.");
+      }
+      const colors = msg.colors.map(color => {
+        if (typeof color !== "string" || !/^#[0-9A-Fa-f]{6}$/.test(color)) {
+          throw new Error("The palette contains an invalid color.");
+        }
+        return color.toUpperCase();
+      });
+      const content = JSON.stringify({ version: 1, colors });
+      const sourceTitle = typeof msg.sourceTitle === "string" ? msg.sourceTitle.trim().slice(0, 120) : "";
+      const fallbackTitle = new URL(msg.sourceUrl || "https://unknown").hostname;
+      const title = `Color Palette — ${sourceTitle || fallbackTitle}`;
+      const res = await fetch(`${API_BASE}/api/v1/swipe`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": key },
+        body:    JSON.stringify({ type: "palette", title, content, sourceUrl: msg.sourceUrl || "" }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Server error ${res.status}${text ? `: ${text}` : ""}`);
+      }
+      sendResponse({ ok: true });
+    } catch (err) {
+      sendResponse({ ok: false, error: err.message || "Save failed" });
+    }
+  })();
+
+  return true; // keep sendResponse alive for async
+});
+
+// Fold one screenshot into a bounded RGB histogram and release the decoded
+// bitmap before the next viewport is captured.
+async function addScreenshotToPaletteHistogram(dataUrl, buckets) {
+  const MAX_SAMPLE_WIDTH = 160;
+  let bitmap;
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    bitmap = await createImageBitmap(blob);
+    const w = bitmap.width;
+    const h = bitmap.height;
+    const sampleW = Math.max(1, Math.min(MAX_SAMPLE_WIDTH, w));
+    const sampleH = Math.max(1, Math.round(h * (sampleW / w)));
+    const canvas = new OffscreenCanvas(sampleW, sampleH);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("Could not create the palette analysis canvas.");
+    ctx.drawImage(bitmap, 0, 0, sampleW, sampleH);
+    const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      const bucket = buckets.get(key) || { count: 0, r: 0, g: 0, b: 0 };
+      bucket.count++;
+      bucket.r += r;
+      bucket.g += g;
+      bucket.b += b;
+      buckets.set(key, bucket);
+    }
+  } finally {
+    if (bitmap) bitmap.close();
+  }
+}
+
+function extractDominantColors(buckets, nColors = 6) {
+  if (buckets.size === 0) throw new Error("No pixels sampled from screenshots.");
+
+  const ranked = [...buckets.values()]
+    .map(bucket => ({
+      count: bucket.count,
+      rgb: [
+        Math.round(bucket.r / bucket.count),
+        Math.round(bucket.g / bucket.count),
+        Math.round(bucket.b / bucket.count),
+      ],
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const selected = [];
+  const selectedKeys = new Set();
+  const distance = (a, b) => Math.sqrt(
+    ((a[0] - b[0]) ** 2) + ((a[1] - b[1]) ** 2) + ((a[2] - b[2]) ** 2),
+  );
+
+  // Start with strong separation, then relax only as needed to reach six.
+  for (const minimumDistance of [84, 64, 48, 32, 16, 0]) {
+    for (const candidate of ranked) {
+      const rgbKey = candidate.rgb.join(",");
+      if (selectedKeys.has(rgbKey)) continue;
+      if (selected.every(existing => distance(existing, candidate.rgb) >= minimumDistance)) {
+        selected.push(candidate.rgb);
+        selectedKeys.add(rgbKey);
+        if (selected.length === nColors) break;
+      }
+    }
+    if (selected.length === nColors) break;
+  }
+
+  // A truly monochrome page may not contain six sampled colors. Fill the rare
+  // shortfall with nearby shades so the saved contract still has six unique values.
+  const base = selected[0] || [128, 128, 128];
+  for (let step = 1; selected.length < nColors; step++) {
+    const sign = step % 2 === 0 ? -1 : 1;
+    const amount = Math.ceil(step / 2) * 12 * sign;
+    const shade = base.map(channel => Math.min(255, Math.max(0, channel + amount)));
+    const shadeKey = shade.join(",");
+    if (!selectedKeys.has(shadeKey)) {
+      selected.push(shade);
+      selectedKeys.add(shadeKey);
+    }
+  }
+
+  return selected.slice(0, nColors).map(([r, g, b]) => {
+    const hex = ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1).toUpperCase();
+    return `#${hex}`;
+  });
+}
+
+async function restoreColorPalettePageState(tabId, pageState) {
+  if (!Number.isInteger(tabId)) return;
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (origX, origY) => {
+      document.querySelectorAll("[data-fia-pal-orig-vis]").forEach(el => {
+        el.style.visibility = el.dataset.fiaPalOrigVis;
+        delete el.dataset.fiaPalOrigVis;
+      });
+      document.getElementById("__fia_pal_progress__")?.remove();
+      if (Number.isFinite(origX) && Number.isFinite(origY)) window.scrollTo(origX, origY);
+    },
+    args: [pageState?.origX ?? null, pageState?.origY ?? null],
+  });
+}
+
+async function handleColorPaletteAnalysis(tabId, sourceUrl, sourceTitle) {
+  const MAX_PALETTE_STRIPS = 120;
+  let pageState = null;
+  try {
+    // 1. Read page geometry (same approach as full-page capture)
+    const [{ result: dims }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => ({
+        scrollH: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0),
+        vpH:     window.innerHeight,
+        vpW:     window.innerWidth,
+        origX:   window.scrollX,
+        origY:   window.scrollY,
+      }),
+    });
+    const { scrollH, vpH, vpW, origX, origY } = dims;
+    pageState = { origX, origY };
+
+    if (!vpH || !vpW) throw new Error("Viewport dimensions are zero.");
+    const totalSteps = Math.ceil(scrollH / vpH);
+    if (totalSteps > MAX_PALETTE_STRIPS) {
+      throw new Error(`This page is too long to scan safely (more than ${MAX_PALETTE_STRIPS} screens).`);
+    }
+
+    const { windowId } = await chrome.tabs.get(tabId);
+
+    // 2. Inject progress banner
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const el = document.createElement("div");
+        el.id = "__fia_pal_progress__";
+        el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1a1a2e;color:#fff;font:600 13px -apple-system,sans-serif;padding:9px 18px;text-align:center;pointer-events:none";
+        el.textContent = "FIA Toolkit: scanning page colors…";
+        document.documentElement.appendChild(el);
+      },
+    });
+
+    // 3. Scroll to top
+    await chrome.scripting.executeScript({ target: { tabId }, func: () => window.scrollTo(0, 0) });
+    await swSleep(250);
+
+    // 4. Capture each strip (same safeguards as full-page capture)
+    const buckets = new Map();
+
+    for (let i = 0; i < totalSteps; i++) {
+      const scrollTop = (i === totalSteps - 1) ? Math.max(0, scrollH - vpH) : i * vpH;
+
+      await chrome.scripting.executeScript({
+        target: { tabId }, func: (y) => window.scrollTo(0, y), args: [scrollTop],
+      });
+      await swSleep(600);
+
+      // Hide fixed/sticky top elements after the first strip
+      if (i === 1) {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            document.querySelectorAll("*").forEach(el => {
+              if (el.id && el.id.startsWith("__fia_")) return;
+              const st  = window.getComputedStyle(el);
+              const pos = st.position;
+              if (pos !== "fixed" && pos !== "sticky") return;
+              const rect = el.getBoundingClientRect();
+              if (rect.height <= 0 || rect.width <= 0) return;
+              let hide = false;
+              if (pos === "fixed") {
+                hide = rect.top >= -5 && rect.top < window.innerHeight * 0.35;
+              } else {
+                const topPx = parseFloat(st.top);
+                hide = !isNaN(topPx) && topPx <= 20;
+              }
+              if (hide) {
+                el.dataset.fiaPalOrigVis = el.style.visibility;
+                el.style.setProperty("visibility", "hidden", "important");
+              }
+            });
+          },
+        });
+      }
+
+      // Hide progress banner before capture
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const el = document.getElementById("__fia_pal_progress__");
+          if (el) el.style.visibility = "hidden";
+        },
+      });
+      await swSleep(80);
+
+      const [activeBeforeCapture] = await chrome.tabs.query({ active: true, windowId });
+      if (activeBeforeCapture?.id !== tabId) {
+        throw new Error("Keep the source tab active until the color scan finishes.");
+      }
+      const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+      const [activeAfterCapture] = await chrome.tabs.query({ active: true, windowId });
+      if (activeAfterCapture?.id !== tabId) {
+        throw new Error("Keep the source tab active until the color scan finishes.");
+      }
+      await addScreenshotToPaletteHistogram(dataUrl, buckets);
+
+      // Restore progress banner
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (cur, tot) => {
+          const el = document.getElementById("__fia_pal_progress__");
+          if (el) {
+            el.style.visibility = "visible";
+            el.textContent = `FIA Toolkit: scanning page colors… ${cur} / ${tot}`;
+          }
+        },
+        args: [i + 1, totalSteps],
+      });
+    }
+
+    // 5. Restore the page before the more expensive image analysis runs.
+    await restoreColorPalettePageState(tabId, pageState);
+
+    // 6. Select six distinct dominant colors from the accumulated histogram.
+    const colors = extractDominantColors(buckets, 6);
+
+    // 7. Inject the overlay content script, then send it the colors.
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["color-palette.js"],
+    });
+    await chrome.tabs.sendMessage(tabId, {
+      action:    "showColorPalette",
+      colors,
+      sourceUrl: sourceUrl || "",
+      sourceTitle: sourceTitle || "",
+    });
+
+  } catch (err) {
+    console.error("[FIA SW] color palette error:", err);
+    await restoreColorPalettePageState(tabId, pageState).catch(() => {});
+    // Inject color-palette.js to show the failure toast
+    chrome.scripting.executeScript({ target: { tabId }, files: ["color-palette.js"] })
+      .then(() => chrome.tabs.sendMessage(tabId, {
+        action: "colorPaletteFailed",
+        error:  `Color Palette failed: ${err.message}`,
+      }))
+      .catch(() => injectErrorToast(tabId, `Color Palette failed: ${err.message}`));
+  }
+}
+
 async function handleFullPageCapture(tabId, title) {
   // Strip-based capture → annotate-editor approach:
   // Each strip is scaled to logical-pixel resolution (DPR=1) via OffscreenCanvas,

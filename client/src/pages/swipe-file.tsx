@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { Redirect } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Camera, FileText, Plus, Copy, Share2, Trash2, Edit3,
+  Camera, FileText, Plus, Copy, Share2, Trash2, Edit3, Palette,
   ExternalLink, Eye, EyeOff, Link2, X, Check, Upload,
   Image as ImageIcon, Loader2, Globe, Scroll, ChevronLeft, ChevronRight,
   ZoomIn, Heart,
@@ -43,7 +43,7 @@ type SwipeItem = {
   id: string;
   userId: string;
   title: string;
-  type: "upload" | "snippet";
+  type: "upload" | "snippet" | "palette";
   content: string | null;
   imagePath: string | null;
   strips: string[] | null;
@@ -55,6 +55,19 @@ type SwipeItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+type SwipePalette = { version: 1; colors: [string, string, string, string, string, string] };
+
+/** Palette content is user/API supplied JSON; only accept the canonical shape. */
+function parsePalette(content: string | null): SwipePalette | null {
+  if (!content) return null;
+  try {
+    const value = JSON.parse(content);
+    if (value?.version !== 1 || !Array.isArray(value.colors) || value.colors.length !== 6) return null;
+    if (!value.colors.every((color: unknown) => typeof color === "string" && /^#[0-9A-F]{6}$/.test(color))) return null;
+    return { version: 1, colors: value.colors as SwipePalette["colors"] };
+  } catch { return null; }
+}
 
 // ---- API helpers ----
 async function apiFetch(url: string, opts: RequestInit = {}) {
@@ -382,6 +395,43 @@ function EditDialog({ item, onClose }: { item: SwipeItem; onClose: () => void })
   );
 }
 
+function PaletteSwatches({ palette, dark = false }: { palette: SwipePalette; dark?: boolean }) {
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [failedIndex, setFailedIndex] = useState<number | null>(null);
+
+  async function copyColor(color: string, index: number) {
+    setFailedIndex(null);
+    try {
+      await navigator.clipboard.writeText(color);
+      setCopiedIndex(index);
+      window.setTimeout(() => setCopiedIndex(current => current === index ? null : current), 1800);
+    } catch {
+      setFailedIndex(index);
+      window.setTimeout(() => setFailedIndex(current => current === index ? null : current), 2500);
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-6 gap-1.5">
+      {palette.colors.map((color, index) => (
+        <button
+          key={`${color}-${index}`}
+          type="button"
+          onClick={(event) => { event.stopPropagation(); void copyColor(color, index); }}
+          className={`group/swatch relative min-w-0 overflow-hidden rounded-md text-left transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${dark ? "ring-1 ring-white/15" : "ring-1 ring-black/5"}`}
+          title={`Copy ${color}`}
+          aria-label={`Copy color ${color}`}
+        >
+          <span className="block aspect-[0.72] w-full" style={{ backgroundColor: color }} />
+          <span className={`block truncate px-1 py-1 text-[9px] font-mono ${dark ? "bg-black/30 text-white/80" : "bg-card text-muted-foreground"}`}>
+            {copiedIndex === index ? "Copied" : failedIndex === index ? "Failed" : color}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ---- Preview Modal ----
 function PreviewModal({
   item,
@@ -540,6 +590,19 @@ function PreviewModal({
                   </p>
                 )}
               </div>
+            ) : item.type === "palette" && parsePalette(item.content) ? (
+              <div className="flex items-center justify-center p-5 md:p-8 min-h-full">
+                <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[hsl(230,25%,12%)] p-5 md:p-7 shadow-xl">
+                  <div className="mb-5 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Website palette</p>
+                      <p className="mt-1 text-sm text-white/70">Click any swatch to copy its hex value.</p>
+                    </div>
+                    <Palette className="h-6 w-6 text-amber-300/80" />
+                  </div>
+                  <PaletteSwatches palette={parsePalette(item.content)!} dark />
+                </div>
+              </div>
             ) : item.type === "snippet" ? (
               <div className="flex items-start justify-center p-4 md:p-6 overflow-y-auto min-h-full">
                 <div className="w-full max-w-3xl rounded-xl border border-white/10 bg-[hsl(230,25%,12%)] p-5 md:p-8 shadow-xl">
@@ -624,10 +687,14 @@ function PreviewModal({
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                   item.type === "upload"
                     ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                    : item.type === "palette"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
                     : "bg-violet-500/20 text-violet-300 border border-violet-500/30"
                 }`}>
                   {item.type === "upload" ? (
                     <><Camera className="h-3 w-3 inline mr-1" />Image</>
+                  ) : item.type === "palette" ? (
+                    <><Palette className="h-3 w-3 inline mr-1" />Palette</>
                   ) : (
                     <><FileText className="h-3 w-3 inline mr-1" />Snippet</>
                   )}
@@ -653,9 +720,11 @@ function PreviewModal({
             <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
               item.type === "upload"
                 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                : item.type === "palette"
+                ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
                 : "bg-violet-500/20 text-violet-300 border border-violet-500/30"
             }`}>
-              {item.type === "upload" ? "Image" : "Snippet"}
+              {item.type === "upload" ? "Image" : item.type === "palette" ? "Palette" : "Snippet"}
             </span>
           </div>
 
@@ -706,6 +775,12 @@ function PreviewModal({
                 <p className="text-xs text-white/60 font-mono leading-relaxed line-clamp-6">
                   {isHtmlSnippet(item.content) ? stripHtml(item.content) : item.content}
                 </p>
+              </div>
+            )}
+            {item.type === "palette" && parsePalette(item.content) && (
+              <div>
+                <p className="text-xs font-medium text-white/40 uppercase tracking-widest mb-2">Colors · click to copy</p>
+                <PaletteSwatches palette={parsePalette(item.content)!} dark />
               </div>
             )}
 
@@ -1044,6 +1119,15 @@ function SwipeCard({
             decoding="async"
             onError={() => setImgError(true)}
           />
+        ) : item.type === "palette" && parsePalette(item.content) ? (
+          <div className="absolute inset-0 bg-[hsl(205,25%,12%)] p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/75">Palette</span>
+              <Palette className="h-4 w-4 text-cyan-200/70" />
+            </div>
+            <PaletteSwatches palette={parsePalette(item.content)!} dark />
+            <p className="mt-2 text-[9px] text-white/45">6 colors · click to inspect</p>
+          </div>
         ) : item.type === "snippet" ? (
           <div className="absolute inset-0 bg-gradient-to-br from-violet-950/60 to-slate-900/80 p-3.5 overflow-hidden">
             <p className="text-[10px] text-white/65 font-mono leading-relaxed line-clamp-8 select-none">
@@ -1086,9 +1170,11 @@ function SwipeCard({
           <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold tracking-wide ${
             item.type === "upload"
               ? "bg-amber-500/85 text-white"
+              : item.type === "palette"
+              ? "bg-cyan-500/85 text-white"
               : "bg-violet-500/85 text-white"
           }`}>
-            {item.type === "upload" ? "IMG" : "TXT"}
+            {item.type === "upload" ? "IMG" : item.type === "palette" ? "PAL" : "TXT"}
           </span>
         </div>
 
@@ -1172,7 +1258,7 @@ export default function SwipeFilePage() {
   const [editItem, setEditItem] = useState<SwipeItem | null>(null);
   const [deleteItem, setDeleteItem] = useState<SwipeItem | null>(null);
   const [previewItem, setPreviewItem] = useState<SwipeItem | null>(null);
-  const [typeFilter, setTypeFilter] = useState<"all" | "upload" | "snippet">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "upload" | "snippet" | "palette">("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -1187,7 +1273,7 @@ export default function SwipeFilePage() {
   type SwipePage = {
     items: SwipeItem[];
     total: number;
-    counts: { all: number; upload: number; snippet: number; shared: number; favorites: number };
+    counts: { all: number; upload: number; snippet: number; palette: number; shared: number; favorites: number };
   };
 
   const {
@@ -1233,7 +1319,14 @@ export default function SwipeFilePage() {
   // Flatten all loaded pages into a single item list
   const items = data?.pages.flatMap(pg => pg.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
-  const counts = data?.pages[0]?.counts ?? { all: 0, upload: 0, snippet: 0, shared: 0, favorites: 0 };
+  const counts = {
+    all: data?.pages[0]?.counts?.all ?? 0,
+    upload: data?.pages[0]?.counts?.upload ?? 0,
+    snippet: data?.pages[0]?.counts?.snippet ?? 0,
+    palette: data?.pages[0]?.counts?.palette ?? 0,
+    shared: data?.pages[0]?.counts?.shared ?? 0,
+    favorites: data?.pages[0]?.counts?.favorites ?? 0,
+  };
 
   // Keep previewItem in sync with updated data (e.g. after share mutation)
   const livePreviewItem = previewItem
@@ -1278,6 +1371,7 @@ export default function SwipeFilePage() {
               { label: "Total Items", value: counts.all },
               { label: "Images", value: counts.upload },
               { label: "Snippets", value: counts.snippet },
+              { label: "Palettes", value: counts.palette },
               { label: "Favorites", value: counts.favorites },
               { label: "Shared", value: counts.shared, highlight: true },
             ].map(s => (
@@ -1334,10 +1428,10 @@ export default function SwipeFilePage() {
                 className="max-w-xs"
               />
               <div className="flex gap-1">
-                {(["all", "upload", "snippet"] as const).map(f => (
+                {(["all", "upload", "snippet", "palette"] as const).map(f => (
                   <Button key={f} size="sm" variant={typeFilter === f ? "default" : "outline"}
                     onClick={() => setTypeFilter(f)} className="gap-1.5">
-                    {f === "all" ? "All" : f === "upload" ? <><Camera className="h-3.5 w-3.5" />Images</> : <><FileText className="h-3.5 w-3.5" />Snippets</>}
+                    {f === "all" ? "All" : f === "upload" ? <><Camera className="h-3.5 w-3.5" />Images</> : f === "palette" ? <><Palette className="h-3.5 w-3.5" />Palettes</> : <><FileText className="h-3.5 w-3.5" />Snippets</>}
                   </Button>
                 ))}
               </div>
@@ -1423,10 +1517,10 @@ export default function SwipeFilePage() {
                 className="max-w-xs"
               />
               <div className="flex gap-1">
-                {(["all", "upload", "snippet"] as const).map(f => (
+                {(["all", "upload", "snippet", "palette"] as const).map(f => (
                   <Button key={f} size="sm" variant={typeFilter === f ? "default" : "outline"}
                     onClick={() => setTypeFilter(f)} className="gap-1.5">
-                    {f === "all" ? "All" : f === "upload" ? <><Camera className="h-3.5 w-3.5" />Images</> : <><FileText className="h-3.5 w-3.5" />Snippets</>}
+                    {f === "all" ? "All" : f === "upload" ? <><Camera className="h-3.5 w-3.5" />Images</> : f === "palette" ? <><Palette className="h-3.5 w-3.5" />Palettes</> : <><FileText className="h-3.5 w-3.5" />Snippets</>}
                   </Button>
                 ))}
               </div>

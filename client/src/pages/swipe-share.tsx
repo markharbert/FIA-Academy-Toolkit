@@ -3,7 +3,7 @@ import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   ExternalLink, FileText, Globe, Loader2,
-  Camera, AlertCircle, ArrowUpRight,
+  Camera, AlertCircle, ArrowUpRight, Palette, Copy, Check,
 } from "lucide-react";
 import { format } from "date-fns";
 import DOMPurify from "dompurify";
@@ -29,7 +29,7 @@ type PromoLink = { title: string; url: string; description?: string };
 type PublicSwipeItem = {
   id: string;
   title: string;
-  type: "upload" | "snippet";
+  type: "upload" | "snippet" | "palette";
   content: string | null;
   imagePath: string | null;
   strips: string[] | null;
@@ -41,6 +41,57 @@ type PublicSwipeItem = {
   createdAt: string;
   fiaAffiliateLink: string | null;
 };
+
+type SwipePalette = { version: 1; colors: [string, string, string, string, string, string] };
+function parsePalette(content: string | null): SwipePalette | null {
+  if (!content) return null;
+  try {
+    const value = JSON.parse(content);
+    if (value?.version !== 1 || !Array.isArray(value.colors) || value.colors.length !== 6) return null;
+    if (!value.colors.every((color: unknown) => typeof color === "string" && /^#[0-9A-F]{6}$/.test(color))) return null;
+    return { version: 1, colors: value.colors as SwipePalette["colors"] };
+  } catch { return null; }
+}
+
+function SharedPalette({ palette }: { palette: SwipePalette }) {
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [failedIndex, setFailedIndex] = useState<number | null>(null);
+  async function copyColor(color: string, index: number) {
+    setFailedIndex(null);
+    try {
+      await navigator.clipboard.writeText(color);
+      setCopiedIndex(index);
+      window.setTimeout(() => setCopiedIndex(current => current === index ? null : current), 1800);
+    } catch {
+      setFailedIndex(index);
+      window.setTimeout(() => setFailedIndex(current => current === index ? null : current), 2500);
+    }
+  }
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center gap-2">
+        <Palette className="h-4 w-4 text-cyan-700" />
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Website palette</p>
+          <p className="text-xs text-gray-400">Select any swatch to copy its hex value.</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {palette.colors.map((color, index) => (
+          <button key={`${color}-${index}`} type="button" onClick={() => void copyColor(color, index)}
+            className="group overflow-hidden rounded-xl border border-gray-200 text-left transition-transform hover:-translate-y-1 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            title={`Copy ${color}`}>
+            <span className="block h-20 sm:h-24" style={{ backgroundColor: color }} />
+            <span className="flex items-center justify-between gap-2 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-700">
+              {copiedIndex === index ? <><Check className="h-3.5 w-3.5 text-emerald-600" />Copied</> : failedIndex === index ? "Copy failed" : color}
+              {copiedIndex !== index && failedIndex !== index && <Copy className="h-3.5 w-3.5 text-gray-300 group-hover:text-primary" />}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ── Share page ─────────────────────────────────────────────────────────────────
 export default function SwipeSharePage() {
@@ -118,6 +169,7 @@ export default function SwipeSharePage() {
   const hasPromos    = item.promoLinks && item.promoLinks.length > 0;
   const isImage      = item.type === "upload" && item.imagePath;
   const isMultiStrip = isImage && Array.isArray(item.strips) && item.strips.length > 1;
+  const palette      = item.type === "palette" ? parsePalette(item.content) : null;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -317,6 +369,45 @@ export default function SwipeSharePage() {
             </div>
           </div>
 
+        ) : palette ? (
+          /* ── PALETTE: six individually copyable swatches ───────────── */
+          <div className="max-w-3xl mx-auto space-y-5 pt-2">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+              <span className="flex items-center gap-1"><Palette className="h-3.5 w-3.5" /> Website Color Palette</span>
+              <span>{format(new Date(item.createdAt), "MMMM d, yyyy")}</span>
+              {item.sourceUrl && (
+                <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 hover:text-gray-700 transition-colors">
+                  <ExternalLink className="h-3.5 w-3.5" /> {item.sourceUrl.replace(/^https?:\/\//, "").split("/")[0]}
+                </a>
+              )}
+            </div>
+            <SharedPalette palette={palette} />
+            {item.notes && (
+              <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400">Creator's Note</p>
+                <p className="text-sm leading-relaxed text-gray-700">{item.notes}</p>
+              </div>
+            )}
+            {hasPromos && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Recommended Resources</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {item.promoLinks.map((pl, i) => (
+                    <a key={i} href={pl.url} target="_blank" rel="noopener noreferrer"
+                      className="group rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-primary/30">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-sm text-gray-900 group-hover:text-primary">{pl.title}</span>
+                        <ArrowUpRight className="h-4 w-4 text-gray-300 group-hover:text-primary" />
+                      </span>
+                      {pl.description && <span className="mt-1 block text-xs text-gray-500">{pl.description}</span>}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="pb-4 text-center text-xs text-gray-500">Shared via <a href={item.fiaAffiliateLink || "https://www.fearlessinfluencer.com"} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:text-blue-700">Fearless Influencer Academy</a></p>
+          </div>
         ) : (
           /* ── SNIPPET / FALLBACK: single column ──────────────────────── */
           <div className="max-w-3xl mx-auto space-y-5 pt-2">

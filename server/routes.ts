@@ -12317,15 +12317,60 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Create item (snippet or confirmed upload)
+  /**
+   * Validate and normalise a palette content payload.
+   * Expects exactly { version: 1, colors: [6 × "#RRGGBB"] }.
+   * Returns canonical JSON string on success, or a human-readable error string.
+   */
+  function parsePaletteContent(raw: unknown): { ok: true; json: string } | { ok: false; error: string } {
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      return { ok: false, error: "palette content must be a JSON object" };
+    }
+    const obj = raw as Record<string, unknown>;
+    if (obj.version !== 1) {
+      return { ok: false, error: "palette content.version must be 1" };
+    }
+    if (!Array.isArray(obj.colors)) {
+      return { ok: false, error: "palette content.colors must be an array" };
+    }
+    if (obj.colors.length !== 6) {
+      return { ok: false, error: `palette content.colors must contain exactly 6 colors, got ${obj.colors.length}` };
+    }
+    const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
+    const normalized: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const c = obj.colors[i];
+      if (typeof c !== "string" || !HEX_RE.test(c)) {
+        return { ok: false, error: `palette content.colors[${i}] is not a valid #RRGGBB hex color` };
+      }
+      normalized.push(c.toUpperCase());
+    }
+    const canonical = JSON.stringify({ version: 1, colors: normalized });
+    return { ok: true, json: canonical };
+  }
+
+  // Create item (snippet, confirmed upload, or palette)
   app.post("/api/swipe", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId as string;
-      const { title, type, content, sourceUrl, notes } = req.body;
-      let { imagePath, strips } = req.body;
+      const { title, type, sourceUrl, notes } = req.body;
+      let { content, imagePath, strips } = req.body;
       if (!title) return res.status(400).json({ message: "title is required" });
-      if (!type || !["upload", "snippet"].includes(type)) return res.status(400).json({ message: "type must be upload or snippet" });
+      if (!type || !["upload", "snippet", "palette"].includes(type))
+        return res.status(400).json({ message: "type must be upload, snippet, or palette" });
       if (type === "snippet" && !content) return res.status(400).json({ message: "content is required for snippets" });
+      if (type === "palette") {
+        // content may arrive as a pre-serialised string or a parsed object
+        let rawPalette: unknown = content;
+        if (typeof rawPalette === "string") {
+          try { rawPalette = JSON.parse(rawPalette); } catch {
+            return res.status(400).json({ message: "palette content must be valid JSON" });
+          }
+        }
+        const result = parsePaletteContent(rawPalette);
+        if (!result.ok) return res.status(400).json({ message: result.error });
+        content = result.json;
+      }
       // For multi-strip (full-page) captures, imagePath defaults to first strip
       if (type === "upload" && !imagePath && Array.isArray(strips) && strips.length > 0) imagePath = strips[0];
       if (type === "upload" && !imagePath) return res.status(400).json({ message: "imagePath is required for uploads" });
@@ -12643,16 +12688,28 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Create a swipe item (snippet or upload)
+  // Create a swipe item (snippet, upload, or palette)
   app.post("/api/v1/swipe", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
-      const { title, type, content, sourceUrl, notes } = req.body;
-      let { imagePath, strips } = req.body;
+      const { title, type, sourceUrl, notes } = req.body;
+      let { content, imagePath, strips } = req.body;
       if (!title)  return res.status(400).json({ message: "title is required" });
-      if (!type || !["upload", "snippet"].includes(type))
-        return res.status(400).json({ message: "type must be upload or snippet" });
+      if (!type || !["upload", "snippet", "palette"].includes(type))
+        return res.status(400).json({ message: "type must be upload, snippet, or palette" });
       if (type === "snippet" && !content) return res.status(400).json({ message: "content required for snippets" });
+      if (type === "palette") {
+        // content may arrive as a pre-serialised string or a parsed object
+        let rawPalette: unknown = content;
+        if (typeof rawPalette === "string") {
+          try { rawPalette = JSON.parse(rawPalette); } catch {
+            return res.status(400).json({ message: "palette content must be valid JSON" });
+          }
+        }
+        const result = parsePaletteContent(rawPalette);
+        if (!result.ok) return res.status(400).json({ message: result.error });
+        content = result.json;
+      }
       // For multi-strip (full-page) captures, imagePath defaults to first strip
       if (type === "upload" && !imagePath && Array.isArray(strips) && strips.length > 0) imagePath = strips[0];
       if (type === "upload" && !imagePath) return res.status(400).json({ message: "imagePath required for uploads" });

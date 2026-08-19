@@ -1530,6 +1530,30 @@ async function swipeStartColorPicker() {
   }
 }
 
+// ── Color Palette (full-page scroll + dominant-color analysis) ────────────────
+
+async function swipeStartColorPalette() {
+  let tab;
+  try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) {}
+  if (!tab?.id || !tab.url?.startsWith("http")) {
+    alert("Color Palette only works on http/https pages.");
+    return;
+  }
+
+  const button = $("swipe-color-palette");
+  if (button) { button.disabled = true; button.innerHTML = '<span class="swipe-tool-icon">🖌️</span><span>Scanning…</span>'; }
+
+  chrome.runtime.sendMessage({
+    action:    "startColorPaletteAnalysis",
+    tabId:     tab.id,
+    sourceUrl: tab.url,
+    sourceTitle: tab.title || "",
+  });
+
+  swipeShowStatus("🖌️ Scanning page colors… the palette overlay will appear on the page when ready.");
+  setTimeout(() => window.close(), 2200);
+}
+
 // (switchSubTab moved up, defined together with switchPrimaryTab)
 
 function switchPrimaryTab(name) {
@@ -1677,6 +1701,7 @@ async function boot() {
   $("swipe-btn-visible").addEventListener("click", swipeCaptureVisibleArea);
   $("swipe-btn-section").addEventListener("click", swipeCaptureSection);
   $("swipe-color-picker").addEventListener("click", swipeStartColorPicker);
+  $("swipe-color-palette").addEventListener("click", swipeStartColorPalette);
 
   // Suspended screen — "Check Again" button triggers an immediate live re-check.
   // The service-worker alarm continues running independently in the background.

@@ -678,7 +678,14 @@ export interface IStorage {
   getAffiliateLinkCategories(userId: string): Promise<string[]>;
 
   // Swipe File
-  getSwipeItems(userId: string): Promise<SwipeItem[]>;
+  getSwipeItems(
+    userId: string,
+    opts?: { search?: string; type?: string; favorite?: boolean; limit?: number; offset?: number },
+  ): Promise<{
+    items: SwipeItem[];
+    total: number;
+    counts: { all: number; upload: number; snippet: number; palette: number; shared: number; favorites: number };
+  }>;
   getSwipeItem(id: string, userId: string): Promise<SwipeItem | undefined>;
   getSwipeItemByToken(token: string): Promise<SwipeItem | undefined>;
   createSwipeItem(userId: string, data: Partial<InsertSwipeItem>): Promise<SwipeItem>;
@@ -5352,7 +5359,7 @@ export class DatabaseStorage implements IStorage {
   ): Promise<{
     items: SwipeItem[];
     total: number;
-    counts: { all: number; upload: number; snippet: number; shared: number; favorites: number };
+    counts: { all: number; upload: number; snippet: number; palette: number; shared: number; favorites: number };
   }> {
     // Build filtered WHERE clause
     const filterConditions: any[] = [eq(swipeItems.userId, userId)];
@@ -5400,14 +5407,16 @@ export class DatabaseStorage implements IStorage {
 
     const uploadCount = Number(breakdown.find(r => r.type === "upload")?.n ?? 0);
     const snippetCount = Number(breakdown.find(r => r.type === "snippet")?.n ?? 0);
+    const paletteCount = Number(breakdown.find(r => r.type === "palette")?.n ?? 0);
 
     return {
       items,
       total: Number(total),
       counts: {
-        all: uploadCount + snippetCount,
+        all: uploadCount + snippetCount + paletteCount,
         upload: uploadCount,
         snippet: snippetCount,
+        palette: paletteCount,
         shared: Number(shared),
         favorites: Number(favorites),
       },
