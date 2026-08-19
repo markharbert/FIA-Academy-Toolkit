@@ -378,7 +378,11 @@ async function main() {
     );
     await colorPage.mouse.click(220, 250);
     await colorPage.waitForFunction(
-      () => document.querySelector(".fia-color-picker-help")?.textContent?.includes("Copied #123456"),
+      () => {
+        const toast = document.querySelector(".fia-color-picker-toast");
+        return toast?.textContent === "Color saved to clipboard"
+          && toast.classList.contains("success");
+      },
     );
 
     console.log("✓ Link Vault packaged-extension smoke test passed");

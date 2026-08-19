@@ -124,6 +124,18 @@
         font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         white-space: nowrap;
       }
+      #${ROOT_ID} .fia-color-picker-toast {
+        position: fixed; left: 50%; top: 62px; transform: translate(-50%, -6px);
+        display: none; padding: 9px 15px; border-radius: 999px; color: #fff;
+        box-shadow: 0 4px 16px rgba(0,0,0,.3);
+        font: 700 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        white-space: nowrap; pointer-events: none;
+      }
+      #${ROOT_ID} .fia-color-picker-toast.show {
+        display: block; transform: translate(-50%, 0);
+      }
+      #${ROOT_ID} .fia-color-picker-toast.success { background: #16834a; }
+      #${ROOT_ID} .fia-color-picker-toast.error { background: #b52b2b; }
       #${ROOT_ID}.fia-color-picker-copied .fia-color-picker-help {
         background: #16834a;
       }
@@ -134,6 +146,7 @@
     root.id = ROOT_ID;
     root.innerHTML = `
       <div class="fia-color-picker-help">Move to a color · Click to copy · Esc to cancel</div>
+      <div class="fia-color-picker-toast" role="status" aria-live="polite"></div>
       <div class="fia-color-picker-magnifier">
         <div class="fia-color-picker-crosshair"></div>
       </div>
@@ -147,6 +160,7 @@
     const magnifier = root.querySelector(".fia-color-picker-magnifier");
     const swatch = root.querySelector(".fia-color-picker-swatch");
     const hexLabel = root.querySelector(".fia-color-picker-hex");
+    const toast = root.querySelector(".fia-color-picker-toast");
     let currentHex = "#------";
     let zoom = clamp(Math.round(Math.max(scaleX, scaleY) * 4), MIN_ZOOM, MAX_ZOOM);
 
@@ -173,8 +187,12 @@
       const copied = await copyText(currentHex);
       root.classList.toggle("fia-color-picker-copied", copied);
       const help = root.querySelector(".fia-color-picker-help");
-      if (help) help.textContent = copied ? `Copied ${currentHex} to clipboard` : `Selected ${currentHex}`;
-      if (copied) setTimeout(destroy, 900);
+      if (help) help.textContent = copied ? `Copied ${currentHex} to clipboard` : `Copy failed — try again`;
+      if (toast) {
+        toast.textContent = copied ? "Color saved to clipboard" : "Could not save color to clipboard";
+        toast.className = `fia-color-picker-toast ${copied ? "success" : "error"} show`;
+      }
+      if (copied) setTimeout(destroy, 1200);
     }
 
     root.addEventListener("pointermove", update, true);
