@@ -48,6 +48,7 @@ function fixtureHtml(kind) {
       <main>
         <h1>Color picker fixture</h1>
         <div id="color-swatch"></div>
+        <div id="responsive-probe" aria-label="Responsive media-query probe"></div>
       </main>`,
     palette: `
       <main id="palette-main">
@@ -97,10 +98,15 @@ function fixtureHtml(kind) {
       <head>
         <meta charset="utf-8">
         <title>Link Vault smoke fixture</title>
+        <script>window.__responsiveFixtureScriptRuns = (window.__responsiveFixtureScriptRuns || 0) + 1;</script>
         <style>
           body { font: 16px system-ui, sans-serif; margin: 3rem; }
           [contenteditable] { border: 1px solid #94a3b8; border-radius: 8px; min-height: 4rem; padding: 1rem; }
           #color-swatch { position: fixed; left: 140px; top: 180px; width: 180px; height: 160px; background: rgb(18, 52, 86); }
+          #responsive-probe::after { content: "desktop"; }
+          @media (max-width: 400px) {
+            #responsive-probe::after { content: "mobile"; }
+          }
         </style>
       </head>
       <body>${fields[kind] || fields.noeditor}</body>
@@ -199,12 +205,15 @@ async function installLinkApiStub(pickerPage) {
 }
 
 async function assertPickerOpeningContract(extensionDir) {
-  const [serviceWorker, popupHtml, popupJs, rulerScript] = await Promise.all([
+  const [serviceWorker, popupHtml, popupJs, rulerScript, responsiveScript, manifestText] = await Promise.all([
     readFile(path.join(extensionDir, "service-worker.js"), "utf8"),
     readFile(path.join(extensionDir, "popup.html"), "utf8"),
     readFile(path.join(extensionDir, "popup.js"), "utf8"),
     readFile(path.join(extensionDir, "ruler.js"), "utf8"),
+    readFile(path.join(extensionDir, "responsive.js"), "utf8"),
+    readFile(path.join(extensionDir, "manifest.json"), "utf8"),
   ]);
+  const packagedManifest = JSON.parse(manifestText);
   const paletteScanner = serviceWorker.match(
     /async function handleColorPaletteAnalysis[\s\S]*?(?=async function handleFullPageCapture)/,
   )?.[0] || "";
@@ -258,6 +267,32 @@ async function assertPickerOpeningContract(extensionDir) {
     rulerScript,
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
+  );
+  assert.equal(packagedManifest.version, "2.4.0", "the packaged extension is not version 2.4.0");
+  assert.ok(
+    packagedManifest.web_accessible_resources?.some(entry =>
+      entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
+    "the packaged extension does not expose the FIA lion to the responsive toolbar",
+  );
+  assert.match(
+    popupHtml,
+    /id="swipe-ruler-row"[\s\S]*?id="swipe-ruler"[\s\S]*?>Ruler<[\s\S]*?id="swipe-responsive"[\s\S]*?>Responsive</,
+    "the packaged popup does not place Responsive beside Ruler",
+  );
+  assert.match(
+    popupJs,
+    /files: \["responsive\.js"\][\s\S]*?\$\("swipe-responsive"\)\.addEventListener\("click", swipeStartResponsive\)/,
+    "the packaged popup no longer injects Responsive from its button",
+  );
+  assert.match(
+    responsiveScript,
+    /Fearless Influencer Academy[\s\S]*?__fia_responsive_preset__[\s\S]*?__fia_responsive_width__[\s\S]*?__fia_responsive_height__/,
+    "the packaged Responsive tool is missing its FIA branding or viewport controls",
+  );
+  assert.equal(
+    [...responsiveScript.matchAll(/\{ id: "[^"]+", label:/g)].length,
+    25,
+    "the packaged Responsive tool must include 25 curated device presets",
   );
 }
 
@@ -566,6 +601,206 @@ async function main() {
     await colorPage.keyboard.press("Escape");
     await colorPage.waitForFunction(() => !document.getElementById("__fia_ruler__"));
 
+    // ── Responsive: presets + custom size + zoom/Fit + cleanup ───────────────
+    await extensionPage.evaluate(async (tabId) => {
+      const tab = await chrome.tabs.get(tabId);
+      await chrome.tabs.update(tabId, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["responsive.js"] });
+    }, colorTab.id);
+    await colorPage.waitForSelector("#__fia_responsive__");
+    await colorPage.waitForFunction(() => {
+      const frame = document.querySelector("#__fia_responsive__ .fia-responsive-frame");
+      return frame?.contentDocument?.readyState === "complete";
+    });
+    assert.equal(
+      await colorPage.$$eval("#__fia_responsive_preset__ option", options => options.length),
+      26,
+      "Responsive should offer 25 presets plus a Custom size option",
+    );
+    assert.equal(
+      await colorPage.$$eval("#__fia_responsive_preset__ optgroup", groups => groups.length),
+      3,
+      "Responsive presets should be grouped into phones, tablets, and larger screens",
+    );
+    await colorPage.waitForFunction(() =>
+      document.querySelector("#__fia_responsive__ .fia-responsive-logo")?.naturalWidth > 0,
+    );
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_responsive__", element => ({
+        role: element.getAttribute("role"),
+        modal: element.getAttribute("aria-modal"),
+      })),
+      { role: "dialog", modal: "true" },
+      "Responsive must expose its full-screen overlay as a modal dialog",
+    );
+    assert.equal(
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
+        frame.contentDocument.scripts.length),
+      0,
+      "Responsive allowed source-page scripts into the preview snapshot",
+    );
+    assert.equal(
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
+        frame.contentWindow.__responsiveFixtureScriptRuns),
+      undefined,
+      "Responsive executed a source-page script inside the preview",
+    );
+    await colorPage.focus("#__fia_responsive_preset__");
+    await colorPage.keyboard.down("Shift");
+    await colorPage.keyboard.press("Tab");
+    await colorPage.keyboard.up("Shift");
+    assert.equal(
+      await colorPage.evaluate(() => document.activeElement?.id),
+      "__fia_responsive_exit__",
+      "Shift+Tab escaped the Responsive modal instead of wrapping to Exit",
+    );
+    await colorPage.keyboard.press("Tab");
+    assert.equal(
+      await colorPage.evaluate(() => document.activeElement?.id),
+      "__fia_responsive_preset__",
+      "Tab escaped the Responsive modal instead of wrapping to the first control",
+    );
+
+    await colorPage.select("#__fia_responsive_preset__", "iphone-se");
+    await colorPage.waitForFunction(() => {
+      const root = document.getElementById("__fia_responsive__");
+      return root?.dataset.width === "375"
+        && root?.dataset.height === "667"
+        && root?.dataset.preset === "iphone-se";
+    });
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_responsive__", element => ({
+        width: element.dataset.width,
+        height: element.dataset.height,
+        preset: element.dataset.preset,
+      })),
+      { width: "375", height: "667", preset: "iphone-se" },
+      "Responsive did not apply the selected phone preset",
+    );
+    assert.equal(
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
+        frame.contentWindow.getComputedStyle(
+          frame.contentDocument.querySelector("#responsive-probe"),
+          "::after",
+        ).content),
+      '"mobile"',
+      "the preview iframe did not activate the mobile media query",
+    );
+
+    await colorPage.$eval("#__fia_responsive_width__", input => {
+      input.value = "1024";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await colorPage.$eval("#__fia_responsive_height__", input => {
+      input.value = "768";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await colorPage.waitForFunction(() => {
+      const root = document.getElementById("__fia_responsive__");
+      return root?.dataset.width === "1024"
+        && root?.dataset.height === "768"
+        && root?.dataset.preset === "custom";
+    });
+    assert.equal(
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
+        frame.contentWindow.getComputedStyle(
+          frame.contentDocument.querySelector("#responsive-probe"),
+          "::after",
+        ).content),
+      '"desktop"',
+      "the custom desktop width did not activate the wider media query",
+    );
+
+    await colorPage.$eval("#__fia_responsive_width__", input => {
+      input.value = "100";
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await colorPage.waitForFunction(() =>
+      document.getElementById("__fia_responsive__")?.dataset.width === "240",
+    );
+    assert.equal(
+      await colorPage.$eval("#__fia_responsive_width__", input => input.value),
+      "240",
+      "Responsive did not constrain an unsafe custom width",
+    );
+
+    await colorPage.click("#__fia_responsive_zoom_out__");
+    assert.equal(
+      await colorPage.$eval("#__fia_responsive__", element => element.dataset.zoom),
+      "90",
+      "Responsive zoom-out did not reduce the preview to 90%",
+    );
+    await colorPage.click("#__fia_responsive_fit__");
+    await colorPage.waitForFunction(() => {
+      const root = document.getElementById("__fia_responsive__");
+      return root?.dataset.fit === "true" && Number(root.dataset.zoom) <= 100;
+    });
+    await colorPage.$eval("#__fia_responsive_width__", input => {
+      input.value = "5120";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await colorPage.$eval("#__fia_responsive_height__", input => {
+      input.value = "5120";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await colorPage.click("#__fia_responsive_fit__");
+    await colorPage.waitForFunction(() => {
+      const root = document.getElementById("__fia_responsive__");
+      const workspace = root?.querySelector(".fia-responsive-workspace");
+      const shell = root?.querySelector(".fia-responsive-shell");
+      if (!root || !workspace || !shell) return false;
+      const rect = shell.getBoundingClientRect();
+      return rect.width <= workspace.clientWidth - 70
+        && rect.height <= workspace.clientHeight - 70;
+    });
+    const fitGeometry = await colorPage.$eval("#__fia_responsive__", root => {
+      const workspace = root.querySelector(".fia-responsive-workspace");
+      const shell = root.querySelector(".fia-responsive-shell");
+      return {
+        zoom: Number(root.dataset.zoom),
+        shellWidth: shell.getBoundingClientRect().width,
+        shellHeight: shell.getBoundingClientRect().height,
+        workspaceWidth: workspace.clientWidth,
+        workspaceHeight: workspace.clientHeight,
+      };
+    });
+    assert.ok(fitGeometry.zoom < 25, "Fit did not scale a maximum-size viewport below 25%");
+    assert.ok(
+      fitGeometry.shellWidth <= fitGeometry.workspaceWidth - 70
+        && fitGeometry.shellHeight <= fitGeometry.workspaceHeight - 70,
+      `Fit overflowed its workspace: ${JSON.stringify(fitGeometry)}`,
+    );
+
+    await colorPage.click("#__fia_responsive_exit__");
+    await colorPage.waitForFunction(() => !document.getElementById("__fia_responsive__"));
+    assert.equal(
+      await colorPage.$eval("#responsive-probe", element => element.getAttribute("aria-label")),
+      "Responsive media-query probe",
+      "exiting Responsive changed the original page",
+    );
+
+    await extensionPage.evaluate(async (tabId) => {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["responsive.js"] });
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["responsive.js"] });
+    }, colorTab.id);
+    await colorPage.waitForFunction(() =>
+      document.querySelectorAll("#__fia_responsive__").length === 1,
+    );
+    await colorPage.waitForFunction(() =>
+      document.querySelector("#__fia_responsive__ .fia-responsive-frame")?.contentDocument?.readyState === "complete",
+    );
+    const responsiveFrameBox = await colorPage.$eval(
+      "#__fia_responsive__ .fia-responsive-frame",
+      frame => {
+        const rect = frame.getBoundingClientRect();
+        return { x: rect.left, y: rect.top };
+      },
+    );
+    await colorPage.mouse.click(responsiveFrameBox.x + 12, responsiveFrameBox.y + 12);
+    await colorPage.keyboard.press("Escape");
+    await colorPage.waitForFunction(() => !document.getElementById("__fia_responsive__"));
+
     // ── Color Palette: full-page scroll + dominant-color extraction ──────────
     const paletteUrl = `${fixture.baseUrl}/palette`;
     const palettePage = await browser.newPage();
@@ -759,6 +994,7 @@ async function main() {
     console.log("  - magnified color picker hex sampling and clipboard copy");
     console.log("  - Site Inspector hover details and Escape cleanup");
     console.log("  - Ruler alignment guides, drag-any-direction measurement, replacement, and Escape cleanup");
+    console.log("  - Responsive presets, custom dimensions, media-query rendering, zoom/Fit, and Exit/Escape cleanup");
     console.log("  - color palette: streaming full-page scan, six dominant colors, detected font variants, copy/save, tab-switch cleanup");
   } finally {
     await browser?.close();

@@ -1615,6 +1615,38 @@ async function swipeStartRuler() {
   }
 }
 
+// ── Responsive (device presets + editable viewport preview) ─────────────────
+
+async function swipeStartResponsive() {
+  let tab;
+  try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) {}
+  if (!tab?.id || !tab.url?.startsWith("http")) {
+    alert("Responsive only works on http/https pages.");
+    return;
+  }
+
+  const button = $("swipe-responsive");
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<span class="swipe-tool-icon">📱</span><span>Opening…</span>';
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["responsive.js"],
+    });
+    window.close();
+  } catch (err) {
+    console.error("[FIA Swipe] responsive preview failed:", err);
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = '<span class="swipe-tool-icon">📱</span><span>Responsive</span>';
+    }
+    alert("Could not start Responsive. Try again on a regular web page.");
+  }
+}
+
 // (switchSubTab moved up, defined together with switchPrimaryTab)
 
 function switchPrimaryTab(name) {
@@ -1765,6 +1797,7 @@ async function boot() {
   $("swipe-color-palette").addEventListener("click", swipeStartColorPalette);
   $("swipe-site-inspector").addEventListener("click", swipeStartSiteInspector);
   $("swipe-ruler").addEventListener("click", swipeStartRuler);
+  $("swipe-responsive").addEventListener("click", swipeStartResponsive);
 
   // Suspended screen — "Check Again" button triggers an immediate live re-check.
   // The service-worker alarm continues running independently in the background.
