@@ -102,6 +102,9 @@ function fixtureHtml(kind) {
         <style>
           body { font: 16px system-ui, sans-serif; margin: 3rem; }
           [contenteditable] { border: 1px solid #94a3b8; border-radius: 8px; min-height: 4rem; padding: 1rem; }
+           /* Deliberately hostile host-page styling: the Responsive overlay must not inherit it. */
+           label { margin: 19px !important; padding: 13px !important; border: 5px solid fuchsia !important; background: lime !important; border-radius: 99px !important; }
+           label span { margin: 17px !important; padding: 11px !important; border: 4px solid orange !important; background: cyan !important; transform: translateY(-9px) !important; }
           #color-swatch { position: fixed; left: 140px; top: 180px; width: 180px; height: 160px; background: rgb(18, 52, 86); }
           #responsive-probe::after { content: "desktop"; }
           @media (max-width: 400px) {
@@ -268,7 +271,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.3", "the packaged extension is not version 2.4.3");
+  assert.equal(packagedManifest.version, "2.4.4", "the packaged extension is not version 2.4.4");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -672,18 +675,25 @@ async function main() {
     assert.deepEqual(
       await colorPage.$$eval("#__fia_responsive__ .fia-responsive-dimension", labels =>
         labels.map(label => {
-          const prefix = label.querySelector("span");
+          const prefix = label.querySelector(".fia-responsive-dimension-prefix");
           const input = label.querySelector("input");
           return {
             dimensionDisplay: getComputedStyle(label).display,
             dimensionAlignItems: getComputedStyle(label).alignItems,
             dimensionHeight: getComputedStyle(label).height,
+            dimensionMargin: getComputedStyle(label).margin,
+            dimensionPadding: getComputedStyle(label).padding,
             prefixPosition: getComputedStyle(prefix).position,
             prefixDisplay: getComputedStyle(prefix).display,
             prefixAlignItems: getComputedStyle(prefix).alignItems,
             prefixJustifyContent: getComputedStyle(prefix).justifyContent,
             prefixHeight: getComputedStyle(prefix).height,
+            prefixMargin: getComputedStyle(prefix).margin,
+            prefixPadding: getComputedStyle(prefix).padding,
+            prefixBorderTopWidth: getComputedStyle(prefix).borderTopWidth,
+            prefixTransform: getComputedStyle(prefix).transform,
             inputLineHeight: getComputedStyle(input).lineHeight,
+            inputAppearance: getComputedStyle(input).appearance,
           };
         })),
       [
@@ -691,23 +701,37 @@ async function main() {
           dimensionDisplay: "flex",
           dimensionAlignItems: "center",
           dimensionHeight: "40px",
+          dimensionMargin: "0px",
+          dimensionPadding: "0px",
           prefixPosition: "static",
           prefixDisplay: "flex",
           prefixAlignItems: "center",
           prefixJustifyContent: "center",
           prefixHeight: "38px",
+          prefixMargin: "0px",
+          prefixPadding: "0px",
+          prefixBorderTopWidth: "0px",
+          prefixTransform: "none",
           inputLineHeight: "38px",
+          inputAppearance: "none",
         },
         {
           dimensionDisplay: "flex",
           dimensionAlignItems: "center",
           dimensionHeight: "40px",
+          dimensionMargin: "0px",
+          dimensionPadding: "0px",
           prefixPosition: "static",
           prefixDisplay: "flex",
           prefixAlignItems: "center",
           prefixJustifyContent: "center",
           prefixHeight: "38px",
+          prefixMargin: "0px",
+          prefixPadding: "0px",
+          prefixBorderTopWidth: "0px",
+          prefixTransform: "none",
           inputLineHeight: "38px",
+          inputAppearance: "none",
         },
       ],
       "Responsive width/height prefixes are not vertically centered in their controls",

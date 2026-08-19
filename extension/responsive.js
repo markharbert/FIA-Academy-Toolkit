@@ -192,13 +192,15 @@
       color: #fff !important; background: #171a35 !important;
     }
     #${ROOT_ID} .fia-responsive-dimension {
+      all: unset !important; box-sizing: border-box !important;
       position: relative !important; flex: 0 0 auto !important; display: flex !important;
       align-items: center !important; width: 92px !important; height: 40px !important;
       overflow: hidden !important; background: rgba(255,255,255,.08) !important;
       border: 1px solid rgba(255,255,255,.2) !important; border-radius: 7px !important;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.04) !important;
     }
-    #${ROOT_ID} .fia-responsive-dimension span {
+    #${ROOT_ID} .fia-responsive-dimension-prefix {
+      all: unset !important; box-sizing: border-box !important;
       position: static !important; z-index: auto !important; display: flex !important;
       align-items: center !important; justify-content: center !important;
       flex: 0 0 24px !important; width: 24px !important; height: 38px !important;
@@ -210,8 +212,12 @@
       flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; height: 38px !important;
       padding: 0 8px 0 0 !important; color: #fff !important; background: transparent !important;
       border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
-      line-height: 38px !important;
+      appearance: none !important; -webkit-appearance: none !important; line-height: 38px !important;
       font-variant-numeric: tabular-nums !important; cursor: text !important;
+    }
+    #${ROOT_ID} .fia-responsive-input::-webkit-outer-spin-button,
+    #${ROOT_ID} .fia-responsive-input::-webkit-inner-spin-button {
+      appearance: none !important; -webkit-appearance: none !important; margin: 0 !important;
     }
     #${ROOT_ID} .fia-responsive-select:focus {
       border-color: #e8b500 !important; box-shadow: 0 0 0 2px rgba(232,181,0,.22) !important;
@@ -321,12 +327,12 @@
         <span class="fia-responsive-select-chevron" aria-hidden="true"></span>
       </div>
       <label class="fia-responsive-dimension">
-        <span>W</span>
+        <span class="fia-responsive-dimension-prefix">W</span>
         <input id="__fia_responsive_width__" class="fia-responsive-input" type="number"
           min="${MIN_WIDTH}" max="${MAX_WIDTH}" step="1" inputmode="numeric" aria-label="Viewport width">
       </label>
       <label class="fia-responsive-dimension">
-        <span>H</span>
+        <span class="fia-responsive-dimension-prefix">H</span>
         <input id="__fia_responsive_height__" class="fia-responsive-input" type="number"
           min="${MIN_HEIGHT}" max="${MAX_HEIGHT}" step="1" inputmode="numeric" aria-label="Viewport height">
       </label>
