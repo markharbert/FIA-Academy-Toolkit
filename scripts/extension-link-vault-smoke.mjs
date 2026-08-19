@@ -49,6 +49,11 @@ function fixtureHtml(kind) {
         <h1>Color picker fixture</h1>
         <div id="color-swatch"></div>
         <div id="responsive-probe" aria-label="Responsive media-query probe"></div>
+        <a id="snapshot-link" href="/somewhere-else">A link that must stay inert in the preview</a>
+        <div id="tall-scroll-region" style="height:2400px;background:linear-gradient(#fff,#dde)">
+          <p>Tall content so the Responsive preview has something to scroll.</p>
+        </div>
+        <p id="page-bottom-marker">bottom of fixture</p>
       </main>`,
     palette: `
       <main id="palette-main">
@@ -1217,10 +1222,43 @@ async function main() {
           allowsScripts: frame.sandbox.contains("allow-scripts"),
           allowsSameOrigin: frame.sandbox.contains("allow-same-origin"),
           sandboxTokenCount: frame.sandbox.length,
+          pointerEvents: getComputedStyle(frame).pointerEvents,
         };
       }),
-      { allowsScripts: false, allowsSameOrigin: false, sandboxTokenCount: 0 },
-      "Responsive preview iframe retained sandbox permissions it does not need",
+      { allowsScripts: false, allowsSameOrigin: false, sandboxTokenCount: 0, pointerEvents: "auto" },
+      "Responsive preview iframe must stay sandbox-locked while accepting pointer input for scrolling",
+    );
+    // ── The snapshot must scroll natively under the mouse wheel ────────────────
+    assert.equal(
+      await responsivePreviewFrame.evaluate(() => Boolean(document.querySelector("style[data-fia-inert]"))),
+      true,
+      "Responsive snapshot is missing the inert-interactive-elements style",
+    );
+    assert.equal(
+      await responsivePreviewFrame.evaluate(() =>
+        getComputedStyle(document.querySelector("#snapshot-link")).pointerEvents),
+      "none",
+      "links inside the Responsive snapshot must be inert so clicks cannot navigate the preview",
+    );
+    const preScrollY = await responsivePreviewFrame.evaluate(() => window.scrollY);
+    assert.equal(preScrollY, 0, "Responsive preview did not start at the top of the snapshot");
+    const scrollTargetBox = await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame-mount", mount => {
+      const rect = mount.shadowRoot.querySelector(".fia-responsive-frame").getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + Math.min(rect.height / 2, 200) };
+    });
+    await colorPage.mouse.move(scrollTargetBox.x, scrollTargetBox.y);
+    await colorPage.mouse.wheel({ deltaY: 600 });
+    await waitFor(
+      () => responsivePreviewFrame.evaluate(() => window.scrollY > 0),
+      "Responsive preview did not scroll under the mouse wheel — the snapshot is stuck at the top",
+    );
+    await responsivePreviewFrame.evaluate(() => window.scrollTo(0, 0));
+    // A click inside the preview moves focus into the sandboxed document; the
+    // blur guard must pull it back out so Escape keeps closing the tool.
+    await colorPage.mouse.click(scrollTargetBox.x, scrollTargetBox.y);
+    await waitFor(
+      () => colorPage.evaluate(() => document.activeElement?.classList?.contains("fia-responsive-workspace")),
+      "focus was not returned to the Responsive workspace after clicking inside the preview",
     );
     assert.deepEqual(
       sandboxScriptWarnings,

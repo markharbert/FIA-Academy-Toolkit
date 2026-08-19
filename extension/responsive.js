@@ -116,6 +116,15 @@
       .forEach(element => element.remove());
     clone.querySelectorAll('meta[http-equiv="Content-Security-Policy" i], meta[http-equiv="refresh" i]')
       .forEach(element => element.remove());
+    // The preview accepts pointer input so members can scroll the snapshot
+    // natively. Neutralize interactive elements inside the snapshot so a click
+    // cannot navigate the sandboxed frame away from the snapshot or trigger
+    // "Blocked form submission" console warnings. Scrolling is unaffected —
+    // wheel/touch events target the scrollable document, not these elements.
+    const inertStyle = clone.ownerDocument.createElement("style");
+    inertStyle.setAttribute("data-fia-inert", "");
+    inertStyle.textContent = "a, area, button, input, select, textarea, summary, [role=\"button\"] { pointer-events: none !important; }";
+    (clone.querySelector("head") || clone).appendChild(inertStyle);
     clone.querySelectorAll("*").forEach(element => {
       Array.from(element.attributes).forEach(attribute => {
         const name = attribute.name.toLowerCase();
@@ -294,6 +303,7 @@
     #${ROOT_ID} .fia-responsive-workspace {
       position: relative !important; flex: 1 1 auto !important; min-height: 0 !important;
       overflow: auto !important; overscroll-behavior: contain !important;
+      outline: none !important;
       background:
         radial-gradient(circle at 50% 10%, rgba(255,255,255,.055), transparent 38%),
         #292c33 !important;
@@ -373,7 +383,7 @@
       <button id="__fia_responsive_fit__" class="fia-responsive-button fia-responsive-fit" type="button">Fit</button>
       <button id="__fia_responsive_exit__" class="fia-responsive-button fia-responsive-exit" type="button">Exit</button>
     </header>
-    <main class="fia-responsive-workspace">
+    <main class="fia-responsive-workspace" tabindex="-1">
       <div class="fia-responsive-canvas">
         <div class="fia-responsive-shell">
           <span class="fia-responsive-size"></span>
@@ -425,9 +435,10 @@
     "border:0 !important",
     "background:#fff !important",
     "transform-origin:0 0 !important",
-    // This is a static, sanitized visual snapshot—not an interactive browser.
-    // Keeping pointer focus in the host makes Escape reliably close the tool.
-    "pointer-events:none !important",
+    // Pointer input stays ENABLED so members can scroll the snapshot natively —
+    // scrolling needs no scripts, so the empty sandbox is unaffected. Escape
+    // reliability is handled by the window-blur focus guard below instead of
+    // pointer-events:none, which froze the preview at the top of the page.
   ].join(";");
   // Mount the preview iframe inside a shadow root so page CSS cannot restyle it.
   // Chrome's cross-origin policy already prevents page scripts from reading or
@@ -567,11 +578,27 @@
     if (fitMode) applyFit();
   }
 
+  function onWindowBlur() {
+    // A click inside the sandboxed preview moves keyboard focus into the frame's
+    // document, where the host page can no longer see Escape. The snapshot is
+    // static and needs no keyboard, so pull focus back out whenever it lands in
+    // the preview. Focus the scrollable workspace (not a control) so stray
+    // arrow-key presses pan the canvas instead of changing device presets.
+    setTimeout(() => {
+      if (destroyed) return;
+      const active = document.activeElement;
+      if (active === frameMount || (frameMount.contains && frameMount.contains(active))) {
+        workspace.focus({ preventScroll: true });
+      }
+    }, 0);
+  }
+
   function destroy() {
     if (destroyed) return;
     destroyed = true;
     document.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("resize", onWindowResize);
+    window.removeEventListener("blur", onWindowBlur);
     host.remove();
     style.remove();
     delete window.__fiaResponsive;
@@ -608,6 +635,7 @@
   host.querySelector("#__fia_responsive_exit__").addEventListener("click", destroy);
   document.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("resize", onWindowResize);
+  window.addEventListener("blur", onWindowBlur);
 
   window.__fiaResponsive = {
     destroy,
