@@ -56,7 +56,34 @@ type SwipeItem = {
   updatedAt: string;
 };
 
-type SwipePalette = { version: 1; colors: [string, string, string, string, string, string] };
+type SwipePaletteFontVariant = { weight: string; size: string; count: number };
+type SwipePaletteFont = { family: string; variants: SwipePaletteFontVariant[] };
+type SwipePalette = {
+  version: 1;
+  colors: [string, string, string, string, string, string];
+  fonts: SwipePaletteFont[];
+};
+
+function parsePaletteFonts(value: unknown): SwipePaletteFont[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 8) return [];
+  return value.flatMap(rawFont => {
+    if (!rawFont || typeof rawFont !== "object") return [];
+    const font = rawFont as Record<string, unknown>;
+    const family = typeof font.family === "string" ? font.family.trim().replace(/\s+/g, " ") : "";
+    if (!family || family.length > 120 || !Array.isArray(font.variants) || font.variants.length < 1 || font.variants.length > 8) return [];
+    const variants = font.variants.flatMap(rawVariant => {
+      if (!rawVariant || typeof rawVariant !== "object") return [];
+      const variant = rawVariant as Record<string, unknown>;
+      const weight = typeof variant.weight === "string" ? variant.weight.trim() : "";
+      const size = typeof variant.size === "string" ? variant.size.trim() : "";
+      const count = variant.count;
+      if (!/^\d{1,4}$/.test(weight) || !/^\d+(?:\.\d+)?px$/.test(size) || typeof count !== "number" || !Number.isInteger(count) || count < 1) return [];
+      return [{ weight, size, count }];
+    });
+    return variants.length ? [{ family, variants }] : [];
+  });
+}
 
 /** Palette content is user/API supplied JSON; only accept the canonical shape. */
 function parsePalette(content: string | null): SwipePalette | null {
@@ -65,7 +92,11 @@ function parsePalette(content: string | null): SwipePalette | null {
     const value = JSON.parse(content);
     if (value?.version !== 1 || !Array.isArray(value.colors) || value.colors.length !== 6) return null;
     if (!value.colors.every((color: unknown) => typeof color === "string" && /^#[0-9A-F]{6}$/.test(color))) return null;
-    return { version: 1, colors: value.colors as SwipePalette["colors"] };
+    return {
+      version: 1,
+      colors: value.colors as SwipePalette["colors"],
+      fonts: parsePaletteFonts(value.fonts),
+    };
   } catch { return null; }
 }
 
@@ -432,6 +463,65 @@ function PaletteSwatches({ palette, dark = false }: { palette: SwipePalette; dar
   );
 }
 
+function PaletteFonts({ palette, dark = false, compact = false }: {
+  palette: SwipePalette;
+  dark?: boolean;
+  compact?: boolean;
+}) {
+  const [copiedFamily, setCopiedFamily] = useState<string | null>(null);
+  const [failedFamily, setFailedFamily] = useState<string | null>(null);
+  if (!palette.fonts.length) return null;
+
+  async function copyFamily(family: string) {
+    setFailedFamily(null);
+    try {
+      await navigator.clipboard.writeText(family);
+      setCopiedFamily(family);
+      window.setTimeout(() => setCopiedFamily(current => current === family ? null : current), 1800);
+    } catch {
+      setFailedFamily(family);
+      window.setTimeout(() => setFailedFamily(current => current === family ? null : current), 2500);
+    }
+  }
+
+  return (
+    <div className={`space-y-2 ${compact ? "" : "mt-5 border-t pt-5"} ${dark ? "border-white/10" : "border-border"}`}>
+      <div>
+        <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${dark ? "text-white/45" : "text-muted-foreground"}`}>Detected fonts</p>
+        {!compact && <p className={`mt-1 text-xs ${dark ? "text-white/55" : "text-muted-foreground"}`}>Weight · size · text elements using it</p>}
+      </div>
+      <div className="space-y-2">
+        {palette.fonts.map(font => (
+          <button
+            key={font.family}
+            type="button"
+            onClick={(event) => { event.stopPropagation(); void copyFamily(font.family); }}
+            title={`Copy ${font.family}`}
+            className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+              dark
+                ? "border-white/10 bg-white/5 hover:border-cyan-300/60 hover:bg-cyan-300/10"
+                : "border-border bg-muted/30 hover:border-primary/50 hover:bg-primary/5"
+            }`}
+          >
+            <span className={`block truncate text-sm font-semibold ${dark ? "text-white/90" : "text-foreground"}`}>
+              {copiedFamily === font.family ? "Copied font family" : failedFamily === font.family ? "Copy failed" : font.family}
+            </span>
+            <span className="mt-1.5 flex flex-wrap gap-1">
+              {font.variants.map(variant => (
+                <span key={`${variant.weight}-${variant.size}`} className={`rounded-full px-1.5 py-0.5 font-mono text-[10px] ${
+                  dark ? "bg-white/10 text-white/60" : "bg-background text-muted-foreground"
+                }`}>
+                  {variant.weight} · {variant.size} · {variant.count}×
+                </span>
+              ))}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ---- Preview Modal ----
 function PreviewModal({
   item,
@@ -601,6 +691,7 @@ function PreviewModal({
                     <Palette className="h-6 w-6 text-amber-300/80" />
                   </div>
                   <PaletteSwatches palette={parsePalette(item.content)!} dark />
+                  <PaletteFonts palette={parsePalette(item.content)!} dark />
                 </div>
               </div>
             ) : item.type === "snippet" ? (
@@ -781,6 +872,7 @@ function PreviewModal({
               <div>
                 <p className="text-xs font-medium text-white/40 uppercase tracking-widest mb-2">Colors · click to copy</p>
                 <PaletteSwatches palette={parsePalette(item.content)!} dark />
+                <PaletteFonts palette={parsePalette(item.content)!} dark compact />
               </div>
             )}
 
@@ -1126,7 +1218,9 @@ function SwipeCard({
               <Palette className="h-4 w-4 text-cyan-200/70" />
             </div>
             <PaletteSwatches palette={parsePalette(item.content)!} dark />
-            <p className="mt-2 text-[9px] text-white/45">6 colors · click to inspect</p>
+            <p className="mt-2 text-[9px] text-white/45">
+              6 colors{parsePalette(item.content)!.fonts.length ? ` · ${parsePalette(item.content)!.fonts.length} fonts` : ""} · click to inspect
+            </p>
           </div>
         ) : item.type === "snippet" ? (
           <div className="absolute inset-0 bg-gradient-to-br from-violet-950/60 to-slate-900/80 p-3.5 overflow-hidden">

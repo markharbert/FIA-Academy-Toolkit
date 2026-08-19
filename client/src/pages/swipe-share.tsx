@@ -42,20 +42,51 @@ type PublicSwipeItem = {
   fiaAffiliateLink: string | null;
 };
 
-type SwipePalette = { version: 1; colors: [string, string, string, string, string, string] };
+type SwipePaletteFontVariant = { weight: string; size: string; count: number };
+type SwipePaletteFont = { family: string; variants: SwipePaletteFontVariant[] };
+type SwipePalette = {
+  version: 1;
+  colors: [string, string, string, string, string, string];
+  fonts: SwipePaletteFont[];
+};
+function parsePaletteFonts(value: unknown): SwipePaletteFont[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 8) return [];
+  return value.flatMap(rawFont => {
+    if (!rawFont || typeof rawFont !== "object") return [];
+    const font = rawFont as Record<string, unknown>;
+    const family = typeof font.family === "string" ? font.family.trim().replace(/\s+/g, " ") : "";
+    if (!family || family.length > 120 || !Array.isArray(font.variants) || font.variants.length < 1 || font.variants.length > 8) return [];
+    const variants = font.variants.flatMap(rawVariant => {
+      if (!rawVariant || typeof rawVariant !== "object") return [];
+      const variant = rawVariant as Record<string, unknown>;
+      const weight = typeof variant.weight === "string" ? variant.weight.trim() : "";
+      const size = typeof variant.size === "string" ? variant.size.trim() : "";
+      const count = variant.count;
+      if (!/^\d{1,4}$/.test(weight) || !/^\d+(?:\.\d+)?px$/.test(size) || typeof count !== "number" || !Number.isInteger(count) || count < 1) return [];
+      return [{ weight, size, count }];
+    });
+    return variants.length ? [{ family, variants }] : [];
+  });
+}
 function parsePalette(content: string | null): SwipePalette | null {
   if (!content) return null;
   try {
     const value = JSON.parse(content);
     if (value?.version !== 1 || !Array.isArray(value.colors) || value.colors.length !== 6) return null;
     if (!value.colors.every((color: unknown) => typeof color === "string" && /^#[0-9A-F]{6}$/.test(color))) return null;
-    return { version: 1, colors: value.colors as SwipePalette["colors"] };
+    return {
+      version: 1,
+      colors: value.colors as SwipePalette["colors"],
+      fonts: parsePaletteFonts(value.fonts),
+    };
   } catch { return null; }
 }
 
 function SharedPalette({ palette }: { palette: SwipePalette }) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [failedIndex, setFailedIndex] = useState<number | null>(null);
+  const [copiedFont, setCopiedFont] = useState<string | null>(null);
   async function copyColor(color: string, index: number) {
     setFailedIndex(null);
     try {
@@ -66,6 +97,13 @@ function SharedPalette({ palette }: { palette: SwipePalette }) {
       setFailedIndex(index);
       window.setTimeout(() => setFailedIndex(current => current === index ? null : current), 2500);
     }
+  }
+  async function copyFont(family: string) {
+    try {
+      await navigator.clipboard.writeText(family);
+      setCopiedFont(family);
+      window.setTimeout(() => setCopiedFont(current => current === family ? null : current), 1800);
+    } catch {}
   }
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -89,6 +127,30 @@ function SharedPalette({ palette }: { palette: SwipePalette }) {
           </button>
         ))}
       </div>
+       {palette.fonts.length > 0 && (
+         <div className="mt-5 border-t border-gray-100 pt-4">
+           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Detected fonts</p>
+           <p className="mt-1 text-xs text-gray-400">Weight · size · text elements using it</p>
+           <div className="mt-3 space-y-2">
+             {palette.fonts.map(font => (
+               <button key={font.family} type="button" onClick={() => void copyFont(font.family)}
+                 title={`Copy ${font.family}`}
+                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/5">
+                 <span className="block truncate text-sm font-semibold text-gray-800">
+                   {copiedFont === font.family ? "Copied font family" : font.family}
+                 </span>
+                 <span className="mt-1.5 flex flex-wrap gap-1">
+                   {font.variants.map(variant => (
+                     <span key={`${variant.weight}-${variant.size}`} className="rounded-full bg-white px-1.5 py-0.5 font-mono text-[10px] text-gray-500 ring-1 ring-gray-200">
+                       {variant.weight} · {variant.size} · {variant.count}×
+                     </span>
+                   ))}
+                 </span>
+               </button>
+             ))}
+           </div>
+         </div>
+       )}
     </div>
   );
 }

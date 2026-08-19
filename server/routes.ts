@@ -12320,7 +12320,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
 
   /**
    * Validate and normalise a palette content payload.
-   * Expects exactly { version: 1, colors: [6 × "#RRGGBB"] }.
+   * Expects { version: 1, colors: [6 × "#RRGGBB"], fonts?: [...] }.
    * Returns canonical JSON string on success, or a human-readable error string.
    */
   function parsePaletteContent(raw: unknown): { ok: true; json: string } | { ok: false; error: string } {
@@ -12346,7 +12346,56 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       }
       normalized.push(c.toUpperCase());
     }
-    const canonical = JSON.stringify({ version: 1, colors: normalized });
+
+    let fonts: Array<{ family: string; variants: Array<{ weight: string; size: string; count: number }> }> | undefined;
+    if (obj.fonts !== undefined) {
+      if (!Array.isArray(obj.fonts) || obj.fonts.length > 8) {
+        return { ok: false, error: "palette content.fonts must contain at most 8 font families" };
+      }
+      fonts = [];
+      for (let i = 0; i < obj.fonts.length; i++) {
+        const rawFont = obj.fonts[i];
+        if (rawFont === null || typeof rawFont !== "object" || Array.isArray(rawFont)) {
+          return { ok: false, error: `palette content.fonts[${i}] must be an object` };
+        }
+        const font = rawFont as Record<string, unknown>;
+        const family = typeof font.family === "string" ? font.family.trim().replace(/\s+/g, " ") : "";
+        if (!family || family.length > 120 || /[\u0000-\u001F\u007F]/.test(family)) {
+          return { ok: false, error: `palette content.fonts[${i}].family must be a valid font name` };
+        }
+        if (!Array.isArray(font.variants) || font.variants.length < 1 || font.variants.length > 8) {
+          return { ok: false, error: `palette content.fonts[${i}].variants must contain 1 to 8 entries` };
+        }
+        const variants: Array<{ weight: string; size: string; count: number }> = [];
+        for (let j = 0; j < font.variants.length; j++) {
+          const rawVariant = font.variants[j];
+          if (rawVariant === null || typeof rawVariant !== "object" || Array.isArray(rawVariant)) {
+            return { ok: false, error: `palette content.fonts[${i}].variants[${j}] must be an object` };
+          }
+          const variant = rawVariant as Record<string, unknown>;
+          const weight = typeof variant.weight === "string" ? variant.weight.trim() : "";
+          const size = typeof variant.size === "string" ? variant.size.trim() : "";
+          const count = variant.count;
+          if (!/^\d{1,4}$/.test(weight) || Number(weight) < 1 || Number(weight) > 1000) {
+            return { ok: false, error: `palette content.fonts[${i}].variants[${j}].weight must be a numeric CSS font weight` };
+          }
+          if (!/^\d+(?:\.\d+)?px$/.test(size) || Number.parseFloat(size) <= 0 || Number.parseFloat(size) > 1000) {
+            return { ok: false, error: `palette content.fonts[${i}].variants[${j}].size must be a pixel value` };
+          }
+          if (typeof count !== "number" || !Number.isInteger(count) || count < 1 || count > 100_000) {
+            return { ok: false, error: `palette content.fonts[${i}].variants[${j}].count must be a positive integer` };
+          }
+          variants.push({ weight, size, count });
+        }
+        fonts.push({ family, variants });
+      }
+    }
+
+    const canonical = JSON.stringify({
+      version: 1,
+      colors: normalized,
+      ...(fonts !== undefined ? { fonts } : {}),
+    });
     return { ok: true, json: canonical };
   }
 

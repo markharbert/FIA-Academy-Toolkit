@@ -2094,10 +2094,23 @@ export type PromoLink = {
  * Content JSON contract for palette items.
  * version: always 1 (for future evolution)
  * colors: exactly six uppercase #RRGGBB hex strings
+ * fonts: optional page typography, grouped by family and observed text variants
  */
+export type SwipePaletteFontVariant = {
+  weight: string;
+  size: string;
+  count: number;
+};
+
+export type SwipePaletteFont = {
+  family: string;
+  variants: SwipePaletteFontVariant[];
+};
+
 export type SwipePaletteContent = {
   version: 1;
   colors: [string, string, string, string, string, string];
+  fonts?: SwipePaletteFont[];
 };
 
 export const swipeItems = pgTable("swipe_items", {

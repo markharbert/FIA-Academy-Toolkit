@@ -77,9 +77,18 @@ function fixtureHtml(kind) {
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font: 16px system-ui, sans-serif; }
+          #palette-type-sample { position: fixed; left: 14px; top: 12px; z-index: 2; color: transparent; }
+          #palette-headline { font-family: "Headline Fixture", sans-serif; font-size: 36px; font-weight: 700; }
+          #palette-copy { margin-top: 4px; font-family: "Body Fixture", serif; font-size: 18px; font-weight: 400; }
         </style>
       </head>
-      <body id="palette-body">${bandDivs}</body>
+      <body id="palette-body">
+        <div id="palette-type-sample">
+          <h1 id="palette-headline">Color Palette Fixture</h1>
+          <p id="palette-copy">Typography sample</p>
+        </div>
+        ${bandDivs}
+      </body>
     </html>`;
   }
 
@@ -536,6 +545,17 @@ async function main() {
         `Expected dominant color ${expectedColor}; received ${hexCodes.join(", ")}`,
       );
     }
+    const fontFamilies = await palettePage.$$eval(
+      "#__fia_color_palette__ .fia-pal-font-family",
+      (els) => els.map(el => el.textContent?.trim()),
+    );
+    assert.ok(fontFamilies.includes("Headline Fixture"), `Expected headline font, got ${fontFamilies.join(", ")}`);
+    assert.ok(fontFamilies.includes("Body Fixture"), `Expected body font, got ${fontFamilies.join(", ")}`);
+    assert.match(
+      await palettePage.$eval("#__fia_color_palette__ .fia-pal-font-list", el => el.textContent || ""),
+      /700 · 36px · 1×/,
+      "Expected headline font weight, size, and count",
+    );
     assert.equal(
       await palettePage.evaluate(() => window.scrollY),
       originalPaletteScrollY,
@@ -594,6 +614,13 @@ async function main() {
     assert.equal(savedPayload.title, "Color Palette — Color Palette smoke fixture");
     assert.equal(savedContent.version, 1);
     assert.deepEqual([...savedContent.colors].sort(), [...expectedPaletteColors].sort());
+    assert.deepEqual(
+      [...savedContent.fonts].sort((a, b) => a.family.localeCompare(b.family)),
+      [
+        { family: "Body Fixture", variants: [{ weight: "400", size: "18px", count: 1 }] },
+        { family: "Headline Fixture", variants: [{ weight: "700", size: "36px", count: 1 }] },
+      ],
+    );
     assert.equal(saveRequestResult.result.value.headers["X-API-Key"], "link-vault-smoke-test");
 
     // Switching tabs during a scan must abort instead of sampling unrelated content,
@@ -642,7 +669,7 @@ async function main() {
     console.log("  - cancel/reopen and stale-picker tab isolation");
     console.log("  - magnified color picker hex sampling and clipboard copy");
     console.log("  - Site Inspector hover details and Escape cleanup");
-    console.log("  - color palette: streaming full-page scan, six dominant colors, copy/save, tab-switch cleanup");
+    console.log("  - color palette: streaming full-page scan, six dominant colors, detected font variants, copy/save, tab-switch cleanup");
   } finally {
     await browser?.close();
     if (fixture?.server) {

@@ -2,8 +2,8 @@
 
 // Injected by the FIA Toolkit extension when the user clicks "Color Palette".
 // Displays a floating overlay showing six dominant colors extracted from the
-// full-page screenshots; each swatch lets the user copy the hex value or save
-// the palette to their Swipe File.
+// full-page screenshots plus the page's observed typography. Everything can be
+// saved together as a palette item in the member's Swipe File.
 
 (() => {
   if (window.__fiaColorPaletteScriptLoaded) return;
@@ -90,6 +90,62 @@
         gap: 12px;
         margin-bottom: 22px;
       }
+      #${OVERLAY_ID} .fia-pal-fonts {
+        margin: 0 0 22px;
+        padding: 15px;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 13px;
+        background: rgba(255,255,255,0.04);
+      }
+      #${OVERLAY_ID} .fia-pal-font-title {
+        margin-bottom: 3px;
+        color: rgba(255,255,255,0.82);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .07em;
+        text-transform: uppercase;
+      }
+      #${OVERLAY_ID} .fia-pal-font-help {
+        margin-bottom: 10px;
+        color: rgba(255,255,255,0.46);
+        font-size: 11px;
+      }
+      #${OVERLAY_ID} .fia-pal-font-list { display: grid; gap: 7px; }
+      #${OVERLAY_ID} .fia-pal-font-card {
+        width: 100%;
+        padding: 10px 11px;
+        border: 1px solid rgba(255,255,255,0.11);
+        border-radius: 9px;
+        color: rgba(255,255,255,0.88);
+        background: rgba(0,0,0,0.18);
+        cursor: pointer;
+        font-family: inherit;
+        text-align: left;
+      }
+      #${OVERLAY_ID} .fia-pal-font-card:hover { border-color: rgba(95,184,240,.75); background: rgba(63,146,204,.13); }
+      #${OVERLAY_ID} .fia-pal-font-family {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      #${OVERLAY_ID} .fia-pal-font-variants {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 7px;
+      }
+      #${OVERLAY_ID} .fia-pal-font-variant {
+        padding: 3px 6px;
+        border-radius: 999px;
+        color: rgba(255,255,255,0.62);
+        background: rgba(255,255,255,0.07);
+        font-size: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      #${OVERLAY_ID} .fia-pal-font-card.fia-pal-copied { border-color: #4ade80; }
       #${OVERLAY_ID} .fia-pal-swatch-wrap {
         display: flex;
         flex-direction: column;
@@ -179,10 +235,70 @@
     document.documentElement.appendChild(style);
   }
 
-  function show(colors, sourceUrl, sourceTitle) {
+  function normalizeFonts(rawFonts) {
+    if (!Array.isArray(rawFonts) || rawFonts.length > 8) return [];
+    return rawFonts.flatMap(rawFont => {
+      if (!rawFont || typeof rawFont !== "object") return [];
+      const family = typeof rawFont.family === "string" ? rawFont.family.trim().replace(/\s+/g, " ") : "";
+      if (!family || family.length > 120) return [];
+      if (!Array.isArray(rawFont.variants) || rawFont.variants.length < 1 || rawFont.variants.length > 8) return [];
+      const variants = rawFont.variants.flatMap(rawVariant => {
+        if (!rawVariant || typeof rawVariant !== "object") return [];
+        const weight = typeof rawVariant.weight === "string" ? rawVariant.weight.trim() : "";
+        const size = typeof rawVariant.size === "string" ? rawVariant.size.trim() : "";
+        const count = rawVariant.count;
+        if (!/^\d{1,4}$/.test(weight) || !/^\d+(?:\.\d+)?px$/.test(size) || !Number.isInteger(count) || count < 1) return [];
+        return [{ weight, size, count }];
+      });
+      return variants.length ? [{ family, variants }] : [];
+    });
+  }
+
+  function renderFonts(container, fonts) {
+    if (!fonts.length) {
+      container.remove();
+      return;
+    }
+    const list = container.querySelector(".fia-pal-font-list");
+    fonts.forEach(font => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "fia-pal-font-card";
+      card.title = `Click to copy ${font.family}`;
+
+      const family = document.createElement("span");
+      family.className = "fia-pal-font-family";
+      family.textContent = font.family;
+      card.appendChild(family);
+
+      const variants = document.createElement("span");
+      variants.className = "fia-pal-font-variants";
+      font.variants.forEach(variant => {
+        const chip = document.createElement("span");
+        chip.className = "fia-pal-font-variant";
+        chip.textContent = `${variant.weight} · ${variant.size} · ${variant.count}×`;
+        variants.appendChild(chip);
+      });
+      card.appendChild(variants);
+      card.addEventListener("click", async () => {
+        const copied = await copyText(font.family);
+        const original = family.textContent;
+        family.textContent = copied ? "✓ Copied font family" : "✗ Copy failed";
+        card.classList.toggle("fia-pal-copied", copied);
+        setTimeout(() => {
+          family.textContent = original;
+          card.classList.remove("fia-pal-copied");
+        }, 1500);
+      });
+      list.appendChild(card);
+    });
+  }
+
+  function show(colors, rawFonts, sourceUrl, sourceTitle) {
     // colors: array of six "#RRGGBB" strings
     destroy();
     if (!Array.isArray(colors) || colors.length !== 6 || colors.some(hex => !/^#[0-9A-F]{6}$/.test(hex))) return;
+    const fonts = normalizeFonts(rawFonts);
     injectStyles();
 
     const overlay = document.createElement("div");
@@ -191,9 +307,14 @@
       <div class="fia-pal-dialog" role="dialog" aria-modal="true" aria-labelledby="__fia_pal_title__">
         <div class="fia-pal-heading">
           <div>
-            <div class="fia-pal-title" id="__fia_pal_title__">🎨 Dominant Colors</div>
-            <div class="fia-pal-subtitle">Click a swatch to copy its hex code</div>
+            <div class="fia-pal-title" id="__fia_pal_title__">🎨 Website Style Palette</div>
+            <div class="fia-pal-subtitle">6 dominant colors${fonts.length ? ` · ${fonts.length} font ${fonts.length === 1 ? "family" : "families"}` : ""} · click a value to copy</div>
           </div>
+        </div>
+        <div class="fia-pal-fonts" id="__fia_pal_fonts__">
+          <div class="fia-pal-font-title">Detected fonts</div>
+          <div class="fia-pal-font-help">Weight · size · text elements using it</div>
+          <div class="fia-pal-font-list"></div>
         </div>
         <div class="fia-pal-swatches">
           ${colors.map(hex => `
@@ -211,6 +332,7 @@
       </div>
     `;
     document.documentElement.appendChild(overlay);
+    renderFonts(overlay.querySelector("#__fia_pal_fonts__"), fonts);
     overlay.addEventListener("click", event => {
       if (event.target === overlay) destroy();
     });
@@ -255,6 +377,7 @@
         const resp = await chrome.runtime.sendMessage({
           action:    "saveColorPalette",
           colors,
+          fonts,
           sourceUrl,
           sourceTitle,
         });
@@ -288,7 +411,7 @@
 
   chrome.runtime.onMessage.addListener(message => {
     if (message?.action === "showColorPalette") {
-      show(message.colors, message.sourceUrl, message.sourceTitle);
+      show(message.colors, message.fonts, message.sourceUrl, message.sourceTitle);
     }
     if (message?.action === "colorPaletteFailed") {
       // Show error via a brief injected toast instead of the full overlay

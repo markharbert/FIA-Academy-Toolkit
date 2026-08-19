@@ -306,7 +306,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         return color.toUpperCase();
       });
-      const content = JSON.stringify({ version: 1, colors });
+      const fonts = normalizePaletteFonts(msg.fonts);
+      const content = JSON.stringify({ version: 1, colors, fonts });
       const sourceTitle = typeof msg.sourceTitle === "string" ? msg.sourceTitle.trim().slice(0, 120) : "";
       const fallbackTitle = new URL(msg.sourceUrl || "https://unknown").hostname;
       const title = `Color Palette — ${sourceTitle || fallbackTitle}`;
@@ -327,6 +328,101 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   return true; // keep sendResponse alive for async
 });
+
+function normalizePaletteFonts(rawFonts) {
+  if (!Array.isArray(rawFonts) || rawFonts.length > 8) {
+    throw new Error("The palette fonts must contain at most eight families.");
+  }
+  return rawFonts.map((rawFont, familyIndex) => {
+    if (!rawFont || typeof rawFont !== "object") {
+      throw new Error(`Font ${familyIndex + 1} is invalid.`);
+    }
+    const family = typeof rawFont.family === "string"
+      ? rawFont.family.trim().replace(/\s+/g, " ")
+      : "";
+    if (!family || family.length > 120 || /[\u0000-\u001F\u007F]/.test(family)) {
+      throw new Error(`Font ${familyIndex + 1} has an invalid name.`);
+    }
+    if (!Array.isArray(rawFont.variants) || rawFont.variants.length < 1 || rawFont.variants.length > 8) {
+      throw new Error(`Font ${family} must include between one and eight variants.`);
+    }
+    const variants = rawFont.variants.map((rawVariant, variantIndex) => {
+      if (!rawVariant || typeof rawVariant !== "object") {
+        throw new Error(`Font ${family} variant ${variantIndex + 1} is invalid.`);
+      }
+      const weight = typeof rawVariant.weight === "string" ? rawVariant.weight.trim() : "";
+      const size = typeof rawVariant.size === "string" ? rawVariant.size.trim() : "";
+      const count = rawVariant.count;
+      if (!/^\d{1,4}$/.test(weight) || Number(weight) < 1 || Number(weight) > 1000) {
+        throw new Error(`Font ${family} has an invalid weight.`);
+      }
+      if (!/^\d+(?:\.\d+)?px$/.test(size) || Number.parseFloat(size) <= 0 || Number.parseFloat(size) > 1000) {
+        throw new Error(`Font ${family} has an invalid size.`);
+      }
+      if (!Number.isInteger(count) || count < 1 || count > 100_000) {
+        throw new Error(`Font ${family} has an invalid usage count.`);
+      }
+      return { weight, size, count };
+    });
+    return { family, variants };
+  });
+}
+
+// Read the actual computed typography used by visible, text-bearing elements.
+// This complements screenshot-based color extraction without retaining page text.
+async function extractPaletteFonts(tabId) {
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const MAX_FAMILIES = 8;
+      const MAX_VARIANTS = 8;
+      const rows = new Map();
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+      let element;
+      let inspected = 0;
+      while ((element = walker.nextNode()) && inspected < 6000) {
+        inspected++;
+        if (element.id?.startsWith("__fia_")) continue;
+        const hasDirectText = [...element.childNodes].some(node =>
+          node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim()),
+        );
+        if (!hasDirectText || element.getClientRects().length === 0) continue;
+        const styles = window.getComputedStyle(element);
+        if (styles.display === "none" || styles.visibility === "hidden") continue;
+
+        const family = styles.fontFamily
+          .split(",")[0]
+          .trim()
+          .replace(/^['"]|['"]$/g, "")
+          .replace(/\s+/g, " ");
+        const weight = /^\d+$/.test(styles.fontWeight)
+          ? styles.fontWeight
+          : styles.fontWeight === "bold" ? "700" : "400";
+        const size = styles.fontSize;
+        if (!family || !/^\d+(?:\.\d+)?px$/.test(size)) continue;
+
+        const entry = rows.get(family) || { family, count: 0, variants: new Map() };
+        entry.count++;
+        const variantKey = `${weight}|${size}`;
+        const variant = entry.variants.get(variantKey) || { weight, size, count: 0 };
+        variant.count++;
+        entry.variants.set(variantKey, variant);
+        rows.set(family, entry);
+      }
+
+      return [...rows.values()]
+        .sort((a, b) => b.count - a.count || a.family.localeCompare(b.family))
+        .slice(0, MAX_FAMILIES)
+        .map(font => ({
+          family: font.family,
+          variants: [...font.variants.values()]
+            .sort((a, b) => b.count - a.count || Number(b.weight) - Number(a.weight) || Number(b.size.replace("px", "")) - Number(a.size.replace("px", "")))
+            .slice(0, MAX_VARIANTS),
+        }));
+    },
+  });
+  return Array.isArray(result) ? result : [];
+}
 
 // Fold one screenshot into a bounded RGB histogram and release the decoded
 // bitmap before the next viewport is captured.
@@ -435,6 +531,13 @@ async function handleColorPaletteAnalysis(tabId, sourceUrl, sourceTitle) {
   const MAX_PALETTE_STRIPS = 120;
   let pageState = null;
   try {
+    // Typography comes directly from the page's rendered DOM, not screenshots.
+    // If a page blocks style inspection, the color palette still succeeds.
+    const fonts = await extractPaletteFonts(tabId).catch(err => {
+      console.warn("[FIA SW] palette font extraction failed:", err);
+      return [];
+    });
+
     // 1. Read page geometry (same approach as full-page capture)
     const [{ result: dims }] = await chrome.scripting.executeScript({
       target: { tabId },
@@ -561,6 +664,7 @@ async function handleColorPaletteAnalysis(tabId, sourceUrl, sourceTitle) {
     await chrome.tabs.sendMessage(tabId, {
       action:    "showColorPalette",
       colors,
+      fonts,
       sourceUrl: sourceUrl || "",
       sourceTitle: sourceTitle || "",
     });
