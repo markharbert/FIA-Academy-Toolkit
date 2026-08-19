@@ -44,6 +44,11 @@ function fixtureHtml(kind) {
         <h1>No editable destination fixture</h1>
         <p id="read-only-copy">This page intentionally has no editable field.</p>
       </main>`,
+    color: `
+      <main>
+        <h1>Color picker fixture</h1>
+        <div id="color-swatch"></div>
+      </main>`,
   };
 
   return `<!doctype html>
@@ -54,6 +59,7 @@ function fixtureHtml(kind) {
         <style>
           body { font: 16px system-ui, sans-serif; margin: 3rem; }
           [contenteditable] { border: 1px solid #94a3b8; border-radius: 8px; min-height: 4rem; padding: 1rem; }
+          #color-swatch { position: fixed; left: 140px; top: 180px; width: 180px; height: 160px; background: rgb(18, 52, 86); }
         </style>
       </head>
       <body>${fields[kind] || fields.noeditor}</body>
@@ -67,7 +73,9 @@ async function startFixtureServer() {
       ? "facebook"
       : pathname.includes("richtext")
         ? "richtext"
-        : "noeditor";
+        : pathname.includes("color")
+          ? "color"
+          : "noeditor";
 
     response.writeHead(200, {
       "content-type": "text/html; charset=utf-8",
@@ -350,11 +358,35 @@ async function main() {
     assert.equal(await chooseSmokeLink(reopenedPicker.pickerPage), "Link pasted");
     await reopenedPage.waitForFunction((url) => document.querySelector("#rich-text-editor")?.textContent?.includes(url), {}, linkUrl);
 
+    const colorUrl = `${fixture.baseUrl}/color`;
+    const colorPage = await browser.newPage();
+    await colorPage.goto(colorUrl, { waitUntil: "domcontentloaded" });
+    const colorTab = await tabFor(colorUrl);
+    await extensionPage.evaluate(async (tabId) => {
+      const tab = await chrome.tabs.get(tabId);
+      await chrome.tabs.update(tabId, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["color-picker.js"] });
+      await chrome.tabs.sendMessage(tabId, { action: "startFiaColorPicker", screenshot });
+    }, colorTab.id);
+    await colorPage.waitForSelector("#__fia_color_picker__");
+    await colorPage.mouse.move(220, 250);
+    await colorPage.waitForFunction(
+      () => document.querySelector(".fia-color-picker-hex")?.textContent === "#123456",
+    );
+    await colorPage.mouse.click(220, 250);
+    await colorPage.waitForFunction(
+      () => document.querySelector(".fia-color-picker-help")?.textContent?.includes("Copied #123456"),
+    );
+
     console.log("✓ Link Vault packaged-extension smoke test passed");
     console.log("  - Facebook-shaped contenteditable insertion");
     console.log("  - generic rich-text editor insertion");
     console.log("  - copied/manual-paste fallback");
     console.log("  - cancel/reopen and stale-picker tab isolation");
+    console.log("  - magnified color picker hex sampling and clipboard copy");
   } finally {
     await browser?.close();
     if (fixture?.server) {

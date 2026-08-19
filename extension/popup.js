@@ -1493,6 +1493,43 @@ async function swipeCaptureSection() {
   }
 }
 
+// ── Color picker (capture viewport → inject page eyedropper) ────────────────
+
+async function swipeStartColorPicker() {
+  let tab;
+  try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) {}
+  if (!tab?.id || !tab.url?.startsWith("http")) {
+    alert("Color Picker only works on http/https pages.");
+    return;
+  }
+
+  const button = $("swipe-color-picker");
+  if (button) { button.disabled = true; button.textContent = "Opening…"; }
+
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }, url => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(url);
+      });
+    });
+
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["color-picker.js"],
+    });
+    await chrome.tabs.sendMessage(tab.id, {
+      action: "startFiaColorPicker",
+      screenshot: dataUrl,
+    });
+    window.close();
+  } catch (err) {
+    console.error("[FIA Swipe] color picker failed:", err);
+    if (button) { button.disabled = false; button.innerHTML = '<span class="swipe-tool-icon">🎨</span><span>Color Picker</span>'; }
+    alert("Could not start the Color Picker. Try again on a regular web page.");
+  }
+}
+
 // (switchSubTab moved up, defined together with switchPrimaryTab)
 
 function switchPrimaryTab(name) {
@@ -1639,6 +1676,7 @@ async function boot() {
   $("swipe-btn-fullpage").addEventListener("click", swipeCaptureFullPage);
   $("swipe-btn-visible").addEventListener("click", swipeCaptureVisibleArea);
   $("swipe-btn-section").addEventListener("click", swipeCaptureSection);
+  $("swipe-color-picker").addEventListener("click", swipeStartColorPicker);
 
   // Suspended screen — "Check Again" button triggers an immediate live re-check.
   // The service-worker alarm continues running independently in the background.

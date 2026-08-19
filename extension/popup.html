@@ -761,6 +761,17 @@
     .swipe-cap-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); }
     .swipe-cap-btn:disabled { opacity: .4; cursor: not-allowed; }
     .swipe-cap-btn.active { border-color: var(--accent); background: var(--accent-dim); }
+    .swipe-tools-row { display: flex; gap: 6px; }
+    .swipe-tool-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 9px 8px; border-radius: 9px;
+      border: 1px solid var(--border-med); background: var(--bg-card);
+      color: var(--text); cursor: pointer; font-family: inherit;
+      font-size: 11px; font-weight: 650; transition: all .15s;
+    }
+    .swipe-tool-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-dim); }
+    .swipe-tool-btn:disabled { opacity: .45; cursor: wait; }
+    .swipe-tool-icon { font-size: 17px; line-height: 1; }
 
     /* Save form */
     .swipe-save-form {
@@ -970,6 +981,15 @@
         <button class="swipe-cap-btn" id="swipe-btn-section">
           <span class="swipe-cap-icon">✂️</span>
           <span class="swipe-cap-label">Section</span>
+        </button>
+      </div>
+
+      <!-- Page tools -->
+      <div class="swipe-section-label">Tools</div>
+      <div id="swipe-tools-row" class="swipe-tools-row">
+        <button class="swipe-tool-btn" id="swipe-color-picker">
+          <span class="swipe-tool-icon">🎨</span>
+          <span>Color Picker</span>
         </button>
       </div>
 
