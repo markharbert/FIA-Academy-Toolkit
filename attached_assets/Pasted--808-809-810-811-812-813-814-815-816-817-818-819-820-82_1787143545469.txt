@@ -1,0 +1,2000 @@
+...
+808
+809
+810
+811
+812
+813
+814
+815
+816
+817
+818
+819
+820
+821
+822
+823
+824
+825
+826
+827
+828
+829
+830
+831
+832
+833
+834
+835
+836
+837
+838
+839
+840
+841
+842
+843
+844
+845
+846
+847
+848
+849
+850
+851
+852
+853
+854
+855
+856
+857
+858
+859
+860
+861
+862
+863
+864
+865
+866
+867
+868
+869
+870
+871
+872
+873
+874
+875
+876
+877
+878
+879
+880
+881
+882
+883
+884
+885
+886
+887
+888
+889
+890
+891
+892
+893
+894
+895
+896
+897
+898
+899
+900
+901
+902
+903
+904
+905
+906
+907
+908
+909
+910
+911
+912
+913
+914
+915
+916
+917
+918
+919
+920
+921
+922
+923
+924
+925
+926
+927
+928
+929
+930
+931
+932
+933
+934
+935
+936
+937
+938
+939
+940
+941
+942
+943
+944
+945
+946
+947
+948
+949
+950
+951
+952
+953
+954
+955
+956
+957
+958
+959
+960
+961
+962
+963
+964
+965
+966
+967
+968
+969
+970
+971
+972
+973
+974
+975
+976
+977
+978
+979
+980
+981
+982
+983
+984
+985
+986
+987
+988
+989
+990
+991
+992
+993
+994
+995
+996
+997
+998
+999
+1000
+1001
+1002
+1003
+1004
+1005
+1006
+1007
+1008
+1009
+1010
+1011
+1012
+1013
+1014
+1015
+1016
+1017
+1018
+1019
+1020
+1021
+1022
+1023
+1024
+1025
+1026
+1027
+1028
+1029
+1030
+1031
+1032
+1033
+1034
+1035
+1036
+1037
+1038
+1039
+1040
+1041
+1042
+1043
+1044
+1045
+1046
+1047
+1048
+1049
+1050
+1051
+1052
+1053
+1054
+1055
+1056
+1057
+1058
+1059
+1060
+1061
+1062
+1063
+1064
+1065
+1066
+1067
+1068
+1069
+1070
+1071
+1072
+1073
+1074
+1075
+1076
+1077
+1078
+1079
+1080
+1081
+1082
+1083
+1084
+1085
+1086
+1087
+1088
+1089
+1090
+1091
+1092
+1093
+1094
+1095
+1096
+1097
+1098
+1099
+1100
+1101
+1102
+1103
+1104
+1105
+1106
+1107
+1108
+1109
+1110
+1111
+1112
+1113
+1114
+1115
+1116
+1117
+1118
+1119
+1120
+1121
+1122
+1123
+1124
+1125
+1126
+1127
+1128
+1129
+1130
+1131
+1132
+1133
+1134
+1135
+1136
+1137
+1138
+1139
+1140
+1141
+1142
+1143
+1144
+1145
+1146
+1147
+1148
+1149
+1150
+1151
+1152
+1153
+1154
+1155
+1156
+1157
+1158
+1159
+1160
+1161
+1162
+1163
+1164
+1165
+1166
+1167
+1168
+1169
+1170
+1171
+1172
+1173
+1174
+1175
+1176
+1177
+1178
+1179
+1180
+1181
+1182
+1183
+1184
+1185
+1186
+1187
+1188
+1189
+1190
+1191
+1192
+1193
+1194
+1195
+1196
+1197
+1198
+1199
+1200
+1201
+1202
+1203
+1204
+1205
+1206
+1207
+1208
+1209
+1210
+1211
+1212
+1213
+1214
+1215
+1216
+1217
+1218
+1219
+1220
+1221
+1222
+1223
+1224
+1225
+1226
+1227
+1228
+1229
+1230
+1231
+1232
+1233
+1234
+1235
+1236
+1237
+1238
+1239
+1240
+1241
+1242
+1243
+1244
+1245
+1246
+1247
+1248
+1249
+1250
+1251
+1252
+1253
+1254
+1255
+1256
+1257
+1258
+1259
+1260
+1261
+1262
+1263
+1264
+1265
+1266
+1267
+1268
+1269
+1270
+1271
+1272
+1273
+1274
+1275
+1276
+1277
+1278
+1279
+1280
+1281
+1282
+1283
+1284
+1285
+1286
+1287
+1288
+1289
+1290
+1291
+1292
+1293
+1294
+1295
+1296
+1297
+1298
+1299
+1300
+1301
+1302
+1303
+1304
+1305
+1306
+1307
+1308
+1309
+1310
+1311
+1312
+1313
+1314
+1315
+1316
+1317
+1318
+1319
+1320
+1321
+1322
+1323
+1324
+1325
+1326
+1327
+1328
+1329
+1330
+1331
+1332
+1333
+1334
+1335
+1336
+1337
+1338
+1339
+1340
+1341
+1342
+1343
+1344
+1345
+1346
+1347
+1348
+1349
+1350
+1351
+1352
+1353
+1354
+1355
+1356
+1357
+1358
+1359
+1360
+1361
+1362
+1363
+1364
+1365
+1366
+1367
+1368
+1369
+1370
+1371
+1372
+1373
+1374
+1375
+1376
+1377
+1378
+1379
+1380
+1381
+1382
+1383
+1384
+1385
+1386
+1387
+1388
+1389
+1390
+1391
+1392
+1393
+1394
+1395
+1396
+1397
+1398
+1399
+1400
+1401
+1402
+1403
+1404
+1405
+1406
+1407
+1408
+1409
+1410
+1411
+1412
+1413
+1414
+1415
+1416
+1417
+1418
+1419
+1420
+1421
+1422
+1423
+1424
+1425
+1426
+1427
+1428
+1429
+1430
+1431
+1432
+1433
+1434
+1435
+1436
+1437
+1438
+1439
+1440
+1441
+1442
+1443
+1444
+1445
+1446
+1447
+1448
+1449
+1450
+1451
+1452
+1453
+1454
+1455
+1456
+1457
+1458
+1459
+1460
+1461
+1462
+1463
+1464
+1465
+1466
+1467
+1468
+1469
+1470
+1471
+1472
+1473
+1474
+1475
+1476
+1477
+1478
+1479
+1480
+1481
+1482
+1483
+1484
+1485
+1486
+1487
+1488
+1489
+1490
+1491
+1492
+1493
+1494
+1495
+1496
+1497
+1498
+1499
+1500
+1501
+1502
+1503
+1504
+1505
+1506
+1507
+1508
+1509
+1510
+1511
+1512
+1513
+1514
+1515
+1516
+1517
+1518
+1519
+1520
+1521
+1522
+1523
+1524
+1525
+1526
+1527
+1528
+1529
+1530
+1531
+1532
+1533
+1534
+1535
+1536
+1537
+1538
+1539
+1540
+1541
+1542
+1543
+1544
+1545
+1546
+1547
+1548
+1549
+1550
+1551
+1552
+1553
+1554
+1555
+1556
+1557
+1558
+1559
+1560
+1561
+1562
+1563
+1564
+1565
+1566
+1567
+1568
+1569
+1570
+1571
+1572
+1573
+1574
+1575
+1576
+1577
+1578
+1579
+1580
+1581
+1582
+1583
+1584
+1585
+1586
+1587
+1588
+1589
+1590
+1591
+1592
+1593
+1594
+1595
+1596
+1597
+1598
+1599
+1600
+1601
+1602
+1603
+1604
+1605
+1606
+1607
+1608
+1609
+1610
+1611
+1612
+1613
+1614
+1615
+1616
+1617
+1618
+1619
+1620
+1621
+1622
+1623
+1624
+1625
+1626
+1627
+1628
+1629
+1630
+1631
+1632
+1633
+1634
+1635
+1636
+1637
+1638
+1639
+1640
+1641
+1642
+1643
+1644
+1645
+1646
+1647
+1648
+1649
+1650
+1651
+1652
+1653
+1654
+1655
+1656
+1657
+1658
+1659
+1660
+1661
+1662
+1663
+1664
+1665
+1666
+1667
+1668
+1669
+1670
+1671
+1672
+1673
+1674
+1675
+1676
+1677
+1678
+1679
+1680
+1681
+1682
+1683
+1684
+1685
+1686
+1687
+1688
+1689
+1690
+1691
+1692
+1693
+1694
+1695
+1696
+1697
+1698
+1699
+1700
+1701
+1702
+1703
+1704
+1705
+1706
+1707
+1708
+1709
+1710
+1711
+1712
+1713
+1714
+1715
+1716
+1717
+1718
+1719
+1720
+1721
+1722
+1723
+1724
+1725
+1726
+1727
+1728
+1729
+1730
+1731
+1732
+1733
+1734
+1735
+1736
+1737
+1738
+1739
+1740
+1741
+1742
+1743
+1744
+1745
+1746
+1747
+1748
+1749
+1750
+1751
+1752
+1753
+1754
+1755
+1756
+1757
+1758
+1759
+1760
+1761
+1762
+1763
+1764
+1765
+1766
+1767
+1768
+1769
+1770
+1771
+1772
+1773
+1774
+1775
+1776
+1777
+1778
+1779
+1780
+1781
+1782
+1783
+1784
+1785
+1786
+1787
+1788
+1789
+1790
+1791
+1792
+1793
+1794
+1795
+1796
+1797
+1798
+1799
+1800
+1801
+1802
+1803
+1804
+1805
+1806
+<807 lines not shown>
+  const descField = document.createElement("div");
+  descField.className = "links-form-field";
+  descField.innerHTML = `<div class="links-form-label">Description <span style="opacity:.5;font-weight:400">(optional)</span></div>`;
+  const descInput = document.createElement("textarea");
+  descInput.className = "links-form-textarea"; descInput.rows = 2;
+  descInput.placeholder = "Short note or description…";
+  descInput.value = link?.description || "";
+  descField.appendChild(descInput);
+  form.appendChild(descField);
+
+  // Active toggle
+  const activeRow = document.createElement("div");
+  activeRow.className = "links-form-active-row";
+  const toggleBtn = document.createElement("button");
+  toggleBtn.className = "links-toggle" + (isActive ? " on" : "");
+  toggleBtn.type = "button";
+  const activeLbl = document.createElement("span");
+  activeLbl.className = "links-form-active-label";
+  activeLbl.textContent = isActive ? "Active" : "Inactive";
+  toggleBtn.addEventListener("click", () => {
+    isActive = !isActive;
+    toggleBtn.className = "links-toggle" + (isActive ? " on" : "");
+    activeLbl.textContent = isActive ? "Active" : "Inactive";
+  });
+  activeRow.appendChild(toggleBtn); activeRow.appendChild(activeLbl);
+  form.appendChild(activeRow);
+
+  // Save / Cancel
+  const actionsRow = document.createElement("div");
+  actionsRow.className = "links-form-actions";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "links-form-cancel"; cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", () => {
+    linksFormOpen = false; linksEditingLink = null; renderLinksList(container);
+  });
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "links-form-save";
+  saveBtn.textContent = isEdit ? "Save Changes" : "Add Link";
+  saveBtn.addEventListener("click", async () => {
+    const tv = titleInput.value.trim();
+    const uv = urlInput.value.trim();
+    titleInput.classList.toggle("error", !tv);
+    urlInput.classList.toggle("error", !uv);
+    if (!tv || !uv) return;
+    const payload = {
+      title: tv, url: uv,
+      category: catInput.value.trim() || null,
+      description: descInput.value.trim() || null,
+      isActive,
+    };
+    saveBtn.textContent = "Saving…"; saveBtn.disabled = true;
+    try {
+      let res;
+      if (isEdit) {
+        res = await apiFetch(`/api/v1/links/${link.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        const idx = linksAll.findIndex(l => l.id === link.id);
+        if (idx !== -1) linksAll[idx] = res.link;
+      } else {
+        res = await apiFetch("/api/v1/links", { method: "POST", body: JSON.stringify(payload) });
+        linksAll.unshift(res.link);
+      }
+      linksFormOpen = false; linksEditingLink = null;
+      renderLinksList(container);
+    } catch (err) {
+      if (err instanceof MembershipError) { showSuspended(); return; }
+      saveBtn.textContent = isEdit ? "Save Changes" : "Add Link";
+      saveBtn.disabled = false;
+    }
+  });
+  actionsRow.appendChild(cancelBtn); actionsRow.appendChild(saveBtn);
+  form.appendChild(actionsRow);
+  return form;
+}
+
+// ─── Render log ────────────────────────────────────────────────────────────
+async function renderLog() {
+  const container = $("log-content");
+  if (!container) return;
+  container.innerHTML = `<div class="log-loading"><div class="spinner" style="border-top-color:var(--accent)"></div></div>`;
+  try {
+    const data = await apiFetch("/api/v1/dmo/history?limit=60");
+    logEntries = data.entries || [];
+    renderLogList(container);
+  } catch {
+    container.innerHTML = `<div class="log-empty">Could not load log. Check your connection.</div>`;
+  }
+}
+
+function renderLogList(container) {
+  container.innerHTML = "";
+
+  // "+ Log Past Day" button
+  const backfillBar = document.createElement("div");
+  backfillBar.className = "log-backfill-bar";
+  const bfBtn = document.createElement("button");
+  bfBtn.className = "log-backfill-btn" + (logEditMode === "backfill" ? " open" : "");
+  bfBtn.id = "log-backfill-btn";
+  bfBtn.textContent = logEditMode === "backfill" ? "✕ Cancel" : "+ Log Past Day";
+  backfillBar.appendChild(bfBtn);
+  container.appendChild(backfillBar);
+
+  bfBtn.addEventListener("click", () => {
+    if (logEditMode === "backfill") {
+      logEditMode = null;
+    } else {
+      logEditMode = "backfill";
+      logExpandedDate = null;
+      logTimeEdits = {};
+      ACTS.forEach(a => { logTimeEdits[a.key] = ""; });
+      logNotesEdit = "";
+    }
+    renderLogList(container);
+  });
+
+  // Backfill form
+  if (logEditMode === "backfill") {
+    container.appendChild(buildBackfillForm(container));
+  }
+
+  if (!logEntries.length) {
+    const empty = document.createElement("div");
+    empty.className = "log-empty";
+    empty.textContent = "No entries yet. Start tracking to build your log.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "log-list";
+  logEntries.forEach(entry => renderLogRow(entry, list, container));
+  container.appendChild(list);
+}
+
+function renderLogRow(entry, list, container) {
+  const totalSecs = ACTS.reduce((s, a) => s + (entry[a.secsKey] || 0), 0);
+  const pts = ACTS.reduce((s, a) => {
+    const tgt = (targets[a.key] ?? a.defaultMins) * 60;
+    return s + Math.min(5, (entry[a.secsKey] || 0) / tgt * 5);
+  }, 0);
+  const dots = ACTS.map(a =>
+    `<div class="log-dot${(entry[a.key] || (entry[a.secsKey] || 0) > 0) ? "" : " off"}" title="${a.label}"></div>`
+  ).join("");
+
+  const isExpanded = logExpandedDate === entry.date;
+  const wrap = document.createElement("div");
+  wrap.className = "log-entry-wrap";
+
+  const row = document.createElement("div");
+  row.className = "log-row" + (isExpanded ? " expanded" : "");
+  row.innerHTML = `
+    <span class="log-date">${fmtDate(entry.date)}</span>
+    <div class="log-dots">${dots}</div>
+    <span class="log-pts">${pts.toFixed(1)} pts</span>
+    <span class="log-time">${fmtMins(totalSecs)}</span>
+    <span class="log-chevron">${isExpanded ? "▾" : "▸"}</span>`;
+  wrap.appendChild(row);
+
+  if (isExpanded) {
+    wrap.appendChild(buildEntryDetail(entry, container));
+  }
+
+  row.addEventListener("click", () => {
+    if (logExpandedDate === entry.date) {
+      logExpandedDate = null;
+      logEditMode = null;
+    } else {
+      logExpandedDate = entry.date;
+      logEditMode = null;
+    }
+    renderLogList(container);
+  });
+
+  list.appendChild(wrap);
+}
+
+function buildEntryDetail(entry, container) {
+  const detail = document.createElement("div");
+  detail.className = "log-detail";
+
+  const isEditingTimes = logEditMode === "times";
+  const isEditingNotes = logEditMode === "notes";
+
+  // ── Activity rows ──
+  const actsDiv = document.createElement("div");
+  actsDiv.className = "log-detail-acts";
+  ACTS.forEach(a => {
+    const secs = entry[a.secsKey] || 0;
+    const tgtSecs = (targets[a.key] ?? a.defaultMins) * 60;
+    const pct = tgtSecs > 0 ? Math.min(100, secs / tgtSecs * 100) : 0;
+    const goalMet = secs >= tgtSecs;
+
+    const actRow = document.createElement("div");
+    actRow.className = "log-act-row";
+
+    if (isEditingTimes) {
+      actRow.innerHTML = `
+        <span class="log-act-icon">${a.icon}</span>
+        <span class="log-act-label">${a.label}</span>
+        <input class="log-time-input" id="log-edit-${a.key}"
+               type="number" min="0" max="480" placeholder="0"
+               value="${logTimeEdits[a.key] ?? (secs > 0 ? Math.round(secs / 60) : "")}" />
+        <span class="log-act-unit">min</span>`;
+    } else {
+      actRow.innerHTML = `
+        <span class="log-act-icon">${a.icon}</span>
+        <span class="log-act-label">${a.label}</span>
+        <div class="log-act-right">
+          <div class="log-act-bar-track"><div class="log-act-bar-fill" style="width:${pct}%"></div></div>
+          <span class="log-act-time${secs === 0 ? " zero" : ""}">${secs > 0 ? fmtMins(secs) : "—"}</span>
+          <span class="log-act-check">${goalMet && secs > 0 ? "✓" : ""}</span>
+        </div>`;
+    }
+    actsDiv.appendChild(actRow);
+  });
+  detail.appendChild(actsDiv);
+
+  // ── Time edit controls ──
+  if (isEditingTimes) {
+    const editRow = document.createElement("div");
+    editRow.className = "log-edit-row";
+    editRow.innerHTML = `
+      <span class="log-edit-hint">Minutes per activity (0 to clear)</span>
+      <button class="log-cancel-btn" id="log-time-cancel">Cancel</button>
+      <button class="log-save-btn"   id="log-time-save">Save Times</button>`;
+    detail.appendChild(editRow);
+
+    editRow.querySelector("#log-time-cancel").addEventListener("click", e => {
+      e.stopPropagation();
+      logEditMode = null;
+      renderLogList(container);
+    });
+    editRow.querySelector("#log-time-save").addEventListener("click", async e => {
+      e.stopPropagation();
+      ACTS.forEach(a => {
+        const inp = detail.querySelector(`#log-edit-${a.key}`);
+        if (inp) logTimeEdits[a.key] = inp.value;
+      });
+      const btn = e.currentTarget;
+      btn.textContent = "Saving…"; btn.disabled = true;
+      try {
+        const payload = { date: entry.date, notes: entry.notes ?? "" };
+        ACTS.forEach(a => {
+          const mins = parseFloat(logTimeEdits[a.key]);
+          const secs = (!isNaN(mins) && mins > 0) ? Math.round(mins * 60) : 0;
+          payload[a.secsKey] = secs;
+          payload[a.key] = secs > 0 ? true : (entry[a.key] || false);
+        });
+        await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(payload) });
+        logEditMode = null;
+        const data = await apiFetch("/api/v1/dmo/history?limit=60");
+        logEntries = data.entries || [];
+        renderLogList(container);
+      } catch (err) {
+        if (err instanceof MembershipError) { showSuspended(); return; }
+        btn.textContent = "Save Times"; btn.disabled = false;
+      }
+    });
+  } else if (!isEditingNotes) {
+    const editRow = document.createElement("div");
+    editRow.className = "log-edit-row log-edit-row-right";
+    editRow.innerHTML = `<button class="log-edit-btn" id="log-times-edit-btn">✎ Edit Times</button>`;
+    detail.appendChild(editRow);
+    editRow.querySelector("#log-times-edit-btn").addEventListener("click", e => {
+      e.stopPropagation();
+      logTimeEdits = {};
+      ACTS.forEach(a => { logTimeEdits[a.key] = entry[a.secsKey] > 0 ? String(Math.round(entry[a.secsKey] / 60)) : ""; });
+      logEditMode = "times";
+      renderLogList(container);
+    });
+  }
+
+  // ── Notes section ──
+  const notesSection = document.createElement("div");
+  notesSection.className = "log-notes-section";
+  const notesText = entry.notes?.trim() || "";
+
+  const notesHeader = document.createElement("div");
+  notesHeader.className = "log-notes-header";
+  notesHeader.innerHTML = `<span class="log-notes-label">📝 Notes</span>`;
+  if (!isEditingNotes && !isEditingTimes) {
+    const editNotesBtn = document.createElement("button");
+    editNotesBtn.className = "log-edit-btn";
+    editNotesBtn.textContent = "✎ Edit";
+    editNotesBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      logNotesEdit = entry.notes ?? "";
+      logEditMode = "notes";
+      renderLogList(container);
+    });
+    notesHeader.appendChild(editNotesBtn);
+  }
+  notesSection.appendChild(notesHeader);
+
+  if (isEditingNotes) {
+    const textarea = document.createElement("textarea");
+    textarea.className = "log-notes-textarea";
+    textarea.id = "log-notes-textarea";
+    textarea.rows = 3;
+    textarea.placeholder = "Add notes for this day…";
+    textarea.value = logNotesEdit;
+    notesSection.appendChild(textarea);
+
+    const notesEditRow = document.createElement("div");
+    notesEditRow.className = "log-edit-row log-edit-row-right";
+    notesEditRow.innerHTML = `
+      <button class="log-cancel-btn" id="log-notes-cancel">Cancel</button>
+      <button class="log-save-btn"   id="log-notes-save">Save Notes</button>`;
+    notesSection.appendChild(notesEditRow);
+
+    notesEditRow.querySelector("#log-notes-cancel").addEventListener("click", e => {
+      e.stopPropagation();
+      logEditMode = null;
+      renderLogList(container);
+    });
+    notesEditRow.querySelector("#log-notes-save").addEventListener("click", async e => {
+      e.stopPropagation();
+      const notes = notesSection.querySelector("#log-notes-textarea")?.value ?? logNotesEdit;
+      const btn = e.currentTarget;
+      btn.textContent = "Saving…"; btn.disabled = true;
+      try {
+        const payload = { date: entry.date, notes };
+        ACTS.forEach(a => {
+          payload[a.secsKey] = entry[a.secsKey] || 0;
+          payload[a.key]     = entry[a.key] || (entry[a.secsKey] > 0);
+        });
+        await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(payload) });
+        logEditMode = null;
+        const data = await apiFetch("/api/v1/dmo/history?limit=60");
+        logEntries = data.entries || [];
+        renderLogList(container);
+      } catch (err) {
+        if (err instanceof MembershipError) { showSuspended(); return; }
+        btn.textContent = "Save Notes"; btn.disabled = false;
+      }
+    });
+  } else {
+    const p = document.createElement("p");
+    p.className = "log-notes-text" + (notesText ? "" : " placeholder");
+    p.textContent = notesText || "No notes for this day. Tap Edit to add.";
+    notesSection.appendChild(p);
+  }
+
+  detail.appendChild(notesSection);
+  return detail;
+}
+
+function buildBackfillForm(container) {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const maxDate = yesterday.toISOString().slice(0, 10);
+
+  const form = document.createElement("div");
+  form.className = "log-backfill-form";
+
+  const dateRow = document.createElement("div");
+  dateRow.className = "log-bf-date-row";
+  dateRow.innerHTML = `
+    <label class="log-bf-label">Date</label>
+    <input type="date" id="bf-date" class="log-bf-date-input"
+           value="${maxDate}" max="${maxDate}" />`;
+  form.appendChild(dateRow);
+
+  ACTS.forEach(a => {
+    const actRow = document.createElement("div");
+    actRow.className = "log-act-row";
+    actRow.innerHTML = `
+      <span class="log-act-icon">${a.icon}</span>
+      <span class="log-act-label">${a.label}</span>
+      <input class="log-time-input" id="bf-${a.key}" type="number"
+             min="0" max="480" placeholder="0"
+             value="${logTimeEdits[a.key] || ""}" />
+      <span class="log-act-unit">min</span>`;
+    form.appendChild(actRow);
+  });
+
+  const notesRow = document.createElement("div");
+  notesRow.className = "log-bf-notes-row";
+  notesRow.innerHTML = `
+    <label class="log-bf-label">Notes <span style="font-weight:400;opacity:.5">(optional)</span></label>
+    <textarea id="bf-notes" class="log-notes-textarea" rows="2"
+              placeholder="Add notes for this day…">${logNotesEdit}</textarea>`;
+  form.appendChild(notesRow);
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "log-edit-row log-edit-row-right";
+  btnRow.innerHTML = `
+    <button class="log-cancel-btn" id="bf-cancel">Cancel</button>
+    <button class="log-save-btn"   id="bf-save">Save Day</button>`;
+  form.appendChild(btnRow);
+
+  btnRow.querySelector("#bf-cancel").addEventListener("click", () => {
+    logEditMode = null;
+    renderLogList(container);
+  });
+
+  btnRow.querySelector("#bf-save").addEventListener("click", async () => {
+    const dateVal = form.querySelector("#bf-date")?.value;
+    if (!dateVal) return;
+    const btn = form.querySelector("#bf-save");
+    btn.textContent = "Saving…"; btn.disabled = true;
+    try {
+      const notes = form.querySelector("#bf-notes")?.value ?? "";
+      const payload = { date: dateVal, notes };
+      ACTS.forEach(a => {
+        const mins = parseFloat(form.querySelector(`#bf-${a.key}`)?.value || "0");
+        const secs = (!isNaN(mins) && mins > 0) ? Math.round(mins * 60) : 0;
+        payload[a.secsKey] = secs;
+        payload[a.key] = secs > 0;
+      });
+      await apiFetch("/api/v1/dmo", { method: "POST", body: JSON.stringify(payload) });
+      logEditMode = null;
+      logExpandedDate = dateVal; // auto-expand the saved entry
+      const data = await apiFetch("/api/v1/dmo/history?limit=60");
+      logEntries = data.entries || [];
+      renderLogList(container);
+    } catch (err) {
+      if (err instanceof MembershipError) { showSuspended(); return; }
+      btn.textContent = "Save Day"; btn.disabled = false;
+    }
+  });
+
+  return form;
+}
+
+// ─── Render settings target rows ───────────────────────────────────────────
+function renderTargetRows() {
+  const container = $("target-rows");
+  if (!container) return;
+  container.innerHTML = "";
+  ACTS.forEach(({ key, label, icon, defaultMins }) => {
+    const row = document.createElement("div");
+    row.className = "target-row";
+    row.innerHTML = `
+      <span class="target-act">${icon} ${label}</span>
+      <div class="target-right">
+        <input type="number" class="target-input" id="target-${key}"
+               value="${targets[key] ?? defaultMins}" min="1" max="480" />
+        <span class="target-unit">min</span>
+      </div>`;
+    container.appendChild(row);
+  });
+}
+
+async function saveTargets() {
+  // Map extension keys → server setting field names
+  const MAP = {
+    visionMeditation: "visionTarget", personalDevelopment: "personalTarget",
+    expandSkills: "expandTarget",     execution: "executionTarget", connecting: "connectingTarget",
+  };
+  const payload = {};
+  ACTS.forEach(({ key, defaultMins }) => {
+    const val = parseInt($(`target-${key}`)?.value, 10);
+    if (val > 0) { targets[key] = val; payload[MAP[key]] = val; }
+    else targets[key] = defaultMins;
+  });
+  try {
+    await apiFetch("/api/dmo/settings", { method: "POST", body: JSON.stringify(payload) });
+    await chrome.storage.local.set({ targets });
+    setStatus("Goals saved ✓", 2500);
+    renderActivities();
+  } catch { setStatus("Save failed", 3000); }
+}
+
+// ─── Load DMO ──────────────────────────────────────────────────────────────
+// Apply DMO data to local state + re-render (no network, no screen change).
+async function applyDmoData(dmoData, settingsData) {
+  todayDate   = dmoData.date;
+  serverEntry = dmoData.entry || null;
+
+  if (settingsData) {
+    targets = {
+      visionMeditation:    settingsData.visionTarget    ?? 30,
+      personalDevelopment: settingsData.personalTarget  ?? 30,
+      expandSkills:        settingsData.expandTarget    ?? 60,
+      execution:           settingsData.executionTarget ?? 60,
+      connecting:          settingsData.connectingTarget?? 60,
+    };
+  } else {
+    const s = await chrome.storage.local.get("targets");
+    targets = s.targets || { visionMeditation:30, personalDevelopment:30, expandSkills:60, execution:60, connecting:60 };
+  }
+  await chrome.storage.local.set({ targets });
+  await loadPersisted(todayDate);
+
+  if (serverEntry) {
+    ACTS.forEach(({ key, secsKey }) => {
+      const local = timers[key];
+      if (!local || local.status === "idle") {
+        const srvSecs = serverEntry[secsKey] || 0;
+        const srvBool = serverEntry[key]     || false;
+        if (srvSecs > 0 || srvBool) {
+          timers[key] = { status: "done", accumulatedSeconds: srvSecs, startedAt: null };
+        }
+      }
+    });
+    if (!notesValue && serverEntry.notes) notesValue = serverEntry.notes;
+  }
+
+  const streak = dmoData.streak?.currentStreak ?? dmoData.streak?.current ?? 0;
+  const sc = $("streak-count");
+  if (sc) sc.textContent = streak;
+  updateSubtitle();
+  renderActivities();
+  renderTargetRows();
+  if (ACTS.some(a => timers[a.key]?.status === "running")) startTick();
+}
+
+// Fetch fresh DMO data from server.
+// background=true → update silently without touching the loading screen.
+async function loadDMO(background = false) {
+  try {
+    const [dmoData, settingsData] = await Promise.all([
+      apiFetch("/api/v1/dmo"),
+      apiFetch("/api/v1/dmo/settings").catch(() => null),
+    ]);
+
+    // Persist for next cache-first open
+    chrome.storage.local.set({ cachedDmo: { dmoData, settingsData } }).catch(() => {});
+
+    await applyDmoData(dmoData, settingsData);
+    if (!background) showScreen("main");
+  } catch (e) {
+    if (e instanceof MembershipError) {
+      showScreen("suspended");
+    } else if (e.status === 401) {
+      await chrome.storage.local.remove("apiKey");
+      apiKey = null; showScreen("setup");
+    } else {
+      if (!background) { renderActivities(); showScreen("main"); }
+      setStatus("Could not refresh — check connection", 5000);
+    }
+  }
+}
+
+// ─── Screen management ─────────────────────────────────────────────────────
+function showScreen(name) {
+  ["loading", "suspended", "setup", "main"].forEach(s => {
+    const el = $(`${s}-screen`);
+    if (!el) return;
+    el.classList.toggle("active", s === name);
+  });
+  if (name === "suspended") {
+    // Ask the service worker to set a persistent alarm that survives popup close.
+    messageServiceWorker({ type: "START_SUSPENDED_CHECK" });
+    startSuspendedCountdown();
+  } else {
+    // Cancel the alarm — membership is no longer suspended from our perspective.
+    messageServiceWorker({ type: "STOP_SUSPENDED_CHECK" });
+    clearSuspendedCountdown();
+  }
+}
+
+// ─── Tab management ────────────────────────────────────────────────────────
+let currentPrimaryTab = "dmo";
+let currentSubTab     = "today";
+
+function updateSubtitle() {
+  const ds = $("date-sub");
+  if (ds && todayDate) ds.textContent = fmtDate(todayDate);
+}
+
+// ─── Swipe File functions ──────────────────────────────────────────────────
+
+const SWIPE_BTN_IDS = ["swipe-btn-fullpage", "swipe-btn-visible", "swipe-btn-section"];
+
+// ── Status helpers ─────────────────────────────────────────────────────────
+
+function swipeShowStatus(html, autoHideMs = 0) {
+  const el = $("swipe-status");
+  if (!el) return;
+  el.innerHTML = html;
+  el.style.display = "flex";
+  if (autoHideMs > 0) setTimeout(() => { el.style.display = "none"; el.innerHTML = ""; }, autoHideMs);
+}
+
+function swipeHideStatus() {
+  const el = $("swipe-status"); if (el) { el.style.display = "none"; el.innerHTML = ""; }
+}
+
+function swipeEnableBtns() {
+  SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) { b.disabled = false; b.classList.remove("active"); } });
+}
+
+function swipeReset() { swipeEnableBtns(); swipeHideStatus(); }
+
+// ── Full Page (native scroll-and-stitch via service worker) ──────────────────
+
+async function swipeCaptureFullPage() {
+  let tab;
+  try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) {}
+  const url = tab?.url ?? "";
+  if (!url.startsWith("http")) { alert("Full Page capture only works on http/https pages."); return; }
+
+  SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
+  $("swipe-btn-fullpage").classList.add("active");
+
+  chrome.runtime.sendMessage({
+    action: "startFullPageCapture",
+    tabId:  tab.id,
+    title:  (tab.title || url).substring(0, 140),
+  });
+
+  swipeShowStatus("📄 Capturing full page… the annotation editor will open in a new tab when ready.");
+  setTimeout(() => window.close(), 2200);
+}
+
+// ── Visible Area (captureVisibleTab → auto-save) ──────────────────────────
+
+async function swipeCaptureVisibleArea() {
+  SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
+  $("swipe-btn-visible").classList.add("active");
+  swipeShowStatus('<span class="spinner" style="width:12px;height:12px;border-width:2px;border-top-color:var(--accent);flex-shrink:0;"></span>&nbsp; Opening editor…');
+
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      chrome.tabs.captureVisibleTab(null, { format: "png" }, url => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(url);
+      });
+    });
+
+    let title = "Visible Area";
+    try { const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); title = tab?.title || title; } catch (_) {}
+
+    // Hand off to the annotation editor — it handles upload after annotations are added
+    await chrome.storage.session.set({ pendingAnnotation: { dataUrl, title } });
+    chrome.tabs.create({ url: chrome.runtime.getURL("annotate.html") });
+    window.close();
+  } catch (err) {
+    swipeEnableBtns();
+    swipeHideStatus();
+    console.error("[FIA Swipe] visible area save failed:", err.message);
+    // Inject red error toast into the active tab
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab?.id) {
+        chrome.scripting.executeScript({
+          target: { tabId: activeTab.id },
+          func: (msg) => {
+            const TOAST_ID = "__fia_save_toast__", STYLE_ID = "__fia_toast_style__";
+            [TOAST_ID, STYLE_ID].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+            const style = document.createElement("style");
+            style.id = STYLE_ID;
+            style.textContent = "@keyframes _fia_in{from{opacity:0;transform:translateX(-50%) scale(.75)}to{opacity:1;transform:translateX(-50%) scale(1)}}@keyframes _fia_out{from{opacity:1;transform:translateX(-50%) scale(1)}to{opacity:0;transform:translateX(-50%) scale(.75)}}";
+            document.head.appendChild(style);
+            const toast = document.createElement("div");
+            toast.id = TOAST_ID;
+            toast.style.cssText = "position:fixed;top:28px;left:50%;transform:translateX(-50%);z-index:2147483647;background:linear-gradient(135deg,#e85d5d 0%,#b52b2b 100%);padding:11px 22px 11px 14px;border-radius:999px;box-shadow:0 8px 28px rgba(185,43,43,.45);display:flex;align-items:center;gap:10px;animation:_fia_in .4s cubic-bezier(.34,1.56,.64,1) both;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,sans-serif;user-select:none;-webkit-user-select:none";
+            toast.innerHTML = `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" style="flex-shrink:0"><circle cx="13" cy="13" r="12" fill="rgba(255,255,255,0.22)"/><path d="M8.5 8.5l9 9M17.5 8.5l-9 9" stroke="white" stroke-width="2.6" stroke-linecap="round"/></svg><span style="color:#fff;font-size:14px;font-weight:650;white-space:nowrap">${msg}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.animation = "_fia_out .32s ease-in both"; setTimeout(() => { toast.remove(); style.remove(); }, 350); }, 4000);
+          },
+          args: ["Capture failed — try again"],
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  }
+}
+
+// ── Section (inject overlay → SW auto-saves) ──────────────────────────────
+
+async function swipeCaptureSection() {
+  let tab;
+  try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_) {}
+  if (!tab?.id) { alert("No active tab found."); return; }
+
+  SWIPE_BTN_IDS.forEach(id => { const b = $(id); if (b) b.disabled = true; });
+  $("swipe-btn-section").classList.add("active");
+
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["selection-overlay.js"] });
+    // Close immediately so the full page is visible for selection
+    window.close();
+  } catch (err) {
+    swipeEnableBtns();
+    swipeHideStatus();
+    console.error("[FIA Swipe] section inject failed:", err.message);
+  }
+}
+
+async function renderSwipe() {
+  // Show cached items instantly, then refresh from the server in the background.
+  // This keeps the list in sync with the web app while feeling immediate.
+  const cached = await chrome.storage.local.get("cachedSwipeItems");
+  if (cached.cachedSwipeItems?.length) {
+    swipeItems = cached.cachedSwipeItems;
+    drawSwipeList();
+  }
+
+  try {
+    const data  = await apiFetch("/api/v1/swipe");
+    swipeItems  = data.items || [];
+    // Persist for next open
+    chrome.storage.local.set({ cachedSwipeItems: swipeItems }).catch(() => {});
+  } catch (_) {
+    if (!cached.cachedSwipeItems) swipeItems = [];
+  }
+  drawSwipeList(); // always re-draw with fresh (or empty-fallback) data
+}
+
+function drawSwipeList() {
+  const container = $("swipe-list");
+  if (!container) return;
+  if (swipeItems.length === 0) {
+    container.innerHTML = `<div class="swipe-empty">Nothing saved yet — try a screenshot!</div>`;
+    return;
+  }
+  const recent = swipeItems.slice(0, SWIPE_RECENT_MAX);
+  const rows = recent.map(item => {
+    const isImg = item.type === "upload" && item.shareToken;
+    const thumb = isImg
+      ? `<div class="swipe-item-thumb"><img src="${API_BASE}/api/swipe/public/${item.shareToken}/image" onerror="this.style.display='none'" /></div>`
+      : `<div class="swipe-item-thumb">${item.type === "upload" ? "📷" : "📝"}</div>`;
+    const action = item.shareToken
+      ? `<button class="swipe-link-btn" data-token="${item.shareToken}">Copy link</button>`
+      : `<button class="swipe-share-btn" data-id="${item.id}">Share</button>`;
+    return `<div class="swipe-item-card">
+      ${thumb}
+      <div class="swipe-item-body">
+        <div class="swipe-item-title">${item.title}</div>
+        <div class="swipe-item-meta">${item.type === "upload" ? "📷 Image" : "📝 Snippet"}</div>
+      </div>
+      <div class="swipe-item-acts">${action}</div>
+    </div>`;
+  }).join("");
+  container.innerHTML = `<div class="swipe-item-list">${rows}</div>`;
+
+  // Copy link buttons
+  container.querySelectorAll(".swipe-link-btn[data-token]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const url = `${API_BASE}/swipe/${btn.dataset.token}`;
+      navigator.clipboard.writeText(url).catch(() => {});
+      btn.textContent = "Copied!"; btn.classList.add("copied");
+      setTimeout(() => { btn.textContent = "Copy link"; btn.classList.remove("copied"); }, 2000);
+    });
+  });
+
+  // Share buttons (no token yet)
+  container.querySelectorAll(".swipe-share-btn[data-id]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true; btn.textContent = "…";
+      try {
+        const data = await apiFetch(`/api/v1/swipe/${btn.dataset.id}/share`, { method: "POST" });
+        const url = `${API_BASE}/swipe/${data.token}`;
+        navigator.clipboard.writeText(url).catch(() => {});
+        const item = swipeItems.find(i => i.id === btn.dataset.id);
+        if (item) item.shareToken = data.token;
+        drawSwipeList(); // re-render to show copy button
+      } catch (_) {
+        btn.disabled = false; btn.textContent = "Share";
+      }
+    });
+  });
+}
+
+// (switchSubTab moved up, defined together with switchPrimaryTab)
+
+function switchPrimaryTab(name) {
+  currentPrimaryTab = name;
+  document.querySelectorAll(".primary-tab-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.primary === name));
+  document.querySelectorAll(".primary-panel").forEach(p =>
+    p.classList.toggle("active", p.id === `primary-${name}`));
+  if (name === "links") renderLinks();
+  if (name === "swipe") renderSwipe();
+  if (name !== "links") {
+    linksFormOpen = false; linksEditingLink = null; linksDeleteConfirmId = null;
+  }
+  chrome.storage.local.set({ lastPrimaryTab: name }).catch(() => {});
+}
+
+function switchSubTab(name) {
+  currentSubTab = name;
+  document.querySelectorAll(".sub-tab-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab-panel").forEach(p =>
+    p.classList.toggle("active", p.id === `tab-${name}`));
+  if (name === "log")   renderLog();
+  if (name === "goals") renderTargetRows();
+  chrome.storage.local.set({ lastSubTab: name }).catch(() => {});
+}
+
+// ─── API key validation ────────────────────────────────────────────────────
+async function validateAndSave(key, errorEl) {
+  errorEl.style.display = "none";
+  if (!key.startsWith("ftk_")) {
+    errorEl.textContent = "Key must start with ftk_"; errorEl.style.display = "block"; return;
+  }
+  apiKey = key;
+  try {
+    await apiFetch("/api/v1/dmo");
+    await chrome.storage.local.set({ apiKey: key });
+    try {
+      const sw = await navigator.serviceWorker.ready;
+      if (sw.active) sw.active.postMessage({ type: "SUBSCRIBE_PUSH", apiKey: key });
+    } catch (_) {}
+    await loadDMO();
+  } catch (e) {
+    if (e instanceof MembershipError) {
+      // Key is valid but membership is inactive — save it and show suspended screen
+      await chrome.storage.local.set({ apiKey: key });
+      showScreen("suspended");
+    } else {
+      apiKey = null;
+      errorEl.textContent = e.status === 401
+        ? "API key not found or revoked — check your Account page."
+        : `Connection error: ${e.message}`;
+      errorEl.style.display = "block"; showScreen("setup");
+    }
+  }
+}
+
+// ─── Boot ──────────────────────────────────────────────────────────────────
+async function boot() {
+  showScreen("loading");
+
+  // Load and apply saved theme
+  const stored = await chrome.storage.local.get(["apiKey", "theme", "targets", "cachedDmo", "lastPrimaryTab", "lastSubTab"]);
+  applyTheme(stored.theme || "light");   // light is default
+
+  // Theme toggle
+  $("theme-btn").addEventListener("click", toggleTheme);
+
+  // Primary tabs (DMO Tracker | Links)
+  document.querySelectorAll(".primary-tab-btn").forEach(b =>
+    b.addEventListener("click", () => switchPrimaryTab(b.dataset.primary)));
+  // Sub-tabs (Today | Log | Settings)
+  document.querySelectorAll(".sub-tab-btn").forEach(b =>
+    b.addEventListener("click", () => switchSubTab(b.dataset.tab)));
+
+  // Setup screen
+  $("save-key-btn").addEventListener("click", () =>
+    validateAndSave($("api-key-input").value.trim(), $("setup-error")));
+  $("api-key-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") $("save-key-btn").click();
+  });
+
+  // Settings tab
+  $("update-key-btn").addEventListener("click", () =>
+    validateAndSave($("settings-key-input").value.trim(), $("settings-error")));
+  $("disconnect-btn").addEventListener("click", () => {
+    $("disconnect-btn").style.display = "none";
+    $("disconnect-confirm").style.display = "flex";
+  });
+  $("disconnect-confirm-cancel").addEventListener("click", () => {
+    $("disconnect-confirm").style.display = "none";
+    $("disconnect-btn").style.display = "";
+  });
+  $("disconnect-confirm-yes").addEventListener("click", async () => {
+    stopTick();
+    const savedTheme = currentTheme;
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set({ theme: savedTheme }); // keep theme pref
+    apiKey = null; timers = {}; notesValue = ""; serverEntry = null;
+    $("disconnect-confirm").style.display = "none";
+    $("disconnect-btn").style.display = "";
+    $("settings-overlay").classList.remove("open");
+    showScreen("setup");
+  });
+  $("save-targets-btn").addEventListener("click", saveTargets);
+
+  // Populate version badge + check for updates
+  try {
+    const currentVersion = chrome.runtime.getManifest().version;
+    const badge = $("settings-version-badge");
+    if (badge) badge.textContent = `v${currentVersion}`;
+
+    // Fetch latest version from server (fire-and-forget, no auth needed)
+    fetch(`${API_BASE}/api/extension/version`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.version) return;
+        const latest  = data.version;
+        const current = currentVersion;
+        // Simple semver-style comparison (major.minor.patch)
+        const toNum = v => v.split(".").reduce((acc, n, i) => acc + parseInt(n, 10) * Math.pow(1000, 2 - i), 0);
+        if (toNum(latest) > toNum(current)) {
+          // Show red dot on gear icon
+          const gear = $("settings-gear-btn");
+          if (gear && !gear.querySelector(".update-dot")) {
+            const dot = document.createElement("span");
+            dot.className = "update-dot";
+            dot.style.cssText = "position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--red);pointer-events:none;";
+            gear.style.position = "relative";
+            gear.appendChild(dot);
+          }
+          // Show update card in Settings
+          const card  = $("settings-update-card");
+          const label = $("settings-update-new-ver");
+          const link  = $("settings-update-dl-link");
+          if (card)  card.style.display = "flex";
+          if (label) label.textContent  = `v${latest}`;
+          if (link && data.downloadUrl)  link.href = `${API_BASE}${data.downloadUrl}`;
+        }
+      })
+      .catch(() => {/* silently ignore network errors */});
+  } catch (_) {}
+
+  // Swipe File panel — three capture buttons
+  $("swipe-btn-fullpage").addEventListener("click", swipeCaptureFullPage);
+  $("swipe-btn-visible").addEventListener("click", swipeCaptureVisibleArea);
+  $("swipe-btn-section").addEventListener("click", swipeCaptureSection);
+
+  // Suspended screen — "Check Again" button triggers an immediate live re-check.
+  // The service-worker alarm continues running independently in the background.
+  $("suspended-check-btn")?.addEventListener("click", async () => {
+    const btn = $("suspended-check-btn");
+    const msg = $("suspended-check-msg");
+    if (!btn || !apiKey) return;
+
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;border-top-color:var(--accent)"></span> Checking…`;
+    if (msg) { msg.textContent = ""; msg.className = "suspended-check-msg"; }
+
+    try {
+      const data = await apiFetch("/api/v1/membership/check", { method: "POST" });
+      if (data.enrolled) {
+        // Membership restored — loadDMO() will call showScreen("main") which
+        // sends STOP_SUSPENDED_CHECK to the SW to cancel the background alarm.
+        await loadDMO();
+      } else {
+        if (msg) { msg.textContent = "Still inactive — contact support"; msg.className = "suspended-check-msg error"; }
+        btn.disabled = false;
+        btn.innerHTML = "🔄 Check Again";
+      }
+    } catch {
+      if (msg) { msg.textContent = "Check failed — try again later"; msg.className = "suspended-check-msg error"; }
+      btn.disabled = false;
+      btn.innerHTML = "🔄 Check Again";
+    }
+  });
+
+  // Suspended screen — disconnect clears everything
+  $("suspended-disconnect")?.addEventListener("click", async () => {
+    stopTick();
+    const savedTheme = currentTheme;
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set({ theme: savedTheme });
+    apiKey = null; timers = {}; notesValue = ""; serverEntry = null;
+    showScreen("setup");
+  });
+
+  // Gear icon → open settings overlay; back arrow → close it
+  $("settings-gear-btn").addEventListener("click", () => {
+    const el = $("settings-key-input");
+    if (el && apiKey) el.value = apiKey;
+    const errEl = $("settings-error");
+    if (errEl) errEl.style.display = "none";
+    $("settings-overlay").classList.add("open");
+  });
+  $("settings-ovl-close").addEventListener("click", () => {
+    $("settings-overlay").classList.remove("open");
+  });
+
+  // Listen for MEMBERSHIP_RESTORED pushed by the service-worker alarm.
+  // Uses chrome.runtime.onMessage — the correct MV3 extension messaging API.
+  // Fires when the background alarm detects restored membership while the popup is open.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === "MEMBERSHIP_RESTORED") {
+      loadDMO();
+    }
+  });
+
+  // Load API key and go — cache-first so the popup feels instant
+  if (stored.apiKey) {
+    apiKey = stored.apiKey;
+    if (stored.targets) targets = stored.targets;
+
+    if (stored.cachedDmo?.dmoData) {
+      // Show UI immediately from last cached response (~0ms), then refresh in background
+      await applyDmoData(stored.cachedDmo.dmoData, stored.cachedDmo.settingsData);
+      showScreen("main");
+      loadDMO(true).catch(() => {}); // silent background refresh
+    } else {
+      // First-ever open — must wait for the network
+      await loadDMO();
+    }
+
+    // Restore whichever tab the user was on last
+    if (stored.lastPrimaryTab) switchPrimaryTab(stored.lastPrimaryTab);
+    if (stored.lastSubTab) switchSubTab(stored.lastSubTab);
+
+    // If the SW auto-saved a capture while the popup was closed, override to the
+    // Swipe tab so the user sees the new item (this runs after restore, so it wins).
+    try {
+      const sess = await chrome.storage.session.get("swipeRecentlySaved");
+      if (sess.swipeRecentlySaved) {
+        await chrome.storage.session.remove("swipeRecentlySaved");
+        switchPrimaryTab("swipe");
+        swipeShowStatus("✓ Saved to your Swipe File!", 3000);
+      }
+    } catch (_) {}
+  } else {
+    showScreen("setup");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", boot);
+ 
