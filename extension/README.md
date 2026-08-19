@@ -18,7 +18,7 @@ The check extracts `fia-toolkit-extension-v2.4.0.zip` into a temporary folder an
 - Color Picker sampling and clipboard feedback;
 - Site Inspector hover highlighting, computed typography, layout, and accessibility details;
 - Ruler crosshair alignment guides, drag-any-direction measurement math, live width/height/X/Y readout, replacement measurements, and Escape cleanup;
-- Responsive Preview FIA branding, 25 device presets, editable viewport dimensions, responsive media-query rendering, zoom/Fit controls, and Exit/Escape cleanup; and
+- Responsive Preview FIA branding, 35 device presets including current and upcoming iPhone sizes, editable viewport dimensions, responsive media-query rendering, zoom/Fit controls, and Exit/Escape cleanup; and
 - full-page Color Palette scanning, six-color extraction, detected font families and variants, scroll restoration, individual color copying, and the Swipe File save payload.
 
 It uses Chromium available on the Replit workspace. Set `CHROMIUM_PATH` when running it somewhere Chromium is not available on the normal command path.

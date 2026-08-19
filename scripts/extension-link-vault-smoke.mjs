@@ -291,8 +291,8 @@ async function assertPickerOpeningContract(extensionDir) {
   );
   assert.equal(
     [...responsiveScript.matchAll(/\{ id: "[^"]+", label:/g)].length,
-    25,
-    "the packaged Responsive tool must include 25 curated device presets",
+    35,
+    "the packaged Responsive tool must include 35 curated device presets",
   );
 }
 
@@ -615,13 +615,39 @@ async function main() {
     });
     assert.equal(
       await colorPage.$$eval("#__fia_responsive_preset__ option", options => options.length),
-      26,
-      "Responsive should offer 25 presets plus a Custom size option",
+      36,
+      "Responsive should offer 35 presets plus a Custom size option",
     );
     assert.equal(
       await colorPage.$$eval("#__fia_responsive_preset__ optgroup", groups => groups.length),
       3,
       "Responsive presets should be grouped into phones, tablets, and larger screens",
+    );
+    assert.deepEqual(
+      await colorPage.$$eval(
+        "#__fia_responsive_preset__ optgroup[label='Phones'] option",
+        options => options
+          .map(option => ({
+            value: option.value,
+            label: option.textContent,
+            width: option.dataset.width,
+            height: option.dataset.height,
+          }))
+          .filter(option => /^iphone-(16|17|18)/.test(option.value)),
+      ),
+      [
+        { value: "iphone-16", label: "iPhone 16 (393 × 852)", width: "393", height: "852" },
+        { value: "iphone-16-plus", label: "iPhone 16 Plus (430 × 932)", width: "430", height: "932" },
+        { value: "iphone-16-pro", label: "iPhone 16 Pro (402 × 874)", width: "402", height: "874" },
+        { value: "iphone-16-pro-max", label: "iPhone 16 Pro Max (440 × 956)", width: "440", height: "956" },
+        { value: "iphone-17", label: "iPhone 17 (402 × 874)", width: "402", height: "874" },
+        { value: "iphone-17-pro", label: "iPhone 17 Pro (402 × 874)", width: "402", height: "874" },
+        { value: "iphone-17-pro-max", label: "iPhone 17 Pro Max (440 × 956)", width: "440", height: "956" },
+        { value: "iphone-18", label: "iPhone 18 (preview) (402 × 874)", width: "402", height: "874" },
+        { value: "iphone-18-pro", label: "iPhone 18 Pro (preview) (402 × 874)", width: "402", height: "874" },
+        { value: "iphone-18-pro-max", label: "iPhone 18 Pro Max (preview) (440 × 956)", width: "440", height: "956" },
+      ],
+      "Responsive is missing the latest iPhone phone presets",
     );
     await colorPage.waitForFunction(() =>
       document.querySelector("#__fia_responsive__ .fia-responsive-logo")?.naturalWidth > 0,
@@ -633,6 +659,15 @@ async function main() {
       })),
       { role: "dialog", modal: "true" },
       "Responsive must expose its full-screen overlay as a modal dialog",
+    );
+    assert.deepEqual(
+      await colorPage.$eval("#__fia_responsive__ .fia-responsive-select-value", value => ({
+        display: getComputedStyle(value).display,
+        alignItems: getComputedStyle(value).alignItems,
+        height: getComputedStyle(value).height,
+      })),
+      { display: "flex", alignItems: "center", height: "40px" },
+      "Responsive device dropdown text is not vertically centered in its control",
     );
     assert.equal(
       await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
@@ -686,6 +721,15 @@ async function main() {
         ).content),
       '"mobile"',
       "the preview iframe did not activate the mobile media query",
+    );
+    await colorPage.select("#__fia_responsive_preset__", "iphone-18-pro");
+    await colorPage.waitForFunction(() =>
+      document.getElementById("__fia_responsive__")?.dataset.preset === "iphone-18-pro",
+    );
+    assert.equal(
+      await colorPage.$eval("#__fia_responsive_preset__", select => select.value),
+      "iphone-18-pro",
+      "Responsive replaced a selected same-size iPhone preset with another model",
     );
 
     await colorPage.$eval("#__fia_responsive_width__", input => {

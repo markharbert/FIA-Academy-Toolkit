@@ -24,6 +24,16 @@
         { id: "iphone-standard", label: "iPhone 14 / 15", width: 390, height: 844 },
         { id: "iphone-plus", label: "iPhone 14 / 15 Plus", width: 430, height: 932 },
         { id: "iphone-xr", label: "iPhone XR / 11", width: 414, height: 896 },
+        { id: "iphone-16", label: "iPhone 16", width: 393, height: 852 },
+        { id: "iphone-16-plus", label: "iPhone 16 Plus", width: 430, height: 932 },
+        { id: "iphone-16-pro", label: "iPhone 16 Pro", width: 402, height: 874 },
+        { id: "iphone-16-pro-max", label: "iPhone 16 Pro Max", width: 440, height: 956 },
+        { id: "iphone-17", label: "iPhone 17", width: 402, height: 874 },
+        { id: "iphone-17-pro", label: "iPhone 17 Pro", width: 402, height: 874 },
+        { id: "iphone-17-pro-max", label: "iPhone 17 Pro Max", width: 440, height: 956 },
+        { id: "iphone-18", label: "iPhone 18 (preview)", width: 402, height: 874 },
+        { id: "iphone-18-pro", label: "iPhone 18 Pro (preview)", width: 402, height: 874 },
+        { id: "iphone-18-pro-max", label: "iPhone 18 Pro Max (preview)", width: 440, height: 956 },
         { id: "pixel-7", label: "Google Pixel 7", width: 412, height: 915 },
         { id: "pixel-8-pro", label: "Google Pixel 8 Pro", width: 448, height: 998 },
         { id: "galaxy-s8", label: "Samsung Galaxy S8+", width: 360, height: 740 },
@@ -156,9 +166,26 @@
       font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.04) !important;
     }
+    #${ROOT_ID} .fia-responsive-select-wrap {
+      position: relative !important; flex: 0 0 auto !important; width: 276px !important; height: 40px !important;
+    }
     #${ROOT_ID} .fia-responsive-select {
-      width: 276px !important; padding: 0 34px 0 12px !important;
-      cursor: pointer !important; appearance: auto !important; color-scheme: dark !important;
+      position: absolute !important; inset: 0 !important; width: 100% !important; min-height: 40px !important;
+      padding: 0 34px 0 12px !important; color: transparent !important;
+      cursor: pointer !important; appearance: none !important; color-scheme: dark !important;
+    }
+    #${ROOT_ID} .fia-responsive-select-value {
+      position: absolute !important; inset: 0 34px 0 12px !important; display: flex !important;
+      align-items: center !important; overflow: hidden !important; pointer-events: none !important;
+      color: #fff !important; font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      white-space: nowrap !important; text-overflow: ellipsis !important;
+    }
+    #${ROOT_ID} .fia-responsive-select-chevron {
+      position: absolute !important; right: 14px !important; top: 50% !important;
+      width: 7px !important; height: 7px !important; pointer-events: none !important;
+      border-right: 2px solid rgba(255,255,255,.72) !important;
+      border-bottom: 2px solid rgba(255,255,255,.72) !important;
+      transform: translateY(-70%) rotate(45deg) !important;
     }
     #${ROOT_ID} .fia-responsive-select option,
     #${ROOT_ID} .fia-responsive-select optgroup {
@@ -257,7 +284,7 @@
     }
     @media (max-width: 980px) {
       #${ROOT_ID} .fia-responsive-brand-copy { display: none !important; }
-      #${ROOT_ID} .fia-responsive-select { width: 230px !important; }
+      #${ROOT_ID} .fia-responsive-select-wrap { width: 230px !important; }
     }
   `;
   document.documentElement.appendChild(style);
@@ -277,7 +304,11 @@
           <span class="fia-responsive-brand-tool">Responsive Preview</span>
         </div>
       </div>
-      <select id="__fia_responsive_preset__" class="fia-responsive-select" aria-label="Device preset"></select>
+      <div class="fia-responsive-select-wrap">
+        <select id="__fia_responsive_preset__" class="fia-responsive-select" aria-label="Device preset"></select>
+        <span class="fia-responsive-select-value" aria-hidden="true"></span>
+        <span class="fia-responsive-select-chevron" aria-hidden="true"></span>
+      </div>
       <label class="fia-responsive-dimension">
         <span>W</span>
         <input id="__fia_responsive_width__" class="fia-responsive-input" type="number"
@@ -309,6 +340,7 @@
   document.documentElement.appendChild(host);
 
   const presetSelect = host.querySelector("#__fia_responsive_preset__");
+  const presetValue = host.querySelector(".fia-responsive-select-value");
   const widthInput = host.querySelector("#__fia_responsive_width__");
   const heightInput = host.querySelector("#__fia_responsive_height__");
   const zoomValue = host.querySelector("#__fia_responsive_zoom_value__");
@@ -340,10 +372,13 @@
   let height = 844;
   let zoom = 1;
   let fitMode = false;
+  let presetId = "iphone-standard";
   let destroyed = false;
 
   function matchingPreset() {
-    return PRESETS.find(device => device.width === width && device.height === height);
+    return PRESETS.find(device =>
+      device.id === presetId && device.width === width && device.height === height,
+    ) || PRESETS.find(device => device.width === width && device.height === height);
   }
 
   function renderPreview() {
@@ -358,6 +393,7 @@
     heightInput.value = String(height);
     const match = matchingPreset();
     presetSelect.value = match?.id || "custom";
+    presetValue.textContent = presetSelect.selectedOptions[0]?.textContent || "Custom size";
     fitButton.classList.toggle("active", fitMode);
     fitButton.setAttribute("aria-pressed", String(fitMode));
     host.dataset.width = String(width);
@@ -367,9 +403,12 @@
     host.dataset.fit = String(fitMode);
   }
 
-  function setDimensions(nextWidth, nextHeight) {
+  function setDimensions(nextWidth, nextHeight, nextPresetId = null) {
     width = clamp(Math.round(nextWidth), MIN_WIDTH, MAX_WIDTH);
     height = clamp(Math.round(nextHeight), MIN_HEIGHT, MAX_HEIGHT);
+    presetId = nextPresetId && PRESETS.some(device => device.id === nextPresetId)
+      ? nextPresetId
+      : null;
     if (fitMode) applyFit();
     else renderPreview();
   }
@@ -472,7 +511,7 @@
 
   presetSelect.addEventListener("change", () => {
     const selected = PRESETS.find(device => device.id === presetSelect.value);
-    if (selected) setDimensions(selected.width, selected.height);
+    if (selected) setDimensions(selected.width, selected.height, selected.id);
   });
   widthInput.addEventListener("input", onDimensionInput);
   heightInput.addEventListener("input", onDimensionInput);
