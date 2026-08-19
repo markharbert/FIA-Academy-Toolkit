@@ -311,8 +311,9 @@
       #${ROOT_ID} .fia-responsive-select-wrap { width: 230px !important; }
     }
   `;
-  const pageRoot = document.documentElement;
-  pageRoot.appendChild(style);
+  const styleRoot = document.head || document.documentElement;
+  if (!styleRoot) return;
+  styleRoot.appendChild(style);
 
   const host = document.createElement("div");
   host.id = ROOT_ID;
@@ -362,7 +363,12 @@
       </div>
     </main>
   `;
-  pageRoot.appendChild(host);
+  const hostRoot = document.body || document.documentElement;
+  if (!hostRoot) {
+    style.remove();
+    return;
+  }
+  hostRoot.appendChild(host);
 
   const presetSelect = host.querySelector("#__fia_responsive_preset__");
   const presetValue = host.querySelector(".fia-responsive-select-value");

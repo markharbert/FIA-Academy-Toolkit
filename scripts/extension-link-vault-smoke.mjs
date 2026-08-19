@@ -271,7 +271,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.7", "the packaged extension is not version 2.4.7");
+  assert.equal(packagedManifest.version, "2.4.8", "the packaged extension is not version 2.4.8");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -617,6 +617,11 @@ async function main() {
       await chrome.scripting.executeScript({ target: { tabId }, files: ["responsive.js"] });
     }, colorTab.id);
     await colorPage.waitForSelector("#__fia_responsive__");
+    assert.equal(
+      await colorPage.$eval("#__fia_responsive__", element => element.parentElement === document.body),
+      true,
+      "Responsive overlay was not mounted under the page body",
+    );
     await colorPage.waitForFunction(() => {
       const frame = document.querySelector("#__fia_responsive__ .fia-responsive-frame");
       return frame?.contentDocument?.readyState === "complete";
