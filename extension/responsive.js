@@ -192,16 +192,19 @@
       color: #fff !important; background: #171a35 !important;
     }
     #${ROOT_ID} .fia-responsive-dimension {
-      position: relative !important; flex: 0 0 auto !important; display: block !important;
+      position: relative !important; flex: 0 0 auto !important; display: flex !important;
+      align-items: center !important; height: 40px !important;
     }
     #${ROOT_ID} .fia-responsive-dimension span {
-      position: absolute !important; z-index: 1 !important; left: 10px !important; top: 50% !important;
-      transform: translateY(-50%) !important; color: rgba(255,255,255,.47) !important;
+      position: absolute !important; z-index: 1 !important; left: 10px !important; top: 0 !important;
+      display: flex !important; align-items: center !important; height: 40px !important;
+      transform: none !important; color: rgba(255,255,255,.47) !important;
       font: 750 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
       pointer-events: none !important; text-transform: uppercase !important;
     }
     #${ROOT_ID} .fia-responsive-input {
-      width: 92px !important; padding: 0 8px 0 29px !important;
+      width: 92px !important; height: 40px !important; padding: 0 8px 0 29px !important;
+      line-height: 38px !important;
       font-variant-numeric: tabular-nums !important; cursor: text !important;
     }
     #${ROOT_ID} .fia-responsive-select:focus,

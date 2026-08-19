@@ -268,7 +268,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.1", "the packaged extension is not version 2.4.1");
+  assert.equal(packagedManifest.version, "2.4.2", "the packaged extension is not version 2.4.2");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -668,6 +668,24 @@ async function main() {
       })),
       { display: "flex", alignItems: "center", height: "40px" },
       "Responsive device dropdown text is not vertically centered in its control",
+    );
+    assert.deepEqual(
+      await colorPage.$$eval("#__fia_responsive__ .fia-responsive-dimension", labels =>
+        labels.map(label => {
+          const prefix = label.querySelector("span");
+          const input = label.querySelector("input");
+          return {
+            labelDisplay: getComputedStyle(prefix).display,
+            labelAlignItems: getComputedStyle(prefix).alignItems,
+            labelHeight: getComputedStyle(prefix).height,
+            inputLineHeight: getComputedStyle(input).lineHeight,
+          };
+        })),
+      [
+        { labelDisplay: "flex", labelAlignItems: "center", labelHeight: "40px", inputLineHeight: "38px" },
+        { labelDisplay: "flex", labelAlignItems: "center", labelHeight: "40px", inputLineHeight: "38px" },
+      ],
+      "Responsive width/height prefixes are not vertically centered in their controls",
     );
     assert.equal(
       await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
