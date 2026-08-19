@@ -52,20 +52,71 @@ async function openAnnotationTab(blob, title) {
   chrome.tabs.create({ url: chrome.runtime.getURL("annotate.html") });
 }
 
-// ─── Context Menu: Save to Swipe File ────────────────────────────────────────
+// ─── Context menus ───────────────────────────────────────────────────────────
 
-// Create the context menu item on install/update AND on every SW startup,
-// so it's never missing if the SW was killed and restarted.
-function ensureContextMenu() {
+// Create the context menu items on install/update AND on every SW startup,
+// so they're never missing if the SW was killed and restarted.
+function ensureContextMenus() {
   chrome.contextMenus.create(
     { id: "fia-save-snippet", title: "Save to Swipe File", contexts: ["selection"] },
     () => { void chrome.runtime.lastError; } // silence "already exists" error
   );
+  chrome.contextMenus.create(
+    { id: "fia-link-vault", title: "Paste from Link Vault…", contexts: ["all"] },
+    () => { void chrome.runtime.lastError; }
+  );
 }
 
-chrome.runtime.onInstalled.addListener(ensureContextMenu);
-chrome.runtime.onStartup.addListener(ensureContextMenu);
-ensureContextMenu(); // also run immediately when the SW wakes
+chrome.runtime.onInstalled.addListener(ensureContextMenus);
+chrome.runtime.onStartup.addListener(ensureContextMenus);
+ensureContextMenus(); // also run immediately when the SW wakes
+
+async function openLinkVaultPicker(tab) {
+  const sourceTabId = tab?.id;
+  const sourceWindowId = tab?.windowId;
+
+  // Only one picker should be active. Close a stale one before opening another.
+  try {
+    const existing = await chrome.storage.session.get("linkPickerContext");
+    const oldWindowId = existing?.linkPickerContext?.pickerWindowId;
+    if (Number.isInteger(oldWindowId)) await chrome.windows.remove(oldWindowId);
+  } catch {
+    // The previous picker may already be closed.
+  }
+
+  await chrome.storage.session.set({
+    linkPickerContext: { sourceTabId, sourceWindowId, openedAt: Date.now() },
+  });
+
+  let left;
+  let top;
+  try {
+    const sourceWindow = await chrome.windows.get(sourceWindowId);
+    left = Math.round((sourceWindow.left ?? 0) + ((sourceWindow.width ?? 1200) - 380) / 2);
+    top = Math.round((sourceWindow.top ?? 0) + ((sourceWindow.height ?? 800) - 560) / 2);
+  } catch {
+    // Chrome will choose a sensible position.
+  }
+
+  const picker = await chrome.windows.create({
+    url: chrome.runtime.getURL("link-picker.html"),
+    type: "popup",
+    width: 380,
+    height: 560,
+    left,
+    top,
+    focused: true,
+  });
+
+  await chrome.storage.session.set({
+    linkPickerContext: {
+      sourceTabId,
+      sourceWindowId,
+      pickerWindowId: picker?.id,
+      openedAt: Date.now(),
+    },
+  });
+}
 
 // Cache the selection HTML sent by snippet-capture.js (content script).
 // Using message passing is more reliable than calling chrome.storage from
@@ -74,6 +125,57 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.action === "cacheSnippetHtml" && msg.html) {
     chrome.storage.session.set({ pendingSnippetHtml: msg.html }).catch(() => {});
   }
+});
+
+// The picker copies the URL first, then asks the original page to insert it at
+// the right-clicked field. Sites that block insertion still receive clipboard
+// fallback, and the original browser window is brought back to the front.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.action !== "pasteVaultLink" || typeof msg.url !== "string") return false;
+
+  (async () => {
+    const stored = await chrome.storage.session.get("linkPickerContext");
+    const context = stored?.linkPickerContext || {};
+    let inserted = false;
+
+    if (Number.isInteger(context.sourceTabId)) {
+      // Bring the original page forward before asking its editor to insert.
+      // Rich-text editors commonly reject execCommand while their tab is hidden.
+      try {
+        await chrome.tabs.update(context.sourceTabId, { active: true });
+      } catch {}
+
+      if (Number.isInteger(context.sourceWindowId)) {
+        try {
+          await chrome.windows.update(context.sourceWindowId, { focused: true });
+        } catch {}
+      }
+
+      await swSleep(60);
+
+      try {
+        const response = await chrome.tabs.sendMessage(context.sourceTabId, {
+          action: "insertVaultLink",
+          url: msg.url,
+        });
+        inserted = response?.inserted === true;
+      } catch {
+        // Restricted pages and tabs closed since the menu click cannot receive messages.
+      }
+    } else if (Number.isInteger(context.sourceWindowId)) {
+      try {
+        await chrome.windows.update(context.sourceWindowId, { focused: true });
+      } catch {}
+    }
+
+    await chrome.storage.session.remove("linkPickerContext");
+    sendResponse({ ok: true, inserted });
+  })().catch((err) => {
+    console.error("[FIA] Link Vault paste failed:", err);
+    sendResponse({ ok: false, inserted: false, error: err?.message || "Paste failed" });
+  });
+
+  return true;
 });
 
 
@@ -319,6 +421,16 @@ async function handleFullPageCapture(tabId, title) {
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === "fia-link-vault") {
+    try {
+      await openLinkVaultPicker(tab);
+    } catch (err) {
+      console.error("[FIA] Link Vault picker failed:", err);
+      injectErrorToast(tab?.id, "Could not open Link Vault");
+    }
+    return;
+  }
+
   if (info.menuItemId !== "fia-save-snippet") return;
   const text      = info.selectionText ?? "";
   const sourceUrl = tab?.url ?? "";

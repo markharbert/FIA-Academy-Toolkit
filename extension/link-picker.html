@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link Vault</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      color-scheme: light;
+      --brand: #06092a;
+      --accent: #3f92cc;
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --text: #06092a;
+      --sub: #64748b;
+      --muted: #94a3b8;
+      --border: #e2e8f0;
+      --hover: #ebf5fb;
+      --success: #16a34a;
+      --error: #da0010;
+    }
+    body.dark {
+      color-scheme: dark;
+      --bg: hsl(230, 50%, 6%);
+      --card: hsl(230, 48%, 9%);
+      --text: #f1f5f9;
+      --sub: hsl(230, 20%, 65%);
+      --muted: hsl(230, 20%, 48%);
+      --border: hsl(230, 30%, 18%);
+      --hover: hsl(203, 40%, 14%);
+    }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-width: 340px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .shell {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 15px 16px 14px;
+      background: var(--brand);
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px rgba(232, 181, 0, .42);
+    }
+    .header-copy { min-width: 0; }
+    h1 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 750;
+    }
+    .subtitle {
+      margin-top: 2px;
+      color: rgba(255, 255, 255, .58);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    #content {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .state {
+      flex: 1;
+      min-height: 390px;
+      padding: 38px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .state-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 13px;
+      border-radius: 50%;
+      background: var(--hover);
+      color: var(--accent);
+      font-size: 22px;
+    }
+    .state-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .state-copy {
+      max-width: 270px;
+      margin: 7px 0 0;
+      color: var(--sub);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .state-copy.error { color: var(--error); }
+    .state-action {
+      margin-top: 16px;
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      font: 600 12px inherit;
+      cursor: pointer;
+    }
+    .state-action:hover { border-color: var(--accent); color: var(--accent); }
+    .list-wrap {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    .list-summary {
+      padding: 10px 14px 8px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .link-list {
+      margin: 0;
+      padding: 8px;
+      list-style: none;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .link-item + .link-item { margin-top: 4px; }
+    .link-button {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--card);
+      color: var(--text);
+      font: 600 12px/1.35 inherit;
+      text-align: left;
+      cursor: pointer;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      transition: border-color .12s, background .12s, transform .08s;
+    }
+    .link-button:hover,
+    .link-button:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--hover);
+    }
+    .link-button:active { transform: scale(.99); }
+    .link-button:disabled { opacity: .55; cursor: wait; }
+    .result {
+      position: fixed;
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      padding: 11px 14px;
+      border-radius: 9px;
+      background: var(--brand);
+      color: #fff;
+      box-shadow: 0 10px 28px rgba(6, 9, 42, .35);
+      font-size: 12px;
+      font-weight: 650;
+      text-align: center;
+    }
+    .result.success { background: var(--success); }
+    .result.error { background: var(--error); }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <img class="logo" src="icons/icon128.png" alt="" />
+      <div class="header-copy">
+        <h1>Link Vault</h1>
+        <div class="subtitle">Choose a link to paste</div>
+      </div>
+    </header>
+    <section id="content" aria-live="polite">
+      <div class="state">
+        <div class="spinner" aria-hidden="true"></div>
+        <p class="state-copy">Loading your links…</p>
+      </div>
+    </section>
+    <div id="result" class="result" role="status" hidden></div>
+  </main>
+  <script src="link-picker.js"></script>
+</body>
+</html>
