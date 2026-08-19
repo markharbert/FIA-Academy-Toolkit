@@ -8,3 +8,4 @@
 - [Replit publish schema warning](replit-publish-schema-warning.md) — "delete column" publish warning means dev DB is missing a column prod has; fix by adding it to dev DB via SQL.
 - [Extension smoke testing](extension-smoke-testing.md) — packaged MV3 smoke tests in headless Chromium need an initial service-worker warmup before Chrome APIs.
 - [Swipe File popup simplification](swipe-file-popup.md) — keep the extension Swipe File tab focused on capture and direct access, not a synced recent-items list.
+- [Palette result visibility](palette-result-modal.md) — extracted palettes should appear in a centered, prominent modal with a dimmed backdrop so saving is hard to miss.

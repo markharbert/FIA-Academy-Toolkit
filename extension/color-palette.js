@@ -42,35 +42,53 @@
     style.textContent = `
       #${OVERLAY_ID} {
         position: fixed;
-        bottom: 28px;
-        left: 50%;
-        transform: translateX(-50%);
+        inset: 0;
         z-index: 2147483647;
-        background: rgba(18, 20, 28, 0.96);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(3, 7, 20, 0.74);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+      }
+      #${OVERLAY_ID} .fia-pal-dialog {
+        width: min(640px, calc(100vw - 32px));
+        max-height: calc(100vh - 48px);
+        overflow-y: auto;
+        background: rgba(18, 20, 28, 0.98);
         border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 16px;
-        padding: 16px 18px 14px;
-        box-shadow: 0 8px 36px rgba(0,0,0,0.55);
+        border-radius: 20px;
+        padding: 24px 26px 22px;
+        box-shadow: 0 20px 70px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         user-select: none;
         -webkit-user-select: none;
-        min-width: 310px;
-        max-width: 420px;
+      }
+      #${OVERLAY_ID} .fia-pal-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
       }
       #${OVERLAY_ID} .fia-pal-title {
-        font-size: 12px;
+        font-size: 15px;
         font-weight: 700;
-        color: rgba(255,255,255,0.65);
+        color: rgba(255,255,255,0.88);
         text-transform: uppercase;
         letter-spacing: .06em;
-        margin-bottom: 12px;
-        text-align: center;
+      }
+      #${OVERLAY_ID} .fia-pal-subtitle {
+        margin-top: 4px;
+        color: rgba(255,255,255,0.48);
+        font-size: 12px;
       }
       #${OVERLAY_ID} .fia-pal-swatches {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 12px;
-        justify-content: center;
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 22px;
       }
       #${OVERLAY_ID} .fia-pal-swatch-wrap {
         display: flex;
@@ -87,19 +105,20 @@
       }
       #${OVERLAY_ID} .fia-pal-swatch {
         width: 100%;
-        aspect-ratio: 1/1;
-        border-radius: 8px;
+        aspect-ratio: 0.9/1;
+        border-radius: 10px;
         border: 2px solid rgba(255,255,255,0.18);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-        transition: transform .12s, box-shadow .12s;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+        transition: transform .15s, box-shadow .15s;
       }
       #${OVERLAY_ID} .fia-pal-swatch-wrap:hover .fia-pal-swatch {
-        transform: scale(1.08);
-        box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+        transform: translateY(-3px) scale(1.03);
+        box-shadow: 0 7px 18px rgba(0,0,0,0.55);
         border-color: rgba(255,255,255,0.5);
       }
       #${OVERLAY_ID} .fia-pal-hex {
-        font-size: 9px;
+        margin-top: 6px;
+        font-size: 10px;
         font-weight: 700;
         color: rgba(255,255,255,0.7);
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -119,10 +138,10 @@
       }
       #${OVERLAY_ID} .fia-pal-btn {
         flex: 1;
-        padding: 8px 10px;
-        border-radius: 9px;
+        padding: 11px 13px;
+        border-radius: 10px;
         border: none;
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 650;
         font-family: inherit;
         cursor: pointer;
@@ -139,7 +158,7 @@
         color: #fff;
       }
       #${OVERLAY_ID} .fia-pal-status {
-        font-size: 11px;
+        font-size: 12px;
         text-align: center;
         margin-top: 8px;
         min-height: 16px;
@@ -147,6 +166,15 @@
       }
       #${OVERLAY_ID} .fia-pal-status.ok   { color: #4ade80; }
       #${OVERLAY_ID} .fia-pal-status.err  { color: #f87171; }
+      @media (max-width: 520px) {
+        #${OVERLAY_ID} { padding: 16px; }
+        #${OVERLAY_ID} .fia-pal-dialog {
+          width: calc(100vw - 20px);
+          padding: 20px 16px 18px;
+        }
+        #${OVERLAY_ID} .fia-pal-swatches { gap: 7px; }
+        #${OVERLAY_ID} .fia-pal-hex { font-size: 8px; letter-spacing: 0; }
+      }
     `;
     document.documentElement.appendChild(style);
   }
@@ -160,22 +188,32 @@
     const overlay = document.createElement("div");
     overlay.id = OVERLAY_ID;
     overlay.innerHTML = `
-      <div class="fia-pal-title">🎨 Dominant Colors</div>
-      <div class="fia-pal-swatches">
-        ${colors.map(hex => `
-          <button type="button" class="fia-pal-swatch-wrap" data-hex="${hex}" title="Click to copy ${hex}" aria-label="Copy color ${hex}">
-            <div class="fia-pal-swatch" style="background:${hex}"></div>
-            <div class="fia-pal-hex">${hex}</div>
-          </button>
-        `).join("")}
+      <div class="fia-pal-dialog" role="dialog" aria-modal="true" aria-labelledby="__fia_pal_title__">
+        <div class="fia-pal-heading">
+          <div>
+            <div class="fia-pal-title" id="__fia_pal_title__">🎨 Dominant Colors</div>
+            <div class="fia-pal-subtitle">Click a swatch to copy its hex code</div>
+          </div>
+        </div>
+        <div class="fia-pal-swatches">
+          ${colors.map(hex => `
+            <button type="button" class="fia-pal-swatch-wrap" data-hex="${hex}" title="Click to copy ${hex}" aria-label="Copy color ${hex}">
+              <div class="fia-pal-swatch" style="background:${hex}"></div>
+              <div class="fia-pal-hex">${hex}</div>
+            </button>
+          `).join("")}
+        </div>
+        <div class="fia-pal-actions">
+          <button class="fia-pal-btn fia-pal-cancel" id="__fia_pal_cancel__">Cancel</button>
+          <button class="fia-pal-btn fia-pal-save"   id="__fia_pal_save__">Save to Swipe File</button>
+        </div>
+        <div class="fia-pal-status" id="__fia_pal_status__"></div>
       </div>
-      <div class="fia-pal-actions">
-        <button class="fia-pal-btn fia-pal-cancel" id="__fia_pal_cancel__">Cancel</button>
-        <button class="fia-pal-btn fia-pal-save"   id="__fia_pal_save__">Save to Swipe File</button>
-      </div>
-      <div class="fia-pal-status" id="__fia_pal_status__"></div>
     `;
     document.documentElement.appendChild(overlay);
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) destroy();
+    });
 
     // Per-swatch copy
     overlay.querySelectorAll(".fia-pal-swatch-wrap").forEach(wrap => {
