@@ -56,6 +56,7 @@ import {
   affiliateLinks, type AffiliateLink, type InsertAffiliateLink,
   swipeItems, type SwipeItem, type InsertSwipeItem, type PromoLink,
 } from "@shared/schema";
+import type { SwipeListResponse } from "./swipe-api";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
 import crypto from "crypto";
 import { db, pool } from "./db";
@@ -5356,11 +5357,7 @@ export class DatabaseStorage implements IStorage {
   async getSwipeItems(
     userId: string,
     opts?: { search?: string; type?: string; favorite?: boolean; limit?: number; offset?: number },
-  ): Promise<{
-    items: SwipeItem[];
-    total: number;
-    counts: { all: number; upload: number; snippet: number; palette: number; shared: number; favorites: number };
-  }> {
+  ): Promise<SwipeListResponse> {
     // Build filtered WHERE clause
     const filterConditions: any[] = [eq(swipeItems.userId, userId)];
     if (opts?.favorite) {

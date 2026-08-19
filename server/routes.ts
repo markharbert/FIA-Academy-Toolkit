@@ -31,6 +31,7 @@ import { getYouTubeAuthUrl, exchangeYouTubeCode, fetchYouTubeChannel, fetchYouTu
 import { getGscAuthUrl, exchangeGscCode, fetchGscSites, fetchGscData, fetchGscPageKeywords, inspectGscUrl } from "./searchConsole";
 import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
+import { formatSwipeListResponse } from "./swipe-api";
 import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
 import OpenAI from "openai";
 import {
@@ -12664,12 +12665,20 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
 
   // ---- v1 API – Swipe File (extension access) ----
 
-  // List recent items
+  // List recent items. The canonical response is:
+  // { items: SwipeItem[], total: number, counts: { all, upload, snippet,
+  //   palette, shared, favorites } }
+  // Clients still using the original nested response can request
+  // ?format=legacy while they migrate.
   app.get("/api/v1/swipe", requireApiKey, async (req: Request, res: Response) => {
     try {
       const user = (req as any).apiUser;
-      const items = await storage.getSwipeItems(user.id);
-      res.json({ items });
+      const format = req.query.format as string | undefined;
+      if (format && format !== "canonical" && format !== "legacy") {
+        return res.status(400).json({ message: "format must be canonical or legacy" });
+      }
+      const result = await storage.getSwipeItems(user.id);
+      res.json(formatSwipeListResponse(result, format === "legacy" ? "legacy" : "canonical"));
     } catch (err) {
       console.error("[v1] swipe list error:", err);
       res.status(500).json({ message: "Failed to load swipe items" });
