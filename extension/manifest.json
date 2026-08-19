@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FIA Toolkit",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Log your Daily Method of Operation, save swipe-file captures, and manage links — all from the FIA Academy Toolkit.",
   "permissions": ["storage", "notifications", "alarms", "activeTab", "tabs", "contextMenus", "scripting", "clipboardWrite"],
   "host_permissions": ["https://toolkit.fearlessmarketinglab.com/*", "<all_urls>"],

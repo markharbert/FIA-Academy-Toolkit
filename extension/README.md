@@ -8,7 +8,7 @@ Run this before distributing an updated extension archive:
 npm run extension:smoke
 ```
 
-The check extracts `fia-toolkit-extension-v2.4.0.zip` into a temporary folder and launches it in a clean Chromium profile. It verifies:
+The check extracts `fia-toolkit-extension-v2.4.1.zip` into a temporary folder and launches it in a clean Chromium profile. It verifies:
 
 - the archive still connects the right-click Link Vault menu to its originating-tab/window/request handoff;
 - insertion into a Facebook-shaped comment `contenteditable`;
