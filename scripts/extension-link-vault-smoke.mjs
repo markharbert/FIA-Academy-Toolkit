@@ -360,6 +360,37 @@ async function main() {
     const noEditorUrl = `${fixture.baseUrl}/noeditor`;
     const noEditorPage = await browser.newPage();
     await noEditorPage.goto(noEditorUrl, { waitUntil: "domcontentloaded" });
+    const noEditorTab = await tabFor(noEditorUrl);
+
+    // ── Site Inspector: hover an element and read its computed details ──────
+    await extensionPage.evaluate(async (tabId) => {
+      const tab = await chrome.tabs.get(tabId);
+      await chrome.tabs.update(tabId, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["site-inspector.js"] });
+    }, noEditorTab.id);
+    const inspectorRect = await noEditorPage.$eval("#read-only-copy", element => {
+      const rect = element.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    await noEditorPage.mouse.move(inspectorRect.x, inspectorRect.y);
+    await noEditorPage.waitForSelector("#__fia_site_inspector_panel__");
+    await noEditorPage.waitForFunction(() =>
+      document.querySelector(".fia-inspector-tag")?.textContent === "P",
+    );
+    assert.match(
+      await noEditorPage.$eval(".fia-inspector-typography", element => element.textContent || ""),
+      /Font|Size|Weight/,
+      "Site Inspector did not show typography details",
+    );
+    assert.match(
+      await noEditorPage.$eval(".fia-inspector-accessibility", element => element.textContent || ""),
+      /Role|Focusable/,
+      "Site Inspector did not show accessibility details",
+    );
+    await noEditorPage.keyboard.press("Escape");
+    await noEditorPage.waitForFunction(() => !document.getElementById("__fia_site_inspector__"));
+
     const noEditorPicker = await openPicker(await tabFor(noEditorUrl), "manual-paste-fallback");
     assert.equal(
       await chooseSmokeLink(noEditorPicker.pickerPage),
@@ -610,6 +641,7 @@ async function main() {
     console.log("  - copied/manual-paste fallback");
     console.log("  - cancel/reopen and stale-picker tab isolation");
     console.log("  - magnified color picker hex sampling and clipboard copy");
+    console.log("  - Site Inspector hover details and Escape cleanup");
     console.log("  - color palette: streaming full-page scan, six dominant colors, copy/save, tab-switch cleanup");
   } finally {
     await browser?.close();
