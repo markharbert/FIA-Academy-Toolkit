@@ -397,7 +397,10 @@
   const frame = document.createElement("iframe");
   frame.className = "fia-responsive-frame";
   frame.title = "Responsive preview of the current page";
-  frame.setAttribute("sandbox", "allow-same-origin");
+  // The snapshot is sanitized before it reaches this iframe. Keeping the
+  // sandbox's script permission avoids Chrome warning when the host page or
+  // an extension attempts to initialize the iframe's about:blank document.
+  frame.setAttribute("sandbox", "allow-same-origin allow-scripts");
   frame.tabIndex = -1;
   frame.style.cssText = [
     "position:absolute !important",

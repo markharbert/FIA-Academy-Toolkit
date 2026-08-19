@@ -277,7 +277,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.10", "the packaged extension is not version 2.4.10");
+  assert.equal(packagedManifest.version, "2.4.11", "the packaged extension is not version 2.4.11");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -837,9 +837,9 @@ async function main() {
         embeddedDocuments: 0,
         inlineHandlers: 0,
         javascriptUrls: 0,
-        allowsScripts: false,
+        allowsScripts: true,
       },
-      "Responsive preview retained script-capable page content or weakened its sandbox",
+      "Responsive preview retained executable page content or did not configure its sanitized sandbox",
     );
     assert.deepEqual(
       sandboxScriptWarnings,
