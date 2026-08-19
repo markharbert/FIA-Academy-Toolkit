@@ -536,6 +536,9 @@ async function checkMembershipAlarm() {
     return;
   }
 
+  // Record when this check cycle began so the popup can compute the real remainder.
+  await chrome.storage.local.set({ lastSuspendedCheckAt: Date.now() });
+
   try {
     const res = await fetch(`${API_BASE}/api/v1/membership/check`, {
       method: "POST",
@@ -575,7 +578,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const { type, apiKey } = message || {};
 
   if (type === "START_SUSPENDED_CHECK") {
-    chrome.storage.local.set({ suspended: true }).then(() =>
+    chrome.storage.local.set({ suspended: true, lastSuspendedCheckAt: Date.now() }).then(() =>
       chrome.alarms.create(SUSPENDED_ALARM, { periodInMinutes: SUSPENDED_CHECK_MINS })
     );
     sendResponse({ ok: true });

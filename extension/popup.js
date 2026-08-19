@@ -151,9 +151,21 @@ function messageServiceWorker(msg) {
 }
 
 // ─── Suspended countdown ───────────────────────────────────────────────────
-function startSuspendedCountdown() {
+async function startSuspendedCountdown() {
   clearSuspendedCountdown();
+
+  // Sync with the real SW alarm: read when the last check cycle began and
+  // compute how many seconds remain in the current 5-minute window.
   let secsLeft = SUSPENDED_CHECK_SECS;
+  try {
+    const { lastSuspendedCheckAt } = await chrome.storage.local.get("lastSuspendedCheckAt");
+    if (lastSuspendedCheckAt) {
+      const elapsed = Math.floor((Date.now() - lastSuspendedCheckAt) / 1000);
+      const remainder = SUSPENDED_CHECK_SECS - elapsed;
+      secsLeft = Math.min(SUSPENDED_CHECK_SECS, Math.max(1, remainder));
+    }
+  } catch { /* fall back to full interval */ }
+
   const el = $("suspended-countdown");
   function tick() {
     if (el) el.textContent = `Next check in ${fmtTimer(secsLeft)}`;
