@@ -468,6 +468,16 @@ async function main() {
     await colorPage.waitForFunction(
       () => document.querySelector(".fia-color-picker-hex")?.textContent === "#123456",
     );
+    assert.equal(
+      await colorPage.$eval(".fia-color-picker-pixel", element => element.dataset.color),
+      "#123456",
+      "the magnifier target should show the exact sampled pixel color",
+    );
+    assert.equal(
+      await colorPage.$(".fia-color-picker-crosshair"),
+      null,
+      "the magnifier should not obscure the sample with a crosshair",
+    );
     await colorPage.mouse.click(220, 250);
     await colorPage.waitForFunction(
       () => {

@@ -89,21 +89,11 @@
         background-repeat: no-repeat; background-color: #888;
         transform: translate(-50%, -50%); overflow: hidden;
       }
-      #${ROOT_ID} .fia-color-picker-crosshair {
-        position: absolute; left: 50%; top: 50%; width: 10px; height: 10px;
-        transform: translate(-50%, -50%); border: 1px solid #fff;
-        box-shadow: 0 0 0 1px rgba(0,0,0,.85); border-radius: 2px;
-      }
-      #${ROOT_ID} .fia-color-picker-crosshair::before,
-      #${ROOT_ID} .fia-color-picker-crosshair::after {
-        content: ""; position: absolute; background: #fff;
-        box-shadow: 0 0 0 1px rgba(0,0,0,.75);
-      }
-      #${ROOT_ID} .fia-color-picker-crosshair::before {
-        width: 1px; height: 22px; left: 4px; top: -7px;
-      }
-      #${ROOT_ID} .fia-color-picker-crosshair::after {
-        width: 22px; height: 1px; left: -7px; top: 4px;
+      #${ROOT_ID} .fia-color-picker-pixel {
+        position: absolute; left: 50%; top: 50%; width: 12px; height: 12px;
+        transform: translate(-50%, -50%); border: 2px solid #fff;
+        box-shadow: 0 0 0 1px rgba(0,0,0,.9), 0 1px 4px rgba(0,0,0,.65);
+        border-radius: 50%; background: #888;
       }
       #${ROOT_ID} .fia-color-picker-readout {
         position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -148,7 +138,7 @@
       <div class="fia-color-picker-help">Move to a color · Click to copy · Esc to cancel</div>
       <div class="fia-color-picker-toast" role="status" aria-live="polite"></div>
       <div class="fia-color-picker-magnifier">
-        <div class="fia-color-picker-crosshair"></div>
+        <div class="fia-color-picker-pixel" aria-label="Sampled pixel"></div>
       </div>
       <div class="fia-color-picker-readout">
         <span class="fia-color-picker-swatch"></span>
@@ -158,6 +148,7 @@
     document.documentElement.appendChild(root);
 
     const magnifier = root.querySelector(".fia-color-picker-magnifier");
+    const pixelMarker = root.querySelector(".fia-color-picker-pixel");
     const swatch = root.querySelector(".fia-color-picker-swatch");
     const hexLabel = root.querySelector(".fia-color-picker-hex");
     const toast = root.querySelector(".fia-color-picker-toast");
@@ -173,6 +164,8 @@
       currentHex = toHex(data);
       hexLabel.textContent = currentHex;
       swatch.style.background = currentHex;
+      pixelMarker.dataset.color = currentHex;
+      pixelMarker.style.backgroundColor = currentHex;
       magnifier.style.left = `${x}px`;
       magnifier.style.top = `${y}px`;
       magnifier.style.backgroundImage = `url("${screenshot}")`;
