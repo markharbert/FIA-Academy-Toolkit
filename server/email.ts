@@ -146,6 +146,26 @@ export async function sendMembershipLapsedEmail(params: {
   }
 }
 
+export async function sendAccessRestoredEmail(params: {
+  email: string;
+  firstName: string | null;
+  loginUrl: string;
+}): Promise<boolean> {
+  const rendered = emailTemplates.accessRestoredEmail({
+    firstName: params.firstName,
+    email: params.email,
+    loginUrl: params.loginUrl,
+  });
+  try {
+    await sendEmail({ to: params.email, subject: rendered.subject, html: rendered.html, text: rendered.text });
+    console.log(`[Email] Access-restored email sent to ${params.email}`);
+    return true;
+  } catch (error) {
+    console.error("[Email] Failed to send access-restored email:", error);
+    return false;
+  }
+}
+
 export function isEmailConfigured(): boolean {
   return !!process.env.SENDGRID_API_TOKEN;
 }

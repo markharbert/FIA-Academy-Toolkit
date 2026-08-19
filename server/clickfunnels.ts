@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
+import { sendAccessRestoredEmail, isEmailConfigured } from "./email";
 
 // Strip any accidental protocol prefix and trailing slash
 const CF_WORKSPACE_DOMAIN = (process.env.CF_WORKSPACE_DOMAIN || "")
@@ -136,6 +137,7 @@ export async function handleCfEnrollmentEvent(
 
   if (isGrantEvent && courseMatches) {
     if (user) {
+      const wasDisabled = user.isDisabled === true;
       await storage.updateUser(user.id, {
         cfEnrolled: true,
         cfContactId: contactId || user.cfContactId,
@@ -146,6 +148,19 @@ export async function handleCfEnrollmentEvent(
         // members can log in again after their membership is reinstated in CF.
         isDisabled: false,
       });
+      // Notify the member that their access has been fully restored so they
+      // know they can log in again without waiting for the next hourly sweep.
+      if (wasDisabled && isEmailConfigured()) {
+        const loginUrl = generateCfSsoUrl(contactEmail);
+        sendAccessRestoredEmail({
+          email: contactEmail,
+          firstName: event.firstName,
+          loginUrl,
+        }).catch(err =>
+          console.error(`[CF Webhook] Failed to send access-restored email to ${contactEmail}:`, err)
+        );
+        console.log(`[CF Webhook] Queued access-restored email for previously disabled member: ${contactEmail}`);
+      }
       return { action: "granted", email: contactEmail };
     }
     // No local account yet — auto-provision one so the member appears in the

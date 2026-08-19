@@ -859,6 +859,38 @@ export function magicLinkLoginEmail(params: {
   return { subject, html: wrap(subject, body, resources), text };
 }
 
+export function accessRestoredEmail(params: {
+  firstName: string | null;
+  email: string;
+  loginUrl: string;
+}): { subject: string; html: string; text: string } {
+  const name = params.firstName || "there";
+  const subject = "Your Academy Toolkit access has been restored 🎉";
+
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hi ${name},</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+      Great news — your <strong>Fearless Influencer Academy</strong> membership has been reinstated
+      and your <strong>Academy Toolkit</strong> access is fully restored.
+    </p>
+    <div style="margin:0 0 24px;padding:16px 20px;background:#f0fdf4;border-left:3px solid #16a34a;border-radius:0 8px 8px 0;">
+      <p style="margin:0;font-size:14px;color:#14532d;line-height:1.6;">
+        ✅ Your account is <strong>active</strong>. You can log in and pick up right where you left off.
+      </p>
+    </div>
+    <p style="margin:0 0 24px;font-size:15px;color:#334155;line-height:1.6;">
+      Click the button below to sign back in:
+    </p>
+    ${btn("Log In to the Toolkit", params.loginUrl)}
+    <p style="margin:24px 0 0;font-size:13px;color:#94a3b8;line-height:1.6;">
+      Questions? Reply to this email and we'll help you out.
+    </p>`;
+
+  const text = `Hi ${name},\n\nGreat news — your Fearless Influencer Academy membership has been reinstated and your Academy Toolkit access is fully restored.\n\nYour account is active. Log in here:\n${params.loginUrl}\n\nQuestions? Reply to this email and we'll help.`;
+
+  return { subject, html: wrap(subject, body), text };
+}
+
 export function membershipLapsedEmail(params: {
   firstName: string | null;
   email: string;
