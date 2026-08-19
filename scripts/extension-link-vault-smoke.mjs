@@ -306,7 +306,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.14", "the packaged extension is not version 2.4.14");
+  assert.equal(packagedManifest.version, "2.4.15", "the packaged extension is not version 2.4.15");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -754,7 +754,10 @@ async function main() {
     const colorPage = await browser.newPage();
     const sandboxScriptWarnings = [];
     colorPage.on("console", message => {
-      if (message.text().includes("Blocked script execution in 'about:blank'")) {
+      if (
+        message.text().includes("Blocked script execution in 'about:blank'")
+        || message.text().includes("An iframe which has both allow-scripts and allow-same-origin")
+      ) {
         sandboxScriptWarnings.push(message.text());
       }
     });

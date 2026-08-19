@@ -1818,7 +1818,7 @@ async function boot() {
     if (badge) badge.textContent = `v${currentVersion}`;
 
     // Fetch latest version from server (fire-and-forget, no auth needed)
-    fetch(`${API_BASE}/api/extension/version`)
+    fetch(`${API_BASE}/api/extension/version`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data?.version) return;

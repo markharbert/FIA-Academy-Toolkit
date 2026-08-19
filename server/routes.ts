@@ -12942,6 +12942,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const path = await import("path");
       const manifestPath = path.resolve("extension/manifest.json");
       const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      res.setHeader("Pragma", "no-cache");
       res.json({
         version:     manifest.version,
         downloadUrl: "/api/extension/download",
@@ -12969,6 +12971,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", stat.size);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      res.setHeader("Pragma", "no-cache");
       fs.createReadStream(zipPath).pipe(res);
     } catch (err) {
       console.error("[extension/download]", err);
