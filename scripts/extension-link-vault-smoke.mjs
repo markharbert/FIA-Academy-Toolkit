@@ -292,7 +292,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.12", "the packaged extension is not version 2.4.12");
+  assert.equal(packagedManifest.version, "2.4.13", "the packaged extension is not version 2.4.13");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -1174,14 +1174,16 @@ async function main() {
               ["href", "src", "action", "formaction"].includes(attribute.name.toLowerCase())
                 && attribute.value.trim().toLowerCase().startsWith("javascript:"),
             )).length,
-          allowsScripts: frame.sandbox.contains("allow-scripts"),
+           allowsScripts: frame.sandbox.contains("allow-scripts"),
+           allowsSameOrigin: frame.sandbox.contains("allow-same-origin"),
         };
       }),
       {
         embeddedDocuments: 0,
         inlineHandlers: 0,
         javascriptUrls: 0,
-        allowsScripts: true,
+         allowsScripts: false,
+         allowsSameOrigin: true,
       },
       "Responsive preview retained executable page content or did not configure its sanitized sandbox",
     );
