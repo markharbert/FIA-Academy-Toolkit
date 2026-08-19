@@ -129,13 +129,19 @@
     }
     #${ROOT_ID}, #${ROOT_ID} * { box-sizing: border-box !important; }
     #${ROOT_ID} .fia-responsive-toolbar {
+      all: unset !important; box-sizing: border-box !important;
       flex: 0 0 auto !important; display: flex !important; align-items: center !important;
+      width: 100% !important; min-width: 0 !important; min-height: 68px !important;
       gap: 10px !important; min-height: 68px !important; padding: 10px 14px !important;
       overflow-x: auto !important; overflow-y: hidden !important;
       color: #fff !important; background: #06092a !important;
       border-bottom: 1px solid rgba(255,255,255,.12) !important;
       box-shadow: 0 5px 18px rgba(0,0,0,.36) !important;
       scrollbar-width: thin !important; scrollbar-color: rgba(255,255,255,.25) transparent !important;
+    }
+    #${ROOT_ID} .fia-responsive-toolbar > * {
+      all: unset !important; box-sizing: border-box !important;
+      flex: 0 0 auto !important; min-width: 0 !important; margin: 0 !important;
     }
     #${ROOT_ID} .fia-responsive-brand {
       flex: 0 0 auto !important; display: flex !important; align-items: center !important;
@@ -161,7 +167,7 @@
     }
     #${ROOT_ID} .fia-responsive-select,
     #${ROOT_ID} .fia-responsive-input {
-      all: unset !important; display: block !important; height: 40px !important;
+      all: unset !important; box-sizing: border-box !important; display: block !important; height: 40px !important;
       color: #fff !important; background: rgba(255,255,255,.08) !important;
       border: 1px solid rgba(255,255,255,.2) !important; border-radius: 7px !important;
       font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
@@ -328,16 +334,16 @@
         <span class="fia-responsive-select-value" aria-hidden="true"></span>
         <span class="fia-responsive-select-chevron" aria-hidden="true"></span>
       </div>
-      <label class="fia-responsive-dimension">
+      <div class="fia-responsive-dimension" role="group" aria-label="Viewport width control">
         <span class="fia-responsive-dimension-prefix">W</span>
         <input id="__fia_responsive_width__" class="fia-responsive-input" type="number"
           min="${MIN_WIDTH}" max="${MAX_WIDTH}" step="1" inputmode="numeric" aria-label="Viewport width">
-      </label>
-      <label class="fia-responsive-dimension">
+      </div>
+      <div class="fia-responsive-dimension" role="group" aria-label="Viewport height control">
         <span class="fia-responsive-dimension-prefix">H</span>
         <input id="__fia_responsive_height__" class="fia-responsive-input" type="number"
           min="${MIN_HEIGHT}" max="${MAX_HEIGHT}" step="1" inputmode="numeric" aria-label="Viewport height">
-      </label>
+      </div>
       <div class="fia-responsive-zoom" aria-label="Preview zoom">
         <button id="__fia_responsive_zoom_out__" class="fia-responsive-button" type="button" aria-label="Zoom out">−</button>
         <output id="__fia_responsive_zoom_value__" class="fia-responsive-zoom-value">100%</output>

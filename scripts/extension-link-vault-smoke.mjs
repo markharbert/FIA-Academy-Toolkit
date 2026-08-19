@@ -103,8 +103,8 @@ function fixtureHtml(kind) {
           body { font: 16px system-ui, sans-serif; margin: 3rem; }
           [contenteditable] { border: 1px solid #94a3b8; border-radius: 8px; min-height: 4rem; padding: 1rem; }
            /* Deliberately hostile host-page styling: the Responsive overlay must not inherit it. */
-           label { margin: 19px !important; padding: 13px !important; border: 5px solid fuchsia !important; background: lime !important; border-radius: 99px !important; }
-           label span { margin: 17px !important; padding: 11px !important; border: 4px solid orange !important; background: cyan !important; transform: translateY(-9px) !important; }
+           label, .fia-responsive-dimension { margin: 19px !important; padding: 13px !important; border: 5px solid fuchsia !important; background: lime !important; border-radius: 99px !important; }
+           label span, .fia-responsive-dimension-prefix { margin: 17px !important; padding: 11px !important; border: 4px solid orange !important; background: cyan !important; transform: translateY(-9px) !important; }
           #color-swatch { position: fixed; left: 140px; top: 180px; width: 180px; height: 160px; background: rgb(18, 52, 86); }
           #responsive-probe::after { content: "desktop"; }
           @media (max-width: 400px) {
@@ -271,7 +271,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.5", "the packaged extension is not version 2.4.5");
+  assert.equal(packagedManifest.version, "2.4.7", "the packaged extension is not version 2.4.7");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -740,6 +740,41 @@ async function main() {
         },
       ],
       "Responsive width/height prefixes are not vertically centered in their controls",
+    );
+    const toolbarSpacing = await colorPage.$eval(
+      "#__fia_responsive__ .fia-responsive-toolbar",
+      toolbar => {
+        const children = Array.from(toolbar.children).map(child => {
+          const rect = child.getBoundingClientRect();
+          return { left: rect.left, right: rect.right, width: rect.width };
+        });
+        const gaps = children.slice(1).map((child, index) => child.left - children[index].right);
+        return { children, gaps };
+      },
+    );
+    assert.ok(
+      toolbarSpacing.children.every(child => child.width > 0)
+        && toolbarSpacing.gaps.every(gap => gap >= 8),
+      `Responsive toolbar controls overlap or are too close: ${JSON.stringify(toolbarSpacing)}`,
+    );
+    const selectBounds = await colorPage.$eval(
+      "#__fia_responsive__ .fia-responsive-select-wrap",
+      wrap => {
+        const select = wrap.querySelector(".fia-responsive-select");
+        const wrapRect = wrap.getBoundingClientRect();
+        const selectRect = select.getBoundingClientRect();
+        return {
+          wrapLeft: wrapRect.left,
+          wrapRight: wrapRect.right,
+          selectLeft: selectRect.left,
+          selectRight: selectRect.right,
+        };
+      },
+    );
+    assert.ok(
+      selectBounds.selectLeft >= selectBounds.wrapLeft
+        && selectBounds.selectRight <= selectBounds.wrapRight,
+      `Responsive preset control paints outside its slot and overlaps W/H: ${JSON.stringify(selectBounds)}`,
     );
     assert.equal(
       await colorPage.$eval("#__fia_responsive__ .fia-responsive-frame", frame =>
