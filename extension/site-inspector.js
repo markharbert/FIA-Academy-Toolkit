@@ -135,8 +135,9 @@
       box-shadow: 0 2px 8px rgba(0,0,0,.28);
     }
     #${ROOT_ID} #${PANEL_ID} {
-      position: fixed; display: none; width: 298px; max-height: min(440px, calc(100vh - 24px));
-      overflow-y: auto; pointer-events: auto; color: #f4f7fb;
+      position: fixed; display: none; width: 298px; height: auto;
+      max-height: none; overflow: visible; box-sizing: border-box;
+      pointer-events: auto; color: #f4f7fb;
       background: rgba(31,35,52,.97); border: 1px solid rgba(255,255,255,.16);
       border-radius: 9px; box-shadow: 0 12px 34px rgba(0,0,0,.35), 0 0 0 1px rgba(0,0,0,.16);
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);

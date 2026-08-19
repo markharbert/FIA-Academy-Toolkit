@@ -446,6 +446,11 @@ async function assertPickerOpeningContract(extensionDir) {
     /function onScroll\(\) \{[\s\S]*?if \(currentElement\) showElement\(currentElement\)/,
     "the packaged Site Inspector no longer repositions the current element on scroll",
   );
+  assert.match(
+    siteInspectorScript,
+    /#\$\{ROOT_ID\} #\$\{PANEL_ID\} \{[\s\S]*?height: auto;[\s\S]*?max-height: none; overflow: visible; box-sizing: border-box;/,
+    "the packaged Site Inspector tooltip no longer forces its content into a scrolling box",
+  );
 
   // ── Audit regression: ruler pointercancel/lostcapture/resize cleanup ──────
   // pointercancel must not commit invalid coordinates, lostpointercapture must
