@@ -118,6 +118,7 @@ function fixtureHtml(kind) {
           srcdoc="&lt;script&gt;window.__responsiveNestedScriptRuns = true;&lt;/script&gt;"></iframe>
         <button id="responsive-inline-handler" hidden onclick="window.__responsiveInlineHandlerRuns = true">Hidden</button>
         <a id="responsive-javascript-link" hidden href="javascript:window.__responsiveJavascriptUrlRuns = true">Hidden</a>
+        <noscript id="responsive-noscript-tracking"><script>window.__responsiveNoscriptScriptRuns = true;</script><iframe src="about:blank" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </body>
     </html>`;
 }
@@ -306,7 +307,7 @@ async function assertPickerOpeningContract(extensionDir) {
     /fia-ruler-guide-x[\s\S]*?fia-ruler-guide-y[\s\S]*?data-ruler-field="width"[\s\S]*?data-ruler-field="height"/,
     "the packaged Ruler is missing its alignment guides or measurement readout",
   );
-  assert.equal(packagedManifest.version, "2.4.16", "the packaged extension is not version 2.4.16");
+  assert.equal(packagedManifest.version, "2.4.17", "the packaged extension is not version 2.4.17");
   assert.ok(
     packagedManifest.web_accessible_resources?.some(entry =>
       entry.resources?.includes("icons/icon128.png") && entry.matches?.includes("<all_urls>")),
@@ -1182,6 +1183,11 @@ async function main() {
       await responsivePreviewFrame.evaluate(() => window.__responsiveFixtureScriptRuns),
       undefined,
       "Responsive executed a source-page script inside the preview",
+    );
+    assert.equal(
+      await responsivePreviewFrame.evaluate(() => document.querySelectorAll("noscript").length),
+      0,
+      "Responsive preview kept <noscript> content, which re-parses as live markup inside the script-disabled sandbox",
     );
     assert.deepEqual(
       await responsivePreviewFrame.evaluate(() => {
