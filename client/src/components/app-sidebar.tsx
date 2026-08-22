@@ -360,7 +360,7 @@ export function AppSidebar() {
 
       <SidebarContent>
         {/* Training section — shows published courses above Navigation */}
-        {trainingCourses.length > 0 && !isCollaborator && (
+        {trainingCourses.length > 0 && !isCollaborator && user?.isAdmin && (
           <>
             <SidebarGroup>
               <SidebarGroupLabel>Training</SidebarGroupLabel>

@@ -13426,8 +13426,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Member: list published courses
-  app.get("/api/training/courses", requireAuth, async (_req, res) => {
+  // Admin-only (until member rollout): list published courses
+  app.get("/api/training/courses", requireAdmin, async (_req, res) => {
     try {
       const published = await storage.getPublishedCourses();
       res.json(published);
@@ -13436,8 +13436,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Member: get course with structure + progress (published only)
-  app.get("/api/training/courses/:id", requireAuth, async (req, res) => {
+  // Admin-only (until member rollout): get course with structure + progress
+  app.get("/api/training/courses/:id", requireAdmin, async (req, res) => {
     try {
       const userId = req.session.userId as string;
       const result = await storage.getCourseWithStructure(req.params.id, userId);
@@ -13457,8 +13457,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Member: get lesson content + resources (published course + published lesson only)
-  app.get("/api/training/lessons/:id", requireAuth, async (req, res) => {
+  // Admin-only (until member rollout): get lesson content + resources
+  app.get("/api/training/lessons/:id", requireAdmin, async (req, res) => {
     try {
       const lesson = await storage.getCourseLesson(req.params.id);
       if (!lesson || lesson.status !== "published") return res.status(404).json({ message: "Not found" });
@@ -13471,8 +13471,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
-  // Member: upsert lesson progress (published course + published lesson only)
-  app.post("/api/training/lessons/:id/progress", requireAuth, async (req, res) => {
+  // Admin-only (until member rollout): upsert lesson progress
+  app.post("/api/training/lessons/:id/progress", requireAdmin, async (req, res) => {
     try {
       const userId = req.session.userId as string;
       const lesson = await storage.getCourseLesson(req.params.id);
