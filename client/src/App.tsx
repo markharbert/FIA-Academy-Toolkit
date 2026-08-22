@@ -101,6 +101,7 @@ const AnalyticsGscPage           = lazyPage(() => import("@/pages/analytics-gsc"
 const LinksPage                  = lazyPage(() => import("@/pages/links"));
 const SwipeFilePage              = lazyPage(() => import("@/pages/swipe-file"));
 const SwipeSharePage             = lazyPage(() => import("@/pages/swipe-share"));
+const ClickFunnelsAdminPage      = lazyPage(() => import("@/pages/clickfunnels-admin"));
 const AdminCoursesPage           = lazyPage(() => import("@/pages/admin-courses"));
 const AdminCourseOutlinePage     = lazyPage(() => import("@/pages/admin-course-outline"));
 const AdminLessonEditorPage      = lazyPage(() => import("@/pages/admin-lesson-editor"));
@@ -230,6 +231,9 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/admin">
         {() => <AdminRoute component={AdminPage} />}
+      </Route>
+      <Route path="/admin/clickfunnels">
+        {() => <AdminRoute component={ClickFunnelsAdminPage} />}
       </Route>
       <Route path="/links">
         {() => <ProtectedRoute component={LinksPage} />}

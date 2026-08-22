@@ -3541,10 +3541,7 @@ export default function AdminPage() {
             <Users className="h-3.5 w-3.5 text-sky-400" />
             Users
           </TabsTrigger>
-          <TabsTrigger value="clickfunnels" data-testid="tab-clickfunnels" className="gap-1.5">
-            <Workflow className="h-3.5 w-3.5 text-purple-400" />
-            ClickFunnels
-          </TabsTrigger>
+
           <TabsTrigger value="integrations" data-testid="tab-integrations" className="gap-1.5">
             <Webhook className="h-3.5 w-3.5 text-emerald-400" />
             Integrations
@@ -4151,10 +4148,6 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="clickfunnels" className="space-y-6">
-          <GracePeriodCard />
-          <CfIntegrationTab />
-        </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">
           <Card>

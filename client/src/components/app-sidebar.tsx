@@ -40,6 +40,7 @@ import {
   CheckCircle2,
   Circle,
   LayoutList,
+  Workflow,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -579,6 +580,17 @@ export function AppSidebar() {
                     >
                       <LayoutList className={location.startsWith("/admin/courses") ? undefined : "text-violet-400"} />
                       <span>Courses</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location.startsWith("/admin/clickfunnels")}
+                      tooltip="ClickFunnels"
+                      onClick={() => setLocation("/admin/clickfunnels")}
+                      data-testid="nav-clickfunnels"
+                    >
+                      <Workflow className={location.startsWith("/admin/clickfunnels") ? undefined : "text-violet-400"} />
+                      <span>ClickFunnels</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
