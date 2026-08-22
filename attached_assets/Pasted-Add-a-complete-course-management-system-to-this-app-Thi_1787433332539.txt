@@ -1,0 +1,93 @@
+Add a complete course management system to this app. This is Phase 1 of turning the Academy Toolkit into a course platform. In this phase, build ONLY the database layer and the admin-side course builder. Do NOT build member-facing course pages yet, that comes in a later phase. Do not modify or break any existing features (DMO Tracker, Projects, Video Tools, Email Tools, Teleprompter, Dashboard, Admin panel tabs that already exist).
+
+=== CONTEXT ===
+
+This app already uses React 18 + TypeScript + Vite, Wouter routing, TanStack React Query, shadcn/ui components, Tailwind, Express backend, Drizzle ORM with PostgreSQL, and session-based auth with an existing admin role. Follow the existing design system and the conventions in design_guidelines.md exactly. The new screens must look native to this app: same sidebar, same card styles, same typography, same color palette as the rest of the admin panel. Do not invent a new visual style.
+
+The purpose: I am migrating my Fearless Influencer Academy course out of ClickFunnels into this app, and I will keep building new courses here forever. So this must be a general course builder, not something hardcoded to one course.
+
+=== DATABASE (Drizzle + PostgreSQL) ===
+
+Create these tables:
+
+1. courses
+- id, title, slug (unique, auto-generated from title but editable), description (text), cover_image_url, is_published (boolean, default false), sort_order, created_at, updated_at
+
+2. course_modules
+- id, course_id (FK to courses, cascade delete), parent_module_id (nullable FK to course_modules, for nesting; modules can contain sub-modules to ANY depth, my current course nests 4 levels deep), title, description (nullable), is_published (boolean, default false), sort_order, created_at, updated_at
+
+3. course_lessons
+- id, module_id (FK to course_modules, cascade delete), title, slug, is_published (boolean, default false), sort_order, video_provider (enum: 'vimeo', 'youtube', 'voomly', 'none', default 'none'), video_id (nullable text, used for vimeo/youtube), video_embed_code (nullable text, used for voomly or any raw embed), body (nullable text, stores rich text content as HTML), custom_embed_code (nullable text, for interactive tools/calculators embedded below the body), created_at, updated_at
+
+4. lesson_resources
+- id, lesson_id (FK to course_lessons, cascade delete), label, url, sort_order
+
+5. lesson_progress
+- id, user_id (FK to users), lesson_id (FK to course_lessons), completed_at (timestamp). Unique constraint on (user_id, lesson_id). This table is created now but only used in a later phase.
+
+CRITICAL ORDERING RULE: within the same parent, modules and lessons can be SIBLINGS and must be freely reorderable against each other. Example from my real course: the module 'LAUNCH' contains four sub-modules AND one loose lesson at the same level, in a specific order. So sort_order must work across the mixed list of a parent's child modules and child lessons together, not as two separate lists.
+
+=== API ROUTES (Express, admin-only) ===
+
+All routes below require an authenticated admin session (reuse the existing admin middleware). Full CRUD for courses, modules, lessons, and lesson resources, plus:
+- A reorder endpoint that accepts the new ordered list of children (mixed modules and lessons) for a given parent and updates sort_order in one transaction
+- A move endpoint to change a module's or lesson's parent (for dragging into a different branch)
+- A duplicate endpoint for lessons (copies everything including body, video fields, and resources, with title suffixed 'Copy', created as draft) and for modules (deep-copies the module and its entire subtree of sub-modules and lessons, all as drafts)
+- Publish/unpublish toggles for courses, modules, and lessons
+- Deleting a module requires the client to pass a confirmation flag and cascade deletes its subtree
+
+=== ADMIN UI: NEW 'COURSES' TAB ===
+
+Add a 'Courses' tab to the existing Admin panel navigation. It contains three screens:
+
+SCREEN 1: COURSE LIST
+- Grid of course cards: cover image, title, module count, lesson count, Published/Draft badge, and a menu (Edit details, Publish/Unpublish, Delete with type-to-confirm)
+- 'New Course' button opens a dialog: title, description, cover image upload (reuse the app's existing file upload infrastructure), slug auto-filled from title. Creating takes you straight to the outline editor.
+
+SCREEN 2: OUTLINE EDITOR (the most important screen, get this right)
+A full-page tree editor for one course, modeled on how ClickFunnels' course outline works but cleaner:
+- Course header at top: cover thumbnail, title, Published/Draft badge, Edit Details button, and a live count like '4 modules / 223 lessons'
+- Below, a collapsible tree of the course structure. Each row is either a module (folder icon) or a lesson (page/play icon). Rows show: drag handle, expand/collapse chevron (modules only), icon, title, a Published/Draft status pill, and a row menu (Edit, Duplicate, Publish/Unpublish, Delete)
+- Drag and drop with a proper library (dnd-kit): reorder rows within the same parent, including mixing lessons between modules in the list, AND drag a row onto/into a different module to re-parent it. Show a clear drop indicator line while dragging. Persist immediately via the reorder/move endpoints with optimistic updates.
+- Nesting must render cleanly at least 5 levels deep with indentation
+- Inline add: every module row has a small '+ Add' control offering 'Add sub-module' and 'Add lesson'. Adding creates the item as a Draft with an inline-editable title, focused and selected so I can type the name and hit Enter. Top level of the course has the same Add control for root-level modules.
+- Expand All / Collapse All buttons
+- Draft items render with a subtly muted title so status is scannable at a glance
+- Clicking a lesson row opens Screen 3. Clicking a module row expands/collapses it; module editing (rename, description) happens via its row menu in a small dialog.
+
+SCREEN 3: LESSON EDITOR
+A full-page editor for one lesson with a sticky header (back-to-outline breadcrumb, lesson title inline-editable, Draft/Published toggle, Save button, and a 'Preview' button that shows the lesson exactly as a member will see it in a modal or new tab using a clean read-only layout). Auto-save drafts every 30 seconds and on blur; show a 'Saved' indicator with timestamp.
+
+The editor body has four sections stacked vertically, clearly labeled:
+
+1. VIDEO
+- One text input labeled 'Video URL or embed code'
+- If the paste matches a Vimeo URL (vimeo.com/..., player.vimeo.com/...), detect it, extract the numeric video ID, set provider=vimeo, and render a live Vimeo player preview below the field
+- If it matches a YouTube URL (youtube.com/watch, youtu.be/..., youtube.com/embed/...), extract the video ID, set provider=youtube, render a live YouTube preview
+- If it contains an iframe/script embed snippet or a Voomly link (voomly.com), set provider=voomly, store the raw snippet in video_embed_code, and render it sandboxed in the preview (iframe with sandbox attributes that still allow video playback)
+- Show a small provider badge (Vimeo / YouTube / Voomly) once detected, and a 'Remove video' link that clears it back to provider=none
+- Swapping a video is just pasting a new value over the old one
+
+2. LESSON CONTENT (rich text)
+- Use TipTap with a clean toolbar styled to match shadcn: Heading 1, Heading 2, paragraph, bold, italic, bullet list, numbered list, link (with URL dialog), image (uploads via existing upload infra, inserted inline, resizable), horizontal divider, blockquote, and a collapsible accordion block (summary + collapsible content) for FAQs and transcripts
+- Pasting a Vimeo or YouTube URL on its own blank line inside the editor auto-converts it into an embedded playable video at that spot (so lessons can have bonus videos mid-content)
+- Store as HTML in the body column. Editor area should feel like writing a document: generous padding, max-width around 720px, comfortable line height
+
+3. CUSTOM EMBED (optional, collapsed by default)
+- An 'Advanced: custom embed' expandable section with a code textarea for raw HTML/JS (for calculators and interactive tools). Renders sandboxed on the member page below the lesson content. Show a warning label that this accepts raw code and is admin-only.
+
+4. RESOURCES
+- A list of label + URL rows with drag-to-reorder, an 'Add resource' button, and delete per row. These render as a downloads/links list at the bottom of the member lesson page later.
+
+=== SEED DATA ===
+
+Seed exactly one sample course titled 'Sample Course' (Draft) containing: one root module 'Module A' with two lessons; inside Module A a sub-module 'Module A1' with one lesson; and one loose lesson at the same level as Module A1 to prove mixed siblings work. Give one seeded lesson a body with a heading, paragraph, bullet list, link, and divider so the editor opens with realistic content.
+
+=== QUALITY BAR / ACCEPTANCE ===
+- I can create a course, build a 4-level-deep tree with mixed modules and lessons, drag anything anywhere, and every change persists across refresh
+- I can paste a Vimeo URL, a YouTube URL, and a Voomly embed code into three different lessons and all three preview and play in the editor
+- I can write formatted content with images and links, add resources, duplicate a lesson and a whole module, toggle drafts, and preview a lesson as a member
+- Nothing about the existing app changes for members; all of this is invisible outside the Admin panel
+- All new admin routes reject non-admin users
+
+Build it fully working, no placeholders or TODO stubs.
