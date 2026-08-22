@@ -40,10 +40,10 @@ import {
   CheckCircle2,
   Circle,
   LayoutList,
-  Workflow,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
+import cfLogo from "@/assets/cf-logo.png";
 
 type NavChild = {
   title: string;
@@ -589,7 +589,7 @@ export function AppSidebar() {
                       onClick={() => setLocation("/admin/clickfunnels")}
                       data-testid="nav-clickfunnels"
                     >
-                      <Workflow className={location.startsWith("/admin/clickfunnels") ? undefined : "text-violet-400"} />
+                      <img src={cfLogo} alt="ClickFunnels" className="h-4 w-4 object-contain" />
                       <span>ClickFunnels</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
