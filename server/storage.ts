@@ -2,7 +2,6 @@ import {
   users, sessions, passwordResetTokens, magicLinkTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
   topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks,
   type PublicApiKey, type Webhook,
-  projects, projectTasks,
   dmoEntries, dmoSettings, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   workspaceInvites, type WorkspaceInvite, type WorkspaceInviteWithMember,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
@@ -55,6 +54,10 @@ import {
   announcements, dismissedAnnouncements, type Announcement, type InsertAnnouncement,
   affiliateLinks, type AffiliateLink, type InsertAffiliateLink,
   swipeItems, type SwipeItem, type InsertSwipeItem, type PromoLink,
+  courses, courseModules, courseLessons, courseResources, courseProgress,
+  type Course, type InsertCourse, type CourseModule, type InsertCourseModule,
+  type CourseLesson, type InsertCourseLesson, type CourseResource, type InsertCourseResource,
+  type CourseProgress,
 } from "@shared/schema";
 import type { SwipeListResponse } from "./swipe-api";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
@@ -694,6 +697,38 @@ export interface IStorage {
   deleteSwipeItem(id: string, userId: string): Promise<void>;
   setSwipeItemShareToken(id: string, userId: string, token: string | null): Promise<SwipeItem | undefined>;
   incrementSwipeItemViewCount(token: string): Promise<void>;
+
+  // Courses (admin)
+  getCourses(): Promise<Course[]>;
+  getCourse(id: string): Promise<Course | undefined>;
+  createCourse(course: InsertCourse): Promise<Course>;
+  updateCourse(id: string, updates: Partial<Course>): Promise<Course | undefined>;
+  deleteCourse(id: string): Promise<boolean>;
+  getCourseModules(courseId: string): Promise<CourseModule[]>;
+  getCourseModule(id: string): Promise<CourseModule | undefined>;
+  createCourseModule(module: InsertCourseModule): Promise<CourseModule>;
+  updateCourseModule(id: string, updates: Partial<CourseModule>): Promise<CourseModule | undefined>;
+  deleteCourseModule(id: string): Promise<boolean>;
+  reorderCourseModules(courseId: string, orderedIds: string[]): Promise<void>;
+  getCourseLessons(moduleId: string): Promise<CourseLesson[]>;
+  getCourseLesson(id: string): Promise<CourseLesson | undefined>;
+  createCourseLesson(lesson: InsertCourseLesson): Promise<CourseLesson>;
+  updateCourseLesson(id: string, updates: Partial<CourseLesson>): Promise<CourseLesson | undefined>;
+  deleteCourseLesson(id: string): Promise<boolean>;
+  reorderCourseLessons(moduleId: string, orderedIds: string[]): Promise<void>;
+  getLessonResources(lessonId: string): Promise<CourseResource[]>;
+  createCourseResource(resource: InsertCourseResource): Promise<CourseResource>;
+  updateCourseResource(id: string, updates: Partial<CourseResource>): Promise<CourseResource | undefined>;
+  deleteCourseResource(id: string): Promise<boolean>;
+
+  // Courses (member)
+  getPublishedCourses(): Promise<Course[]>;
+  getCourseWithStructure(courseId: string, userId: string): Promise<{
+    course: Course;
+    modules: (CourseModule & { lessons: (CourseLesson & { completed: boolean; lastAccessedAt: Date | null })[] })[];
+  } | undefined>;
+  upsertCourseProgress(userId: string, courseId: string, lessonId: string, completed: boolean): Promise<CourseProgress>;
+  getUserCourseProgress(userId: string, courseId: string): Promise<CourseProgress[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5476,6 +5511,168 @@ export class DatabaseStorage implements IStorage {
     await db.update(swipeItems)
       .set({ viewCount: sql`${swipeItems.viewCount} + 1` })
       .where(eq(swipeItems.shareToken, token));
+  }
+
+  // ── Courses (admin) ────────────────────────────────────────────────────────
+
+  async getCourses(): Promise<Course[]> {
+    return db.select().from(courses).orderBy(courses.sortOrder, courses.createdAt);
+  }
+
+  async getCourse(id: string): Promise<Course | undefined> {
+    const [row] = await db.select().from(courses).where(eq(courses.id, id));
+    return row || undefined;
+  }
+
+  async createCourse(course: InsertCourse): Promise<Course> {
+    const [row] = await db.insert(courses).values(course).returning();
+    return row;
+  }
+
+  async updateCourse(id: string, updates: Partial<Course>): Promise<Course | undefined> {
+    const [row] = await db.update(courses).set({ ...updates, updatedAt: new Date() }).where(eq(courses.id, id)).returning();
+    return row || undefined;
+  }
+
+  async deleteCourse(id: string): Promise<boolean> {
+    const [row] = await db.delete(courses).where(eq(courses.id, id)).returning();
+    return !!row;
+  }
+
+  async getCourseModules(courseId: string): Promise<CourseModule[]> {
+    return db.select().from(courseModules).where(eq(courseModules.courseId, courseId)).orderBy(courseModules.sortOrder);
+  }
+
+  async getCourseModule(id: string): Promise<CourseModule | undefined> {
+    const [row] = await db.select().from(courseModules).where(eq(courseModules.id, id));
+    return row || undefined;
+  }
+
+  async createCourseModule(module: InsertCourseModule): Promise<CourseModule> {
+    const [row] = await db.insert(courseModules).values(module).returning();
+    return row;
+  }
+
+  async updateCourseModule(id: string, updates: Partial<CourseModule>): Promise<CourseModule | undefined> {
+    const [row] = await db.update(courseModules).set({ ...updates, updatedAt: new Date() }).where(eq(courseModules.id, id)).returning();
+    return row || undefined;
+  }
+
+  async deleteCourseModule(id: string): Promise<boolean> {
+    const [row] = await db.delete(courseModules).where(eq(courseModules.id, id)).returning();
+    return !!row;
+  }
+
+  async reorderCourseModules(courseId: string, orderedIds: string[]): Promise<void> {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.update(courseModules).set({ sortOrder: i }).where(and(eq(courseModules.id, orderedIds[i]), eq(courseModules.courseId, courseId)));
+    }
+  }
+
+  async getCourseLessons(moduleId: string): Promise<CourseLesson[]> {
+    return db.select().from(courseLessons).where(eq(courseLessons.moduleId, moduleId)).orderBy(courseLessons.sortOrder);
+  }
+
+  async getCourseLesson(id: string): Promise<CourseLesson | undefined> {
+    const [row] = await db.select().from(courseLessons).where(eq(courseLessons.id, id));
+    return row || undefined;
+  }
+
+  async createCourseLesson(lesson: InsertCourseLesson): Promise<CourseLesson> {
+    const [row] = await db.insert(courseLessons).values(lesson).returning();
+    return row;
+  }
+
+  async updateCourseLesson(id: string, updates: Partial<CourseLesson>): Promise<CourseLesson | undefined> {
+    const [row] = await db.update(courseLessons).set({ ...updates, updatedAt: new Date() }).where(eq(courseLessons.id, id)).returning();
+    return row || undefined;
+  }
+
+  async deleteCourseLesson(id: string): Promise<boolean> {
+    const [row] = await db.delete(courseLessons).where(eq(courseLessons.id, id)).returning();
+    return !!row;
+  }
+
+  async reorderCourseLessons(moduleId: string, orderedIds: string[]): Promise<void> {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.update(courseLessons).set({ sortOrder: i }).where(and(eq(courseLessons.id, orderedIds[i]), eq(courseLessons.moduleId, moduleId)));
+    }
+  }
+
+  async getLessonResources(lessonId: string): Promise<CourseResource[]> {
+    return db.select().from(courseResources).where(eq(courseResources.lessonId, lessonId)).orderBy(courseResources.sortOrder);
+  }
+
+  async createCourseResource(resource: InsertCourseResource): Promise<CourseResource> {
+    const [row] = await db.insert(courseResources).values(resource).returning();
+    return row;
+  }
+
+  async updateCourseResource(id: string, updates: Partial<CourseResource>): Promise<CourseResource | undefined> {
+    const [row] = await db.update(courseResources).set(updates).where(eq(courseResources.id, id)).returning();
+    return row || undefined;
+  }
+
+  async deleteCourseResource(id: string): Promise<boolean> {
+    const [row] = await db.delete(courseResources).where(eq(courseResources.id, id)).returning();
+    return !!row;
+  }
+
+  // ── Courses (member) ───────────────────────────────────────────────────────
+
+  async getPublishedCourses(): Promise<Course[]> {
+    return db.select().from(courses).where(eq(courses.status, "published")).orderBy(courses.sortOrder);
+  }
+
+  async getCourseWithStructure(courseId: string, userId: string): Promise<{
+    course: Course;
+    modules: (CourseModule & { lessons: (CourseLesson & { completed: boolean; lastAccessedAt: Date | null })[] })[];
+  } | undefined> {
+    const [course] = await db.select().from(courses).where(eq(courses.id, courseId));
+    if (!course) return undefined;
+
+    const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId)).orderBy(courseModules.sortOrder);
+    const lessons = await db.select().from(courseLessons).where(eq(courseLessons.courseId, courseId)).orderBy(courseLessons.sortOrder);
+    const progress = await db.select().from(courseProgress).where(and(eq(courseProgress.userId, userId), eq(courseProgress.courseId, courseId)));
+
+    const progressMap = new Map(progress.map(p => [p.lessonId, p]));
+
+    const modulesWithLessons = modules.map(m => ({
+      ...m,
+      lessons: lessons
+        .filter(l => l.moduleId === m.id)
+        .map(l => ({
+          ...l,
+          completed: !!(progressMap.get(l.id)?.completedAt),
+          lastAccessedAt: progressMap.get(l.id)?.lastAccessedAt ?? null,
+        })),
+    }));
+
+    return { course, modules: modulesWithLessons };
+  }
+
+  async upsertCourseProgress(userId: string, courseId: string, lessonId: string, completed: boolean): Promise<CourseProgress> {
+    const now = new Date();
+    // Use INSERT ... ON CONFLICT DO UPDATE to handle concurrent requests safely.
+    // The unique constraint (user_id, lesson_id) prevents duplicate rows.
+    // completedAt is preserved once set (once completed, stays completed) unless
+    // the caller explicitly passes completed=false to toggle it off.
+    const [row] = await db
+      .insert(courseProgress)
+      .values({ userId, courseId, lessonId, completedAt: completed ? now : null, lastAccessedAt: now })
+      .onConflictDoUpdate({
+        target: [courseProgress.userId, courseProgress.lessonId],
+        set: {
+          completedAt: sql`CASE WHEN ${completed} THEN COALESCE(course_progress.completed_at, EXCLUDED.completed_at) ELSE NULL END`,
+          lastAccessedAt: now,
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async getUserCourseProgress(userId: string, courseId: string): Promise<CourseProgress[]> {
+    return db.select().from(courseProgress).where(and(eq(courseProgress.userId, userId), eq(courseProgress.courseId, courseId)));
   }
 }
 

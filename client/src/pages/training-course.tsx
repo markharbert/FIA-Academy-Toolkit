@@ -1,0 +1,78 @@
+import { useEffect } from "react";
+import { useParams, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+
+type CourseLesson = { id: string; title: string; status: string };
+type CourseModule = { id: string; title: string; lessons: CourseLesson[] };
+type CourseStructure = {
+  course: { id: string; title: string; status: string };
+  modules: CourseModule[];
+};
+
+/**
+ * Landing page for a course — immediately resolves and redirects to the first
+ * published lesson. This gives the sidebar a stable URL to navigate to without
+ * needing to know the first lesson ID in advance.
+ */
+export default function TrainingCoursePage() {
+  const { courseId } = useParams<{ courseId: string }>();
+  const [, setLocation] = useLocation();
+
+  const { data, isLoading, isError } = useQuery<CourseStructure>({
+    queryKey: ["/api/training/courses", courseId],
+    queryFn: async () => {
+      const res = await fetch(`/api/training/courses/${courseId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Not found");
+      return res.json();
+    },
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!data) return;
+    // Navigate to the first available published lesson
+    for (const module of data.modules) {
+      for (const lesson of module.lessons) {
+        setLocation(`/training/${courseId}/lessons/${lesson.id}`, { replace: true });
+        return;
+      }
+    }
+  }, [data, courseId, setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="h-7 w-7 animate-spin text-violet-400" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-background">
+        <p className="text-sm text-muted-foreground">Course not found.</p>
+      </div>
+    );
+  }
+
+  const hasLessons = data?.modules.some((m) => m.lessons.length > 0);
+  if (data && !hasLessons) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-background">
+        <p className="text-sm text-muted-foreground">
+          This course has no published lessons yet.
+        </p>
+      </div>
+    );
+  }
+
+  // Redirect in progress
+  return (
+    <div className="flex h-screen items-center justify-center bg-background">
+      <Loader2 className="h-7 w-7 animate-spin text-violet-400" />
+    </div>
+  );
+}

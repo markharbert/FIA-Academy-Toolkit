@@ -1,5 +1,6 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { useQuery } from "@tanstack/react-query";
 import { Collapsible, CollapsibleContent } from "@radix-ui/react-collapsible";
 import { cn } from "@/lib/utils";
 import {
@@ -32,8 +33,13 @@ import {
   Users,
   BarChart2,
   ChevronDown,
+  ChevronRight,
   CalendarDays,
   BookMarked,
+  GraduationCap,
+  CheckCircle2,
+  Circle,
+  LayoutList,
 } from "lucide-react";
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
@@ -252,6 +258,11 @@ function isGroupActive(item: NavItem, location: string): boolean {
   return false;
 }
 
+type PublishedCourse = { id: string; title: string; slug: string; status: string };
+type CourseLesson = { id: string; title: string; completed: boolean };
+type CourseModule = { id: string; title: string; lessons: CourseLesson[] };
+type CourseStructure = { course: PublishedCourse; modules: CourseModule[] };
+
 export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
@@ -260,6 +271,35 @@ export function AppSidebar() {
   const navItems = isCollaborator
     ? allNavItems.filter((item) => item.collaboratorVisible)
     : allNavItems.filter((item) => !item.adminOnly || user?.isAdmin);
+
+  // Training: extract active courseId/lessonId from URL
+  const trainingMatch = location.match(/^\/training\/([^/]+)(?:\/lessons\/([^/]+))?/);
+  const activeCourseId = trainingMatch?.[1] ?? null;
+  const activeLessonId = trainingMatch?.[2] ?? null;
+
+  // Fetch published courses for Training section (skip for collaborators)
+  const { data: trainingCourses = [] } = useQuery<PublishedCourse[]>({
+    queryKey: ["/api/training/courses"],
+    queryFn: async () => {
+      const res = await fetch("/api/training/courses", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!user && !isCollaborator,
+    staleTime: 60_000,
+  });
+
+  // Fetch active course structure when on a training page
+  const { data: activeCourseStructure } = useQuery<CourseStructure>({
+    queryKey: ["/api/training/courses", activeCourseId],
+    queryFn: async () => {
+      const res = await fetch(`/api/training/courses/${activeCourseId}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!activeCourseId,
+    staleTime: 30_000,
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -319,6 +359,87 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* Training section — shows published courses above Navigation */}
+        {trainingCourses.length > 0 && !isCollaborator && (
+          <>
+            <SidebarGroup>
+              <SidebarGroupLabel>Training</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {trainingCourses.map((course) => {
+                    const isCourseActive = course.id === activeCourseId;
+                    const structure = isCourseActive ? activeCourseStructure : null;
+                    return (
+                      <Collapsible key={course.id} open={isCourseActive}>
+                        <SidebarMenuItem>
+                          <SidebarMenuButton
+                            isActive={isCourseActive}
+                            tooltip={course.title}
+                            onClick={() => setLocation(`/training/${course.id}`)}
+                            className={isCourseActive ? "!bg-violet-500/15" : ""}
+                          >
+                            <GraduationCap className={isCourseActive ? undefined : "text-violet-400"} />
+                            <span className="truncate">{course.title}</span>
+                            {isCourseActive ? (
+                              <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground/60" />
+                            ) : (
+                              <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground/40" />
+                            )}
+                          </SidebarMenuButton>
+                          <CollapsibleContent>
+                            {structure && (
+                              <SidebarMenuSub className="!border-violet-500/30">
+                                {structure.modules.map((module) =>
+                                  module.lessons.map((lesson) => {
+                                    const isLessonActive = lesson.id === activeLessonId;
+                                    return (
+                                      <SidebarMenuSubItem key={lesson.id}>
+                                        <SidebarMenuSubButton
+                                          isActive={isLessonActive}
+                                          onClick={() =>
+                                            setLocation(
+                                              `/training/${course.id}/lessons/${lesson.id}`
+                                            )
+                                          }
+                                          style={{ cursor: "pointer" }}
+                                          className={
+                                            isLessonActive
+                                              ? "!bg-amber-500/15 !text-amber-200 font-medium"
+                                              : "text-white/55 hover:!text-white"
+                                          }
+                                        >
+                                          {lesson.completed ? (
+                                            <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
+                                          ) : (
+                                            <Circle
+                                              className={cn(
+                                                "h-3 w-3 shrink-0",
+                                                isLessonActive
+                                                  ? "text-amber-400"
+                                                  : "text-white/30"
+                                              )}
+                                            />
+                                          )}
+                                          <span className="truncate">{lesson.title}</span>
+                                        </SidebarMenuSubButton>
+                                      </SidebarMenuSubItem>
+                                    );
+                                  })
+                                )}
+                              </SidebarMenuSub>
+                            )}
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            <SidebarSeparator />
+          </>
+        )}
+
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -441,12 +562,23 @@ export function AppSidebar() {
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={location === "/admin"}
-                      tooltip="Admin"
+                      tooltip="Admin Panel"
                       onClick={() => setLocation("/admin")}
                       data-testid="nav-admin"
                     >
                       <Shield className={location === "/admin" ? undefined : "text-violet-400"} />
                       <span>Admin Panel</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location.startsWith("/admin/courses")}
+                      tooltip="Courses"
+                      onClick={() => setLocation("/admin/courses")}
+                      data-testid="nav-courses"
+                    >
+                      <LayoutList className={location.startsWith("/admin/courses") ? undefined : "text-violet-400"} />
+                      <span>Courses</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>

@@ -2146,3 +2146,76 @@ export const insertSwipeItemSchema = createInsertSchema(swipeItems).omit({
 });
 export type InsertAffiliateLink = z.infer<typeof insertAffiliateLinkSchema>;
 export type AffiliateLink = typeof affiliateLinks.$inferSelect;
+
+// ── Course Management ──────────────────────────────────────────────────────────
+
+export const courses = pgTable("courses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  slug: varchar("slug", { length: 200 }).notNull().unique(),
+  coverGradient: text("cover_gradient"),
+  status: varchar("status", { length: 20 }).notNull().default("draft"), // 'draft' | 'published'
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export type Course = typeof courses.$inferSelect;
+export type InsertCourse = typeof courses.$inferInsert;
+export const insertCourseSchema = createInsertSchema(courses).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const courseModules = pgTable("course_modules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  courseId: varchar("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
+  parentModuleId: varchar("parent_module_id"), // nullable — for nested sub-modules
+  title: text("title").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export type CourseModule = typeof courseModules.$inferSelect;
+export type InsertCourseModule = typeof courseModules.$inferInsert;
+export const insertCourseModuleSchema = createInsertSchema(courseModules).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const courseLessons = pgTable("course_lessons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  courseId: varchar("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
+  moduleId: varchar("module_id").notNull().references(() => courseModules.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  videoUrl: text("video_url"),
+  content: text("content"), // TipTap HTML
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  durationMinutes: integer("duration_minutes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+export type CourseLesson = typeof courseLessons.$inferSelect;
+export type InsertCourseLesson = typeof courseLessons.$inferInsert;
+export const insertCourseLessonSchema = createInsertSchema(courseLessons).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const courseResources = pgTable("course_resources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  lessonId: varchar("lesson_id").notNull().references(() => courseLessons.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  kind: varchar("kind", { length: 20 }).notNull().default("link"), // 'pdf' | 'link'
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+export type CourseResource = typeof courseResources.$inferSelect;
+export type InsertCourseResource = typeof courseResources.$inferInsert;
+export const insertCourseResourceSchema = createInsertSchema(courseResources).omit({ id: true });
+
+export const courseProgress = pgTable("course_progress", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  courseId: varchar("course_id").notNull().references(() => courses.id, { onDelete: "cascade" }),
+  lessonId: varchar("lesson_id").notNull().references(() => courseLessons.id, { onDelete: "cascade" }),
+  completedAt: timestamp("completed_at"),
+  lastAccessedAt: timestamp("last_accessed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (t) => ({
+  userLessonIdx: index("idx_course_progress_user_lesson").on(t.userId, t.lessonId),
+}));
+export type CourseProgress = typeof courseProgress.$inferSelect;
+export type InsertCourseProgress = typeof courseProgress.$inferInsert;

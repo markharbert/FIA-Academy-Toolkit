@@ -13152,6 +13152,343 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   runGracePeriodExpirySweep().catch(() => {});
   setInterval(runGracePeriodExpirySweep, 60 * 60 * 1000); // every hour
 
+  // ── Course Management Routes ─────────────────────────────────────────────────
+
+  function generateCourseSlug(title: string): string {
+    return title.toLowerCase().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "") + "-" + Date.now().toString(36);
+  }
+
+  // Admin: list courses with lesson counts
+  app.get("/api/admin/courses", requireAdmin, async (_req, res) => {
+    try {
+      const allCourses = await storage.getCourses();
+      // Enrich each course with module/lesson counts
+      const enriched = await Promise.all(allCourses.map(async (c) => {
+        const modules = await storage.getCourseModules(c.id);
+        let lessonCount = 0;
+        for (const m of modules) {
+          const lessons = await storage.getCourseLessons(m.id);
+          lessonCount += lessons.length;
+        }
+        return { ...c, moduleCount: modules.length, lessonCount };
+      }));
+      res.json(enriched);
+    } catch (e) {
+      console.error("[courses] list error:", e);
+      res.status(500).json({ message: "Failed to load courses" });
+    }
+  });
+
+  // Admin: create course
+  app.post("/api/admin/courses", requireAdmin, async (req, res) => {
+    try {
+      const { title, description, coverGradient } = req.body;
+      if (!title?.trim()) return res.status(400).json({ message: "Title is required" });
+      const slug = generateCourseSlug(title.trim());
+      const course = await storage.createCourse({ title: title.trim(), description: description || null, slug, coverGradient: coverGradient || null, status: "draft", sortOrder: 0 });
+      res.status(201).json(course);
+    } catch (e) {
+      console.error("[courses] create error:", e);
+      res.status(500).json({ message: "Failed to create course" });
+    }
+  });
+
+  // Admin: get single course
+  app.get("/api/admin/courses/:id", requireAdmin, async (req, res) => {
+    try {
+      const course = await storage.getCourse(req.params.id);
+      if (!course) return res.status(404).json({ message: "Not found" });
+      res.json(course);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load course" });
+    }
+  });
+
+  // Admin: update course
+  app.put("/api/admin/courses/:id", requireAdmin, async (req, res) => {
+    try {
+      const course = await storage.updateCourse(req.params.id, req.body);
+      if (!course) return res.status(404).json({ message: "Not found" });
+      res.json(course);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update course" });
+    }
+  });
+
+  // Admin: delete course
+  app.delete("/api/admin/courses/:id", requireAdmin, async (req, res) => {
+    try {
+      const ok = await storage.deleteCourse(req.params.id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to delete course" });
+    }
+  });
+
+  // Admin: get course structure (modules + lessons)
+  app.get("/api/admin/courses/:id/structure", requireAdmin, async (req, res) => {
+    try {
+      const course = await storage.getCourse(req.params.id);
+      if (!course) return res.status(404).json({ message: "Not found" });
+      const modules = await storage.getCourseModules(req.params.id);
+      const modulesWithLessons = await Promise.all(modules.map(async (m) => ({
+        ...m,
+        lessons: await storage.getCourseLessons(m.id),
+      })));
+      res.json({ course, modules: modulesWithLessons });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load structure" });
+    }
+  });
+
+  // Admin: reorder modules
+  app.put("/api/admin/courses/:id/modules/reorder", requireAdmin, async (req, res) => {
+    try {
+      const { orderedIds } = req.body;
+      if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds required" });
+      await storage.reorderCourseModules(req.params.id, orderedIds);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to reorder" });
+    }
+  });
+
+  // Admin: create module
+  app.post("/api/admin/courses/:courseId/modules", requireAdmin, async (req, res) => {
+    try {
+      const { title } = req.body;
+      if (!title?.trim()) return res.status(400).json({ message: "Title required" });
+      const modules = await storage.getCourseModules(req.params.courseId);
+      const module = await storage.createCourseModule({ courseId: req.params.courseId, title: title.trim(), status: "draft", sortOrder: modules.length });
+      res.status(201).json(module);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to create module" });
+    }
+  });
+
+  // Admin: update module
+  app.put("/api/admin/modules/:id", requireAdmin, async (req, res) => {
+    try {
+      const module = await storage.updateCourseModule(req.params.id, req.body);
+      if (!module) return res.status(404).json({ message: "Not found" });
+      res.json(module);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update module" });
+    }
+  });
+
+  // Admin: delete module
+  app.delete("/api/admin/modules/:id", requireAdmin, async (req, res) => {
+    try {
+      const ok = await storage.deleteCourseModule(req.params.id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to delete module" });
+    }
+  });
+
+  // Admin: reorder lessons in a module
+  app.put("/api/admin/modules/:id/lessons/reorder", requireAdmin, async (req, res) => {
+    try {
+      const { orderedIds } = req.body;
+      if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds required" });
+      await storage.reorderCourseLessons(req.params.id, orderedIds);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to reorder" });
+    }
+  });
+
+  // Admin: create lesson
+  app.post("/api/admin/modules/:moduleId/lessons", requireAdmin, async (req, res) => {
+    try {
+      const { title, courseId } = req.body;
+      if (!title?.trim() || !courseId) return res.status(400).json({ message: "title and courseId required" });
+      const lessons = await storage.getCourseLessons(req.params.moduleId);
+      const lesson = await storage.createCourseLesson({ courseId, moduleId: req.params.moduleId, title: title.trim(), status: "draft", sortOrder: lessons.length });
+      res.status(201).json(lesson);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to create lesson" });
+    }
+  });
+
+  // Admin: get lesson with resources
+  app.get("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
+    try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      if (!lesson) return res.status(404).json({ message: "Not found" });
+      const resources = await storage.getLessonResources(req.params.id);
+      res.json({ ...lesson, resources });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load lesson" });
+    }
+  });
+
+  // Admin: update lesson
+  app.put("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
+    try {
+      const updates = { ...req.body };
+      // Validate videoUrl — only allow http/https to prevent javascript: injection
+      if (updates.videoUrl !== undefined && updates.videoUrl !== null && updates.videoUrl !== "") {
+        try {
+          const { protocol } = new URL(updates.videoUrl);
+          if (protocol !== "https:" && protocol !== "http:") {
+            return res.status(400).json({ message: "videoUrl must be an http(s) URL" });
+          }
+        } catch {
+          return res.status(400).json({ message: "videoUrl must be a valid URL" });
+        }
+      }
+      const lesson = await storage.updateCourseLesson(req.params.id, updates);
+      if (!lesson) return res.status(404).json({ message: "Not found" });
+      res.json(lesson);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update lesson" });
+    }
+  });
+
+  // Admin: delete lesson
+  app.delete("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
+    try {
+      const ok = await storage.deleteCourseLesson(req.params.id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to delete lesson" });
+    }
+  });
+
+  // Admin: get lesson resources
+  app.get("/api/admin/lessons/:id/resources", requireAdmin, async (req, res) => {
+    try {
+      const resources = await storage.getLessonResources(req.params.id);
+      res.json(resources);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load resources" });
+    }
+  });
+
+  // Admin: add resource to lesson
+  app.post("/api/admin/lessons/:lessonId/resources", requireAdmin, async (req, res) => {
+    try {
+      const { name, url, kind } = req.body;
+      if (!name?.trim() || !url?.trim()) return res.status(400).json({ message: "name and url required" });
+      // Validate resource URL — only allow http/https
+      try {
+        const { protocol } = new URL(url.trim());
+        if (protocol !== "https:" && protocol !== "http:") {
+          return res.status(400).json({ message: "Resource URL must be an http(s) URL" });
+        }
+      } catch {
+        return res.status(400).json({ message: "Resource URL must be a valid URL" });
+      }
+      const existing = await storage.getLessonResources(req.params.lessonId);
+      const resource = await storage.createCourseResource({ lessonId: req.params.lessonId, name: name.trim(), url: url.trim(), kind: kind || "link", sortOrder: existing.length });
+      res.status(201).json(resource);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to add resource" });
+    }
+  });
+
+  // Admin: update resource
+  app.put("/api/admin/resources/:id", requireAdmin, async (req, res) => {
+    try {
+      const updates = { ...req.body };
+      // Validate URL if present
+      if (updates.url) {
+        try {
+          const { protocol } = new URL(updates.url);
+          if (protocol !== "https:" && protocol !== "http:") {
+            return res.status(400).json({ message: "Resource URL must be an http(s) URL" });
+          }
+        } catch {
+          return res.status(400).json({ message: "Resource URL must be a valid URL" });
+        }
+      }
+      const resource = await storage.updateCourseResource(req.params.id, updates);
+      if (!resource) return res.status(404).json({ message: "Not found" });
+      res.json(resource);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update resource" });
+    }
+  });
+
+  // Admin: delete resource
+  app.delete("/api/admin/resources/:id", requireAdmin, async (req, res) => {
+    try {
+      const ok = await storage.deleteCourseResource(req.params.id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to delete resource" });
+    }
+  });
+
+  // Member: list published courses
+  app.get("/api/training/courses", requireAuth, async (_req, res) => {
+    try {
+      const published = await storage.getPublishedCourses();
+      res.json(published);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load courses" });
+    }
+  });
+
+  // Member: get course with structure + progress (published only)
+  app.get("/api/training/courses/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId as string;
+      const result = await storage.getCourseWithStructure(req.params.id, userId);
+      if (!result) return res.status(404).json({ message: "Not found" });
+      // Enforce published access for members
+      if (result.course.status !== "published") return res.status(404).json({ message: "Not found" });
+      // Filter to published lessons only
+      const filtered = {
+        ...result,
+        modules: result.modules
+          .map((m) => ({ ...m, lessons: m.lessons.filter((l) => l.status === "published") }))
+          .filter((m) => m.lessons.length > 0),
+      };
+      res.json(filtered);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load course" });
+    }
+  });
+
+  // Member: get lesson content + resources (published course + published lesson only)
+  app.get("/api/training/lessons/:id", requireAuth, async (req, res) => {
+    try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      if (!lesson || lesson.status !== "published") return res.status(404).json({ message: "Not found" });
+      const course = await storage.getCourse(lesson.courseId);
+      if (!course || course.status !== "published") return res.status(404).json({ message: "Not found" });
+      const resources = await storage.getLessonResources(req.params.id);
+      res.json({ ...lesson, resources });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load lesson" });
+    }
+  });
+
+  // Member: upsert lesson progress (published course + published lesson only)
+  app.post("/api/training/lessons/:id/progress", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId as string;
+      const lesson = await storage.getCourseLesson(req.params.id);
+      if (!lesson || lesson.status !== "published") return res.status(404).json({ message: "Not found" });
+      const course = await storage.getCourse(lesson.courseId);
+      if (!course || course.status !== "published") return res.status(404).json({ message: "Not found" });
+      const { completed } = req.body;
+      const progress = await storage.upsertCourseProgress(userId, lesson.courseId, req.params.id, !!completed);
+      res.json(progress);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update progress" });
+    }
+  });
+
+  // ── End Course Management Routes ──────────────────────────────────────────────
+
   // Start the automatic placement monitoring scheduler
   startPlacementScheduler(storage);
 

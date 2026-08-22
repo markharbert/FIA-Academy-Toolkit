@@ -101,6 +101,11 @@ const AnalyticsGscPage           = lazyPage(() => import("@/pages/analytics-gsc"
 const LinksPage                  = lazyPage(() => import("@/pages/links"));
 const SwipeFilePage              = lazyPage(() => import("@/pages/swipe-file"));
 const SwipeSharePage             = lazyPage(() => import("@/pages/swipe-share"));
+const AdminCoursesPage           = lazyPage(() => import("@/pages/admin-courses"));
+const AdminCourseOutlinePage     = lazyPage(() => import("@/pages/admin-course-outline"));
+const AdminLessonEditorPage      = lazyPage(() => import("@/pages/admin-lesson-editor"));
+const TrainingCoursePage         = lazyPage(() => import("@/pages/training-course"));
+const TrainingLessonPage         = lazyPage(() => import("@/pages/training-lesson"));
 const PrivacyPolicyPage          = lazyPage(() => import("@/pages/privacy-policy"));
 const NotFound                   = lazyPage(() => import("@/pages/not-found"));
 
@@ -342,6 +347,21 @@ function ProtectedRoutes() {
       </Route>
       <Route path="/feedback">
         {() => <ProtectedRoute component={FeedbackPage} />}
+      </Route>
+      <Route path="/admin/courses/:id/lessons/:lessonId">
+        {() => <AdminRoute component={AdminLessonEditorPage} />}
+      </Route>
+      <Route path="/admin/courses/:id/outline">
+        {() => <AdminRoute component={AdminCourseOutlinePage} />}
+      </Route>
+      <Route path="/admin/courses">
+        {() => <AdminRoute component={AdminCoursesPage} />}
+      </Route>
+      <Route path="/training/:courseId/lessons/:lessonId">
+        {() => <ProtectedRoute component={TrainingLessonPage} />}
+      </Route>
+      <Route path="/training/:courseId">
+        {() => <ProtectedRoute component={TrainingCoursePage} />}
       </Route>
       <Route>{() => <AuthenticatedCatchAll />}</Route>
     </Switch>
