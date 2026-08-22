@@ -6,16 +6,10 @@ import {
   FileText,
   Plus,
   MoreHorizontal,
-  Shield,
-  LogOut,
-  LayoutDashboard,
-  PlayCircle,
-  Mail,
-  BarChart2,
-  BookOpen,
   ArrowLeft,
   ChevronLeft,
 } from "lucide-react";
+import { RealSidebar } from "./RealSidebar";
 import { useState } from "react";
 
 type NodeKind = "module" | "lesson";
@@ -245,41 +239,7 @@ export function OutlineEditor() {
       className="flex min-h-screen w-full overflow-hidden text-slate-100"
       style={{ background: "hsl(230 50% 6%)", fontFamily: "'DM Sans', ui-sans-serif, sans-serif" }}
     >
-      <aside
-        className="hidden w-[220px] shrink-0 flex-col border-r border-slate-800/60 md:flex"
-        style={{ background: "linear-gradient(180deg, hsl(230 75% 14%) 0%, hsl(230 75% 10%) 100%)" }}
-      >
-        <div className="flex h-[68px] items-center gap-3 border-b border-white/10 px-5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#3f92cc] text-white shadow-[0_5px_18px_rgba(63,146,204,.25)]">
-            <BookOpen size={17} />
-          </div>
-          <div>
-            <div className="text-sm font-bold tracking-tight">CreatorOS</div>
-            <div className="text-[10px] text-slate-400">COURSE STUDIO</div>
-          </div>
-        </div>
-        <div className="px-3 pt-6">
-          <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-slate-500">Workspace</p>
-          {[
-            [LayoutDashboard, "Dashboard"],
-            [PlayCircle, "Courses"],
-            [Mail, "Members"],
-            [BarChart2, "Analytics"],
-          ].map(([Icon, label]) => (
-            <button type="button" key={label as string} className="mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-xs text-slate-400 hover:bg-white/5 hover:text-slate-100">
-              <Icon size={16} /> {label as string}
-            </button>
-          ))}
-        </div>
-        <div className="mt-auto space-y-1 border-t border-white/10 px-3 py-4">
-          <button type="button" className="flex w-full items-center gap-3 rounded-md bg-[#3f92cc]/15 px-3 py-2.5 text-left text-xs font-medium text-[#78b9e2]">
-            <Shield size={16} /> Admin Panel
-          </button>
-          <button type="button" className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-xs text-slate-400 hover:bg-white/5 hover:text-slate-100">
-            <LogOut size={16} /> Sign out
-          </button>
-        </div>
-      </aside>
+      <RealSidebar activePath="admin" />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="shrink-0 border-b border-slate-800/80 px-4 py-3 md:px-6" style={{ background: "hsl(230 48% 9%)" }}>

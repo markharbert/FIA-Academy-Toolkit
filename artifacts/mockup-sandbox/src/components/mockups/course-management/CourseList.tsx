@@ -2,20 +2,13 @@ import { useState } from "react";
 import {
   Plus,
   MoreHorizontal,
-  BookOpen,
   Users,
-  BarChart2,
-  LayoutDashboard,
-  PlayCircle,
-  Mail,
-  Shield,
-  LogOut,
   ChevronDown,
   CheckCircle,
-  FileText,
   GripVertical,
   Settings,
 } from "lucide-react";
+import { RealSidebar } from "./RealSidebar";
 
 type Course = {
   title: string;
@@ -53,14 +46,6 @@ const courses: Course[] = [
   },
 ];
 
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard },
-  { label: "Planning", icon: FileText },
-  { label: "Video Studio", icon: PlayCircle },
-  { label: "Email Tools", icon: Mail },
-  { label: "Analytics", icon: BarChart2 },
-  { label: "Library", icon: BookOpen },
-];
 
 export function CourseList() {
   const [activeTab, setActiveTab] = useState("Courses");
@@ -81,60 +66,7 @@ export function CourseList() {
         fontFamily: "'DM Sans', ui-sans-serif, system-ui, sans-serif",
       }}
     >
-      <aside
-        className="hidden md:flex w-[220px] shrink-0 min-h-screen flex-col border-r"
-        style={{
-          background:
-            "linear-gradient(180deg, hsl(230 75% 14%) 0%, hsl(230 75% 10%) 100%)",
-          borderColor: "hsl(230 30% 18%)",
-        }}
-      >
-        <div className="h-[82px] flex items-center px-6 border-b" style={{ borderColor: "hsl(230 30% 18%)" }}>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg bg-gradient-to-br from-amber-300 to-orange-500 shadow-lg shadow-orange-950/30">
-              <span aria-hidden="true">🦁</span>
-            </div>
-            <div className="leading-tight">
-              <div className="font-bold tracking-tight text-[14px] text-white">Academy</div>
-              <div className="text-[10px] uppercase tracking-[0.19em] text-blue-300/75">Toolkit</div>
-            </div>
-          </div>
-        </div>
-
-        <nav className="px-3 py-7 space-y-1">
-          <div className="px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace</div>
-          {navItems.map(({ label, icon: Icon }) => (
-            <button
-              key={label}
-              onClick={() => showNotice(`${label} is coming soon`)}
-              className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-slate-400 hover:text-slate-100 hover:bg-white/[0.04] transition-colors text-left"
-            >
-              <Icon size={16} strokeWidth={1.8} />
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="mt-auto px-3 pb-5">
-          <div className="px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Admin</div>
-          <button className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] bg-violet-500/15 text-white text-left">
-            <Shield size={16} className="text-violet-400" strokeWidth={1.8} />
-            Admin Panel
-          </button>
-          <div className="mt-5 pt-4 border-t flex items-center justify-between" style={{ borderColor: "hsl(230 30% 18%)" }}>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-blue-400/20 text-blue-200 flex items-center justify-center text-xs font-bold">MH</div>
-              <div className="min-w-0">
-                <div className="text-xs font-medium text-slate-200">Mark H.</div>
-                <div className="text-[10px] text-slate-500">Administrator</div>
-              </div>
-            </div>
-            <button onClick={() => showNotice("You are already signed in")} aria-label="Log out" className="text-slate-500 hover:text-slate-200 transition-colors">
-              <LogOut size={15} />
-            </button>
-          </div>
-        </div>
-      </aside>
+      <RealSidebar activePath="admin" />
 
       <main className="flex-1 min-w-0">
         <header className="h-[82px] border-b flex items-center justify-between px-6 lg:px-10" style={{ borderColor: "hsl(230 30% 18%)" }}>
@@ -159,7 +91,7 @@ export function CourseList() {
                 className={`h-full relative whitespace-nowrap text-[13px] transition-colors ${activeTab === tab ? "text-white font-medium" : "text-slate-500 hover:text-slate-300"}`}
               >
                 {tab}
-                {activeTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e8b500]" />}
+                {activeTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#da0010]" />}
               </button>
             ))}
           </div>
@@ -171,7 +103,7 @@ export function CourseList() {
                   <h2 className="text-[24px] font-semibold tracking-[-0.03em]">Courses</h2>
                   <p className="mt-1.5 text-[13px] text-slate-500">Build and manage training courses for your members.</p>
                 </div>
-                <button onClick={() => setShowDialog(true)} className="shrink-0 flex items-center gap-2 rounded-md bg-[#3f92cc] px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-[#52a5dd] transition-colors shadow-lg shadow-blue-950/20">
+                <button onClick={() => setShowDialog(true)} className="shrink-0 flex items-center gap-2 rounded-md bg-[#da0010] px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-[#b8000e] transition-colors shadow-lg shadow-red-950/20">
                   <Plus size={15} /> New Course
                 </button>
               </div>
@@ -222,7 +154,7 @@ export function CourseList() {
             <div className="flex items-start justify-between"><div><h3 className="text-lg font-semibold">New course</h3><p className="mt-1 text-xs text-slate-500">Give your members somewhere new to grow.</p></div><GripVertical size={18} className="rotate-90 text-slate-600" /></div>
             <label className="mt-6 block text-xs text-slate-400">Course title<input autoFocus className="mt-2 w-full rounded border bg-slate-950/40 px-3 py-2.5 text-sm outline-none focus:border-[#3f92cc]" style={{ borderColor: "hsl(230 30% 23%)" }} placeholder="e.g. Community Building 101" /></label>
             <label className="mt-4 block text-xs text-slate-400">Description<textarea className="mt-2 w-full resize-none rounded border bg-slate-950/40 px-3 py-2.5 text-sm outline-none focus:border-[#3f92cc]" style={{ borderColor: "hsl(230 30% 23%)" }} rows={3} placeholder="What will members learn?" /></label>
-            <div className="mt-6 flex justify-end gap-2"><button onClick={() => setShowDialog(false)} className="rounded border px-3.5 py-2 text-xs text-slate-300 hover:text-white" style={{ borderColor: "hsl(230 30% 24%)" }}>Cancel</button><button onClick={() => { setShowDialog(false); showNotice("Course draft created"); }} className="rounded bg-[#3f92cc] px-3.5 py-2 text-xs font-semibold text-white">Create Course</button></div>
+            <div className="mt-6 flex justify-end gap-2"><button onClick={() => setShowDialog(false)} className="rounded border px-3.5 py-2 text-xs text-slate-300 hover:text-white" style={{ borderColor: "hsl(230 30% 24%)" }}>Cancel</button><button onClick={() => { setShowDialog(false); showNotice("Course draft created"); }} className="rounded bg-[#da0010] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#b8000e]">Create Course</button></div>
           </div>
         </div>
       )}

@@ -2,29 +2,23 @@ import { useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
-  BarChart2,
-  BookOpen,
   Bold,
   ChevronRight,
   Eye,
   GripVertical,
   Image,
   Italic,
-  LayoutDashboard,
   Link as LinkIcon,
   List,
   ListOrdered,
-  LogOut,
-  Mail,
   Minus,
   MoreHorizontal,
-  PlayCircle,
   Plus,
   Quote,
   Save,
-  Shield,
   Trash2,
 } from "lucide-react";
+import { RealSidebar } from "./RealSidebar";
 
 type Resource = { id: number; name: string; url: string };
 
@@ -55,32 +49,7 @@ export function LessonEditor() {
       className="flex min-h-screen w-full overflow-hidden text-slate-100"
       style={{ background: "hsl(230 50% 6%)", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
     >
-      <aside
-        className="hidden w-[220px] shrink-0 flex-col border-r border-slate-800/70 md:flex"
-        style={{ background: "linear-gradient(180deg, hsl(230 75% 14%) 0%, hsl(230 75% 10%) 100%)" }}
-      >
-        <div className="flex h-[76px] items-center gap-3 border-b border-white/[0.07] px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#3f92cc] text-sm font-black text-white shadow-[0_5px_20px_rgba(63,146,204,.22)]">F</div>
-          <div><p className="text-[13px] font-bold tracking-wide text-white">Fearless Lab</p><p className="mt-0.5 text-[10px] uppercase tracking-[.16em] text-slate-500">Admin workspace</p></div>
-        </div>
-        <nav className="space-y-1 px-3 py-5 text-[13px]">
-          {[
-            [LayoutDashboard, "Dashboard"],
-            [BookOpen, "Courses"],
-            [PlayCircle, "Lessons"],
-            [Mail, "Members"],
-            [BarChart2, "Analytics"],
-          ].map(([Icon, label]) => (
-            <button key={label as string} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-slate-400 transition hover:bg-white/[0.06] hover:text-slate-100">
-              <Icon size={16} strokeWidth={1.8} /><span>{label as string}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="mt-auto border-t border-white/[0.07] p-3">
-          <button className="mb-1 flex w-full items-center gap-3 rounded-lg bg-white/[0.08] px-3 py-2.5 text-white"><Shield size={16} /><span>Admin Panel</span></button>
-          <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-slate-500 hover:text-slate-200"><LogOut size={16} /><span>Sign out</span></button>
-        </div>
-      </aside>
+      <RealSidebar activePath="admin" />
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="shrink-0 border-b border-slate-800/80 px-5 py-3 md:px-7" style={{ background: "hsl(230 48% 9%)" }}>
@@ -94,11 +63,11 @@ export function LessonEditor() {
             </div>
             <div className="flex items-center gap-2.5">
               <span className="text-xs font-medium text-slate-400">{published ? "Published" : "Draft"}</span>
-              <button onClick={() => setPublished(!published)} aria-label="Toggle lesson status" className={`relative h-5 w-9 rounded-full transition ${published ? "bg-[#3f92cc]" : "bg-slate-700"}`}>
+              <button onClick={() => setPublished(!published)} aria-label="Toggle lesson status" className={`relative h-5 w-9 rounded-full transition ${published ? "bg-[#da0010]" : "bg-slate-700"}`}>
                 <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-slate-200 shadow transition-transform ${published ? "translate-x-[18px]" : "translate-x-0.5"}`} />
               </button>
               <button className="hidden items-center gap-2 rounded-md border border-slate-700 bg-transparent px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white sm:flex"><Eye size={14} /> Preview</button>
-              <button onClick={saveLesson} className="flex items-center gap-2 rounded-md bg-[#3f92cc] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#55a3d8]"><Save size={14} /> Save</button>
+              <button onClick={saveLesson} className="flex items-center gap-2 rounded-md bg-[#da0010] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#b8000e]"><Save size={14} /> Save</button>
             </div>
           </div>
           <div className="mt-2 pl-9 text-[11px] text-slate-500">{saved ? "💾 Last saved 2 min ago" : "Saving changes…"}</div>
