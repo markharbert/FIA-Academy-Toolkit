@@ -1,13 +1,5 @@
 import { useState } from "react";
-import {
-  Plus,
-  MoreHorizontal,
-  Users,
-  ChevronDown,
-  CheckCircle,
-  GripVertical,
-  Settings,
-} from "lucide-react";
+import { Plus, MoreHorizontal, Users, ChevronDown, CheckCircle, GripVertical, Settings } from "lucide-react";
 import { RealSidebar } from "./RealSidebar";
 
 type Course = {
@@ -46,7 +38,6 @@ const courses: Course[] = [
   },
 ];
 
-
 export function CourseList() {
   const [activeTab, setActiveTab] = useState("Courses");
   const [showDialog, setShowDialog] = useState(false);
@@ -60,76 +51,140 @@ export function CourseList() {
 
   return (
     <div
-      className="min-h-screen flex text-slate-100"
-      style={{
-        background: "hsl(230 50% 6%)",
-        fontFamily: "'DM Sans', ui-sans-serif, system-ui, sans-serif",
-      }}
+      className="min-h-screen flex text-gray-900"
+      style={{ background: "#ffffff", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}
     >
       <RealSidebar activePath="admin" />
 
       <main className="flex-1 min-w-0">
-        <header className="h-[82px] border-b flex items-center justify-between px-6 lg:px-10" style={{ borderColor: "hsl(230 30% 18%)" }}>
+        {/* Page header */}
+        <header className="h-[82px] border-b bg-white flex items-center justify-between px-6 lg:px-10" style={{ borderColor: "#e5e7eb" }}>
           <div>
-            <h1 className="text-[21px] font-semibold tracking-[-0.02em]">Admin Panel</h1>
-            <div className="mt-1 text-[11px] text-slate-500 flex items-center gap-1.5">
-              Academy Toolkit <span className="text-slate-700">/</span> <span className="text-slate-400">Admin Panel</span>
+            <h1 className="text-[21px] font-semibold tracking-[-0.02em] text-gray-900">Admin Panel</h1>
+            <div className="mt-1 text-[11px] text-gray-400 flex items-center gap-1.5">
+              Academy Toolkit <span className="text-gray-300">/</span> <span className="text-gray-500">Admin Panel</span>
             </div>
           </div>
-          <button onClick={() => showNotice("All systems operational")} className="hidden sm:flex items-center gap-2 text-[11px] text-slate-400 hover:text-white">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/80" /> All systems operational
-            <ChevronDown size={14} className="text-slate-600" />
+          <button
+            onClick={() => showNotice("All systems operational")}
+            className="hidden sm:flex items-center gap-2 text-[11px] text-gray-500 hover:text-gray-800"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-400/60" /> All systems operational
+            <ChevronDown size={14} className="text-gray-400" />
           </button>
         </header>
 
         <div className="px-6 lg:px-10">
-          <div className="h-[62px] flex items-end gap-7 border-b overflow-x-auto" style={{ borderColor: "hsl(230 30% 18%)" }}>
+          {/* Tabs */}
+          <div className="h-[52px] flex items-end gap-7 border-b overflow-x-auto" style={{ borderColor: "#e5e7eb" }}>
             {["Overview", "Users", "Courses", "Announcements", "Settings"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`h-full relative whitespace-nowrap text-[13px] transition-colors ${activeTab === tab ? "text-white font-medium" : "text-slate-500 hover:text-slate-300"}`}
+                className={`h-full relative whitespace-nowrap text-[13px] transition-colors pb-px ${
+                  activeTab === tab
+                    ? "text-gray-900 font-semibold"
+                    : "text-gray-400 hover:text-gray-700"
+                }`}
               >
                 {tab}
-                {activeTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#da0010]" />}
+                {activeTab === tab && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#da0010]" />
+                )}
               </button>
             ))}
           </div>
 
           {activeTab === "Courses" ? (
-            <section className="py-9">
+            <section className="py-8">
+              {/* Section header */}
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-[24px] font-semibold tracking-[-0.03em]">Courses</h2>
-                  <p className="mt-1.5 text-[13px] text-slate-500">Build and manage training courses for your members.</p>
+                  <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-gray-900">Courses</h2>
+                  <p className="mt-1 text-[13px] text-gray-500">Build and manage training courses for your members.</p>
                 </div>
-                <button onClick={() => setShowDialog(true)} className="shrink-0 flex items-center gap-2 rounded-md bg-[#da0010] px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-[#b8000e] transition-colors shadow-lg shadow-red-950/20">
+                <button
+                  onClick={() => setShowDialog(true)}
+                  className="shrink-0 flex items-center gap-2 rounded-md bg-[#da0010] px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-[#b8000e] transition-colors shadow-sm"
+                >
                   <Plus size={15} /> New Course
                 </button>
               </div>
 
-              <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Course cards */}
+              <div className="mt-7 grid grid-cols-1 lg:grid-cols-3 gap-5">
                 {courses.map((course, index) => (
-                  <article key={course.title} className="group overflow-hidden rounded-lg border transition-transform hover:-translate-y-0.5" style={{ background: "hsl(230 48% 9%)", borderColor: "hsl(230 30% 18%)" }}>
+                  <article
+                    key={course.title}
+                    className="group overflow-hidden rounded-xl border bg-white transition-all hover:shadow-md hover:-translate-y-0.5"
+                    style={{ borderColor: "#e5e7eb" }}
+                  >
+                    {/* Cover */}
                     <div className="h-40 relative overflow-hidden" style={{ background: course.cover }}>
-                      <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 75% 25%, rgba(255,255,255,.35), transparent 32%), linear-gradient(135deg, transparent 45%, rgba(255,255,255,.08) 46%, transparent 47%)", backgroundSize: "auto, 14px 14px" }} />
-                      <div className="absolute -right-2 -bottom-5 text-[86px] leading-none font-black tracking-[-0.12em] text-white/[0.10] select-none">{course.initials}</div>
-                      <div className="absolute left-5 top-5 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/55">Academy Toolkit</div>
+                      <div
+                        className="absolute inset-0 opacity-20"
+                        style={{
+                          backgroundImage:
+                            "radial-gradient(circle at 75% 25%, rgba(255,255,255,.35), transparent 32%)",
+                        }}
+                      />
+                      <div className="absolute -right-2 -bottom-5 text-[86px] leading-none font-black tracking-[-0.12em] text-white/[0.10] select-none">
+                        {course.initials}
+                      </div>
+                      <div className="absolute left-5 top-5 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60">
+                        Academy Toolkit
+                      </div>
                     </div>
+
+                    {/* Body */}
                     <div className="p-5">
-                      <h3 className="font-semibold text-[15px] leading-5 text-slate-100">{course.title}</h3>
-                      <p className="mt-2 text-[12px] text-slate-500 truncate">{course.description}</p>
-                      <div className="mt-5 flex items-center justify-between text-[11px] text-slate-500">
+                      <h3 className="font-semibold text-[15px] leading-5 text-gray-900">{course.title}</h3>
+                      <p className="mt-1.5 text-[12px] text-gray-500 truncate">{course.description}</p>
+
+                      <div className="mt-4 flex items-center justify-between text-[11px] text-gray-400">
                         <span>{course.stats}</span>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] ${course.status === "Published" ? "border-green-500/30 bg-green-500/15 text-green-400" : "border-slate-600/50 bg-slate-700/50 text-slate-400"}`}>
-                          {course.status === "Published" && <CheckCircle size={10} className="inline mr-1 -mt-0.5" />}{course.status}
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                            course.status === "Published"
+                              ? "border-green-200 bg-green-50 text-green-700"
+                              : "border-gray-200 bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {course.status === "Published" && (
+                            <CheckCircle size={10} className="inline mr-1 -mt-0.5" />
+                          )}
+                          {course.status}
                         </span>
                       </div>
-                      <div className="mt-5 pt-4 border-t flex gap-2" style={{ borderColor: "hsl(230 30% 18%)" }}>
-                        <button onClick={() => showNotice(`Opening ${course.title}`)} className="flex-1 rounded border px-3 py-2 text-[11px] font-medium text-slate-300 hover:text-white hover:border-slate-500 transition-colors" style={{ borderColor: "hsl(230 30% 24%)" }}>Edit Outline</button>
+
+                      <div className="mt-4 pt-4 border-t flex gap-2" style={{ borderColor: "#f3f4f6" }}>
+                        <button
+                          onClick={() => showNotice(`Opening ${course.title}`)}
+                          className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-600 hover:border-gray-400 hover:text-gray-900 transition-colors bg-white"
+                        >
+                          Edit Outline
+                        </button>
                         <div className="relative">
-                          <button onClick={() => setOpenMenu(openMenu === index ? null : index)} aria-label={`More options for ${course.title}`} className="h-[31px] w-[34px] flex items-center justify-center rounded border text-slate-500 hover:text-slate-200 hover:border-slate-500" style={{ borderColor: "hsl(230 30% 24%)" }}><MoreHorizontal size={16} /></button>
-                          {openMenu === index && <div className="absolute right-0 bottom-9 z-10 w-32 rounded-md border p-1 shadow-xl" style={{ background: "hsl(230 48% 12%)", borderColor: "hsl(230 30% 23%)" }}><button onClick={() => { setOpenMenu(null); showNotice("Course settings opened"); }} className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-slate-300 hover:bg-white/5"><Settings size={12} /> Settings</button></div>}
+                          <button
+                            onClick={() => setOpenMenu(openMenu === index ? null : index)}
+                            aria-label={`More options for ${course.title}`}
+                            className="h-[31px] w-[34px] flex items-center justify-center rounded-md border border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-700 bg-white"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                          {openMenu === index && (
+                            <div
+                              className="absolute right-0 bottom-9 z-10 w-32 rounded-md border bg-white p-1 shadow-lg"
+                              style={{ borderColor: "#e5e7eb" }}
+                            >
+                              <button
+                                onClick={() => { setOpenMenu(null); showNotice("Course settings opened"); }}
+                                className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-gray-700 hover:bg-gray-50"
+                              >
+                                <Settings size={12} /> Settings
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -139,22 +194,71 @@ export function CourseList() {
             </section>
           ) : (
             <div className="py-20 flex flex-col items-center justify-center text-center">
-              <div className="rounded-full bg-blue-400/10 p-4 text-blue-300"><Users size={24} /></div>
-              <h2 className="mt-4 text-lg font-semibold">{activeTab}</h2>
-              <p className="mt-1 text-sm text-slate-500">This admin workspace is ready for your next decision.</p>
+              <div className="rounded-full bg-blue-50 p-4 text-blue-400">
+                <Users size={24} />
+              </div>
+              <h2 className="mt-4 text-lg font-semibold text-gray-900">{activeTab}</h2>
+              <p className="mt-1 text-sm text-gray-500">This admin workspace is ready for your next decision.</p>
             </div>
           )}
         </div>
       </main>
 
-      {notice && <div className="fixed bottom-5 right-5 rounded-md border bg-slate-900 px-4 py-3 text-xs text-slate-200 shadow-2xl" style={{ borderColor: "hsl(230 30% 25%)" }}>{notice}</div>}
+      {/* Toast */}
+      {notice && (
+        <div className="fixed bottom-5 right-5 rounded-lg border border-gray-200 bg-white px-4 py-3 text-xs text-gray-800 shadow-lg">
+          {notice}
+        </div>
+      )}
+
+      {/* New Course dialog */}
       {showDialog && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/75 p-4" onClick={() => setShowDialog(false)}>
-          <div className="w-full max-w-md rounded-xl border p-6 shadow-2xl" style={{ background: "hsl(230 48% 10%)", borderColor: "hsl(230 30% 23%)" }} onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between"><div><h3 className="text-lg font-semibold">New course</h3><p className="mt-1 text-xs text-slate-500">Give your members somewhere new to grow.</p></div><GripVertical size={18} className="rotate-90 text-slate-600" /></div>
-            <label className="mt-6 block text-xs text-slate-400">Course title<input autoFocus className="mt-2 w-full rounded border bg-slate-950/40 px-3 py-2.5 text-sm outline-none focus:border-[#3f92cc]" style={{ borderColor: "hsl(230 30% 23%)" }} placeholder="e.g. Community Building 101" /></label>
-            <label className="mt-4 block text-xs text-slate-400">Description<textarea className="mt-2 w-full resize-none rounded border bg-slate-950/40 px-3 py-2.5 text-sm outline-none focus:border-[#3f92cc]" style={{ borderColor: "hsl(230 30% 23%)" }} rows={3} placeholder="What will members learn?" /></label>
-            <div className="mt-6 flex justify-end gap-2"><button onClick={() => setShowDialog(false)} className="rounded border px-3.5 py-2 text-xs text-slate-300 hover:text-white" style={{ borderColor: "hsl(230 30% 24%)" }}>Cancel</button><button onClick={() => { setShowDialog(false); showNotice("Course draft created"); }} className="rounded bg-[#da0010] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#b8000e]">Create Course</button></div>
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm"
+          onClick={() => setShowDialog(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border bg-white p-6 shadow-xl"
+            style={{ borderColor: "#e5e7eb" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">New course</h3>
+                <p className="mt-1 text-xs text-gray-500">Give your members somewhere new to grow.</p>
+              </div>
+              <GripVertical size={18} className="rotate-90 text-gray-300" />
+            </div>
+            <label className="mt-6 block text-xs font-medium text-gray-600">
+              Course title
+              <input
+                autoFocus
+                className="mt-1.5 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-[#da0010] focus:ring-1 focus:ring-[#da0010]/20"
+                placeholder="e.g. Community Building 101"
+              />
+            </label>
+            <label className="mt-4 block text-xs font-medium text-gray-600">
+              Description
+              <textarea
+                className="mt-1.5 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-[#da0010] focus:ring-1 focus:ring-[#da0010]/20"
+                rows={3}
+                placeholder="What will members learn?"
+              />
+            </label>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setShowDialog(false)}
+                className="rounded-md border border-gray-300 px-3.5 py-2 text-xs text-gray-600 hover:border-gray-400 hover:text-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowDialog(false); showNotice("Course draft created"); }}
+                className="rounded-md bg-[#da0010] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#b8000e]"
+              >
+                Create Course
+              </button>
+            </div>
           </div>
         </div>
       )}
