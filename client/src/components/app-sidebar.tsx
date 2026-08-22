@@ -278,7 +278,7 @@ export function AppSidebar() {
   const activeCourseId = trainingMatch?.[1] ?? null;
   const activeLessonId = trainingMatch?.[2] ?? null;
 
-  // Fetch published courses for Training section (skip for collaborators)
+  // Fetch published courses for Training section (admins only — route requires admin)
   const { data: trainingCourses = [] } = useQuery<PublishedCourse[]>({
     queryKey: ["/api/training/courses"],
     queryFn: async () => {
@@ -286,7 +286,7 @@ export function AppSidebar() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!user && !isCollaborator,
+    enabled: !!user && !isCollaborator && !!user.isAdmin,
     staleTime: 60_000,
   });
 
