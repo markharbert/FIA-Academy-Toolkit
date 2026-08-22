@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect, useParams } from "wouter";
+import { Switch, Route, Redirect, useParams, useLocation } from "wouter";
 import { lazy, Suspense } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { queryClient } from "./lib/queryClient";
@@ -397,6 +397,8 @@ function PublicRoutes() {
 
 function AppLayout() {
   const { user, isLoading } = useAuth();
+  const [location] = useLocation();
+  const isTrainingRoute = location.startsWith("/training/");
 
   if (isLoading) {
     return (
@@ -431,7 +433,7 @@ function AppLayout() {
                 <div className="flex-1">
                   <ProtectedRoutes />
                 </div>
-                <Footer />
+                {!isTrainingRoute && <Footer />}
               </div>
             </main>
           </SidebarInset>

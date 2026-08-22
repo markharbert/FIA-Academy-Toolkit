@@ -186,8 +186,8 @@ export function LessonEditorPreview() {
 
   return (
     <div
-      className="flex min-h-screen text-gray-900"
-      style={{ background: "#ffffff", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}
+      className="flex h-screen text-gray-900 overflow-hidden"
+      style={{ background: "#f8fafc", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}
     >
       {/* Sidebar — always present */}
       <CourseSidebar />
