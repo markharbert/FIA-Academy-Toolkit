@@ -156,7 +156,7 @@ export default function TrainingLessonPage() {
             onClick={() => setLocation(`/training/${courseId}`)}
           >
             <GraduationCap className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-            <span className="text-[12px] font-semibold text-amber-100 leading-snug line-clamp-2 group-hover:text-white transition-colors">
+            <span className="text-[13px] font-semibold text-amber-100 leading-snug line-clamp-2 group-hover:text-white transition-colors">
               {courseData?.course.title ?? "Course"}
             </span>
           </button>
@@ -184,7 +184,7 @@ export default function TrainingLessonPage() {
               {/* Module label */}
               <div className="px-2 py-1.5">
                 <p
-                  className="text-[9px] font-bold uppercase tracking-widest truncate"
+                  className="text-[10px] font-bold uppercase tracking-widest truncate"
                   style={{ color: "rgba(255,255,255,0.3)" }}
                 >
                   {module.title}
@@ -216,7 +216,7 @@ export default function TrainingLessonPage() {
                         )}
                       />
                     )}
-                    <span className="truncate text-[11px] leading-snug">{l.title}</span>
+                    <span className="truncate text-[12px] leading-snug">{l.title}</span>
                   </button>
                 );
               })}

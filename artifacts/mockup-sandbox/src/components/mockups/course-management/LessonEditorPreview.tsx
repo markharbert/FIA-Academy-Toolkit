@@ -93,7 +93,7 @@ function CourseSidebar() {
         <div className="rounded-lg overflow-hidden" style={{ background: "rgba(245,158,11,0.08)" }}>
           <div className="flex items-center gap-2.5 px-2 py-1.5">
             <span className="flex-shrink-0 h-5 w-5 rounded text-[9px] font-black flex items-center justify-center bg-amber-500/30 text-amber-200">FIA</span>
-            <span className="flex-1 text-left truncate text-[12px] font-semibold text-amber-100">Fearless Influencer Academy</span>
+            <span className="flex-1 text-left truncate text-[13px] font-semibold text-amber-100">Fearless Influencer Academy</span>
           </div>
 
           {/* Lesson tree */}
@@ -104,7 +104,7 @@ function CourseSidebar() {
                 <div key={mod.id}>
                   <button
                     onClick={() => setExpanded((s) => ({ ...s, [mod.id]: !s[mod.id] }))}
-                    className="w-full flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-400/60 hover:text-amber-300"
+                    className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-400/60 hover:text-amber-300"
                   >
                     {mod.lessons.length > 0
                       ? open ? <ChevronDown size={11} /> : <ChevronRight size={11} />
@@ -127,7 +127,7 @@ function CourseSidebar() {
                         ? <CheckCircle size={11} className="flex-shrink-0 text-green-400/80" />
                         : <span className={`flex-shrink-0 h-2.5 w-2.5 rounded-full border ${lesson.active ? "border-amber-400 bg-amber-400/30" : "border-white/20"}`} />
                       }
-                      <span className="truncate text-[11px]">{lesson.title}</span>
+                      <span className="truncate text-[12px]">{lesson.title}</span>
                     </button>
                   ))}
                 </div>
