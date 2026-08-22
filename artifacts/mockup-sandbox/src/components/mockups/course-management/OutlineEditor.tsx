@@ -173,7 +173,7 @@ export function OutlineEditor() {
       className="flex min-h-screen w-full overflow-hidden text-gray-900"
       style={{ background: "#ffffff", fontFamily: "Inter, ui-sans-serif, sans-serif" }}
     >
-      <RealSidebar activePath="admin" />
+      <RealSidebar activePath="courses" />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Sticky header */}
