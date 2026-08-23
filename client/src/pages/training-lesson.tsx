@@ -151,7 +151,7 @@ export default function TrainingLessonPage() {
       <div className="px-2 py-1.5">
         <p
           className="text-[10px] font-bold uppercase tracking-widest truncate"
-          style={{ color: "rgba(255,255,255,0.3)" }}
+          style={{ color: "#ffffff" }}
         >
           {module.title}
         </p>
@@ -167,7 +167,7 @@ export default function TrainingLessonPage() {
               "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
               isActive ? "bg-amber-500/20 text-amber-100" : "hover:bg-white/5",
             )}
-            style={!isActive ? { color: "rgba(255,255,255,0.5)" } : undefined}
+            style={!isActive ? { color: "#ffffff" } : undefined}
           >
             {lesson.completed ? (
               <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
