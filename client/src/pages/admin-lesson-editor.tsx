@@ -76,6 +76,7 @@ type CfDownload = {
   workspace_id: string;
   asset_id: string | null;
   name: string;
+  editUrl: string | null;
 };
 
 type VimeoFolderNode = VimeoFolder & { children: VimeoFolderNode[] };
@@ -806,7 +807,7 @@ export default function AdminLessonEditorPage() {
               Choose a ClickFunnels download
             </DialogTitle>
             <DialogDescription>
-              This adds a resource link that opens the member’s ClickFunnels Downloads page. The file remains hosted in ClickFunnels.
+              Choose an asset to pre-fill its name, or open the asset in ClickFunnels to copy its actual file URL.
             </DialogDescription>
           </DialogHeader>
 
@@ -832,22 +833,38 @@ export default function AdminLessonEditorPage() {
           ) : (
             <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
               {visibleCfDownloads.map((download) => (
-                <button
-                  key={download.id}
-                  type="button"
-                  disabled={addResource.isPending}
-                  className="flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => selectCfDownload(download)}
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-muted">
-                    <Download className="h-4 w-4 text-muted-foreground" />
+                  <div
+                    key={download.id}
+                    className="flex w-full items-center gap-3 rounded-md border p-3 transition-colors hover:bg-muted/50"
+                  >
+                    <button
+                      type="button"
+                      disabled={addResource.isPending}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => selectCfDownload(download)}
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-muted">
+                        <Download className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{download.name}</span>
+                        <span className="block text-xs text-muted-foreground">Select this asset</span>
+                      </span>
+                      {addResource.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 text-muted-foreground" />}
+                    </button>
+                    {download.editUrl && (
+                      <a
+                        href={download.editUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-ring"
+                        title={`Open ${download.name} in ClickFunnels`}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open in CF
+                      </a>
+                    )}
                   </div>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{download.name}</span>
-                    <span className="block text-xs text-muted-foreground">Opens in ClickFunnels</span>
-                  </span>
-                  {addResource.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 text-muted-foreground" />}
-                </button>
               ))}
             </div>
           )}

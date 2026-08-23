@@ -1900,7 +1900,14 @@ export async function registerRoutes(
   app.get("/api/admin/cf/downloads", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const downloads = await listCfDownloads();
-      res.json({ downloads });
+      res.json({
+        downloads: downloads.map((download) => ({
+          ...download,
+          editUrl: download.public_id
+            ? `https://${CF_WORKSPACE_DOMAIN}/account/downloads/${encodeURIComponent(download.public_id)}/edit`
+            : null,
+        })),
+      });
     } catch (err: any) {
       console.error("[CF Downloads] list:", err?.message);
       res.status(502).json({ message: err?.message ?? "Failed to list ClickFunnels downloads" });
