@@ -5,7 +5,7 @@ import { Plus, BookOpen, Layout, MoreHorizontal, Eye, EyeOff, Trash2, Pencil } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -86,6 +86,7 @@ export default function AdminCoursesPage() {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const [courseToDelete, setCourseToDelete] = useState<{ id: string; title: string } | null>(null);
   const [courseToEdit, setCourseToEdit] = useState<{ id: string; title: string; description: string } | null>(null);
 
   const editMutation = useMutation({
@@ -261,7 +262,7 @@ export default function AdminCoursesPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
-                        onClick={() => deleteMutation.mutate(course.id)}
+                        onClick={() => setCourseToDelete({ id: course.id, title: course.title })}
                       >
                         <Trash2 className="h-4 w-4 mr-2" /> Delete
                       </DropdownMenuItem>
@@ -316,6 +317,28 @@ export default function AdminCoursesPage() {
               onClick={() => courseToEdit && editMutation.mutate(courseToEdit)}
             >
               {editMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!courseToDelete} onOpenChange={(open) => { if (!open) setCourseToDelete(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete course?</DialogTitle>
+            <DialogDescription>
+              <strong>"{courseToDelete?.title}"</strong> and all its modules and lessons will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCourseToDelete(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => courseToDelete && deleteMutation.mutate(courseToDelete.id)}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

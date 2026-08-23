@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { COURSE_ICONS, CourseIcon } from "@/lib/course-icons";
@@ -105,6 +109,8 @@ export default function AdminCourseOutlinePage() {
   const [addingLesson, setAddingLesson] = useState<{ moduleId: string; title: string } | null>(null);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [customNumber, setCustomNumber] = useState("");
+  const [moduleToDelete, setModuleToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [lessonToDelete, setLessonToDelete] = useState<{ id: string; title: string } | null>(null);
 
   const { data, isLoading } = useQuery<CourseStructure>({
     queryKey: ["/api/admin/courses", id, "structure"],
@@ -388,7 +394,7 @@ export default function AdminCourseOutlinePage() {
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 text-destructive hover:text-destructive"
-                  onClick={() => deleteModule.mutate(module.id)}
+                  onClick={() => setModuleToDelete({ id: module.id, title: module.title })}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -429,7 +435,7 @@ export default function AdminCourseOutlinePage() {
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => deleteLesson.mutate(lesson.id)}
+                          onClick={() => setLessonToDelete({ id: lesson.id, title: lesson.title })}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -519,6 +525,48 @@ export default function AdminCourseOutlinePage() {
           </Button>
         )}
       </div>
+
+      {/* Delete module dialog */}
+      <Dialog open={!!moduleToDelete} onOpenChange={(open) => { if (!open) setModuleToDelete(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete module?</DialogTitle>
+            <DialogDescription>
+              <strong>"{moduleToDelete?.title}"</strong> and all its lessons will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModuleToDelete(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => { moduleToDelete && deleteModule.mutate(moduleToDelete.id); setModuleToDelete(null); }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete lesson dialog */}
+      <Dialog open={!!lessonToDelete} onOpenChange={(open) => { if (!open) setLessonToDelete(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete lesson?</DialogTitle>
+            <DialogDescription>
+              <strong>"{lessonToDelete?.title}"</strong> will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLessonToDelete(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => { lessonToDelete && deleteLesson.mutate(lessonToDelete.id); setLessonToDelete(null); }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
