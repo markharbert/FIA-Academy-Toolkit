@@ -325,7 +325,14 @@ export default function TrainingLessonPage() {
               {module.title}
             </p>
             {!isModuleExpanded && isModuleComplete && (
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span title="Module Complete" className="flex shrink-0">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" aria-label="Module complete" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right">Module Complete</TooltipContent>
+              </Tooltip>
             )}
           </button>
         </div>
