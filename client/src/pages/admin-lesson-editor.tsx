@@ -180,11 +180,12 @@ export default function AdminLessonEditorPage() {
   const [vimeoVideoPage, setVimeoVideoPage] = useState(1);
   const [vimeoFolderFilter, setVimeoFolderFilter] = useState("");
   const [expandedVimeoFolders, setExpandedVimeoFolders] = useState<Record<string, boolean>>({});
+  const [isNavigatingLesson, setIsNavigatingLesson] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef({ title: "", videoUrl: "", content: "" });
   const revisionRef = useRef(0);
   const saveInFlightRef = useRef(false);
-  const saveDrainPromiseRef = useRef<Promise<void> | null>(null);
+  const saveDrainPromiseRef = useRef<Promise<boolean> | null>(null);
   const queuedRevisionRef = useRef<number | null>(null);
   const loadedLessonIdRef = useRef<string | null>(null);
   const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null);
@@ -206,7 +207,6 @@ export default function AdminLessonEditorPage() {
     );
   }, [courseStructure?.modules]);
   const currentLessonIndex = orderedLessons.findIndex((item) => item.id === lessonId);
-  const previousLesson = currentLessonIndex > 0 ? orderedLessons[currentLessonIndex - 1] : null;
   const nextLesson = currentLessonIndex >= 0 ? orderedLessons[currentLessonIndex + 1] ?? null : null;
 
   const { data: vimeoFoldersData, isLoading: vimeoFoldersLoading, error: vimeoFoldersError } = useQuery<{
@@ -329,33 +329,35 @@ export default function AdminLessonEditorPage() {
     onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
   });
 
-  const saveCurrentDraft = async (revision: number) => {
+  const saveCurrentDraft = async (revision: number): Promise<boolean> => {
     // Keep writes in order. Without this queue, an older delayed request can
     // reach the server after a newer request and overwrite the latest content.
     if (saveInFlightRef.current) {
       queuedRevisionRef.current = revision;
-      if (saveDrainPromiseRef.current) await saveDrainPromiseRef.current;
-      return;
+      return saveDrainPromiseRef.current ? await saveDrainPromiseRef.current : false;
     }
 
     const drainPromise = (async () => {
+      let saved = true;
       saveInFlightRef.current = true;
       try {
         await saveMutation.mutateAsync({ ...formRef.current, revision });
       } catch {
         // The mutation's error handler shows the error and leaves the form dirty.
+        saved = false;
       } finally {
         saveInFlightRef.current = false;
         const queuedRevision = queuedRevisionRef.current;
         queuedRevisionRef.current = null;
         saveDrainPromiseRef.current = null;
         if (queuedRevision !== null && queuedRevision > revision) {
-          await saveCurrentDraft(queuedRevision);
+          saved = (await saveCurrentDraft(queuedRevision)) && saved;
         }
       }
+      return saved;
     })();
     saveDrainPromiseRef.current = drainPromise;
-    await drainPromise;
+    return await drainPromise;
   };
 
   const togglePublish = useMutation({
@@ -418,6 +420,28 @@ export default function AdminLessonEditorPage() {
   const saveNow = () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     void saveCurrentDraft(revisionRef.current);
+  };
+
+  const navigateToLesson = async (targetLessonId: string) => {
+    if (isNavigatingLesson) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setIsNavigatingLesson(true);
+    try {
+      if (isDirty || saveInFlightRef.current) {
+        const saved = await saveCurrentDraft(revisionRef.current);
+        if (!saved) {
+          toast({
+            title: "Couldn’t save this lesson",
+            description: "Please save your changes before moving to another lesson.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      setLocation(`/admin/courses/${courseId}/lessons/${targetLessonId}`);
+    } finally {
+      setIsNavigatingLesson(false);
+    }
   };
 
   useEffect(() => () => {
@@ -483,6 +507,18 @@ export default function AdminLessonEditorPage() {
           >
             <Save className="h-3.5 w-3.5 mr-1.5" />
             Save
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (nextLesson) void navigateToLesson(nextLesson.id);
+            }}
+            disabled={!nextLesson || courseStructureLoading || isNavigatingLesson}
+            title={nextLesson ? `Next: ${nextLesson.title}` : "This is the final lesson"}
+          >
+            {isNavigatingLesson ? "Saving…" : "Next lesson"}
+            <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
           </Button>
           <Button
             size="sm"
