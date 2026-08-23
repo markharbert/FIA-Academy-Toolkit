@@ -383,9 +383,9 @@ export default function TrainingLessonPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-3 rounded-xl px-4 py-4 transition-colors group"
-                      style={{ background: "#fff", border: "1px solid #e5e7eb", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#d1d5db")}
-                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
+                      style={{ background: "#f5f9ff", border: "1px solid #dbeafe", boxShadow: "0 1px 2px rgba(30,64,175,0.05)" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#eff6ff")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "#f5f9ff")}
                     >
                       <div
                         className="h-11 w-11 rounded-lg flex items-center justify-center shrink-0"
