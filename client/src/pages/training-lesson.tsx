@@ -293,16 +293,16 @@ export default function TrainingLessonPage() {
             key={lesson.id}
             onClick={() => setLocation(`/training/${courseId}/lessons/${lesson.id}`)}
             className={cn(
-              "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
+              "flex items-start gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
               isActive ? "bg-amber-500/20 text-amber-100" : "hover:bg-white/5",
             )}
             style={!isActive ? { color: "#ffffff" } : undefined}
           >
             {lesson.completed ? (
-              <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
+              <CheckCircle2 className="mt-0.5 h-3 w-3 text-emerald-400 shrink-0" />
             ) : (
               <span className={cn(
-                "h-2.5 w-2.5 rounded-full border shrink-0 flex-none",
+                "mt-0.5 h-2.5 w-2.5 rounded-full border shrink-0 flex-none",
                 isActive ? "border-amber-400 bg-amber-400/30" : "border-white/20",
               )} />
             )}
