@@ -279,7 +279,7 @@ export default function TrainingLessonPage() {
     <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
       <div className="px-2 py-1.5">
         <p
-          className="text-[10px] font-bold uppercase tracking-widest truncate"
+          className="text-[10px] font-bold uppercase tracking-widest whitespace-normal break-words"
           style={{ color: "#ffffff" }}
         >
           {module.title}
@@ -306,7 +306,7 @@ export default function TrainingLessonPage() {
                 isActive ? "border-amber-400 bg-amber-400/30" : "border-white/20",
               )} />
             )}
-            <span className="truncate text-[12px] leading-snug">{lesson.title}</span>
+            <span className="whitespace-normal break-words text-[12px] leading-snug">{lesson.title}</span>
           </button>
         );
       })}
