@@ -36,7 +36,6 @@ import {
   ChevronRight,
   CalendarDays,
   BookMarked,
-  GraduationCap,
   CheckCircle2,
   Circle,
   LayoutList,
@@ -44,6 +43,7 @@ import {
 import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 import cfLogo from "@/assets/cf-logo.png";
+import { CourseIcon } from "@/lib/course-icons";
 
 type NavChild = {
   title: string;
@@ -259,7 +259,7 @@ function isGroupActive(item: NavItem, location: string): boolean {
   return false;
 }
 
-type PublishedCourse = { id: string; title: string; slug: string; status: string };
+type PublishedCourse = { id: string; title: string; slug: string; status: string; icon?: string | null };
 
 export function AppSidebar() {
   const { user, logout } = useAuth();
@@ -361,7 +361,7 @@ export function AppSidebar() {
                           onClick={() => setLocation(`/training/${course.id}`)}
                           className={isCourseActive ? "!bg-violet-500/15" : ""}
                         >
-                          <GraduationCap className={isCourseActive ? undefined : "text-violet-400"} />
+                          <CourseIcon icon={course.icon} className={isCourseActive ? undefined : "text-violet-400"} />
                           <span className="truncate">{course.title}</span>
                         </SidebarMenuButton>
                       </SidebarMenuItem>

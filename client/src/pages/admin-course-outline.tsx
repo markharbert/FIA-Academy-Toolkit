@@ -3,13 +3,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Plus, ChevronDown, ChevronRight, Pencil, Trash2,
-  FileText, Eye, EyeOff, GripVertical, Check, X,
+  FileText, Eye, EyeOff, GripVertical, Check, X, Smile,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { COURSE_ICONS, CourseIcon } from "@/lib/course-icons";
 
 type Lesson = {
   id: string;
@@ -34,6 +36,7 @@ type CourseStructure = {
     title: string;
     status: string;
     description: string | null;
+    icon: string | null;
   };
   modules: Module[];
 };
@@ -100,6 +103,8 @@ export default function AdminCourseOutlinePage() {
   const [addingModuleTitle, setAddingModuleTitle] = useState("");
   const [showAddModule, setShowAddModule] = useState(false);
   const [addingLesson, setAddingLesson] = useState<{ moduleId: string; title: string } | null>(null);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [customNumber, setCustomNumber] = useState("");
 
   const { data, isLoading } = useQuery<CourseStructure>({
     queryKey: ["/api/admin/courses", id, "structure"],
@@ -118,11 +123,11 @@ export default function AdminCourseOutlinePage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", id, "structure"] });
 
   const updateCourse = useMutation({
-    mutationFn: (title: string) =>
+    mutationFn: (updates: { title?: string; icon?: string | null }) =>
       apiFetch(`/api/admin/courses/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify(updates),
       }),
     onSuccess: () => {
       invalidate();
@@ -246,10 +251,91 @@ export default function AdminCourseOutlinePage() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
+
+        {/* Icon picker */}
+        <Popover open={iconPickerOpen} onOpenChange={setIconPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-violet-400 hover:text-violet-300"
+              title="Change course icon"
+            >
+              <CourseIcon icon={course.icon} className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-3" align="start">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Icon</p>
+            <div className="grid grid-cols-6 gap-1 mb-3">
+              {COURSE_ICONS.map(({ name, icon: Icon }) => (
+                <button
+                  key={name}
+                  onClick={() => { updateCourse.mutate({ icon: name }); setIconPickerOpen(false); }}
+                  className={cn(
+                    "flex items-center justify-center rounded h-8 w-8 hover:bg-muted transition-colors",
+                    course.icon === name && "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/50",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              ))}
+            </div>
+
+            <p className="text-xs font-medium text-muted-foreground mb-2">Number</p>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {["1","2","3","4","5","6","7","8","9"].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => { updateCourse.mutate({ icon: n }); setIconPickerOpen(false); }}
+                  className={cn(
+                    "flex items-center justify-center rounded h-8 w-8 text-sm font-semibold hover:bg-muted transition-colors",
+                    course.icon === n && "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/50",
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1 mb-3">
+              <Input
+                placeholder="Custom number…"
+                value={customNumber}
+                onChange={(e) => setCustomNumber(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customNumber) {
+                    updateCourse.mutate({ icon: customNumber });
+                    setCustomNumber("");
+                    setIconPickerOpen(false);
+                  }
+                }}
+                className="h-8 text-sm"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 shrink-0"
+                disabled={!customNumber}
+                onClick={() => { updateCourse.mutate({ icon: customNumber }); setCustomNumber(""); setIconPickerOpen(false); }}
+              >
+                Set
+              </Button>
+            </div>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-full text-xs text-muted-foreground"
+              onClick={() => { updateCourse.mutate({ icon: null }); setIconPickerOpen(false); }}
+            >
+              Remove icon
+            </Button>
+          </PopoverContent>
+        </Popover>
+
         <div className="flex-1 min-w-0">
           <InlineEdit
             value={course.title}
-            onSave={(title) => title.trim() && updateCourse.mutate(title.trim())}
+            onSave={(title) => title.trim() && updateCourse.mutate({ title: title.trim() })}
             className="text-xl font-semibold"
           />
           <p className="text-xs text-muted-foreground mt-0.5">

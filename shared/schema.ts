@@ -2158,6 +2158,7 @@ export const courses = pgTable("courses", {
   status: varchar("status", { length: 20 }).notNull().default("draft"), // 'draft' | 'published'
   sortOrder: integer("sort_order").notNull().default(0),
   externalId: text("external_id"),  // e.g. 'cf-course-123' — for idempotent import
+  icon: text("icon"),               // sidebar icon: Lucide name or number string
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

@@ -5854,6 +5854,7 @@ export async function runMigrations(): Promise<void> {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_course_modules_ext ON course_modules(course_id, external_id) WHERE external_id IS NOT NULL`);
     await pool.query(`ALTER TABLE course_lessons ADD COLUMN IF NOT EXISTS external_id TEXT`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_course_lessons_ext ON course_lessons(course_id, external_id) WHERE external_id IS NOT NULL`);
+    await pool.query(`ALTER TABLE courses ADD COLUMN IF NOT EXISTS icon TEXT`);
     console.log("[migration] course external_id columns ensured");
   } catch (err: any) {
     console.error("[migration] course external_id migration failed:", err?.message);
