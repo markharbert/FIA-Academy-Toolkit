@@ -400,6 +400,9 @@ export default function TrainingLessonPage() {
                 {courseData?.course.title ?? "Course"}
               </span>
             )}
+            {!courseNavCollapsed && totalCount > 0 && completedCount === totalCount && (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-label="Course complete" />
+            )}
           </button>
 
           {!courseNavCollapsed && totalCount > 0 && (
@@ -407,7 +410,10 @@ export default function TrainingLessonPage() {
               {/* Custom progress bar */}
               <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.1)" }}>
                 <div
-                  className="h-full rounded-full bg-amber-400 transition-all"
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    completedCount === totalCount ? "bg-emerald-400" : "bg-amber-400",
+                  )}
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
