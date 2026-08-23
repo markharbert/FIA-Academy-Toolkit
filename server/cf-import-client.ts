@@ -4,6 +4,7 @@
  */
 
 import { CF_WORKSPACE_DOMAIN, CF_API_TOKEN, CF_COURSE_ID } from "./clickfunnels";
+import { listVimeoVideos, matchVimeoVideoForLesson, type VimeoVideo } from "./vimeo";
 
 const baseUrl = () => `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
 const authHeaders = () => ({
@@ -168,7 +169,11 @@ async function fetchCfLessonBody(lessonId: string): Promise<string | null> {
   }
 }
 
-async function findLessonVimeoUrl(courseId: string, lesson: CfLesson): Promise<string | null> {
+async function findLessonVimeoUrl(
+  courseId: string,
+  lesson: CfLesson,
+  vimeoVideos: VimeoVideo[],
+): Promise<string | null> {
   const fromBody = extractVimeoUrl(lesson.body);
   if (fromBody) return fromBody;
 
@@ -179,7 +184,10 @@ async function findLessonVimeoUrl(courseId: string, lesson: CfLesson): Promise<s
   if (!lesson.current_path) return null;
 
   const page = await fetchCfLessonPage(courseId, lesson.current_path);
-  return extractVimeoUrl(page);
+  const fromPage = extractVimeoUrl(page);
+  if (fromPage) return fromPage;
+
+  return matchVimeoVideoForLesson(lesson.title, vimeoVideos)?.url ?? null;
 }
 
 // ─── Pagination — loops until a page returns < 20 items ──────────────────────
@@ -251,6 +259,10 @@ export async function getCfCourseStructure(
   }));
 
   onProgress(`Fetching lessons for ${sections.length} sections...`);
+  const vimeoVideos = await listVimeoVideos();
+  if (vimeoVideos.length > 0) {
+    onProgress(`Loaded ${vimeoVideos.length} Vimeo videos for title matching...`);
+  }
 
   // 2. Fetch lessons for each section — max 3 concurrent requests
   const lessonMap = new Map<string, CfLesson[]>();
@@ -274,7 +286,7 @@ export async function getCfCourseStructure(
       }));
 
       for (const lesson of lessons) {
-        const videoUrl = await findLessonVimeoUrl(cfCourseId, lesson);
+        const videoUrl = await findLessonVimeoUrl(cfCourseId, lesson, vimeoVideos);
         if (videoUrl) {
           lesson.videoUrl = videoUrl;
           videosFound++;
