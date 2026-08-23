@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -447,6 +448,7 @@ export function CourseImportCard() {
     promote: false,
   });
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [customCourseId, setCustomCourseId] = useState("");
 
   // Fetch existing courses for the "add to existing" picker
   const { data: existingCourses } = useQuery<
@@ -689,32 +691,71 @@ export function CourseImportCard() {
 
         {/* browsing */}
         {step === "browsing" && (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              {cfCourses.length} course{cfCourses.length !== 1 ? "s" : ""}{" "}
-              found. Pick one to import.
-            </p>
-            <div className="divide-y rounded-md border bg-card">
-              {cfCourses.map((course) => (
-                <div
-                  key={course.id}
-                  className="flex items-center justify-between px-3 py-2.5 gap-3"
-                >
-                  <span className="text-sm font-medium truncate">
-                    {course.name}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => fetchStructure(course)}
-                    className="flex-shrink-0 gap-1.5"
+          <div className="space-y-4">
+            {/* Configured courses */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Your configured course
+              </p>
+              <div className="divide-y rounded-md border bg-card">
+                {cfCourses.map((course) => (
+                  <div
+                    key={course.id}
+                    className="flex items-center justify-between px-3 py-2.5 gap-3"
                   >
-                    <ArrowRight className="h-3.5 w-3.5" />
-                    Fetch Structure
-                  </Button>
-                </div>
-              ))}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{course.name}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{course.id}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => fetchStructure(course)}
+                      className="flex-shrink-0 gap-1.5"
+                    >
+                      <ArrowRight className="h-3.5 w-3.5" />
+                      Select
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {/* Manual lookup */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Import a different course by ID
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Find the public ID in your CF course URL, e.g.{" "}
+                <span className="font-mono bg-muted px-1 rounded">
+                  /courses/<strong>elXgXp</strong>
+                </span>
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. elXgXp"
+                  value={customCourseId}
+                  onChange={(e) => setCustomCourseId(e.target.value.trim())}
+                  className="font-mono text-sm h-8"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customCourseId) {
+                      fetchStructure({ id: customCourseId, name: customCourseId });
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  disabled={!customCourseId}
+                  onClick={() => fetchStructure({ id: customCourseId, name: customCourseId })}
+                  className="gap-1.5 flex-shrink-0"
+                >
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  Fetch
+                </Button>
+              </div>
+            </div>
+
             <Button
               size="sm"
               variant="ghost"
