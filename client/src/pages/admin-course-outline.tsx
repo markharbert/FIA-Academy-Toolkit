@@ -388,11 +388,7 @@ export default function AdminCourseOutlinePage() {
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 text-destructive hover:text-destructive"
-                  onClick={() => {
-                    if (confirm(`Delete module "${module.title}" and all its lessons?`)) {
-                      deleteModule.mutate(module.id);
-                    }
-                  }}
+                  onClick={() => deleteModule.mutate(module.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -433,11 +429,7 @@ export default function AdminCourseOutlinePage() {
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => {
-                            if (confirm(`Delete lesson "${lesson.title}"?`)) {
-                              deleteLesson.mutate(lesson.id);
-                            }
-                          }}
+                          onClick={() => deleteLesson.mutate(lesson.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>

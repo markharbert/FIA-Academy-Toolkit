@@ -490,7 +490,7 @@ function TemplateTaskSheet({
               variant="ghost"
               size="sm"
               className="text-destructive hover:text-destructive"
-              onClick={() => { if (confirm("Delete this template task?")) onDelete(task.id); }}
+              onClick={() => onDelete(task.id)}
               data-testid="button-template-delete-task"
             >
               <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete task
