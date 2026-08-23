@@ -330,7 +330,7 @@ export default function TrainingLessonPage() {
             className={cn(
               "flex items-start gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
               collapsed && "justify-center px-1",
-              isActive ? "bg-amber-500/20 text-amber-100" : "hover:bg-white/5",
+              isActive ? "bg-amber-500/20 text-amber-100" : "bg-white/5 hover:bg-white/10",
             )}
             style={!isActive ? { color: "#ffffff" } : undefined}
             title={collapsed ? lesson.title : undefined}
