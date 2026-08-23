@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { COURSE_ICONS, CourseIcon } from "@/lib/course-icons";
+import { COURSE_ICON_GROUPS, CourseIcon } from "@/lib/course-icons";
 
 type Lesson = {
   id: string;
@@ -270,71 +270,89 @@ export default function AdminCourseOutlinePage() {
               <CourseIcon icon={course.icon} className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-72 p-3" align="start">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Icon</p>
-            <div className="grid grid-cols-6 gap-1 mb-3">
-              {COURSE_ICONS.map(({ name, icon: Icon }) => (
-                <button
-                  key={name}
-                  onClick={() => { updateCourse.mutate({ icon: name }); setIconPickerOpen(false); }}
-                  className={cn(
-                    "flex items-center justify-center rounded h-8 w-8 hover:bg-muted transition-colors",
-                    course.icon === name && "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/50",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </button>
+          <PopoverContent className="w-80 p-0" align="start">
+            <div className="max-h-96 overflow-y-auto p-3 space-y-4">
+              {/* Icon groups */}
+              {COURSE_ICON_GROUPS.map((group) => (
+                <div key={group.category}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    {group.category}
+                  </p>
+                  <div className="grid grid-cols-8 gap-0.5">
+                    {group.icons.map(({ name, icon: Icon }) => (
+                      <button
+                        key={name}
+                        title={name}
+                        onClick={() => { updateCourse.mutate({ icon: name }); setIconPickerOpen(false); }}
+                        className={cn(
+                          "flex items-center justify-center rounded h-8 w-8 hover:bg-muted transition-colors",
+                          course.icon === name && "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/50",
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
+
+              {/* Numbers */}
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                  Number
+                </p>
+                <div className="grid grid-cols-8 gap-0.5 mb-2">
+                  {["1","2","3","4","5","6","7","8","9"].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => { updateCourse.mutate({ icon: n }); setIconPickerOpen(false); }}
+                      className={cn(
+                        "flex items-center justify-center rounded h-8 w-8 text-sm font-semibold hover:bg-muted transition-colors",
+                        course.icon === n && "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/50",
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-1">
+                  <Input
+                    placeholder="Custom number…"
+                    value={customNumber}
+                    onChange={(e) => setCustomNumber(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && customNumber) {
+                        updateCourse.mutate({ icon: customNumber });
+                        setCustomNumber("");
+                        setIconPickerOpen(false);
+                      }
+                    }}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 shrink-0"
+                    disabled={!customNumber}
+                    onClick={() => { updateCourse.mutate({ icon: customNumber }); setCustomNumber(""); setIconPickerOpen(false); }}
+                  >
+                    Set
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            <p className="text-xs font-medium text-muted-foreground mb-2">Number</p>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {["1","2","3","4","5","6","7","8","9"].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => { updateCourse.mutate({ icon: n }); setIconPickerOpen(false); }}
-                  className={cn(
-                    "flex items-center justify-center rounded h-8 w-8 text-sm font-semibold hover:bg-muted transition-colors",
-                    course.icon === n && "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/50",
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-1 mb-3">
-              <Input
-                placeholder="Custom number…"
-                value={customNumber}
-                onChange={(e) => setCustomNumber(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && customNumber) {
-                    updateCourse.mutate({ icon: customNumber });
-                    setCustomNumber("");
-                    setIconPickerOpen(false);
-                  }
-                }}
-                className="h-8 text-sm"
-              />
+            {/* Footer */}
+            <div className="border-t p-2">
               <Button
                 size="sm"
-                variant="outline"
-                className="h-8 shrink-0"
-                disabled={!customNumber}
-                onClick={() => { updateCourse.mutate({ icon: customNumber }); setCustomNumber(""); setIconPickerOpen(false); }}
+                variant="ghost"
+                className="w-full text-xs text-muted-foreground"
+                onClick={() => { updateCourse.mutate({ icon: null }); setIconPickerOpen(false); }}
               >
-                Set
+                Remove icon
               </Button>
             </div>
-
-            <Button
-              size="sm"
-              variant="ghost"
-              className="w-full text-xs text-muted-foreground"
-              onClick={() => { updateCourse.mutate({ icon: null }); setIconPickerOpen(false); }}
-            >
-              Remove icon
-            </Button>
           </PopoverContent>
         </Popover>
 
