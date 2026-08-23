@@ -4,7 +4,7 @@ import { useParams, useLocation } from "wouter";
 import Player from "@vimeo/player";
 import {
   ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, ExternalLink, Link,
-  BookOpen, Clock, SkipBack, SkipForward, FileText, Menu, X,
+  BookOpen, Clock, SkipBack, SkipForward, FileText, Menu, X, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import { cn } from "@/lib/utils";
@@ -135,6 +135,7 @@ export default function TrainingLessonPage() {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [courseNavCollapsed, setCourseNavCollapsed] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
   const vimeoPlayerApiRef = useRef<Player | null>(null);
@@ -275,9 +276,9 @@ export default function TrainingLessonPage() {
     m.lessons.some((l) => l.id === lessonId)
   );
 
-  const renderModuleNavigation = (module: CourseModuleTree<CourseModule>, depth = 0) => (
+  const renderModuleNavigation = (module: CourseModuleTree<CourseModule>, depth = 0, collapsed = courseNavCollapsed) => (
     <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
-      <div className="px-2 py-1.5">
+      <div className={cn("px-2 py-1.5", collapsed && "hidden")}>
         <p
           className="text-[10px] font-bold uppercase tracking-widest whitespace-normal break-words"
           style={{ color: "#ffffff" }}
@@ -294,9 +295,11 @@ export default function TrainingLessonPage() {
             onClick={() => setLocation(`/training/${courseId}/lessons/${lesson.id}`)}
             className={cn(
               "flex items-start gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
+              collapsed && "justify-center px-1",
               isActive ? "bg-amber-500/20 text-amber-100" : "hover:bg-white/5",
             )}
             style={!isActive ? { color: "#ffffff" } : undefined}
+            title={collapsed ? lesson.title : undefined}
           >
             {lesson.completed ? (
               <CheckCircle2 className="mt-0.5 h-3 w-3 text-emerald-400 shrink-0" />
@@ -306,11 +309,11 @@ export default function TrainingLessonPage() {
                 isActive ? "border-amber-400 bg-amber-400/30" : "border-white/20",
               )} />
             )}
-            <span className="whitespace-normal break-words text-[12px] leading-snug">{lesson.title}</span>
+            {!collapsed && <span className="whitespace-normal break-words text-[12px] leading-snug">{lesson.title}</span>}
           </button>
         );
       })}
-      {module.children.map((child) => renderModuleNavigation(child, depth + 1))}
+      {module.children.map((child) => renderModuleNavigation(child, depth + 1, collapsed))}
     </div>
   );
 
@@ -353,31 +356,40 @@ export default function TrainingLessonPage() {
               </button>
             </div>
             <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-              {moduleTree.map((module) => renderModuleNavigation(module))}
+              {moduleTree.map((module) => renderModuleNavigation(module, 0, false))}
             </nav>
           </aside>
         </div>
       )}
       <aside
-        className="hidden w-60 shrink-0 flex-col overflow-y-auto lg:flex"
+        className={cn(
+          "hidden shrink-0 flex-col overflow-y-auto transition-[width] duration-200 lg:flex",
+          courseNavCollapsed ? "w-14" : "w-60",
+        )}
         style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BDR}` }}
       >
         {/* Course title + progress */}
-        <div className="px-3 py-3 flex-shrink-0" style={{ borderBottom: `1px solid ${SIDEBAR_BDR}` }}>
+        <div
+          className={cn("flex-shrink-0 px-3 py-3", courseNavCollapsed && "px-2")}
+          style={{ borderBottom: `1px solid ${SIDEBAR_BDR}` }}
+        >
           <button
-            className="flex items-start gap-2 w-full text-left group"
+            className={cn("flex w-full items-start gap-2 text-left group", courseNavCollapsed && "justify-center")}
             onClick={() => setLocation(`/training/${courseId}`)}
+            title={courseNavCollapsed ? (courseData?.course.title ?? "Course") : undefined}
           >
             <CourseIcon
               icon={courseData?.course.icon}
               className="h-4 w-4 text-amber-400 shrink-0 mt-0.5"
             />
-            <span className="text-[13px] font-semibold text-amber-100 leading-snug line-clamp-2 group-hover:text-white transition-colors">
-              {courseData?.course.title ?? "Course"}
-            </span>
+            {!courseNavCollapsed && (
+              <span className="text-[13px] font-semibold text-amber-100 leading-snug line-clamp-2 group-hover:text-white transition-colors">
+                {courseData?.course.title ?? "Course"}
+              </span>
+            )}
           </button>
 
-          {totalCount > 0 && (
+          {!courseNavCollapsed && totalCount > 0 && (
             <div className="mt-2.5 space-y-1 pl-6">
               {/* Custom progress bar */}
               <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.1)" }}>
@@ -391,11 +403,23 @@ export default function TrainingLessonPage() {
               </p>
             </div>
           )}
+          <button
+            type="button"
+            aria-label={courseNavCollapsed ? "Expand course navigation" : "Collapse course navigation"}
+            title={courseNavCollapsed ? "Expand course navigation" : "Collapse course navigation"}
+            className={cn(
+              "mt-3 flex h-7 w-full items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white",
+              courseNavCollapsed && "mt-2",
+            )}
+            onClick={() => setCourseNavCollapsed((collapsed) => !collapsed)}
+          >
+            {courseNavCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
         </div>
 
         {/* Module / lesson tree */}
         <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
-          {moduleTree.map((module) => renderModuleNavigation(module))}
+           {moduleTree.map((module) => renderModuleNavigation(module))}
         </nav>
       </aside>
 
