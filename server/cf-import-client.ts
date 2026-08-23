@@ -35,6 +35,7 @@ export interface CfLesson {
   body: string | null;
   current_path: string | null;
   videoUrl?: string;
+  videoSource?: "clickfunnels" | "vimeo-title";
 }
 
 export interface CfTreeNode {
@@ -44,6 +45,7 @@ export interface CfTreeNode {
   published: boolean;
   sortOrder: number;
   videoUrl?: string;
+  videoSource?: "clickfunnels" | "vimeo-title";
   children: CfTreeNode[];
 }
 
@@ -55,6 +57,8 @@ export interface CfCourseStructure {
   totalLessons: number;
   videosFound: number;
   videosUnavailable: number;
+  vimeoLibraryVideos: number;
+  vimeoTitleMatches: number;
 }
 
 // ─── Core fetch with retry on 429 / 5xx ─────────────────────────────────────
@@ -169,25 +173,31 @@ async function fetchCfLessonBody(lessonId: string): Promise<string | null> {
   }
 }
 
+type VimeoDiscovery = {
+  url: string;
+  source: "clickfunnels" | "vimeo-title";
+};
+
 async function findLessonVimeoUrl(
   courseId: string,
   lesson: CfLesson,
   vimeoVideos: VimeoVideo[],
-): Promise<string | null> {
+): Promise<VimeoDiscovery | null> {
   const fromBody = extractVimeoUrl(lesson.body);
-  if (fromBody) return fromBody;
+  if (fromBody) return { url: fromBody, source: "clickfunnels" };
 
   const detailBody = await fetchCfLessonBody(lesson.id);
   const fromDetail = extractVimeoUrl(detailBody);
-  if (fromDetail) return fromDetail;
+  if (fromDetail) return { url: fromDetail, source: "clickfunnels" };
 
-  if (!lesson.current_path) return null;
+  if (lesson.current_path) {
+    const page = await fetchCfLessonPage(courseId, lesson.current_path);
+    const fromPage = extractVimeoUrl(page);
+    if (fromPage) return { url: fromPage, source: "clickfunnels" };
+  }
 
-  const page = await fetchCfLessonPage(courseId, lesson.current_path);
-  const fromPage = extractVimeoUrl(page);
-  if (fromPage) return fromPage;
-
-  return matchVimeoVideoForLesson(lesson.title, vimeoVideos)?.url ?? null;
+  const fromVimeo = matchVimeoVideoForLesson(lesson.title, vimeoVideos)?.url;
+  return fromVimeo ? { url: fromVimeo, source: "vimeo-title" } : null;
 }
 
 // ─── Pagination — loops until a page returns < 20 items ──────────────────────
@@ -269,6 +279,7 @@ export async function getCfCourseStructure(
   let fetchedSections = 0;
   let videosChecked = 0;
   let videosFound = 0;
+  let vimeoTitleMatches = 0;
 
   const queue = [...sections];
   const workers = Array.from({ length: 3 }, async () => {
@@ -286,10 +297,12 @@ export async function getCfCourseStructure(
       }));
 
       for (const lesson of lessons) {
-        const videoUrl = await findLessonVimeoUrl(cfCourseId, lesson, vimeoVideos);
-        if (videoUrl) {
-          lesson.videoUrl = videoUrl;
+        const discovery = await findLessonVimeoUrl(cfCourseId, lesson, vimeoVideos);
+        if (discovery) {
+          lesson.videoUrl = discovery.url;
+          lesson.videoSource = discovery.source;
           videosFound++;
+          if (discovery.source === "vimeo-title") vimeoTitleMatches++;
         }
         videosChecked++;
         onProgress(`Checking lesson videos (${videosChecked})...`);
@@ -314,6 +327,8 @@ export async function getCfCourseStructure(
     totalLessons,
     videosFound,
     videosUnavailable: totalLessons - videosFound,
+    vimeoLibraryVideos: vimeoVideos.length,
+    vimeoTitleMatches,
   };
 }
 
@@ -340,6 +355,7 @@ function buildCfTree(
         published: l.published_at !== null,
         sortOrder: l.sort_order,
         videoUrl: l.videoUrl,
+        videoSource: l.videoSource,
         children: [],
       }));
 

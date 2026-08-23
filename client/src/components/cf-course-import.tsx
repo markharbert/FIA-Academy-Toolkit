@@ -58,6 +58,7 @@ interface CfTreeNode {
   published: boolean;
   sortOrder: number;
   videoUrl?: string;
+  videoSource?: "clickfunnels" | "vimeo-title";
   children: CfTreeNode[];
 }
 
@@ -69,6 +70,8 @@ interface CfCourseStructure {
   totalLessons: number;
   videosFound: number;
   videosUnavailable: number;
+  vimeoLibraryVideos: number;
+  vimeoTitleMatches: number;
 }
 
 interface FinalTreeNode extends CfTreeNode {
@@ -816,6 +819,12 @@ export function CourseImportCard() {
                   {structure.videosFound} Vimeo video{structure.videosFound !== 1 ? "s" : ""} found ·{" "}
                   {structure.videosUnavailable} unavailable
                 </p>
+                {structure.vimeoLibraryVideos > 0 && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Vimeo library: {structure.vimeoLibraryVideos} video{structure.vimeoLibraryVideos !== 1 ? "s" : ""} ·{" "}
+                    {structure.vimeoTitleMatches} exact title match{structure.vimeoTitleMatches !== 1 ? "es" : ""}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Button
