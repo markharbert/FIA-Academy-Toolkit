@@ -137,6 +137,7 @@ export default function TrainingLessonPage() {
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
   const vimeoPlayerApiRef = useRef<Player | null>(null);
+  const transcriptScrollContainerRef = useRef<HTMLDivElement>(null);
   const activeTranscriptWordRef = useRef<HTMLSpanElement>(null);
   const lastScrolledWordRef = useRef<number | null>(null);
 
@@ -222,11 +223,17 @@ export default function TrainingLessonPage() {
     if (!transcriptOpen || transcriptTab !== "transcript" || activeWordIndex < 0) return;
     if (lastScrolledWordRef.current === activeWordIndex) return;
     lastScrolledWordRef.current = activeWordIndex;
-    activeTranscriptWordRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-      inline: "nearest",
-    });
+    const container = transcriptScrollContainerRef.current;
+    const word = activeTranscriptWordRef.current;
+    if (!container || !word) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const wordRect = word.getBoundingClientRect();
+    const wordOutsideViewport = wordRect.top < containerRect.top || wordRect.bottom > containerRect.bottom;
+    if (wordOutsideViewport) {
+      const centeredOffset = wordRect.top - containerRect.top - (container.clientHeight - wordRect.height) / 2;
+      container.scrollBy({ top: centeredOffset, behavior: "smooth" });
+    }
   }, [activeWordIndex, transcriptOpen, transcriptTab]);
 
   useEffect(() => {
@@ -500,7 +507,7 @@ export default function TrainingLessonPage() {
                         Transcript
                       </button>
                     </div>
-                    <div className="max-h-[360px] overflow-y-auto">
+                    <div ref={transcriptScrollContainerRef} className="max-h-[360px] overflow-y-auto">
                     {transcriptTab === "chapters" ? (
                       <div className="p-3">
                         {chapters.length > 0 ? (
