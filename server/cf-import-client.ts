@@ -3,7 +3,7 @@
  * Handles cursor pagination (after=<last_id>), concurrency, and retry with backoff.
  */
 
-import { CF_WORKSPACE_DOMAIN, CF_API_TOKEN, CF_COURSE_ID } from "./clickfunnels";
+import { CF_WORKSPACE_DOMAIN, CF_API_TOKEN, CF_COURSE_ID, CF_WORKSPACE_ID } from "./clickfunnels";
 
 const baseUrl = () => `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
 const authHeaders = () => ({
@@ -241,17 +241,41 @@ export async function listCfCourses(): Promise<CfCourse[]> {
   return [{ id: CF_COURSE_ID, name }];
 }
 
-/** Lists downloadable assets available in the configured ClickFunnels workspace. */
+/**
+ * Lists downloadable assets available in the configured ClickFunnels workspace.
+ *
+ * Workspace ID resolution order:
+ *   1. CF_WORKSPACE_ID environment variable (preferred — set this as a secret)
+ *   2. workspace_id field on the course record (not present for all account types)
+ */
 export async function listCfDownloads(): Promise<CfDownload[]> {
-  if (!CF_COURSE_ID) throw new Error("CF_COURSE_ID is not configured");
-  const rawCourse = await cfGet(`/courses/${encodeURIComponent(CF_COURSE_ID)}`);
-  const course = Array.isArray(rawCourse) ? rawCourse[0] : (rawCourse?.data ?? rawCourse);
-  const workspaceId = course?.workspace_id ?? course?.workspace?.id;
-  if (!workspaceId) {
-    throw new Error("The configured ClickFunnels course did not include a workspace ID");
+  if (!CF_WORKSPACE_DOMAIN || !CF_API_TOKEN) {
+    throw new Error("ClickFunnels is not configured (CF_WORKSPACE_DOMAIN / CF_API_TOKEN missing)");
   }
 
-  const rawDownloads = await paginateAll<any>(`/workspaces/${encodeURIComponent(String(workspaceId))}/downloads`);
+  // 1. Prefer explicitly configured workspace ID
+  let workspaceId: string = CF_WORKSPACE_ID;
+
+  // 2. Fall back: try to read it from the course record
+  if (!workspaceId && CF_COURSE_ID) {
+    try {
+      const rawCourse = await cfGet(`/courses/${encodeURIComponent(CF_COURSE_ID)}`);
+      const course = Array.isArray(rawCourse) ? rawCourse[0] : (rawCourse?.data ?? rawCourse);
+      const discovered = course?.workspace_id ?? course?.workspace?.id;
+      if (discovered) workspaceId = String(discovered);
+    } catch {
+      // Swallow — fall through to the helpful error below
+    }
+  }
+
+  if (!workspaceId) {
+    throw new Error(
+      "Could not determine the ClickFunnels workspace ID. " +
+      "Add CF_WORKSPACE_ID as a Replit Secret (find it in your ClickFunnels workspace settings).",
+    );
+  }
+
+  const rawDownloads = await paginateAll<any>(`/workspaces/${encodeURIComponent(workspaceId)}/downloads`);
   return rawDownloads.map((download) => ({
     id: String(download.id),
     public_id: download.public_id ? String(download.public_id) : null,

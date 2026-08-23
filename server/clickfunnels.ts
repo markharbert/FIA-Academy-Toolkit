@@ -427,4 +427,9 @@ export async function getAllCfEnrollments(): Promise<CfEnrollmentRecord[]> {
   return results;
 }
 
-export { CF_WORKSPACE_DOMAIN, CF_COURSE_ID, CF_API_TOKEN };
+// Numeric workspace ID — required for the downloads endpoint. If not set, the
+// picker will attempt to discover it from the course record (may not work for
+// all account types).
+const CF_WORKSPACE_ID = process.env.CF_WORKSPACE_ID || "";
+
+export { CF_WORKSPACE_DOMAIN, CF_COURSE_ID, CF_API_TOKEN, CF_WORKSPACE_ID };
