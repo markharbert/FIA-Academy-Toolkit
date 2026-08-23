@@ -12,6 +12,11 @@ export interface VimeoVideo {
   thumbnailUrl?: string;
 }
 
+export interface VimeoVideoPage {
+  videos: VimeoVideo[];
+  hasMore: boolean;
+}
+
 function vimeoHeaders() {
   return {
     Authorization: `Bearer ${VIMEO_ACCESS_TOKEN}`,
@@ -73,30 +78,29 @@ export async function listVimeoProjects(): Promise<Array<{ id: string; name: str
   return projects;
 }
 
-/** List videos from the account or one Vimeo folder, following pagination. */
-export async function listVimeoVideos(projectId?: string): Promise<VimeoVideo[]> {
+/** Return one fast, bounded page of videos from the account or a Vimeo folder. */
+export async function listVimeoVideos(
+  folderId?: string,
+  page = 1,
+  perPage = 50,
+): Promise<VimeoVideoPage> {
   if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
-  const path = projectId
-    ? `/me/folders/${encodeURIComponent(projectId)}/videos?per_page=100&page=1`
-    : `/me/videos?per_page=100&page=1`;
+  const path = folderId
+    ? `/me/folders/${encodeURIComponent(folderId)}/videos?per_page=${perPage}&page=${page}`
+    : `/me/videos?per_page=${perPage}&page=${page}`;
   const videos: VimeoVideo[] = [];
-  let nextUrl: string | null = path;
-
-  for (let page = 0; nextUrl && page < 25; page++) {
-    const payload = await vimeoGet(nextUrl);
-    for (const video of Array.isArray(payload?.data) ? payload.data : []) {
-      const url = extractVimeoLink(video);
-      if (url && typeof video?.name === "string" && video.name.trim()) {
-        const pictures = Array.isArray(video?.pictures?.sizes) ? video.pictures.sizes : [];
-        videos.push({
-          id: String(video.uri ?? video.id ?? url),
-          name: video.name,
-          url,
-          thumbnailUrl: pictures.at(-1)?.link,
-        });
-      }
+  const payload = await vimeoGet(path);
+  for (const video of Array.isArray(payload?.data) ? payload.data : []) {
+    const url = extractVimeoLink(video);
+    if (url && typeof video?.name === "string" && video.name.trim()) {
+      const pictures = Array.isArray(video?.pictures?.sizes) ? video.pictures.sizes : [];
+      videos.push({
+        id: String(video.uri ?? video.id ?? url),
+        name: video.name,
+        url,
+        thumbnailUrl: pictures.at(-1)?.link,
+      });
     }
-    nextUrl = typeof payload?.paging?.next === "string" ? payload.paging.next : null;
   }
-  return videos;
+  return { videos, hasMore: typeof payload?.paging?.next === "string" };
 }

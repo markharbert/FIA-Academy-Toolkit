@@ -52,6 +52,11 @@ type VimeoPickerVideo = {
   thumbnailUrl?: string;
 };
 
+type VimeoVideoPage = {
+  videos: VimeoPickerVideo[];
+  hasMore: boolean;
+};
+
 async function apiFetch(url: string, init?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...init });
   if (!res.ok) {
@@ -131,6 +136,8 @@ export default function AdminLessonEditorPage() {
   const [showAddResource, setShowAddResource] = useState(false);
   const [vimeoPickerOpen, setVimeoPickerOpen] = useState(false);
   const [selectedVimeoFolderId, setSelectedVimeoFolderId] = useState("all");
+  const [vimeoVideoPage, setVimeoVideoPage] = useState(1);
+  const [vimeoFolderFilter, setVimeoFolderFilter] = useState("");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef({ title: "", videoUrl: "", content: "" });
   const revisionRef = useRef(0);
@@ -152,11 +159,9 @@ export default function AdminLessonEditorPage() {
     enabled: vimeoPickerOpen,
   });
 
-  const { data: vimeoVideosData, isLoading: vimeoVideosLoading, error: vimeoVideosError } = useQuery<{
-    videos: VimeoPickerVideo[];
-  }>({
-    queryKey: ["/api/admin/vimeo/folders", selectedVimeoFolderId, "videos"],
-    queryFn: () => apiFetch(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos`),
+  const { data: vimeoVideosData, isLoading: vimeoVideosLoading, error: vimeoVideosError } = useQuery<VimeoVideoPage>({
+    queryKey: ["/api/admin/vimeo/folders", selectedVimeoFolderId, "videos", vimeoVideoPage],
+    queryFn: () => apiFetch(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos?page=${vimeoVideoPage}`),
     enabled: vimeoPickerOpen && !!selectedVimeoFolderId,
   });
 
@@ -378,6 +383,8 @@ export default function AdminLessonEditorPage() {
               className="shrink-0 gap-1.5"
               onClick={() => {
                 setSelectedVimeoFolderId("all");
+                setVimeoVideoPage(1);
+                setVimeoFolderFilter("");
                 setVimeoPickerOpen(true);
               }}
             >
@@ -569,15 +576,24 @@ export default function AdminLessonEditorPage() {
           </DialogHeader>
 
           <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)]">
-            <div className="space-y-1 rounded-md border bg-muted/20 p-2">
+            <div className="max-h-[55vh] space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2">
               <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Folders
               </p>
+              <Input
+                value={vimeoFolderFilter}
+                onChange={(event) => setVimeoFolderFilter(event.target.value)}
+                placeholder="Find a folder…"
+                className="mb-1 h-8 text-xs"
+              />
               <Button
                 type="button"
                 variant={selectedVimeoFolderId === "all" ? "secondary" : "ghost"}
                 className="w-full justify-start gap-2"
-                onClick={() => setSelectedVimeoFolderId("all")}
+                onClick={() => {
+                  setSelectedVimeoFolderId("all");
+                  setVimeoVideoPage(1);
+                }}
               >
                 <Folder className="h-4 w-4" />
                 All videos
@@ -592,13 +608,18 @@ export default function AdminLessonEditorPage() {
                   Folders are unavailable for this Vimeo token. You can still choose from all videos.
                 </p>
               ) : (
-                (vimeoFoldersData?.folders ?? []).map((folder) => (
+                (vimeoFoldersData?.folders ?? [])
+                  .filter((folder) => folder.name.toLowerCase().includes(vimeoFolderFilter.trim().toLowerCase()))
+                  .map((folder) => (
                   <Button
                     key={folder.id}
                     type="button"
                     variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
                     className="w-full justify-start gap-2 text-left"
-                    onClick={() => setSelectedVimeoFolderId(folder.id)}
+                    onClick={() => {
+                      setSelectedVimeoFolderId(folder.id);
+                      setVimeoVideoPage(1);
+                    }}
                   >
                     <Folder className="h-4 w-4 shrink-0" />
                     <span className="truncate">{folder.name}</span>
@@ -644,6 +665,27 @@ export default function AdminLessonEditorPage() {
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">{video.name}</span>
                     </button>
                   ))}
+                  <div className="flex items-center justify-between border-t pt-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={vimeoVideoPage === 1}
+                      onClick={() => setVimeoVideoPage((page) => page - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs text-muted-foreground">Page {vimeoVideoPage}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!vimeoVideosData?.hasMore}
+                      onClick={() => setVimeoVideoPage((page) => page + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

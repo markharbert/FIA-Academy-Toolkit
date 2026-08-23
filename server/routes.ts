@@ -2038,12 +2038,15 @@ export async function registerRoutes(
 
   app.get("/api/admin/vimeo/folders/:folderId/videos", requireAdmin, async (req: Request, res: Response) => {
     const { folderId } = req.params;
+    const page = Number.parseInt(String(req.query.page ?? "1"), 10);
     if (folderId !== "all" && !/^\d+$/.test(folderId)) {
       return res.status(400).json({ message: "Invalid Vimeo folder" });
     }
+    if (!Number.isInteger(page) || page < 1 || page > 10_000) {
+      return res.status(400).json({ message: "Invalid Vimeo page" });
+    }
     try {
-      const videos = await listVimeoVideos(folderId === "all" ? undefined : folderId);
-      res.json({ videos });
+      res.json(await listVimeoVideos(folderId === "all" ? undefined : folderId, page));
     } catch (err: any) {
       console.error("[Vimeo] list videos:", err?.message);
       res.status(502).json({ message: err?.message ?? "Failed to load Vimeo videos" });

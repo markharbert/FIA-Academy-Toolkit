@@ -13,3 +13,4 @@
 - [Responsive script-free snapshots](responsive-script-free-snapshots.md) — sanitize nested documents and script entry points without granting iframe script permission.
 - [Scroll capture coordination](scroll-capture-coordination.md) — page-scrolling capture tools must share one per-tab lock to avoid corrupting captures.
 - [CF Course Import](cf-course-import.md) — SSE structure fetch, cursor pagination, externalId idempotency, filterTree logic, bonus wrapping for loose root lessons.
+- [Vimeo lesson picker](vimeo-lesson-picker.md) — folder browsing needs private token scope and page-sized reads to remain responsive on large libraries.
