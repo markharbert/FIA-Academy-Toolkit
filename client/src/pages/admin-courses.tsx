@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Plus, BookOpen, Layout, MoreHorizontal, Eye, EyeOff, Trash2 } from "lucide-react";
+import { Plus, BookOpen, Layout, MoreHorizontal, Eye, EyeOff, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -87,6 +87,22 @@ export default function AdminCoursesPage() {
   });
 
   const [courseToDelete, setCourseToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [courseToEdit, setCourseToEdit] = useState<{ id: string; title: string; description: string } | null>(null);
+
+  const editMutation = useMutation({
+    mutationFn: (data: { id: string; title: string; description: string }) =>
+      apiFetch(`/api/admin/courses/${data.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: data.title, description: data.description }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses"] });
+      setCourseToEdit(null);
+      toast({ title: "Course updated" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiFetch(`/api/admin/courses/${id}`, { method: "DELETE" }),
@@ -227,6 +243,11 @@ export default function AdminCoursesPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
+                        onClick={() => setCourseToEdit({ id: course.id, title: course.title, description: course.description ?? "" })}
+                      >
+                        <Pencil className="h-4 w-4 mr-2" /> Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         onClick={() => togglePublishMutation.mutate(course)}
                       >
                         {course.status === "published" ? (
@@ -253,6 +274,53 @@ export default function AdminCoursesPage() {
           ))}
         </div>
       )}
+
+      {/* Edit dialog */}
+      <Dialog open={!!courseToEdit} onOpenChange={(open) => { if (!open) setCourseToEdit(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit course</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-course-title">Title</Label>
+              <Input
+                id="edit-course-title"
+                value={courseToEdit?.title ?? ""}
+                onChange={(e) => setCourseToEdit((prev) => prev ? { ...prev, title: e.target.value } : prev)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && courseToEdit?.title.trim()) {
+                    editMutation.mutate(courseToEdit);
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-course-desc">
+                Description <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea
+                id="edit-course-desc"
+                rows={3}
+                value={courseToEdit?.description ?? ""}
+                onChange={(e) => setCourseToEdit((prev) => prev ? { ...prev, description: e.target.value } : prev)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCourseToEdit(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!courseToEdit?.title.trim() || editMutation.isPending}
+              onClick={() => courseToEdit && editMutation.mutate(courseToEdit)}
+            >
+              {editMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!courseToDelete} onOpenChange={(open) => { if (!open) setCourseToDelete(null); }}>
