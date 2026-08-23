@@ -1,9 +1,32 @@
 import { useEditor, EditorContent } from "@tiptap/react";
+import { mergeAttributes, Node } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import { useEffect } from "react";
-import { Bold, Italic, Strikethrough, List, ListOrdered, Quote, Code, Link2, Undo2, Redo2, Heading2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bold, Italic, Strikethrough, List, ListOrdered, Quote, Code, Link2, Undo2, Redo2, Heading2, ImagePlus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
+
+const LessonImage = Node.create({
+  name: "lessonImage",
+  group: "block",
+  atom: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      alt: { default: "" },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "img[src]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["img", mergeAttributes(HTMLAttributes, {
+      class: "my-4 max-w-full rounded-md",
+    })];
+  },
+});
 
 interface Props {
   value: string;
@@ -13,10 +36,14 @@ interface Props {
 }
 
 export function RichTextEditor({ value, onChange, placeholder, testId }: Props) {
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState("");
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({ link: false }),
+      LessonImage,
       Link.configure({
         openOnClick: false,
         autolink: true,
@@ -68,6 +95,59 @@ export function RichTextEditor({ value, onChange, placeholder, testId }: Props) 
     }
   };
 
+  const insertImageUrl = () => {
+    const url = window.prompt("Image URL", "https://");
+    if (url === null) return;
+    try {
+      const parsed = new URL(url.trim());
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error();
+      editor.chain().focus().insertContent({
+        type: "lessonImage",
+        attrs: { src: parsed.toString(), alt: "" },
+      }).run();
+      setImageError("");
+    } catch {
+      setImageError("Please enter a valid http(s) image URL.");
+    }
+  };
+
+  const uploadImage = async (file: File) => {
+    setImageError("");
+    if (!file.type.startsWith("image/")) {
+      setImageError("Please choose an image file.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setImageError("Images must be 10 MB or smaller.");
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const response = await apiRequest("POST", "/api/uploads/request-url", {
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      });
+      const { uploadURL, objectPath } = await response.json();
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      if (!uploadResponse.ok) throw new Error("Upload failed");
+      editor.chain().focus().insertContent({
+        type: "lessonImage",
+        attrs: { src: objectPath, alt: file.name },
+      }).run();
+    } catch {
+      setImageError("Image upload failed. Please try again.");
+    } finally {
+      setIsUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  };
+
   const Btn = ({ active, onClick, label, icon: Icon, tid }: { active?: boolean; onClick: () => void; label: string; icon: React.ComponentType<{ className?: string }>; tid: string }) => (
     <Button
       type="button"
@@ -96,10 +176,35 @@ export function RichTextEditor({ value, onChange, placeholder, testId }: Props) 
         <Btn tid="editor-quote" active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} label="Quote" icon={Quote} />
         <Btn tid="editor-code" active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} label="Code" icon={Code} />
         <Btn tid="editor-link" active={editor.isActive("link")} onClick={setLink} label="Link" icon={Link2} />
+        <Btn tid="editor-image-url" onClick={insertImageUrl} label="Insert image from URL" icon={ImagePlus} />
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void uploadImage(file);
+          }}
+        />
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={() => imageInputRef.current?.click()}
+          disabled={isUploadingImage}
+          title="Upload image"
+          aria-label="Upload image"
+          data-testid="editor-image-upload"
+        >
+          {isUploadingImage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+        </Button>
         <div className="mx-1 h-4 w-px bg-border" />
         <Btn tid="editor-undo" onClick={() => editor.chain().focus().undo().run()} label="Undo" icon={Undo2} />
         <Btn tid="editor-redo" onClick={() => editor.chain().focus().redo().run()} label="Redo" icon={Redo2} />
       </div>
+      {imageError && <p className="px-3 py-1 text-xs text-destructive">{imageError}</p>}
       <EditorContent editor={editor} placeholder={placeholder} />
     </div>
   );
