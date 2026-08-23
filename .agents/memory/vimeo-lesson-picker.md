@@ -7,4 +7,4 @@ Use Vimeo's current `/me/folders` endpoints for folder browsing, and require a p
 
 **Why:** The legacy projects endpoint and a token without the private scope return 403 for folders. A full-library video request can time out on accounts with large video collections.
 
-**How to apply:** Keep the token server-only, page the picker results, and let admins explicitly choose a folder and then a video to populate a lesson's URL. Do not infer lesson-to-video matches automatically.
+**How to apply:** Keep the token server-only, retain each folder's Vimeo ancestor path, and display folders as a collapsible hierarchy. Search results should include their breadcrumb paths. Page video results and let admins explicitly choose a folder and then a video to populate a lesson's URL. Do not infer lesson-to-video matches automatically.

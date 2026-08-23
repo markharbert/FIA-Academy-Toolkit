@@ -686,24 +686,37 @@ export default function AdminLessonEditorPage() {
                 <p className="px-2 py-3 text-xs text-muted-foreground">
                   Folders are unavailable for this Vimeo token. You can still choose from all videos.
                 </p>
+              ) : vimeoFolderFilter.trim() ? (
+                vimeoFolderSearchResults.length > 0 ? (
+                  <div className="space-y-1">
+                    {vimeoFolderSearchResults.map((folder) => (
+                      <Button
+                        key={folder.id}
+                        type="button"
+                        variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
+                        className="h-auto w-full justify-start gap-2 py-1.5 text-left"
+                        onClick={() => {
+                          setSelectedVimeoFolderId(folder.id);
+                          setVimeoVideoPage(1);
+                        }}
+                      >
+                        <Folder className="h-4 w-4 shrink-0" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm">{folder.name}</span>
+                          {folder.path.length > 0 && (
+                            <span className="block truncate text-xs font-normal text-muted-foreground">
+                              {folder.path.join(" / ")}
+                            </span>
+                          )}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-2 py-3 text-xs text-muted-foreground">No matching folders.</p>
+                )
               ) : (
-                (vimeoFoldersData?.folders ?? [])
-                  .filter((folder) => folder.name.toLowerCase().includes(vimeoFolderFilter.trim().toLowerCase()))
-                  .map((folder) => (
-                  <Button
-                    key={folder.id}
-                    type="button"
-                    variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
-                    className="w-full justify-start gap-2 text-left"
-                    onClick={() => {
-                      setSelectedVimeoFolderId(folder.id);
-                      setVimeoVideoPage(1);
-                    }}
-                  >
-                    <Folder className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{folder.name}</span>
-                  </Button>
-                ))
+                vimeoFolderTree.map((folder) => renderVimeoFolder(folder))
               )}
             </div>
 
