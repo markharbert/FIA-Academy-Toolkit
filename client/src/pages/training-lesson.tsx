@@ -289,7 +289,12 @@ export default function TrainingLessonPage() {
     m.lessons.some((l) => l.id === lessonId)
   );
 
-  const renderModuleNavigation = (module: CourseModuleTree<CourseModule>, depth = 0, collapsed = courseNavCollapsed) => {
+  const renderModuleNavigation = (
+    module: CourseModuleTree<CourseModule>,
+    depth = 0,
+    collapsed = courseNavCollapsed,
+    moduleNumber = 1,
+  ) => {
     const isModuleExpanded = expandedCourseModules.has(module.id);
     const getModuleLessons = (node: CourseModuleTree<CourseModule>): CourseLesson[] => [
       ...node.lessons,
@@ -297,19 +302,45 @@ export default function TrainingLessonPage() {
     ];
     const moduleLessons = getModuleLessons(module);
     const isModuleComplete = moduleLessons.length > 0 && moduleLessons.every((lesson) => lesson.completed);
+    const isCurrentModule = moduleLessons.some((lesson) => lesson.id === lessonId);
+    const toggleModule = () => setExpandedCourseModules((current) => {
+      const next = new Set(current);
+      if (next.has(module.id)) next.delete(module.id);
+      else next.add(module.id);
+      return next;
+    });
 
     return (
       <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
+        {collapsed && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold transition-colors",
+                  isCurrentModule
+                    ? "bg-amber-400/30 text-amber-200 ring-1 ring-amber-400/60"
+                    : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white",
+                )}
+                onClick={toggleModule}
+                aria-label={`${isModuleExpanded ? "Collapse" : "Expand"} ${module.title}`}
+              >
+                {isModuleComplete ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                ) : (
+                  moduleNumber
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{module.title}</TooltipContent>
+          </Tooltip>
+        )}
         <div className={cn("px-2 py-1.5", collapsed && "hidden")}>
           <button
             type="button"
             className="flex w-full items-center gap-1.5 text-left text-white/75 transition-colors hover:text-white"
-            onClick={() => setExpandedCourseModules((current) => {
-              const next = new Set(current);
-              if (next.has(module.id)) next.delete(module.id);
-              else next.add(module.id);
-              return next;
-            })}
+            onClick={toggleModule}
             aria-expanded={isModuleExpanded}
             aria-label={`${isModuleExpanded ? "Collapse" : "Expand"} ${module.title}`}
           >
@@ -373,7 +404,9 @@ export default function TrainingLessonPage() {
           </Tooltip>
         ) : lessonButton;
         })}
-        {isModuleExpanded && module.children.map((child) => renderModuleNavigation(child, depth + 1, collapsed))}
+        {isModuleExpanded && module.children.map((child, index) => (
+          renderModuleNavigation(child, depth + 1, collapsed, index + 1)
+        ))}
       </div>
     );
   };
