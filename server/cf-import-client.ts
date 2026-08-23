@@ -95,26 +95,10 @@ async function paginateAll<T extends { id: string | number }>(
   return all;
 }
 
-// ─── Workspace ID (cached in process memory) ─────────────────────────────────
-
-let _cachedWorkspaceId: string | null = null;
-
-export async function getWorkspaceId(): Promise<string> {
-  if (_cachedWorkspaceId) return _cachedWorkspaceId;
-  const raw = await cfGet("/workspaces");
-  const list: Array<{ id: string | number }> = Array.isArray(raw)
-    ? raw
-    : Array.isArray(raw?.data) ? raw.data : [raw];
-  if (!list.length) throw new Error("No ClickFunnels workspaces found");
-  _cachedWorkspaceId = String(list[0].id);
-  return _cachedWorkspaceId;
-}
-
 // ─── Course list ──────────────────────────────────────────────────────────────
 
 export async function listCfCourses(): Promise<CfCourse[]> {
-  const wsId = await getWorkspaceId();
-  const raw = await paginateAll<any>(`/workspaces/${wsId}/courses`);
+  const raw = await paginateAll<any>(`/courses`);
   return raw.map(c => ({
     id: String(c.id),
     name: c.name ?? c.title ?? `Course ${c.id}`,
