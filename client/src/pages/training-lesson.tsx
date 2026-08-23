@@ -370,11 +370,11 @@ export default function TrainingLessonPage() {
       >
         {/* Course title + progress */}
         <div
-          className={cn("flex-shrink-0 px-3 py-3", courseNavCollapsed && "px-2")}
+          className={cn("relative flex-shrink-0 px-3 py-3", courseNavCollapsed && "px-2")}
           style={{ borderBottom: `1px solid ${SIDEBAR_BDR}` }}
         >
           <button
-            className={cn("flex w-full items-start gap-2 text-left group", courseNavCollapsed && "justify-center")}
+            className={cn("flex w-full items-start gap-2 pr-7 text-left group", courseNavCollapsed && "justify-center px-0")}
             onClick={() => setLocation(`/training/${courseId}`)}
             title={courseNavCollapsed ? (courseData?.course.title ?? "Course") : undefined}
           >
@@ -408,8 +408,7 @@ export default function TrainingLessonPage() {
             aria-label={courseNavCollapsed ? "Expand course navigation" : "Collapse course navigation"}
             title={courseNavCollapsed ? "Expand course navigation" : "Collapse course navigation"}
             className={cn(
-              "mt-3 flex h-7 w-full items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white",
-              courseNavCollapsed && "mt-2",
+              "absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white",
             )}
             onClick={() => setCourseNavCollapsed((collapsed) => !collapsed)}
           >
