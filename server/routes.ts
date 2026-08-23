@@ -13466,6 +13466,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   const resourceUpdateSchema = z.object({
     name: z.string().trim().min(1, "Resource name is required").max(500).optional(),
     url: z.string().trim().min(1, "Resource URL is required").max(4_000).optional(),
+    subtitle: z.string().trim().max(500).nullable().optional(),
     kind: z.enum(["link", "pdf"]).optional(),
   }).strict().refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
   function validationError(res: Response, error: z.ZodError) {
@@ -13718,7 +13719,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: add resource to lesson
   app.post("/api/admin/lessons/:lessonId/resources", requireAdmin, async (req, res) => {
     try {
-      const { name, url, kind } = req.body;
+      const { name, url, subtitle, kind } = req.body;
       if (!name?.trim() || !url?.trim()) return res.status(400).json({ message: "name and url required" });
       if (kind !== undefined && kind !== "link" && kind !== "pdf") {
         return res.status(400).json({ message: "Resource kind must be link or pdf" });
@@ -13735,7 +13736,14 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         return res.status(400).json({ message: "Resource URL must be a valid URL" });
       }
       const existing = await storage.getLessonResources(req.params.lessonId);
-      const resource = await storage.createCourseResource({ lessonId: req.params.lessonId, name: name.trim(), url: url.trim(), kind: kind || "link", sortOrder: existing.length });
+      const resource = await storage.createCourseResource({
+        lessonId: req.params.lessonId,
+        name: name.trim(),
+        url: url.trim(),
+        subtitle: subtitle?.trim() || null,
+        kind: kind || "link",
+        sortOrder: existing.length,
+      });
       res.status(201).json(resource);
     } catch (e) {
       res.status(500).json({ message: "Failed to add resource" });

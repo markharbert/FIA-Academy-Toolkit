@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
-  ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink,
+  ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink, Pencil,
   Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ type Resource = {
   id: string;
   name: string;
   url: string;
+  subtitle: string | null;
   kind: string;
   sortOrder: number;
 };
@@ -182,7 +183,8 @@ export default function AdminLessonEditorPage() {
   const [videoUrl, setVideoUrl] = useState("");
   const [content, setContent] = useState("");
   const [isDirty, setIsDirty] = useState(false);
-  const [newResource, setNewResource] = useState({ name: "", url: "", kind: "link" as "link" | "pdf" });
+  const [newResource, setNewResource] = useState({ name: "", url: "", subtitle: "", kind: "link" as "link" | "pdf" });
+  const [editingResource, setEditingResource] = useState<Resource | null>(null);
   const [showAddResource, setShowAddResource] = useState(false);
   const [cfDownloadUrlHint, setCfDownloadUrlHint] = useState(false);
   const [selectedCfDownloadEditUrl, setSelectedCfDownloadEditUrl] = useState<string | null>(null);
@@ -399,19 +401,32 @@ export default function AdminLessonEditorPage() {
   });
 
   const addResource = useMutation({
-    mutationFn: (r: { name: string; url: string; kind: string }) =>
-      apiFetch(`/api/admin/lessons/${lessonId}/resources`, {
-        method: "POST",
+    mutationFn: (r: { name: string; url: string; subtitle: string; kind: string }) =>
+      apiFetch(editingResource ? `/api/admin/resources/${editingResource.id}` : `/api/admin/lessons/${lessonId}/resources`, {
+        method: editingResource ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(r),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
-      setNewResource({ name: "", url: "", kind: "link" });
+      setNewResource({ name: "", url: "", subtitle: "", kind: "link" });
       setShowAddResource(false);
+      setEditingResource(null);
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const startEditingResource = (resource: Resource) => {
+    setEditingResource(resource);
+    setNewResource({
+      name: resource.name,
+      url: resource.url,
+      subtitle: resource.subtitle || "",
+      kind: resource.kind === "pdf" ? "pdf" : "link",
+    });
+    setCfDownloadUrlHint(false);
+    setShowAddResource(true);
+  };
 
   const deleteResource = useMutation({
     mutationFn: (resourceId: string) =>
@@ -449,7 +464,7 @@ export default function AdminLessonEditorPage() {
     // and open the Add Resource form for the admin to paste the URL they copy
     // from ClickFunnels → My Assets → Downloads → Copy icon.
     setCfDownloadPickerOpen(false);
-    setNewResource({ name: download.name, url: "", kind: "link" });
+    setNewResource({ name: download.name, url: "", subtitle: "", kind: "link" });
     setCfDownloadUrlHint(true);
     setSelectedCfDownloadEditUrl(download.editUrl);
     setShowAddResource(true);
@@ -712,6 +727,17 @@ export default function AdminLessonEditorPage() {
                   </p>
                 )}
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Subtitle (optional)</Label>
+                <Input
+                  placeholder="A short explanation for members"
+                  value={newResource.subtitle}
+                  onChange={(e) =>
+                    setNewResource((p) => ({ ...p, subtitle: e.target.value }))
+                  }
+                  className="h-8 text-sm"
+                />
+              </div>
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -726,7 +752,7 @@ export default function AdminLessonEditorPage() {
                     addResource.isPending
                   }
                 >
-                  Add
+                  {editingResource ? "Save changes" : "Add"}
                 </Button>
                 <Button
                   size="sm"
@@ -735,6 +761,8 @@ export default function AdminLessonEditorPage() {
                     setShowAddResource(false);
                     setCfDownloadUrlHint(false);
                     setSelectedCfDownloadEditUrl(null);
+                    setEditingResource(null);
+                    setNewResource({ name: "", url: "", subtitle: "", kind: "link" });
                   }}
                 >
                   Cancel
@@ -760,8 +788,20 @@ export default function AdminLessonEditorPage() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{r.name}</p>
+                    {r.subtitle && (
+                      <p className="text-xs text-muted-foreground truncate">{r.subtitle}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => startEditingResource(r)}
+                      title="Edit resource"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     <a href={r.url} target="_blank" rel="noopener noreferrer">
                       <Button size="icon" variant="ghost" className="h-7 w-7">
                         <ExternalLink className="h-3.5 w-3.5" />

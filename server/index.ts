@@ -887,6 +887,8 @@ async function runStartupMigrations() {
 
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS cf_grace_expiry_sent_at TIMESTAMP`);
     console.log("[startup] users cf_grace_expiry_sent_at migration complete");
+    await db.execute(sql`ALTER TABLE course_resources ADD COLUMN IF NOT EXISTS subtitle TEXT`);
+    console.log("[startup] course_resources subtitle migration complete");
 
   } catch (err) {
     console.error("[startup] migration error:", err);

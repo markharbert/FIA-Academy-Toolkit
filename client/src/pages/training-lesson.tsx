@@ -28,6 +28,7 @@ type Resource = {
   id: string;
   name: string;
   url: string;
+  subtitle: string | null;
   kind: string;
 };
 
@@ -400,6 +401,9 @@ export default function TrainingLessonPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium truncate" style={{ color: "#111827" }}>{r.name}</p>
+                        {r.subtitle && (
+                          <p className="text-[11px] truncate" style={{ color: "#9ca3af" }}>{r.subtitle}</p>
+                        )}
                       </div>
                       <ExternalLink className="h-4 w-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: "#9ca3af" }} />
                     </a>

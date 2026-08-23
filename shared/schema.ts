@@ -2204,6 +2204,7 @@ export const courseResources = pgTable("course_resources", {
   lessonId: varchar("lesson_id").notNull().references(() => courseLessons.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   url: text("url").notNull(),
+  subtitle: text("subtitle"),
   kind: varchar("kind", { length: 20 }).notNull().default("link"), // 'pdf' | 'link'
   sortOrder: integer("sort_order").notNull().default(0),
 });
