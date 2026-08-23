@@ -135,6 +135,8 @@ export default function TrainingLessonPage() {
   const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
+  const activeTranscriptWordRef = useRef<HTMLSpanElement>(null);
+  const lastScrolledWordRef = useRef<number | null>(null);
 
   // Load course structure (for sidebar nav + prev/next)
   const { data: courseData, isError: isCourseError } = useQuery<CourseStructure>({
@@ -208,9 +210,21 @@ export default function TrainingLessonPage() {
     : -1;
 
   useEffect(() => {
+    if (!transcriptOpen || transcriptTab !== "transcript" || activeWordIndex < 0) return;
+    if (lastScrolledWordRef.current === activeWordIndex) return;
+    lastScrolledWordRef.current = activeWordIndex;
+    activeTranscriptWordRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+  }, [activeWordIndex, transcriptOpen, transcriptTab]);
+
+  useEffect(() => {
     setTranscriptOpen(false);
     setTranscriptTab("chapters");
     setVideoCurrentTime(0);
+    lastScrolledWordRef.current = null;
   }, [lessonId]);
 
   const subscribeToVimeoTimeUpdates = () => {
@@ -536,6 +550,7 @@ export default function TrainingLessonPage() {
                               return (
                                 <span
                                   key={index}
+                                  ref={isWord && wordIndex === activeWordIndex ? activeTranscriptWordRef : undefined}
                                   className={isWord && wordIndex === activeWordIndex
                                     ? "rounded-sm bg-yellow-300 px-0.5 text-gray-900 shadow-sm"
                                     : undefined}
