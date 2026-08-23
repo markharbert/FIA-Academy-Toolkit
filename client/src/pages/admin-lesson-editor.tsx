@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink,
-  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight,
+  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +68,15 @@ type VimeoPickerVideo = {
 type VimeoVideoPage = {
   videos: VimeoPickerVideo[];
   hasMore: boolean;
+};
+
+type CfDownload = {
+  id: string;
+  public_id: string | null;
+  workspace_id: string;
+  asset_id: string | null;
+  name: string;
+  url: string;
 };
 
 type VimeoFolderNode = VimeoFolder & { children: VimeoFolderNode[] };
@@ -175,6 +184,8 @@ export default function AdminLessonEditorPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [newResource, setNewResource] = useState({ name: "", url: "", kind: "link" as "link" | "pdf" });
   const [showAddResource, setShowAddResource] = useState(false);
+  const [cfDownloadPickerOpen, setCfDownloadPickerOpen] = useState(false);
+  const [cfDownloadFilter, setCfDownloadFilter] = useState("");
   const [vimeoPickerOpen, setVimeoPickerOpen] = useState(false);
   const [selectedVimeoFolderId, setSelectedVimeoFolderId] = useState("all");
   const [vimeoVideoPage, setVimeoVideoPage] = useState(1);
@@ -199,6 +210,19 @@ export default function AdminLessonEditorPage() {
     queryKey: ["/api/admin/courses", courseId, "structure"],
     queryFn: () => apiFetch(`/api/admin/courses/${courseId}/structure`),
   });
+
+  const { data: cfDownloadsData, isLoading: cfDownloadsLoading, error: cfDownloadsError } = useQuery<{
+    downloads: CfDownload[];
+  }>({
+    queryKey: ["/api/admin/cf/downloads"],
+    queryFn: () => apiFetch("/api/admin/cf/downloads"),
+    enabled: cfDownloadPickerOpen,
+  });
+  const visibleCfDownloads = useMemo(() => {
+    const filter = cfDownloadFilter.trim().toLowerCase();
+    const downloads = cfDownloadsData?.downloads ?? [];
+    return filter ? downloads.filter((download) => download.name.toLowerCase().includes(filter)) : downloads;
+  }, [cfDownloadFilter, cfDownloadsData?.downloads]);
 
   const orderedLessons = useMemo(() => {
     const roots = buildCourseModuleTree(courseStructure?.modules ?? []);
@@ -417,6 +441,21 @@ export default function AdminLessonEditorPage() {
     toast({ title: "Vimeo video selected", description: video.name });
   };
 
+  const selectCfDownload = (download: CfDownload) => {
+    addResource.mutate(
+      { name: download.name, url: download.url, kind: "link" },
+      {
+        onSuccess: () => {
+          setCfDownloadPickerOpen(false);
+          toast({
+            title: "ClickFunnels resource added",
+            description: `${download.name} opens from ClickFunnels.`,
+          });
+        },
+      },
+    );
+  };
+
   const saveNow = () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     void saveCurrentDraft(revisionRef.current);
@@ -589,13 +628,25 @@ export default function AdminLessonEditorPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label>Resources</Label>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowAddResource((p) => !p)}
-            >
-              <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Resource
-            </Button>
+             <div className="flex items-center gap-2">
+               <Button
+                 size="sm"
+                 variant="outline"
+                 onClick={() => {
+                   setCfDownloadFilter("");
+                   setCfDownloadPickerOpen(true);
+                 }}
+               >
+                 <Download className="h-3.5 w-3.5 mr-1.5" /> Choose ClickFunnels Download
+               </Button>
+               <Button
+                 size="sm"
+                 variant="outline"
+                 onClick={() => setShowAddResource((p) => !p)}
+               >
+                 <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Resource
+               </Button>
+             </div>
           </div>
 
           {/* Add resource form */}
@@ -734,6 +785,62 @@ export default function AdminLessonEditorPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={cfDownloadPickerOpen} onOpenChange={setCfDownloadPickerOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-5 w-5 text-primary" />
+              Choose a ClickFunnels download
+            </DialogTitle>
+            <DialogDescription>
+              This adds a resource link that opens the member’s ClickFunnels Downloads page. The file remains hosted in ClickFunnels.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Input
+            value={cfDownloadFilter}
+            onChange={(event) => setCfDownloadFilter(event.target.value)}
+            placeholder="Search ClickFunnels downloads…"
+          />
+
+          {cfDownloadsLoading ? (
+            <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading ClickFunnels downloads…
+            </div>
+          ) : cfDownloadsError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {(cfDownloadsError as Error).message || "Unable to load ClickFunnels downloads."}
+            </div>
+          ) : visibleCfDownloads.length === 0 ? (
+            <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed px-4 text-center text-sm text-muted-foreground">
+              {cfDownloadFilter.trim() ? "No matching ClickFunnels downloads." : "No ClickFunnels downloads are available."}
+            </div>
+          ) : (
+            <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+              {visibleCfDownloads.map((download) => (
+                <button
+                  key={download.id}
+                  type="button"
+                  disabled={addResource.isPending}
+                  className="flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => selectCfDownload(download)}
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-muted">
+                    <Download className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{download.name}</span>
+                    <span className="block text-xs text-muted-foreground">Opens in ClickFunnels</span>
+                  </span>
+                  {addResource.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 text-muted-foreground" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={vimeoPickerOpen} onOpenChange={setVimeoPickerOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-6xl">

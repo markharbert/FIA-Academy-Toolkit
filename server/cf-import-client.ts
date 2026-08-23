@@ -243,21 +243,19 @@ export async function listCfCourses(): Promise<CfCourse[]> {
 
 /** Lists downloadable assets available in the configured ClickFunnels workspace. */
 export async function listCfDownloads(): Promise<CfDownload[]> {
-  const rawWorkspaces = await paginateAll<any>("/workspaces");
-  const workspaces = rawWorkspaces.map((workspace) => ({
-    ...workspace,
-    id: String(workspace.id),
-    subdomain: String(workspace.subdomain ?? workspace.domain ?? "").toLowerCase(),
-  }));
-  const configuredSubdomain = CF_WORKSPACE_DOMAIN.split(".")[0].toLowerCase();
-  const workspace = workspaces.find((item) => item.subdomain === configuredSubdomain) ?? workspaces[0];
-  if (!workspace) throw new Error("No ClickFunnels workspace is available for this API token");
+  if (!CF_COURSE_ID) throw new Error("CF_COURSE_ID is not configured");
+  const rawCourse = await cfGet(`/courses/${encodeURIComponent(CF_COURSE_ID)}`);
+  const course = Array.isArray(rawCourse) ? rawCourse[0] : (rawCourse?.data ?? rawCourse);
+  const workspaceId = course?.workspace_id ?? course?.workspace?.id;
+  if (!workspaceId) {
+    throw new Error("The configured ClickFunnels course did not include a workspace ID");
+  }
 
-  const rawDownloads = await paginateAll<any>(`/workspaces/${encodeURIComponent(workspace.id)}/downloads`);
+  const rawDownloads = await paginateAll<any>(`/workspaces/${encodeURIComponent(String(workspaceId))}/downloads`);
   return rawDownloads.map((download) => ({
     id: String(download.id),
     public_id: download.public_id ? String(download.public_id) : null,
-    workspace_id: String(download.workspace_id ?? workspace.id),
+    workspace_id: String(download.workspace_id ?? workspaceId),
     asset_id: download.asset_id ? String(download.asset_id) : null,
     name: String(download.name ?? `Download ${download.id}`),
     created_at: download.created_at ?? null,
