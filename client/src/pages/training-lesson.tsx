@@ -297,7 +297,7 @@ export default function TrainingLessonPage() {
         <div className={cn("px-2 py-1.5", collapsed && "hidden")}>
           <button
             type="button"
-            className="flex w-full items-center gap-1.5 text-left"
+            className="flex w-full items-center gap-1.5 text-left text-white/75 transition-colors hover:text-white"
             onClick={() => setExpandedCourseModules((current) => {
               const next = new Set(current);
               if (next.has(module.id)) next.delete(module.id);
