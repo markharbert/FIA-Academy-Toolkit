@@ -324,7 +324,7 @@ export default function TrainingLessonPage() {
 
       {/* ── Course nav sidebar ─────────────────────────────────────────────── */}
       <aside
-        className="w-60 shrink-0 flex flex-col overflow-y-auto"
+        className="hidden w-60 shrink-0 flex-col overflow-y-auto lg:flex"
         style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BDR}` }}
       >
         {/* Course title + progress */}
@@ -369,10 +369,10 @@ export default function TrainingLessonPage() {
 
         {/* Top bar — breadcrumb + lesson count */}
         <div
-          className="sticky top-0 z-10 flex items-center justify-between px-8 py-3"
+          className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6 lg:px-8"
           style={{ background: "#fff", borderBottom: "1px solid #e5e7eb" }}
         >
-          <div className="flex items-center gap-1.5 text-[12px]" style={{ color: "#9ca3af" }}>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[12px]" style={{ color: "#9ca3af" }}>
             <button
               className="font-medium hover:underline"
               style={{ color: "#d97706" }}
@@ -387,7 +387,7 @@ export default function TrainingLessonPage() {
               </>
             )}
             <span style={{ color: "#d1d5db" }}>/</span>
-            <span style={{ color: "#4b5563", fontWeight: 500 }}>{lesson?.title}</span>
+                <span className="max-w-[min(45vw,28rem)] truncate" style={{ color: "#4b5563", fontWeight: 500 }}>{lesson?.title}</span>
           </div>
 
           {totalCount > 0 && (
@@ -421,7 +421,7 @@ export default function TrainingLessonPage() {
         ) : !lesson ? (
           <div className="p-8 text-gray-500 text-sm">Lesson not found.</div>
         ) : (
-          <div className="mx-auto max-w-[780px] px-8 py-10">
+          <div className="mx-auto max-w-[780px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
 
             {/* Meta tag */}
             {currentModule && (
@@ -452,17 +452,19 @@ export default function TrainingLessonPage() {
 
             {/* Video */}
             {embedUrl && (
-              <div
-                className="aspect-video rounded-xl overflow-hidden shadow-sm"
-                style={{ background: "#0f172a" }}
-              >
-                <iframe
-                  ref={isVimeoLesson ? vimeoPlayerRef : undefined}
-                  src={embedUrl}
-                  className="w-full h-full"
-                  allowFullScreen
-                  title={lesson.title}
-                />
+              <div className="mb-8 lg:relative lg:left-1/2 lg:w-[min(1400px,calc(100vw-19rem-4rem))] lg:-translate-x-1/2">
+                <div
+                  className="aspect-video overflow-hidden rounded-xl shadow-sm"
+                  style={{ background: "#0f172a" }}
+                >
+                  <iframe
+                    ref={isVimeoLesson ? vimeoPlayerRef : undefined}
+                    src={embedUrl}
+                    className="h-full w-full"
+                    allowFullScreen
+                    title={lesson.title}
+                  />
+                </div>
               </div>
             )}
             {lesson.transcriptText && (
