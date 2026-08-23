@@ -313,9 +313,6 @@ export default function TrainingLessonPage() {
             aria-expanded={isModuleExpanded}
             aria-label={`${isModuleExpanded ? "Collapse" : "Expand"} ${module.title}`}
           >
-            {!isModuleExpanded && isModuleComplete && (
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
-            )}
             <p
               className="text-[10px] font-bold uppercase tracking-widest whitespace-normal break-words"
               style={{ color: "#ffffff" }}
@@ -326,6 +323,9 @@ export default function TrainingLessonPage() {
               <ChevronDown className="ml-auto h-3 w-3 shrink-0" />
             ) : (
               <ChevronRight className="ml-auto h-3 w-3 shrink-0" />
+            )}
+            {!isModuleExpanded && isModuleComplete && (
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
             )}
           </button>
         </div>
@@ -418,7 +418,7 @@ export default function TrainingLessonPage() {
       <aside
         className={cn(
           "hidden shrink-0 flex-col overflow-y-auto transition-[width] duration-200 lg:flex",
-          courseNavCollapsed ? "w-14" : "w-60",
+          courseNavCollapsed ? "w-14" : "w-[264px]",
         )}
         style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BDR}` }}
       >
