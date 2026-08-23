@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink,
-  Film, Folder, Loader2, ChevronDown, ChevronRight,
+  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { buildCourseModuleTree, flattenCourseModuleTree } from "@shared/course-structure";
 
 type Resource = {
   id: string;
@@ -38,6 +39,15 @@ type LessonWithResources = {
   status: string;
   durationMinutes: number | null;
   resources: Resource[];
+};
+
+type CourseNavigationStructure = {
+  modules: Array<{
+    id: string;
+    parentModuleId: string | null;
+    sortOrder: number;
+    lessons: Array<{ id: string; title: string; sortOrder: number }>;
+  }>;
 };
 
 type VimeoFolder = {
@@ -174,6 +184,7 @@ export default function AdminLessonEditorPage() {
   const formRef = useRef({ title: "", videoUrl: "", content: "" });
   const revisionRef = useRef(0);
   const saveInFlightRef = useRef(false);
+  const saveDrainPromiseRef = useRef<Promise<void> | null>(null);
   const queuedRevisionRef = useRef<number | null>(null);
   const loadedLessonIdRef = useRef<string | null>(null);
   const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null);
@@ -182,6 +193,21 @@ export default function AdminLessonEditorPage() {
     queryKey: ["/api/admin/lessons", lessonId],
     queryFn: () => apiFetch(`/api/admin/lessons/${lessonId}?courseId=${encodeURIComponent(courseId)}`),
   });
+
+  const { data: courseStructure, isLoading: courseStructureLoading } = useQuery<CourseNavigationStructure>({
+    queryKey: ["/api/admin/courses", courseId, "structure"],
+    queryFn: () => apiFetch(`/api/admin/courses/${courseId}/structure`),
+  });
+
+  const orderedLessons = useMemo(() => {
+    const roots = buildCourseModuleTree(courseStructure?.modules ?? []);
+    return flattenCourseModuleTree(roots).flatMap((module) =>
+      [...module.lessons].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id)),
+    );
+  }, [courseStructure?.modules]);
+  const currentLessonIndex = orderedLessons.findIndex((item) => item.id === lessonId);
+  const previousLesson = currentLessonIndex > 0 ? orderedLessons[currentLessonIndex - 1] : null;
+  const nextLesson = currentLessonIndex >= 0 ? orderedLessons[currentLessonIndex + 1] ?? null : null;
 
   const { data: vimeoFoldersData, isLoading: vimeoFoldersLoading, error: vimeoFoldersError } = useQuery<{
     folders: VimeoFolder[];
@@ -308,22 +334,28 @@ export default function AdminLessonEditorPage() {
     // reach the server after a newer request and overwrite the latest content.
     if (saveInFlightRef.current) {
       queuedRevisionRef.current = revision;
+      if (saveDrainPromiseRef.current) await saveDrainPromiseRef.current;
       return;
     }
 
-    saveInFlightRef.current = true;
-    try {
-      await saveMutation.mutateAsync({ ...formRef.current, revision });
-    } catch {
-      // The mutation's error handler shows the error and leaves the form dirty.
-    } finally {
-      saveInFlightRef.current = false;
-      const queuedRevision = queuedRevisionRef.current;
-      queuedRevisionRef.current = null;
-      if (queuedRevision !== null && queuedRevision > revision) {
-        void saveCurrentDraft(queuedRevision);
+    const drainPromise = (async () => {
+      saveInFlightRef.current = true;
+      try {
+        await saveMutation.mutateAsync({ ...formRef.current, revision });
+      } catch {
+        // The mutation's error handler shows the error and leaves the form dirty.
+      } finally {
+        saveInFlightRef.current = false;
+        const queuedRevision = queuedRevisionRef.current;
+        queuedRevisionRef.current = null;
+        saveDrainPromiseRef.current = null;
+        if (queuedRevision !== null && queuedRevision > revision) {
+          await saveCurrentDraft(queuedRevision);
+        }
       }
-    }
+    })();
+    saveDrainPromiseRef.current = drainPromise;
+    await drainPromise;
   };
 
   const togglePublish = useMutation({
