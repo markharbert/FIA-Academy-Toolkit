@@ -418,7 +418,9 @@ export default function TrainingLessonPage() {
                 />
               </div>
               <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.35)" }}>
-                {completedCount} / {totalCount} complete
+                {completedCount === totalCount
+                  ? "Great Job! Course Complete"
+                  : `${completedCount} / ${totalCount} complete`}
               </p>
             </div>
           )}
