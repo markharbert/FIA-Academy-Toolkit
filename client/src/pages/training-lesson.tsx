@@ -20,8 +20,8 @@ function safeHref(url: string | null | undefined): string {
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
-const SIDEBAR_BG  = "linear-gradient(180deg, hsl(230 75% 14%) 0%, hsl(230 75% 10%) 100%)";
-const SIDEBAR_BDR = "hsl(230 60% 16%)";
+const SIDEBAR_BG  = "linear-gradient(180deg, #1b274b 0%, #151f3d 100%)";
+const SIDEBAR_BDR = "rgba(255,255,255,0.12)";
 
 type Resource = {
   id: string;
