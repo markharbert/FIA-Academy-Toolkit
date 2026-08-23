@@ -291,6 +291,12 @@ export default function TrainingLessonPage() {
 
   const renderModuleNavigation = (module: CourseModuleTree<CourseModule>, depth = 0, collapsed = courseNavCollapsed) => {
     const isModuleExpanded = expandedCourseModules.has(module.id);
+    const getModuleLessons = (node: CourseModuleTree<CourseModule>): CourseLesson[] => [
+      ...node.lessons,
+      ...node.children.flatMap((child) => getModuleLessons(child)),
+    ];
+    const moduleLessons = getModuleLessons(module);
+    const isModuleComplete = moduleLessons.length > 0 && moduleLessons.every((lesson) => lesson.completed);
 
     return (
       <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
@@ -313,6 +319,9 @@ export default function TrainingLessonPage() {
             >
               {module.title}
             </p>
+            {!isModuleExpanded && isModuleComplete && (
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
+            )}
             {isModuleExpanded ? (
               <ChevronDown className="ml-auto h-3 w-3 shrink-0" />
             ) : (
