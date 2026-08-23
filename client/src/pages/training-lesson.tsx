@@ -40,6 +40,7 @@ type LessonDetail = {
   title: string;
   videoUrl: string | null;
   transcriptText: string | null;
+  transcriptCues: LessonTranscriptCue[] | null;
   transcriptChapters: LessonChapter[] | null;
   content: string | null;
   status: string;
@@ -50,6 +51,11 @@ type LessonDetail = {
 type LessonChapter = {
   startSeconds: number;
   title: string;
+};
+
+type LessonTranscriptCue = {
+  startSeconds: number;
+  text: string;
 };
 
 type CourseLesson = {
@@ -127,6 +133,7 @@ export default function TrainingLessonPage() {
   const queryClient = useQueryClient();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
 
   // Load course structure (for sidebar nav + prev/next)
@@ -174,11 +181,45 @@ export default function TrainingLessonPage() {
   const embedUrl = lesson?.videoUrl ? getEmbedUrl(lesson.videoUrl) : null;
   const isVimeoLesson = !!lesson?.videoUrl?.includes("vimeo.com");
   const chapters = lesson?.transcriptChapters ?? [];
+  const transcriptCues = lesson?.transcriptCues ?? [];
 
   useEffect(() => {
     setTranscriptOpen(false);
     setTranscriptTab("chapters");
+    setVideoCurrentTime(0);
   }, [lessonId]);
+
+  const subscribeToVimeoTimeUpdates = () => {
+    const player = vimeoPlayerRef.current;
+    if (!player?.contentWindow || !isVimeoLesson) return;
+    player.contentWindow.postMessage(
+      JSON.stringify({ method: "addEventListener", value: "timeupdate" }),
+      "https://player.vimeo.com",
+    );
+  };
+
+  useEffect(() => {
+    if (!isVimeoLesson) return;
+
+    const handleVimeoMessage = (event: MessageEvent) => {
+      if (event.origin !== "https://player.vimeo.com") return;
+      let message = event.data;
+      if (typeof message === "string") {
+        try {
+          message = JSON.parse(message);
+        } catch {
+          return;
+        }
+      }
+      if (message?.event === "timeupdate" && typeof message.data?.seconds === "number") {
+        setVideoCurrentTime(message.data.seconds);
+      }
+    };
+
+    window.addEventListener("message", handleVimeoMessage);
+    subscribeToVimeoTimeUpdates();
+    return () => window.removeEventListener("message", handleVimeoMessage);
+  }, [isVimeoLesson, lessonId]);
 
   const seekToChapter = (startSeconds: number) => {
     const player = vimeoPlayerRef.current;
@@ -385,6 +426,7 @@ export default function TrainingLessonPage() {
                   className="w-full h-full"
                   allowFullScreen
                   title={lesson.title}
+                  onLoad={subscribeToVimeoTimeUpdates}
                 />
               </div>
             )}
@@ -457,8 +499,45 @@ export default function TrainingLessonPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="px-5 py-4 text-[14px] leading-7 whitespace-pre-wrap" style={{ color: "#374151" }}>
-                        {lesson.transcriptText}
+                      <div className="px-5 py-4 text-[14px] leading-7" style={{ color: "#374151" }}>
+                        {transcriptCues.length > 0 ? (
+                          <div className="space-y-3">
+                            {transcriptCues.map((cue, cueIndex) => {
+                              const nextCue = transcriptCues[cueIndex + 1];
+                              const cueEnd = nextCue?.startSeconds ?? cue.startSeconds + 8;
+                              const isActiveCue = videoCurrentTime >= cue.startSeconds && videoCurrentTime < cueEnd;
+                              const words = cue.text.trim().split(/\s+/).filter(Boolean);
+                              const cueProgress = isActiveCue
+                                ? Math.min(0.999, Math.max(0, (videoCurrentTime - cue.startSeconds) / Math.max(0.1, cueEnd - cue.startSeconds)))
+                                : 0;
+                              const activeWordIndex = isActiveCue
+                                ? Math.min(words.length - 1, Math.floor(cueProgress * words.length))
+                                : -1;
+
+                              return (
+                                <p key={`${cue.startSeconds}-${cue.text}`} className={cn(
+                                  "rounded-md px-2 py-1.5 transition-colors",
+                                  isActiveCue && "bg-amber-50",
+                                )}>
+                                  {words.map((word, wordIndex) => (
+                                    <span key={`${cue.startSeconds}-${wordIndex}`}>
+                                      {wordIndex > 0 ? " " : ""}
+                                      <span
+                                        className={cn(
+                                          isActiveCue && wordIndex === activeWordIndex && "rounded-sm bg-yellow-300 px-0.5 text-gray-900 shadow-sm",
+                                        )}
+                                      >
+                                        {word}
+                                      </span>
+                                    </span>
+                                  ))}
+                                </p>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="whitespace-pre-wrap">{lesson.transcriptText}</span>
+                        )}
                       </div>
                     )}
                     </div>
