@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, CheckCircle2, Circle, ExternalLink, Link,
-  BookOpen, GraduationCap, Clock, SkipBack, SkipForward,
+  BookOpen, Clock, SkipBack, SkipForward,
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import { cn } from "@/lib/utils";
 import { buildCourseModuleTree, flattenCourseModuleTree, type CourseModuleTree } from "@shared/course-structure";
+import { CourseIcon } from "@/lib/course-icons";
 
 /** Restrict resource/video URLs to http(s) only — prevents javascript: hrefs. */
 function safeHref(url: string | null | undefined): string {
@@ -64,6 +65,7 @@ type CourseStructure = {
     id: string;
     title: string;
     status: string;
+    icon?: string | null;
   };
   modules: CourseModule[];
 };
@@ -210,7 +212,10 @@ export default function TrainingLessonPage() {
             className="flex items-start gap-2 w-full text-left group"
             onClick={() => setLocation(`/training/${courseId}`)}
           >
-            <GraduationCap className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+            <CourseIcon
+              icon={courseData?.course.icon}
+              className="h-4 w-4 text-amber-400 shrink-0 mt-0.5"
+            />
             <span className="text-[13px] font-semibold text-amber-100 leading-snug line-clamp-2 group-hover:text-white transition-colors">
               {courseData?.course.title ?? "Course"}
             </span>
