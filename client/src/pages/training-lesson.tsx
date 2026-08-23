@@ -410,7 +410,8 @@ export default function TrainingLessonPage() {
             aria-label={courseNavCollapsed ? "Expand course navigation" : "Collapse course navigation"}
             title={courseNavCollapsed ? "Expand course navigation" : "Collapse course navigation"}
             className={cn(
-              "absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white",
+              "absolute top-2 flex h-7 w-7 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white",
+              courseNavCollapsed ? "left-1/2 -translate-x-1/2" : "right-2",
             )}
             onClick={() => setCourseNavCollapsed((collapsed) => !collapsed)}
           >
