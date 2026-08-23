@@ -185,6 +185,7 @@ export default function AdminLessonEditorPage() {
   const [newResource, setNewResource] = useState({ name: "", url: "", kind: "link" as "link" | "pdf" });
   const [showAddResource, setShowAddResource] = useState(false);
   const [cfDownloadUrlHint, setCfDownloadUrlHint] = useState(false);
+  const [selectedCfDownloadEditUrl, setSelectedCfDownloadEditUrl] = useState<string | null>(null);
   const [cfDownloadPickerOpen, setCfDownloadPickerOpen] = useState(false);
   const [cfDownloadFilter, setCfDownloadFilter] = useState("");
   const newResourceUrlRef = useRef<HTMLInputElement>(null);
@@ -450,6 +451,7 @@ export default function AdminLessonEditorPage() {
     setCfDownloadPickerOpen(false);
     setNewResource({ name: download.name, url: "", kind: "link" });
     setCfDownloadUrlHint(true);
+    setSelectedCfDownloadEditUrl(download.editUrl);
     setShowAddResource(true);
     // Focus the URL field after the form renders
     setTimeout(() => newResourceUrlRef.current?.focus(), 50);
@@ -693,9 +695,20 @@ export default function AdminLessonEditorPage() {
                 />
                 {cfDownloadUrlHint && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
-                    The ClickFunnels API doesn't include the file URL. In ClickFunnels go to{" "}
-                    <strong>My Assets → Downloads</strong>, click the{" "}
-                    <strong>Copy</strong> icon next to this file, then paste it here.
+                    The ClickFunnels API doesn't include the file URL.{" "}
+                    {selectedCfDownloadEditUrl ? (
+                      <a
+                        href={selectedCfDownloadEditUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold underline underline-offset-2 hover:text-amber-800 dark:hover:text-amber-300"
+                      >
+                        Open this asset in ClickFunnels
+                      </a>
+                    ) : (
+                      <span>In ClickFunnels, go to <strong>My Assets → Downloads</strong></span>
+                    )}{" "}
+                    and click the <strong>Copy</strong> icon next to this file, then paste the URL here.
                   </p>
                 )}
               </div>
@@ -705,6 +718,7 @@ export default function AdminLessonEditorPage() {
                   onClick={() => {
                     addResource.mutate(newResource);
                     setCfDownloadUrlHint(false);
+                    setSelectedCfDownloadEditUrl(null);
                   }}
                   disabled={
                     !newResource.name.trim() ||
@@ -720,6 +734,7 @@ export default function AdminLessonEditorPage() {
                   onClick={() => {
                     setShowAddResource(false);
                     setCfDownloadUrlHint(false);
+                    setSelectedCfDownloadEditUrl(null);
                   }}
                 >
                   Cancel
@@ -852,18 +867,6 @@ export default function AdminLessonEditorPage() {
                       </span>
                       {addResource.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 text-muted-foreground" />}
                     </button>
-                    {download.editUrl && (
-                      <a
-                        href={download.editUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-ring"
-                        title={`Open ${download.name} in ClickFunnels`}
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Open in CF
-                      </a>
-                    )}
                   </div>
               ))}
             </div>
