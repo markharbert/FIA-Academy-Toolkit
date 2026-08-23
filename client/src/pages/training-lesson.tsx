@@ -430,6 +430,7 @@ export default function TrainingLessonPage() {
                         Transcript
                       </button>
                     </div>
+                    <div className="max-h-[360px] overflow-y-auto">
                     {transcriptTab === "chapters" ? (
                       <div className="p-3">
                         {chapters.length > 0 ? (
@@ -460,6 +461,7 @@ export default function TrainingLessonPage() {
                         {lesson.transcriptText}
                       </div>
                     )}
+                    </div>
                   </div>
                 )}
               </div>
