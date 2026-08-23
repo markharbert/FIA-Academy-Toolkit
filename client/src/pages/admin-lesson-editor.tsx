@@ -62,6 +62,8 @@ type VimeoVideoPage = {
 
 type VimeoFolderNode = VimeoFolder & { children: VimeoFolderNode[] };
 
+const VIMEO_LAST_FOLDER_STORAGE_KEY = "academy-toolkit:last-vimeo-folder";
+
 function buildVimeoFolderTree(folders: VimeoFolder[]): VimeoFolderNode[] {
   const nodes = new Map<string, VimeoFolderNode>(
     folders.map((folder) => [folder.id, { ...folder, children: [] as VimeoFolderNode[] }]),
@@ -207,11 +209,35 @@ export default function AdminLessonEditorPage() {
     );
   }, [vimeoFolderFilter, vimeoFolderTree]);
 
+  useEffect(() => {
+    if (!vimeoPickerOpen) return;
+    const savedFolderId = window.localStorage.getItem(VIMEO_LAST_FOLDER_STORAGE_KEY);
+    setSelectedVimeoFolderId(savedFolderId || "all");
+    setVimeoVideoPage(1);
+    setVimeoFolderFilter("");
+  }, [vimeoPickerOpen]);
+
+  useEffect(() => {
+    const folders = vimeoFoldersData?.folders;
+    if (!vimeoPickerOpen || !folders || selectedVimeoFolderId === "all") return;
+    if (!folders.some((folder) => folder.id === selectedVimeoFolderId)) {
+      setSelectedVimeoFolderId("all");
+      setVimeoVideoPage(1);
+      window.localStorage.setItem(VIMEO_LAST_FOLDER_STORAGE_KEY, "all");
+    }
+  }, [vimeoFoldersData?.folders, selectedVimeoFolderId, vimeoPickerOpen]);
+
+  const selectVimeoFolder = (folderId: string) => {
+    setSelectedVimeoFolderId(folderId);
+    setVimeoVideoPage(1);
+    window.localStorage.setItem(VIMEO_LAST_FOLDER_STORAGE_KEY, folderId);
+  };
+
   const renderVimeoFolder = (folder: VimeoFolderNode, depth = 0): JSX.Element => {
     const isExpanded = expandedVimeoFolders[folder.id] ?? depth === 0;
     return (
       <div key={folder.id}>
-            <div className="flex items-start gap-0.5">
+        <div className="flex items-start gap-0.5">
           {folder.children.length > 0 ? (
             <button
               type="button"
@@ -233,8 +259,7 @@ export default function AdminLessonEditorPage() {
             className="h-auto min-h-10 min-w-0 flex-1 justify-start gap-2 py-2 text-left"
             style={{ paddingLeft: `${8 + Math.min(depth, 6) * 8}px` }}
             onClick={() => {
-              setSelectedVimeoFolderId(folder.id);
-              setVimeoVideoPage(1);
+              selectVimeoFolder(folder.id);
             }}
           >
             <Folder className="h-4 w-4 shrink-0" />
@@ -463,8 +488,6 @@ export default function AdminLessonEditorPage() {
               variant="outline"
               className="shrink-0 gap-1.5"
               onClick={() => {
-                setSelectedVimeoFolderId("all");
-                setVimeoVideoPage(1);
                 setVimeoFolderFilter("");
                 setVimeoPickerOpen(true);
               }}
@@ -672,8 +695,7 @@ export default function AdminLessonEditorPage() {
                 variant={selectedVimeoFolderId === "all" ? "secondary" : "ghost"}
                 className="w-full justify-start gap-2"
                 onClick={() => {
-                  setSelectedVimeoFolderId("all");
-                  setVimeoVideoPage(1);
+                  selectVimeoFolder("all");
                 }}
               >
                 <Folder className="h-4 w-4" />
@@ -698,8 +720,7 @@ export default function AdminLessonEditorPage() {
                         variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
                         className="h-auto w-full justify-start gap-2 py-2 text-left"
                         onClick={() => {
-                          setSelectedVimeoFolderId(folder.id);
-                          setVimeoVideoPage(1);
+                          selectVimeoFolder(folder.id);
                         }}
                       >
                         <Folder className="h-4 w-4 shrink-0" />
