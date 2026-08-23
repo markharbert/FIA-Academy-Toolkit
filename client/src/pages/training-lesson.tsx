@@ -166,6 +166,7 @@ export default function TrainingLessonPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/training/courses", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/courses"] });
     },
   });
 
