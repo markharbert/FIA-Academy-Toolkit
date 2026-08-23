@@ -75,11 +75,21 @@ function VideoPreview({ url }: { url: string }) {
   }
 
   if (provider === "vimeo") {
-    const vimeoId = url.replace(/.*vimeo\.com\//, "").split("?")[0];
+    let embedUrl: string | null = null;
+    try {
+      const parsedUrl = new URL(url);
+      const vimeoId = parsedUrl.pathname.match(/(?:^|\/)(?:video\/)?(\d+)(?:\/|$)/)?.[1];
+      embedUrl = vimeoId
+        ? `https://player.vimeo.com/video/${vimeoId}${parsedUrl.search}`
+        : null;
+    } catch {
+      embedUrl = null;
+    }
+    if (!embedUrl) return null;
     return (
       <div className="aspect-video rounded-lg overflow-hidden bg-black">
         <iframe
-          src={`https://player.vimeo.com/video/${vimeoId}`}
+          src={embedUrl}
           className="w-full h-full"
           allowFullScreen
           title="Video preview"

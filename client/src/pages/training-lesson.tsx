@@ -88,8 +88,13 @@ function getEmbedUrl(videoUrl: string): string | null {
     return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
   }
   if (videoUrl.includes("vimeo.com")) {
-    const vimeoId = videoUrl.replace(/.*vimeo\.com\//, "").split("?")[0];
-    return `https://player.vimeo.com/video/${vimeoId}`;
+    try {
+      const url = new URL(videoUrl);
+      const vimeoId = url.pathname.match(/(?:^|\/)(?:video\/)?(\d+)(?:\/|$)/)?.[1];
+      return vimeoId ? `https://player.vimeo.com/video/${vimeoId}${url.search}` : null;
+    } catch {
+      return null;
+    }
   }
   return null;
 }

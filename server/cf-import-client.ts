@@ -31,6 +31,9 @@ export interface CfLesson {
   title: string;
   sort_order: number;
   published_at: string | null;
+  body: string | null;
+  current_path: string | null;
+  videoUrl?: string;
 }
 
 export interface CfTreeNode {
@@ -39,6 +42,7 @@ export interface CfTreeNode {
   title: string;
   published: boolean;
   sortOrder: number;
+  videoUrl?: string;
   children: CfTreeNode[];
 }
 
@@ -48,6 +52,8 @@ export interface CfCourseStructure {
   roots: CfTreeNode[];
   totalSections: number;
   totalLessons: number;
+  videosFound: number;
+  videosUnavailable: number;
 }
 
 // ─── Core fetch with retry on 429 / 5xx ─────────────────────────────────────
@@ -70,6 +76,110 @@ async function cfGet(path: string): Promise<any> {
     return res.json();
   }
   throw lastErr;
+}
+
+/**
+ * Extract a canonical Vimeo player URL from HTML or serialized page data.
+ * The import intentionally accepts only explicit vimeo.com URLs, never a bare
+ * numeric ID, so unrelated page data cannot be mistaken for a video.
+ */
+export function extractVimeoUrl(content: unknown): string | null {
+  if (typeof content !== "string" || !content) return null;
+
+  const normalized = content
+    .replace(/\\u002F/gi, "/")
+    .replace(/\\\//g, "/")
+    .replace(/&amp;/gi, "&");
+  const match = normalized.match(
+    /(?:https?:)?\/\/(?:player\.)?vimeo\.com\/(?:video\/)?([1-9]\d{4,11})(\?[^"'<>\s\\]*)?/i,
+  );
+  if (!match) return null;
+
+  const [, videoId, query = ""] = match;
+  return `https://player.vimeo.com/video/${videoId}${query}`;
+}
+
+function lessonPageUrl(courseId: string, currentPath: string): URL | null {
+  if (!CF_WORKSPACE_DOMAIN || !currentPath) return null;
+  try {
+    const origin = new URL(`https://${CF_WORKSPACE_DOMAIN}`);
+    const path = currentPath.startsWith("/") ? currentPath : `/${currentPath}`;
+    const url = new URL(
+      `/courses/${encodeURIComponent(courseId.toLowerCase())}${path}`,
+      origin,
+    );
+    return url.origin === origin.origin ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches a lesson page only from the configured ClickFunnels domain. Redirects
+ * are followed manually and never allowed to leave that domain.
+ */
+async function fetchCfLessonPage(courseId: string, currentPath: string): Promise<string | null> {
+  if (!CF_WORKSPACE_DOMAIN) return null;
+  let origin: URL;
+  try {
+    origin = new URL(`https://${CF_WORKSPACE_DOMAIN}`);
+  } catch {
+    return null;
+  }
+  const initialUrl = lessonPageUrl(courseId, currentPath);
+  if (!initialUrl) return null;
+  let url: URL = initialUrl;
+
+  try {
+    for (let redirect = 0; redirect < 3; redirect++) {
+      const response: Response = await fetch(url.toString(), {
+        headers: { ...authHeaders(), Accept: "text/html,application/xhtml+xml" },
+        redirect: "manual",
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (response.status >= 300 && response.status < 400) {
+        const location: string | null = response.headers.get("location");
+        if (!location) return null;
+        const nextUrl: URL = new URL(location, url);
+        if (nextUrl.origin !== origin.origin) return null;
+        url = nextUrl;
+        continue;
+      }
+      if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) {
+        return null;
+      }
+      return await response.text();
+    }
+  } catch {
+    // A protected or unavailable lesson should never stop the rest of an import.
+  }
+  return null;
+}
+
+/** The documented single-lesson endpoint can include body content omitted by list responses. */
+async function fetchCfLessonBody(lessonId: string): Promise<string | null> {
+  try {
+    const raw = await cfGet(`/courses/lessons/${encodeURIComponent(lessonId)}`);
+    const lesson = raw?.data ?? raw;
+    return typeof lesson?.body === "string" ? lesson.body : null;
+  } catch {
+    // Some older CF lessons have no body or cannot be fetched individually.
+    return null;
+  }
+}
+
+async function findLessonVimeoUrl(courseId: string, lesson: CfLesson): Promise<string | null> {
+  const fromBody = extractVimeoUrl(lesson.body);
+  if (fromBody) return fromBody;
+
+  const detailBody = await fetchCfLessonBody(lesson.id);
+  const fromDetail = extractVimeoUrl(detailBody);
+  if (fromDetail) return fromDetail;
+
+  if (!lesson.current_path) return null;
+
+  const page = await fetchCfLessonPage(courseId, lesson.current_path);
+  return extractVimeoUrl(page);
 }
 
 // ─── Pagination — loops until a page returns < 20 items ──────────────────────
@@ -145,6 +255,8 @@ export async function getCfCourseStructure(
   // 2. Fetch lessons for each section — max 3 concurrent requests
   const lessonMap = new Map<string, CfLesson[]>();
   let fetchedSections = 0;
+  let videosChecked = 0;
+  let videosFound = 0;
 
   const queue = [...sections];
   const workers = Array.from({ length: 3 }, async () => {
@@ -152,12 +264,25 @@ export async function getCfCourseStructure(
       const section = queue.shift();
       if (!section) break;
       const raw = await paginateAll<any>(`/courses/sections/${section.id}/lessons`);
-      lessonMap.set(section.id, raw.map(l => ({
+      const lessons: CfLesson[] = raw.map(l => ({
         id: String(l.id),
         title: l.title ?? `Lesson ${l.id}`,
         sort_order: l.sort_order ?? 0,
         published_at: l.published_at ?? null,
-      })));
+        body: typeof l.body === "string" ? l.body : null,
+        current_path: typeof l.current_path === "string" ? l.current_path : null,
+      }));
+
+      for (const lesson of lessons) {
+        const videoUrl = await findLessonVimeoUrl(cfCourseId, lesson);
+        if (videoUrl) {
+          lesson.videoUrl = videoUrl;
+          videosFound++;
+        }
+        videosChecked++;
+        onProgress(`Checking lesson videos (${videosChecked})...`);
+      }
+      lessonMap.set(section.id, lessons);
       fetchedSections++;
       onProgress(`Fetched lessons for ${fetchedSections} of ${sections.length} sections...`);
     }
@@ -175,6 +300,8 @@ export async function getCfCourseStructure(
     roots,
     totalSections: sections.length,
     totalLessons,
+    videosFound,
+    videosUnavailable: totalLessons - videosFound,
   };
 }
 
@@ -200,6 +327,7 @@ function buildCfTree(
         title: l.title,
         published: l.published_at !== null,
         sortOrder: l.sort_order,
+        videoUrl: l.videoUrl,
         children: [],
       }));
 

@@ -57,6 +57,7 @@ interface CfTreeNode {
   title: string;
   published: boolean;
   sortOrder: number;
+  videoUrl?: string;
   children: CfTreeNode[];
 }
 
@@ -66,6 +67,8 @@ interface CfCourseStructure {
   roots: CfTreeNode[];
   totalSections: number;
   totalLessons: number;
+  videosFound: number;
+  videosUnavailable: number;
 }
 
 interface FinalTreeNode extends CfTreeNode {
@@ -79,6 +82,9 @@ interface ImportResult {
   wrappedLessons: number;
   courseId: string;
   courseName: string;
+  videosImported: number;
+  videosSkipped: number;
+  videosUnavailable: number;
 }
 
 // ─── Tree helpers ─────────────────────────────────────────────────────────────
@@ -216,6 +222,24 @@ function countFinalNodes(nodes: FinalTreeNode[]): {
   };
   nodes.forEach(walk);
   return { modules, lessons };
+}
+
+function countLessonVideos(nodes: CfTreeNode[]): {
+  found: number;
+  unavailable: number;
+} {
+  let found = 0;
+  let unavailable = 0;
+  const walk = (node: CfTreeNode) => {
+    if (node.type === "lesson") {
+      if (node.videoUrl) found++;
+      else unavailable++;
+      return;
+    }
+    node.children.forEach(walk);
+  };
+  nodes.forEach(walk);
+  return { found, unavailable };
 }
 
 function countSelectedNodes(
@@ -652,6 +676,7 @@ export function CourseImportCard() {
     return applyBonusWrapping(roots);
   })();
   const finalCounts = countFinalNodes(finalTree);
+  const selectedVideoCounts = countLessonVideos(filteredTree);
   const selCounts = structure
     ? countSelectedNodes(selectedIds, structure.roots)
     : { modules: 0, lessons: 0 };
@@ -787,6 +812,10 @@ export function CourseImportCard() {
                   {structure.totalSections} sections ·{" "}
                   {structure.totalLessons} lessons
                 </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {structure.videosFound} Vimeo video{structure.videosFound !== 1 ? "s" : ""} found ·{" "}
+                  {structure.videosUnavailable} unavailable
+                </p>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Button
@@ -835,7 +864,11 @@ export function CourseImportCard() {
               <span className="font-semibold text-foreground">
                 {selCounts.lessons}
               </span>{" "}
-              lesson{selCounts.lessons !== 1 ? "s" : ""} selected
+                lesson{selCounts.lessons !== 1 ? "s" : ""} selected ·{" "}
+                <span className="font-semibold text-foreground">
+                  {selectedVideoCounts.found}
+                </span>{" "}
+                Vimeo video{selectedVideoCounts.found !== 1 ? "s" : ""} ready
             </p>
 
             {/* Tree */}
@@ -1013,7 +1046,11 @@ export function CourseImportCard() {
                 <span className="font-medium text-foreground">
                   {finalCounts.lessons}
                 </span>{" "}
-                lesson{finalCounts.lessons !== 1 ? "s" : ""}
+                lesson{finalCounts.lessons !== 1 ? "s" : ""} ·{" "}
+                <span className="font-medium text-foreground">
+                  {selectedVideoCounts.found}
+                </span>{" "}
+                Vimeo video{selectedVideoCounts.found !== 1 ? "s" : ""} ready
                 {destination.type === "new"
                   ? ` → new course "${destination.title}"`
                   : " → existing course"}
@@ -1099,6 +1136,22 @@ export function CourseImportCard() {
                 <p className="text-xs text-muted-foreground">
                   Course:{" "}
                   <span className="font-medium">{importResult.courseName}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Vimeo videos:{" "}
+                  <span className="font-medium">{importResult.videosImported}</span> imported
+                  {importResult.videosSkipped > 0 && (
+                    <>
+                      {" "}
+                      · <span className="font-medium">{importResult.videosSkipped}</span> kept existing
+                    </>
+                  )}
+                  {importResult.videosUnavailable > 0 && (
+                    <>
+                      {" "}
+                      · <span className="font-medium">{importResult.videosUnavailable}</span> unavailable
+                    </>
+                  )}
                 </p>
               </div>
             </div>

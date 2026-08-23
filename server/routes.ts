@@ -46,7 +46,7 @@ import {
   CF_COURSE_ID,
   type CfContactInfo,
 } from "./clickfunnels";
-import { listCfCourses, getCfCourseStructure, type CfTreeNode } from "./cf-import-client";
+import { listCfCourses, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -1797,13 +1797,22 @@ export async function registerRoutes(
 
   // ── CF Course Import ─────────────────────────────────────────────────────────
 
+  type CfImportResult = {
+    created: number;
+    updated: number;
+    wrappedLessons: number;
+    videosImported: number;
+    videosSkipped: number;
+    videosUnavailable: number;
+  };
+
   /** Recursively import a module node and its children into the DB (idempotent via externalId). */
   async function importModuleNode(
     node: CfTreeNode,
     courseId: string,
     parentModuleId: string | null,
     sortOrder: number,
-    result: { created: number; updated: number },
+    result: CfImportResult,
   ) {
     const extId = `cf-section-${node.cfId}`;
     let moduleId: string;
@@ -1839,12 +1848,25 @@ export async function registerRoutes(
     courseId: string,
     moduleId: string,
     sortOrder: number,
-    result: { created: number; updated: number },
+    result: CfImportResult,
   ) {
     const extId = `cf-lesson-${node.cfId}`;
     const existing = await storage.getCourseLessonByExternalId(courseId, extId);
+    const videoUrl = node.videoUrl ? extractVimeoUrl(node.videoUrl) : null;
     if (existing) {
-      if (existing.title !== node.title) await storage.updateCourseLesson(existing.id, { title: node.title });
+      const updates: { title?: string; videoUrl?: string } = {};
+      if (existing.title !== node.title) updates.title = node.title;
+      // Never replace an existing admin-entered video URL; re-imports only fill
+      // missing video fields with a newly discovered ClickFunnels Vimeo URL.
+      if (videoUrl && !existing.videoUrl) {
+        updates.videoUrl = videoUrl;
+        result.videosImported++;
+      } else if (videoUrl) {
+        result.videosSkipped++;
+      } else {
+        result.videosUnavailable++;
+      }
+      if (Object.keys(updates).length) await storage.updateCourseLesson(existing.id, updates as any);
       result.updated++;
     } else {
       await storage.createCourseLesson({
@@ -1854,7 +1876,10 @@ export async function registerRoutes(
         status: node.published ? "published" : "draft",
         sortOrder,
         externalId: extId,
+        videoUrl,
       } as any);
+      if (videoUrl) result.videosImported++;
+      else result.videosUnavailable++;
       result.created++;
     }
   }
@@ -1951,7 +1976,14 @@ export async function registerRoutes(
       const existingModules = await storage.getCourseModules(targetCourseId);
       let sortIdx = existingModules.length > 0 ? Math.max(...existingModules.map(m => m.sortOrder)) + 1 : 0;
 
-      const importResult = { created: 0, updated: 0, wrappedLessons: 0 };
+      const importResult: CfImportResult = {
+        created: 0,
+        updated: 0,
+        wrappedLessons: 0,
+        videosImported: 0,
+        videosSkipped: 0,
+        videosUnavailable: 0,
+      };
 
       // Loose root-level lessons → wrap in "Bonus" module
       const topModules = importRoots.filter(n => n.type === "module");
