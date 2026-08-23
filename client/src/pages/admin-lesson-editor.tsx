@@ -36,6 +36,10 @@ type LessonWithResources = {
   moduleId: string;
   title: string;
   videoUrl: string | null;
+  transcriptText: string | null;
+  transcriptLanguage: string | null;
+  transcriptSource: string | null;
+  transcriptUpdatedAt: string | null;
   content: string | null;
   status: string;
   durationMinutes: number | null;
@@ -69,6 +73,14 @@ type VimeoPickerVideo = {
 type VimeoVideoPage = {
   videos: VimeoPickerVideo[];
   hasMore: boolean;
+};
+
+type VimeoTranscriptTrack = {
+  id: string;
+  language: string;
+  name: string;
+  type: string;
+  link: string | null;
 };
 
 type CfDownload = {
@@ -197,6 +209,7 @@ export default function AdminLessonEditorPage() {
   const [vimeoFolderFilter, setVimeoFolderFilter] = useState("");
   const [expandedVimeoFolders, setExpandedVimeoFolders] = useState<Record<string, boolean>>({});
   const [isNavigatingLesson, setIsNavigatingLesson] = useState(false);
+  const [showTranscriptTracks, setShowTranscriptTracks] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef({ title: "", videoUrl: "", content: "" });
   const revisionRef = useRef(0);
@@ -205,6 +218,7 @@ export default function AdminLessonEditorPage() {
   const queuedRevisionRef = useRef<number | null>(null);
   const loadedLessonIdRef = useRef<string | null>(null);
   const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null);
+  const videoProvider = detectVideoProvider(videoUrl);
 
   const { data: lesson, isLoading } = useQuery<LessonWithResources>({
     queryKey: ["/api/admin/lessons", lessonId],
@@ -250,6 +264,13 @@ export default function AdminLessonEditorPage() {
     queryKey: ["/api/admin/vimeo/folders", selectedVimeoFolderId, "videos", vimeoVideoPage],
     queryFn: () => apiFetch(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos?page=${vimeoVideoPage}`),
     enabled: vimeoPickerOpen && !!selectedVimeoFolderId,
+  });
+  const { data: vimeoTranscriptTracks, isLoading: vimeoTranscriptTracksLoading, error: vimeoTranscriptTracksError } = useQuery<{
+    tracks: VimeoTranscriptTrack[];
+  }>({
+    queryKey: ["/api/admin/lessons", lessonId, "vimeo-transcript-tracks"],
+    queryFn: () => apiFetch(`/api/admin/lessons/${lessonId}/vimeo-transcript-tracks`),
+    enabled: showTranscriptTracks && videoProvider === "vimeo",
   });
 
   const vimeoFolderTree = useMemo(
@@ -400,6 +421,21 @@ export default function AdminLessonEditorPage() {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const importVimeoTranscript = useMutation({
+    mutationFn: (trackId: string) =>
+      apiFetch(`/api/admin/lessons/${lessonId}/vimeo-transcript`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      setShowTranscriptTracks(false);
+      toast({ title: "Transcript added", description: "The Vimeo transcript is ready for members to view." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn’t add transcript", description: e.message, variant: "destructive" }),
+  });
+
   const addResource = useMutation({
     mutationFn: (r: { name: string; url: string; subtitle: string; kind: string }) =>
       apiFetch(editingResource ? `/api/admin/resources/${editingResource.id}` : `/api/admin/lessons/${lessonId}/resources`, {
@@ -520,7 +556,6 @@ export default function AdminLessonEditorPage() {
     );
   }
 
-  const videoProvider = detectVideoProvider(videoUrl);
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -622,6 +657,78 @@ export default function AdminLessonEditorPage() {
           {videoUrl && videoProvider && (
             <div className="mt-3">
               <VideoPreview url={videoUrl} />
+            </div>
+          )}
+          {videoProvider === "vimeo" && (
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">Transcript</p>
+                  <p className="text-xs text-muted-foreground">
+                    {lesson.transcriptText
+                      ? `Imported from ${lesson.transcriptSource || "Vimeo"}${lesson.transcriptLanguage ? ` · ${lesson.transcriptLanguage}` : ""}`
+                      : "Import captions already available for this Vimeo video."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {lesson.transcriptText && (
+                    <Button asChild size="sm" variant="outline">
+                      <a href={`/api/admin/lessons/${lessonId}/transcript/download`}>
+                        <Download className="mr-1.5 h-3.5 w-3.5" />
+                        Download
+                      </a>
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={lesson.transcriptText ? "outline" : "default"}
+                    onClick={() => setShowTranscriptTracks((shown) => !shown)}
+                  >
+                    {lesson.transcriptText ? "Replace transcript" : "Add transcript"}
+                  </Button>
+                </div>
+              </div>
+              {showTranscriptTracks && (
+                <div className="border-t pt-3">
+                  {vimeoTranscriptTracksLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Checking Vimeo for transcripts…
+                    </div>
+                  ) : vimeoTranscriptTracksError ? (
+                    <p className="text-sm text-destructive">
+                      {vimeoTranscriptTracksError instanceof Error ? vimeoTranscriptTracksError.message : "Couldn’t load Vimeo transcripts."}
+                    </p>
+                  ) : (vimeoTranscriptTracks?.tracks.length ?? 0) === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Vimeo has no caption or transcript track available for this video yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">Choose a Vimeo text track to import:</p>
+                      {vimeoTranscriptTracks?.tracks.map((track) => (
+                        <Button
+                          key={track.id}
+                          type="button"
+                          variant="outline"
+                          className="h-auto w-full justify-between py-2 text-left"
+                          disabled={importVimeoTranscript.isPending}
+                          onClick={() => importVimeoTranscript.mutate(track.id)}
+                        >
+                          <span>
+                            <span className="block text-sm">{track.name || track.language || "Vimeo transcript"}</span>
+                            <span className="block text-xs font-normal text-muted-foreground">
+                              {[track.language, track.type].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
+                          {importVimeoTranscript.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

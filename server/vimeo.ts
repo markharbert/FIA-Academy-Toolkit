@@ -85,7 +85,10 @@ function captionTextToTranscript(captionText: string): string {
   for (const block of blocks) {
     const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
     if (!lines.length || /^WEBVTT/i.test(lines[0]) || /^NOTE\b/i.test(lines[0])) continue;
-    const textLines = lines.filter((line) => !/^(?:\d+\s*)?\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?\s*-->\s*/.test(line));
+    const textLines = lines.filter((line) =>
+      !/^\d+$/.test(line) &&
+      !/^(?:\d+\s*)?\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?\s*-->\s*/.test(line),
+    );
     const text = textLines
       .join(" ")
       .replace(/<\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?>/g, "")
@@ -99,7 +102,11 @@ function captionTextToTranscript(captionText: string): string {
     if (text && text !== cues.at(-1)) cues.push(text);
   }
 
-  return cues.join(" ").replace(/\s+([,.!?;:])/g, "$1").trim();
+  const paragraphs: string[] = [];
+  for (let index = 0; index < cues.length; index += 8) {
+    paragraphs.push(cues.slice(index, index + 8).join(" ").replace(/\s+([,.!?;:])/g, "$1").trim());
+  }
+  return paragraphs.filter(Boolean).join("\n\n");
 }
 
 export async function listVimeoTextTracks(videoId: string): Promise<VimeoTextTrack[]> {

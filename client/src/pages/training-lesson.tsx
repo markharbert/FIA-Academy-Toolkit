@@ -1,8 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
-  ChevronLeft, ChevronRight, CheckCircle2, Circle, ExternalLink, Link,
-  BookOpen, Clock, SkipBack, SkipForward,
+  ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, ExternalLink, Link,
+  BookOpen, Clock, SkipBack, SkipForward, FileText,
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ type LessonDetail = {
   moduleId: string;
   title: string;
   videoUrl: string | null;
+  transcriptText: string | null;
   content: string | null;
   status: string;
   durationMinutes: number | null;
@@ -104,6 +106,7 @@ export default function TrainingLessonPage() {
   const { courseId, lessonId } = useParams<{ courseId: string; lessonId: string }>();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   // Load course structure (for sidebar nav + prev/next)
   const { data: courseData, isError: isCourseError } = useQuery<CourseStructure>({
@@ -338,7 +341,7 @@ export default function TrainingLessonPage() {
             {/* Video */}
             {embedUrl && (
               <div
-                className="aspect-video rounded-xl overflow-hidden mb-8 shadow-sm"
+                className="aspect-video rounded-xl overflow-hidden shadow-sm"
                 style={{ background: "#0f172a" }}
               >
                 <iframe
@@ -349,6 +352,28 @@ export default function TrainingLessonPage() {
                 />
               </div>
             )}
+            {lesson.transcriptText && (
+              <div className="mb-8 overflow-hidden rounded-xl" style={{ border: "1px solid #dbeafe", background: "#f5f9ff" }}>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                  onClick={() => setTranscriptOpen((open) => !open)}
+                  aria-expanded={transcriptOpen}
+                >
+                  <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: "#1e3a8a" }}>
+                    <FileText className="h-4 w-4" />
+                    View Transcript
+                  </span>
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", transcriptOpen && "rotate-180")} style={{ color: "#1e3a8a" }} />
+                </button>
+                {transcriptOpen && (
+                  <div className="border-t px-5 py-4 text-[14px] leading-7 whitespace-pre-wrap" style={{ borderColor: "#dbeafe", color: "#374151", background: "#ffffff" }}>
+                    {lesson.transcriptText}
+                  </div>
+                )}
+              </div>
+            )}
+            {!lesson.transcriptText && embedUrl && <div className="mb-8" />}
 
             {/* Lesson content — sanitized before render to prevent stored XSS */}
             {lesson.content && (
