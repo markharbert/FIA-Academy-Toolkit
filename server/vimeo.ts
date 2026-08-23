@@ -9,6 +9,7 @@ export interface VimeoVideo {
   id: string;
   name: string;
   url: string;
+  thumbnailUrl?: string;
 }
 
 function vimeoHeaders() {
@@ -34,32 +35,69 @@ function extractVimeoLink(video: any): string | null {
   return null;
 }
 
-/** List the authenticated account's videos, following Vimeo's paging.next links. */
-export async function listVimeoVideos(): Promise<VimeoVideo[]> {
+async function vimeoGet(path: string): Promise<any> {
   if (!VIMEO_ACCESS_TOKEN) return [];
-
-  const videos: VimeoVideo[] = [];
-  let nextUrl: string | null = "https://api.vimeo.com/me/videos?per_page=100&page=1";
-
-  for (let page = 0; nextUrl && page < 25; page++) {
-    const response = await fetch(nextUrl, {
+  const response = await fetch(
+    path.startsWith("http") ? path : `https://api.vimeo.com${path}`,
+    {
       headers: vimeoHeaders(),
       signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) {
-      throw new Error(`Vimeo API ${response.status} while listing videos`);
-    }
+    },
+  );
+  if (!response.ok) throw new Error(`Vimeo API ${response.status}`);
+  return response.json();
+}
 
-    const payload = await response.json() as any;
-    for (const video of Array.isArray(payload?.data) ? payload.data : []) {
-      const url = extractVimeoLink(video);
-      if (url && typeof video?.name === "string" && video.name.trim()) {
-        videos.push({ id: String(video.uri ?? video.id ?? url), name: video.name, url });
+function resourceId(uri: unknown): string | null {
+  if (typeof uri !== "string") return null;
+  const match = uri.match(/\/(\d+)(?:\/)?$/);
+  return match?.[1] ?? null;
+}
+
+/** List the authenticated account's Vimeo folders (Projects). */
+export async function listVimeoProjects(): Promise<Array<{ id: string; name: string }>> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const projects: Array<{ id: string; name: string }> = [];
+  let nextUrl: string | null = "https://api.vimeo.com/me/projects?per_page=100&page=1";
+
+  for (let page = 0; nextUrl && page < 25; page++) {
+    const payload = await vimeoGet(nextUrl);
+    for (const project of Array.isArray(payload?.data) ? payload.data : []) {
+      const id = resourceId(project?.uri);
+      if (id && typeof project?.name === "string" && project.name.trim()) {
+        projects.push({ id, name: project.name });
       }
     }
     nextUrl = typeof payload?.paging?.next === "string" ? payload.paging.next : null;
   }
+  return projects;
+}
 
+/** List videos from the account or one Vimeo folder, following pagination. */
+export async function listVimeoVideos(projectId?: string): Promise<VimeoVideo[]> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const path = projectId
+    ? `/me/projects/${encodeURIComponent(projectId)}/videos?per_page=100&page=1`
+    : `/me/videos?per_page=100&page=1`;
+  const videos: VimeoVideo[] = [];
+  let nextUrl: string | null = path;
+
+  for (let page = 0; nextUrl && page < 25; page++) {
+    const payload = await vimeoGet(nextUrl);
+    for (const video of Array.isArray(payload?.data) ? payload.data : []) {
+      const url = extractVimeoLink(video);
+      if (url && typeof video?.name === "string" && video.name.trim()) {
+        const pictures = Array.isArray(video?.pictures?.sizes) ? video.pictures.sizes : [];
+        videos.push({
+          id: String(video.uri ?? video.id ?? url),
+          name: video.name,
+          url,
+          thumbnailUrl: pictures.at(-1)?.link,
+        });
+      }
+    }
+    nextUrl = typeof payload?.paging?.next === "string" ? payload.paging.next : null;
+  }
   return videos;
 }
 

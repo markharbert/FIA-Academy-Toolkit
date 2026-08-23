@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink,
+  Film, Folder, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 
 type Resource = {
   id: string;
@@ -34,6 +38,18 @@ type LessonWithResources = {
   status: string;
   durationMinutes: number | null;
   resources: Resource[];
+};
+
+type VimeoFolder = {
+  id: string;
+  name: string;
+};
+
+type VimeoPickerVideo = {
+  id: string;
+  name: string;
+  url: string;
+  thumbnailUrl?: string;
 };
 
 async function apiFetch(url: string, init?: RequestInit) {

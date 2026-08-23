@@ -47,6 +47,7 @@ import {
   type CfContactInfo,
 } from "./clickfunnels";
 import { listCfCourses, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
+import { listVimeoProjects, listVimeoVideos } from "./vimeo";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -2022,6 +2023,30 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[CF Import] execute:", err?.message);
       res.status(500).json({ message: err?.message ?? "Import failed" });
+    }
+  });
+
+  app.get("/api/admin/vimeo/folders", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const folders = await listVimeoProjects();
+      res.json({ folders });
+    } catch (err: any) {
+      console.error("[Vimeo] list folders:", err?.message);
+      res.status(502).json({ message: err?.message ?? "Failed to load Vimeo folders" });
+    }
+  });
+
+  app.get("/api/admin/vimeo/folders/:folderId/videos", requireAdmin, async (req: Request, res: Response) => {
+    const { folderId } = req.params;
+    if (folderId !== "all" && !/^\d+$/.test(folderId)) {
+      return res.status(400).json({ message: "Invalid Vimeo folder" });
+    }
+    try {
+      const videos = await listVimeoVideos(folderId === "all" ? undefined : folderId);
+      res.json({ videos });
+    } catch (err: any) {
+      console.error("[Vimeo] list videos:", err?.message);
+      res.status(502).json({ message: err?.message ?? "Failed to load Vimeo videos" });
     }
   });
 
