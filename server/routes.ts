@@ -46,7 +46,7 @@ import {
   CF_COURSE_ID,
   type CfContactInfo,
 } from "./clickfunnels";
-import { listCfCourses, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
+import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
 import { listVimeoProjects, listVimeoVideos } from "./vimeo";
 
 const openai = new OpenAI({
@@ -1893,6 +1893,22 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[CF Import] listCfCourses:", err?.message);
       res.status(502).json({ message: err?.message ?? "Failed to list CF courses" });
+    }
+  });
+
+  /** List ClickFunnels downloads for linking from lesson resources. */
+  app.get("/api/admin/cf/downloads", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const downloads = await listCfDownloads();
+      res.json({
+        downloads: downloads.map((download) => ({
+          ...download,
+          url: `https://${CF_WORKSPACE_DOMAIN}/profile/downloads`,
+        })),
+      });
+    } catch (err: any) {
+      console.error("[CF Downloads] list:", err?.message);
+      res.status(502).json({ message: err?.message ?? "Failed to list ClickFunnels downloads" });
     }
   });
 

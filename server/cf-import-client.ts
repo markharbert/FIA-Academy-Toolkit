@@ -18,6 +18,16 @@ export interface CfCourse {
   name: string;
 }
 
+export interface CfDownload {
+  id: string;
+  public_id: string | null;
+  workspace_id: string;
+  asset_id: string | null;
+  name: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export interface CfSection {
   id: string;
   title: string;
@@ -229,6 +239,30 @@ export async function listCfCourses(): Promise<CfCourse[]> {
   }
 
   return [{ id: CF_COURSE_ID, name }];
+}
+
+/** Lists downloadable assets available in the configured ClickFunnels workspace. */
+export async function listCfDownloads(): Promise<CfDownload[]> {
+  const rawWorkspaces = await paginateAll<any>("/workspaces");
+  const workspaces = rawWorkspaces.map((workspace) => ({
+    ...workspace,
+    id: String(workspace.id),
+    subdomain: String(workspace.subdomain ?? workspace.domain ?? "").toLowerCase(),
+  }));
+  const configuredSubdomain = CF_WORKSPACE_DOMAIN.split(".")[0].toLowerCase();
+  const workspace = workspaces.find((item) => item.subdomain === configuredSubdomain) ?? workspaces[0];
+  if (!workspace) throw new Error("No ClickFunnels workspace is available for this API token");
+
+  const rawDownloads = await paginateAll<any>(`/workspaces/${encodeURIComponent(workspace.id)}/downloads`);
+  return rawDownloads.map((download) => ({
+    id: String(download.id),
+    public_id: download.public_id ? String(download.public_id) : null,
+    workspace_id: String(download.workspace_id ?? workspace.id),
+    asset_id: download.asset_id ? String(download.asset_id) : null,
+    name: String(download.name ?? `Download ${download.id}`),
+    created_at: download.created_at ?? null,
+    updated_at: download.updated_at ?? null,
+  }));
 }
 
 // ─── Full course structure (sections + lessons) ───────────────────────────────
