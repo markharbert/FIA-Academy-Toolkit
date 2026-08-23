@@ -6,6 +6,14 @@ import { useEffect, useRef, useState } from "react";
 import { Bold, Italic, Strikethrough, List, ListOrdered, Quote, Code, Link2, Undo2, Redo2, Heading2, Image as ImageIcon, Upload, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const LessonImage = Node.create({
   name: "lessonImage",
@@ -39,6 +47,8 @@ export function RichTextEditor({ value, onChange, placeholder, testId }: Props) 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [imageError, setImageError] = useState("");
+  const [imageUrlDialogOpen, setImageUrlDialogOpen] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -95,17 +105,17 @@ export function RichTextEditor({ value, onChange, placeholder, testId }: Props) 
     }
   };
 
-  const insertImageUrl = () => {
-    const url = window.prompt("Image URL", "https://");
-    if (url === null) return;
+  const submitImageUrl = () => {
     try {
-      const parsed = new URL(url.trim());
+      const parsed = new URL(imageUrl.trim());
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error();
       editor.chain().focus().insertContent({
         type: "lessonImage",
         attrs: { src: parsed.toString(), alt: "" },
       }).run();
       setImageError("");
+      setImageUrl("");
+      setImageUrlDialogOpen(false);
     } catch {
       setImageError("Please enter a valid http(s) image URL.");
     }
@@ -176,7 +186,10 @@ export function RichTextEditor({ value, onChange, placeholder, testId }: Props) 
         <Btn tid="editor-quote" active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} label="Quote" icon={Quote} />
         <Btn tid="editor-code" active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} label="Code" icon={Code} />
         <Btn tid="editor-link" active={editor.isActive("link")} onClick={setLink} label="Link" icon={Link2} />
-        <Btn tid="editor-image-url" onClick={insertImageUrl} label="Insert image from URL" icon={ImageIcon} />
+        <Btn tid="editor-image-url" onClick={() => {
+          setImageError("");
+          setImageUrlDialogOpen(true);
+        }} label="Insert image from URL" icon={ImageIcon} />
         <input
           ref={imageInputRef}
           type="file"
@@ -206,6 +219,57 @@ export function RichTextEditor({ value, onChange, placeholder, testId }: Props) 
       </div>
       {imageError && <p className="px-3 py-1 text-xs text-destructive">{imageError}</p>}
       <EditorContent editor={editor} placeholder={placeholder} />
+      <Dialog open={imageUrlDialogOpen} onOpenChange={setImageUrlDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Insert image from URL</DialogTitle>
+            <DialogDescription>
+              Paste the direct URL of the image you want to add to the lesson.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitImageUrl();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <label htmlFor="lesson-image-url" className="text-sm font-medium">
+                Image URL
+              </label>
+              <Input
+                id="lesson-image-url"
+                type="url"
+                value={imageUrl}
+                onChange={(event) => {
+                  setImageUrl(event.target.value);
+                  if (imageError) setImageError("");
+                }}
+                placeholder="https://example.com/image.jpg"
+                autoFocus
+              />
+              {imageError && <p className="text-xs text-destructive">{imageError}</p>}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setImageUrl("");
+                  setImageError("");
+                  setImageUrlDialogOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!imageUrl.trim()}>
+                Insert image
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
