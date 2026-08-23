@@ -617,14 +617,14 @@ function CfIntegrationSection() {
 export default function ClickFunnelsAdminPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl space-y-6">
-      <GracePeriodCard />
       <Tabs defaultValue="integration">
         <TabsList>
           <TabsTrigger value="integration">Integration</TabsTrigger>
           <TabsTrigger value="course-import">Course Import</TabsTrigger>
         </TabsList>
-        <TabsContent value="integration" className="mt-4">
+        <TabsContent value="integration" className="mt-4 space-y-6">
           <CfIntegrationSection />
+          <GracePeriodCard />
         </TabsContent>
         <TabsContent value="course-import" className="mt-4">
           <CourseImportCard />
