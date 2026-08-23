@@ -164,9 +164,12 @@ export default function TrainingLessonPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ completed }),
       }),
-    onSuccess: () => {
+    onSuccess: (_savedProgress, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/training/courses", courseId] });
       queryClient.invalidateQueries({ queryKey: ["/api/training/courses"] });
+      if (variables.completed && nextLesson) {
+        setLocation(`/training/${courseId}/lessons/${nextLesson.id}`);
+      }
     },
   });
 
