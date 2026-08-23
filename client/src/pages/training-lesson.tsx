@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
+import Player from "@vimeo/player";
 import {
   ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, ExternalLink, Link,
   BookOpen, Clock, SkipBack, SkipForward, FileText,
@@ -135,6 +136,7 @@ export default function TrainingLessonPage() {
   const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
+  const vimeoPlayerApiRef = useRef<Player | null>(null);
   const activeTranscriptWordRef = useRef<HTMLSpanElement>(null);
   const lastScrolledWordRef = useRef<number | null>(null);
 
@@ -184,6 +186,13 @@ export default function TrainingLessonPage() {
   const isVimeoLesson = !!lesson?.videoUrl?.includes("vimeo.com");
   const chapters = lesson?.transcriptChapters ?? [];
   const transcriptCues = lesson?.transcriptCues ?? [];
+  const transcriptText = lesson?.transcriptText ?? "";
+  const transcriptTokens = transcriptText.split(/(\s+)/);
+  let transcriptWordCount = 0;
+  const transcriptTokenWordIndexes = transcriptTokens.map((token) => {
+    if (!token || /^\s+$/.test(token)) return -1;
+    return transcriptWordCount++;
+  });
   const activeCueIndex = transcriptCues.findIndex((cue, index) => {
     const nextCue = transcriptCues[index + 1];
     const cueEnd = nextCue?.startSeconds ?? cue.startSeconds + 8;
@@ -227,43 +236,25 @@ export default function TrainingLessonPage() {
     lastScrolledWordRef.current = null;
   }, [lessonId]);
 
-  const subscribeToVimeoTimeUpdates = () => {
-    const player = vimeoPlayerRef.current;
-    if (!player?.contentWindow || !isVimeoLesson) return;
-    player.contentWindow.postMessage(
-      JSON.stringify({ method: "addEventListener", value: "timeupdate" }),
-      "https://player.vimeo.com",
-    );
-  };
-
   useEffect(() => {
-    if (!isVimeoLesson) return;
+    const iframe = vimeoPlayerRef.current;
+    if (!iframe || !isVimeoLesson || !embedUrl) return;
 
-    const handleVimeoMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.vimeo.com") return;
-      let message = event.data;
-      if (typeof message === "string") {
-        try {
-          message = JSON.parse(message);
-        } catch {
-          return;
-        }
-      }
-      if (message?.event === "timeupdate" && typeof message.data?.seconds === "number") {
-        setVideoCurrentTime(message.data.seconds);
-      }
+    const player = new Player(iframe);
+    const handleTimeUpdate = ({ seconds }: { seconds: number }) => setVideoCurrentTime(seconds);
+    vimeoPlayerApiRef.current = player;
+    player.on("timeupdate", handleTimeUpdate);
+
+    return () => {
+      player.off("timeupdate", handleTimeUpdate);
+      if (vimeoPlayerApiRef.current === player) vimeoPlayerApiRef.current = null;
     };
-
-    window.addEventListener("message", handleVimeoMessage);
-    subscribeToVimeoTimeUpdates();
-    return () => window.removeEventListener("message", handleVimeoMessage);
-  }, [isVimeoLesson, lessonId]);
+  }, [embedUrl, isVimeoLesson]);
 
   const seekToChapter = (startSeconds: number) => {
-    const player = vimeoPlayerRef.current;
-    if (!player?.contentWindow || !isVimeoLesson) return;
-    player.contentWindow.postMessage(JSON.stringify({ method: "setCurrentTime", value: startSeconds }), "https://player.vimeo.com");
-    player.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!isVimeoLesson) return;
+    void vimeoPlayerApiRef.current?.setCurrentTime(startSeconds);
+    vimeoPlayerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   // Find current module for breadcrumb
@@ -464,7 +455,6 @@ export default function TrainingLessonPage() {
                   className="w-full h-full"
                   allowFullScreen
                   title={lesson.title}
-                  onLoad={subscribeToVimeoTimeUpdates}
                 />
               </div>
             )}
@@ -539,14 +529,9 @@ export default function TrainingLessonPage() {
                     ) : (
                       <div className="px-5 py-4 text-[14px] leading-7 whitespace-pre-wrap" style={{ color: "#374151" }}>
                         {transcriptCues.length > 0
-                          ? lesson.transcriptText.split(/(\s+)/).map((token, index) => {
-                              const isWord = !/^\s+$/.test(token);
-                              const wordIndex = isWord
-                                ? lesson.transcriptText
-                                    .split(/(\s+)/)
-                                    .slice(0, index)
-                                    .filter((part) => part && !/^\s+$/.test(part)).length
-                                : -1;
+                          ? transcriptTokens.map((token, index) => {
+                              const wordIndex = transcriptTokenWordIndexes[index];
+                              const isWord = wordIndex >= 0;
                               return (
                                 <span
                                   key={index}
