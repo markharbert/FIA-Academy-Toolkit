@@ -3,7 +3,7 @@
  * Handles cursor pagination (after=<last_id>), concurrency, and retry with backoff.
  */
 
-import { CF_WORKSPACE_DOMAIN, CF_API_TOKEN } from "./clickfunnels";
+import { CF_WORKSPACE_DOMAIN, CF_API_TOKEN, CF_COURSE_ID } from "./clickfunnels";
 
 const baseUrl = () => `https://${CF_WORKSPACE_DOMAIN}/api/v2`;
 const authHeaders = () => ({
@@ -96,13 +96,27 @@ async function paginateAll<T extends { id: string | number }>(
 }
 
 // ─── Course list ──────────────────────────────────────────────────────────────
+// CF v2 doesn't expose a course-listing endpoint for this account type.
+// We use the configured CF_COURSE_ID and try to fetch its details.
 
 export async function listCfCourses(): Promise<CfCourse[]> {
-  const raw = await paginateAll<any>(`/courses`);
-  return raw.map(c => ({
-    id: String(c.id),
-    name: c.name ?? c.title ?? `Course ${c.id}`,
-  }));
+  if (!CF_COURSE_ID) {
+    throw new Error("CF_COURSE_ID is not configured");
+  }
+
+  // Try to fetch the course's own record for its title; fall back gracefully.
+  let name = `Course ${CF_COURSE_ID}`;
+  try {
+    const raw = await cfGet(`/courses/${CF_COURSE_ID}`);
+    const course = Array.isArray(raw) ? raw[0] : raw;
+    if (course?.name || course?.title) {
+      name = course.name ?? course.title;
+    }
+  } catch {
+    // 404 or auth error — title unknown, proceed with ID as name
+  }
+
+  return [{ id: CF_COURSE_ID, name }];
 }
 
 // ─── Full course structure (sections + lessons) ───────────────────────────────
