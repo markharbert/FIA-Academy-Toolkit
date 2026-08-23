@@ -1,0 +1,53 @@
+Add a Course Import tool to the ClickFunnels Integration admin page (clickfunnels-admin.tsx). It pulls course structures directly from the ClickFunnels API (the app already has CF_API_TOKEN and CF_WORKSPACE_DOMAIN in secrets and talks to the CF API server-side for member sync) and creates courses in the existing course system (courses, course_modules with parentModuleId nesting, course_lessons tables). Do not modify the course builder, the existing CF membership features, or anything else in the app.
+
+=== CRITICAL: CLICKFUNNELS API PAGINATION ===
+
+The ClickFunnels v2 API returns a MAXIMUM of 20 items per request and uses cursor pagination via an 'after' query parameter (pass the last item's id from the previous page). Every list request in this tool MUST loop pages until a page returns fewer than 20 items. This applies to listing courses, listing sections, and listing lessons. My real course has 45 sections and 223 lessons; a naive single request returns only 20 sections and looks complete. Getting this wrong silently loses most of the course.
+
+Relevant endpoints (base: https://{CF_WORKSPACE_DOMAIN}/api/v2, Bearer CF_API_TOKEN, Accept: application/json):
+- GET /workspaces/{workspaceId}/courses (list courses; the workspace id can be derived from existing config or fetched once)
+- GET /courses/{courseId}/sections (flat list of ALL sections; each has id, title, parent_id for nesting, sort_order, published_at, days_till_drip_access)
+- GET /courses/sections/{sectionId}/lessons (lessons for one section; each has id, title, sort_order, published_at; the body field is always empty via API, ignore it)
+
+Build a small server-side CF client module with a paginate-all helper, modest concurrency (max 3-4 parallel requests when fetching lessons for 45 sections), and retry with backoff on 429/5xx.
+
+=== SCHEMA ADDITION ===
+
+Add via migration: nullable text column external_id on courses, course_modules, and course_lessons, with an index on each. Store ClickFunnels ids there as 'cf-course-{id}', 'cf-section-{id}', 'cf-lesson-{id}'. This makes imports idempotent and re-runnable.
+
+=== UI: 'COURSE IMPORT' CARD ON THE CF INTEGRATION PAGE ===
+
+A new card matching the page's existing card style (gradient top bar, icon, title, description), opening a full import flow (dialog or dedicated section) with these steps:
+
+STEP 1 BROWSE: 'Load Courses from ClickFunnels' button fetches ALL courses in the workspace (paginated) and lists them: title, CF id, and a Fetch Structure button per course. Cache the list client-side for the session.
+
+STEP 2 FETCH + SELECT: fetching a course pulls its complete tree (all sections paginated, all lessons per section paginated, assembled by parent_id into a nested tree, ordered by sort_order, lessons and sub-modules mixed at the same level in correct order). Show a progress indicator during fetch ('Fetched 30 of 45 sections...'). Then render the SELECTION TREE:
+- Collapsible nested tree, every module and lesson row has a CHECKBOX
+- Checking a module checks its entire subtree; unchecking likewise; parent checkboxes show an indeterminate state when only some descendants are checked
+- Checking a lesson or deep module automatically includes its ancestor modules as structure (ancestors render as force-included with a muted checked state when they have checked descendants)
+- Select All and Deselect All buttons
+- Draft items (published_at null in CF) show a Draft pill
+- A live summary: 'Selected: X modules, Y lessons'
+- Expand All / Collapse All
+
+STEP 3 DESTINATION: choose where the selection goes:
+- 'Create new course': title input (prefilled intelligently: if the selection root is a single module, use its title in title case), auto slug, imported course status = draft
+- 'Add to existing course': dropdown of existing Toolkit courses; selection is appended at the course root, after existing items
+- PROMOTE OPTION: when the selection consists of exactly one top-level module and its contents, show a toggle, default ON: 'Use this module as the course itself (its contents become the course's top level)'. With it ON, the module itself is not created; its children become root items of the destination course. This is how a top-level module like LAUNCH becomes a standalone Launch course without a redundant wrapper module inside.
+- LOOSE LESSON RULE: the destination schema requires every lesson to be inside a module. If promotion (or direct selection) would place a lesson at the course root, auto-wrap consecutive root-level lessons in a module named 'Bonus' at that same position, and mention this in the preview.
+
+STEP 4 CONFIRM + IMPORT: a compact preview of the final destination tree (read-only, with the wrapper modules and promotion applied), totals, then Import. Server-side execution in a single transaction:
+- Create/attach everything with correct nesting, mixed sort order preserved exactly as in CF, statuses mapped (CF published_at set = published, null = draft)
+- IDEMPOTENCY: before creating any module or lesson, check external_id within the destination course. If it already exists there: update title, sortOrder, and status ONLY; never touch content, videoUrl, durationMinutes, or resources; never delete anything; report it as Updated instead of Created
+- Result report: created counts, updated counts, wrapped-lesson notes, and a clear notice: 'ClickFunnels does not expose lesson videos or page content via API. Structure and titles were imported; videos and content are filled in a separate pass.'
+- Log to the admin audit log (course name, counts)
+
+=== ACCEPTANCE (test against my real data) ===
+- Loading courses lists my workspace courses including Fearless Influencer Academy
+- Fetching Fearless Influencer Academy shows exactly 4 top-level modules (LAUNCH, CORE, VAULT, TOOLS), 45 total sections and 223 total lessons in the tree, proving pagination works
+- Selecting only LAUNCH with promotion ON creates a draft course 'Launch' whose top level is: Step One through Step Four as modules plus the loose draft lesson wrapped in a 'Bonus' module, 13 lessons total, order matching ClickFunnels, draft states preserved
+- Running the exact same import again creates zero duplicates and reports items as Updated
+- Selecting three individual lessons deep inside CORE imports them with their ancestor module structure intact
+- All endpoints admin-only via the existing admin middleware
+
+Build it fully working, no placeholders.

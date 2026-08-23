@@ -9,6 +9,7 @@ import {
   Loader2, CheckCircle, AlertCircle, Users, Copy, ExternalLink,
   Webhook, UserCheck, UserX, Zap, Key, Search, Clock, RotateCw, Link,
 } from "lucide-react";
+import { CourseImportCard } from "@/components/cf-course-import";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -617,6 +618,7 @@ export default function ClickFunnelsAdminPage() {
     <div className="container mx-auto py-8 px-4 max-w-5xl space-y-6">
       <GracePeriodCard />
       <CfIntegrationSection />
+      <CourseImportCard />
     </div>
   );
 }

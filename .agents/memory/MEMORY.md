@@ -12,3 +12,4 @@
 - [Responsive toolbar form sizing](responsive-toolbar-form-sizing.md) — form-control resets must restore border-box sizing or painted controls can overflow their flex slots.
 - [Responsive script-free snapshots](responsive-script-free-snapshots.md) — sanitize nested documents and script entry points without granting iframe script permission.
 - [Scroll capture coordination](scroll-capture-coordination.md) — page-scrolling capture tools must share one per-tab lock to avoid corrupting captures.
+- [CF Course Import](cf-course-import.md) — SSE structure fetch, cursor pagination, externalId idempotency, filterTree logic, bonus wrapping for loose root lessons.

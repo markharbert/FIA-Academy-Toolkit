@@ -45,6 +45,7 @@ import {
   CF_COURSE_ID,
   type CfContactInfo,
 } from "./clickfunnels";
+import { listCfCourses, getCfCourseStructure, type CfTreeNode } from "./cf-import-client";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -1792,6 +1793,206 @@ export async function registerRoutes(
       res.status(500).json({ message: "Sync failed" });
     }
   });
+
+  // ── CF Course Import ─────────────────────────────────────────────────────────
+
+  /** Recursively import a module node and its children into the DB (idempotent via externalId). */
+  async function importModuleNode(
+    node: CfTreeNode,
+    courseId: string,
+    parentModuleId: string | null,
+    sortOrder: number,
+    result: { created: number; updated: number },
+  ) {
+    const extId = `cf-section-${node.cfId}`;
+    let moduleId: string;
+
+    const existing = await storage.getCourseModuleByExternalId(courseId, extId);
+    if (existing) {
+      if (existing.title !== node.title) await storage.updateCourseModule(existing.id, { title: node.title });
+      moduleId = existing.id;
+      result.updated++;
+    } else {
+      const created = await storage.createCourseModule({
+        courseId,
+        parentModuleId,
+        title: node.title,
+        status: node.published ? "published" : "draft",
+        sortOrder,
+        externalId: extId,
+      } as any);
+      moduleId = created.id;
+      result.created++;
+    }
+
+    let childSort = 0;
+    for (const child of node.children) {
+      if (child.type === "module") await importModuleNode(child, courseId, moduleId, childSort++, result);
+      else await importLessonNode(child, courseId, moduleId, childSort++, result);
+    }
+  }
+
+  /** Import a lesson node (idempotent via externalId). */
+  async function importLessonNode(
+    node: CfTreeNode,
+    courseId: string,
+    moduleId: string,
+    sortOrder: number,
+    result: { created: number; updated: number },
+  ) {
+    const extId = `cf-lesson-${node.cfId}`;
+    const existing = await storage.getCourseLessonByExternalId(courseId, extId);
+    if (existing) {
+      if (existing.title !== node.title) await storage.updateCourseLesson(existing.id, { title: node.title });
+      result.updated++;
+    } else {
+      await storage.createCourseLesson({
+        courseId,
+        moduleId,
+        title: node.title,
+        status: node.published ? "published" : "draft",
+        sortOrder,
+        externalId: extId,
+      } as any);
+      result.created++;
+    }
+  }
+
+  /** List all courses from the connected CF workspace. */
+  app.get("/api/admin/cf/import/courses", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const courses = await listCfCourses();
+      res.json({ courses });
+    } catch (err: any) {
+      console.error("[CF Import] listCfCourses:", err?.message);
+      res.status(502).json({ message: err?.message ?? "Failed to list CF courses" });
+    }
+  });
+
+  /**
+   * Stream the full section + lesson tree for a CF course as SSE.
+   * Events: { type:"progress"|"done"|"error", message?, structure? }
+   */
+  app.get("/api/admin/cf/import/courses/:cfCourseId/structure", requireAdmin, async (req: Request, res: Response) => {
+    const { cfCourseId } = req.params;
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    let closed = false;
+    req.on("close", () => { closed = true; });
+    const send = (data: object) => { if (!closed) res.write(`data: ${JSON.stringify(data)}\n\n`); };
+
+    try {
+      const structure = await getCfCourseStructure(cfCourseId, (msg) => send({ type: "progress", message: msg }));
+      send({ type: "done", structure });
+    } catch (err: any) {
+      console.error("[CF Import] structure fetch:", err?.message);
+      send({ type: "error", message: err?.message ?? "Failed to fetch course structure" });
+    } finally {
+      res.end();
+    }
+  });
+
+  /**
+   * Execute the import.
+   * Body: { cfCourseTitle, filteredTree, destination, promote }
+   * Response: { created, updated, wrappedLessons, courseId, courseName }
+   */
+  app.post("/api/admin/cf/import/execute", requireAdmin, async (req: Request, res: Response) => {
+    const adminUser = (req as any).adminUser;
+    try {
+      const { cfCourseTitle, filteredTree, destination, promote } = req.body as {
+        cfCourseTitle: string;
+        filteredTree: CfTreeNode[];
+        destination: { type: "new" | "existing"; title?: string; existingCourseId?: string };
+        promote: boolean;
+      };
+
+      if (!Array.isArray(filteredTree)) return res.status(400).json({ message: "filteredTree is required" });
+      if (!destination?.type) return res.status(400).json({ message: "destination.type is required" });
+
+      // Apply promotion: lift single root module's children up one level
+      let importRoots: CfTreeNode[] = filteredTree;
+      let promotedTitle = "";
+      if (promote && filteredTree.length === 1 && filteredTree[0].type === "module") {
+        promotedTitle = filteredTree[0].title;
+        importRoots = filteredTree[0].children;
+      }
+
+      // Resolve target course
+      let targetCourseId: string;
+      let courseName: string;
+
+      if (destination.type === "new") {
+        const rawTitle = (destination.title?.trim() || promotedTitle || cfCourseTitle || "CF Import").slice(0, 200);
+        const baseSlug = generateCourseSlug(rawTitle);
+        let finalSlug = baseSlug;
+        let slugAttempt = 0;
+        while (true) {
+          const { rows } = await pool.query("SELECT id FROM courses WHERE slug = $1 LIMIT 1", [finalSlug]);
+          if (!rows.length) break;
+          finalSlug = `${baseSlug}-${++slugAttempt}`;
+        }
+        const course = await storage.createCourse({ title: rawTitle, slug: finalSlug, status: "draft", sortOrder: 0 });
+        targetCourseId = course.id;
+        courseName = rawTitle;
+      } else {
+        if (!destination.existingCourseId) return res.status(400).json({ message: "existingCourseId required" });
+        const existing = await storage.getCourse(destination.existingCourseId);
+        if (!existing) return res.status(404).json({ message: "Target course not found" });
+        targetCourseId = existing.id;
+        courseName = existing.title;
+      }
+
+      // Append after existing modules
+      const existingModules = await storage.getCourseModules(targetCourseId);
+      let sortIdx = existingModules.length > 0 ? Math.max(...existingModules.map(m => m.sortOrder)) + 1 : 0;
+
+      const importResult = { created: 0, updated: 0, wrappedLessons: 0 };
+
+      // Loose root-level lessons → wrap in "Bonus" module
+      const topModules = importRoots.filter(n => n.type === "module");
+      const looseRootLessons = importRoots.filter(n => n.type === "lesson");
+
+      if (looseRootLessons.length > 0) {
+        const bonusMod = await storage.createCourseModule({
+          courseId: targetCourseId,
+          parentModuleId: null,
+          title: "Bonus",
+          status: "draft",
+          sortOrder: sortIdx++,
+        });
+        importResult.created++;
+        for (let i = 0; i < looseRootLessons.length; i++) {
+          await importLessonNode(looseRootLessons[i], targetCourseId, bonusMod.id, i, importResult);
+        }
+        importResult.wrappedLessons = looseRootLessons.length;
+      }
+
+      // Import top-level modules recursively
+      for (const node of topModules) {
+        await importModuleNode(node, targetCourseId, null, sortIdx++, importResult);
+      }
+
+      // Audit log
+      await storage.createAuditLog({
+        adminUserId: adminUser.id,
+        action: "cf_course_import",
+        metadataJson: { targetCourseId, courseName, cfCourseTitle, ...importResult } as any,
+        ip: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      });
+
+      res.json({ ...importResult, courseId: targetCourseId, courseName });
+    } catch (err: any) {
+      console.error("[CF Import] execute:", err?.message);
+      res.status(500).json({ message: err?.message ?? "Import failed" });
+    }
+  });
+
+  // ── end CF Course Import ──────────────────────────────────────────────────────
 
   // Admin: simulate a CF webhook event for testing
   app.post("/api/admin/cf/test-webhook", requireAdmin, async (req: Request, res: Response) => {

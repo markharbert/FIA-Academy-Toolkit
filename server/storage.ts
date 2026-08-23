@@ -706,12 +706,14 @@ export interface IStorage {
   deleteCourse(id: string): Promise<boolean>;
   getCourseModules(courseId: string): Promise<CourseModule[]>;
   getCourseModule(id: string): Promise<CourseModule | undefined>;
+  getCourseModuleByExternalId(courseId: string, externalId: string): Promise<CourseModule | undefined>;
   createCourseModule(module: InsertCourseModule): Promise<CourseModule>;
   updateCourseModule(id: string, updates: Partial<CourseModule>): Promise<CourseModule | undefined>;
   deleteCourseModule(id: string): Promise<boolean>;
   reorderCourseModules(courseId: string, orderedIds: string[]): Promise<void>;
   getCourseLessons(moduleId: string): Promise<CourseLesson[]>;
   getCourseLesson(id: string): Promise<CourseLesson | undefined>;
+  getCourseLessonByExternalId(courseId: string, externalId: string): Promise<CourseLesson | undefined>;
   createCourseLesson(lesson: InsertCourseLesson): Promise<CourseLesson>;
   updateCourseLesson(id: string, updates: Partial<CourseLesson>): Promise<CourseLesson | undefined>;
   deleteCourseLesson(id: string): Promise<boolean>;
@@ -5548,6 +5550,13 @@ export class DatabaseStorage implements IStorage {
     return row || undefined;
   }
 
+  async getCourseModuleByExternalId(courseId: string, externalId: string): Promise<CourseModule | undefined> {
+    const [row] = await db.select().from(courseModules).where(
+      and(eq(courseModules.courseId, courseId), eq(courseModules.externalId, externalId))
+    );
+    return row || undefined;
+  }
+
   async createCourseModule(module: InsertCourseModule): Promise<CourseModule> {
     const [row] = await db.insert(courseModules).values(module).returning();
     return row;
@@ -5575,6 +5584,13 @@ export class DatabaseStorage implements IStorage {
 
   async getCourseLesson(id: string): Promise<CourseLesson | undefined> {
     const [row] = await db.select().from(courseLessons).where(eq(courseLessons.id, id));
+    return row || undefined;
+  }
+
+  async getCourseLessonByExternalId(courseId: string, externalId: string): Promise<CourseLesson | undefined> {
+    const [row] = await db.select().from(courseLessons).where(
+      and(eq(courseLessons.courseId, courseId), eq(courseLessons.externalId, externalId))
+    );
     return row || undefined;
   }
 
@@ -5828,6 +5844,19 @@ export async function runMigrations(): Promise<void> {
     console.log("[migration] gsc_analytics_cache table ensured");
   } catch (err: any) {
     console.error("[migration] gsc_analytics_cache table failed:", err?.message);
+  }
+
+  // CF course import: add external_id to courses, modules, and lessons for idempotent import
+  try {
+    await pool.query(`ALTER TABLE courses ADD COLUMN IF NOT EXISTS external_id TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_courses_external_id ON courses(external_id) WHERE external_id IS NOT NULL`);
+    await pool.query(`ALTER TABLE course_modules ADD COLUMN IF NOT EXISTS external_id TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_course_modules_ext ON course_modules(course_id, external_id) WHERE external_id IS NOT NULL`);
+    await pool.query(`ALTER TABLE course_lessons ADD COLUMN IF NOT EXISTS external_id TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_course_lessons_ext ON course_lessons(course_id, external_id) WHERE external_id IS NOT NULL`);
+    console.log("[migration] course external_id columns ensured");
+  } catch (err: any) {
+    console.error("[migration] course external_id migration failed:", err?.message);
   }
 
   for (const migration of migrations) {

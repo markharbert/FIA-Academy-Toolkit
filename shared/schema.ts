@@ -2157,6 +2157,7 @@ export const courses = pgTable("courses", {
   coverGradient: text("cover_gradient"),
   status: varchar("status", { length: 20 }).notNull().default("draft"), // 'draft' | 'published'
   sortOrder: integer("sort_order").notNull().default(0),
+  externalId: text("external_id"),  // e.g. 'cf-course-123' — for idempotent import
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -2171,6 +2172,7 @@ export const courseModules = pgTable("course_modules", {
   title: text("title").notNull(),
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   sortOrder: integer("sort_order").notNull().default(0),
+  externalId: text("external_id"),  // e.g. 'cf-section-456' — for idempotent import
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -2188,6 +2190,7 @@ export const courseLessons = pgTable("course_lessons", {
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   durationMinutes: integer("duration_minutes"),
   sortOrder: integer("sort_order").notNull().default(0),
+  externalId: text("external_id"),  // e.g. 'cf-lesson-789' — for idempotent import
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
