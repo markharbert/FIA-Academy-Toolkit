@@ -216,6 +216,7 @@ export default function AdminLessonEditorPage() {
   const [expandedVimeoFolders, setExpandedVimeoFolders] = useState<Record<string, boolean>>({});
   const [isNavigatingLesson, setIsNavigatingLesson] = useState(false);
   const [showTranscriptTracks, setShowTranscriptTracks] = useState(false);
+  const [transcriptDeleteOpen, setTranscriptDeleteOpen] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef({ title: "", videoUrl: "", content: "" });
   const revisionRef = useRef(0);
@@ -452,6 +453,19 @@ export default function AdminLessonEditorPage() {
       toast({ title: "Chapters created", description: "Members can now jump to the key moments in this lesson." });
     },
     onError: (e: Error) => toast({ title: "Couldn’t create chapters", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteTranscript = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/admin/lessons/${lessonId}/transcript`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      setTranscriptDeleteOpen(false);
+      toast({ title: "Transcript removed", description: "The transcript and its chapters were removed from this lesson." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn’t remove transcript", description: e.message, variant: "destructive" }),
   });
 
   const addResource = useMutation({
@@ -711,6 +725,18 @@ export default function AdminLessonEditorPage() {
                         <Download className="mr-1.5 h-3.5 w-3.5" />
                         Download
                       </a>
+                    </Button>
+                  )}
+                  {lesson.transcriptText && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setTranscriptDeleteOpen(true)}
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                      Remove
                     </Button>
                   )}
                   <Button
@@ -989,6 +1015,30 @@ export default function AdminLessonEditorPage() {
               }}
             >
               {deleteResource.isPending ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={transcriptDeleteOpen} onOpenChange={(open) => !open && setTranscriptDeleteOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove transcript?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the transcript, timestamped cues, and generated chapters from this lesson. You can import the Vimeo transcript again later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteTranscript.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteTranscript.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                deleteTranscript.mutate();
+              }}
+            >
+              {deleteTranscript.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Remove transcript
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

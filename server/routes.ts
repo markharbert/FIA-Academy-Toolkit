@@ -13728,6 +13728,25 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  app.delete("/api/admin/lessons/:id/transcript", requireAdmin, async (req, res) => {
+    try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      if (!lesson) return res.status(404).json({ message: "Not found" });
+      const saved = await storage.updateCourseLesson(req.params.id, {
+        transcriptText: null,
+        transcriptLanguage: null,
+        transcriptSource: null,
+        transcriptUpdatedAt: null,
+        transcriptCues: null,
+        transcriptChapters: null,
+      });
+      res.json(saved);
+    } catch (e) {
+      console.error("[Vimeo transcript delete]", e);
+      res.status(500).json({ message: "Failed to remove transcript." });
+    }
+  });
+
   app.get("/api/admin/lessons/:id/transcript/download", requireAdmin, async (req, res) => {
     const lesson = await storage.getCourseLesson(req.params.id);
     if (!lesson?.transcriptText) return res.status(404).json({ message: "No transcript has been saved for this lesson." });
