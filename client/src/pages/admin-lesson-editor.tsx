@@ -63,7 +63,9 @@ type VimeoVideoPage = {
 type VimeoFolderNode = VimeoFolder & { children: VimeoFolderNode[] };
 
 function buildVimeoFolderTree(folders: VimeoFolder[]): VimeoFolderNode[] {
-  const nodes = new Map(folders.map((folder) => [folder.id, { ...folder, children: [] }]));
+  const nodes = new Map<string, VimeoFolderNode>(
+    folders.map((folder) => [folder.id, { ...folder, children: [] as VimeoFolderNode[] }]),
+  );
   const roots: VimeoFolderNode[] = [];
 
   for (const node of nodes.values()) {
@@ -209,7 +211,7 @@ export default function AdminLessonEditorPage() {
     const isExpanded = expandedVimeoFolders[folder.id] ?? depth === 0;
     return (
       <div key={folder.id}>
-        <div className="flex items-center gap-0.5">
+            <div className="flex items-start gap-0.5">
           {folder.children.length > 0 ? (
             <button
               type="button"
@@ -228,7 +230,7 @@ export default function AdminLessonEditorPage() {
           <Button
             type="button"
             variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
-            className="min-w-0 flex-1 justify-start gap-2 text-left"
+            className="h-auto min-h-10 min-w-0 flex-1 justify-start gap-2 py-2 text-left"
             style={{ paddingLeft: `${8 + Math.min(depth, 6) * 8}px` }}
             onClick={() => {
               setSelectedVimeoFolderId(folder.id);
@@ -236,7 +238,7 @@ export default function AdminLessonEditorPage() {
             }}
           >
             <Folder className="h-4 w-4 shrink-0" />
-            <span className="truncate">{folder.name}</span>
+            <span className="whitespace-normal break-words">{folder.name}</span>
           </Button>
         </div>
         {isExpanded && folder.children.map((child) => renderVimeoFolder(child, depth + 1))}
@@ -643,7 +645,7 @@ export default function AdminLessonEditorPage() {
       </AlertDialog>
 
       <Dialog open={vimeoPickerOpen} onOpenChange={setVimeoPickerOpen}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Film className="h-5 w-5 text-blue-500" />
@@ -654,7 +656,7 @@ export default function AdminLessonEditorPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)]">
+          <div className="grid gap-4 sm:grid-cols-[24rem_minmax(0,1fr)]">
             <div className="max-h-[55vh] space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2">
               <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Folders
@@ -694,7 +696,7 @@ export default function AdminLessonEditorPage() {
                         key={folder.id}
                         type="button"
                         variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
-                        className="h-auto w-full justify-start gap-2 py-1.5 text-left"
+                        className="h-auto w-full justify-start gap-2 py-2 text-left"
                         onClick={() => {
                           setSelectedVimeoFolderId(folder.id);
                           setVimeoVideoPage(1);
@@ -702,9 +704,9 @@ export default function AdminLessonEditorPage() {
                       >
                         <Folder className="h-4 w-4 shrink-0" />
                         <span className="min-w-0">
-                          <span className="block truncate text-sm">{folder.name}</span>
+                          <span className="block whitespace-normal break-words text-sm">{folder.name}</span>
                           {folder.path.length > 0 && (
-                            <span className="block truncate text-xs font-normal text-muted-foreground">
+                            <span className="block whitespace-normal break-words text-xs font-normal text-muted-foreground">
                               {folder.path.join(" / ")}
                             </span>
                           )}
