@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink, Pencil,
-  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download,
+  Film, Folder, Loader2, ChevronDown, ChevronRight, ArrowRight, Download, ListVideo,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ type LessonWithResources = {
   transcriptLanguage: string | null;
   transcriptSource: string | null;
   transcriptUpdatedAt: string | null;
+  transcriptChapters: LessonChapter[] | null;
   content: string | null;
   status: string;
   durationMinutes: number | null;
@@ -81,6 +82,11 @@ type VimeoTranscriptTrack = {
   name: string;
   type: string;
   link: string | null;
+};
+
+type LessonChapter = {
+  startSeconds: number;
+  title: string;
 };
 
 type CfDownload = {
@@ -436,6 +442,18 @@ export default function AdminLessonEditorPage() {
     onError: (e: Error) => toast({ title: "Couldn’t add transcript", description: e.message, variant: "destructive" }),
   });
 
+  const generateTranscriptChapters = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/admin/lessons/${lessonId}/transcript-chapters`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      toast({ title: "Chapters created", description: "Members can now jump to the key moments in this lesson." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn’t create chapters", description: e.message, variant: "destructive" }),
+  });
+
   const addResource = useMutation({
     mutationFn: (r: { name: string; url: string; subtitle: string; kind: string }) =>
       apiFetch(editingResource ? `/api/admin/resources/${editingResource.id}` : `/api/admin/lessons/${lessonId}/resources`, {
@@ -671,6 +689,22 @@ export default function AdminLessonEditorPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {lesson.transcriptText && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={generateTranscriptChapters.isPending}
+                      onClick={() => generateTranscriptChapters.mutate()}
+                    >
+                      {generateTranscriptChapters.isPending ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <ListVideo className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      {lesson.transcriptChapters?.length ? "Regenerate chapters" : "Generate chapters"}
+                    </Button>
+                  )}
                   {lesson.transcriptText && (
                     <Button asChild size="sm" variant="outline">
                       <a href={`/api/admin/lessons/${lessonId}/transcript/download`}>

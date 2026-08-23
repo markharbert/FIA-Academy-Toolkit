@@ -25,6 +25,11 @@ export interface VimeoTextTrack {
   link: string | null;
 }
 
+export interface VimeoTranscriptCue {
+  startSeconds: number;
+  text: string;
+}
+
 function vimeoHeaders() {
   return {
     Authorization: `Bearer ${VIMEO_ACCESS_TOKEN}`,
@@ -77,14 +82,25 @@ export function extractVimeoVideoId(url: string): string | null {
   }
 }
 
-function captionTextToTranscript(captionText: string): string {
+function parseTimestamp(value: string): number | null {
+  const parts = value.trim().replace(",", ".").split(":").map(Number);
+  if (parts.some((part) => !Number.isFinite(part))) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return null;
+}
+
+function captionTextToTranscript(captionText: string): { text: string; cues: VimeoTranscriptCue[] } {
   const normalized = captionText.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
   const blocks = normalized.split(/\n{2,}/);
-  const cues: string[] = [];
+  const cues: VimeoTranscriptCue[] = [];
 
   for (const block of blocks) {
     const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
     if (!lines.length || /^WEBVTT/i.test(lines[0]) || /^NOTE\b/i.test(lines[0])) continue;
+    const timestampLine = lines.find((line) => /-->\s*/.test(line));
+    const timestamp = timestampLine?.match(/(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?)\s*-->/)?.[1];
+    const startSeconds = timestamp ? parseTimestamp(timestamp) : null;
     const textLines = lines.filter((line) =>
       !/^\d+$/.test(line) &&
       !/^(?:\d+\s*)?\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?\s*-->\s*/.test(line),
@@ -99,14 +115,14 @@ function captionTextToTranscript(captionText: string): string {
       .replace(/&gt;/gi, ">")
       .replace(/\s+/g, " ")
       .trim();
-    if (text && text !== cues.at(-1)) cues.push(text);
+    if (text && startSeconds !== null && text !== cues.at(-1)?.text) cues.push({ startSeconds, text });
   }
 
   const paragraphs: string[] = [];
   for (let index = 0; index < cues.length; index += 8) {
-    paragraphs.push(cues.slice(index, index + 8).join(" ").replace(/\s+([,.!?;:])/g, "$1").trim());
+    paragraphs.push(cues.slice(index, index + 8).map((cue) => cue.text).join(" ").replace(/\s+([,.!?;:])/g, "$1").trim());
   }
-  return paragraphs.filter(Boolean).join("\n\n");
+  return { text: paragraphs.filter(Boolean).join("\n\n"), cues };
 }
 
 export async function listVimeoTextTracks(videoId: string): Promise<VimeoTextTrack[]> {
@@ -127,6 +143,7 @@ export async function fetchVimeoTranscript(videoId: string, trackId: string): Pr
   text: string;
   language: string;
   name: string;
+  cues: VimeoTranscriptCue[];
 }> {
   const tracks = await listVimeoTextTracks(videoId);
   const track = tracks.find((candidate) => candidate.id === trackId);
@@ -137,9 +154,9 @@ export async function fetchVimeoTranscript(videoId: string, trackId: string): Pr
   });
   if (!response.ok) throw new Error(`Vimeo transcript download failed (${response.status})`);
   const raw = await response.text();
-  const text = captionTextToTranscript(raw);
+  const { text, cues } = captionTextToTranscript(raw);
   if (!text) throw new Error("Vimeo returned an empty transcript");
-  return { text, language: track.language, name: track.name };
+  return { text, language: track.language, name: track.name, cues };
 }
 
 export interface VimeoFolder {

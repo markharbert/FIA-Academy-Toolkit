@@ -2191,6 +2191,8 @@ export const courseLessons = pgTable("course_lessons", {
   transcriptLanguage: text("transcript_language"),
   transcriptSource: text("transcript_source"),
   transcriptUpdatedAt: timestamp("transcript_updated_at"),
+  transcriptCues: jsonb("transcript_cues").$type<LessonTranscriptCue[]>(),
+  transcriptChapters: jsonb("transcript_chapters").$type<LessonChapter[]>(),
   content: text("content"), // TipTap HTML
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   durationMinutes: integer("duration_minutes"),
@@ -2199,6 +2201,8 @@ export const courseLessons = pgTable("course_lessons", {
   createdAt: timestamp("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+export type LessonTranscriptCue = { startSeconds: number; text: string };
+export type LessonChapter = { startSeconds: number; title: string };
 export type CourseLesson = typeof courseLessons.$inferSelect;
 export type InsertCourseLesson = typeof courseLessons.$inferInsert;
 export const insertCourseLessonSchema = createInsertSchema(courseLessons).omit({ id: true, createdAt: true, updatedAt: true });

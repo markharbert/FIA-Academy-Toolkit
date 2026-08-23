@@ -894,7 +894,9 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS transcript_text TEXT,
         ADD COLUMN IF NOT EXISTS transcript_language TEXT,
         ADD COLUMN IF NOT EXISTS transcript_source TEXT,
-        ADD COLUMN IF NOT EXISTS transcript_updated_at TIMESTAMP
+        ADD COLUMN IF NOT EXISTS transcript_updated_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS transcript_cues JSONB,
+        ADD COLUMN IF NOT EXISTS transcript_chapters JSONB
     `);
     console.log("[startup] course_lessons transcript columns migration complete");
 

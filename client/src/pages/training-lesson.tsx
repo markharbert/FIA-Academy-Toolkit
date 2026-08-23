@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, ExternalLink, Link,
@@ -40,10 +40,16 @@ type LessonDetail = {
   title: string;
   videoUrl: string | null;
   transcriptText: string | null;
+  transcriptChapters: LessonChapter[] | null;
   content: string | null;
   status: string;
   durationMinutes: number | null;
   resources: Resource[];
+};
+
+type LessonChapter = {
+  startSeconds: number;
+  title: string;
 };
 
 type CourseLesson = {
@@ -94,7 +100,10 @@ function getEmbedUrl(videoUrl: string): string | null {
     try {
       const url = new URL(videoUrl);
       const vimeoId = url.pathname.match(/(?:^|\/)(?:video\/)?(\d+)(?:\/|$)/)?.[1];
-      return vimeoId ? `https://player.vimeo.com/video/${vimeoId}${url.search}` : null;
+      if (!vimeoId) return null;
+      const params = new URLSearchParams(url.search);
+      params.set("api", "1");
+      return `https://player.vimeo.com/video/${vimeoId}?${params.toString()}`;
     } catch {
       return null;
     }
@@ -102,11 +111,23 @@ function getEmbedUrl(videoUrl: string): string | null {
   return null;
 }
 
+function formatTimestamp(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remaining = (total % 60).toString().padStart(2, "0");
+  return hours
+    ? `${hours}:${minutes.toString().padStart(2, "0")}:${remaining}`
+    : `${minutes}:${remaining}`;
+}
+
 export default function TrainingLessonPage() {
   const { courseId, lessonId } = useParams<{ courseId: string; lessonId: string }>();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
+  const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
 
   // Load course structure (for sidebar nav + prev/next)
   const { data: courseData, isError: isCourseError } = useQuery<CourseStructure>({
@@ -151,6 +172,20 @@ export default function TrainingLessonPage() {
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const embedUrl = lesson?.videoUrl ? getEmbedUrl(lesson.videoUrl) : null;
+  const isVimeoLesson = !!lesson?.videoUrl?.includes("vimeo.com");
+  const chapters = lesson?.transcriptChapters ?? [];
+
+  useEffect(() => {
+    setTranscriptOpen(false);
+    setTranscriptTab("chapters");
+  }, [lessonId]);
+
+  const seekToChapter = (startSeconds: number) => {
+    const player = vimeoPlayerRef.current;
+    if (!player?.contentWindow || !isVimeoLesson) return;
+    player.contentWindow.postMessage(JSON.stringify({ method: "setCurrentTime", value: startSeconds }), "https://player.vimeo.com");
+    player.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
   // Find current module for breadcrumb
   const currentModule = courseData?.modules.find((m) =>
@@ -345,6 +380,7 @@ export default function TrainingLessonPage() {
                 style={{ background: "#0f172a" }}
               >
                 <iframe
+                  ref={isVimeoLesson ? vimeoPlayerRef : undefined}
                   src={embedUrl}
                   className="w-full h-full"
                   allowFullScreen
@@ -362,13 +398,68 @@ export default function TrainingLessonPage() {
                 >
                   <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: "#1e3a8a" }}>
                     <FileText className="h-4 w-4" />
-                    View Transcript
+                    View Chapters / Transcript
                   </span>
                   <ChevronDown className={cn("h-4 w-4 transition-transform", transcriptOpen && "rotate-180")} style={{ color: "#1e3a8a" }} />
                 </button>
                 {transcriptOpen && (
-                  <div className="border-t px-5 py-4 text-[14px] leading-7 whitespace-pre-wrap" style={{ borderColor: "#dbeafe", color: "#374151", background: "#ffffff" }}>
-                    {lesson.transcriptText}
+                  <div className="border-t" style={{ borderColor: "#dbeafe", background: "#ffffff" }}>
+                    <div className="flex gap-1 border-b px-4 pt-3" style={{ borderColor: "#e5eefc" }} role="tablist" aria-label="Lesson transcript">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={transcriptTab === "chapters"}
+                        onClick={() => setTranscriptTab("chapters")}
+                        className="rounded-t-md px-3 py-2 text-[12px] font-semibold transition-colors"
+                        style={transcriptTab === "chapters"
+                          ? { background: "#eff6ff", color: "#1e3a8a", border: "1px solid #dbeafe", borderBottomColor: "#eff6ff" }
+                          : { color: "#6b7280" }}
+                      >
+                        Chapters
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={transcriptTab === "transcript"}
+                        onClick={() => setTranscriptTab("transcript")}
+                        className="rounded-t-md px-3 py-2 text-[12px] font-semibold transition-colors"
+                        style={transcriptTab === "transcript"
+                          ? { background: "#eff6ff", color: "#1e3a8a", border: "1px solid #dbeafe", borderBottomColor: "#eff6ff" }
+                          : { color: "#6b7280" }}
+                      >
+                        Transcript
+                      </button>
+                    </div>
+                    {transcriptTab === "chapters" ? (
+                      <div className="p-3">
+                        {chapters.length > 0 ? (
+                          <div className="space-y-1">
+                            {chapters.map((chapter) => (
+                              <button
+                                key={`${chapter.startSeconds}-${chapter.title}`}
+                                type="button"
+                                onClick={() => seekToChapter(chapter.startSeconds)}
+                                disabled={!isVimeoLesson}
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors enabled:hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span className="w-10 shrink-0 font-mono text-[12px] font-semibold" style={{ color: "#2563eb" }}>
+                                  {formatTimestamp(chapter.startSeconds)}
+                                </span>
+                                <span className="text-[13px] font-medium" style={{ color: "#374151" }}>{chapter.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="px-2 py-3 text-[13px]" style={{ color: "#6b7280" }}>
+                            Chapters have not been created for this lesson yet.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="px-5 py-4 text-[14px] leading-7 whitespace-pre-wrap" style={{ color: "#374151" }}>
+                        {lesson.transcriptText}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

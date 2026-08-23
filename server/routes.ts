@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints } from "./ai";
+import { transcribeAudio, transcribeAudioWhisper, scoreTranscript, generateTitle, generateDmoSummary, generateBulletPoints, generateLessonChapters } from "./ai";
 import { convertToMp4, generateThumbnail, extractAudio, probeVideo, faststartMp4, prepareTeleprompterMp4, SUPPORTED_VIDEO_EXTENSIONS, SUPPORTED_VIDEO_MIMETYPES } from "./ffmpeg";
 import { signupSchema, loginSchema, goalTypes, type GoalType, forgotPasswordSchema, resetPasswordSchema, type AuthProvider, updateAccountSchema, dmoEntryDataSchema, type CompetitorSeedAddress, insertProjectSchema, insertProjectTaskSchema, updateProjectTaskSchema, insertTaskCommentSchema, updateTaskCommentSchema, insertProjectTemplateSchema, insertProjectTemplateTaskSchema, updateProjectTemplateTaskSchema, insertProjectColumnSchema, insertCannedResponseSchema, insertAnnouncementSchema, insertAffiliateLinkSchema } from "@shared/schema";
 import { safeTimezone, todayKeyInTz, dueHasTime } from "@shared/datetime";
@@ -13718,6 +13718,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
         transcriptLanguage: transcript.language || null,
         transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
         transcriptUpdatedAt: new Date(),
+        transcriptCues: transcript.cues,
+        transcriptChapters: null,
       });
       res.json(saved);
     } catch (e) {
@@ -13732,7 +13734,45 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     const filename = `${lesson.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "lesson"}-transcript.txt`;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.send(`${lesson.title}\n\n${lesson.transcriptText}\n`);
+    const chapters = Array.isArray(lesson.transcriptChapters) ? lesson.transcriptChapters : [];
+    const formatTime = (seconds: number) => {
+      const total = Math.max(0, Math.floor(seconds));
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const remaining = (total % 60).toString().padStart(2, "0");
+      return hours ? `${hours}:${minutes.toString().padStart(2, "0")}:${remaining}` : `${minutes}:${remaining}`;
+    };
+    const chapterText = chapters.length
+      ? `Chapters\n${chapters.map((chapter) => `${formatTime(chapter.startSeconds)} — ${chapter.title}`).join("\n")}\n\n`
+      : "";
+    res.send(`${lesson.title}\n\n${chapterText}Transcript\n${lesson.transcriptText}\n`);
+  });
+
+  app.post("/api/admin/lessons/:id/transcript-chapters", requireAdmin, async (req, res) => {
+    try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      if (!lesson?.transcriptText) return res.status(400).json({ message: "Import a Vimeo transcript before creating chapters." });
+      const videoId = lesson.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
+      if (!videoId) return res.status(400).json({ message: "Chapters are currently available for Vimeo lessons only." });
+
+      let cues = Array.isArray(lesson.transcriptCues) ? lesson.transcriptCues : [];
+      if (cues.length < 2) {
+        const tracks = await listVimeoTextTracks(videoId);
+        const track = tracks.find((candidate) => candidate.language === lesson.transcriptLanguage) ?? tracks[0];
+        if (!track) return res.status(400).json({ message: "Vimeo has no caption track available to anchor chapter links." });
+        const refreshed = await fetchVimeoTranscript(videoId, track.id);
+        cues = refreshed.cues;
+      }
+      const chapters = await generateLessonChapters(cues);
+      const saved = await storage.updateCourseLesson(req.params.id, {
+        transcriptCues: cues,
+        transcriptChapters: chapters,
+      });
+      res.json(saved);
+    } catch (e) {
+      console.error("[Vimeo transcript chapters]", e);
+      res.status(502).json({ message: e instanceof Error ? e.message : "Could not create transcript chapters." });
+    }
   });
 
   // Admin: delete lesson

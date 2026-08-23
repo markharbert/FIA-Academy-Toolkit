@@ -18,6 +18,59 @@ const openai = new OpenAI({
 
 const MAX_INLINE_SIZE = 15 * 1024 * 1024; // 15MB threshold for inline vs File API
 
+export type GeneratedLessonChapter = { startSeconds: number; title: string };
+
+export async function generateLessonChapters(
+  cues: Array<{ startSeconds: number; text: string }>,
+): Promise<GeneratedLessonChapter[]> {
+  if (cues.length < 2) throw new Error("This transcript does not include enough timestamped captions to create chapters.");
+  const cueLines = cues
+    .map((cue) => {
+      const minutes = Math.floor(cue.startSeconds / 60);
+      const seconds = Math.floor(cue.startSeconds % 60).toString().padStart(2, "0");
+      return `[${minutes}:${seconds}] ${cue.text}`;
+    })
+    .join("\n")
+    .slice(0, 48_000);
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.1",
+    messages: [
+      {
+        role: "system",
+        content: "Create concise, useful navigation chapters for a lesson video. Choose 3 to 10 genuine topic shifts. Only use startSeconds values that appear in the supplied timestamped captions. Titles must be 3 to 60 characters, clear, and in title case.",
+      },
+      {
+        role: "user",
+        content: `Return JSON only as {"chapters":[{"startSeconds":0,"title":"..."}]}.\n\nTimestamped transcript:\n${cueLines}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    max_completion_tokens: 900,
+    temperature: 0.2,
+  });
+  const raw = response.choices[0]?.message?.content;
+  if (!raw) throw new Error("AI did not return chapter suggestions.");
+  const parsed = JSON.parse(raw) as { chapters?: unknown };
+  if (!Array.isArray(parsed.chapters)) throw new Error("AI returned an invalid chapter format.");
+
+  const validStarts = [...new Set(cues.map((cue) => Math.round(cue.startSeconds)))].sort((a, b) => a - b);
+  const chapters: GeneratedLessonChapter[] = [];
+  for (const candidate of parsed.chapters) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const { startSeconds, title } = candidate as { startSeconds?: unknown; title?: unknown };
+    if (typeof startSeconds !== "number" || typeof title !== "string") continue;
+    const nearestStart = validStarts.reduce((nearest, value) =>
+      Math.abs(value - startSeconds) < Math.abs(nearest - startSeconds) ? value : nearest,
+    validStarts[0]);
+    const cleanedTitle = title.replace(/\s+/g, " ").trim().replace(/^["']|["']$/g, "").slice(0, 60);
+    if (!cleanedTitle || chapters.some((chapter) => chapter.startSeconds === nearestStart)) continue;
+    chapters.push({ startSeconds: nearestStart, title: cleanedTitle });
+  }
+  const sorted = chapters.sort((a, b) => a.startSeconds - b.startSeconds).slice(0, 10);
+  if (!sorted.length) throw new Error("AI did not return usable chapter suggestions.");
+  return sorted;
+}
+
 export async function transcribeAudio(audioPath: string): Promise<string> {
   const absolutePath = path.resolve(audioPath);
   const audioBuffer = fs.readFileSync(absolutePath);
