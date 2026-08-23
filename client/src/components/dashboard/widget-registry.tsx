@@ -83,12 +83,42 @@ export const SIZE_LABELS: Record<WidgetSize, string> = {
   "full":       "Full width",
 };
 
-/** Merge a saved layout with the default — adds any new widget IDs not yet in saved. */
-export function mergeLayout(saved: WidgetConfig[] | null | undefined): WidgetConfig[] {
-  if (!saved || saved.length === 0) return DEFAULT_LAYOUT;
-  const savedIds = new Set(saved.map((w) => w.id));
-  const newWidgets = DEFAULT_LAYOUT.filter((w) => !savedIds.has(w.id));
-  return [...saved, ...newWidgets];
+/** Merge a saved layout with the default — safely ignores stale or malformed saved entries. */
+export function mergeLayout(saved: unknown): WidgetConfig[] {
+  if (!Array.isArray(saved) || saved.length === 0) {
+    return DEFAULT_LAYOUT.map((widget) => ({ ...widget }));
+  }
+
+  const defaultsById = new Map(DEFAULT_LAYOUT.map((widget) => [widget.id, widget]));
+  const validSizes = new Set<WidgetSize>(["third", "half", "two-thirds", "full"]);
+  const seenIds = new Set<WidgetId>();
+  const normalized: WidgetConfig[] = [];
+
+  for (const entry of saved) {
+    if (!entry || typeof entry !== "object") continue;
+
+    const candidate = entry as Partial<WidgetConfig>;
+    const defaultWidget = typeof candidate.id === "string"
+      ? defaultsById.get(candidate.id as WidgetId)
+      : undefined;
+
+    if (!defaultWidget || seenIds.has(defaultWidget.id)) continue;
+
+    seenIds.add(defaultWidget.id);
+    normalized.push({
+      id: defaultWidget.id,
+      visible: typeof candidate.visible === "boolean" ? candidate.visible : defaultWidget.visible,
+      size: typeof candidate.size === "string" && validSizes.has(candidate.size as WidgetSize)
+        ? candidate.size as WidgetSize
+        : defaultWidget.size,
+    });
+  }
+
+  const newWidgets = DEFAULT_LAYOUT
+    .filter((widget) => !seenIds.has(widget.id))
+    .map((widget) => ({ ...widget }));
+
+  return [...normalized, ...newWidgets];
 }
 
 // ─── Shared presentational components ─────────────────────────────────────────

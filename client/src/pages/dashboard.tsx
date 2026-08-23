@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo, useLayoutEffect } from "react";
+import { Component, useState, useEffect, useRef, useCallback, memo, useLayoutEffect, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -139,6 +139,43 @@ const WidgetRenderer = memo(function WidgetRenderer({ id }: { id: WidgetId }) {
   }
 });
 
+class WidgetErrorBoundary extends Component<
+  { children: ReactNode; widgetId: WidgetId },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error(`[Dashboard] ${this.props.widgetId} widget failed to render:`, error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-[160px] w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-5 text-center">
+          <p className="text-sm text-muted-foreground">
+            This dashboard widget could not load. The rest of your dashboard is still available.
+          </p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function SafeWidgetRenderer({ id }: { id: WidgetId }) {
+  return (
+    <WidgetErrorBoundary key={id} widgetId={id}>
+      <WidgetRenderer id={id} />
+    </WidgetErrorBoundary>
+  );
+}
+
 // ─── Ghost slot (hidden widget placeholder) ──────────────────────────────────
 // Defined at module level so React never treats it as a new component type
 // between renders — avoiding unmount/remount flicker during drag.
@@ -266,7 +303,7 @@ function SortableWidget({
       {/* Subtle violet ring to show edit state */}
       <div className="rounded-xl ring-2 ring-violet-400/40 ring-offset-1 pointer-events-none absolute inset-0 z-10" />
 
-      <WidgetRenderer id={config.id} />
+      <SafeWidgetRenderer id={config.id} />
     </div>
   );
 }
@@ -781,7 +818,7 @@ export default function DashboardPage() {
                       className={`${SIZE_CLASSES[config.size]} flex flex-col`}
                       data-testid={`widget-cell-${config.id}`}
                     >
-                      <WidgetRenderer id={config.id} />
+                      <SafeWidgetRenderer id={config.id} />
                     </div>
                   );
                 }
@@ -830,7 +867,7 @@ export default function DashboardPage() {
                       }}
                       className="opacity-90 shadow-2xl rounded-xl rotate-1 scale-[1.02] pointer-events-none"
                     >
-                      <WidgetRenderer id={activeWidgetId} />
+                      <SafeWidgetRenderer id={activeWidgetId} />
                     </div>
                   ) : null}
                 </DragOverlay>

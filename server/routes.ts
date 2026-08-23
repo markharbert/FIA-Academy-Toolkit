@@ -54,6 +54,43 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
 });
 
+const dashboardWidgetIds = [
+  "projects",
+  "email-health",
+  "dmo-streak",
+  "inbox-analyzer",
+  "competitor-pulse",
+  "recent-activity",
+  "video-score",
+  "topic-pulse",
+  "scripts",
+  "youtube-analytics",
+  "search-console",
+  "funnel-board",
+  "quick-actions",
+] as const;
+
+const dashboardLayoutSchema = z
+  .array(z.object({
+    id: z.enum(dashboardWidgetIds),
+    visible: z.boolean(),
+    size: z.enum(["third", "half", "two-thirds", "full"]),
+  }))
+  .max(dashboardWidgetIds.length)
+  .superRefine((layout, context) => {
+    const seen = new Set<string>();
+    layout.forEach((widget, index) => {
+      if (seen.has(widget.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate dashboard widget: ${widget.id}`,
+          path: [index, "id"],
+        });
+      }
+      seen.add(widget.id);
+    });
+  });
+
 async function fetchMicrolinkScreenshotUrl(url: string): Promise<string | null> {
   try {
     const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false`;
@@ -10087,11 +10124,11 @@ Keep it concise (3-4 sentences max). Be specific about what commenters are sayin
 
   app.patch("/api/dashboard/layout", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { layout } = req.body;
-      if (!Array.isArray(layout)) {
-        return res.status(400).json({ message: "layout must be an array" });
+      const parsed = dashboardLayoutSchema.safeParse(req.body?.layout);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid dashboard layout" });
       }
-      await storage.updateUser(req.session.userId!, { dashboardLayout: layout } as any);
+      await storage.updateUser(req.session.userId!, { dashboardLayout: parsed.data } as any);
       return res.json({ ok: true });
     } catch (err) {
       console.error("[dashboard] layout save error:", err);
