@@ -10,6 +10,7 @@ import DOMPurify from "dompurify";
 import { cn } from "@/lib/utils";
 import { buildCourseModuleTree, flattenCourseModuleTree, type CourseModuleTree } from "@shared/course-structure";
 import { CourseIcon } from "@/lib/course-icons";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** Restrict resource/video URLs to http(s) only — prevents javascript: hrefs. */
 function safeHref(url: string | null | undefined): string {
@@ -289,7 +290,7 @@ export default function TrainingLessonPage() {
 
       {module.lessons.map((lesson) => {
         const isActive = lesson.id === lessonId;
-        return (
+        const lessonButton = (
           <button
             key={lesson.id}
             onClick={() => setLocation(`/training/${courseId}/lessons/${lesson.id}`)}
@@ -312,6 +313,14 @@ export default function TrainingLessonPage() {
             {!collapsed && <span className="whitespace-normal break-words text-[12px] leading-snug">{lesson.title}</span>}
           </button>
         );
+        return collapsed ? (
+          <Tooltip key={lesson.id}>
+            <TooltipTrigger asChild>{lessonButton}</TooltipTrigger>
+            <TooltipContent side="right" className="max-w-xs">
+              {lesson.title}
+            </TooltipContent>
+          </Tooltip>
+        ) : lessonButton;
       })}
       {module.children.map((child) => renderModuleNavigation(child, depth + 1, collapsed))}
     </div>
@@ -420,9 +429,11 @@ export default function TrainingLessonPage() {
         </div>
 
         {/* Module / lesson tree */}
-        <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
-           {moduleTree.map((module) => renderModuleNavigation(module))}
-        </nav>
+        <TooltipProvider delayDuration={200}>
+          <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
+            {moduleTree.map((module) => renderModuleNavigation(module))}
+          </nav>
+        </TooltipProvider>
       </aside>
 
       {/* ── Lesson content ─────────────────────────────────────────────────── */}
