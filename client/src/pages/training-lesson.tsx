@@ -182,6 +182,30 @@ export default function TrainingLessonPage() {
   const isVimeoLesson = !!lesson?.videoUrl?.includes("vimeo.com");
   const chapters = lesson?.transcriptChapters ?? [];
   const transcriptCues = lesson?.transcriptCues ?? [];
+  const activeCueIndex = transcriptCues.findIndex((cue, index) => {
+    const nextCue = transcriptCues[index + 1];
+    const cueEnd = nextCue?.startSeconds ?? cue.startSeconds + 8;
+    return videoCurrentTime >= cue.startSeconds && videoCurrentTime < cueEnd;
+  });
+  const activeCue = activeCueIndex >= 0 ? transcriptCues[activeCueIndex] : null;
+  const activeCueNextStart = activeCueIndex >= 0
+    ? (transcriptCues[activeCueIndex + 1]?.startSeconds ?? activeCue!.startSeconds + 8)
+    : 0;
+  const activeCueWords = activeCue?.text.trim().split(/\s+/).filter(Boolean) ?? [];
+  const activeWordInCue = activeCue
+    ? Math.min(
+        activeCueWords.length - 1,
+        Math.floor(
+          Math.min(0.999, Math.max(0, (videoCurrentTime - activeCue.startSeconds) / Math.max(0.1, activeCueNextStart - activeCue.startSeconds))) *
+            activeCueWords.length,
+        ),
+      )
+    : -1;
+  const activeWordIndex = activeCue
+    ? transcriptCues
+        .slice(0, activeCueIndex)
+        .reduce((count, cue) => count + cue.text.trim().split(/\s+/).filter(Boolean).length, 0) + activeWordInCue
+    : -1;
 
   useEffect(() => {
     setTranscriptOpen(false);
@@ -499,45 +523,28 @@ export default function TrainingLessonPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="px-5 py-4 text-[14px] leading-7" style={{ color: "#374151" }}>
-                        {transcriptCues.length > 0 ? (
-                          <div className="space-y-3">
-                            {transcriptCues.map((cue, cueIndex) => {
-                              const nextCue = transcriptCues[cueIndex + 1];
-                              const cueEnd = nextCue?.startSeconds ?? cue.startSeconds + 8;
-                              const isActiveCue = videoCurrentTime >= cue.startSeconds && videoCurrentTime < cueEnd;
-                              const words = cue.text.trim().split(/\s+/).filter(Boolean);
-                              const cueProgress = isActiveCue
-                                ? Math.min(0.999, Math.max(0, (videoCurrentTime - cue.startSeconds) / Math.max(0.1, cueEnd - cue.startSeconds)))
-                                : 0;
-                              const activeWordIndex = isActiveCue
-                                ? Math.min(words.length - 1, Math.floor(cueProgress * words.length))
+                      <div className="px-5 py-4 text-[14px] leading-7 whitespace-pre-wrap" style={{ color: "#374151" }}>
+                        {transcriptCues.length > 0
+                          ? lesson.transcriptText.split(/(\s+)/).map((token, index) => {
+                              const isWord = !/^\s+$/.test(token);
+                              const wordIndex = isWord
+                                ? lesson.transcriptText
+                                    .split(/(\s+)/)
+                                    .slice(0, index)
+                                    .filter((part) => part && !/^\s+$/.test(part)).length
                                 : -1;
-
                               return (
-                                <p key={`${cue.startSeconds}-${cue.text}`} className={cn(
-                                  "rounded-md px-2 py-1.5 transition-colors",
-                                  isActiveCue && "bg-amber-50",
-                                )}>
-                                  {words.map((word, wordIndex) => (
-                                    <span key={`${cue.startSeconds}-${wordIndex}`}>
-                                      {wordIndex > 0 ? " " : ""}
-                                      <span
-                                        className={cn(
-                                          isActiveCue && wordIndex === activeWordIndex && "rounded-sm bg-yellow-300 px-0.5 text-gray-900 shadow-sm",
-                                        )}
-                                      >
-                                        {word}
-                                      </span>
-                                    </span>
-                                  ))}
-                                </p>
+                                <span
+                                  key={index}
+                                  className={isWord && wordIndex === activeWordIndex
+                                    ? "rounded-sm bg-yellow-300 px-0.5 text-gray-900 shadow-sm"
+                                    : undefined}
+                                >
+                                  {token}
+                                </span>
                               );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="whitespace-pre-wrap">{lesson.transcriptText}</span>
-                        )}
+                            })
+                          : lesson.transcriptText}
                       </div>
                     )}
                     </div>
