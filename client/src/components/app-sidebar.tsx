@@ -260,9 +260,6 @@ function isGroupActive(item: NavItem, location: string): boolean {
 }
 
 type PublishedCourse = { id: string; title: string; slug: string; status: string };
-type CourseLesson = { id: string; title: string; completed: boolean };
-type CourseModule = { id: string; title: string; lessons: CourseLesson[] };
-type CourseStructure = { course: PublishedCourse; modules: CourseModule[] };
 
 export function AppSidebar() {
   const { user, logout } = useAuth();
@@ -273,10 +270,9 @@ export function AppSidebar() {
     ? allNavItems.filter((item) => item.collaboratorVisible)
     : allNavItems.filter((item) => !item.adminOnly || user?.isAdmin);
 
-  // Training: extract active courseId/lessonId from URL
-  const trainingMatch = location.match(/^\/training\/([^/]+)(?:\/lessons\/([^/]+))?/);
+  // Training: extract active courseId from URL
+  const trainingMatch = location.match(/^\/training\/([^/]+)/);
   const activeCourseId = trainingMatch?.[1] ?? null;
-  const activeLessonId = trainingMatch?.[2] ?? null;
 
   // Fetch published courses for Training section (admins only — route requires admin)
   const { data: trainingCourses = [] } = useQuery<PublishedCourse[]>({
@@ -288,18 +284,6 @@ export function AppSidebar() {
     },
     enabled: !!user && !isCollaborator && !!user.isAdmin,
     staleTime: 60_000,
-  });
-
-  // Fetch active course structure when on a training page
-  const { data: activeCourseStructure } = useQuery<CourseStructure>({
-    queryKey: ["/api/training/courses", activeCourseId],
-    queryFn: async () => {
-      const res = await fetch(`/api/training/courses/${activeCourseId}`, { credentials: "include" });
-      if (!res.ok) return null;
-      return res.json();
-    },
-    enabled: !!activeCourseId,
-    staleTime: 30_000,
   });
 
   const handleLogout = async () => {
@@ -369,69 +353,18 @@ export function AppSidebar() {
                 <SidebarMenu>
                   {trainingCourses.map((course) => {
                     const isCourseActive = course.id === activeCourseId;
-                    const structure = isCourseActive ? activeCourseStructure : null;
                     return (
-                      <Collapsible key={course.id} open={isCourseActive}>
-                        <SidebarMenuItem>
-                          <SidebarMenuButton
-                            isActive={isCourseActive}
-                            tooltip={course.title}
-                            onClick={() => setLocation(`/training/${course.id}`)}
-                            className={isCourseActive ? "!bg-violet-500/15" : ""}
-                          >
-                            <GraduationCap className={isCourseActive ? undefined : "text-violet-400"} />
-                            <span className="truncate">{course.title}</span>
-                            {isCourseActive ? (
-                              <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground/60" />
-                            ) : (
-                              <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground/40" />
-                            )}
-                          </SidebarMenuButton>
-                          <CollapsibleContent>
-                            {structure && (
-                              <SidebarMenuSub className="!border-violet-500/30">
-                                {structure.modules.map((module) =>
-                                  module.lessons.map((lesson) => {
-                                    const isLessonActive = lesson.id === activeLessonId;
-                                    return (
-                                      <SidebarMenuSubItem key={lesson.id}>
-                                        <SidebarMenuSubButton
-                                          isActive={isLessonActive}
-                                          onClick={() =>
-                                            setLocation(
-                                              `/training/${course.id}/lessons/${lesson.id}`
-                                            )
-                                          }
-                                          style={{ cursor: "pointer" }}
-                                          className={
-                                            isLessonActive
-                                              ? "!bg-amber-500/15 !text-amber-200 font-medium"
-                                              : "text-white/55 hover:!text-white"
-                                          }
-                                        >
-                                          {lesson.completed ? (
-                                            <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
-                                          ) : (
-                                            <Circle
-                                              className={cn(
-                                                "h-3 w-3 shrink-0",
-                                                isLessonActive
-                                                  ? "text-amber-400"
-                                                  : "text-white/30"
-                                              )}
-                                            />
-                                          )}
-                                          <span className="truncate">{lesson.title}</span>
-                                        </SidebarMenuSubButton>
-                                      </SidebarMenuSubItem>
-                                    );
-                                  })
-                                )}
-                              </SidebarMenuSub>
-                            )}
-                          </CollapsibleContent>
-                        </SidebarMenuItem>
-                      </Collapsible>
+                      <SidebarMenuItem key={course.id}>
+                        <SidebarMenuButton
+                          isActive={isCourseActive}
+                          tooltip={course.title}
+                          onClick={() => setLocation(`/training/${course.id}`)}
+                          className={isCourseActive ? "!bg-violet-500/15" : ""}
+                        >
+                          <GraduationCap className={isCourseActive ? undefined : "text-violet-400"} />
+                          <span className="truncate">{course.title}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
                     );
                   })}
                 </SidebarMenu>
