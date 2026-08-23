@@ -381,28 +381,25 @@ export default function TrainingLessonPage() {
                       href={safeHref(r.url)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-3 rounded-xl px-4 py-3 transition-colors group"
+                      className="flex items-center gap-3 rounded-xl px-4 py-4 transition-colors group"
                       style={{ background: "#fff", border: "1px solid #e5e7eb", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}
                       onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#d1d5db")}
                       onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
                     >
                       <div
-                        className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
+                        className="h-11 w-11 rounded-lg flex items-center justify-center shrink-0"
                         style={{ background: "#f3f4f6" }}
                       >
                         {r.kind === "pdf" ? (
-                          <svg className="h-4 w-4" style={{ color: "#ef4444" }} viewBox="0 0 24 24" fill="currentColor">
+                          <svg className="h-7 w-7" style={{ color: "#ef4444" }} viewBox="0 0 24 24" fill="currentColor">
                             <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" />
                           </svg>
                         ) : (
-                          <Link className="h-4 w-4" style={{ color: "#6b7280" }} />
+                          <Link className="h-5 w-5" style={{ color: "#6b7280" }} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium truncate" style={{ color: "#111827" }}>{r.name}</p>
-                        <p className="text-[11px]" style={{ color: "#9ca3af" }}>
-                          {r.kind === "pdf" ? "PDF document" : "External link"}
-                        </p>
                       </div>
                       <ExternalLink className="h-4 w-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: "#9ca3af" }} />
                     </a>
