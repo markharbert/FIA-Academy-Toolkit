@@ -466,7 +466,7 @@ export default function TrainingLessonPage() {
               </div>
             )}
             {lesson.transcriptText && (
-              <div className="mb-8 overflow-hidden rounded-xl" style={{ border: "1px solid #dbeafe", background: "#f5f9ff" }}>
+              <div className="mx-auto mb-8 mt-8 max-w-[680px] overflow-hidden rounded-xl" style={{ border: "1px solid #dbeafe", background: "#f5f9ff" }}>
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
