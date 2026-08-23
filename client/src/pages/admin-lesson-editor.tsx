@@ -129,6 +129,8 @@ export default function AdminLessonEditorPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [newResource, setNewResource] = useState({ name: "", url: "", kind: "link" as "link" | "pdf" });
   const [showAddResource, setShowAddResource] = useState(false);
+  const [vimeoPickerOpen, setVimeoPickerOpen] = useState(false);
+  const [selectedVimeoFolderId, setSelectedVimeoFolderId] = useState("all");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef({ title: "", videoUrl: "", content: "" });
   const revisionRef = useRef(0);
@@ -140,6 +142,22 @@ export default function AdminLessonEditorPage() {
   const { data: lesson, isLoading } = useQuery<LessonWithResources>({
     queryKey: ["/api/admin/lessons", lessonId],
     queryFn: () => apiFetch(`/api/admin/lessons/${lessonId}?courseId=${encodeURIComponent(courseId)}`),
+  });
+
+  const { data: vimeoFoldersData, isLoading: vimeoFoldersLoading, error: vimeoFoldersError } = useQuery<{
+    folders: VimeoFolder[];
+  }>({
+    queryKey: ["/api/admin/vimeo/folders"],
+    queryFn: () => apiFetch("/api/admin/vimeo/folders"),
+    enabled: vimeoPickerOpen,
+  });
+
+  const { data: vimeoVideosData, isLoading: vimeoVideosLoading, error: vimeoVideosError } = useQuery<{
+    videos: VimeoPickerVideo[];
+  }>({
+    queryKey: ["/api/admin/vimeo/folders", selectedVimeoFolderId, "videos"],
+    queryFn: () => apiFetch(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos`),
+    enabled: vimeoPickerOpen && !!selectedVimeoFolderId,
   });
 
   // Populate only when navigating to another lesson. Refetching after a save
@@ -248,6 +266,12 @@ export default function AdminLessonEditorPage() {
     }, 2000);
   };
 
+  const selectVimeoVideo = (video: VimeoPickerVideo) => {
+    handleChange("videoUrl", video.url);
+    setVimeoPickerOpen(false);
+    toast({ title: "Vimeo video selected", description: video.name });
+  };
+
   const saveNow = () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     void saveCurrentDraft(revisionRef.current);
@@ -341,11 +365,26 @@ export default function AdminLessonEditorPage() {
             {!videoProvider && <Link className="h-4 w-4 text-muted-foreground" />}
             Video URL
           </Label>
-          <Input
-            placeholder="https://youtube.com/watch?v=... or https://vimeo.com/..."
-            value={videoUrl}
-            onChange={(e) => handleChange("videoUrl", e.target.value)}
-          />
+          <div className="flex gap-2">
+            <Input
+              placeholder="https://youtube.com/watch?v=... or https://vimeo.com/..."
+              value={videoUrl}
+              onChange={(e) => handleChange("videoUrl", e.target.value)}
+              className="min-w-0 flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 gap-1.5"
+              onClick={() => {
+                setSelectedVimeoFolderId("all");
+                setVimeoPickerOpen(true);
+              }}
+            >
+              <Film className="h-4 w-4 text-blue-500" />
+              Choose Vimeo
+            </Button>
+          </div>
           {videoUrl && videoProvider && (
             <div className="mt-3">
               <VideoPreview url={videoUrl} />
@@ -516,6 +555,101 @@ export default function AdminLessonEditorPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={vimeoPickerOpen} onOpenChange={setVimeoPickerOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Film className="h-5 w-5 text-blue-500" />
+              Choose a Vimeo video
+            </DialogTitle>
+            <DialogDescription>
+              Choose a folder, then select the video to use for this lesson.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)]">
+            <div className="space-y-1 rounded-md border bg-muted/20 p-2">
+              <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Folders
+              </p>
+              <Button
+                type="button"
+                variant={selectedVimeoFolderId === "all" ? "secondary" : "ghost"}
+                className="w-full justify-start gap-2"
+                onClick={() => setSelectedVimeoFolderId("all")}
+              >
+                <Folder className="h-4 w-4" />
+                All videos
+              </Button>
+              {vimeoFoldersLoading ? (
+                <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading folders…
+                </div>
+              ) : vimeoFoldersError ? (
+                <p className="px-2 py-3 text-xs text-muted-foreground">
+                  Folders are unavailable for this Vimeo token. You can still choose from all videos.
+                </p>
+              ) : (
+                (vimeoFoldersData?.folders ?? []).map((folder) => (
+                  <Button
+                    key={folder.id}
+                    type="button"
+                    variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
+                    className="w-full justify-start gap-2 text-left"
+                    onClick={() => setSelectedVimeoFolderId(folder.id)}
+                  >
+                    <Folder className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{folder.name}</span>
+                  </Button>
+                ))
+              )}
+            </div>
+
+            <div className="min-w-0">
+              {vimeoVideosLoading ? (
+                <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading videos…
+                </div>
+              ) : vimeoVideosError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  {(vimeoVideosError as Error).message || "Unable to load Vimeo videos."}
+                </div>
+              ) : (vimeoVideosData?.videos ?? []).length === 0 ? (
+                <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+                  No videos in this folder.
+                </div>
+              ) : (
+                <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+                  {(vimeoVideosData?.videos ?? []).map((video) => (
+                    <button
+                      key={video.id}
+                      type="button"
+                      className="flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring"
+                      onClick={() => selectVimeoVideo(video)}
+                    >
+                      {video.thumbnailUrl ? (
+                        <img
+                          src={video.thumbnailUrl}
+                          alt=""
+                          className="h-12 w-20 rounded object-cover bg-muted"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-20 items-center justify-center rounded bg-muted">
+                          <Film className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{video.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

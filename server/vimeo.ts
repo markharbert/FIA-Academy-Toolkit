@@ -58,7 +58,7 @@ function resourceId(uri: unknown): string | null {
 export async function listVimeoProjects(): Promise<Array<{ id: string; name: string }>> {
   if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
   const projects: Array<{ id: string; name: string }> = [];
-  let nextUrl: string | null = "https://api.vimeo.com/me/projects?per_page=100&page=1";
+  let nextUrl: string | null = "https://api.vimeo.com/me/folders?per_page=100&page=1";
 
   for (let page = 0; nextUrl && page < 25; page++) {
     const payload = await vimeoGet(nextUrl);
@@ -77,7 +77,7 @@ export async function listVimeoProjects(): Promise<Array<{ id: string; name: str
 export async function listVimeoVideos(projectId?: string): Promise<VimeoVideo[]> {
   if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
   const path = projectId
-    ? `/me/projects/${encodeURIComponent(projectId)}/videos?per_page=100&page=1`
+    ? `/me/folders/${encodeURIComponent(projectId)}/videos?per_page=100&page=1`
     : `/me/videos?per_page=100&page=1`;
   const videos: VimeoVideo[] = [];
   let nextUrl: string | null = path;
@@ -99,29 +99,4 @@ export async function listVimeoVideos(projectId?: string): Promise<VimeoVideo[]>
     nextUrl = typeof payload?.paging?.next === "string" ? payload.paging.next : null;
   }
   return videos;
-}
-
-export function normalizeVideoTitle(title: string): string {
-  return title
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
-/**
- * Match only a unique exact normalized title. A fuzzy match could silently
- * attach the wrong lesson when a library contains multiple similar videos.
- */
-export function matchVimeoVideoForLesson(
-  lessonTitle: string,
-  videos: VimeoVideo[],
-): VimeoVideo | null {
-  const normalizedTitle = normalizeVideoTitle(lessonTitle);
-  if (!normalizedTitle) return null;
-  const matches = videos.filter((video) => normalizeVideoTitle(video.name) === normalizedTitle);
-  const uniqueMatches = new Map(matches.map((video) => [video.url, video]));
-  return uniqueMatches.size === 1 ? [...uniqueMatches.values()][0] : null;
 }
