@@ -117,6 +117,20 @@ export default function AdminCourseOutlinePage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/courses", id, "structure"] });
 
+  const updateCourse = useMutation({
+    mutationFn: (title: string) =>
+      apiFetch(`/api/admin/courses/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses"] });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   const togglePublishCourse = useMutation({
     mutationFn: () =>
       apiFetch(`/api/admin/courses/${id}`, {
@@ -233,7 +247,11 @@ export default function AdminCourseOutlinePage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold truncate">{course.title}</h1>
+          <InlineEdit
+            value={course.title}
+            onSave={(title) => title.trim() && updateCourse.mutate(title.trim())}
+            className="text-xl font-semibold"
+          />
           <p className="text-xs text-muted-foreground mt-0.5">
             {modules.length} module{modules.length !== 1 ? "s" : ""} · {totalLessons} lesson{totalLessons !== 1 ? "s" : ""}
           </p>
