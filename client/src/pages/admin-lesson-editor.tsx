@@ -11,6 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { RichTextEditor } from "@/components/projects/rich-text-editor";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Resource = {
   id: string;
@@ -100,24 +104,34 @@ export default function AdminLessonEditorPage() {
   const [newResource, setNewResource] = useState({ name: "", url: "", kind: "link" as "link" | "pdf" });
   const [showAddResource, setShowAddResource] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const formRef = useRef({ title: "", videoUrl: "", content: "" });
+  const revisionRef = useRef(0);
+  const saveInFlightRef = useRef(false);
+  const queuedRevisionRef = useRef<number | null>(null);
+  const loadedLessonIdRef = useRef<string | null>(null);
+  const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(null);
 
   const { data: lesson, isLoading } = useQuery<LessonWithResources>({
     queryKey: ["/api/admin/lessons", lessonId],
-    queryFn: () => apiFetch(`/api/admin/lessons/${lessonId}`),
+    queryFn: () => apiFetch(`/api/admin/lessons/${lessonId}?courseId=${encodeURIComponent(courseId)}`),
   });
 
-  // Populate form when data loads
+  // Populate only when navigating to another lesson. Refetching after a save
+  // must not overwrite keystrokes made while the previous save was in flight.
   useEffect(() => {
-    if (lesson) {
+    if (lesson && loadedLessonIdRef.current !== lesson.id) {
+      loadedLessonIdRef.current = lesson.id;
       setTitle(lesson.title);
       setVideoUrl(lesson.videoUrl || "");
       setContent(lesson.content || "");
+      formRef.current = { title: lesson.title, videoUrl: lesson.videoUrl || "", content: lesson.content || "" };
+      revisionRef.current = 0;
       setIsDirty(false);
     }
   }, [lesson]);
 
   const saveMutation = useMutation({
-    mutationFn: (data: { title: string; videoUrl: string | null; content: string }) =>
+    mutationFn: (data: { title: string; videoUrl: string | null; content: string; revision: number }) =>
       apiFetch(`/api/admin/lessons/${lessonId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -127,13 +141,35 @@ export default function AdminLessonEditorPage() {
           content: data.content || null,
         }),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
-      setIsDirty(false);
+    onSuccess: (_savedLesson, variables) => {
+      if (variables.revision === revisionRef.current) setIsDirty(false);
       toast({ title: "Saved" });
     },
     onError: (e: Error) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
   });
+
+  const saveCurrentDraft = async (revision: number) => {
+    // Keep writes in order. Without this queue, an older delayed request can
+    // reach the server after a newer request and overwrite the latest content.
+    if (saveInFlightRef.current) {
+      queuedRevisionRef.current = revision;
+      return;
+    }
+
+    saveInFlightRef.current = true;
+    try {
+      await saveMutation.mutateAsync({ ...formRef.current, revision });
+    } catch {
+      // The mutation's error handler shows the error and leaves the form dirty.
+    } finally {
+      saveInFlightRef.current = false;
+      const queuedRevision = queuedRevisionRef.current;
+      queuedRevisionRef.current = null;
+      if (queuedRevision !== null && queuedRevision > revision) {
+        void saveCurrentDraft(queuedRevision);
+      }
+    }
+  };
 
   const togglePublish = useMutation({
     mutationFn: () =>
@@ -164,7 +200,10 @@ export default function AdminLessonEditorPage() {
   const deleteResource = useMutation({
     mutationFn: (resourceId: string) =>
       apiFetch(`/api/admin/resources/${resourceId}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lessons", lessonId] });
+      setResourceToDelete(null);
+    },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -174,20 +213,23 @@ export default function AdminLessonEditorPage() {
     if (field === "videoUrl") setVideoUrl(value);
     if (field === "content") setContent(value);
     setIsDirty(true);
+    formRef.current = { ...formRef.current, [field]: value };
+    const revision = ++revisionRef.current;
 
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
-      const t = field === "title" ? value : title;
-      const v = field === "videoUrl" ? value : videoUrl;
-      const c = field === "content" ? value : content;
-      saveMutation.mutate({ title: t, videoUrl: v, content: c });
+      void saveCurrentDraft(revision);
     }, 2000);
   };
 
   const saveNow = () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    saveMutation.mutate({ title, videoUrl, content });
+    void saveCurrentDraft(revisionRef.current);
   };
+
+  useEffect(() => () => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+  }, []);
 
   if (isLoading) {
     return (
@@ -407,7 +449,7 @@ export default function AdminLessonEditorPage() {
                       size="icon"
                       variant="ghost"
                       className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => deleteResource.mutate(r.id)}
+                      onClick={() => setResourceToDelete(r)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -424,6 +466,30 @@ export default function AdminLessonEditorPage() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={!!resourceToDelete} onOpenChange={(open) => !open && setResourceToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete resource?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{resourceToDelete?.name}</strong> will be permanently removed from this lesson.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteResource.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (resourceToDelete) deleteResource.mutate(resourceToDelete.id);
+              }}
+            >
+              {deleteResource.isPending ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

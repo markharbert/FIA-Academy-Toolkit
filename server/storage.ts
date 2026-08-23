@@ -5568,8 +5568,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCourseModule(id: string): Promise<boolean> {
-    const [row] = await db.delete(courseModules).where(eq(courseModules.id, id)).returning();
-    return !!row;
+    return db.transaction(async (tx) => {
+      const [root] = await tx.select({ id: courseModules.id })
+        .from(courseModules)
+        .where(eq(courseModules.id, id));
+      if (!root) return false;
+
+      // Imported courses can contain nested modules. parentModuleId deliberately
+      // remains nullable, so remove descendants explicitly before the root.
+      const moduleIds = [root.id];
+      for (let index = 0; index < moduleIds.length; index++) {
+        const children = await tx.select({ id: courseModules.id })
+          .from(courseModules)
+          .where(eq(courseModules.parentModuleId, moduleIds[index]));
+        for (const child of children) {
+          if (!moduleIds.includes(child.id)) moduleIds.push(child.id);
+        }
+      }
+
+      for (const moduleId of moduleIds.reverse()) {
+        await tx.delete(courseModules).where(eq(courseModules.id, moduleId));
+      }
+      return true;
+    });
   }
 
   async reorderCourseModules(courseId: string, orderedIds: string[]): Promise<void> {

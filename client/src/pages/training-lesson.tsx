@@ -95,16 +95,16 @@ export default function TrainingLessonPage() {
   const queryClient = useQueryClient();
 
   // Load course structure (for sidebar nav + prev/next)
-  const { data: courseData } = useQuery<CourseStructure>({
+  const { data: courseData, isError: isCourseError } = useQuery<CourseStructure>({
     queryKey: ["/api/training/courses", courseId],
     queryFn: () => apiFetch(`/api/training/courses/${courseId}`),
     enabled: !!courseId,
   });
 
   // Load lesson content
-  const { data: lesson, isLoading } = useQuery<LessonDetail>({
+  const { data: lesson, isLoading, isError: isLessonError } = useQuery<LessonDetail>({
     queryKey: ["/api/training/lessons", lessonId],
-    queryFn: () => apiFetch(`/api/training/lessons/${lessonId}`),
+    queryFn: () => apiFetch(`/api/training/lessons/${lessonId}?courseId=${encodeURIComponent(courseId)}`),
     enabled: !!lessonId,
   });
 
@@ -140,6 +140,14 @@ export default function TrainingLessonPage() {
   const currentModule = courseData?.modules.find((m) =>
     m.lessons.some((l) => l.id === lessonId)
   );
+
+  if (isCourseError || isLessonError) {
+    return (
+      <div className="flex h-full items-center justify-center bg-slate-50 p-6 text-sm text-slate-500">
+        This lesson is not available.
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full text-sm" style={{ fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>

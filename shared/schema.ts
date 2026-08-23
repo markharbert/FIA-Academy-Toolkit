@@ -2220,6 +2220,7 @@ export const courseProgress = pgTable("course_progress", {
   lastAccessedAt: timestamp("last_accessed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (t) => ({
   userLessonIdx: index("idx_course_progress_user_lesson").on(t.userId, t.lessonId),
+  userLessonUnique: unique("course_progress_user_lesson_unique").on(t.userId, t.lessonId),
 }));
 export type CourseProgress = typeof courseProgress.$inferSelect;
 export type InsertCourseProgress = typeof courseProgress.$inferInsert;

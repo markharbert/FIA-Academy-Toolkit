@@ -13359,6 +13359,44 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     return title.toLowerCase().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "") + "-" + Date.now().toString(36);
   }
 
+  const courseStatusSchema = z.enum(["draft", "published"]);
+  const courseTitleSchema = z.string().trim().min(1, "Title is required").max(500, "Title is too long");
+  const courseCreateSchema = z.object({
+    title: courseTitleSchema,
+    description: z.string().trim().max(10_000).nullable().optional(),
+    coverGradient: z.string().max(1_000).nullable().optional(),
+  }).strict();
+  const courseUpdateSchema = z.object({
+    title: courseTitleSchema.optional(),
+    description: z.string().trim().max(10_000).nullable().optional(),
+    coverGradient: z.string().max(1_000).nullable().optional(),
+    icon: z.string().trim().max(100).nullable().optional(),
+    status: courseStatusSchema.optional(),
+  }).strict().refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
+  const moduleUpdateSchema = z.object({
+    title: courseTitleSchema.optional(),
+    status: courseStatusSchema.optional(),
+  }).strict().refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
+  const lessonUpdateSchema = z.object({
+    title: courseTitleSchema.optional(),
+    videoUrl: z.string().trim().max(4_000).nullable().optional(),
+    content: z.string().max(1_000_000).nullable().optional(),
+    status: courseStatusSchema.optional(),
+    durationMinutes: z.number().int().min(0).max(100_000).nullable().optional(),
+  }).strict().refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
+  const resourceUpdateSchema = z.object({
+    name: z.string().trim().min(1, "Resource name is required").max(500).optional(),
+    url: z.string().trim().min(1, "Resource URL is required").max(4_000).optional(),
+    kind: z.enum(["link", "pdf"]).optional(),
+  }).strict().refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
+  const idsMatch = (actualIds: string[], orderedIds: unknown[]): boolean => orderedIds.length === actualIds.length
+    && new Set(orderedIds).size === orderedIds.length
+    && orderedIds.every((id) => typeof id === "string" && actualIds.includes(id));
+
+  function validationError(res: Response, error: z.ZodError) {
+    return res.status(400).json({ message: error.issues[0]?.message || "Invalid course data" });
+  }
+
   // Admin: list courses with lesson counts
   app.get("/api/admin/courses", requireAdmin, async (_req, res) => {
     try {
@@ -13383,10 +13421,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: create course
   app.post("/api/admin/courses", requireAdmin, async (req, res) => {
     try {
-      const { title, description, coverGradient } = req.body;
-      if (!title?.trim()) return res.status(400).json({ message: "Title is required" });
-      const slug = generateCourseSlug(title.trim());
-      const course = await storage.createCourse({ title: title.trim(), description: description || null, slug, coverGradient: coverGradient || null, status: "draft", sortOrder: 0 });
+      const parsed = courseCreateSchema.safeParse(req.body);
+      if (!parsed.success) return validationError(res, parsed.error);
+      const { title, description, coverGradient } = parsed.data;
+      const slug = generateCourseSlug(title);
+      const course = await storage.createCourse({ title, description: description || null, slug, coverGradient: coverGradient || null, status: "draft", sortOrder: 0 });
       res.status(201).json(course);
     } catch (e) {
       console.error("[courses] create error:", e);
@@ -13408,7 +13447,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: update course
   app.put("/api/admin/courses/:id", requireAdmin, async (req, res) => {
     try {
-      const course = await storage.updateCourse(req.params.id, req.body);
+      const parsed = courseUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return validationError(res, parsed.error);
+      const course = await storage.updateCourse(req.params.id, parsed.data);
       if (!course) return res.status(404).json({ message: "Not found" });
       res.json(course);
     } catch (e) {
@@ -13448,6 +13489,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const { orderedIds } = req.body;
       if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds required" });
+      const modules = await storage.getCourseModules(req.params.id);
+      if (!idsMatch(modules.map((module) => module.id), orderedIds)) {
+        return res.status(400).json({ message: "orderedIds must include each module in this course exactly once" });
+      }
       await storage.reorderCourseModules(req.params.id, orderedIds);
       res.json({ ok: true });
     } catch (e) {
@@ -13458,10 +13503,12 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: create module
   app.post("/api/admin/courses/:courseId/modules", requireAdmin, async (req, res) => {
     try {
-      const { title } = req.body;
-      if (!title?.trim()) return res.status(400).json({ message: "Title required" });
+      const parsed = courseTitleSchema.safeParse(req.body?.title);
+      if (!parsed.success) return validationError(res, parsed.error);
+      const course = await storage.getCourse(req.params.courseId);
+      if (!course) return res.status(404).json({ message: "Course not found" });
       const modules = await storage.getCourseModules(req.params.courseId);
-      const module = await storage.createCourseModule({ courseId: req.params.courseId, title: title.trim(), status: "draft", sortOrder: modules.length });
+      const module = await storage.createCourseModule({ courseId: req.params.courseId, title: parsed.data, status: "draft", sortOrder: modules.length });
       res.status(201).json(module);
     } catch (e) {
       res.status(500).json({ message: "Failed to create module" });
@@ -13471,7 +13518,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: update module
   app.put("/api/admin/modules/:id", requireAdmin, async (req, res) => {
     try {
-      const module = await storage.updateCourseModule(req.params.id, req.body);
+      const parsed = moduleUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return validationError(res, parsed.error);
+      const module = await storage.updateCourseModule(req.params.id, parsed.data);
       if (!module) return res.status(404).json({ message: "Not found" });
       res.json(module);
     } catch (e) {
@@ -13495,6 +13544,10 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const { orderedIds } = req.body;
       if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds required" });
+      const lessons = await storage.getCourseLessons(req.params.id);
+      if (!idsMatch(lessons.map((lesson) => lesson.id), orderedIds)) {
+        return res.status(400).json({ message: "orderedIds must include each lesson in this module exactly once" });
+      }
       await storage.reorderCourseLessons(req.params.id, orderedIds);
       res.json({ ok: true });
     } catch (e) {
@@ -13505,10 +13558,15 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: create lesson
   app.post("/api/admin/modules/:moduleId/lessons", requireAdmin, async (req, res) => {
     try {
-      const { title, courseId } = req.body;
-      if (!title?.trim() || !courseId) return res.status(400).json({ message: "title and courseId required" });
+      const parsed = courseTitleSchema.safeParse(req.body?.title);
+      if (!parsed.success) return validationError(res, parsed.error);
+      const module = await storage.getCourseModule(req.params.moduleId);
+      if (!module) return res.status(404).json({ message: "Module not found" });
+      if (req.body?.courseId && req.body.courseId !== module.courseId) {
+        return res.status(400).json({ message: "Module does not belong to the supplied course" });
+      }
       const lessons = await storage.getCourseLessons(req.params.moduleId);
-      const lesson = await storage.createCourseLesson({ courseId, moduleId: req.params.moduleId, title: title.trim(), status: "draft", sortOrder: lessons.length });
+      const lesson = await storage.createCourseLesson({ courseId: module.courseId, moduleId: req.params.moduleId, title: parsed.data, status: "draft", sortOrder: lessons.length });
       res.status(201).json(lesson);
     } catch (e) {
       res.status(500).json({ message: "Failed to create lesson" });
@@ -13520,6 +13578,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const lesson = await storage.getCourseLesson(req.params.id);
       if (!lesson) return res.status(404).json({ message: "Not found" });
+      if (typeof req.query.courseId === "string" && lesson.courseId !== req.query.courseId) {
+        return res.status(404).json({ message: "Lesson not found in this course" });
+      }
       const resources = await storage.getLessonResources(req.params.id);
       res.json({ ...lesson, resources });
     } catch (e) {
@@ -13530,7 +13591,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: update lesson
   app.put("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
     try {
-      const updates = { ...req.body };
+      const parsed = lessonUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return validationError(res, parsed.error);
+      const updates = parsed.data;
       // Validate videoUrl — only allow http/https to prevent javascript: injection
       if (updates.videoUrl !== undefined && updates.videoUrl !== null && updates.videoUrl !== "") {
         try {
@@ -13564,6 +13627,8 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: get lesson resources
   app.get("/api/admin/lessons/:id/resources", requireAdmin, async (req, res) => {
     try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      if (!lesson) return res.status(404).json({ message: "Lesson not found" });
       const resources = await storage.getLessonResources(req.params.id);
       res.json(resources);
     } catch (e) {
@@ -13576,6 +13641,11 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const { name, url, kind } = req.body;
       if (!name?.trim() || !url?.trim()) return res.status(400).json({ message: "name and url required" });
+      if (kind !== undefined && kind !== "link" && kind !== "pdf") {
+        return res.status(400).json({ message: "Resource kind must be link or pdf" });
+      }
+      const lesson = await storage.getCourseLesson(req.params.lessonId);
+      if (!lesson) return res.status(404).json({ message: "Lesson not found" });
       // Validate resource URL — only allow http/https
       try {
         const { protocol } = new URL(url.trim());
@@ -13596,7 +13666,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: update resource
   app.put("/api/admin/resources/:id", requireAdmin, async (req, res) => {
     try {
-      const updates = { ...req.body };
+      const parsed = resourceUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return validationError(res, parsed.error);
+      const updates = parsed.data;
       // Validate URL if present
       if (updates.url) {
         try {
@@ -13663,6 +13735,9 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     try {
       const lesson = await storage.getCourseLesson(req.params.id);
       if (!lesson || lesson.status !== "published") return res.status(404).json({ message: "Not found" });
+      if (typeof req.query.courseId === "string" && lesson.courseId !== req.query.courseId) {
+        return res.status(404).json({ message: "Lesson not found in this course" });
+      }
       const course = await storage.getCourse(lesson.courseId);
       if (!course || course.status !== "published") return res.status(404).json({ message: "Not found" });
       const resources = await storage.getLessonResources(req.params.id);
