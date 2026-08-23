@@ -76,7 +76,6 @@ type CfDownload = {
   workspace_id: string;
   asset_id: string | null;
   name: string;
-  url: string;
 };
 
 type VimeoFolderNode = VimeoFolder & { children: VimeoFolderNode[] };
@@ -184,8 +183,10 @@ export default function AdminLessonEditorPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [newResource, setNewResource] = useState({ name: "", url: "", kind: "link" as "link" | "pdf" });
   const [showAddResource, setShowAddResource] = useState(false);
+  const [cfDownloadUrlHint, setCfDownloadUrlHint] = useState(false);
   const [cfDownloadPickerOpen, setCfDownloadPickerOpen] = useState(false);
   const [cfDownloadFilter, setCfDownloadFilter] = useState("");
+  const newResourceUrlRef = useRef<HTMLInputElement>(null);
   const [vimeoPickerOpen, setVimeoPickerOpen] = useState(false);
   const [selectedVimeoFolderId, setSelectedVimeoFolderId] = useState("all");
   const [vimeoVideoPage, setVimeoVideoPage] = useState(1);
@@ -442,18 +443,15 @@ export default function AdminLessonEditorPage() {
   };
 
   const selectCfDownload = (download: CfDownload) => {
-    addResource.mutate(
-      { name: download.name, url: download.url, kind: "link" },
-      {
-        onSuccess: () => {
-          setCfDownloadPickerOpen(false);
-          toast({
-            title: "ClickFunnels resource added",
-            description: `${download.name} opens from ClickFunnels.`,
-          });
-        },
-      },
-    );
+    // The CF API does not expose the direct file URL, so we pre-fill the name
+    // and open the Add Resource form for the admin to paste the URL they copy
+    // from ClickFunnels → My Assets → Downloads → Copy icon.
+    setCfDownloadPickerOpen(false);
+    setNewResource({ name: download.name, url: "", kind: "link" });
+    setCfDownloadUrlHint(true);
+    setShowAddResource(true);
+    // Focus the URL field after the form renders
+    setTimeout(() => newResourceUrlRef.current?.focus(), 50);
   };
 
   const saveNow = () => {
@@ -684,6 +682,7 @@ export default function AdminLessonEditorPage() {
               <div className="space-y-1">
                 <Label className="text-xs">URL</Label>
                 <Input
+                  ref={newResourceUrlRef}
                   placeholder="https://…"
                   value={newResource.url}
                   onChange={(e) =>
@@ -691,11 +690,21 @@ export default function AdminLessonEditorPage() {
                   }
                   className="h-8 text-sm"
                 />
+                {cfDownloadUrlHint && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    The ClickFunnels API doesn't include the file URL. In ClickFunnels go to{" "}
+                    <strong>My Assets → Downloads</strong>, click the{" "}
+                    <strong>Copy</strong> icon next to this file, then paste it here.
+                  </p>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  onClick={() => addResource.mutate(newResource)}
+                  onClick={() => {
+                    addResource.mutate(newResource);
+                    setCfDownloadUrlHint(false);
+                  }}
                   disabled={
                     !newResource.name.trim() ||
                     !newResource.url.trim() ||
@@ -707,7 +716,10 @@ export default function AdminLessonEditorPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setShowAddResource(false)}
+                  onClick={() => {
+                    setShowAddResource(false);
+                    setCfDownloadUrlHint(false);
+                  }}
                 >
                   Cancel
                 </Button>
