@@ -421,7 +421,8 @@ export default function TrainingLessonPage() {
         ) : !lesson ? (
           <div className="p-8 text-gray-500 text-sm">Lesson not found.</div>
         ) : (
-          <div className="mx-auto max-w-[780px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+          <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+            <div className="mx-auto max-w-[780px]">
 
             {/* Meta tag */}
             {currentModule && (
@@ -449,10 +450,11 @@ export default function TrainingLessonPage() {
             >
               {lesson.title}
             </h1>
+            </div>
 
             {/* Video */}
             {embedUrl && (
-              <div className="mb-8 lg:relative lg:left-1/2 lg:w-[max(100%,min(1400px,calc(100vw-21rem)))] lg:-translate-x-1/2">
+              <div className="mb-8">
                 <div
                   className="aspect-video overflow-hidden rounded-xl shadow-sm"
                   style={{ background: "#0f172a" }}
@@ -467,6 +469,7 @@ export default function TrainingLessonPage() {
                 </div>
               </div>
             )}
+            <div className="mx-auto max-w-[780px]">
             {lesson.transcriptText && (
               <div className="mx-auto mb-8 mt-8 max-w-[680px] overflow-hidden rounded-xl" style={{ border: "1px solid #dbeafe", background: "#f5f9ff" }}>
                 <button
@@ -685,6 +688,7 @@ export default function TrainingLessonPage() {
               )}
             </div>
 
+          </div>
           </div>
         )}
       </main>
