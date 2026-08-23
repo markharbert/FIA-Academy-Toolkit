@@ -307,9 +307,21 @@ export default function AdminCourseOutlinePage() {
     return (
       <div
         key={module.id}
-        className={cn("rounded-lg border bg-card overflow-hidden", depth > 0 && "ml-5 border-l-4 border-l-violet-400/30")}
+        className={cn(
+          "overflow-hidden rounded-lg border",
+          depth === 0
+            ? "border-sky-200 bg-sky-50/70 dark:border-sky-800/60 dark:bg-sky-950/20"
+            : "ml-5 border-l-4 border-violet-300 bg-violet-50/70 dark:border-violet-700/60 dark:bg-violet-950/20",
+        )}
       >
-        <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 group">
+        <div
+          className={cn(
+            "group flex items-center gap-2 px-3 py-2.5",
+            depth === 0
+              ? "bg-sky-100/80 dark:bg-sky-900/30"
+              : "bg-violet-100/80 dark:bg-violet-900/30",
+          )}
+        >
           <button
             onClick={() => moveModule(module, -1)}
             className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-30"
@@ -357,7 +369,10 @@ export default function AdminCourseOutlinePage() {
         {isOpen && (
           <div className="divide-y">
             {module.lessons.map((lesson, lessonIndex) => (
-              <div key={lesson.id} className="flex items-center gap-2 px-4 py-2 group hover:bg-muted/30 transition-colors">
+              <div
+                key={lesson.id}
+                className="group flex items-center gap-2 border-t border-amber-200/70 bg-amber-50/70 px-4 py-2 transition-colors hover:bg-amber-100/80 dark:border-amber-800/40 dark:bg-amber-950/20 dark:hover:bg-amber-900/30"
+              >
                 <div className="flex shrink-0 flex-col">
                   <button
                     onClick={() => moveLesson(module.id, lesson.id, module.lessons, -1)}
