@@ -313,15 +313,15 @@ export default function TrainingLessonPage() {
             aria-expanded={isModuleExpanded}
             aria-label={`${isModuleExpanded ? "Collapse" : "Expand"} ${module.title}`}
           >
+            {!isModuleExpanded && isModuleComplete && (
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
+            )}
             <p
               className="text-[10px] font-bold uppercase tracking-widest whitespace-normal break-words"
               style={{ color: "#ffffff" }}
             >
               {module.title}
             </p>
-            {!isModuleExpanded && isModuleComplete && (
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-label="Module complete" />
-            )}
             {isModuleExpanded ? (
               <ChevronDown className="ml-auto h-3 w-3 shrink-0" />
             ) : (
