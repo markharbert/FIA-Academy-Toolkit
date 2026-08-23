@@ -13932,10 +13932,23 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   });
 
   // Admin-only (until member rollout): list published courses
-  app.get("/api/training/courses", requireAdmin, async (_req, res) => {
+  app.get("/api/training/courses", requireAdmin, async (req, res) => {
     try {
       const published = await storage.getPublishedCourses();
-      res.json(published);
+      const userId = req.session.userId as string;
+      const coursesWithProgress = await Promise.all(published.map(async (course) => {
+        const structure = await storage.getCourseWithStructure(course.id, userId);
+        const lessons = structure?.modules.flatMap((module) => module.lessons)
+          .filter((lesson) => lesson.status === "published") ?? [];
+        return {
+          ...course,
+          progress: {
+            completed: lessons.filter((lesson) => lesson.completed).length,
+            total: lessons.length,
+          },
+        };
+      }));
+      res.json(coursesWithProgress);
     } catch (e) {
       res.status(500).json({ message: "Failed to load courses" });
     }

@@ -259,7 +259,14 @@ function isGroupActive(item: NavItem, location: string): boolean {
   return false;
 }
 
-type PublishedCourse = { id: string; title: string; slug: string; status: string; icon?: string | null };
+type PublishedCourse = {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  icon?: string | null;
+  progress?: { completed: number; total: number };
+};
 
 export function AppSidebar() {
   const { user, logout } = useAuth();
@@ -363,6 +370,18 @@ export function AppSidebar() {
                         >
                           <CourseIcon icon={course.icon} className={isCourseActive ? undefined : "text-violet-400"} />
                           <span className="truncate">{course.title}</span>
+                          {course.progress && course.progress.total > 0 && (
+                            course.progress.completed === course.progress.total ? (
+                              <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-emerald-400" aria-label="Course complete" />
+                            ) : (
+                              <span
+                                className="ml-auto shrink-0 text-[10px] font-medium tabular-nums text-sidebar-foreground/60"
+                                aria-label={`${course.progress.completed} of ${course.progress.total} lessons complete`}
+                              >
+                                {course.progress.completed}/{course.progress.total}
+                              </span>
+                            )
+                          )}
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     );
