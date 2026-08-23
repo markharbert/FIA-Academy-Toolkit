@@ -307,7 +307,9 @@ export default function TrainingLessonPage() {
             ) : (
               <span className={cn(
                 "mt-0.5 h-2.5 w-2.5 rounded-full border shrink-0 flex-none",
-                isActive ? "border-amber-400 bg-amber-400/30" : "border-white/20",
+                isActive
+                  ? "border-amber-400 bg-amber-400/30"
+                  : "border-amber-300/90 bg-amber-300/20",
               )} />
             )}
             {!collapsed && <span className="whitespace-normal break-words text-[12px] leading-snug">{lesson.title}</span>}
