@@ -504,8 +504,6 @@ export default function TrainingLessonPage() {
           <div className="p-8 text-gray-500 text-sm">Lesson not found.</div>
         ) : (
           <div className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-            <div className="mx-auto max-w-[780px]">
-
             {/* Meta tag */}
             {currentModule && (
               <div
@@ -532,7 +530,6 @@ export default function TrainingLessonPage() {
             >
               {lesson.title}
             </h1>
-            </div>
 
             {/* Video */}
             {embedUrl && (
