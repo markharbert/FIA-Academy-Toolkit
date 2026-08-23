@@ -257,7 +257,7 @@ export default function AdminCourseOutlinePage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-3xl mx-auto space-y-4">
+      <div className="p-6 max-w-4xl mx-auto space-y-4">
         <div className="h-8 w-48 bg-muted rounded animate-pulse" />
         <div className="h-64 bg-muted rounded animate-pulse" />
       </div>
@@ -266,7 +266,7 @@ export default function AdminCourseOutlinePage() {
 
   if (!data) {
     return (
-      <div className="p-6 max-w-3xl mx-auto">
+      <div className="p-6 max-w-4xl mx-auto">
         <p className="text-muted-foreground">Course not found.</p>
       </div>
     );
@@ -425,7 +425,7 @@ export default function AdminCourseOutlinePage() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto">
       {/* Back + header */}
       <div className="flex items-center gap-3 mb-6">
         <Button
