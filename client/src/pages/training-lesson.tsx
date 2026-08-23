@@ -309,6 +309,7 @@ export default function TrainingLessonPage() {
       else next.add(module.id);
       return next;
     });
+    const openModule = () => setExpandedCourseModules((current) => new Set(current).add(module.id));
 
     return (
       <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
@@ -323,7 +324,10 @@ export default function TrainingLessonPage() {
                     ? "bg-amber-400/30 text-amber-200 ring-1 ring-amber-400/60"
                     : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white",
                 )}
-                onClick={toggleModule}
+                onClick={() => {
+                  setCourseNavCollapsed(false);
+                  openModule();
+                }}
                 aria-label={`${isModuleExpanded ? "Collapse" : "Expand"} ${module.title}`}
               >
                 {isModuleComplete ? (
