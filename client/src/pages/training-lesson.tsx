@@ -137,6 +137,8 @@ export default function TrainingLessonPage() {
   const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [courseNavCollapsed, setCourseNavCollapsed] = useState(false);
+  const [expandedCourseModules, setExpandedCourseModules] = useState<Set<string>>(new Set());
+  const courseModulesInitializedRef = useRef(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
   const vimeoPlayerApiRef = useRef<Player | null>(null);
@@ -176,6 +178,16 @@ export default function TrainingLessonPage() {
   });
 
   const moduleTree = courseData ? buildCourseModuleTree(courseData.modules) : [];
+
+  useEffect(() => {
+    if (courseData && !courseModulesInitializedRef.current) {
+      const initiallyExpanded = courseData.modules.length > 3
+        ? (moduleTree[0] ? [moduleTree[0].id] : [])
+        : courseData.modules.map((module) => module.id);
+      setExpandedCourseModules(new Set(initiallyExpanded));
+      courseModulesInitializedRef.current = true;
+    }
+  }, [courseData, moduleTree]);
 
   // Flatten lessons in the nested outline order for prev/next navigation.
   const allLessons: CourseLesson[] = flattenCourseModuleTree(moduleTree).flatMap((module) => module.lessons);
@@ -277,18 +289,35 @@ export default function TrainingLessonPage() {
     m.lessons.some((l) => l.id === lessonId)
   );
 
-  const renderModuleNavigation = (module: CourseModuleTree<CourseModule>, depth = 0, collapsed = courseNavCollapsed) => (
-    <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
-      <div className={cn("px-2 py-1.5", collapsed && "hidden")}>
-        <p
-          className="text-[10px] font-bold uppercase tracking-widest whitespace-normal break-words"
-          style={{ color: "#ffffff" }}
-        >
-          {module.title}
-        </p>
-      </div>
+  const renderModuleNavigation = (module: CourseModuleTree<CourseModule>, depth = 0, collapsed = courseNavCollapsed) => {
+    const isModuleExpanded = expandedCourseModules.has(module.id);
 
-      {module.lessons.map((lesson) => {
+    return (
+      <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
+        <div className={cn("px-2 py-1.5", collapsed && "hidden")}>
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 text-left"
+            onClick={() => setExpandedCourseModules((current) => {
+              const next = new Set(current);
+              if (next.has(module.id)) next.delete(module.id);
+              else next.add(module.id);
+              return next;
+            })}
+            aria-expanded={isModuleExpanded}
+            aria-label={`${isModuleExpanded ? "Collapse" : "Expand"} ${module.title}`}
+          >
+            {isModuleExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+            <p
+              className="text-[10px] font-bold uppercase tracking-widest whitespace-normal break-words"
+              style={{ color: "#ffffff" }}
+            >
+              {module.title}
+            </p>
+          </button>
+        </div>
+
+        {isModuleExpanded && module.lessons.map((lesson) => {
         const isActive = lesson.id === lessonId;
         const lessonButton = (
           <button
@@ -323,10 +352,11 @@ export default function TrainingLessonPage() {
             </TooltipContent>
           </Tooltip>
         ) : lessonButton;
-      })}
-      {module.children.map((child) => renderModuleNavigation(child, depth + 1, collapsed))}
-    </div>
-  );
+        })}
+        {isModuleExpanded && module.children.map((child) => renderModuleNavigation(child, depth + 1, collapsed))}
+      </div>
+    );
+  };
 
   if (isCourseError || isLessonError) {
     return (
