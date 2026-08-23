@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Plus, ChevronDown, ChevronRight, Pencil, Trash2,
-  FileText, Eye, EyeOff, ArrowUp, ArrowDown, Check, X, Smile,
+  FileText, Eye, EyeOff, ArrowUp, ArrowDown, Check, X, Smile, Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -382,7 +382,15 @@ export default function AdminCourseOutlinePage() {
                 <div className="flex-1 min-w-0 text-sm">
                   <InlineEdit value={lesson.title} onSave={(title) => updateLesson.mutate({ lessonId: lesson.id, title })} />
                 </div>
-                {lesson.videoUrl && <span className="text-xs text-muted-foreground shrink-0">video</span>}
+                {lesson.videoUrl && (
+                  <span
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-sm"
+                    title="Video added to this lesson"
+                    aria-label="Video added to this lesson"
+                  >
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                  </span>
+                )}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
                   <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setLocation(`/admin/courses/${id}/lessons/${lesson.id}`)} title="Edit lesson">
                     <Pencil className="h-3.5 w-3.5" />
