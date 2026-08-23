@@ -418,7 +418,7 @@ export default function TrainingLessonPage() {
       <aside
         className={cn(
           "hidden shrink-0 flex-col overflow-y-auto transition-[width] duration-200 lg:flex",
-          courseNavCollapsed ? "w-14" : "w-[264px]",
+          courseNavCollapsed ? "w-14" : "w-[290px]",
         )}
         style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BDR}` }}
       >
