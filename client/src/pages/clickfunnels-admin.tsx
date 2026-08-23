@@ -4,6 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, CheckCircle, AlertCircle, Users, Copy, ExternalLink,
@@ -616,9 +617,19 @@ function CfIntegrationSection() {
 export default function ClickFunnelsAdminPage() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl space-y-6">
+      <Tabs defaultValue="integration">
+        <TabsList>
+          <TabsTrigger value="integration">Integration</TabsTrigger>
+          <TabsTrigger value="course-import">Course Import</TabsTrigger>
+        </TabsList>
+        <TabsContent value="integration" className="mt-4">
+          <CfIntegrationSection />
+        </TabsContent>
+        <TabsContent value="course-import" className="mt-4">
+          <CourseImportCard />
+        </TabsContent>
+      </Tabs>
       <GracePeriodCard />
-      <CfIntegrationSection />
-      <CourseImportCard />
     </div>
   );
 }
