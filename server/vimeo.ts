@@ -17,6 +17,14 @@ export interface VimeoVideoPage {
   hasMore: boolean;
 }
 
+export interface VimeoTextTrack {
+  id: string;
+  language: string;
+  name: string;
+  type: string;
+  link: string | null;
+}
+
 function vimeoHeaders() {
   return {
     Authorization: `Bearer ${VIMEO_ACCESS_TOKEN}`,
@@ -57,6 +65,74 @@ function resourceId(uri: unknown): string | null {
   if (typeof uri !== "string") return null;
   const match = uri.match(/\/(\d+)(?:\/)?$/);
   return match?.[1] ?? null;
+}
+
+export function extractVimeoVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (!/(^|\.)vimeo\.com$/i.test(parsed.hostname)) return null;
+    return parsed.pathname.match(/(?:^|\/)(?:video\/)?(\d+)(?:\/|$)/)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function captionTextToTranscript(captionText: string): string {
+  const normalized = captionText.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+  const blocks = normalized.split(/\n{2,}/);
+  const cues: string[] = [];
+
+  for (const block of blocks) {
+    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (!lines.length || /^WEBVTT/i.test(lines[0]) || /^NOTE\b/i.test(lines[0])) continue;
+    const textLines = lines.filter((line) => !/^(?:\d+\s*)?\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?\s*-->\s*/.test(line));
+    const text = textLines
+      .join(" ")
+      .replace(/<\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{3})?>/g, "")
+      .replace(/<\/?[^>]+>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text && text !== cues.at(-1)) cues.push(text);
+  }
+
+  return cues.join(" ").replace(/\s+([,.!?;:])/g, "$1").trim();
+}
+
+export async function listVimeoTextTracks(videoId: string): Promise<VimeoTextTrack[]> {
+  if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
+  const payload = await vimeoGet(`/videos/${encodeURIComponent(videoId)}/texttracks`);
+  return (Array.isArray(payload?.data) ? payload.data : [])
+    .map((track: any) => ({
+      id: resourceId(track?.uri) ?? String(track?.id ?? ""),
+      language: typeof track?.language === "string" ? track.language : "",
+      name: typeof track?.name === "string" ? track.name : "",
+      type: typeof track?.type === "string" ? track.type : "",
+      link: typeof track?.link === "string" ? track.link : null,
+    }))
+    .filter((track: VimeoTextTrack) => track.id && track.link);
+}
+
+export async function fetchVimeoTranscript(videoId: string, trackId: string): Promise<{
+  text: string;
+  language: string;
+  name: string;
+}> {
+  const tracks = await listVimeoTextTracks(videoId);
+  const track = tracks.find((candidate) => candidate.id === trackId);
+  if (!track?.link) throw new Error("That Vimeo transcript is no longer available");
+  const response = await fetch(track.link, {
+    headers: vimeoHeaders(),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`Vimeo transcript download failed (${response.status})`);
+  const raw = await response.text();
+  const text = captionTextToTranscript(raw);
+  if (!text) throw new Error("Vimeo returned an empty transcript");
+  return { text, language: track.language, name: track.name };
 }
 
 export interface VimeoFolder {

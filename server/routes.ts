@@ -47,7 +47,7 @@ import {
   type CfContactInfo,
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
-import { listVimeoProjects, listVimeoVideos } from "./vimeo";
+import { listVimeoProjects, listVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript } from "./vimeo";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -13691,6 +13691,48 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     } catch (e) {
       res.status(500).json({ message: "Failed to update lesson" });
     }
+  });
+
+  app.get("/api/admin/lessons/:id/vimeo-transcript-tracks", requireAdmin, async (req, res) => {
+    try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      const videoId = lesson?.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
+      if (!lesson || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this lesson first." });
+      res.json({ tracks: await listVimeoTextTracks(videoId) });
+    } catch (e) {
+      console.error("[Vimeo transcript tracks]", e);
+      res.status(502).json({ message: "Vimeo could not provide transcript tracks for this video." });
+    }
+  });
+
+  app.post("/api/admin/lessons/:id/vimeo-transcript", requireAdmin, async (req, res) => {
+    try {
+      const lesson = await storage.getCourseLesson(req.params.id);
+      const videoId = lesson?.videoUrl ? extractVimeoVideoId(lesson.videoUrl) : null;
+      const trackId = typeof req.body?.trackId === "string" ? req.body.trackId : "";
+      if (!lesson || !videoId) return res.status(400).json({ message: "Add a Vimeo video to this lesson first." });
+      if (!/^\d+$/.test(trackId)) return res.status(400).json({ message: "Choose a transcript language." });
+      const transcript = await fetchVimeoTranscript(videoId, trackId);
+      const saved = await storage.updateCourseLesson(req.params.id, {
+        transcriptText: transcript.text,
+        transcriptLanguage: transcript.language || null,
+        transcriptSource: `Vimeo${transcript.name ? ` · ${transcript.name}` : ""}`,
+        transcriptUpdatedAt: new Date(),
+      });
+      res.json(saved);
+    } catch (e) {
+      console.error("[Vimeo transcript import]", e);
+      res.status(502).json({ message: e instanceof Error ? e.message : "Vimeo transcript import failed." });
+    }
+  });
+
+  app.get("/api/admin/lessons/:id/transcript/download", requireAdmin, async (req, res) => {
+    const lesson = await storage.getCourseLesson(req.params.id);
+    if (!lesson?.transcriptText) return res.status(404).json({ message: "No transcript has been saved for this lesson." });
+    const filename = `${lesson.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "lesson"}-transcript.txt`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(`${lesson.title}\n\n${lesson.transcriptText}\n`);
   });
 
   // Admin: delete lesson

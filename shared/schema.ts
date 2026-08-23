@@ -2187,6 +2187,10 @@ export const courseLessons = pgTable("course_lessons", {
   moduleId: varchar("module_id").notNull().references(() => courseModules.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   videoUrl: text("video_url"),
+  transcriptText: text("transcript_text"),
+  transcriptLanguage: text("transcript_language"),
+  transcriptSource: text("transcript_source"),
+  transcriptUpdatedAt: timestamp("transcript_updated_at"),
   content: text("content"), // TipTap HTML
   status: varchar("status", { length: 20 }).notNull().default("draft"),
   durationMinutes: integer("duration_minutes"),
