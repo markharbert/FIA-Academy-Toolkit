@@ -307,13 +307,17 @@ export default function TrainingLessonPage() {
             aria-expanded={isModuleExpanded}
             aria-label={`${isModuleExpanded ? "Collapse" : "Expand"} ${module.title}`}
           >
-            {isModuleExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
             <p
               className="text-[10px] font-bold uppercase tracking-widest whitespace-normal break-words"
               style={{ color: "#ffffff" }}
             >
               {module.title}
             </p>
+            {isModuleExpanded ? (
+              <ChevronDown className="ml-auto h-3 w-3 shrink-0" />
+            ) : (
+              <ChevronRight className="ml-auto h-3 w-3 shrink-0" />
+            )}
           </button>
         </div>
 
