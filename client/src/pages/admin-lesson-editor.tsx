@@ -749,18 +749,17 @@ export default function AdminLessonEditorPage() {
               {lesson.resources.map((r) => (
                 <div
                   key={r.id}
-                  className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 group"
+                  className="flex items-center gap-3 rounded-md border bg-card px-3 py-4 group"
                 >
                   {r.kind === "pdf" ? (
-                    <svg className="h-4 w-4 text-red-500 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" />
-                    </svg>
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-red-600 text-[10px] font-extrabold tracking-tight text-white shadow-sm">
+                      PDF
+                    </div>
                   ) : (
-                    <Link className="h-4 w-4 text-blue-500 shrink-0" />
+                    <Link className="h-5 w-5 text-blue-500 shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{r.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{r.url}</p>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                     <a href={r.url} target="_blank" rel="noopener noreferrer">

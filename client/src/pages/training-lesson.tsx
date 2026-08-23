@@ -391,9 +391,9 @@ export default function TrainingLessonPage() {
                         style={{ background: "#f3f4f6" }}
                       >
                         {r.kind === "pdf" ? (
-                          <svg className="h-7 w-7" style={{ color: "#ef4444" }} viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" />
-                          </svg>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-red-600 text-[9px] font-extrabold tracking-tight text-white shadow-sm">
+                            PDF
+                          </div>
                         ) : (
                           <Link className="h-5 w-5" style={{ color: "#6b7280" }} />
                         )}
