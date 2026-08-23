@@ -13716,6 +13716,50 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     }
   });
 
+  // Admin: prepare a direct-to-storage upload for an inline lesson image.
+  app.post("/api/admin/lesson-images/request-upload-url", requireAdmin, async (req, res) => {
+    try {
+      const { name, size, contentType } = req.body ?? {};
+      const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+      if (typeof name !== "string" || typeof contentType !== "string" || !Number.isFinite(Number(size))) {
+        return res.status(400).json({ message: "name, size, and contentType are required" });
+      }
+      if (!allowedTypes.has(contentType)) {
+        return res.status(400).json({ message: "Please upload a JPG, PNG, WebP, or GIF image." });
+      }
+      if (Number(size) <= 0 || Number(size) > 10 * 1024 * 1024) {
+        return res.status(400).json({ message: "Images must be 10 MB or smaller." });
+      }
+
+      const objectStorage = new ObjectStorageService();
+      const uploadUrl = await objectStorage.getObjectEntityUploadURL();
+      const objectPath = objectStorage.normalizeObjectEntityPath(uploadUrl);
+      const imageId = objectPath.match(/^\/objects\/uploads\/([0-9a-f-]{36})$/i)?.[1];
+      if (!imageId) throw new Error("Unexpected object-storage path");
+
+      res.json({ uploadUrl, imageUrl: `/api/lesson-images/${imageId}` });
+    } catch (err) {
+      console.error("[lesson images] prepare upload error:", err);
+      res.status(500).json({ message: "Failed to prepare image upload" });
+    }
+  });
+
+  // Inline lesson images are private to authenticated Toolkit members.
+  app.get("/api/lesson-images/:id", requireAuth, async (req, res) => {
+    try {
+      const imageId = req.params.id;
+      if (!/^[0-9a-f-]{36}$/i.test(imageId)) {
+        return res.status(400).json({ message: "Invalid image ID" });
+      }
+      const objectStorage = new ObjectStorageService();
+      const image = await objectStorage.getObjectEntityFile(`/objects/uploads/${imageId}`);
+      await objectStorage.downloadObject(image, res, 86_400);
+    } catch (err) {
+      console.error("[lesson images] serve image error:", err);
+      if (!res.headersSent) res.status(404).json({ message: "Image not found" });
+    }
+  });
+
   // Admin: add resource to lesson
   app.post("/api/admin/lessons/:lessonId/resources", requireAdmin, async (req, res) => {
     try {
