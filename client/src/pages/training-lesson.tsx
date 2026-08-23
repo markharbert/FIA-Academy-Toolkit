@@ -194,7 +194,10 @@ export default function TrainingLessonPage() {
   }
 
   return (
-    <div className="flex h-full text-sm" style={{ fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>
+    <div
+      className="flex min-h-[calc(100vh-3rem)] text-sm"
+      style={{ fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}
+    >
 
       {/* ── Course nav sidebar ─────────────────────────────────────────────── */}
       <aside
