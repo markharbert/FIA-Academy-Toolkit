@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Save, Eye, EyeOff, Youtube, Link, Plus, Trash2, ExternalLink,
-  Film, Folder, Loader2,
+  Film, Folder, Loader2, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,9 @@ type LessonWithResources = {
 type VimeoFolder = {
   id: string;
   name: string;
+  parentId?: string;
+  parentName?: string;
+  path: string[];
 };
 
 type VimeoPickerVideo = {
@@ -56,6 +59,30 @@ type VimeoVideoPage = {
   videos: VimeoPickerVideo[];
   hasMore: boolean;
 };
+
+type VimeoFolderNode = VimeoFolder & { children: VimeoFolderNode[] };
+
+function buildVimeoFolderTree(folders: VimeoFolder[]): VimeoFolderNode[] {
+  const nodes = new Map(folders.map((folder) => [folder.id, { ...folder, children: [] }]));
+  const roots: VimeoFolderNode[] = [];
+
+  for (const node of nodes.values()) {
+    const parent = node.parentId ? nodes.get(node.parentId) : undefined;
+    if (parent && parent.id !== node.id) parent.children.push(node);
+    else roots.push(node);
+  }
+
+  const sortNodes = (items: VimeoFolderNode[]) => {
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    items.forEach((item) => sortNodes(item.children));
+  };
+  sortNodes(roots);
+  return roots;
+}
+
+function flattenVimeoFolderTree(nodes: VimeoFolderNode[]): VimeoFolderNode[] {
+  return nodes.flatMap((node) => [node, ...flattenVimeoFolderTree(node.children)]);
+}
 
 async function apiFetch(url: string, init?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...init });
@@ -138,6 +165,7 @@ export default function AdminLessonEditorPage() {
   const [selectedVimeoFolderId, setSelectedVimeoFolderId] = useState("all");
   const [vimeoVideoPage, setVimeoVideoPage] = useState(1);
   const [vimeoFolderFilter, setVimeoFolderFilter] = useState("");
+  const [expandedVimeoFolders, setExpandedVimeoFolders] = useState<Record<string, boolean>>({});
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef({ title: "", videoUrl: "", content: "" });
   const revisionRef = useRef(0);
@@ -164,6 +192,57 @@ export default function AdminLessonEditorPage() {
     queryFn: () => apiFetch(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos?page=${vimeoVideoPage}`),
     enabled: vimeoPickerOpen && !!selectedVimeoFolderId,
   });
+
+  const vimeoFolderTree = useMemo(
+    () => buildVimeoFolderTree(vimeoFoldersData?.folders ?? []),
+    [vimeoFoldersData?.folders],
+  );
+  const vimeoFolderSearchResults = useMemo(() => {
+    const filter = vimeoFolderFilter.trim().toLowerCase();
+    if (!filter) return [];
+    return flattenVimeoFolderTree(vimeoFolderTree).filter((folder) =>
+      [folder.name, ...(folder.path ?? [])].some((part) => part.toLowerCase().includes(filter)),
+    );
+  }, [vimeoFolderFilter, vimeoFolderTree]);
+
+  const renderVimeoFolder = (folder: VimeoFolderNode, depth = 0): JSX.Element => {
+    const isExpanded = expandedVimeoFolders[folder.id] ?? depth === 0;
+    return (
+      <div key={folder.id}>
+        <div className="flex items-center gap-0.5">
+          {folder.children.length > 0 ? (
+            <button
+              type="button"
+              aria-label={isExpanded ? `Collapse ${folder.name}` : `Expand ${folder.name}`}
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded hover:bg-muted"
+              onClick={() => setExpandedVimeoFolders((current) => ({
+                ...current,
+                [folder.id]: !isExpanded,
+              }))}
+            >
+              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+          ) : (
+            <span className="w-6 shrink-0" />
+          )}
+          <Button
+            type="button"
+            variant={selectedVimeoFolderId === folder.id ? "secondary" : "ghost"}
+            className="min-w-0 flex-1 justify-start gap-2 text-left"
+            style={{ paddingLeft: `${8 + Math.min(depth, 6) * 8}px` }}
+            onClick={() => {
+              setSelectedVimeoFolderId(folder.id);
+              setVimeoVideoPage(1);
+            }}
+          >
+            <Folder className="h-4 w-4 shrink-0" />
+            <span className="truncate">{folder.name}</span>
+          </Button>
+        </div>
+        {isExpanded && folder.children.map((child) => renderVimeoFolder(child, depth + 1))}
+      </div>
+    );
+  };
 
   // Populate only when navigating to another lesson. Refetching after a save
   // must not overwrite keystrokes made while the previous save was in flight.

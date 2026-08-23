@@ -59,18 +59,39 @@ function resourceId(uri: unknown): string | null {
   return match?.[1] ?? null;
 }
 
-/** List the authenticated account's Vimeo folders (Projects). */
-export async function listVimeoProjects(): Promise<Array<{ id: string; name: string }>> {
+export interface VimeoFolder {
+  id: string;
+  name: string;
+  parentId?: string;
+  parentName?: string;
+  path: string[];
+}
+
+/** List the authenticated account's Vimeo folders, including ancestor paths. */
+export async function listVimeoProjects(): Promise<VimeoFolder[]> {
   if (!VIMEO_ACCESS_TOKEN) throw new Error("Vimeo access is not configured");
-  const projects: Array<{ id: string; name: string }> = [];
-  let nextUrl: string | null = "https://api.vimeo.com/me/folders?per_page=100&page=1";
+  const projects: VimeoFolder[] = [];
+  let nextUrl: string | null =
+    "https://api.vimeo.com/me/folders?per_page=100&page=1&fields=uri,name,metadata.connections.ancestor_path";
 
   for (let page = 0; nextUrl && page < 25; page++) {
     const payload = await vimeoGet(nextUrl);
     for (const project of Array.isArray(payload?.data) ? payload.data : []) {
       const id = resourceId(project?.uri);
       if (id && typeof project?.name === "string" && project.name.trim()) {
-        projects.push({ id, name: project.name });
+        const ancestors = Array.isArray(project?.metadata?.connections?.ancestor_path)
+          ? project.metadata.connections.ancestor_path.filter(
+            (ancestor: any) => typeof ancestor?.name === "string" && typeof ancestor?.uri === "string",
+          )
+          : [];
+        const directParent = ancestors[0];
+        projects.push({
+          id,
+          name: project.name,
+          parentId: resourceId(directParent?.uri) ?? undefined,
+          parentName: directParent?.name,
+          path: [...ancestors].reverse().map((ancestor: any) => ancestor.name),
+        });
       }
     }
     nextUrl = typeof payload?.paging?.next === "string" ? payload.paging.next : null;
