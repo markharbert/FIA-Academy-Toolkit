@@ -4,7 +4,7 @@ import { useParams, useLocation } from "wouter";
 import Player from "@vimeo/player";
 import {
   ChevronLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, ExternalLink, Link,
-  BookOpen, Clock, SkipBack, SkipForward, FileText,
+  BookOpen, Clock, SkipBack, SkipForward, FileText, Menu, X,
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import { cn } from "@/lib/utils";
@@ -134,6 +134,7 @@ export default function TrainingLessonPage() {
   const queryClient = useQueryClient();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptTab, setTranscriptTab] = useState<"chapters" | "transcript">("chapters");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const vimeoPlayerRef = useRef<HTMLIFrameElement>(null);
   const vimeoPlayerApiRef = useRef<Player | null>(null);
@@ -241,6 +242,7 @@ export default function TrainingLessonPage() {
     setTranscriptTab("chapters");
     setVideoCurrentTime(0);
     lastScrolledWordRef.current = null;
+    setMobileNavOpen(false);
   }, [lessonId]);
 
   useEffect(() => {
@@ -323,6 +325,35 @@ export default function TrainingLessonPage() {
     >
 
       {/* ── Course nav sidebar ─────────────────────────────────────────────── */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close course navigation"
+            className="absolute inset-0 bg-slate-950/50"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <aside
+            className="relative flex h-full w-[min(18rem,85vw)] flex-col overflow-y-auto shadow-2xl"
+            style={{ background: SIDEBAR_BG }}
+          >
+            <div className="flex items-center justify-between border-b px-4 py-4" style={{ borderColor: SIDEBAR_BDR }}>
+              <span className="text-sm font-semibold text-amber-100">Course navigation</span>
+              <button
+                type="button"
+                aria-label="Close course navigation"
+                className="rounded-md p-1 text-white/70 hover:bg-white/10 hover:text-white"
+                onClick={() => setMobileNavOpen(false)}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
+              {moduleTree.map((module) => renderModuleNavigation(module))}
+            </nav>
+          </aside>
+        </div>
+      )}
       <aside
         className="hidden w-60 shrink-0 flex-col overflow-y-auto lg:flex"
         style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BDR}` }}
@@ -373,6 +404,14 @@ export default function TrainingLessonPage() {
           style={{ background: "#fff", borderBottom: "1px solid #e5e7eb" }}
         >
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[12px]" style={{ color: "#9ca3af" }}>
+            <button
+              type="button"
+              aria-label="Open course navigation"
+              className="mr-1 rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 lg:hidden"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu className="h-4 w-4" />
+            </button>
             <button
               className="font-medium hover:underline"
               style={{ color: "#d97706" }}
