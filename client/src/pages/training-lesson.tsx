@@ -378,10 +378,12 @@ export default function TrainingLessonPage() {
             onClick={() => setLocation(`/training/${courseId}`)}
             title={courseNavCollapsed ? (courseData?.course.title ?? "Course") : undefined}
           >
-            <CourseIcon
-              icon={courseData?.course.icon}
-              className="h-4 w-4 text-amber-400 shrink-0 mt-0.5"
-            />
+            {!courseNavCollapsed && (
+              <CourseIcon
+                icon={courseData?.course.icon}
+                className="h-4 w-4 text-amber-400 shrink-0 mt-0.5"
+              />
+            )}
             {!courseNavCollapsed && (
               <span className="text-[13px] font-semibold text-amber-100 leading-snug line-clamp-2 group-hover:text-white transition-colors">
                 {courseData?.course.title ?? "Course"}
