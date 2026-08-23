@@ -10,7 +10,8 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "extension:smoke": "node scripts/extension-link-vault-smoke.mjs",
-    "test:swipe-api": "node --import tsx --test server/swipe-api.contract.test.ts"
+    "test:swipe-api": "node --import tsx --test server/swipe-api.contract.test.ts",
+    "test:course-builder": "node --import tsx --test server/course-structure.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

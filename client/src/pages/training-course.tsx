@@ -2,9 +2,10 @@ import { useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import { buildCourseModuleTree, flattenCourseModuleTree } from "@shared/course-structure";
 
 type CourseLesson = { id: string; title: string; status: string };
-type CourseModule = { id: string; title: string; lessons: CourseLesson[] };
+type CourseModule = { id: string; parentModuleId: string | null; title: string; sortOrder: number; lessons: CourseLesson[] };
 type CourseStructure = {
   course: { id: string; title: string; status: string };
   modules: CourseModule[];
@@ -34,7 +35,7 @@ export default function TrainingCoursePage() {
   useEffect(() => {
     if (!data) return;
     // Navigate to the first available published lesson
-    for (const module of data.modules) {
+    for (const module of flattenCourseModuleTree(buildCourseModuleTree(data.modules))) {
       for (const lesson of module.lessons) {
         setLocation(`/training/${courseId}/lessons/${lesson.id}`, { replace: true });
         return;
@@ -58,7 +59,7 @@ export default function TrainingCoursePage() {
     );
   }
 
-  const hasLessons = data?.modules.some((m) => m.lessons.length > 0);
+  const hasLessons = data && flattenCourseModuleTree(buildCourseModuleTree(data.modules)).some((module) => module.lessons.length > 0);
   if (data && !hasLessons) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-3 bg-background">

@@ -33,6 +33,7 @@ import { startPlacementScheduler } from "./placementScheduler";
 import { fireWebhooks } from "./webhooks";
 import { formatSwipeListResponse } from "./swipe-api";
 import { safeNormalizeWebsite } from "./inboxIntelScreenshots";
+import { hasExactIds } from "@shared/course-structure";
 import OpenAI from "openai";
 import {
   verifyCfWebhookSignature,
@@ -13389,10 +13390,6 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     url: z.string().trim().min(1, "Resource URL is required").max(4_000).optional(),
     kind: z.enum(["link", "pdf"]).optional(),
   }).strict().refine((updates) => Object.keys(updates).length > 0, "At least one update is required");
-  const idsMatch = (actualIds: string[], orderedIds: unknown[]): boolean => orderedIds.length === actualIds.length
-    && new Set(orderedIds).size === orderedIds.length
-    && orderedIds.every((id) => typeof id === "string" && actualIds.includes(id));
-
   function validationError(res: Response, error: z.ZodError) {
     return res.status(400).json({ message: error.issues[0]?.message || "Invalid course data" });
   }
@@ -13487,11 +13484,15 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin: reorder modules
   app.put("/api/admin/courses/:id/modules/reorder", requireAdmin, async (req, res) => {
     try {
-      const { orderedIds } = req.body;
+      const { orderedIds, parentModuleId } = req.body;
       if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds required" });
+      if (parentModuleId !== null && parentModuleId !== undefined && typeof parentModuleId !== "string") {
+        return res.status(400).json({ message: "parentModuleId must be a string or null" });
+      }
       const modules = await storage.getCourseModules(req.params.id);
-      if (!idsMatch(modules.map((module) => module.id), orderedIds)) {
-        return res.status(400).json({ message: "orderedIds must include each module in this course exactly once" });
+      const siblingModules = modules.filter((module) => module.parentModuleId === (parentModuleId ?? null));
+      if (!hasExactIds(siblingModules.map((module) => module.id), orderedIds)) {
+        return res.status(400).json({ message: "orderedIds must include each module in this group exactly once" });
       }
       await storage.reorderCourseModules(req.params.id, orderedIds);
       res.json({ ok: true });
@@ -13545,7 +13546,7 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
       const { orderedIds } = req.body;
       if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds required" });
       const lessons = await storage.getCourseLessons(req.params.id);
-      if (!idsMatch(lessons.map((lesson) => lesson.id), orderedIds)) {
+      if (!hasExactIds(lessons.map((lesson) => lesson.id), orderedIds)) {
         return res.status(400).json({ message: "orderedIds must include each lesson in this module exactly once" });
       }
       await storage.reorderCourseLessons(req.params.id, orderedIds);

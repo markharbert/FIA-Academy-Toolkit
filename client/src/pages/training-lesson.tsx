@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import { cn } from "@/lib/utils";
+import { buildCourseModuleTree, flattenCourseModuleTree, type CourseModuleTree } from "@shared/course-structure";
 
 /** Restrict resource/video URLs to http(s) only — prevents javascript: hrefs. */
 function safeHref(url: string | null | undefined): string {
@@ -52,7 +53,9 @@ type CourseLesson = {
 
 type CourseModule = {
   id: string;
+  parentModuleId: string | null;
   title: string;
+  sortOrder: number;
   lessons: CourseLesson[];
 };
 
@@ -121,8 +124,10 @@ export default function TrainingLessonPage() {
     },
   });
 
-  // Flatten lessons for prev/next nav
-  const allLessons: CourseLesson[] = courseData?.modules.flatMap((m) => m.lessons) ?? [];
+  const moduleTree = courseData ? buildCourseModuleTree(courseData.modules) : [];
+
+  // Flatten lessons in the nested outline order for prev/next navigation.
+  const allLessons: CourseLesson[] = flattenCourseModuleTree(moduleTree).flatMap((module) => module.lessons);
   const currentIndex = allLessons.findIndex((l) => l.id === lessonId);
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
   const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
@@ -139,6 +144,45 @@ export default function TrainingLessonPage() {
   // Find current module for breadcrumb
   const currentModule = courseData?.modules.find((m) =>
     m.lessons.some((l) => l.id === lessonId)
+  );
+
+  const renderModuleNavigation = (module: CourseModuleTree<CourseModule>, depth = 0) => (
+    <div key={module.id} className="mb-1" style={depth ? { marginLeft: `${depth * 10}px` } : undefined}>
+      <div className="px-2 py-1.5">
+        <p
+          className="text-[10px] font-bold uppercase tracking-widest truncate"
+          style={{ color: "rgba(255,255,255,0.3)" }}
+        >
+          {module.title}
+        </p>
+      </div>
+
+      {module.lessons.map((lesson) => {
+        const isActive = lesson.id === lessonId;
+        return (
+          <button
+            key={lesson.id}
+            onClick={() => setLocation(`/training/${courseId}/lessons/${lesson.id}`)}
+            className={cn(
+              "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
+              isActive ? "bg-amber-500/20 text-amber-100" : "hover:bg-white/5",
+            )}
+            style={!isActive ? { color: "rgba(255,255,255,0.5)" } : undefined}
+          >
+            {lesson.completed ? (
+              <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
+            ) : (
+              <span className={cn(
+                "h-2.5 w-2.5 rounded-full border shrink-0 flex-none",
+                isActive ? "border-amber-400 bg-amber-400/30" : "border-white/20",
+              )} />
+            )}
+            <span className="truncate text-[12px] leading-snug">{lesson.title}</span>
+          </button>
+        );
+      })}
+      {module.children.map((child) => renderModuleNavigation(child, depth + 1))}
+    </div>
   );
 
   if (isCourseError || isLessonError) {
@@ -187,49 +231,7 @@ export default function TrainingLessonPage() {
 
         {/* Module / lesson tree */}
         <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
-          {courseData?.modules.map((module) => (
-            <div key={module.id} className="mb-1">
-              {/* Module label */}
-              <div className="px-2 py-1.5">
-                <p
-                  className="text-[10px] font-bold uppercase tracking-widest truncate"
-                  style={{ color: "rgba(255,255,255,0.3)" }}
-                >
-                  {module.title}
-                </p>
-              </div>
-
-              {/* Lessons */}
-              {module.lessons.map((l) => {
-                const isActive = l.id === lessonId;
-                return (
-                  <button
-                    key={l.id}
-                    onClick={() => setLocation(`/training/${courseId}/lessons/${l.id}`)}
-                    className={cn(
-                      "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left transition-colors",
-                      isActive
-                        ? "bg-amber-500/20 text-amber-100"
-                        : "hover:bg-white/5"
-                    )}
-                    style={!isActive ? { color: "rgba(255,255,255,0.5)" } : undefined}
-                  >
-                    {l.completed ? (
-                      <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
-                    ) : (
-                      <span
-                        className={cn(
-                          "h-2.5 w-2.5 rounded-full border shrink-0 flex-none",
-                          isActive ? "border-amber-400 bg-amber-400/30" : "border-white/20"
-                        )}
-                      />
-                    )}
-                    <span className="truncate text-[12px] leading-snug">{l.title}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {moduleTree.map((module) => renderModuleNavigation(module))}
         </nav>
       </aside>
 

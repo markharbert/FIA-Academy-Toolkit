@@ -61,6 +61,7 @@ import {
 } from "@shared/schema";
 import type { SwipeListResponse } from "./swipe-api";
 import { safeTimezone, todayKeyInTz, addDaysToKey } from "@shared/datetime";
+import { collectCourseModuleSubtreeIds } from "@shared/course-structure";
 import crypto from "crypto";
 import { db, pool } from "./db";
 import { eq, and, lt, lte, gte, isNull, desc, gt, sql, or, ilike, count, asc, inArray } from "drizzle-orm";
@@ -5569,24 +5570,19 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCourseModule(id: string): Promise<boolean> {
     return db.transaction(async (tx) => {
-      const [root] = await tx.select({ id: courseModules.id })
+      const [root] = await tx.select({ id: courseModules.id, courseId: courseModules.courseId })
         .from(courseModules)
         .where(eq(courseModules.id, id));
       if (!root) return false;
 
-      // Imported courses can contain nested modules. parentModuleId deliberately
-      // remains nullable, so remove descendants explicitly before the root.
-      const moduleIds = [root.id];
-      for (let index = 0; index < moduleIds.length; index++) {
-        const children = await tx.select({ id: courseModules.id })
-          .from(courseModules)
-          .where(eq(courseModules.parentModuleId, moduleIds[index]));
-        for (const child of children) {
-          if (!moduleIds.includes(child.id)) moduleIds.push(child.id);
-        }
-      }
+      const modules = await tx.select({
+        id: courseModules.id,
+        parentModuleId: courseModules.parentModuleId,
+        sortOrder: courseModules.sortOrder,
+      }).from(courseModules).where(eq(courseModules.courseId, root.courseId));
+      const moduleIds = collectCourseModuleSubtreeIds(root.id, modules);
 
-      for (const moduleId of moduleIds.reverse()) {
+      for (const moduleId of moduleIds) {
         await tx.delete(courseModules).where(eq(courseModules.id, moduleId));
       }
       return true;

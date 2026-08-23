@@ -3,11 +3,11 @@ import { useCallback, useState, useRef, useEffect } from "react";
 import {
   Mail, MessageSquare, Search, Mic, StickyNote, Globe, X, Copy,
   UserPlus, CheckCircle, DollarSign, PlayCircle, Radio,
-  CreditCard, TrendingUp, TrendingDown, ExternalLink, Video, Timer,
+  CreditCard, TrendingUp, TrendingDown, ExternalLink, Video, Timer, Linkedin,
 } from "lucide-react";
 import {
   SiFacebook, SiInstagram, SiYoutube, SiTiktok, SiGoogle,
-  SiPinterest, SiLinkedin, SiX, SiSnapchat, SiReddit,
+  SiPinterest, SiX, SiSnapchat, SiReddit,
   SiThreads, SiSpotify,
 } from "react-icons/si";
 import { useCanvasTheme } from "./canvas-theme-context";
@@ -65,7 +65,7 @@ export const TRAFFIC_PLATFORMS: Record<string, {
   tiktok:    { label: "TikTok",      Icon: SiTiktok,      color: "#69C9D0" },
   google:    { label: "Google Ads",  Icon: SiGoogle,      color: "#4285F4" },
   pinterest: { label: "Pinterest",   Icon: SiPinterest,   color: "#E60023" },
-  linkedin:  { label: "LinkedIn",    Icon: SiLinkedin,    color: "#0A66C2" },
+  linkedin:  { label: "LinkedIn",    Icon: Linkedin,      color: "#0A66C2" },
   twitter:   { label: "X / Twitter", Icon: SiX,           color: "#e7e9ea" },
   snapchat:  { label: "Snapchat",    Icon: SiSnapchat,    color: "#FFFC00" },
   reddit:    { label: "Reddit",      Icon: SiReddit,      color: "#FF4500" },

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import {
   ArrowLeft, Plus, ChevronDown, ChevronRight, Pencil, Trash2,
-  FileText, Eye, EyeOff, GripVertical, Check, X, Smile,
+  FileText, Eye, EyeOff, ArrowUp, ArrowDown, Check, X, Smile,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { COURSE_ICON_GROUPS, CourseIcon } from "@/lib/course-icons";
+import { buildCourseModuleTree, type CourseModuleTree } from "@shared/course-structure";
 
 type Lesson = {
   id: string;
@@ -28,6 +29,7 @@ type Lesson = {
 
 type Module = {
   id: string;
+  parentModuleId: string | null;
   title: string;
   status: string;
   sortOrder: number;
@@ -216,6 +218,34 @@ export default function AdminCourseOutlinePage() {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const reorderModules = useMutation({
+    mutationFn: ({ orderedIds, parentModuleId }: { orderedIds: string[]; parentModuleId: string | null }) =>
+      apiFetch(`/api/admin/courses/${id}/modules/reorder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds, parentModuleId }),
+      }),
+    onSuccess: invalidate,
+    onError: (e: Error) => {
+      invalidate();
+      toast({ title: "Couldn't save module order", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const reorderLessons = useMutation({
+    mutationFn: ({ moduleId, orderedIds }: { moduleId: string; orderedIds: string[] }) =>
+      apiFetch(`/api/admin/modules/${moduleId}/lessons/reorder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds }),
+      }),
+    onSuccess: invalidate,
+    onError: (e: Error) => {
+      invalidate();
+      toast({ title: "Couldn't save lesson order", description: e.message, variant: "destructive" });
+    },
+  });
+
   const toggleModule = (moduleId: string) => {
     setExpandedModules((prev) => {
       const next = new Set(prev);
@@ -244,6 +274,147 @@ export default function AdminCourseOutlinePage() {
 
   const { course, modules } = data;
   const totalLessons = modules.reduce((s, m) => s + m.lessons.length, 0);
+  const moduleTree = buildCourseModuleTree(modules);
+
+  const moveModule = (module: Module, direction: -1 | 1) => {
+    const siblings = modules
+      .filter((candidate) => candidate.parentModuleId === module.parentModuleId)
+      .sort((left, right) => left.sortOrder - right.sortOrder);
+    const currentIndex = siblings.findIndex((candidate) => candidate.id === module.id);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= siblings.length) return;
+    const orderedIds = siblings.map((candidate) => candidate.id);
+    [orderedIds[currentIndex], orderedIds[targetIndex]] = [orderedIds[targetIndex], orderedIds[currentIndex]];
+    reorderModules.mutate({ orderedIds, parentModuleId: module.parentModuleId });
+  };
+
+  const moveLesson = (moduleId: string, lessonId: string, lessons: Lesson[], direction: -1 | 1) => {
+    const currentIndex = lessons.findIndex((lesson) => lesson.id === lessonId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= lessons.length) return;
+    const orderedIds = lessons.map((lesson) => lesson.id);
+    [orderedIds[currentIndex], orderedIds[targetIndex]] = [orderedIds[targetIndex], orderedIds[currentIndex]];
+    reorderLessons.mutate({ moduleId, orderedIds });
+  };
+
+  const renderModule = (module: CourseModuleTree<Module>, depth = 0) => {
+    const isOpen = expandedModules.has(module.id);
+    const siblings = modules
+      .filter((candidate) => candidate.parentModuleId === module.parentModuleId)
+      .sort((left, right) => left.sortOrder - right.sortOrder);
+    const siblingIndex = siblings.findIndex((candidate) => candidate.id === module.id);
+
+    return (
+      <div
+        key={module.id}
+        className={cn("rounded-lg border bg-card overflow-hidden", depth > 0 && "ml-5 border-l-4 border-l-violet-400/30")}
+      >
+        <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 group">
+          <button
+            onClick={() => moveModule(module, -1)}
+            className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            disabled={reorderModules.isPending || siblingIndex === 0}
+            title="Move module up"
+            aria-label={`Move ${module.title} up`}
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => moveModule(module, 1)}
+            className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            disabled={reorderModules.isPending || siblingIndex === siblings.length - 1}
+            title="Move module down"
+            aria-label={`Move ${module.title} down`}
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => toggleModule(module.id)}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label={isOpen ? `Collapse ${module.title}` : `Expand ${module.title}`}
+          >
+            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+          <div className="flex-1 min-w-0 font-medium text-sm">
+            <InlineEdit
+              value={module.title}
+              onSave={(title) => updateModule.mutate({ moduleId: module.id, title })}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground shrink-0">
+            {module.lessons.length} lesson{module.lessons.length !== 1 ? "s" : ""}
+          </span>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 text-destructive hover:text-destructive"
+            onClick={() => setModuleToDelete({ id: module.id, title: module.title })}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        {isOpen && (
+          <div className="divide-y">
+            {module.lessons.map((lesson, lessonIndex) => (
+              <div key={lesson.id} className="flex items-center gap-2 px-4 py-2 group hover:bg-muted/30 transition-colors">
+                <div className="flex shrink-0 flex-col">
+                  <button
+                    onClick={() => moveLesson(module.id, lesson.id, module.lessons, -1)}
+                    disabled={reorderLessons.isPending || lessonIndex === 0}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    title="Move lesson up"
+                    aria-label={`Move ${lesson.title} up`}
+                  >
+                    <ArrowUp className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={() => moveLesson(module.id, lesson.id, module.lessons, 1)}
+                    disabled={reorderLessons.isPending || lessonIndex === module.lessons.length - 1}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    title="Move lesson down"
+                    aria-label={`Move ${lesson.title} down`}
+                  >
+                    <ArrowDown className="h-3 w-3" />
+                  </button>
+                </div>
+                <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0 text-sm">
+                  <InlineEdit value={lesson.title} onSave={(title) => updateLesson.mutate({ lessonId: lesson.id, title })} />
+                </div>
+                {lesson.videoUrl && <span className="text-xs text-muted-foreground shrink-0">video</span>}
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setLocation(`/admin/courses/${id}/lessons/${lesson.id}`)} title="Edit lesson">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setLessonToDelete({ id: lesson.id, title: lesson.title })}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            {addingLesson?.moduleId === module.id ? (
+              <form className="flex items-center gap-2 px-4 py-2" onSubmit={(e) => {
+                e.preventDefault();
+                if (addingLesson.title.trim()) addLesson.mutate({ moduleId: module.id, title: addingLesson.title });
+              }}>
+                <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <Input autoFocus placeholder="Lesson title…" value={addingLesson.title} onChange={(e) => setAddingLesson({ moduleId: module.id, title: e.target.value })} className="h-7 text-sm py-0" />
+                <Button type="submit" size="icon" variant="ghost" className="h-7 w-7" disabled={addLesson.isPending}><Check className="h-3.5 w-3.5 text-green-500" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => setAddingLesson(null)}><X className="h-3.5 w-3.5" /></Button>
+              </form>
+            ) : (
+              <button className="flex items-center gap-2 w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors" onClick={() => setAddingLesson({ moduleId: module.id, title: "" })}>
+                <Plus className="h-3.5 w-3.5" /> Add lesson
+              </button>
+            )}
+            {module.children.map((child) => renderModule(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -382,126 +553,7 @@ export default function AdminCourseOutlinePage() {
 
       {/* Module list */}
       <div className="space-y-3">
-        {modules.map((module, mi) => {
-          const isOpen = expandedModules.has(module.id);
-          return (
-            <div key={module.id} className="rounded-lg border bg-card overflow-hidden">
-              {/* Module header */}
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/40 group">
-                <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0" />
-                <button
-                  onClick={() => toggleModule(module.id)}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                >
-                  {isOpen ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </button>
-                <div className="flex-1 min-w-0 font-medium text-sm">
-                  <InlineEdit
-                    value={module.title}
-                    onSave={(title) => updateModule.mutate({ moduleId: module.id, title })}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {module.lessons.length} lesson{module.lessons.length !== 1 ? "s" : ""}
-                </span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 text-destructive hover:text-destructive"
-                  onClick={() => setModuleToDelete({ id: module.id, title: module.title })}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-
-              {/* Lessons */}
-              {isOpen && (
-                <div className="divide-y">
-                  {module.lessons.map((lesson) => (
-                    <div
-                      key={lesson.id}
-                      className="flex items-center gap-2 px-4 py-2 group hover:bg-muted/30 transition-colors"
-                    >
-                      <GripVertical className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />
-                      <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0 text-sm">
-                        <InlineEdit
-                          value={lesson.title}
-                          onSave={(title) => updateLesson.mutate({ lessonId: lesson.id, title })}
-                        />
-                      </div>
-                      {lesson.videoUrl && (
-                        <span className="text-xs text-muted-foreground shrink-0">video</span>
-                      )}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() =>
-                            setLocation(`/admin/courses/${id}/lessons/${lesson.id}`)
-                          }
-                          title="Edit lesson"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => setLessonToDelete({ id: lesson.id, title: lesson.title })}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Add lesson row */}
-                  {addingLesson?.moduleId === module.id ? (
-                    <form
-                      className="flex items-center gap-2 px-4 py-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (addingLesson.title.trim()) {
-                          addLesson.mutate({ moduleId: module.id, title: addingLesson.title });
-                        }
-                      }}
-                    >
-                      <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <Input
-                        autoFocus
-                        placeholder="Lesson title…"
-                        value={addingLesson.title}
-                        onChange={(e) =>
-                          setAddingLesson({ moduleId: module.id, title: e.target.value })
-                        }
-                        className="h-7 text-sm py-0"
-                      />
-                      <Button type="submit" size="icon" variant="ghost" className="h-7 w-7" disabled={addLesson.isPending}>
-                        <Check className="h-3.5 w-3.5 text-green-500" />
-                      </Button>
-                      <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => setAddingLesson(null)}>
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </form>
-                  ) : (
-                    <button
-                      className="flex items-center gap-2 w-full px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
-                      onClick={() => setAddingLesson({ moduleId: module.id, title: "" })}
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Add lesson
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {moduleTree.map((module) => renderModule(module))}
 
         {/* Add module */}
         {showAddModule ? (
