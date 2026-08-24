@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   addMonths,
   addDays,
-  addYears,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -168,7 +167,7 @@ export default function TrainingSchedulePage() {
 
   const upcomingRange = useMemo(() => {
     const start = new Date();
-    return { start, end: addYears(start, 2) };
+    return { start, end: addDays(start, 99) };
   }, []);
 
   const upcomingEventsQuery = useQuery<ScheduleResponse>({
