@@ -1735,8 +1735,6 @@ export interface NotificationPreferences {
   dmoMilestone: { enabled: boolean };
   dmoBroken: { enabled: boolean };
   weeklyDmoSummary: { enabled: boolean; dayOfWeek: number; hour: number };
-  videoScoringComplete: { enabled: boolean };
-  videoPracticeReminder: { enabled: boolean };
   reputationDropAlert: { enabled: boolean };
   weeklyInboxReport: { enabled: boolean; dayOfWeek: number; hour: number };
   inboxReportReady: { enabled: boolean };
@@ -1756,8 +1754,6 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   dmoMilestone: { enabled: true },
   dmoBroken: { enabled: false },
   weeklyDmoSummary: { enabled: false, dayOfWeek: 0, hour: 18 },
-  videoScoringComplete: { enabled: true },
-  videoPracticeReminder: { enabled: false },
   reputationDropAlert: { enabled: true },
   weeklyInboxReport: { enabled: false, dayOfWeek: 1, hour: 8 },
   inboxReportReady: { enabled: true },

@@ -7,7 +7,6 @@ import {
   weeklyProjectDigestEmail,
   dmoStreakAtRiskEmail,
   weeklyDmoSummaryEmail,
-  videoPracticeReminderEmail,
 } from "./email-templates";
 import type { NotificationPreferences } from "@shared/schema";
 
@@ -191,24 +190,6 @@ async function tick() {
         }
       }
 
-      // ── Video practice reminder (Friday afternoon if no upload this week) ──
-      if (p.videoPracticeReminder?.enabled) {
-        if (currentDow === 5 && currentHour === 14) {
-          const alreadySent = await storage.hasNotificationBeenSent(user.id, "video_practice_reminder", todayStr, startOfTodayInTz(tz));
-          if (!alreadySent) {
-            const weekStart = new Date(nowLocal);
-            weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-            weekStart.setHours(0, 0, 0, 0);
-            const sessions = await storage.getSessionsByUser(user.id);
-            const hasUploadThisWeek = sessions.some(s => new Date(s.createdAt) >= weekStart);
-            if (!hasUploadThisWeek) {
-              const tpl = videoPracticeReminderEmail({ firstName: user.firstName }, resources);
-              await sendEmail({ to: user.email, ...tpl });
-              await storage.logNotification(user.id, "video_practice_reminder", todayStr);
-            }
-          }
-        }
-      }
     }));
   } catch (err) {
     console.error("[notificationScheduler] tick error:", err);

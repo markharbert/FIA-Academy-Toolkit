@@ -269,44 +269,6 @@ export function weeklyDmoSummaryEmail(params: {
   return { subject, html: wrap("Weekly DMO Summary", body, resources), text };
 }
 
-export function videoScoringCompleteEmail(params: {
-  firstName: string | null;
-  videoTitle: string;
-  score: number | null;
-  sessionId: string;
-}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
-  const name = params.firstName || "there";
-  const subject = `Your video "${params.videoTitle}" has been scored`;
-  const scoreDisplay = params.score !== null
-    ? `<div style="text-align:center;padding:20px 0;">
-        <p style="margin:0;font-size:56px;font-weight:800;color:#3f92cc;">${params.score}<span style="font-size:24px;color:#94a3b8;">/100</span></p>
-        <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Video Formula Score</p>
-      </div>`
-    : `<p style="margin:16px 0;font-size:15px;color:#334155;">Your transcript has been processed and feedback is ready.</p>`;
-  const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
-    <p style="margin:0 0 8px;font-size:15px;color:#334155;">Your video <strong>"${params.videoTitle}"</strong> has been analyzed.</p>
-    ${scoreDisplay}
-    ${btn("View my results", `${BASE_URL}/video-score-upload/${params.sessionId}`)}`;
-  const text = `Hey ${name},\n\nYour video "${params.videoTitle}" has been scored${params.score !== null ? ` — ${params.score}/100` : ""}.\n\nView results: ${BASE_URL}/video-score-upload/${params.sessionId}`;
-  return { subject, html: wrap("Your Video Results Are Ready", body, resources), text };
-}
-
-export function videoPracticeReminderEmail(params: {
-  firstName: string | null;
-}, resources: EmailResourceLink[] = []): { subject: string; html: string; text: string } {
-  const name = params.firstName || "there";
-  const subject = "This week's video practice is waiting for you";
-  const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">Hey ${name},</p>
-    <p style="margin:0 0 16px;font-size:15px;color:#334155;">
-      You haven't uploaded a practice video this week yet. Consistency is the key to improvement — even a quick 60-second take counts.
-    </p>
-    ${btn("Upload a video", `${BASE_URL}/video-score-upload`)}`;
-  const text = `Hey ${name},\n\nYou haven't uploaded a practice video this week yet. Keep the habit going!\n\n${BASE_URL}/video-score-upload`;
-  return { subject, html: wrap("Time for Your Weekly Video Practice", body, resources), text };
-}
-
 export function reputationDropAlertEmail(params: {
   firstName: string | null;
   domain: string;

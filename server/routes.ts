@@ -1454,10 +1454,6 @@ export async function registerRoutes(
       weeklyDmoSummary: () => emailTemplates.weeklyDmoSummaryEmail({
         firstName: sample.firstName, points: 340, currentStreak: 21, activitiesLogged: 6,
       }, resources),
-      videoScoringComplete: () => emailTemplates.videoScoringCompleteEmail({
-        firstName: sample.firstName, videoTitle: "How I Got 10 Clients in 30 Days", score: 78, sessionId: "demo-session-id",
-      }, resources),
-      videoPracticeReminder: () => emailTemplates.videoPracticeReminderEmail({ firstName: sample.firstName }, resources),
       reputationDropAlert: () => emailTemplates.reputationDropAlertEmail({
         firstName: sample.firstName, domain: "fearlessmarketinglab.com", score: "LOW", previousScore: "HIGH",
       }, resources),
@@ -1500,16 +1496,16 @@ export async function registerRoutes(
       function rewriteForPreview(html: string) {
         return html.replace(new RegExp(prodBase, "g"), reqBase);
       }
-      const override = await storage.getEmailTemplateOverride(template);
-      if (override?.htmlOverride) {
-        res.setHeader("Content-Type", "text/html");
-        return res.send(rewriteForPreview(override.htmlOverride));
-      }
       const resources = await storage.getActiveEmailResources();
       const fn = buildDefaultTemplateMap(resources)[template];
       if (!fn) {
         const available = Object.keys(buildDefaultTemplateMap()).join("\n");
         return res.status(404).send(`<pre>Unknown template "${template}".\n\nAvailable:\n${available}</pre>`);
+      }
+      const override = await storage.getEmailTemplateOverride(template);
+      if (override?.htmlOverride) {
+        res.setHeader("Content-Type", "text/html");
+        return res.send(rewriteForPreview(override.htmlOverride));
       }
       res.setHeader("Content-Type", "text/html");
       res.send(rewriteForPreview(fn().html));

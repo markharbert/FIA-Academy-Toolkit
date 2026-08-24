@@ -753,13 +753,6 @@ export default function AccountPage() {
                         ],
                       },
                       {
-                        group: "Video Coaching",
-                        items: [
-                          { key: "videoScoringComplete" as const, label: "Video scoring complete", desc: "Notified as soon as your video analysis finishes." },
-                          { key: "videoPracticeReminder" as const, label: "Weekly practice reminder", desc: "Friday nudge if you haven't uploaded a practice video this week." },
-                        ],
-                      },
-                      {
                         group: "Email Health",
                         items: [
                           { key: "reputationDropAlert" as const, label: "Sender reputation drop", desc: "Instant alert when your Google Postmaster reputation drops." },

@@ -579,6 +579,15 @@ async function runStartupMigrations() {
       )
     `);
     await db.execute(sql`
+      DELETE FROM email_template_overrides
+      WHERE template_key IN ('videoScoringComplete', 'videoPracticeReminder')
+    `);
+    await db.execute(sql`
+      UPDATE notification_preferences
+      SET preferences = preferences - 'videoScoringComplete' - 'videoPracticeReminder'
+      WHERE preferences ? 'videoScoringComplete' OR preferences ? 'videoPracticeReminder'
+    `);
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS email_resource_links (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         description TEXT NOT NULL,
@@ -589,7 +598,7 @@ async function runStartupMigrations() {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log("[startup] notification tables migration complete");
+    console.log("[startup] notification tables migration complete; retired video email settings removed");
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS public_api_keys (
