@@ -332,7 +332,10 @@ export default function AdminLessonEditorPage() {
     const academyFolder = vimeoAcademyFolders.find(
       (folder) => folder.name.trim().toLowerCase() === "fearless influencer academy",
     );
-    if (academyFolder && selectedVimeoFolderId !== academyFolder.id) {
+    const selectedFolderIsInAcademy = vimeoAcademyFolders.some(
+      (folder) => folder.id === selectedVimeoFolderId,
+    );
+    if (academyFolder && !selectedFolderIsInAcademy) {
       setSelectedVimeoFolderId(academyFolder.id);
       setVimeoVideoPage(1);
       window.localStorage.setItem(VIMEO_LAST_FOLDER_STORAGE_KEY, academyFolder.id);
