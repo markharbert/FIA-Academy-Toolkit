@@ -365,18 +365,6 @@ export function AppSidebar() {
               <SidebarGroupLabel>Training</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={location === "/training/schedule"}
-                      tooltip="Training Schedule"
-                      onClick={() => setLocation("/training/schedule")}
-                      className={location === "/training/schedule" ? "!bg-fuchsia-500/15" : ""}
-                      data-testid="nav-training-schedule"
-                    >
-                      <CalendarDays className="text-fuchsia-400" />
-                      <span className="truncate">Schedule</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
                   {trainingCourses.map((course) => {
                     const isCourseActive = course.id === activeCourseId || course.slug === activeCourseId;
                     return (
@@ -409,6 +397,18 @@ export function AppSidebar() {
                       </SidebarMenuItem>
                     );
                   })}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={location === "/training/schedule"}
+                      tooltip="Training Schedule"
+                      onClick={() => setLocation("/training/schedule")}
+                      className={location === "/training/schedule" ? "!bg-fuchsia-500/15" : ""}
+                      data-testid="nav-training-schedule"
+                    >
+                      <CalendarDays className="text-fuchsia-400" />
+                      <span className="truncate">Schedule</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
