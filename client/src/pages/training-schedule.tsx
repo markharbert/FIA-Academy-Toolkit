@@ -176,11 +176,11 @@ export default function TrainingSchedulePage() {
           <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-2xl">
               <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-fuchsia-700">
-                <Sparkles className="h-3.5 w-3.5" /> Academy events
+                <Sparkles className="h-3.5 w-3.5" /> Fearless Influencer Academy Live Events
               </div>
               <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Training Schedule</h1>
               <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
-                A polished view of every live session, workshop, and Academy moment — always sourced from your Google Calendar.
+                This is the live event calendar for Fearless Influencer Academy. It updates regularly with the latest event information.
               </p>
             </div>
             <div className="flex w-full max-w-xl flex-col sm:items-end">
