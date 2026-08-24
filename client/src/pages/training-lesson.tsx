@@ -666,7 +666,7 @@ export default function TrainingLessonPage() {
 
             {/* Video */}
             {embedUrl && (
-              <div className="mb-8">
+              <div className="mx-auto mb-8 w-full max-w-[1100px]">
                 <div
                   className="aspect-video overflow-hidden rounded-xl shadow-sm"
                   style={{ background: "#0f172a" }}
