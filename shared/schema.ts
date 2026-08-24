@@ -42,6 +42,8 @@ export const users = pgTable("users", {
   cfRevokedAt: timestamp("cf_revoked_at"),
   cfRevokedGraceUntil: timestamp("cf_revoked_grace_until"),
   cfGraceExpirySentAt: timestamp("cf_grace_expiry_sent_at"),
+  cfMembershipEventAt: timestamp("cf_membership_event_at"),
+  cfMembershipEventId: text("cf_membership_event_id"),
   icalToken: text("ical_token"),
   dashboardLayout: jsonb("dashboard_layout"),
   swipePromoLinks: jsonb("swipe_promo_links").$type<string[]>().default(sql`'[]'::jsonb`),
@@ -1796,6 +1798,7 @@ export type InsertWebhook = typeof webhooks.$inferInsert;
 // ─── ClickFunnels Webhook Activity ────────────────────────────────────────────
 export const cfWebhookActivity = pgTable("cf_webhook_activity", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: text("event_id").unique(),
   eventType: text("event_type").notNull(),
   email: text("email"),
   contactId: text("contact_id"),
@@ -1805,6 +1808,9 @@ export const cfWebhookActivity = pgTable("cf_webhook_activity", {
   httpStatus: integer("http_status"),
   error: text("error"),
   durationMs: integer("duration_ms"),
+  deliveryCount: integer("delivery_count").notNull().default(1),
+  eventOccurredAt: timestamp("event_occurred_at"),
+  lastReceivedAt: timestamp("last_received_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (t) => ({
   createdAtIdx: index("idx_cf_webhook_activity_created").on(t.createdAt),
@@ -1814,6 +1820,26 @@ export const cfWebhookActivity = pgTable("cf_webhook_activity", {
 
 export type CfWebhookActivity = typeof cfWebhookActivity.$inferSelect;
 export type InsertCfWebhookActivity = typeof cfWebhookActivity.$inferInsert;
+
+// ─── ClickFunnels Membership Identity Review ──────────────────────────────────
+// Kept separately from local profiles so an ambiguous external record can never
+// silently create or overwrite the wrong account.
+export const cfIdentityIssues = pgTable("cf_identity_issues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  issueKey: text("issue_key").notNull().unique(),
+  kind: text("kind").notNull(),
+  contactId: text("contact_id"),
+  email: text("email"),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  details: jsonb("details").notNull().default(sql`'{}'::jsonb`),
+  firstDetectedAt: timestamp("first_detected_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  lastDetectedAt: timestamp("last_detected_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  resolvedAt: timestamp("resolved_at"),
+}, (t) => ({
+  openIdx: index("idx_cf_identity_issues_open").on(t.resolvedAt, t.lastDetectedAt),
+}));
+
+export type CfIdentityIssue = typeof cfIdentityIssues.$inferSelect;
 
 // ─── ClickFunnels Membership Reconciliation Runs ──────────────────────────────
 export const cfReconciliationRuns = pgTable("cf_reconciliation_runs", {

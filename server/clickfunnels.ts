@@ -64,6 +64,8 @@ export function generateCfSsoUrl(email: string, redirectTo?: string): string {
 // Parse enrollment event from the CF webhook payload
 export interface CfWebhookEvent {
   eventType: string;
+  eventId: string | null;
+  occurredAt: Date;
   contactEmail: string | null;
   contactId: string | null;
   courseId: string | null;
@@ -74,6 +76,13 @@ export interface CfWebhookEvent {
 export function parseCfWebhookEvent(body: any): CfWebhookEvent {
   const eventType: string = body.event_type || body.type || "";
   const data = body.data || body.subject || body || {};
+  const rawEventId = body.event_id || body.webhook_event_id || body.event?.id || body.id;
+  const eventId = rawEventId ? String(rawEventId) : null;
+  const rawOccurredAt = body.occurred_at || body.event_at || body.timestamp || body.created_at || body.event?.occurred_at;
+  const parsedOccurredAt = rawOccurredAt ? new Date(rawOccurredAt) : null;
+  const occurredAt = parsedOccurredAt && !Number.isNaN(parsedOccurredAt.getTime())
+    ? parsedOccurredAt
+    : new Date();
 
   // Contact email – may be at top level or nested
   const contactEmail: string | null =
@@ -102,26 +111,14 @@ export function parseCfWebhookEvent(body: any): CfWebhookEvent {
   const lastName: string | null =
     data.last_name || data.contact?.last_name || null;
 
-  return { eventType, contactEmail, contactId, courseId, firstName, lastName };
+  return { eventType, eventId, occurredAt, contactEmail, contactId, courseId, firstName, lastName };
 }
 
 // Grant or revoke CF access for a user identified by email
 export async function handleCfEnrollmentEvent(
   event: CfWebhookEvent
 ): Promise<{ action: string; email: string | null }> {
-  const { eventType, contactEmail, contactId, courseId } = event;
-
-  // Only act when the event is about the configured course (or no course filter set)
-  const courseMatches =
-    !CF_COURSE_ID ||
-    !courseId ||
-    courseId === CF_COURSE_ID;
-
-  if (!contactEmail) {
-    return { action: "ignored_no_email", email: null };
-  }
-
-  const user = await storage.getUserByEmail(contactEmail);
+  const { eventType, contactEmail, contactId, courseId, firstName, lastName } = event;
 
   // Only explicit course enrollment events qualify as grants.
   // contact.identified / contact.created do not prove course enrollment and
@@ -134,21 +131,47 @@ export async function handleCfEnrollmentEvent(
     "subscription.cancelled",
     "subscription.churned",
   ].includes(eventType);
+  const isSubscriptionEvent = ["subscription.cancelled", "subscription.churned"].includes(eventType);
+  const isCourseEvent = [
+    "courses/enrollment.created",
+    "courses/enrollment.suspended",
+    "courses/enrollment.deleted",
+  ].includes(eventType);
 
-  if (isGrantEvent && courseMatches) {
+  // Enrollment events must name the configured course. A missing course ID is
+  // not enough evidence to grant or revoke access.
+  if (isCourseEvent && (!CF_COURSE_ID || courseId !== CF_COURSE_ID)) {
+    return { action: "ignored_unscoped_course_event", email: contactEmail };
+  }
+
+  const user = contactId
+    ? await storage.getUserByCfContactId(contactId)
+    : contactEmail
+      ? await storage.getUserByEmail(contactEmail)
+      : undefined;
+
+  if (user?.cfMembershipEventAt && user.cfMembershipEventAt > event.occurredAt) {
+    return { action: "ignored_stale_event", email: user.email || contactEmail };
+  }
+
+  if (isGrantEvent) {
+    if (!contactEmail) return { action: "ignored_no_email", email: null };
     if (user) {
       const wasDisabled = user.isDisabled === true;
-      await storage.updateUser(user.id, {
+      const updatedUser = await storage.updateUserForCfMembershipEvent(user.id, {
         cfEnrolled: true,
         cfContactId: contactId || user.cfContactId,
         cfEnrolledAt: new Date(),
         cfRevokedAt: null,
         cfRevokedGraceUntil: null,
         cfGraceExpirySentAt: null, // reset so a new warning fires on any future revocation
+        cfMembershipEventAt: event.occurredAt,
+        cfMembershipEventId: event.eventId,
         // Re-enabling the account ensures previously revoked (and thus disabled)
         // members can log in again after their membership is reinstated in CF.
         isDisabled: false,
-      });
+      }, event.occurredAt);
+      if (!updatedUser) return { action: "ignored_stale_event", email: user.email || contactEmail };
       // Notify the member that their access has been fully restored so they
       // know they can log in again without waiting for the next hourly sweep.
       if (wasDisabled && isEmailConfigured()) {
@@ -177,20 +200,39 @@ export async function handleCfEnrollmentEvent(
       cfEnrolled: true,
       cfContactId: contactId,
       cfEnrolledAt: new Date(),
+      cfMembershipEventAt: event.occurredAt,
+      cfMembershipEventId: event.eventId,
     });
     console.log(`[CF Webhook] Auto-provisioned account for new enrollee: ${contactEmail}`);
     return { action: "created", email: contactEmail };
   }
 
   if (isRevokeEvent) {
+    // Subscription events are broader than course events. Confirm the current
+    // enrollment against the configured course before allowing one to revoke
+    // Toolkit access, so an unrelated cancellation cannot disable a member.
+    if (isSubscriptionEvent) {
+      if (!user) return { action: "no_local_user", email: contactEmail };
+      if (!user.email && !contactEmail) return { action: "ignored_no_email", email: null };
+      const verification = await checkCfEnrollmentByEmail(
+        user.email || contactEmail!,
+        contactId || user.cfContactId || undefined,
+      );
+      if (verification.enrolled) {
+        return { action: "ignored_subscription_still_enrolled", email: user.email || contactEmail };
+      }
+    }
     if (user) {
-      await storage.updateUser(user.id, {
+      const updatedUser = await storage.updateUserForCfMembershipEvent(user.id, {
         cfEnrolled: false,
         cfRevokedAt: new Date(),
           cfRevokedGraceUntil: null,
           cfGraceExpirySentAt: null,
+           cfMembershipEventAt: event.occurredAt,
+           cfMembershipEventId: event.eventId,
           isDisabled: true,
-      });
+       }, event.occurredAt);
+        if (!updatedUser) return { action: "ignored_stale_event", email: user.email || contactEmail };
         console.log(`[CF Webhook] Revoked access immediately for: ${contactEmail}`);
         return { action: "revoked", email: contactEmail };
     }

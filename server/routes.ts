@@ -49,6 +49,7 @@ import {
   type CfContactInfo,
 } from "./clickfunnels";
 import { listCfCourses, listCfDownloads, getCfCourseStructure, extractVimeoUrl, type CfTreeNode } from "./cf-import-client";
+import { runCfMembershipReconciliation } from "./cfMembershipReconciliation";
 import { listVimeoProjects, listVimeoVideos, extractVimeoVideoId, listVimeoTextTracks, fetchVimeoTranscript } from "./vimeo";
 import { FIA_EVENT_CALENDAR_ID, FIA_EVENT_CALENDAR_NAME, FIA_EVENT_CALENDAR_SUBSCRIBE_URL, FIA_EVENT_CALENDAR_TIMEZONE, GoogleCalendarError, getTrainingCalendarEvents } from "./googleCalendar";
 
@@ -1317,6 +1318,7 @@ export async function registerRoutes(
     async (req: Request, res: Response) => {
       const startedAt = Date.now();
       let parsedEvent: ReturnType<typeof parseCfWebhookEvent> | null = null;
+      let receiptEventId: string | null = null;
       const recordActivity = async (data: {
         eventType: string;
         email?: string | null;
@@ -1370,18 +1372,33 @@ export async function registerRoutes(
 
         const event = parseCfWebhookEvent(body);
         parsedEvent = event;
+        // CF supplies event IDs on current deliveries. Older payload shapes do
+        // not always include one, so use a deterministic payload digest only as
+        // a delivery key; the payload itself is never stored.
+        receiptEventId = event.eventId || `payload:${crypto.createHash("sha256").update(rawBody).digest("hex")}`;
         console.log("[CF Webhook] Received:", event.eventType, "| email:", event.contactEmail, "| course:", event.courseId);
+        const receipt = await storage.claimCfWebhookEvent({
+          eventId: receiptEventId,
+          eventType: event.eventType || "unknown",
+          email: event.contactEmail,
+          contactId: event.contactId,
+          courseId: event.courseId,
+          status: "processing",
+          action: "processing",
+          eventOccurredAt: event.occurredAt,
+        });
+        if (!receipt.claimed) {
+          return res.json({ ok: true, action: "duplicate_delivery", deliveryCount: receipt.deliveryCount });
+        }
 
         const result = await handleCfEnrollmentEvent(event);
         console.log("[CF Webhook] Action:", result.action, "| email:", result.email);
-        await recordActivity({
-          eventType: event.eventType || "unknown",
-          email: result.email || event.contactEmail,
-          contactId: event.contactId,
-          courseId: event.courseId,
+        await storage.completeCfWebhookEvent(receiptEventId, {
           status: "processed",
           action: result.action,
           httpStatus: 200,
+          error: null,
+          durationMs: Date.now() - startedAt,
         });
 
         // New enrollment: send welcome email with a 7-day password setup link
@@ -1417,16 +1434,27 @@ export async function registerRoutes(
         res.json({ ok: true, action: result.action });
       } catch (err) {
         console.error("[CF Webhook] Error:", err);
-        await recordActivity({
-          eventType: parsedEvent?.eventType || "unknown",
-          email: parsedEvent?.contactEmail,
-          contactId: parsedEvent?.contactId,
-          courseId: parsedEvent?.courseId,
-          status: "failed",
-          action: "processing_failed",
-          httpStatus: 500,
-          error: err instanceof Error ? err.message.slice(0, 500) : "Webhook processing failed",
-        });
+        const error = err instanceof Error ? err.message.slice(0, 500) : "Webhook processing failed";
+        if (receiptEventId) {
+          await storage.completeCfWebhookEvent(receiptEventId, {
+            status: "failed",
+            action: "processing_failed",
+            httpStatus: 500,
+            error,
+            durationMs: Date.now() - startedAt,
+          }).catch((activityError) => console.error("[CF Webhook] Failed to finalize receipt:", activityError));
+        } else {
+          await recordActivity({
+            eventType: parsedEvent?.eventType || "unknown",
+            email: parsedEvent?.contactEmail,
+            contactId: parsedEvent?.contactId,
+            courseId: parsedEvent?.courseId,
+            status: "failed",
+            action: "processing_failed",
+            httpStatus: 500,
+            error,
+          });
+        }
         res.status(500).json({ message: "Webhook processing failed" });
       }
     }
@@ -1740,11 +1768,18 @@ export async function registerRoutes(
       const allConfigured = Object.values(configured).every(Boolean);
       const reconciliationConfigured = configured.apiToken && configured.workspaceDomain && configured.courseId;
 
-      const [enrolledResult, latestReconciliation, latestSuccessfulReconciliation] = await Promise.all([
+      const [enrolledResult, latestReconciliation, latestSuccessfulReconciliation, webhookActivity, identityIssues] = await Promise.all([
         storage.getCfEnrolledUsers(),
         storage.getLatestCfReconciliationRun(),
         storage.getLatestSuccessfulCfReconciliationRun(),
+        storage.getCfWebhookActivity({ limit: 1, offset: 0 }),
+        storage.getOpenCfIdentityIssues(50),
       ]);
+      const now = Date.now();
+      const webhookAgeMs = webhookActivity.lastReceivedAt ? now - webhookActivity.lastReceivedAt.getTime() : null;
+      const reconciliationAgeMs = latestSuccessfulReconciliation?.completedAt
+        ? now - latestSuccessfulReconciliation.completedAt.getTime()
+        : null;
 
       res.json({
         configured,
@@ -1757,6 +1792,15 @@ export async function registerRoutes(
         neverEnrolledCount: enrolledResult.neverEnrolledCount,
         latestReconciliation: latestReconciliation ?? null,
         latestSuccessfulReconciliation: latestSuccessfulReconciliation ?? null,
+        health: {
+          scheduledAt: "3:15 AM America/New_York",
+          lastWebhookAt: webhookActivity.lastReceivedAt,
+          lastSuccessfulReconciliationAt: latestSuccessfulReconciliation?.completedAt ?? null,
+          webhookIsStale: webhookAgeMs !== null && webhookAgeMs > 48 * 60 * 60 * 1000,
+          reconciliationIsStale: reconciliationAgeMs === null || reconciliationAgeMs > 30 * 60 * 60 * 1000,
+          latestRunFailed: latestReconciliation?.status === "failed",
+          issueCount: identityIssues.length,
+        },
       });
     } catch (err) {
       console.error("[CF Admin] Status error:", err);
@@ -1778,6 +1822,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/cf/identity-issues", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      res.json({ issues: await storage.getOpenCfIdentityIssues(100) });
+    } catch (err) {
+      console.error("[CF Admin] Identity issues error:", err);
+      res.status(500).json({ message: "Failed to load ClickFunnels identity issues" });
+    }
+  });
+
   // Admin: list users with CF enrollment info
   app.get("/api/admin/cf/users", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -1794,62 +1847,18 @@ export async function registerRoutes(
     }
   });
 
-  // Admin: reconcile the local membership directory against a complete
-  // ClickFunnels enrollment scan. The scan completes before any membership
-  // update begins, and the storage layer applies changes in one transaction.
   app.post("/api/admin/cf/reconcile", requireAdmin, async (_req: Request, res: Response) => {
-    const latestRun = await storage.getLatestCfReconciliationRun();
-    if (latestRun?.status === "running") {
-      return res.status(409).json({
-        message: "A ClickFunnels reconciliation is already running. Please wait for it to finish.",
-      });
-    }
-
-    const run = await storage.createCfReconciliationRun({ status: "running" });
-    let membershipChangesApplied = false;
     try {
-      const { getAllCfEnrollments } = await import("./clickfunnels");
-      const enrollments = await getAllCfEnrollments();
-      const activeFetched = enrollments.filter((enrollment) => enrollment.active).length;
-      const inactiveFetched = enrollments.length - activeFetched;
-      // getAllCfEnrollments only resolves after following every page. If its
-      // request or pagination fails, execution jumps to the catch block before
-      // applyCfReconciliation can make any membership change.
-      const changes = await storage.applyCfReconciliation(enrollments);
-      membershipChangesApplied = true;
-      const completedAt = new Date();
-      const completedRun = await storage.updateCfReconciliationRun(run.id, {
-        status: "completed",
-        totalFetched: enrollments.length,
-        activeFetched,
-        inactiveFetched,
-        accountsCreated: changes.accountsCreated,
-        accountsReactivated: changes.accountsReactivated,
-        accountsRevoked: changes.accountsRevoked,
-        unchanged: changes.unchanged,
-        completedAt,
-        error: null,
-      });
-      const summary = await storage.getCfEnrolledUsers();
-
+      const result = await runCfMembershipReconciliation();
       res.json({
-        run: completedRun,
-        summary,
-        message: `Reconciliation complete. ${changes.accountsCreated} accounts created, ${changes.accountsReactivated} restored, and ${changes.accountsRevoked} immediately revoked.`,
+        run: result.run,
+        summary: result.summary,
+        message: `Reconciliation complete. ${result.changes.accountsCreated} accounts created, ${result.changes.accountsReactivated} restored, and ${result.changes.accountsRevoked} immediately revoked.${result.changes.identityIssues ? ` ${result.changes.identityIssues} identity issue${result.changes.identityIssues === 1 ? "" : "s"} need review.` : ""}`,
       });
     } catch (err: any) {
-      const error = String(err?.message || "ClickFunnels reconciliation failed").slice(0, 1000);
-      console.error(`[CF Reconciliation] ${membershipChangesApplied ? "Membership changes were applied, but reporting failed" : "Failed before membership changes could complete"}:`, error);
-      await storage.updateCfReconciliationRun(run.id, {
-        status: membershipChangesApplied ? "completed" : "failed",
-        completedAt: new Date(),
-        error,
-      }).catch((updateErr) => console.error("[CF Reconciliation] Failed to record run error:", updateErr));
-      res.status(502).json({
-        message: membershipChangesApplied
-          ? "Membership changes were applied, but the reconciliation result could not be fully reported. Refresh the page to review the current directory."
-          : "Reconciliation could not be completed. No membership changes were applied.",
-      });
+      const message = String(err?.message || "ClickFunnels reconciliation failed");
+      const status = message.includes("already running") ? 409 : 502;
+      res.status(status).json({ message: status === 409 ? message : "Reconciliation could not be completed. No membership changes were applied." });
     }
   });
 

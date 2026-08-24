@@ -1,9 +1,9 @@
 import { 
   users, sessions, passwordResetTokens, magicLinkTokens, userIdentities, adminAuditLog, userActionLog, processingMetrics, sessionFolders,
-  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks, cfWebhookActivity, cfReconciliationRuns,
+  topicRuns, topics, savedTopics, scripts, linkPlaceholders, userApiKeys, videoTrendsCredits, savedOffers, appSettings, publicApiKeys, webhooks, cfWebhookActivity, cfReconciliationRuns, cfIdentityIssues,
   type PublicApiKey, type Webhook,
   type CfWebhookActivity, type InsertCfWebhookActivity,
-  type CfReconciliationRun, type InsertCfReconciliationRun,
+  type CfReconciliationRun, type InsertCfReconciliationRun, type CfIdentityIssue,
   dmoEntries, dmoSettings, emailInboxAddresses, emailAnalyses, seedInboxes, postmasterConnections, postmasterDomains,
   workspaceInvites, type WorkspaceInvite, type WorkspaceInviteWithMember,
   competitorTrackers, competitorSeedAddresses, capturedCompetitorEmails, capturedCompetitorEmailLinks,
@@ -87,6 +87,7 @@ export type CfReconciliationChanges = {
   accountsReactivated: number;
   accountsRevoked: number;
   unchanged: number;
+  identityIssues: number;
 };
 
 type CourseNavigationModule = Pick<
@@ -142,8 +143,10 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByCfContactId(contactId: string): Promise<User | undefined>;
   createUser(user: InsertUser & { emailConsentAt?: Date; emailConsentIp?: string }): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+  updateUserForCfMembershipEvent(id: string, updates: Partial<User>, occurredAt: Date): Promise<User | undefined>;
   
   // Sessions
   getSession(id: string): Promise<Session | undefined>;
@@ -229,6 +232,9 @@ export interface IStorage {
   updateCfReconciliationRun(id: string, data: Partial<InsertCfReconciliationRun>): Promise<CfReconciliationRun | undefined>;
   getLatestCfReconciliationRun(): Promise<CfReconciliationRun | undefined>;
   getLatestSuccessfulCfReconciliationRun(): Promise<CfReconciliationRun | undefined>;
+  getOpenCfIdentityIssues(limit?: number): Promise<CfIdentityIssue[]>;
+  claimCfWebhookEvent(data: InsertCfWebhookActivity): Promise<{ claimed: boolean; deliveryCount: number }>;
+  completeCfWebhookEvent(eventId: string, data: Pick<InsertCfWebhookActivity, "status" | "action" | "httpStatus" | "error" | "durationMs">): Promise<void>;
 
   // Admin: Audit Log
   createAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
@@ -817,6 +823,11 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
+  async getUserByCfContactId(contactId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.cfContactId, contactId)).limit(1);
+    return user;
+  }
+
   async createUser(insertUser: InsertUser & { emailConsentAt?: Date; emailConsentIp?: string }): Promise<User> {
     // Normalize email before insert to ensure consistency
     const normalizedData = {
@@ -840,6 +851,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user || undefined;
+  }
+
+  async updateUserForCfMembershipEvent(id: string, updates: Partial<User>, occurredAt: Date): Promise<User | undefined> {
+    const [user] = await db.update(users).set(updates).where(and(
+      eq(users.id, id),
+      or(isNull(users.cfMembershipEventAt), lte(users.cfMembershipEventAt, occurredAt)),
+    )).returning();
+    return user;
   }
 
   // Sessions
@@ -1221,11 +1240,39 @@ export class DatabaseStorage implements IStorage {
       const activeByContactId = new Map<string, CfReconciliationEnrollment>();
       const inactiveByEmail = new Map<string, CfReconciliationEnrollment>();
       const inactiveByContactId = new Map<string, CfReconciliationEnrollment>();
+      const issues: Array<{ issueKey: string; kind: string; contactId?: string; email?: string; userId?: string; details: Record<string, unknown> }> = [];
+
+      const localByEmail = new Map<string, User[]>();
+      const localByContactId = new Map<string, User[]>();
+      for (const user of localUsers) {
+        const email = normalizeEmail(user.email);
+        if (email) localByEmail.set(email, [...(localByEmail.get(email) || []), user]);
+        if (user.cfContactId) localByContactId.set(user.cfContactId, [...(localByContactId.get(user.cfContactId) || []), user]);
+      }
 
       for (const enrollment of enrollments) {
         const email = normalizeEmail(enrollment.email);
-        if (!email) continue;
+        if (!email || !enrollment.contactId) {
+          issues.push({
+            issueKey: `invalid-record:${enrollment.contactId || email || "unknown"}`,
+            kind: "invalid_enrollment_record",
+            contactId: enrollment.contactId,
+            email: email || undefined,
+            details: { reason: "ClickFunnels enrollment record is missing a contact ID or email." },
+          });
+          continue;
+        }
         if (enrollment.active) {
+          if (activeByContactId.has(enrollment.contactId) || activeByEmail.has(email)) {
+            issues.push({
+              issueKey: `duplicate-enrollment:${enrollment.contactId}:${email}`,
+              kind: "duplicate_clickfunnels_enrollment",
+              contactId: enrollment.contactId,
+              email,
+              details: { reason: "More than one active ClickFunnels enrollment mapped to the same identity." },
+            });
+            continue;
+          }
           activeByEmail.set(email, enrollment);
           activeByContactId.set(enrollment.contactId, enrollment);
         } else {
@@ -1234,17 +1281,13 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      const localByEmail = new Map(
-        localUsers
-          .map((user) => [normalizeEmail(user.email), user] as const)
-          .filter((entry): entry is readonly [string, User] => Boolean(entry[0])),
-      );
       const now = new Date();
       const changes: CfReconciliationChanges = {
         accountsCreated: 0,
         accountsReactivated: 0,
         accountsRevoked: 0,
         unchanged: 0,
+        identityIssues: 0,
       };
 
       // Active ClickFunnels enrollments are the only records that can create a
@@ -1252,7 +1295,32 @@ export class DatabaseStorage implements IStorage {
       // people to the local directory unnecessarily.
       for (const enrollment of activeByEmail.values()) {
         const email = normalizeEmail(enrollment.email)!;
-        const existing = localByEmail.get(email);
+        const contactMatches = localByContactId.get(enrollment.contactId) || [];
+        const emailMatches = localByEmail.get(email) || [];
+        if (contactMatches.length > 1 || emailMatches.length > 1) {
+          issues.push({
+            issueKey: `ambiguous-local:${enrollment.contactId}:${email}`,
+            kind: "ambiguous_local_identity",
+            contactId: enrollment.contactId,
+            email,
+            details: { contactMatchCount: contactMatches.length, emailMatchCount: emailMatches.length },
+          });
+          continue;
+        }
+        const byContact = contactMatches[0];
+        const byEmail = emailMatches[0];
+        if (byContact && byEmail && byContact.id !== byEmail.id) {
+          issues.push({
+            issueKey: `identity-conflict:${enrollment.contactId}:${email}`,
+            kind: "contact_email_conflict",
+            contactId: enrollment.contactId,
+            email,
+            userId: byContact.id,
+            details: { contactUserId: byContact.id, emailUserId: byEmail.id },
+          });
+          continue;
+        }
+        const existing = byContact || byEmail;
         if (!existing) {
           const firstName = enrollment.firstName || "";
           const lastName = enrollment.lastName || "";
@@ -1281,7 +1349,8 @@ export class DatabaseStorage implements IStorage {
         }
 
         const needsAccessRestore = !existing.cfEnrolled || existing.isDisabled || !!existing.cfRevokedAt;
-        const needsUpdate = needsAccessRestore || existing.cfContactId !== enrollment.contactId;
+        const emailChanged = normalizeEmail(existing.email) !== email;
+        const needsUpdate = needsAccessRestore || existing.cfContactId !== enrollment.contactId || emailChanged;
         if (!needsUpdate) {
           changes.unchanged++;
           continue;
@@ -1290,6 +1359,7 @@ export class DatabaseStorage implements IStorage {
         await tx.update(users).set({
           cfEnrolled: true,
           cfContactId: enrollment.contactId,
+          email: emailChanged ? email : existing.email,
           cfEnrolledAt: existing.cfEnrolledAt ?? now,
           cfRevokedAt: null,
           cfRevokedGraceUntil: null,
@@ -1304,14 +1374,18 @@ export class DatabaseStorage implements IStorage {
       // for an existing local profile, even when that person never logged in.
       for (const localUser of localUsers) {
         if (localUser.isAdmin) continue;
+        const contactMatches = localUser.cfContactId ? localByContactId.get(localUser.cfContactId) || [] : [];
+        const email = normalizeEmail(localUser.email);
+        const emailMatches = email ? localByEmail.get(email) || [] : [];
+        if (contactMatches.length > 1 || emailMatches.length > 1) continue;
         const activeEnrollment =
           (localUser.cfContactId ? activeByContactId.get(localUser.cfContactId) : undefined) ||
-          (normalizeEmail(localUser.email) ? activeByEmail.get(normalizeEmail(localUser.email)!) : undefined);
+          (email ? activeByEmail.get(email) : undefined);
         if (activeEnrollment) continue;
 
         const inactiveEnrollment =
           (localUser.cfContactId ? inactiveByContactId.get(localUser.cfContactId) : undefined) ||
-          (normalizeEmail(localUser.email) ? inactiveByEmail.get(normalizeEmail(localUser.email)!) : undefined);
+          (email ? inactiveByEmail.get(email) : undefined);
         if (localUser.cfEnrolled !== true && !inactiveEnrollment) continue;
 
         const needsRevocation =
@@ -1335,6 +1409,26 @@ export class DatabaseStorage implements IStorage {
         changes.accountsRevoked++;
       }
 
+      await tx.update(cfIdentityIssues).set({ resolvedAt: now }).where(isNull(cfIdentityIssues.resolvedAt));
+      for (const issue of issues) {
+        await tx.insert(cfIdentityIssues).values({
+          ...issue,
+          lastDetectedAt: now,
+          resolvedAt: null,
+        }).onConflictDoUpdate({
+          target: cfIdentityIssues.issueKey,
+          set: {
+            kind: issue.kind,
+            contactId: issue.contactId ?? null,
+            email: issue.email ?? null,
+            userId: issue.userId ?? null,
+            details: issue.details,
+            lastDetectedAt: now,
+            resolvedAt: null,
+          },
+        });
+      }
+      changes.identityIssues = issues.length;
       return changes;
     });
   }
@@ -1345,6 +1439,35 @@ export class DatabaseStorage implements IStorage {
     );
     const [row] = await db.insert(cfWebhookActivity).values(data).returning();
     return row;
+  }
+
+  async claimCfWebhookEvent(data: InsertCfWebhookActivity): Promise<{ claimed: boolean; deliveryCount: number }> {
+    if (!data.eventId) return { claimed: true, deliveryCount: 1 };
+    await db.delete(cfWebhookActivity).where(
+      lt(cfWebhookActivity.createdAt, new Date(Date.now() - 90 * 24 * 60 * 60 * 1000))
+    );
+    const now = new Date();
+    const [inserted] = await db.insert(cfWebhookActivity).values({
+      ...data,
+      status: "processing",
+      action: "processing",
+      lastReceivedAt: now,
+      deliveryCount: 1,
+    }).onConflictDoNothing({ target: cfWebhookActivity.eventId }).returning();
+    if (inserted) return { claimed: true, deliveryCount: 1 };
+    const [existing] = await db.select({
+      deliveryCount: cfWebhookActivity.deliveryCount,
+    }).from(cfWebhookActivity).where(eq(cfWebhookActivity.eventId, data.eventId)).limit(1);
+    const deliveryCount = (existing?.deliveryCount || 0) + 1;
+    await db.update(cfWebhookActivity).set({
+      deliveryCount,
+      lastReceivedAt: now,
+    }).where(eq(cfWebhookActivity.eventId, data.eventId));
+    return { claimed: false, deliveryCount };
+  }
+
+  async completeCfWebhookEvent(eventId: string, data: Pick<InsertCfWebhookActivity, "status" | "action" | "httpStatus" | "error" | "durationMs">): Promise<void> {
+    await db.update(cfWebhookActivity).set(data).where(eq(cfWebhookActivity.eventId, eventId));
   }
 
   async getCfWebhookActivity(options: {
@@ -1406,6 +1529,13 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(cfReconciliationRuns.completedAt), desc(cfReconciliationRuns.startedAt))
       .limit(1);
     return row;
+  }
+
+  async getOpenCfIdentityIssues(limit = 20): Promise<CfIdentityIssue[]> {
+    return db.select().from(cfIdentityIssues)
+      .where(isNull(cfIdentityIssues.resolvedAt))
+      .orderBy(desc(cfIdentityIssues.lastDetectedAt))
+      .limit(limit);
   }
 
   async getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>> {

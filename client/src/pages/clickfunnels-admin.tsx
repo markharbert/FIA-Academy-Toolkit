@@ -30,6 +30,24 @@ interface CfStatus {
   courseId: string | null;
   latestReconciliation: CfReconciliationRun | null;
   latestSuccessfulReconciliation: CfReconciliationRun | null;
+  health: {
+    scheduledAt: string;
+    lastWebhookAt: string | null;
+    lastSuccessfulReconciliationAt: string | null;
+    webhookIsStale: boolean;
+    reconciliationIsStale: boolean;
+    latestRunFailed: boolean;
+    issueCount: number;
+  };
+}
+
+interface CfIdentityIssue {
+  id: string;
+  kind: string;
+  contactId: string | null;
+  email: string | null;
+  details: Record<string, unknown>;
+  lastDetectedAt: string;
 }
 
 interface CfUser {
@@ -137,6 +155,9 @@ function MembershipOverviewTab() {
       });
     },
   });
+  const { data: issuesData } = useQuery<{ issues: CfIdentityIssue[] }>({
+    queryKey: ["/api/admin/cf/identity-issues"],
+  });
 
   const latest = status?.latestReconciliation;
   const latestSuccessful = status?.latestSuccessfulReconciliation;
@@ -174,6 +195,56 @@ function MembershipOverviewTab() {
           </Card>
         ))}
       </div>
+
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-sky-500 to-indigo-500" />
+        <CardHeader className="pb-3 pt-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Zap className="h-4 w-4 text-sky-500" />
+            Sync health
+          </CardTitle>
+          <CardDescription>Webhooks apply timely changes; a complete scan runs daily at {status?.health?.scheduledAt || "3:15 AM America/New_York"}.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">Last webhook</p>
+            <p className={`mt-1 text-sm font-semibold ${status?.health?.webhookIsStale ? "text-amber-700 dark:text-amber-300" : ""}`}>{formatDateTime(status?.health?.lastWebhookAt)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{status?.health?.webhookIsStale ? "No delivery in 48+ hours" : "Receiving deliveries"}</p>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">Last full scan</p>
+            <p className={`mt-1 text-sm font-semibold ${status?.health?.reconciliationIsStale ? "text-amber-700 dark:text-amber-300" : ""}`}>{formatDateTime(status?.health?.lastSuccessfulReconciliationAt)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{status?.health?.reconciliationIsStale ? "Needs a successful scan" : "Fresh within 30 hours"}</p>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">API health</p>
+            <p className={`mt-1 text-sm font-semibold ${status?.health?.latestRunFailed ? "text-rose-700 dark:text-rose-300" : "text-emerald-700 dark:text-emerald-300"}`}>{status?.health?.latestRunFailed ? "Latest scan failed" : "No current scan failure"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Failed scans leave access unchanged</p>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">Identity review</p>
+            <p className={`mt-1 text-sm font-semibold ${status?.health?.issueCount ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>{status?.health?.issueCount || 0} open issue{status?.health?.issueCount === 1 ? "" : "s"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Ambiguous records are never auto-merged</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {(issuesData?.issues?.length ?? 0) > 0 && (
+        <Card className="border-amber-300 dark:border-amber-900">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base"><AlertCircle className="h-4 w-4 text-amber-600" />Identity issues to review</CardTitle>
+            <CardDescription>These records were intentionally skipped to prevent a ClickFunnels email or contact ID from being linked to the wrong local account.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {issuesData?.issues.map((issue) => (
+              <div key={issue.id} className="rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm dark:border-amber-950 dark:bg-amber-950/20">
+                <p className="font-medium">{issue.kind.replace(/_/g, " ")}</p>
+                <p className="mt-0.5 text-muted-foreground">{issue.email || "No email"}{issue.contactId ? ` · Contact ${issue.contactId}` : ""} · Detected {formatDateTime(issue.lastDetectedAt)}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-400" />

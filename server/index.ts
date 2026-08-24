@@ -8,6 +8,7 @@ import { startNotificationScheduler } from "./notificationScheduler";
 
 import { configureEmailSender } from "./email-sendgrid";
 import { startYouTubeAnalyticsScheduler } from "./youtubeAnalyticsScheduler";
+import { startCfMembershipReconciliationScheduler } from "./cfMembershipReconciliation";
 import { db, pool } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { teleprompterScripts, teleprompterRecordings } from "@shared/schema";
@@ -878,9 +879,36 @@ async function runStartupMigrations() {
     await db.execute(sql`
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS cf_revoked_grace_until TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS cf_revoked_at TIMESTAMP
+        ADD COLUMN IF NOT EXISTS cf_revoked_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS cf_membership_event_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS cf_membership_event_id TEXT
     `);
     console.log("[startup] users CF revocation history migration complete");
+
+    await db.execute(sql`
+      ALTER TABLE cf_webhook_activity
+        ADD COLUMN IF NOT EXISTS event_id TEXT,
+        ADD COLUMN IF NOT EXISTS delivery_count INTEGER NOT NULL DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS event_occurred_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS last_received_at TIMESTAMP
+    `);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cf_webhook_activity_event_id ON cf_webhook_activity(event_id) WHERE event_id IS NOT NULL`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS cf_identity_issues (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        issue_key TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL,
+        contact_id TEXT,
+        email TEXT,
+        user_id VARCHAR REFERENCES users(id) ON DELETE SET NULL,
+        details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        first_detected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_detected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        resolved_at TIMESTAMP
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cf_identity_issues_open ON cf_identity_issues(resolved_at, last_detected_at DESC)`);
+    console.log("[startup] ClickFunnels sync reliability migration complete");
 
     // Chrome extension push notification subscriptions
     await db.execute(sql`
@@ -1062,6 +1090,7 @@ async function runStartupMigrations() {
 
           startNotificationScheduler();
           startYouTubeAnalyticsScheduler();
+          startCfMembershipReconciliationScheduler();
 
           // Backfill DMO streak cache for existing users who have never had it
           // computed. It stays detached so it cannot block a healthy server.
