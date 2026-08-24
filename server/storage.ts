@@ -202,17 +202,10 @@ export interface IStorage {
   getCfEnrolledUsers(): Promise<{
     enrolledCount: number;
     revokedCount: number;
-    gracePeriodCount: number;
     neverEnrolledCount: number;
   }>;
   getCfUsers(filter?: string): Promise<Array<Pick<User, 'id' | 'email' | 'displayName' | 'firstName' | 'lastName' | 'cfEnrolled' | 'cfEnrolledAt' | 'cfRevokedAt' | 'cfContactId' | 'cfRevokedGraceUntil'>>>;
-  applyCfReconciliation(enrollments: CfReconciliationEnrollment[], gracePeriodHours: number): Promise<CfReconciliationChanges>;
-
-  /** Returns non-admin accounts whose grace period has expired but isDisabled is still false. */
-  getUsersWithExpiredGracePeriod(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>>>;
-
-  /** Returns non-admin accounts whose grace period expires within the next 24 h and haven't been warned yet. */
-  getUsersApproachingGraceExpiry(): Promise<Array<Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'cfRevokedGraceUntil'>>>;
+  applyCfReconciliation(enrollments: CfReconciliationEnrollment[]): Promise<CfReconciliationChanges>;
 
   getEnrolledUsersWithContactId(): Promise<Array<{ userId: string; email: string; contactId: string }>>;
   getCfButtonSettings(): Promise<{ text: string; bg: string; color: string; radius: string; width: string; fontSize: string; padding: string }>;
@@ -450,8 +443,6 @@ export interface IStorage {
   setApiAccessEnabled(enabled: boolean): Promise<void>;
   getEmailSenderSettings(): Promise<{ fromName: string; fromEmail: string }>;
   setEmailSenderSettings(fromName: string, fromEmail: string): Promise<void>;
-  getCfGracePeriodHours(): Promise<number>;
-  setCfGracePeriodHours(hours: number): Promise<void>;
 
   // Public API Keys
   getUserPublicApiKey(userId: string): Promise<PublicApiKey | undefined>;

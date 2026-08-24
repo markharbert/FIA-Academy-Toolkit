@@ -184,20 +184,15 @@ export async function handleCfEnrollmentEvent(
 
   if (isRevokeEvent) {
     if (user) {
-      // Read configurable grace period from DB (default 48h).
-      // Payment processors allow retry windows, so cutting access the instant
-      // the webhook arrives can lock out members whose payment may still succeed.
-      const gracePeriodHours = await storage.getCfGracePeriodHours();
-      const graceUntil = new Date(Date.now() + gracePeriodHours * 60 * 60 * 1000);
       await storage.updateUser(user.id, {
         cfEnrolled: false,
         cfRevokedAt: new Date(),
-        cfRevokedGraceUntil: graceUntil,
-        // Do NOT set isDisabled: true here — requireAuth/requireApiKey honour
-        // cfRevokedGraceUntil and will let active sessions continue until it passes.
+          cfRevokedGraceUntil: null,
+          cfGraceExpirySentAt: null,
+          isDisabled: true,
       });
-      console.log(`[CF Webhook] Revocation with ${gracePeriodHours}h grace period until ${graceUntil.toISOString()} for: ${contactEmail}`);
-      return { action: "revoked_grace", email: contactEmail };
+        console.log(`[CF Webhook] Revoked access immediately for: ${contactEmail}`);
+        return { action: "revoked", email: contactEmail };
     }
     return { action: "no_local_user", email: contactEmail };
   }
