@@ -14080,25 +14080,18 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
   // Admin-only (until member rollout): get lesson content + resources
   app.get("/api/training/lessons/:id", requireAdmin, async (req, res) => {
     try {
-      let lesson = await storage.getCourseLesson(req.params.id);
-      if (!lesson && typeof req.query.courseId === "string" && typeof req.query.moduleSlug === "string") {
-        const course = await resolveCourseIdentifier(req.query.courseId);
-        const module = course
-          ? await storage.getCourseModuleBySlug(course.id, req.query.moduleSlug)
-          : undefined;
-        if (course && module) {
-          lesson = await storage.getCourseLessonBySlug(course.id, module.id, req.params.id);
-        }
+      const courseIdentifier = typeof req.query.courseId === "string" ? req.query.courseId : undefined;
+      const moduleSlug = typeof req.query.moduleSlug === "string" ? req.query.moduleSlug : undefined;
+      const match = courseIdentifier && moduleSlug
+        ? await storage.getCourseLessonByPath(courseIdentifier, moduleSlug, req.params.id)
+        : await storage.getCourseLessonWithCourse(req.params.id);
+      const lesson = match?.lesson;
+      const course = match?.course;
+      if (!lesson || !course || lesson.status !== "published") return res.status(404).json({ message: "Not found" });
+      if (courseIdentifier && course.id !== courseIdentifier && course.slug !== courseIdentifier) {
+        return res.status(404).json({ message: "Lesson not found in this course" });
       }
-      if (!lesson || lesson.status !== "published") return res.status(404).json({ message: "Not found" });
-      if (typeof req.query.courseId === "string") {
-        const course = await resolveCourseIdentifier(req.query.courseId);
-        if (!course || lesson.courseId !== course.id) {
-          return res.status(404).json({ message: "Lesson not found in this course" });
-        }
-      }
-      const course = await storage.getCourse(lesson.courseId);
-      if (!course || course.status !== "published") return res.status(404).json({ message: "Not found" });
+      if (course.status !== "published") return res.status(404).json({ message: "Not found" });
       const resources = await storage.getLessonResources(req.params.id);
       res.json({ ...lesson, resources });
     } catch (e) {

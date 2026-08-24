@@ -44,7 +44,7 @@ import logoImage from "@assets/academy_toolkit_logo_1776551500119.png";
 import lionLogo from "@assets/FI_Lion_Logo_(2)_1777779197459.png";
 import cfLogo from "@/assets/cf-logo.png";
 import { CourseIcon } from "@/lib/course-icons";
-import { trainingCoursePath } from "@shared/training-url";
+import { trainingCoursePath, trainingLessonPath } from "@shared/training-url";
 
 type NavChild = {
   title: string;
@@ -267,6 +267,12 @@ type PublishedCourse = {
   status: string;
   icon?: string | null;
   progress?: { completed: number; total: number };
+  firstLesson?: {
+    id: string;
+    title: string;
+    slug: string | null;
+    module: { title: string; slug: string | null };
+  } | null;
 };
 
 export function AppSidebar() {
@@ -366,7 +372,11 @@ export function AppSidebar() {
                         <SidebarMenuButton
                           isActive={isCourseActive}
                           tooltip={course.title}
-                          onClick={() => setLocation(trainingCoursePath(course))}
+                          onClick={() => setLocation(
+                            course.firstLesson
+                              ? trainingLessonPath(course, course.firstLesson.module, course.firstLesson)
+                              : trainingCoursePath(course),
+                          )}
                           className={isCourseActive ? "!bg-violet-500/15" : ""}
                         >
                           <CourseIcon icon={course.icon} className={isCourseActive ? undefined : "text-violet-400"} />

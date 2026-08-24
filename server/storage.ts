@@ -85,6 +85,11 @@ type CourseNavigationLesson = Pick<
   lastAccessedAt: Date | null;
 };
 
+type CourseLessonWithCourse = {
+  lesson: CourseLesson;
+  course: Course;
+};
+
 // API key encryption helpers using SESSION_SECRET
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 
@@ -729,6 +734,8 @@ export interface IStorage {
   reorderCourseModules(courseId: string, orderedIds: string[]): Promise<void>;
   getCourseLessons(moduleId: string): Promise<CourseLesson[]>;
   getCourseLesson(id: string): Promise<CourseLesson | undefined>;
+  getCourseLessonWithCourse(id: string): Promise<CourseLessonWithCourse | undefined>;
+  getCourseLessonByPath(courseIdentifier: string, moduleSlug: string, lessonSlug: string): Promise<CourseLessonWithCourse | undefined>;
   getCourseLessonBySlug(courseId: string, moduleId: string, slug: string): Promise<CourseLesson | undefined>;
   getCourseLessonByExternalId(courseId: string, externalId: string): Promise<CourseLesson | undefined>;
   createCourseLesson(lesson: InsertCourseLesson): Promise<CourseLesson>;
@@ -744,7 +751,13 @@ export interface IStorage {
   getPublishedCourses(): Promise<Course[]>;
   getPublishedCoursesWithProgress(userId: string): Promise<Array<Course & {
     progress: { completed: number; total: number };
-    firstLesson: { id: string; title: string; slug: string | null; moduleId: string } | null;
+    firstLesson: {
+      id: string;
+      title: string;
+      slug: string | null;
+      moduleId: string;
+      module: { title: string; slug: string | null };
+    } | null;
   }>>;
   getCourseWithStructure(courseId: string, userId: string): Promise<{
     course: Course;
@@ -5636,6 +5649,40 @@ export class DatabaseStorage implements IStorage {
     return row || undefined;
   }
 
+  async getCourseLessonWithCourse(id: string): Promise<CourseLessonWithCourse | undefined> {
+    const [row] = await db.select({
+      lesson: courseLessons,
+      course: courses,
+    })
+      .from(courseLessons)
+      .innerJoin(courses, eq(courseLessons.courseId, courses.id))
+      .where(eq(courseLessons.id, id))
+      .limit(1);
+    return row || undefined;
+  }
+
+  async getCourseLessonByPath(
+    courseIdentifier: string,
+    moduleSlug: string,
+    lessonSlug: string,
+  ): Promise<CourseLessonWithCourse | undefined> {
+    const [row] = await db.select({
+      lesson: courseLessons,
+      course: courses,
+    })
+      .from(courseLessons)
+      .innerJoin(courseModules, eq(courseLessons.moduleId, courseModules.id))
+      .innerJoin(courses, eq(courseLessons.courseId, courses.id))
+      .where(and(
+        eq(courses.slug, courseIdentifier),
+        eq(courseModules.courseId, courses.id),
+        eq(courseModules.slug, moduleSlug),
+        eq(courseLessons.slug, lessonSlug),
+      ))
+      .limit(1);
+    return row || undefined;
+  }
+
   async getCourseLessonBySlug(courseId: string, moduleId: string, slug: string): Promise<CourseLesson | undefined> {
     const [row] = await db.select().from(courseLessons).where(
       and(
@@ -5702,7 +5749,13 @@ export class DatabaseStorage implements IStorage {
 
   async getPublishedCoursesWithProgress(userId: string): Promise<Array<Course & {
     progress: { completed: number; total: number };
-    firstLesson: { id: string; title: string; slug: string | null; moduleId: string } | null;
+    firstLesson: {
+      id: string;
+      title: string;
+      slug: string | null;
+      moduleId: string;
+      module: { title: string; slug: string | null };
+    } | null;
   }>> {
     const published = await this.getPublishedCourses();
     if (published.length === 0) return [];
@@ -5716,13 +5769,16 @@ export class DatabaseStorage implements IStorage {
         title: courseLessons.title,
         slug: courseLessons.slug,
         sortOrder: courseLessons.sortOrder,
+        moduleTitle: courseModules.title,
+        moduleSlug: courseModules.slug,
       })
         .from(courseLessons)
+        .innerJoin(courseModules, eq(courseLessons.moduleId, courseModules.id))
         .where(and(
           inArray(courseLessons.courseId, courseIds),
           eq(courseLessons.status, "published"),
         ))
-        .orderBy(courseLessons.sortOrder),
+        .orderBy(courseModules.sortOrder, courseLessons.sortOrder),
       db.select({
         courseId: courseProgress.courseId,
         lessonId: courseProgress.lessonId,
@@ -5758,6 +5814,10 @@ export class DatabaseStorage implements IStorage {
               title: firstLesson.title,
               slug: firstLesson.slug,
               moduleId: firstLesson.moduleId,
+              module: {
+                title: firstLesson.moduleTitle,
+                slug: firstLesson.moduleSlug,
+              },
             }
           : null,
       };
@@ -5850,6 +5910,38 @@ export async function runMigrations(): Promise<void> {
       name: "idx_sessions_user_created",
       sql: `CREATE INDEX IF NOT EXISTS idx_sessions_user_created
             ON sessions (user_id, created_at DESC)`,
+    },
+    // Course learner navigation and progress queries should remain index-backed
+    // as imported courses grow from dozens to thousands of lessons.
+    {
+      name: "idx_course_modules_course_sort",
+      sql: `CREATE INDEX IF NOT EXISTS idx_course_modules_course_sort
+            ON course_modules (course_id, sort_order)`,
+    },
+    {
+      name: "idx_course_modules_course_slug",
+      sql: `CREATE INDEX IF NOT EXISTS idx_course_modules_course_slug
+            ON course_modules (course_id, slug) WHERE slug IS NOT NULL`,
+    },
+    {
+      name: "idx_course_lessons_course_sort",
+      sql: `CREATE INDEX IF NOT EXISTS idx_course_lessons_course_sort
+            ON course_lessons (course_id, sort_order)`,
+    },
+    {
+      name: "idx_course_lessons_path",
+      sql: `CREATE INDEX IF NOT EXISTS idx_course_lessons_path
+            ON course_lessons (course_id, module_id, slug) WHERE slug IS NOT NULL`,
+    },
+    {
+      name: "idx_course_resources_lesson_sort",
+      sql: `CREATE INDEX IF NOT EXISTS idx_course_resources_lesson_sort
+            ON course_resources (lesson_id, sort_order)`,
+    },
+    {
+      name: "idx_course_progress_user_course",
+      sql: `CREATE INDEX IF NOT EXISTS idx_course_progress_user_course
+            ON course_progress (user_id, course_id)`,
     },
     // user_action_log: userId + createdAt — used by getUserActionLogs (cursor pagination)
     // and getAdminActivityFeed (filters by userId and sorts by createdAt).
