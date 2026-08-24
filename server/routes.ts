@@ -14065,6 +14065,39 @@ Respond with JSON only: {"subject": "...", "body": "..."}`;
     });
   });
 
+  // The dashboard can show the next session to any authenticated member
+  // without exposing the admin-only schedule or its full event list.
+  app.get("/api/training/schedule/upcoming", requireAuth, async (_req, res) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const startDate = new Date();
+      const endDate = new Date(startDate.getTime() + 99 * 24 * 60 * 60 * 1000);
+      const events = await getTrainingCalendarEvents(
+        FIA_EVENT_CALENDAR_ID,
+        startDate,
+        endDate,
+        FIA_EVENT_CALENDAR_TIMEZONE,
+      );
+      const event = events
+        .filter((candidate) => {
+          const eventStart = candidate.isAllDay
+            ? new Date(`${candidate.start.slice(0, 10)}T00:00:00Z`)
+            : new Date(candidate.start);
+          return eventStart.getTime() >= startDate.getTime();
+        })
+        .sort((a, b) => {
+          const aStart = a.isAllDay ? new Date(`${a.start.slice(0, 10)}T00:00:00Z`) : new Date(a.start);
+          const bStart = b.isAllDay ? new Date(`${b.start.slice(0, 10)}T00:00:00Z`) : new Date(b.start);
+          return aStart.getTime() - bStart.getTime();
+        })[0] || null;
+      res.json({ event });
+    } catch (error) {
+      console.error("[training-schedule] dashboard upcoming event error:", error);
+      const status = error instanceof GoogleCalendarError && error.status === 404 ? 404 : 502;
+      res.status(status).json({ message: "Google Calendar is unavailable." });
+    }
+  });
+
   app.get("/api/training/schedule/events", requireAdmin, async (req, res) => {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     const schema = z.object({

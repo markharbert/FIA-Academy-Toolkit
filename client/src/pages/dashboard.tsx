@@ -127,7 +127,7 @@ type DashboardScheduleEvent = {
 };
 
 type DashboardScheduleResponse = {
-  events: DashboardScheduleEvent[];
+  event: DashboardScheduleEvent | null;
 };
 
 function dashboardEventStart(event: DashboardScheduleEvent) {
@@ -152,24 +152,17 @@ function dashboardCountdownParts(milliseconds: number) {
 
 function DashboardNextEventWidget({ timezone }: { timezone: string }) {
   const [now, setNow] = useState(() => new Date());
-  const upcomingRange = useRef<{ start: Date; end: Date }>();
-  if (!upcomingRange.current) {
-    const start = new Date();
-    upcomingRange.current = { start, end: new Date(start.getTime() + 99 * 24 * 60 * 60 * 1000) };
-  }
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const range = upcomingRange.current;
   const eventsQuery = useQuery<DashboardScheduleResponse>({
-    queryKey: ["/api/training/schedule/events/dashboard", range.start.toISOString(), range.end.toISOString(), timezone],
+    queryKey: ["/api/training/schedule/upcoming"],
     enabled: true,
     queryFn: async () => {
-      const params = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() });
-      const response = await fetch(`/api/training/schedule/events?${params}`, {
+      const response = await fetch("/api/training/schedule/upcoming", {
         credentials: "include",
         cache: "no-store",
       });
@@ -180,9 +173,10 @@ function DashboardNextEventWidget({ timezone }: { timezone: string }) {
     refetchOnMount: "always",
   });
 
-  const nextEvent = (eventsQuery.data?.events || [])
-    .filter((event) => dashboardEventStart(event).getTime() >= now.getTime())
-    .sort((a, b) => dashboardEventStart(a).getTime() - dashboardEventStart(b).getTime())[0];
+  const nextEvent = eventsQuery.data?.event &&
+    dashboardEventStart(eventsQuery.data.event).getTime() >= now.getTime()
+    ? eventsQuery.data.event
+    : null;
 
   return (
     <div
@@ -787,7 +781,7 @@ export default function DashboardPage() {
               Your private marketing command center.
             </p>
             </div>
-            {user?.isAdmin && <DashboardNextEventWidget timezone={user?.timezone || "America/New_York"} />}
+            <DashboardNextEventWidget timezone={user?.timezone || "America/New_York"} />
           </div>
         </div>
       </div>
