@@ -266,11 +266,17 @@ export default function AdminLessonEditorPage() {
     queryFn: () => apiFetch("/api/admin/vimeo/folders"),
     enabled: vimeoPickerOpen,
   });
+  const vimeoAcademyFolders = useMemo(
+    () => (vimeoFoldersData?.folders ?? []).filter(
+      (folder) => folder.name.trim().toLowerCase() === "fearless influencer academy",
+    ),
+    [vimeoFoldersData?.folders],
+  );
 
   const { data: vimeoVideosData, isLoading: vimeoVideosLoading, error: vimeoVideosError } = useQuery<VimeoVideoPage>({
     queryKey: ["/api/admin/vimeo/folders", selectedVimeoFolderId, "videos", vimeoVideoPage],
     queryFn: () => apiFetch(`/api/admin/vimeo/folders/${selectedVimeoFolderId}/videos?page=${vimeoVideoPage}`),
-    enabled: vimeoPickerOpen && !!selectedVimeoFolderId,
+    enabled: vimeoPickerOpen && selectedVimeoFolderId !== "all",
   });
   const { data: vimeoTranscriptTracks, isLoading: vimeoTranscriptTracksLoading, error: vimeoTranscriptTracksError } = useQuery<{
     tracks: VimeoTranscriptTrack[];
@@ -281,8 +287,8 @@ export default function AdminLessonEditorPage() {
   });
 
   const vimeoFolderTree = useMemo(
-    () => buildVimeoFolderTree(vimeoFoldersData?.folders ?? []),
-    [vimeoFoldersData?.folders],
+    () => buildVimeoFolderTree(vimeoAcademyFolders),
+    [vimeoAcademyFolders],
   );
   const vimeoFolderSearchResults = useMemo(() => {
     const filter = vimeoFolderFilter.trim().toLowerCase();
@@ -301,14 +307,14 @@ export default function AdminLessonEditorPage() {
   }, [vimeoPickerOpen]);
 
   useEffect(() => {
-    const folders = vimeoFoldersData?.folders;
-    if (!vimeoPickerOpen || !folders || selectedVimeoFolderId === "all") return;
-    if (!folders.some((folder) => folder.id === selectedVimeoFolderId)) {
-      setSelectedVimeoFolderId("all");
+    if (!vimeoPickerOpen || !vimeoFoldersData?.folders) return;
+    const academyFolder = vimeoAcademyFolders[0];
+    if (academyFolder && selectedVimeoFolderId !== academyFolder.id) {
+      setSelectedVimeoFolderId(academyFolder.id);
       setVimeoVideoPage(1);
-      window.localStorage.setItem(VIMEO_LAST_FOLDER_STORAGE_KEY, "all");
+      window.localStorage.setItem(VIMEO_LAST_FOLDER_STORAGE_KEY, academyFolder.id);
     }
-  }, [vimeoFoldersData?.folders, selectedVimeoFolderId, vimeoPickerOpen]);
+  }, [vimeoAcademyFolders, vimeoFoldersData?.folders, selectedVimeoFolderId, vimeoPickerOpen]);
 
   const selectVimeoFolder = (folderId: string) => {
     setSelectedVimeoFolderId(folderId);
@@ -1112,7 +1118,7 @@ export default function AdminLessonEditorPage() {
               Choose a Vimeo video
             </DialogTitle>
             <DialogDescription>
-              Choose a folder, then select the video to use for this lesson.
+              Select a Fearless Influencer Academy video to use for this lesson.
             </DialogDescription>
           </DialogHeader>
 
@@ -1121,23 +1127,6 @@ export default function AdminLessonEditorPage() {
               <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Folders
               </p>
-              <Input
-                value={vimeoFolderFilter}
-                onChange={(event) => setVimeoFolderFilter(event.target.value)}
-                placeholder="Find a folder…"
-                className="mb-1 h-8 text-xs"
-              />
-              <Button
-                type="button"
-                variant={selectedVimeoFolderId === "all" ? "secondary" : "ghost"}
-                className="w-full justify-start gap-2"
-                onClick={() => {
-                  selectVimeoFolder("all");
-                }}
-              >
-                <Folder className="h-4 w-4" />
-                All videos
-              </Button>
               {vimeoFoldersLoading ? (
                 <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1145,7 +1134,7 @@ export default function AdminLessonEditorPage() {
                 </div>
               ) : vimeoFoldersError ? (
                 <p className="px-2 py-3 text-xs text-muted-foreground">
-                  Folders are unavailable for this Vimeo token. You can still choose from all videos.
+                  The Fearless Influencer Academy folder is unavailable for this Vimeo token.
                 </p>
               ) : vimeoFolderFilter.trim() ? (
                 vimeoFolderSearchResults.length > 0 ? (
@@ -1176,7 +1165,13 @@ export default function AdminLessonEditorPage() {
                   <p className="px-2 py-3 text-xs text-muted-foreground">No matching folders.</p>
                 )
               ) : (
-                vimeoFolderTree.map((folder) => renderVimeoFolder(folder))
+                vimeoFolderTree.length > 0 ? (
+                  vimeoFolderTree.map((folder) => renderVimeoFolder(folder))
+                ) : (
+                  <p className="px-2 py-3 text-xs text-muted-foreground">
+                    The Fearless Influencer Academy folder was not found.
+                  </p>
+                )
               )}
             </div>
 
