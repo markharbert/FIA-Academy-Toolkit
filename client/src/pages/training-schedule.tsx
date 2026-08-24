@@ -27,6 +27,7 @@ import {
   Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import DOMPurify from "dompurify";
 
 type CalendarSettings = {
   calendarId: string;
@@ -80,6 +81,24 @@ function displayRange(event: ScheduleEvent) {
   if (event.isAllDay) return "All-day experience";
   const day = format(new Date(event.start), "EEEE, MMMM d");
   return `${day} · ${format(new Date(event.start), "h:mm a")} – ${format(new Date(event.end), "h:mm a")}`;
+}
+
+function sanitizeEventDescription(description: string) {
+  const hasHtml = /<\s*[a-z][^>]*>/i.test(description);
+  const source = hasHtml
+    ? description
+    : description
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\n/g, "<br />");
+
+  return DOMPurify.sanitize(source, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["target", "rel"],
+    FORBID_TAGS: ["style", "script", "iframe", "object", "form"],
+    FORBID_ATTR: ["style", "onerror", "onclick", "onload"],
+  });
 }
 
 export default function TrainingSchedulePage() {
@@ -271,7 +290,12 @@ export default function TrainingSchedulePage() {
                   <div className="flex gap-2"><Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" /><span>{displayRange(selectedEvent)}</span></div>
                   {selectedEvent.location && <div className="flex gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" /><span>{selectedEvent.location}</span></div>}
                   {selectedEvent.recurring && <div className="flex gap-2"><Repeat2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" /><span>Repeating Academy event</span></div>}
-                  {selectedEvent.description && <p className="max-h-28 overflow-y-auto whitespace-pre-line rounded-lg bg-slate-50 p-3 leading-5 text-slate-700">{selectedEvent.description}</p>}
+                  {selectedEvent.description && (
+                    <div
+                      className="break-words rounded-lg bg-slate-50 p-3 leading-5 text-slate-700 [&_a]:font-semibold [&_a]:text-cyan-700 [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-cyan-900 [&_br]:leading-6 [&_li]:ml-4 [&_li]:list-disc [&_ol]:my-2 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-bold [&_ul]:my-2"
+                      dangerouslySetInnerHTML={{ __html: sanitizeEventDescription(selectedEvent.description) }}
+                    />
+                  )}
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {selectedEvent.meetingUrl && <Button size="sm" asChild className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"><a href={selectedEvent.meetingUrl} target="_blank" rel="noreferrer"><Video className="mr-1.5 h-3.5 w-3.5" /> Join session</a></Button>}
