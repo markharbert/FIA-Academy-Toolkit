@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   addMonths,
   eachDayOfInterval,
@@ -25,6 +25,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DOMPurify from "dompurify";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
+import { formatInTimeZone, getCommonTimezones } from "@shared/datetime";
 
 type CalendarSettings = {
   calendarId: string;
@@ -66,19 +70,23 @@ function eventTone(event: ScheduleEvent) {
   return EVENT_TONES[seed % EVENT_TONES.length];
 }
 
-function eventDayKey(event: ScheduleEvent) {
-  return event.isAllDay ? event.start.slice(0, 10) : format(new Date(event.start), "yyyy-MM-dd");
+function eventDayKey(event: ScheduleEvent, timezone: string) {
+  return event.isAllDay ? event.start.slice(0, 10) : formatInTimeZone(new Date(event.start), timezone, "yyyy-MM-dd");
 }
 
-function displayTime(event: ScheduleEvent) {
+function displayTime(event: ScheduleEvent, timezone: string) {
   if (event.isAllDay) return "All day";
-  return format(new Date(event.start), "h:mm a");
+  return formatInTimeZone(new Date(event.start), timezone, "h:mm a");
 }
 
-function displayRange(event: ScheduleEvent) {
+function displayRange(event: ScheduleEvent, timezone: string) {
   if (event.isAllDay) return "All-day experience";
-  const day = format(new Date(event.start), "EEEE, MMMM d");
-  return `${day} · ${format(new Date(event.start), "h:mm a")} – ${format(new Date(event.end), "h:mm a")}`;
+  const day = formatInTimeZone(new Date(event.start), timezone, "EEEE, MMMM d");
+  return `${day} · ${formatInTimeZone(new Date(event.start), timezone, "h:mm a")} – ${formatInTimeZone(new Date(event.end), timezone, "h:mm a")}`;
+}
+
+function displayAllDayDate(event: ScheduleEvent, timezone: string) {
+  return formatInTimeZone(new Date(`${event.start.slice(0, 10)}T12:00:00Z`), timezone, "EEEE, MMMM d");
 }
 
 function eventStartDate(event: ScheduleEvent) {
@@ -120,9 +128,12 @@ function sanitizeEventDescription(description: string) {
 }
 
 export default function TrainingSchedulePage() {
+  const { user, refetch: refetchUser } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const timezone = user?.timezone || "America/New_York";
+  const timezoneOptions = useMemo(() => getCommonTimezones(), []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -135,8 +146,16 @@ export default function TrainingSchedulePage() {
     return { start, end };
   }, [currentMonth]);
 
+  const updateTimezoneMutation = useMutation({
+    mutationFn: async (nextTimezone: string) => {
+      const response = await apiRequest("PATCH", "/api/account", { timezone: nextTimezone });
+      return response.json();
+    },
+    onSuccess: () => refetchUser(),
+  });
+
   const eventsQuery = useQuery<ScheduleResponse>({
-    queryKey: ["/api/training/schedule/events", range.start.toISOString(), range.end.toISOString()],
+    queryKey: ["/api/training/schedule/events", range.start.toISOString(), range.end.toISOString(), timezone],
     queryFn: async () => {
       const params = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() });
       const response = await fetch(`/api/training/schedule/events?${params}`, {
@@ -159,11 +178,11 @@ export default function TrainingSchedulePage() {
   const eventsByDay = useMemo(() => {
     const map = new Map<string, ScheduleEvent[]>();
     events.forEach((event) => {
-      const key = eventDayKey(event);
+      const key = eventDayKey(event, timezone);
       map.set(key, [...(map.get(key) || []), event]);
     });
     return map;
-  }, [events]);
+  }, [events, timezone]);
   const nextEvent = useMemo(
     () => events
       .filter((event) => eventStartDate(event).getTime() >= now.getTime())
