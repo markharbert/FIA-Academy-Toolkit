@@ -271,10 +271,15 @@ export default function TrainingSchedulePage() {
                     </div>
                   </div>
                 </button>
+              ) : upcomingEventsQuery.isLoading ? (
+                <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Next session</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">Loading next session…</p>
+                </div>
               ) : (
                 <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Next session</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">No upcoming sessions in this view</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">No upcoming sessions scheduled</p>
                 </div>
               )}
             </div>
