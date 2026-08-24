@@ -147,7 +147,7 @@ const formatDateTime = (value: string | null | undefined) =>
     ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
     : "Never";
 
-type MemberFilter = "all" | "enrolled" | "revoked" | "never";
+type MemberFilter = "all" | "enrolled" | "revoked" | "never" | "never_logged_in" | "logged_in";
 
 function getMemberState(member: CfUser): Exclude<MemberFilter, "all"> {
   if (member.cfEnrolled) return "enrolled";
@@ -562,7 +562,14 @@ function MembersTab() {
     const state = getMemberState(member);
     const needle = search.trim().toLowerCase();
     const matchesSearch = !needle || [member.displayName, member.firstName, member.lastName, member.email].some((value) => value?.toLowerCase().includes(needle));
-    return matchesSearch && (filter === "all" || state === filter);
+    const matchesFilter = filter === "all"
+      ? true
+      : filter === "never_logged_in"
+        ? !member.lastLoginAt
+        : filter === "logged_in"
+          ? !!member.lastLoginAt
+          : state === filter;
+    return matchesSearch && matchesFilter;
   });
 
   return (
@@ -591,6 +598,8 @@ function MembersTab() {
               ["enrolled", "Active"],
               ["revoked", "Revoked"],
               ["never", "Never enrolled"],
+              ["never_logged_in", "Never logged in"],
+              ["logged_in", "Has logged in"],
             ] as Array<[MemberFilter, string]>).map(([value, label]) => (
               <Button key={value} size="sm" variant={filter === value ? "default" : "outline"} onClick={() => setFilter(value)} data-testid={`button-cf-member-filter-${value}`}>
                 {label}
