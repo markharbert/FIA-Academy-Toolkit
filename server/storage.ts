@@ -72,6 +72,19 @@ export function normalizeEmail(email: string | null | undefined): string | null 
   return email.trim().toLowerCase();
 }
 
+type CourseNavigationModule = Pick<
+  CourseModule,
+  "id" | "courseId" | "parentModuleId" | "title" | "slug" | "status" | "sortOrder"
+>;
+
+type CourseNavigationLesson = Pick<
+  CourseLesson,
+  "id" | "courseId" | "moduleId" | "title" | "slug" | "status" | "sortOrder"
+> & {
+  completed: boolean;
+  lastAccessedAt: Date | null;
+};
+
 // API key encryption helpers using SESSION_SECRET
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 
@@ -729,9 +742,13 @@ export interface IStorage {
 
   // Courses (member)
   getPublishedCourses(): Promise<Course[]>;
+  getPublishedCoursesWithProgress(userId: string): Promise<Array<Course & {
+    progress: { completed: number; total: number };
+    firstLesson: { id: string; title: string; slug: string | null; moduleId: string } | null;
+  }>>;
   getCourseWithStructure(courseId: string, userId: string): Promise<{
     course: Course;
-    modules: (CourseModule & { lessons: (CourseLesson & { completed: boolean; lastAccessedAt: Date | null })[] })[];
+    modules: (CourseNavigationModule & { lessons: CourseNavigationLesson[] })[];
   } | undefined>;
   upsertCourseProgress(userId: string, courseId: string, lessonId: string, completed: boolean): Promise<CourseProgress>;
   getUserCourseProgress(userId: string, courseId: string): Promise<CourseProgress[]>;
@@ -5683,16 +5700,102 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(courses).where(eq(courses.status, "published")).orderBy(courses.sortOrder);
   }
 
+  async getPublishedCoursesWithProgress(userId: string): Promise<Array<Course & {
+    progress: { completed: number; total: number };
+    firstLesson: { id: string; title: string; slug: string | null; moduleId: string } | null;
+  }>> {
+    const published = await this.getPublishedCourses();
+    if (published.length === 0) return [];
+
+    const courseIds = published.map((course) => course.id);
+    const [lessons, progress] = await Promise.all([
+      db.select({
+        id: courseLessons.id,
+        courseId: courseLessons.courseId,
+        moduleId: courseLessons.moduleId,
+        title: courseLessons.title,
+        slug: courseLessons.slug,
+        sortOrder: courseLessons.sortOrder,
+      })
+        .from(courseLessons)
+        .where(and(
+          inArray(courseLessons.courseId, courseIds),
+          eq(courseLessons.status, "published"),
+        ))
+        .orderBy(courseLessons.sortOrder),
+      db.select({
+        courseId: courseProgress.courseId,
+        lessonId: courseProgress.lessonId,
+        completedAt: courseProgress.completedAt,
+      })
+        .from(courseProgress)
+        .where(and(
+          eq(courseProgress.userId, userId),
+          inArray(courseProgress.courseId, courseIds),
+        )),
+    ]);
+
+    const lessonsByCourse = new Map<string, typeof lessons>();
+    for (const lesson of lessons) {
+      const courseLessonsForCourse = lessonsByCourse.get(lesson.courseId) ?? [];
+      courseLessonsForCourse.push(lesson);
+      lessonsByCourse.set(lesson.courseId, courseLessonsForCourse);
+    }
+    const progressByLesson = new Map(progress.map((item) => [item.lessonId, item]));
+
+    return published.map((course) => {
+      const courseLessonsForCourse = lessonsByCourse.get(course.id) ?? [];
+      const completed = courseLessonsForCourse.filter(
+        (lesson) => !!progressByLesson.get(lesson.id)?.completedAt,
+      ).length;
+      const firstLesson = courseLessonsForCourse[0] ?? null;
+      return {
+        ...course,
+        progress: { completed, total: courseLessonsForCourse.length },
+        firstLesson: firstLesson
+          ? {
+              id: firstLesson.id,
+              title: firstLesson.title,
+              slug: firstLesson.slug,
+              moduleId: firstLesson.moduleId,
+            }
+          : null,
+      };
+    });
+  }
+
   async getCourseWithStructure(courseId: string, userId: string): Promise<{
     course: Course;
-    modules: (CourseModule & { lessons: (CourseLesson & { completed: boolean; lastAccessedAt: Date | null })[] })[];
+    modules: (CourseNavigationModule & { lessons: CourseNavigationLesson[] })[];
   } | undefined> {
-    const [course] = await db.select().from(courses).where(eq(courses.id, courseId));
+    const [courseResult, modules, lessons, progress] = await Promise.all([
+      db.select().from(courses).where(eq(courses.id, courseId)),
+      db.select({
+        id: courseModules.id,
+        courseId: courseModules.courseId,
+        parentModuleId: courseModules.parentModuleId,
+        title: courseModules.title,
+        slug: courseModules.slug,
+        status: courseModules.status,
+        sortOrder: courseModules.sortOrder,
+      }).from(courseModules).where(eq(courseModules.courseId, courseId)).orderBy(courseModules.sortOrder),
+      db.select({
+        id: courseLessons.id,
+        courseId: courseLessons.courseId,
+        moduleId: courseLessons.moduleId,
+        title: courseLessons.title,
+        slug: courseLessons.slug,
+        status: courseLessons.status,
+        sortOrder: courseLessons.sortOrder,
+      }).from(courseLessons).where(eq(courseLessons.courseId, courseId)).orderBy(courseLessons.sortOrder),
+      db.select({
+        lessonId: courseProgress.lessonId,
+        completedAt: courseProgress.completedAt,
+        lastAccessedAt: courseProgress.lastAccessedAt,
+      }).from(courseProgress).where(and(eq(courseProgress.userId, userId), eq(courseProgress.courseId, courseId))),
+    ]);
+    const course = courseResult[0];
     if (!course) return undefined;
-
-    const modules = await db.select().from(courseModules).where(eq(courseModules.courseId, courseId)).orderBy(courseModules.sortOrder);
-    const lessons = await db.select().from(courseLessons).where(eq(courseLessons.courseId, courseId)).orderBy(courseLessons.sortOrder);
-    const progress = await db.select().from(courseProgress).where(and(eq(courseProgress.userId, userId), eq(courseProgress.courseId, courseId)));
 
     const progressMap = new Map(progress.map(p => [p.lessonId, p]));
 
